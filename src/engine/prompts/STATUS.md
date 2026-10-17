@@ -1,5 +1,8 @@
 # Role prompts: status (W3, task A5)
 
+**model_chooser@1.md (contract v8, 2026-10-17).** The four-part prompt for the model_chooser (Bible 10.5 step 2; see
+`../claude/roles/STATUS.md`). Its hash is pinned in `load.test.ts`.
+
 **scriptwriter@1.md (contract v8, this branch).** The four-part prompt of Bible 11.2 for the scriptwriter (see `../claude/roles/STATUS.md`).
 Its hash is pinned in `load.test.ts`. A change to the file is a new version (scriptwriter@2), not an edit.
 

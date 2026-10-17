@@ -9,6 +9,11 @@ import type { EnginePayload, StageContext, StageOutput } from "../types.ts";
 import { validateStageOutput } from "../validate.ts";
 import { createPlanHandler, shotSummaryOf, type PlanPorts } from "./plan.ts";
 import type { KitScope, ResolvedKits } from "./intake.ts";
+import { readFileSync } from "node:fs";
+import type { ModelChoices } from "../../contracts/model-choices.ts";
+import { parseModelsCatalog, parseVideoCatalog, type CatalogRead, type ModelCatalogSource } from "../../gateway/catalog.ts";
+import { json } from "../../claude/test/helpers.ts";
+import { plannedCallsOf } from "../../plan/model-choices.ts";
 
 const WS = WORKSPACE_ID;
 const REQ = FIXTURE_IDS.request;
@@ -214,4 +219,110 @@ test("a stage whose input is not a validated request is refused, not guessed", a
     () => createPlanHandler(ports).run(ctx),
     (error: unknown) => error instanceof Error && /validated_request input artifact/.test(error.message),
   );
+});
+
+const CATALOG_READ_AT = "2026-10-16T09:00:00.000Z";
+const gatewayFixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`../../gateway/test/fixtures/${name}.json`, import.meta.url), "utf8"));
+
+/** A catalog over the gateway's recorded listings (unverified live), counting its reads. */
+function recordedCatalog(): ModelCatalogSource & { reads: number } {
+  const read: CatalogRead = {
+    status: "read",
+    catalog: {
+      readAt: CATALOG_READ_AT,
+      entries: [
+        ...parseVideoCatalog(gatewayFixture("openrouter-catalog-videos"), CATALOG_READ_AT).entries,
+        ...parseModelsCatalog("image", gatewayFixture("openrouter-catalog-image"), CATALOG_READ_AT).entries,
+        // The fixture plan's clips are 1.5 s with a first frame and a reference; none of the recorded models fits them, this one does.
+        {
+          id: "vendor/short-clip",
+          modelClasses: ["video.budget"],
+          capabilities: { minSeconds: 1, maxSeconds: 10, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: 2, audio: false },
+          price: { unit: "per_second", usd: 0.03, sku: "per-video-second" },
+          readAt: CATALOG_READ_AT,
+        },
+      ],
+      dropped: [],
+      failed: [],
+      videoListing: null,
+    },
+  };
+  const source = { reads: 0, async read() { source.reads += 1; return read; } };
+  return source;
+}
+
+/**
+ * A model_chooser answer: c1 picks the one candidate, c2 picks an id that is no candidate, and the rest get no pick. The route table's
+ * video.budget fallback (Veo 3.1 Lite, 4 to 8 s) fits no 1.5 s clip, so those calls get no choice and keep the route table.
+ */
+const chooserAnswer = json(200, {
+  id: "gen-plan-chooser",
+  model: "anthropic/claude-haiku-5.5",
+  choices: [
+    {
+      index: 0,
+      finish_reason: "stop",
+      message: {
+        role: "assistant",
+        content: JSON.stringify({
+          picks: [
+            { callId: "c1", modelId: "vendor/short-clip", reason: "The only candidate that lists 1.5 s with a first frame." },
+            { callId: "c2", modelId: "vendor/not-listed", reason: "x" },
+          ],
+        }),
+      },
+    },
+  ],
+  usage: { prompt_tokens: 2000, completion_tokens: 40, cost: 0.0022 },
+});
+
+const PLAN_ANSWERS = ["openrouter-request-classifier-ok", "openrouter-planner-ok", "openrouter-director-ok"];
+
+test("with a catalog, a passing plan is followed by one model_chooser call, and the request's model_choices artifact is written once", async () => {
+  const catalog = recordedCatalog();
+  const first = await depsWith([...PLAN_ANSWERS.map((name) => recordedAnswer(name)), chooserAnswer], 4);
+  const ports: PlanPorts = { loadKits: async () => kits(), roleDeps: () => first.deps, catalog };
+  const ctx = contextFor(FIXTURE_IDS.reservation);
+  const result = await createPlanHandler(ports).run(ctx);
+  if (result.kind !== "done" || result.output.stage !== "plan") assert.fail("expected a plan output");
+  assert.equal(result.output.gate.pass, true);
+  assert.equal(catalog.reads, 1, "one catalog read for the request");
+  const chooserCalls = first.requests.filter((request) => String(request.body).includes("model_chooser_answer"));
+  assert.equal(chooserCalls.length, 1, "one model_chooser call for the whole request");
+
+  const choicesId = result.output.artifacts.model_choices;
+  assert.ok(choicesId?.startsWith("art_"), "the model_choices artifact is named in the output");
+  const stored = await readArtifact(db.sql, { organizationId: WS, artifactId: choicesId });
+  assert.equal(stored.envelope.type, "model_choices");
+  assert.deepEqual(stored.envelope.parentIds, [result.output.artifacts.plan]);
+  const body = stored.envelope.body as ModelChoices;
+  const plan = (await readArtifact(db.sql, { organizationId: WS, artifactId: result.output.artifacts.plan ?? "" })).envelope.body as ScenePlan;
+  const calls = plannedCallsOf(plan);
+  const firstClip = calls.find((call) => call.modelClass === "video.budget");
+  assert.deepEqual(
+    body.choices.map((entry) => [entry.shotId, entry.output, entry.modelChoice.modelId, entry.modelChoice.source]),
+    [[firstClip?.shotId, "shot", "vendor/short-clip", "orchestrator"]],
+    "only the valid pick is a choice; the refused pick and the missing picks have no eligible fallback, so they keep the route table",
+  );
+  assert.equal(body.catalogReadAt, CATALOG_READ_AT);
+  assert.ok(calls.length > 0, "the fixture plan has paid calls");
+  for (const call of calls) {
+    assert.ok(plan.decisions.some((decision) => decision.reason.startsWith(`${call.shotId} ${call.output}: `)), `a decision records ${call.shotId} ${call.output}`);
+  }
+  assert.doesNotThrow(() => validateStageOutput(result.output, ctx.payload));
+
+  // A retry of the job reuses the stored artifact: no catalog read and no second chooser call.
+  const retry = await depsWith(PLAN_ANSWERS.map((name) => recordedAnswer(name)), 4);
+  const again = await createPlanHandler({ ...ports, roleDeps: () => retry.deps }).run(ctx);
+  if (again.kind !== "done" || again.output.stage !== "plan") assert.fail("expected a plan output");
+  assert.equal(again.output.artifacts.model_choices, choicesId, "the request keeps its one model_choices artifact");
+  assert.equal(catalog.reads, 1);
+  assert.equal(retry.requests.filter((request) => String(request.body).includes("model_chooser_answer")).length, 0);
+});
+
+test("without a catalog, the plan stage writes no model_choices and makes no chooser call", async () => {
+  const ports = await portsWith(PLAN_ANSWERS, 4);
+  const result = await createPlanHandler(ports).run(contextFor(FIXTURE_IDS.reservation));
+  if (result.kind !== "done" || result.output.stage !== "plan") assert.fail("expected a plan output");
+  assert.equal(result.output.artifacts.model_choices, undefined);
 });

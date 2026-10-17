@@ -1,5 +1,11 @@
 # STATUS: Claude roles added in E5 (W13)
 
+**model_chooser (contract v8, 2026-10-17).** `model_chooser.ts`: Haiku (llm.check), stage plan, prompt `model_chooser@1.md`. Input: up to 40
+calls named `c1..cN`, each with shot, output, visual type, class, seconds, frames, reference count and up to 12 candidates (id, catalog
+capabilities, price). Answer: `{ picks: [{ callId, modelId, reason (max 300) }] }`, strict in shape, loose on ids (the code checks them in
+`assets/model-choice.ts`). Estimate 12k in / 2k out (initial; Bible 11.1 has no row for this role). Tests: `model_chooser.test.ts` (4);
+recorded answer `test/fixtures/openrouter-model-chooser-ok.json` (authored, not a live capture).
+
 **scriptwriter (contract v8, this branch).** `scriptwriter.ts`: Opus (llm.direction), stage write_script, prompt `scriptwriter@1.md`. Its
 input carries the brief, its sources, the attachments' types and notes, the reference's structure (genome, genes, segments with durations),
 the constraints and the approved claims. The reference's transcript is an input of the answer check only and is never sent (the test

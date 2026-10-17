@@ -381,7 +381,12 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
   };
   const handlers: Parameters<typeof registerEngineHandlers>[1] = {
     intake: createIntakeHandler(intakePorts),
-    plan: createPlanHandler({ loadKits: kits.loadKits, roleDeps: roles }),
+    // The model choice after the plan (Bible 10.5) reads the same catalog cache the routers check the choices against.
+    plan: createPlanHandler({
+      loadKits: kits.loadKits,
+      roleDeps: roles,
+      ...(composition.shotPorts?.catalog === undefined ? {} : { catalog: composition.shotPorts.catalog }),
+    }),
     estimate_reserve: createEstimateReserveHandler({ workspaceBudget: composition.workspaceBudget }),
     edit: createEditHandler({ loadStyleKit: kits.loadStyleKit }),
   };

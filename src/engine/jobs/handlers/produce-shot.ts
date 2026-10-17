@@ -49,7 +49,10 @@ import type { MediaFunctions, ProbeResult } from "../../media/interface.ts";
 import type { Sql } from "../../../lib/meridian/learning/store.ts";
 import { FFMPEG_LIMITS } from "../../../../functions/ffmpeg/limits.ts";
 import { thresholds } from "../../config/thresholds.ts";
-import { mediaKey, readJobInputs, writeArtifact, type MediaStorePort } from "../artifact-store.ts";
+import { mediaKey, readJobInputs, writeArtifact, type MediaStorePort, type StoredArtifact } from "../artifact-store.ts";
+import { modelChoicesSchema } from "../../contracts/model-choices.ts";
+import type { ModelChoice } from "../../contracts/assets.ts";
+import { SINGLE_CALL_OUTPUT } from "../../plan/model-choices.ts";
 import { stableId, seedFor } from "../stable-id.ts";
 import { epochOf, type ProduceHold, type StageContext, type StageHandler, type StageOutput, type StageRunResult } from "../types.ts";
 
@@ -244,7 +247,15 @@ export function promptWithHints(prompt: string, hints: readonly string[]): strin
  * The asset spec of one generate call (Bible 10.1). It is built from the plan's shot, the attempt and the hints, so a replay
  * builds the same spec with the same cache key, and a redo (a new attempt, with hints) builds a new one.
  */
-export function assetSpecFor(input: { requestId: string; shot: ShotSpec; attempt: number; hints: readonly string[]; subject?: string }): AssetSpec {
+export function assetSpecFor(input: {
+  requestId: string;
+  shot: ShotSpec;
+  attempt: number;
+  hints: readonly string[];
+  subject?: string;
+  /** The orchestrator's model for this call, from the request's model_choices (Bible 10.5). Absent or null: the route table applies. */
+  modelChoice?: ModelChoice | null;
+}): AssetSpec {
   const source = input.shot.source;
   if (source.kind !== "generate") {
     throw new EngineError("invalid_input", `${input.shot.shotId} is a ${source.kind} shot and has no asset spec`, { stage: "produce_shot" });
@@ -267,6 +278,7 @@ export function assetSpecFor(input: { requestId: string; shot: ShotSpec; attempt
     height: TAKE_HEIGHT,
     seed: seedFor(label),
     takes: source.takes,
+    modelChoice: input.modelChoice ?? null,
   };
   return assetSpecSchema.parse(spec);
 }
@@ -464,7 +476,7 @@ export function splitAdapterId(id: string): { provider: string; model: string } 
 }
 
 /** The plan shot a job is for, read from the scene plan it is allowed to read (Bible 5.1). */
-async function planShotOf(ctx: StageContext): Promise<{ shot: ShotSpec; planArtifactId: string }> {
+async function planShotOf(ctx: StageContext): Promise<{ shot: ShotSpec; planArtifactId: string; choices: ShotChoices }> {
   const inputs = await readJobInputs(ctx.sql, { organizationId: ctx.organizationId, requestId: ctx.requestId, inputArtifactIds: ctx.payload.inputArtifactIds });
   const planned = inputs.find((input) => input.envelope.type === "scene_plan");
   if (!planned) throw new EngineError("invalid_input", `${ctx.stage} needs its scene_plan input artifact`, { stage: ctx.stage });
@@ -473,7 +485,30 @@ async function planShotOf(ctx: StageContext): Promise<{ shot: ShotSpec; planArti
   const shotId = shotIdOf(ctx);
   const shot = plan.data.shots.find((candidate) => candidate.shotId === shotId);
   if (!shot) throw new EngineError("invalid_input", `the scene plan has no shot ${shotId}`, { stage: ctx.stage });
-  return { shot, planArtifactId: planned.envelope.artifactId };
+  return { shot, planArtifactId: planned.envelope.artifactId, choices: shotChoicesOf(inputs, shot) };
+}
+
+/** The model choices of one shot's calls, by output name. Empty when the job has no model_choices input. */
+type ShotChoices = ReadonlyMap<string, ModelChoice>;
+
+/**
+ * The request's model choices for this shot (Bible 10.5, contract v8), from the job's model_choices input. A choice whose model class is
+ * not the call's (an artifact that does not match this plan) is not used: that call keeps the route table, never another class's model.
+ */
+function shotChoicesOf(inputs: readonly StoredArtifact[], shot: ShotSpec): ShotChoices {
+  const stored = inputs.find((input) => input.envelope.type === "model_choices");
+  if (stored === undefined) return new Map();
+  const parsed = modelChoicesSchema.safeParse(stored.envelope.body);
+  if (!parsed.success) throw new EngineError("invalid_input", "the model choices do not parse", { stage: "produce_shot" });
+  const classOf = new Map<string, string>();
+  if (shot.source.kind === "generate") classOf.set(SINGLE_CALL_OUTPUT, shot.source.modelClass);
+  if (shot.source.kind === "chain") for (const call of shot.source.calls) classOf.set(call.output, call.modelClass);
+  const choices = new Map<string, ModelChoice>();
+  for (const entry of parsed.data.choices) {
+    if (entry.shotId !== shot.shotId || classOf.get(entry.output) !== entry.modelClass) continue;
+    choices.set(entry.output, entry.modelChoice);
+  }
+  return choices;
 }
 
 /**
@@ -528,6 +563,8 @@ export function chainCallSpecFor(input: {
   hints: readonly string[];
   outputs: readonly ChainOutput[];
   linkOf?: (uri: string) => string;
+  /** The orchestrator's model for this call (Bible 10.5). Absent or null: the route table applies. */
+  modelChoice?: ModelChoice | null;
 }): AssetSpec {
   const call = input.calls[input.index];
   if (call === undefined) {
@@ -554,6 +591,7 @@ export function chainCallSpecFor(input: {
     height: TAKE_HEIGHT,
     seed: seedFor(label),
     takes: call.takes,
+    modelChoice: input.modelChoice ?? null,
   });
 }
 
@@ -624,6 +662,7 @@ async function specOfCall(run: ChainRun, index: number, outputs: readonly ChainO
     hints: run.ctx.payload.hints,
     outputs,
     linkOf: (uri) => links.get(uri) ?? uri,
+    modelChoice: run.choices.get(call.output) ?? null,
   });
   const stored = await recordChainSpec(run.ctx.sql, { ...key, callIndex: index, spec, at: new Date((run.ports.now ?? Date.now)()).toISOString() });
   return { kind: "spec", spec: stored };
@@ -652,6 +691,8 @@ type ChainRun = {
   attempt: number;
   progress: ChainProgress;
   decisions: Decision[];
+  /** The model choices of this shot's calls, by output (Bible 10.5). */
+  choices: ShotChoices;
 };
 
 /** The chain's progress carried on a poll, parsed again (the poll payload is stored JSON, Bible 1). Absent for a generate shot. */
@@ -809,14 +850,21 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
   const now = ports.now ?? Date.now;
   return {
     async run(ctx: StageContext): Promise<StageRunResult> {
-      const { shot, planArtifactId } = await planShotOf(ctx);
+      const { shot, planArtifactId, choices } = await planShotOf(ctx);
       const epoch = epochFor(ctx);
       const attempt = attemptFor(ctx);
       const source = shot.source;
 
       if (source.kind === "generate") {
         const started = now();
-        const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints, subject: ctx.subjectId });
+        const spec = assetSpecFor({
+          requestId: ctx.requestId,
+          shot,
+          attempt,
+          hints: ctx.payload.hints,
+          subject: ctx.subjectId,
+          modelChoice: choices.get(SINGLE_CALL_OUTPUT) ?? null,
+        });
         const reservationId = requireReservation(ctx);
         const production = await ports.generator.generate({
           sql: ctx.sql,
@@ -899,6 +947,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
             attempt,
             progress: { index: 0, startedAt: new Date((ports.now ?? Date.now)()).toISOString(), outputs: [] },
             decisions: [],
+            choices,
           },
           null,
         );
@@ -914,7 +963,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
       }
       const job = carriedJob(submission.carry);
       const carried = carriedDecisionsOf(submission.carry);
-      const { shot, planArtifactId } = await planShotOf(ctx);
+      const { shot, planArtifactId, choices } = await planShotOf(ctx);
       const attempt = attemptFor(ctx);
       const chain = chainCarryOf(submission.carry);
       if (chain !== null) {
@@ -922,7 +971,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         // with before it was submitted, so the settle checks the same spec (Bible 5.1).
         if (shot.source.kind !== "chain") throw new EngineError("internal", `${shot.shotId} carries chain progress but its source is ${shot.source.kind}`, { stage: "produce_shot" });
         const calls = shot.source.calls;
-        const run: ChainRun = { ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried };
+        const run: ChainRun = { ctx, ports, shot, calls, planArtifactId, epoch: epochFor(ctx), attempt, progress: chain, decisions: carried, choices };
         const built = await specOfCall(run, chain.index, chain.outputs);
         if (built.kind !== "spec") throw new EngineError("internal", `${shot.shotId} has a settled call with no recorded spec`, { stage: "produce_shot" });
         const spec = built.spec;
@@ -942,7 +991,14 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         }
         return driveChain(run, settled);
       }
-      const spec = assetSpecFor({ requestId: ctx.requestId, shot, attempt, hints: ctx.payload.hints, subject: ctx.subjectId });
+      const spec = assetSpecFor({
+        requestId: ctx.requestId,
+        shot,
+        attempt,
+        hints: ctx.payload.hints,
+        subject: ctx.subjectId,
+        modelChoice: choices.get(SINGLE_CALL_OUTPUT) ?? null,
+      });
       const production = await ports.generator.settle(
         { sql: ctx.sql, organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId: requireReservation(ctx), spec, visualType: shot.visualType },
         job,

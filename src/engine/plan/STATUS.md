@@ -1,5 +1,14 @@
 # STATUS: the plan stage (W7), E3 and E5 (W9 plan-side support)
 
+**Model choice (Bible 10.5, contract v8; 2026-10-17).** `model-choices.ts`: `plannedCallsOf(plan)` lists the plan's paid calls in a
+production class (a generate shot is output `shot`; a chain call is its output). `chooseModels({ deps, catalog, requestId, workspaceId,
+reservationId, attempt, signal?, plan })` reads the catalog once, filters and ranks each call's candidates (`gateway/catalog-fit.ts`, capped at
+12), sends the calls that have candidates to `model_chooser` in ONE `runRole` call, and resolves each pick with
+`assets/model-choice.ts resolveModelChoice` (only an eligible id is accepted; else the first eligible route-table target, source
+`fallback`; else no choice). A refused, failed or duplicate role call falls back for every call; an internal error is thrown. It returns the
+`model_choices` body (null when the catalog is not connected) and one Decision per call, its reason prefixed `<shotId> <output>: `. Tests:
+`model-choices.test.ts` (6).
+
 **Brief requests (contract v8, this branch).** `planScene` takes `script` (the resolved words, `script/resolve.ts`). `build.ts` reads the beats
 from it, not from `request.script`. The handler resolves it from the job's written_script input. `minimum.ts` and `fixtureInputs.ts` read the
 script of a script request through the resolver. The plan's recorded answers name shots by the fixture request's id and reference segments,

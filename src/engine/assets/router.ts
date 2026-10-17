@@ -757,7 +757,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           at: at(),
           chose: adapter.id,
           alternatives: [],
-          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt}, still listed in the read at ${chosen.entry.readAt}; estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`,
+          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt} (${spec.modelChoice.reason}), still listed in the read at ${chosen.entry.readAt}; estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`,
           by: spec.modelChoice.source === "orchestrator" ? "director" : "scorer",
         });
       }

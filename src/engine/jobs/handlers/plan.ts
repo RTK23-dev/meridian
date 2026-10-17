@@ -25,6 +25,20 @@ import type { StageContext, StageHandler, StageRunResult, ShotSummary } from "..
 import { notImplementedError } from "../types.ts";
 import type { KitScope, ResolvedKits } from "./intake.ts";
 import { scriptOf, writtenScriptOf } from "../../script/resolve.ts";
+import type { ModelChoices } from "../../contracts/model-choices.ts";
+import type { ModelCatalogSource } from "../../gateway/catalog.ts";
+import { chooseModels } from "../../plan/model-choices.ts";
+import type { Sql } from "../../../lib/meridian/learning/store.ts";
+
+/** The request's model_choices artifact id, when one is stored (a request has at most one, contract v8). */
+async function modelChoicesArtifactOf(sql: Sql, organizationId: string, requestId: string): Promise<string | null> {
+  const rows = await sql<{ id: string }>`
+    select id from engine_artifacts
+    where organization_id = ${organizationId} and request_id = ${requestId} and type = 'model_choices'
+    order by created_at, id limit 1
+  `;
+  return rows[0]?.id ?? null;
+}
 
 /**
  * The ports the plan stage needs from outside: the kit store (the same port intake uses) and the Claude client's deps for one
@@ -34,6 +48,12 @@ export type PlanPorts = {
   loadKits: (scope: KitScope) => Promise<ResolvedKits>;
   /** The gateway, the ledger, the clock and the call journal for one request (claude/client.ts RoleDeps). */
   roleDeps: (scope: { organizationId: string; requestId: string; reservationId: string }) => RoleDeps;
+  /**
+   * OpenRouter's model catalog (gateway/catalog.ts, Bible 10.5). When given, a plan that passes its gate is followed by the request's
+   * one model_chooser call (plan/model-choices.ts), and its choices are written as the request's model_choices artifact. Absent, no
+   * model is chosen and every call keeps the route table.
+   */
+  catalog?: ModelCatalogSource;
 };
 
 /**
@@ -181,16 +201,53 @@ export function createPlanHandler(ports: PlanPorts): StageHandler {
       if (planned.plan !== null) {
         // The summaries refuse a chain the pipeline cannot run (contract v5) before anything is written, so no such plan is stored.
         const summaries = planned.plan.shots.map(shotSummaryOf);
+        // The request's model choice (Bible 10.5): one model_chooser call after a plan that passed, before the plan is written, so the
+        // plan's decisions record every choice. A request has one model_choices artifact: a retry of this job reuses the stored one.
+        let plan = planned.plan;
+        let choices: ModelChoices | null = null;
+        let existingChoices: string | null = null;
+        if (planned.gate.pass && ports.catalog !== undefined) {
+          const stored = await modelChoicesArtifactOf(ctx.sql, ctx.organizationId, ctx.requestId);
+          if (stored !== null) {
+            existingChoices = stored;
+          } else {
+            const run = await chooseModels({
+              deps,
+              catalog: ports.catalog,
+              requestId: ctx.requestId,
+              workspaceId: ctx.organizationId,
+              reservationId,
+              attempt,
+              signal: ctx.signal,
+              plan,
+            });
+            plan = { ...plan, decisions: [...plan.decisions, ...run.decisions] };
+            choices = run.choices;
+          }
+        }
         const written = await writeArtifact(ctx.sql, {
           organizationId: ctx.organizationId,
           requestId: ctx.requestId,
           stage: ctx.stage,
           type: "scene_plan",
-          body: planned.plan,
+          body: plan,
           parentIds: [validatedStored.envelope.artifactId, dnaStored.envelope.artifactId, voiceStored.envelope.artifactId],
           createdAt: new Date().toISOString(),
         });
         artifacts.plan = written.artifactId;
+        if (existingChoices !== null) artifacts.model_choices = existingChoices;
+        if (choices !== null) {
+          const choicesWritten = await writeArtifact(ctx.sql, {
+            organizationId: ctx.organizationId,
+            requestId: ctx.requestId,
+            stage: ctx.stage,
+            type: "model_choices",
+            body: choices,
+            parentIds: [written.artifactId],
+            createdAt: new Date().toISOString(),
+          });
+          artifacts.model_choices = choicesWritten.artifactId;
+        }
         shots = summaries;
       }
       return { kind: "done", output: { stage: "plan", subjectId: ctx.subjectId, artifacts, gate: planned.gate, shots } };

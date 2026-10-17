@@ -1413,7 +1413,9 @@ function schedule(state: OrchestratorState): QueuedJob[] {
             round: shot.round,
             epoch: shot.epoch,
           },
-          ["plan"],
+          // The request's model choices (Bible 10.5, contract v8), when the plan stage wrote them. A request without them has no slot,
+          // and its produce jobs keep the route table.
+          ["plan", "model_choices"],
           hints,
         );
       }

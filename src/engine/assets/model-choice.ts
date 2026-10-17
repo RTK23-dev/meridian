@@ -23,14 +23,25 @@ const MICRO_PER_USD = 10_000;
 
 /** What a spec needs from its model. The engine never asks a video model for its own audio: the voice track is the clock (Bible 1). */
 export function needOf(spec: AssetSpec): ModelNeed {
-  return {
+  return needFor({
     modelClass: spec.modelClass,
-    durationSeconds: spec.durationMs / 1000,
-    aspect: spec.aspect,
-    resolution: isVideoClass(spec.modelClass) ? VIDEO_RESOLUTION : null,
+    durationMs: spec.durationMs,
     firstFrame: spec.firstFrame !== undefined,
     lastFrame: spec.lastFrame !== undefined,
     refCount: spec.refs.length,
+  });
+}
+
+/** The same need, from the parts of a call a plan already names (before its asset spec is built at produce time). */
+export function needFor(call: { modelClass: AssetSpec["modelClass"]; durationMs: number; firstFrame: boolean; lastFrame: boolean; refCount: number }): ModelNeed {
+  return {
+    modelClass: call.modelClass,
+    durationSeconds: call.durationMs / 1000,
+    aspect: "9:16",
+    resolution: isVideoClass(call.modelClass) ? VIDEO_RESOLUTION : null,
+    firstFrame: call.firstFrame,
+    lastFrame: call.lastFrame,
+    refCount: call.refCount,
     audio: false,
   };
 }

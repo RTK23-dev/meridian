@@ -87,29 +87,27 @@ fail (with src/lib/meridian/storage and scripts/migration-plan.test.mjs). Lint: 
    variant run), and the Factory's brief path (the Factory maps only a script; it does not send a brief yet).
 7. Intake of a brief names no beats: a visual request on a brief fails intake (contract v8 open point 2, decided here).
 
-## Model choice (Bible 10.5, contract v7; 2026-10-17): router side wired, director call blocked on a contract change
+## Model choice (Bible 10.5, contracts v7 and v8; 2026-10-17)
 
-**Wired.** `runtime.ts`: `ShotPorts.catalog` (production: `modelCatalogCache({ gateway })`) is passed to every asset router. A spec with
-`modelChoice` skips `noEligibleVideoModel` (the route table's profiles do not decide a chosen model; the router checks it against the
-catalog and falls back to the route table, which refuses the same way when it has no profiled model). With `modelChoice: null` nothing
-changed. No spec carries a choice yet: `assetSpecFor` and `chainCallSpecFor` still write `modelChoice: null` (the contract default).
+**Built (fixture-tested; nothing called live).**
+- `handlers/plan.ts`: `PlanPorts.catalog` (production: the shot ports' `modelCatalogCache`, shared with the routers). After a plan that
+  passes its gate, the handler runs `plan/model-choices.ts chooseModels` (one catalog read, one `model_chooser` call through `runRole` on
+  the job's reservation), appends one Decision per call to the plan's decisions, writes the scene plan, then the request's `model_choices`
+  artifact (parent: the plan) in slot `model_choices`. A request has one: a retry finds the stored artifact and reuses it (no read, no call).
+  A catalog that is not connected writes no artifact (one Decision says why). Without the port nothing changes.
+- `orchestrator.ts`: produce_shot jobs read slots `plan` and `model_choices` (absent slot: route table, as before).
+- `handlers/produce-shot.ts`: `shotChoicesOf` reads the job's model_choices input; a generate shot's call (output `shot`, lead decision) and
+  each chain call (its output) get `modelChoice` on their asset spec (`assetSpecFor`, `chainCallSpecFor`); `finish` rebuilds the same spec. An
+  entry whose model class differs from the call's is not used.
+- `runtime.ts`: `ShotPorts.catalog` to every router; a spec with a choice skips `noEligibleVideoModel` (the router checks it).
+- Tests: `handlers/plan.test.ts` (+2: one chooser call, artifact written once, retry reuses it; no catalog, no artifact),
+  `model-choice-pipeline.test.ts` (plan choice, estimate, produce, poll, check_take: the chosen model is submitted, ledgered at the catalog
+  estimate, billed by OpenRouter, named on the take and in the decisions).
 
-**Blocked, for the lead (contract change needed; nothing built).**
-1. *Role name.* The choice must run through `runRole`, whose `role` is a `ClaudeRole` (`contracts/ledger.ts CLAUDE_ROLES`, "a new role is a
-   contract change"), and the ledger requires `promptVersion` to start with `<role>@`. Reusing `director_check` with a new prompt file would
-   be `director_check@3` beside the plan's `director_check@2`, and `deliver` refuses a request whose role ran two prompt versions
-   (`deliver/calls.ts`, `role-call-store.ts promptVersionsOf`). So a role such as `model_chooser` (llm.direction) must be added to
-   `CLAUDE_ROLES` with a version bump (engine-contracts@8).
-2. *Where the request-level choice lives.* The v7 note puts the choice on the asset spec at produce time, but the brief asks for one call
-   per request planning step. The `ScenePlan` has no field for it, `engine_artifacts` holds only contract artifact types, and a new table
-   needs a migration. Two options: (a) a new artifact type `model_choices` written after the plan (contract change); or (b) no storage:
-   each produce job builds the same request-wide input (every pending call's need and eligible candidates, from one catalog read) and the
-   role-call journal returns the stored answer to every later job, so the request pays one call; a catalog change between jobs makes a
-   new input and a second call. Lead and owner to choose.
-3. *Reservation.* `estimate_reserve` has no line for this call; in `cap` mode the call may be refused, which falls back by rule.
-
-Ready to use once unblocked: `assets/model-choice.ts resolveModelChoice` (accept-or-fallback, Decision), `gateway/catalog-fit.ts`
-(eligibility and ranking), `gateway/catalog.ts` (the candidates). The pipeline test with orchestrator choices end to end is not written.
+**Open, for the lead.** (1) No DB constraint enforces one `model_choices` per request; the handler checks before writing. (2) The pipeline
+test runs the plan stage's choice step directly (the real handler is covered in plan.test.ts with the 13-shot fixture, whose 1.5 s clips no
+recorded model fits). (3) `estimate_reserve` still prices shots from the price table, not the chosen model; the router's catalog estimate
+is authorized against that reservation, so a dearer chosen model can be refused in cap mode (a budget hold).
 
 ## Production shot ports: produce_shot and check_take in production (this pass)
 

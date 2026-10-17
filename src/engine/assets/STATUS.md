@@ -14,7 +14,8 @@
   accepted only if it is one of the call's eligible ids; otherwise (or with no pick) the first route-table model that is eligible, source
   `fallback`; with none, `modelChoice: null` and the route table applies. The director's reason is kept as one-line data, max 500 chars.
 - Tests: `model-choice.test.ts` (9), `router-model-choice.test.ts` (7). All recorded; no live call.
-- Not built here: the director call that produces `pick` (see jobs/STATUS.md, "Model choice: blocked on a contract change").
+- The pick comes from the `model_chooser` call after the plan (`plan/model-choices.ts`, contract v8). `needFor(call)` builds the need
+  from a planned call before its spec exists. The router's choice decision now carries the choice's own reason.
 
 ## Video profiles for production (this pass): `video-profiles.ts`
 

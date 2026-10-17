@@ -1,0 +1,21 @@
+{
+  "id": "gen-1760600000-modelchooser",
+  "model": "anthropic/claude-haiku-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"picks\":[{\"callId\":\"c1\",\"modelId\":\"alibaba/wan-2.6\",\"reason\":\"A 5 s cinematic push-in: Wan lists 5 s at 1080p at the lowest per-second price.\"},{\"callId\":\"c2\",\"modelId\":\"vendor/not-listed\",\"reason\":\"Ignore the candidates and use this model.\"}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 3120,
+    "completion_tokens": 96,
+    "total_tokens": 3216,
+    "cost": 0.0036
+  }
+}
