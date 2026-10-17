@@ -494,7 +494,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
 - A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
   `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
-- Preflight and copy claims on the Factory image path. Factory images run no preflight and no claim check. Their specs carry no duration, and the Factory has no copy check (see [ROADMAP.md](ROADMAP.md)).
+- Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. A deterministic prohibited or unsupported claim rejects the image before a provider is called. The engine claim question is still not asked on this path: an uncalibrated answer cannot approve, and the creative's later review is where that question belongs. Images still have no duration, so they are not sent through the video preflight.
 - Learning is not re-run on a schedule. The learn stage runs once in the queue, and a waiting run is checked again only with its Check learning
   button.
 - Cross-surface proposals: an organic winner proposed as an ad test, or the reverse. A run with intent `both` learns each surface for its

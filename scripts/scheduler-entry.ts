@@ -18,6 +18,15 @@ async function tick() {
      values ('scheduler', now(), 'enqueue-only')
      on conflict (name) do update set beat_at = now(), detail = excluded.detail`,
   );
+  // One held-call reconciler per workspace. A row an operator disabled is left disabled.
+  await pool.query(
+    `insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled, payload)
+     select 'reconcile_holds:' || o.id, o.id, null, 'engine.reconcile_holds', 900, now(), true, '{}'
+     from organizations o
+     where not exists (
+       select 1 from job_schedules existing where existing.id = 'reconcile_holds:' || o.id
+     )`,
+  );
   const due = await pool.query<{
     id: string;
     organization_id: string;

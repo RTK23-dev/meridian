@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
-import { submitOnShortcut } from "@/components/forms/shortcut";
-import { useDirtyDismiss } from "@/components/forms/use-dirty-dismiss";
-import { connectAccountSchema, type ConnectAccountInput } from "@/components/forms/client-schemas";
-import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, EmptyState, Field, ErrorNotice, Card, SelectInput, ScreenSkeleton, Input } from "@/components/ui";
+import { Badge, Button, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, Field, ErrorNotice, Card, ScreenSkeleton, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { usePendingVariables, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
@@ -19,6 +14,7 @@ import {
 import { beginOauth } from "@/lib/meridian/oauth/begin";
 import { oauthClientReadinessAction } from "@/lib/meridian/oauth/readiness";
 import { signInProviderForPlatform, signInState, type AccountSignInProvider } from "@/components/accounts/oauth-connect";
+import { parseAccountPaste } from "@/components/accounts/paste";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 
@@ -50,11 +46,13 @@ function BrandAccounts({ brandId }: { brandId: string }) {
 
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const blankAccount: ConnectAccountInput = { platform: "instagram", name: "", handle: "", externalAccountId: "", token: "" };
-  const form = useForm<ConnectAccountInput>({ resolver: zodResolver(connectAccountSchema), defaultValues: blankAccount, mode: "onBlur" });
-  const platform = form.watch("platform");
+  const [platform, setPlatform] = useState<(typeof PLATFORMS)[number]["id"]>("instagram");
+  const [paste, setPaste] = useState("");
+  const [name, setName] = useState("");
+  const [handle, setHandle] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [token, setToken] = useState("");
 
-  // Meta and Google ad accounts can start the existing sign-in flow. The flow returns to Integrations, where the account is confirmed.
   const organizationId = workspace?.active?.id ?? "";
   const signInProvider = signInProviderForPlatform(platform);
   const readinessQuery = useQuery({
@@ -71,7 +69,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     setErrorMessage(null);
     setSigningIn(provider);
     try {
-      const started = await beginOauth({ data: { organizationId, provider, origin: window.location.origin } });
+      const started = await beginOauth({ data: { organizationId, provider, origin: window.location.origin, returnTo: `/brands/${brandId}/accounts` } });
       window.location.assign(started.url);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Sign-in could not start.");
@@ -79,11 +77,14 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     }
   };
 
-  const dismiss = useDirtyDismiss({
-    dirty: form.formState.isDirty,
-    onOpenChange: (open) => setAddModalOpen(open),
-    onDiscard: () => form.reset(blankAccount),
-  });
+  const clearDraft = () => {
+    setPaste("");
+    setName("");
+    setHandle("");
+    setAccountId("");
+    setToken("");
+    setErrorMessage(null);
+  };
 
   const connectAccount = useScopedMutation({
     mutationKey: ["mutation", "accounts.connect", brandId],
@@ -94,7 +95,7 @@ function BrandAccounts({ brandId }: { brandId: string }) {
     success: "Account connected.",
     onSuccess: () => {
       setAddModalOpen(false);
-      form.reset(blankAccount);
+      clearDraft();
     },
   });
   const disconnectKey = ["mutation", "accounts.disconnect", brandId] as const;
@@ -107,25 +108,37 @@ function BrandAccounts({ brandId }: { brandId: string }) {
   const disconnecting = usePendingVariables<string>(disconnectKey);
 
   const selectedPlatformMeta = PLATFORMS.find((p) => p.id === platform) || PLATFORMS[0];
+  const dirty = [paste, name, handle, accountId, token].some((value) => value.trim().length > 0);
 
-  // The fields are checked by the schema before this runs, with the same limits the server applies.
-  const handleConnect = form.handleSubmit(async (values) => {
+  function applyPaste(value: string) {
+    setPaste(value);
+    const parsed = parseAccountPaste(value);
+    if (!parsed) return;
+    setAccountId(parsed.externalAccountId);
+    setHandle(parsed.handle);
+    setName((current) => current.trim() ? current : parsed.name);
+  }
+
+  async function handleConnect(event: FormEvent) {
+    event.preventDefault();
     setErrorMessage(null);
+    if (!name.trim() || !accountId.trim()) {
+      setErrorMessage("Enter the account name and the account ID. Pasting a profile link fills both.");
+      return;
+    }
+    const usesWorkspaceLogin = platform === "meta_ads" || platform === "google_ads";
     const ok = await connectAccount
       .mutateAsync({
-        platform: values.platform,
-        name: values.name.trim(),
-        handle: values.handle.trim(),
-        externalAccountId: values.externalAccountId.trim(),
+        platform,
+        name: name.trim(),
+        handle: handle.trim(),
+        externalAccountId: accountId.trim(),
         accountType: selectedPlatformMeta.type,
-        token: values.token.trim(),
+        token: usesWorkspaceLogin ? "" : token.trim(),
       })
       .then(() => true, () => false);
-
-    if (!ok) {
-      setErrorMessage("Failed to connect account.");
-    }
-  });
+    if (!ok) setErrorMessage("Failed to connect account.");
+  }
 
   const handleDisconnect = async (accountId: string) => {
     await disconnectAccount.mutateAsync(accountId).catch(() => undefined);
@@ -140,15 +153,14 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Account Vault</p>
-          <h1 className="page-title">Connected Platform Accounts</h1>
+          <h1 className="page-title">Connected accounts</h1>
           <p className="text-muted">
-            Manage multiple social pages, creator profiles, and advertising accounts for this brand.
-            All tokens are encrypted in the database with AES-256-GCM.
+            This names the page or ad account this brand uses. Meta and Google ads use the workspace login from Integrations, then the ad account ID here. Instagram, Facebook, YouTube, and TikTok still need their own token on this form.
           </p>
         </div>
-        {canAdmin ? (
-          <Button type="button" variant={accounts.length === 0 ? "secondary" : "primary"} onClick={() => setAddModalOpen(true)}>
-            Connect Account
+        {canAdmin && accounts.length > 0 ? (
+          <Button type="button" onClick={() => setAddModalOpen(true)}>
+            Connect another
           </Button>
         ) : null}
       </div>
@@ -156,15 +168,35 @@ function BrandAccounts({ brandId }: { brandId: string }) {
       {query.isPending && !query.data ? (
         <ScreenSkeleton label="Loading accounts" shape="rows" />
       ) : accounts.length === 0 ? (
-        <EmptyState
-          title="No accounts connected yet"
-          reason="Connect an Instagram page, YouTube channel, TikTok account, or ad account to enable multi-channel publishing and automated performance telemetry."
-          action={canAdmin ? (
-            <Button type="button" onClick={() => setAddModalOpen(true)}>
-              Connect First Account
-            </Button>
-          ) : undefined}
-        />
+        canAdmin ? (
+          <ConnectForm
+            platform={platform}
+            onPlatform={setPlatform}
+            paste={paste}
+            onPaste={applyPaste}
+            name={name}
+            onName={setName}
+            handle={handle}
+            onHandle={setHandle}
+            accountId={accountId}
+            onAccountId={setAccountId}
+            token={token}
+            onToken={setToken}
+            errorMessage={errorMessage}
+            pending={connectAccount.isPending}
+            dirty={dirty}
+            onSubmit={handleConnect}
+            onDiscard={clearDraft}
+            signIn={signInProvider ? {
+              provider: signInProvider,
+              enabled: signInEnabled,
+              reason: signInReason,
+              pending: signingIn === signInProvider,
+              onStart: () => void startSignIn(signInProvider),
+            } : null}
+            workspaceLogin={platform === "meta_ads" || platform === "google_ads"}
+          />
+        ) : <p className="text-sm text-muted">No accounts yet. A workspace admin can connect one.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {
@@ -213,105 +245,142 @@ function BrandAccounts({ brandId }: { brandId: string }) {
         </div>
       )}
 
-      <Dialog open={addModalOpen} onOpenChange={dismiss.requestOpenChange}>
-        <UnsavedChangesGuard dirty={form.formState.isDirty && addModalOpen} />
+      {accounts.length > 0 ? (
+      <Dialog open={addModalOpen} onOpenChange={(open) => { if (!open) clearDraft(); setAddModalOpen(open); }}>
+        <UnsavedChangesGuard dirty={dirty && addModalOpen} />
         <DialogContent aria-describedby="connect-account-description">
-          <DialogTitle>Connect Platform Account</DialogTitle>
+          <DialogTitle>Connect an account</DialogTitle>
           <DialogDescription id="connect-account-description">
-            Add an account to this brand. Tokens are encrypted using AES-256-GCM before writing to the database.
+            Paste a link or an ID. Sign-in is there for Meta Ads and Google Ads when this deployment has it.
           </DialogDescription>
-
-          <form className="mt-4 space-y-4" noValidate onSubmit={handleConnect} onKeyDown={(event) => submitOnShortcut(event)}>
-            {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
-
-            <Field label="Platform" error={form.formState.errors.platform?.message}>
-              <SelectInput {...form.register("platform")}>
-                {PLATFORMS.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} ({p.type.replace("_", " ")})
-                  </option>
-                ))}
-              </SelectInput>
-            </Field>
-
-            {signInProvider ? (
-              <div className="space-y-2 rounded-md border border-line p-3">
-                <p className="text-sm font-semibold">Sign in with {signInProvider === "meta" ? "Meta" : "Google Ads"}</p>
-                <p className="text-sm text-muted">
-                  Sign-in stores the token for this workspace, then returns you to Integrations to confirm the ad account.
-                </p>
-                <Button
-                  type="button"
-                  disabled={!signInEnabled}
-                  aria-describedby={signInEnabled || !signInReason ? undefined : "accounts-signin-reason"}
-                  onClick={() => void startSignIn(signInProvider)}
-                >
-                  {signingIn === signInProvider ? "Opening sign-in…" : `Sign in with ${signInProvider === "meta" ? "Meta" : "Google Ads"}`}
-                </Button>
-                {!signInEnabled && signInReason ? <DisabledReason id="accounts-signin-reason">{signInReason}</DisabledReason> : null}
-              </div>
-            ) : null}
-
-            <Field label="Account Display Name" error={form.formState.errors.name?.message} required>
-              <Input
-                {...form.register("name")}
-                maxLength={120}
-                placeholder="e.g. Acme Official Store"
-                required
-              />
-            </Field>
-
-            <Field label="Account Handle / Username" error={form.formState.errors.handle?.message}>
-              <Input
-                {...form.register("handle")}
-                maxLength={120}
-                placeholder={selectedPlatformMeta.placeholder}
-              />
-            </Field>
-
-            <Field label="External Account ID / Page ID" error={form.formState.errors.externalAccountId?.message} required>
-              <Input
-                {...form.register("externalAccountId")}
-                maxLength={120}
-                placeholder="e.g. 1029384756 or act_12345"
-                required
-              />
-            </Field>
-
-            <Field label="Access Token (Encrypted in the Vault)" hint="Publishing needs this token. Without it the account is listed but cannot publish or sync." error={form.formState.errors.token?.message}>
-              <Input
-                {...form.register("token")}
-                type="password"
-                placeholder="Paste the access token for this account"
-              />
-            </Field>
-
-            <UnsavedChangesBar
-              dirty={form.formState.isDirty}
-              subject="account connection"
-              confirming={dismiss.confirming}
-              onConfirmingChange={dismiss.setConfirming}
-              onDiscard={dismiss.discard}
+          <div className="mt-4">
+            <ConnectForm
+              platform={platform}
+              onPlatform={setPlatform}
+              paste={paste}
+              onPaste={applyPaste}
+              name={name}
+              onName={setName}
+              handle={handle}
+              onHandle={setHandle}
+              accountId={accountId}
+              onAccountId={setAccountId}
+              token={token}
+              onToken={setToken}
+              errorMessage={errorMessage}
+              pending={connectAccount.isPending}
+              dirty={dirty}
+              onSubmit={handleConnect}
+              onDiscard={() => { clearDraft(); setAddModalOpen(false); }}
+              signIn={signInProvider ? {
+                provider: signInProvider,
+                enabled: signInEnabled,
+                reason: signInReason,
+                pending: signingIn === signInProvider,
+                onStart: () => void startSignIn(signInProvider),
+              } : null}
+              workspaceLogin={platform === "meta_ads" || platform === "google_ads"}
             />
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="quiet"
-                onClick={() => dismiss.requestOpenChange(false)}
-                disabled={connectAccount.isPending}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={connectAccount.isPending || form.formState.isSubmitting}
-              >
-                {connectAccount.isPending ? "Connecting…" : "Save & Connect"}
-              </Button>
-            </div>
-          </form>
+          </div>
         </DialogContent>
       </Dialog>
+      ) : null}
     </div>
+  );
+}
+
+function ConnectForm({
+  platform,
+  onPlatform,
+  paste,
+  onPaste,
+  name,
+  onName,
+  handle,
+  onHandle,
+  accountId,
+  onAccountId,
+  token,
+  onToken,
+  errorMessage,
+  pending,
+  dirty,
+  onSubmit,
+  onDiscard,
+  signIn,
+  workspaceLogin,
+}: {
+  platform: (typeof PLATFORMS)[number]["id"];
+  onPlatform: (id: (typeof PLATFORMS)[number]["id"]) => void;
+  paste: string;
+  onPaste: (value: string) => void;
+  name: string;
+  onName: (value: string) => void;
+  handle: string;
+  onHandle: (value: string) => void;
+  accountId: string;
+  onAccountId: (value: string) => void;
+  token: string;
+  onToken: (value: string) => void;
+  errorMessage: string | null;
+  pending: boolean;
+  dirty: boolean;
+  onSubmit: (event: FormEvent) => void;
+  onDiscard: () => void;
+  signIn: { provider: AccountSignInProvider; enabled: boolean; reason: string | null; pending: boolean; onStart: () => void } | null;
+  workspaceLogin: boolean;
+}) {
+  const selected = PLATFORMS.find((item) => item.id === platform) ?? PLATFORMS[0];
+  const [confirming, setConfirming] = useState(false);
+  const canSave = name.trim().length > 0 && accountId.trim().length > 0;
+  return (
+    <form className="space-y-4 rounded-xl border border-border bg-surface p-4" noValidate onSubmit={onSubmit}>
+      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Platform">
+        {PLATFORMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            role="radio"
+            aria-checked={platform === item.id}
+            onClick={() => onPlatform(item.id)}
+            className={`min-h-11 rounded-full border px-3 text-sm font-semibold ${platform === item.id ? "border-fg bg-fg text-bg" : "border-border bg-surface text-fg hover:bg-surface-2"}`}
+          >
+            {item.name}
+          </button>
+        ))}
+      </div>
+      {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
+      {signIn ? (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-sm font-semibold">Sign in with {signIn.provider === "meta" ? "Meta" : "Google"}</p>
+          <p className="text-sm text-fg-muted">Sign-in stores the workspace login and brings you back to this page. Then enter the ad account ID. It does not connect an Instagram or Facebook page.</p>
+          <Button type="button" disabled={!signIn.enabled} aria-describedby={signIn.enabled || !signIn.reason ? undefined : "accounts-signin-reason"} onClick={signIn.onStart}>
+            {signIn.pending ? "Opening sign-in…" : `Sign in with ${signIn.provider === "meta" ? "Meta" : "Google"}`}
+          </Button>
+          {!signIn.enabled && signIn.reason ? <DisabledReason id="accounts-signin-reason">{signIn.reason}</DisabledReason> : null}
+        </div>
+      ) : null}
+      <Field label="Paste a link to fill the fields" hint={`For example ${selected.placeholder}. You can still edit every field after it fills.`}>
+        <Input value={paste} onChange={(event) => onPaste(event.target.value)} placeholder={selected.placeholder} autoComplete="off" spellCheck={false} maxLength={200} />
+      </Field>
+      <Field label="Account name" hint="The name shown in Meridian.">
+        <Input value={name} onChange={(event) => onName(event.target.value)} maxLength={120} placeholder="Acme official" required />
+      </Field>
+      <Field label="Handle" hint="Optional. A profile link fills this.">
+        <Input value={handle} onChange={(event) => onHandle(event.target.value)} maxLength={120} placeholder={selected.placeholder} autoComplete="off" spellCheck={false} />
+      </Field>
+      <Field label="Account ID" hint="The page ID, channel ID, or ad account ID the platform uses.">
+        <Input value={accountId} onChange={(event) => onAccountId(event.target.value)} maxLength={120} placeholder="1029384756 or act_12345" required autoComplete="off" spellCheck={false} />
+      </Field>
+      {workspaceLogin ? (
+        <p className="text-sm text-fg-muted">Paid ads use the workspace login. This form does not take a second token. Enter the ad account this brand should use.</p>
+      ) : (
+        <Field label="Access token" hint="Required to publish or sync this page. The Meta or Google ads login does not include this permission. Stored encrypted.">
+          <Input type="password" value={token} onChange={(event) => onToken(event.target.value)} placeholder="Paste the access token" autoComplete="new-password" spellCheck={false} />
+        </Field>
+      )}
+      <UnsavedChangesBar dirty={dirty} subject="account connection" confirming={confirming} onConfirmingChange={setConfirming} onDiscard={onDiscard} />
+      <Button type="submit" disabled={pending || !canSave}>{pending ? "Connecting…" : "Connect"}</Button>
+    </form>
   );
 }

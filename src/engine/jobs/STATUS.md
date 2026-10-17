@@ -7,11 +7,9 @@
   `EngineRuntime.jobs.reconcile_holds`, built by `createEngineRuntime` when the composition gives `holdReaders` (production does:
   OpenRouter's generation stats and Deepgram's request lookup, `productionComposition`). With no handler it is refused as not implemented.
   It returns `reconciled:settled=<n>,open=<n>,operator=<n>`. A failure is not a dead letter on a stage: Meridian marks the job.
-- **Scheduling (the one line).** The worker already sends every `engine.*` job to `executeEngineJob`, and the scheduler enqueues any due
-  `job_schedules` row (`scripts/scheduler-entry.ts`). So a workspace runs the reconciler every 15 minutes with one statement, run once per
-  workspace (replace the organization id; the id is the schedule's own key):
-  `insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled, payload) values ('reconcile_holds:<organization id>', '<organization id>', null, 'engine.reconcile_holds', 900, now(), true, '{}') on conflict (id) do update set enabled = true;`
-  Nothing in `src/lib/meridian` changes for it. Disable it with `update job_schedules set enabled = false where id = 'reconcile_holds:<organization id>'`.
+- **Scheduling.** The scheduler inserts one `engine.reconcile_holds` row per organization when the row is absent
+  (`scripts/scheduler-entry.ts`, every 15 minutes, id `reconcile_holds:<organization id>`). A row that already exists is not
+  changed, so disabling it stays disabled. The worker already sends every `engine.*` job to `executeEngineJob`.
 - **The reconciler** is `budget/reconcile-holds.ts` (`reconcileHolds`). It settles a held call only to its bill, and only at least five
   minutes after the call (`HOLD_SETTLE_AFTER_MS`); 100 calls a run, oldest first (`HOLD_BATCH_LIMIT`). A held call with no provider ref is
   listed under `needsOperator` and is never settled automatically; a call whose provider has no reader is listed under `stillOpen`.

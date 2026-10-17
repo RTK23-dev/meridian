@@ -1,6 +1,6 @@
 import type { Sql } from "../learning/store.ts";
 
-export type ClaimedOauthState = { organizationId: string; redirectOrigin: string };
+export type ClaimedOauthState = { organizationId: string; redirectOrigin: string; returnPath: string | null };
 
 /**
  * Consumes an OAuth state exactly once. The WHERE clause holds every check: the person who started the flow, the provider,
@@ -12,7 +12,7 @@ export async function claimOauthState(
   sql: Sql,
   input: { stateHash: string; userId: string; provider: string; origin: string },
 ): Promise<ClaimedOauthState | null> {
-  const rows = await sql<{ organization_id: string; redirect_origin: string | null }>`
+  const rows = await sql<{ organization_id: string; redirect_origin: string | null; return_path: string | null }>`
     update oauth_states set used_at = now()
     where state_hash = ${input.stateHash}
       and user_id = ${input.userId}
@@ -20,9 +20,9 @@ export async function claimOauthState(
       and redirect_origin = ${input.origin}
       and used_at is null
       and expires_at > now()
-    returning organization_id, redirect_origin
+    returning organization_id, redirect_origin, return_path
   `;
   const row = rows[0];
   if (!row || !row.redirect_origin) return null;
-  return { organizationId: row.organization_id, redirectOrigin: row.redirect_origin };
+  return { organizationId: row.organization_id, redirectOrigin: row.redirect_origin, returnPath: row.return_path };
 }

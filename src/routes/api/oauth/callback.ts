@@ -4,6 +4,7 @@ import { exchangeOauthCode, hashOauthState, isAllowedOauthOrigin, sealSecret } f
 import { claimOauthState } from "@/lib/meridian/oauth/state";
 import { liveTransport } from "@/lib/meridian/providers/http";
 import { signedInUserId } from "@/lib/meridian/storage/drive-route-auth.server";
+import { oauthReturnPath } from "@/lib/meridian/oauth/return-path";
 
 export const Route = createFileRoute("/api/oauth/callback")({
   server: {
@@ -42,7 +43,7 @@ export const Route = createFileRoute("/api/oauth/callback")({
             sealed_refresh = excluded.sealed_refresh,
             updated_at = now()
         `;
-        return new Response(null, { status: 302, headers: { location: "/integrations" } });
+        return new Response(null, { status: 302, headers: { location: oauthReturnPath(match.returnPath) } });
       },
     },
   },

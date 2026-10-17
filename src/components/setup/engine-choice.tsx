@@ -9,15 +9,17 @@ import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
 
 /** What each engine does and what it needs, in plain words. */
-const ENGINE_COPY: Record<string, { summary: string; needs: string; keyCategory: "jev" | "openai" }> = {
+const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" }> = {
   jev: {
-    summary: "TypeSafe's grading engine. It reads each idea or ad as text and answers with a score, a yes or no, or a choice.",
-    needs: "A TypeSafe key, saved for this workspace below.",
+    title: "TypeSafe JEV",
+    summary: "Answers each idea or ad as text: a score, a yes or no, or a choice.",
+    needs: "A TypeSafe key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "jev",
   },
   "openai-decisions": {
-    summary: "The same questions, answered by an OpenAI model. It can also read images, so visual checks use the picture itself.",
-    needs: "An OpenAI key, saved for this workspace below. The model is set on the server.",
+    title: "OpenAI Decisions",
+    summary: "The same questions, answered by an OpenAI model. It can also read images.",
+    needs: "An OpenAI key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "openai",
   },
 };
@@ -41,7 +43,6 @@ export function EngineChoice({
   keys: Record<"jev" | "openai", EngineKeyState>;
 }) {
   const activeId = engines.active.engineId;
-  const chosen = engines.active.source !== "default";
   const [picked, setPicked] = useState<string | null>(null);
   const selected = picked ?? activeId;
   const [message, setMessage] = useState<string | null>(null);
@@ -63,7 +64,9 @@ export function EngineChoice({
     },
   });
   const error = save.error ? plainError(save.error) : null;
-  const unchanged = chosen && selected === activeId;
+  const selectedEngine = engines.engines.find((engine) => engine.id === selected);
+  const selectedReady = selectedEngine?.health.status === "READY";
+  const unchanged = selected === activeId && engines.active.source !== "default";
 
   return (
     <div className="space-y-4">
@@ -73,15 +76,14 @@ export function EngineChoice({
         {engines.engines.map((engine) => {
           const copy = ENGINE_COPY[engine.id];
           const ready = engine.health.status === "READY";
-          const isActive = engine.id === activeId && chosen;
-          const canPick = ready || isActive;
+          const isActive = engine.id === activeId && engines.active.source !== "default";
           const key = copy ? keys[copy.keyCategory] : null;
           const inputId = `engine-${engine.id}`;
           return (
             <div
               key={engine.id}
-              className={`space-y-3 rounded-lg border p-4 transition duration-200 ease-out hover:shadow-md ${
-                selected === engine.id ? "border-fg bg-surface-2 shadow-sm" : "border-border bg-surface"
+              className={`space-y-3 rounded-lg border p-4 ${
+                selected === engine.id ? "border-fg bg-surface-2" : "border-border bg-surface"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -92,24 +94,23 @@ export function EngineChoice({
                     name="decision-engine"
                     value={engine.id}
                     checked={selected === engine.id}
-                    disabled={!canPick || !canAdmin || save.isPending}
+                    disabled={!canAdmin || save.isPending}
                     onChange={() => { setMessage(null); setPicked(engine.id); }}
                     className="mt-1.5 size-4 shrink-0 accent-[var(--color-accent)]"
                   />
-                  <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canPick && canAdmin ? "cursor-pointer" : ""}`}>
-                    <span className="block text-lg font-semibold text-fg">{engine.label}</span>
+                  <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canAdmin ? "cursor-pointer" : ""}`}>
+                    <span className="block text-lg font-semibold text-fg">{copy?.title ?? engine.label}</span>
                     {copy ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
-                  {isActive ? "Active" : ready ? "Ready" : "Not ready"}
+                  {isActive ? "In use" : ready ? "Ready" : "Needs a key"}
                 </span>
               </div>
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Needs: </span>{copy.needs}</p> : null}
               {!ready && engine.health.message ? <p className="text-sm text-fg [overflow-wrap:anywhere]">{engine.health.message}</p> : null}
-              {/* A card that is not ready carries its key form, so the key is saved where the choice is made. */}
-              {!ready && key && canAdmin ? (
-                <KeyForm row={{ label: engine.label, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
+              {!ready && key && copy && canAdmin ? (
+                <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}
             </div>
           );
@@ -118,10 +119,11 @@ export function EngineChoice({
       {!canAdmin ? <p className="text-sm text-fg-muted">Only a workspace admin can choose the engine or save a key. Everyone can see which one is in use.</p> : null}
       {canAdmin ? (
         <div className="flex flex-wrap items-center gap-3">
-          <Button type="button" variant="secondary" onClick={() => { setMessage(null); void save.mutateAsync(selected).catch(() => undefined); }} disabled={save.isPending || unchanged || !selected} aria-describedby={unchanged ? "engine-unchanged" : undefined}>
+          <Button type="button" variant="secondary" onClick={() => { setMessage(null); void save.mutateAsync(selected).catch(() => undefined); }} disabled={save.isPending || unchanged || !selected || !selectedReady} aria-describedby={!selectedReady || unchanged ? "engine-unchanged" : undefined}>
             {save.isPending ? "Saving..." : "Use this engine"}
           </Button>
-          {unchanged && !save.isPending ? <DisabledReason id="engine-unchanged">This engine is already the one in use. Pick the other card to change it.</DisabledReason> : null}
+          {unchanged && !save.isPending ? <DisabledReason id="engine-unchanged">This engine is already in use.</DisabledReason> : null}
+          {!unchanged && !selectedReady && !save.isPending ? <DisabledReason id="engine-unchanged">Save this engine's key on its card. The choice is saved only after the key is ready.</DisabledReason> : null}
         </div>
       ) : null}
     </div>

@@ -1,10 +1,12 @@
 /**
  * A sliding-window limit, held in this process's memory.
  *
- * The hits are process-local. Each server instance keeps its own, so with N instances one caller can make up to N times the limit. A
- * shared store (a Postgres table, or Redis) is needed before the limit is a guarantee for the whole deployment. That is an owner decision
- * (docs/engine/PHASE_LOG.md, open list). Until it is made, the limit is per instance, and this code does not change.
+ * Used when DATABASE_URL is unset (one local process, and the unit tests).
+ * When DATABASE_URL is set, enforceNamedLimit counts the same bucket in
+ * rate_limit_windows so a second instance cannot multiply the allowance.
  */
+import { consumeWindow, type WindowQuery } from "./shared-limit.ts";
+
 export function createRateLimit(limit: number, windowMs: number) {
   const hits = new Map<string, number[]>();
   let calls = 0;
@@ -49,6 +51,53 @@ export function refuseIfLimited(
   now = Date.now(),
 ): void {
   if (!limiter.allow(key, now)) throw new Error(RATE_LIMIT_MESSAGE);
+}
+
+const NAMED_LIMITS = {
+  auth: authLimit,
+  invite: inviteLimit,
+  upload: uploadLimit,
+  model: modelLimit,
+} as const;
+
+const NAMED_SPEC = {
+  auth: { limit: 20, windowMs: 60_000 },
+  invite: { limit: 10, windowMs: 60_000 },
+  upload: { limit: 30, windowMs: 60_000 },
+  model: { limit: 20, windowMs: 60_000 },
+} as const;
+
+export type NamedLimit = keyof typeof NAMED_LIMITS;
+
+let sharedQuery: WindowQuery | null | undefined;
+
+async function databaseQuery(): Promise<WindowQuery | null> {
+  if (sharedQuery !== undefined) return sharedQuery;
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url) {
+    sharedQuery = null;
+    return null;
+  }
+  const { default: pg } = await import("pg");
+  const pool = new pg.Pool({
+    connectionString: url,
+    max: 2,
+    ssl: url.includes("sslmode=disable") ? false : undefined,
+  });
+  sharedQuery = async (sql, params) => pool.query(sql, params);
+  return sharedQuery;
+}
+
+/** Counts against Postgres when DATABASE_URL is set, otherwise against this process. */
+export async function enforceNamedLimit(name: NamedLimit, key: string): Promise<void> {
+  const query = await databaseQuery();
+  if (!query) {
+    refuseIfLimited(NAMED_LIMITS[name], key);
+    return;
+  }
+  const spec = NAMED_SPEC[name];
+  const allowed = await consumeWindow(query, `${name}:${key}`, spec.limit, spec.windowMs);
+  if (!allowed) throw new Error(RATE_LIMIT_MESSAGE);
 }
 
 export function clientKey(request: Request): string {

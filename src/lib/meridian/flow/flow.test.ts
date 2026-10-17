@@ -74,6 +74,14 @@ test("Flow Connectors: swappable engines allow swapping grading engine without c
   assert.ok((report.finalOutput as any).overallScore >= 0.55);
 });
 
+test("the heuristic grader does not fill a missing score and then pass", async () => {
+  const engine = heuristicGradingEngine();
+  const graded = await engine.grade({ scores: { brandFit: 0.9 } });
+  assert.equal(graded.passed, false);
+  assert.equal(graded.confidence, 0);
+  assert.match(graded.reasons[0] ?? "", /Missing/);
+});
+
 test("Flow Connectors: multi-step flow (Planner -> Gate -> Publisher) executes or stops at gate", async () => {
   const flow = createFlow("plan-gate-publish");
 

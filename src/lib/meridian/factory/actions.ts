@@ -3,7 +3,7 @@ import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { modelLimit, refuseIfLimited } from "@/lib/meridian/security/limits";
+import { enforceNamedLimit } from "@/lib/meridian/security/limits";
 import { FACTORY_GRAPH, factoryRunJobs, isFactoryStage, type FactoryStage } from "./pipeline.ts";
 import {
   DEFAULT_RUN_SETTINGS,
@@ -379,7 +379,7 @@ export const startFactoryRun = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    refuseIfLimited(modelLimit, context.userId);
+    await enforceNamedLimit("model", context.userId);
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
     const brandRows = await sql<{ run_defaults: string }>`
       select run_defaults from brands where id = ${data.brandId} and organization_id = ${organizationId} limit 1

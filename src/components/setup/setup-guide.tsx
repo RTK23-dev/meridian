@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { CircleCheck, CircleDashed, Circle } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { KeyForm } from "@/components/settings/setup-panel";
@@ -108,7 +109,7 @@ export function SetupGuide() {
     <div className="space-y-10">
       <PageHeader
         title="Set up Meridian"
-        description="Work down the list. Each step says what it does and why it matters, and shows what is saved right now. The first two are required; the rest can wait."
+        description="Create a brand, then choose a decision engine and save its key. The other connections are on this page. Each one shows what it needs and saves it here."
         breadcrumbs={[{ label: "Overview", to: "/" }]}
       />
 
@@ -138,40 +139,9 @@ export function SetupGuide() {
       </section>
 
       <ol className="space-y-5">
-        {steps.map((step, index) => {
-          const mark = STEP_MARK[step.status];
-          const Icon = mark.icon;
-          const isCurrent = step.status === "current";
-          return (
-            <li key={step.id} id={`step-${step.id}`} className="scroll-mt-24">
-              <article
-                aria-labelledby={`step-title-${step.id}`}
-                className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition-shadow duration-300 md:p-6 ${isCurrent ? "border-fg shadow-sm" : "border-border"}`}
-                style={{ animationDelay: `${Math.min(index, 2) * 40}ms` }}
-              >
-                <div className="flex items-start gap-4">
-                  <span className={`grid size-9 shrink-0 place-items-center rounded-full ${mark.className}`} aria-hidden="true">
-                    <Icon className="size-4" />
-                  </span>
-                  <div className="min-w-0 flex-1 space-y-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <h3 id={`step-title-${step.id}`} className="text-xl font-semibold text-fg">
-                        <span className="mr-2 text-fg-muted">{index + 1}.</span>{step.title}
-                      </h3>
-                      <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
-                        {step.required ? "Required" : "Optional"} · {mark.label}
-                      </span>
-                    </div>
-                    <p className="text-sm text-fg">{step.what}</p>
-                    <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Why: </span>{step.why}</p>
-                    <p className="rounded-lg bg-surface-2 px-3 py-2 text-sm text-fg [overflow-wrap:anywhere]" aria-live="polite">{step.detail}</p>
-                    <div className="pt-1">{body(step)}</div>
-                  </div>
-                </div>
-              </article>
-            </li>
-          );
-        })}
+        {steps.map((step, index) => (
+          <SetupStep key={step.id} step={step} index={index} body={body(step)} />
+        ))}
       </ol>
 
       <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
@@ -180,6 +150,40 @@ export function SetupGuide() {
         <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
       </section>
     </div>
+  );
+}
+
+function SetupStep({ step, index, body }: { step: GuideStep; index: number; body: React.ReactNode }) {
+  const mark = STEP_MARK[step.status];
+  const Icon = mark.icon;
+  const isCurrent = step.status === "current";
+  return (
+    <li id={`step-${step.id}`} className="scroll-mt-24">
+      <article
+        aria-labelledby={`step-title-${step.id}`}
+        className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition duration-300 hover:shadow-md md:p-6 ${isCurrent ? "border-fg" : "border-border"}`}
+        style={{ animationDelay: `${Math.min(index, 2) * 40}ms` }}
+      >
+        <div className="flex items-start gap-4">
+          <span className={`grid size-9 shrink-0 place-items-center rounded-full ${mark.className}`} aria-hidden="true">
+            <Icon className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 id={`step-title-${step.id}`} className="text-xl font-semibold text-fg">
+                <span className="mr-2 text-fg-muted">{index + 1}.</span>{step.title}
+              </h3>
+              <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
+                {step.required ? "Required" : "Optional"} · {mark.label}
+              </span>
+            </div>
+            <p className="text-sm text-fg">{step.what}</p>
+            <p className="text-sm text-fg-muted">{step.detail}</p>
+            <div className="pt-1">{body}</div>
+          </div>
+        </div>
+      </article>
+    </li>
   );
 }
 
@@ -262,9 +266,12 @@ function RowList({
               </div>
               <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
             </div>
-            {row.save.kind === "form" ? (
+            {row.save.kind === "form" && !row.fingerprint ? (
+              <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
+            ) : null}
+            {row.save.kind === "form" && row.fingerprint ? (
               <details className="group rounded-md border border-border p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-fg underline decoration-accent underline-offset-4">{row.fingerprint ? "Replace or remove the key" : "Add the key"}</summary>
+                <summary className="cursor-pointer text-sm font-semibold text-fg underline decoration-accent underline-offset-4">Replace or remove the key</summary>
                 <div className="mt-3">
                   <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
                 </div>

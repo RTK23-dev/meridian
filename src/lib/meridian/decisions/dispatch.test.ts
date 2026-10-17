@@ -123,6 +123,21 @@ test("an active engine that fails is reported as failed; the other engine is not
   assert.equal(openai.calls.length, 1);
 });
 
+test("a switch to JEV without a TypeSafe key is refused, the same as OpenAI without a key", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "switch-jev-needs-key");
+  const before = await resolveActiveEngine(sql, tenant.organizationId);
+  const jev = await saveWorkspaceEngine(sql, {
+    organizationId: tenant.organizationId,
+    actorId: tenant.userId,
+    engineId: "jev",
+    targetHealth: { status: "NOT_CONFIGURED", message: "No TypeSafe key is saved for this workspace." },
+  });
+  assert.equal(jev.ok, false);
+  assert.match(jev.ok ? "" : jev.reason, /No TypeSafe key/);
+  assert.deepEqual(await resolveActiveEngine(sql, tenant.organizationId), before);
+});
+
 test("a switch to an engine that is not READY is refused and keeps the previous valid selection", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "switch-refused");

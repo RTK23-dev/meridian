@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Held-call reconciler.** The scheduler inserts one `engine.reconcile_holds` row per organization when none exists. A disabled row stays disabled.
+- **Rate limits.** With `DATABASE_URL`, auth and model calls share one Postgres window (`rate_limit_windows`, migration `0103`). Without it, the limit stays in the one local process.
+- **Factory images.** An empty still is refused before a provider is chosen. Duration does not apply to a still. A deterministic claim rejection stops the image and spends nothing. An uncalibrated engine answer still does not approve.
+- **Scores.** Opportunity workflow coverage is 1, 0.5, or 0 from whether a product and a known template exist. It is not 0.9, 0.62, or 0.35, and it is not a measured reproduction rate. The heuristic grader does not fill a missing score. A calibration row with no score is left out of the report.
 - **Video engine.** Contracts v7 to v9: model choice on asset specs, brief requests with the engine's own script
   (`write_script`), and the ledger's `providerRef` (migration `0101`). The orchestrator picks each production model from OpenRouter's
   catalog, and a chosen call is priced from its catalog price. Narration goes through OpenRouter speech (`elevenlabs/eleven-v4`, with
