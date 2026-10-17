@@ -17,12 +17,13 @@
  */
 
 import { createHash } from "node:crypto";
-import type {
-  CreativeSpec,
-  ProductionCapabilities,
-  ProductionJob,
-  ProductionProvider,
-  ProviderHealth,
+import {
+  providerPromptOf,
+  type CreativeSpec,
+  type ProductionCapabilities,
+  type ProductionJob,
+  type ProductionProvider,
+  type ProviderHealth,
 } from "../types.ts";
 import { modelCapabilityRegistry } from "../registry.ts";
 import { ProviderConfigResolver } from "../../config/resolver.ts";
@@ -309,7 +310,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
       };
     }
 
-    const prompt = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
+    const prompt = providerPromptOf(spec);
     const meridianJobId = spec.idempotencyKey || `job-omni-${globalThis.crypto.randomUUID()}`;
     const aspectRatio = spec.aspectRatio || "9:16";
     const durationSeconds = spec.durationTargetSeconds;

@@ -68,6 +68,8 @@ export type VideoRequest = {
   angle: string;
   planDeliverableId: string;
   durationSeconds: number;
+  aspectRatio: "9:16" | "1:1" | "16:9" | "4:5";
+  visualDirection: string;
   sequenceIndex: number;
 };
 
@@ -153,10 +155,11 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
     title: req.label,
     modality: "video",
     format: "video_ugc",
-    aspectRatio: "9:16",
+    aspectRatio: req.aspectRatio,
     durationTargetSeconds: req.durationSeconds,
     hookLine: req.hook,
     script: req.copy,
+    visualDirection: req.visualDirection || undefined,
     scenes: [],
     idempotencyKey: req.jobId,
   };

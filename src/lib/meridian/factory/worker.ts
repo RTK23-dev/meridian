@@ -109,6 +109,9 @@ export async function executeFactoryJob(
     where run_id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id} and stage = ${job.job_type}
   `;
   const spend = await meteredSpendOf(sql, job.organization_id, job.brand_id, runId);
+  const autoApproveReview = job.job_type === "factory.review" && job.brand_id
+    ? (await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id))?.gradingThresholds.autoApproveEnabled === true
+    : false;
   const decision = stageDecision({
     automation: settings.automation,
     stage: job.job_type,
@@ -120,6 +123,7 @@ export async function executeFactoryJob(
     dailySpentCents: spend.dailyCents,
     // The brand's caps are held against the brand's spend across all its runs, not this run's spend alone.
     ...(await brandCapFiguresOf(sql, job.organization_id, job.brand_id)),
+    autoApproveReview,
   });
   if (decision.action === "stop" || decision.action === "await_approval") {
     // A stage that waits or is stopped is recorded on the run with its reason. It is not a failure. The stages after it hold until
@@ -222,10 +226,12 @@ export async function executeFactoryJob(
     return `templates:${planned.templates};plans:${planned.plans};refused:${planned.refused.length}`;
   }
   if (job.job_type === "factory.produce") {
-    const videosPerConcept = settings.formats.includes("video") && job.brand_id
-      ? (await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id))?.generationParams.videoCount ?? null
-      : null;
-    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants, videosPerConcept);
+    const line = job.brand_id ? await loadSavedFactoryPipelineConfig(sql, job.organization_id, job.brand_id) : null;
+    const videosPerConcept = settings.formats.includes("video") ? line?.generationParams.videoCount ?? null : null;
+    const dailyCap = line?.generationParams.dailyGenerationCap ?? null;
+    const made = await persistVariants(sql, job.organization_id, job.brand_id, runId, settings.caps.maxVariants, videosPerConcept, dailyCap);
+    const videoChoice = settings.providers.video;
+    const lineProvider = !videoChoice || videoChoice === "auto" ? line?.generationParams.provider : undefined;
     // Each variant is materialized through the production router with the run's provider choice. A named provider that is not ready,
     // a cap that is reached, or a budget that refuses the reservation stops the run here, with the reason on the run row.
     const produced = await produceFactoryCreatives(sql, {
@@ -233,7 +239,10 @@ export async function executeFactoryJob(
       brandId: job.brand_id,
       runId,
       formats: settings.formats,
-      providers: settings.providers,
+      providers: lineProvider ? { ...settings.providers, video: lineProvider } : settings.providers,
+      lineDirection: line
+        ? { pacing: line.generationParams.renderPacing, scriptPrompt: line.prompts.scriptPrompt }
+        : null,
       caps: { totalCents: capOrNull(settings.caps.totalCents), dailyCents: capOrNull(settings.caps.dailyCents) },
       costPerMasterUsd: settings.costPerMasterUsd,
       engines: seams.decisionEngines,
@@ -768,6 +777,14 @@ async function persistTemplates(
   return { templates, plans, refused };
 }
 
+async function variantsMadeToday(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+  const rows = await sql<{ n: number }>`
+    select count(*)::int as n from factory_variants
+    where organization_id = ${organizationId} and brand_id = ${brandId} and created_at >= date_trunc('day', now())
+  `;
+  return rows[0]?.n ?? 0;
+}
+
 /**
  * The variants of each planned pick (NORTH_STAR section 5, plan). A pick gets its control, and one variant for each entry the brain
  * supplies, changing one attribute. Every row records the attribute it tests: "control" for the control. The run's variant cap bounds
@@ -780,6 +797,7 @@ async function persistVariants(
   runId: string,
   maxVariants: number,
   videosPerConcept: number | null = null,
+  dailyCap: number | null = null,
 ): Promise<number> {
   const templates = await sql<{ id: string; plan: string }>`
     select id, plan from factory_templates
@@ -788,10 +806,12 @@ async function persistVariants(
   `;
   const brain = await loadFactoryBrain(sql, organizationId, brandId);
   const entries = brainEntriesOf(brain.values);
+  const madeToday = dailyCap === null ? 0 : await variantsMadeToday(sql, organizationId, brandId);
+  let dailyRoom = dailyCap === null ? Number.POSITIVE_INFINITY : Math.max(0, dailyCap - madeToday);
   let budget = Math.max(0, maxVariants);
   let count = 0;
   for (const template of templates) {
-    if (budget <= 0) break;
+    if (budget <= 0 || dailyRoom <= 0) break;
     const stored = parseStoredPlan(template.plan);
     if (!stored) continue;
     const control: PlanAttributes = stored.attributes;
@@ -800,9 +820,11 @@ async function persistVariants(
       { attribute: "control", attributes: control },
       ...variantsOf(control, entries, Math.max(0, room - 1)).map((variant) => ({ attribute: variant.attribute, attributes: variant.attributes })),
     ].slice(0, room);
+    let considered = 0;
     for (const [index, row] of rows.entries()) {
+      if (dailyRoom <= 0) break;
       const id = `var:${template.id}:${index}`;
-      await sql`
+      const inserted = await sql<{ id: string }>`
         insert into factory_variants (
           id, organization_id, brand_id, template_id, hook, cta, presenter, length_ms, gate_result, tests_attribute, angle, format, proof
         ) values (
@@ -811,10 +833,13 @@ async function persistVariants(
           ${row.attributes.format}, ${row.attributes.proof}
         )
         on conflict (id) do nothing
+        returning id
       `;
+      considered += 1;
       count += 1;
+      if (inserted.length > 0) dailyRoom -= 1;
     }
-    budget -= rows.length;
+    budget -= considered;
   }
   return count;
 }
@@ -851,11 +876,13 @@ export function variantGateVerdicts(input: {
   rules: { approved: string[]; banned: string[] };
   /** The rights recorded for the variant's creatives: the two licences and the AI-label confirmation (rights.ts). */
   rights: { musicLicensed: boolean; footageLicensed: boolean; aiLabeled: boolean };
+  /** A saved line can turn an unapproved claim into review. Omitted means the strict gate, which blocks it. */
+  strictClaimGate?: boolean;
 }): GateVerdict[] {
   return [
     originalityGate({ frameHashDistance: null, embeddingDistance: null, textSimilarity: null }),
     brandGate({ logoPresent: null, paletteMatch: null, productLooksRight: null }),
-    claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned }),
+    claimsGate({ claims: recordedClaimsOf(input.storyboard ?? ""), approvedClaims: input.rules.approved, bannedWords: input.rules.banned, strict: input.strictClaimGate }),
     // This job runs no policy check, so no flag is known. Unknown is review; it is never recorded as a pass.
     policyGate({ beforeAfter: null, personalAttribute: null, healthClaim: null, financeClaim: null }),
     // The three inputs come from the records for the variant's creatives (rights.ts): the two licences and the AI-label confirmation.
@@ -953,13 +980,15 @@ async function gateVariantRows(
   variants: Array<{ id: string; storyboard: string | null }>,
   rules: { approved: string[]; banned: string[] },
 ): Promise<number> {
+  const line = await loadSavedFactoryPipelineConfig(sql, organizationId, brandId);
+  const strictClaimGate = line?.gradingThresholds.strictClaimGate !== false;
   let count = 0;
   for (const variant of variants) {
     const jev = await creativeQaVerdict(sql, organizationId, brandId, variant.id);
     const creativeIds = await creativeIdsOfVariant(sql, organizationId, brandId, variant.id);
     const licences = await licencesForCreatives(sql, organizationId, brandId, creativeIds);
     const rights = variantLicenceFlags(creativeIds, licences);
-    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights }), jev]);
+    const combined = combineGates([...variantGateVerdicts({ storyboard: variant.storyboard, rules, rights, strictClaimGate }), jev]);
     await sql`
       update factory_variants set gate_result = ${combined.result}
       where id = ${variant.id} and organization_id = ${organizationId} and brand_id = ${brandId}

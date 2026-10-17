@@ -10,12 +10,13 @@
  * - Never invents job IDs
  */
 
-import type {
-  CreativeSpec,
-  ProductionCapabilities,
-  ProductionJob,
-  ProductionProvider,
-  ProviderHealth,
+import {
+  providerPromptOf,
+  type CreativeSpec,
+  type ProductionCapabilities,
+  type ProductionJob,
+  type ProductionProvider,
+  type ProviderHealth,
 } from "../types.ts";
 import type { Sql } from "../../learning/store.ts";
 import { loadDefaultSql, resolveHiggsfieldCredential, type CredentialEnv } from "../../credentials/resolve.ts";
@@ -74,7 +75,7 @@ export const HIGGSFIELD_MODELS: Record<string, HiggsfieldModelDefinition> = {
     path: "/higgsfield/video/v1.0",
     supportedAspectRatios: ["9:16", "16:9", "1:1"],
     buildPayload: (spec: CreativeSpec) => ({
-      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      prompt: providerPromptOf(spec),
       duration: spec.durationTargetSeconds,
       aspect_ratio: spec.aspectRatio,
     }),
@@ -83,7 +84,7 @@ export const HIGGSFIELD_MODELS: Record<string, HiggsfieldModelDefinition> = {
     path: "/higgsfield/dop/v1.0",
     supportedAspectRatios: ["9:16", "16:9"],
     buildPayload: (spec: CreativeSpec) => ({
-      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      prompt: providerPromptOf(spec),
       duration: spec.durationTargetSeconds,
       aspect_ratio: spec.aspectRatio,
       camera_motion: "pan_zoom_auto",
@@ -93,7 +94,7 @@ export const HIGGSFIELD_MODELS: Record<string, HiggsfieldModelDefinition> = {
     path: "/higgsfield/genjutsu/restyle/v1.0",
     supportedAspectRatios: ["9:16", "16:9"],
     buildPayload: (spec: CreativeSpec) => ({
-      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      prompt: providerPromptOf(spec),
       duration: spec.durationTargetSeconds,
       aspect_ratio: spec.aspectRatio,
     }),
@@ -102,7 +103,7 @@ export const HIGGSFIELD_MODELS: Record<string, HiggsfieldModelDefinition> = {
     path: "/seedance/v1.0",
     supportedAspectRatios: ["9:16", "16:9"],
     buildPayload: (spec: CreativeSpec) => ({
-      prompt: spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script,
+      prompt: providerPromptOf(spec),
       duration: spec.durationTargetSeconds,
       aspect_ratio: spec.aspectRatio,
     }),

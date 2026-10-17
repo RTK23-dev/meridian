@@ -32,9 +32,19 @@ export function winnerClearsFloor(score: number, floor: number | null): boolean 
   return floor === null || score >= floor;
 }
 
+/** A saved confidence floor excludes a decoded trait that is less sure. A trait with no confidence is still used. */
+export function confidenceClearsFloor(confidence: number | null, floor: number | null): boolean {
+  return floor === null || confidence === null || confidence >= floor;
+}
 /** A saved P(beat) floor excludes a pattern that measured a lower probability. A pattern with no probability is still used. */
 export function patternClearsBeatFloor(pBeat: number | null, floor: number | null): boolean {
   return floor === null || pBeat === null || pBeat >= floor;
+}
+
+/** A 3 s retention floor ignores only a retention_3s pattern whose measured rate is lower. Other metrics are not compared to it. A missing rate is still used. */
+export function retentionClearsFloor(metric: string, observed: number | null, floor: number | null): boolean {
+  if (floor === null || metric !== "retention_3s" || observed === null || !Number.isFinite(observed)) return true;
+  return observed >= floor;
 }
 
 export const LEARNED_WEIGHT_SCALE = 0.5;
@@ -118,6 +128,8 @@ export type LearnedRow = {
   ci_high: number | null;
   surface: string;
   channel: string;
+  /** Measured rate for the pattern's metric. Absent on older callers. A retention floor reads it only for retention_3s. */
+  observed?: number | null;
 };
 
 /**
@@ -138,6 +150,7 @@ export function learnedWeightOf(
   rows: LearnedRow[],
   scope: LearningScope | null,
   beatFloor: number | null = null,
+  retentionFloor: number | null = null,
 ): { weight: number; notes: string[] } {
   const attributes: Record<string, string> = { angle: concept.angle, hookType: concept.hookType, format: concept.format };
   let adjustment = 0;
@@ -145,6 +158,7 @@ export function learnedWeightOf(
   for (const row of rows) {
     if (!scope || !patternInScope(row, scope)) continue;
     if (!patternClearsBeatFloor(row.p_beat, beatFloor)) continue;
+    if (!retentionClearsFloor(row.metric, row.observed ?? null, retentionFloor)) continue;
     const own = attributes[row.attribute];
     if (own === undefined || own === "" || row.value.trim().toLowerCase() !== own.trim().toLowerCase()) continue;
     const pattern: LearnedPattern = {
@@ -200,6 +214,8 @@ type Candidate = {
   known: number;
   /** Known ads still delivering at their last sighting. */
   running: number;
+  /** Confidence of the angle on the ad with the highest winner score, or null when the decode did not record one. */
+  confidence: number | null;
 };
 
 export type Pick = {
@@ -259,6 +275,7 @@ export async function pickConceptsForRun(
     const concept = dna?.adId ? conceptOf(dna) : null;
     if (!concept) continue;
     const winner = Number(row.winner_score);
+    const confidence = typeof dna.angle?.confidence === "number" && Number.isFinite(dna.angle.confidence) ? dna.angle.confidence : null;
     const candidate: Candidate = candidates.get(concept.key) ?? {
       concept,
       researchAdId: row.research_ad_id,
@@ -266,11 +283,13 @@ export async function pickConceptsForRun(
       bestWinner: winner,
       known: 0,
       running: 0,
+      confidence,
     };
     if (winner > candidate.bestWinner) {
       candidate.bestWinner = winner;
       candidate.researchAdId = row.research_ad_id;
       candidate.grade = row;
+      candidate.confidence = confidence;
     }
     if (row.still_running !== null) {
       candidate.known += 1;
@@ -282,6 +301,8 @@ export async function pickConceptsForRun(
   const line = await loadSavedFactoryPipelineConfig(sql, input.organizationId, input.brandId);
   const winnerFloor = line?.gradingThresholds.winnerScoreMin ?? null;
   const beatFloor = line?.gradingThresholds.pBeatMin ?? null;
+  const confidenceFloor = line?.gradingThresholds.confidenceMin ?? null;
+  const retentionFloor = line?.gradingThresholds.retention3sMin ?? null;
   const brain = await loadFactoryBrain(sql, input.organizationId, input.brandId);
   // Only the surfaces the run makes creatives for are read, and only the channels it names (or every channel). The filter is in the
   // query and again in learnedWeightOf, so a pattern from another surface can never move an arm. No scope reads no pattern at all.
@@ -290,7 +311,7 @@ export async function pickConceptsForRun(
   const learned = surfaces.length === 0
     ? []
     : await sql<LearnedRow>`
-        select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high, surface, channel
+        select attribute, value, metric, lift, sample_size, impressions, state, p_beat, ci_low, ci_high, surface, channel, observed
         from learned_patterns
         where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
           and surface = any(${surfaces}) and (channel = '' or channel = any(${channels}))
@@ -311,12 +332,19 @@ export async function pickConceptsForRun(
       });
       continue;
     }
+    if (!confidenceClearsFloor(candidate.confidence, confidenceFloor)) {
+      filtered.push({
+        concept: candidate.concept.label,
+        reason: `The decoded angle confidence ${candidate.confidence} is below this brand's floor of ${confidenceFloor}.`,
+      });
+      continue;
+    }
     if (!fit.passes) {
       filtered.push({ concept: candidate.concept.label, reason: fit.reason });
       continue;
     }
     for (const scope of scopes) {
-      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope, beatFloor);
+      const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope, beatFloor, retentionFloor);
       const surface: LearningSurface | "" = scope ? scope.surface : "";
       const id = scopes.length > 1 && scope ? `${scope.surface}|${candidate.concept.key}` : candidate.concept.key;
       arms.push({ id, successes: candidate.running, failures: candidate.known - candidate.running, weight });

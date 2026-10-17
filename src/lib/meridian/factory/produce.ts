@@ -82,6 +82,12 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
 }
 
 /** One variant in one format. Each format has its own path, and each path finds what the run already made before it spends. */
+const VIDEO_ASPECTS = ["9:16", "1:1", "16:9", "4:5"] as const;
+
+function videoAspectOf(value: string | undefined): (typeof VIDEO_ASPECTS)[number] {
+  return VIDEO_ASPECTS.find((aspect) => aspect === value) ?? "9:16";
+}
+
 async function produceVariantFormat(
   sql: Sql,
   input: ProduceInput,
@@ -130,6 +136,12 @@ async function produceVariantFormat(
       angle: variant.angle,
       planDeliverableId: deliverable?.id ?? "",
       durationSeconds: deliverable?.targetDurationSeconds ?? 8,
+      aspectRatio: videoAspectOf(deliverable?.kind === "video" ? deliverable.aspectRatio : undefined),
+      visualDirection: [
+        deliverable?.visualDirection ?? "",
+        input.lineDirection ? `Cut pacing: ${input.lineDirection.pacing}.` : "",
+        input.lineDirection?.scriptPrompt ?? "",
+      ].filter((part) => part.trim()).join("\n"),
       sequenceIndex: index,
     });
   }

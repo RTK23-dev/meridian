@@ -45,6 +45,8 @@ export type ProduceInput = {
   driveClient?: ArtifactDrive;
   /** The video engine's seams (FactoryEngineSeams). Used only by a video whose provider is the engine. */
   engine?: FactoryEngineSeams;
+  /** Saved line directions the video provider is told. Spoken copy is not replaced. */
+  lineDirection?: { pacing: string; scriptPrompt: string } | null;
 };
 
 export type Scope = { organizationId: string; brandId: string };

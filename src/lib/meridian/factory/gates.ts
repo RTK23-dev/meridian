@@ -150,23 +150,28 @@ export function claimsGate(input: {
   claims: string[] | null;
   approvedClaims: string[];
   bannedWords: string[];
+  /** When false, a claim that is not on the approved list is review instead of a block. Banned words still block. Missing claims stay review. */
+  strict?: boolean;
 }): GateVerdict {
   const claims = (input.claims ?? []).filter((claim) => claim.trim().length > 0);
   if (claims.length === 0) {
     return { gate: "claims", result: "review", reason: "No claim text is recorded for this variant. A person must check its claims." };
-  }
-  const approved = new Set(input.approvedClaims.map((item) => item.trim().toLowerCase()).filter(Boolean));
-  for (const claim of claims) {
-    const key = claim.trim().toLowerCase();
-    if (!approved.has(key)) {
-      return { gate: "claims", result: "block", reason: `Claim "${claim.trim()}" is not on the approved list.` };
-    }
   }
   const banned = input.bannedWords.map((item) => item.trim().toLowerCase()).filter(Boolean);
   const haystack = claims.join(" ").toLowerCase();
   for (const word of banned) {
     if (haystack.includes(word)) {
       return { gate: "claims", result: "block", reason: `Banned word "${word}" is present.` };
+    }
+  }
+  const approved = new Set(input.approvedClaims.map((item) => item.trim().toLowerCase()).filter(Boolean));
+  for (const claim of claims) {
+    const key = claim.trim().toLowerCase();
+    if (!approved.has(key)) {
+      if (input.strict === false) {
+        return { gate: "claims", result: "review", reason: `Claim "${claim.trim()}" is not on the approved list. The strict claim gate is off, so a person checks it.` };
+      }
+      return { gate: "claims", result: "block", reason: `Claim "${claim.trim()}" is not on the approved list.` };
     }
   }
   return { gate: "claims", result: "pass", reason: "Every claim maps to an approved claim. No banned words." };

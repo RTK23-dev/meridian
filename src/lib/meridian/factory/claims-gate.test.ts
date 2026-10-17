@@ -18,6 +18,12 @@ test("recorded claims are checked: an approved claim passes, an unapproved claim
   assert.equal(claimsGate({ claims: ["washes hands and may cure"], approvedClaims: ["washes hands and may cure"], bannedWords: ["cure"] }).result, "block");
 });
 
+test("a strict claim gate that is off sends an unapproved claim to a person, and a banned word still blocks", () => {
+  assert.equal(claimsGate({ claims: ["Lasts a year"], approvedClaims: ["washes hands"], bannedWords: [], strict: false }).result, "review");
+  assert.equal(claimsGate({ claims: ["This cures eczema"], approvedClaims: ["washes hands"], bannedWords: ["cure"], strict: false }).result, "block");
+  assert.equal(claimsGate({ claims: [], approvedClaims: ["washes hands"], bannedWords: [], strict: false }).result, "review");
+});
+
 test("the storyboard's recorded claims are read only when a list of text is present", () => {
   assert.equal(recordedClaimsOf(JSON.stringify({ schema: "meridian.storyboard.v1", beats: [] })), null);
   assert.equal(recordedClaimsOf(JSON.stringify({ claims: [] })), null);

@@ -100,6 +100,7 @@ export class ManualCloudProvider implements ProductionProvider {
       durationTargetSeconds: spec.durationTargetSeconds,
       hookLine: spec.hookLine,
       script: spec.script,
+      visualDirection: spec.visualDirection ?? "",
       scenes: spec.scenes,
       instructions: "Place the finished MP4 video into the output folder named in outputFolderUrl. It is picked up once it has stopped changing.",
     };

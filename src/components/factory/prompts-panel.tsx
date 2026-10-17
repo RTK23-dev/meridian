@@ -33,7 +33,7 @@ export function PromptsPanel({
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-fg-muted">
-        Each prompt saves to this brand. No model call reads them yet. No prompt version is stored or returned for these prompts, so none is shown.
+        The script prompt is sent with a video when a line is saved. Brief, perception, and grading prompts are saved and not read. Grading stays on the versioned JEV questions.
       </p>
 
       {PROMPT_KEYS.map((key) => {
@@ -54,7 +54,9 @@ export function PromptsPanel({
               onChange={(event) => onChange(key, event.currentTarget.value)}
               className="font-mono"
             />
-            <NotAppliedNote reason={NOT_READ_REASON.prompt} />
+            {key === "scriptPrompt"
+              ? <p className="text-sm text-fg-muted">{NOT_READ_REASON.scriptPrompt}</p>
+              : <NotAppliedNote reason={NOT_READ_REASON.prompt} />}
           </div>
         );
       })}

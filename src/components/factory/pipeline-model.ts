@@ -321,21 +321,22 @@ export const PROMPT_META: Record<PromptKey, { label: string; purpose: string }> 
   gradingPrompt: { label: "JEV cognitive grading", purpose: "Instructions for the grading rubric wording." },
 };
 
-/** Why a saved value does not change any run. Shown next to the control, so no control looks active. */
+/** What a saved value does on a run. A value that is not read says so. */
 export const NOT_READ_REASON = {
   videoCount: "Produce writes at most this many variants for each concept when the run makes video.",
   aspectRatio: "A saved line sets the video plan's aspect ratio. A brand with no saved line keeps 9:16.",
   durationSeconds: "A saved line sets the video plan's length. A brand with no saved line keeps the ad's own length.",
-  renderPacing: "No factory job reads the cut pacing yet.",
-  provider: "No factory job reads the render engine yet. The run's own provider choice is the one produce uses.",
-  dailyGenerationCap: "No factory job reads this daily cap yet. The spend caps on the Live tests tab are the ones launch reads.",
+  renderPacing: "Stored with the video as visual direction, after the spoken copy. It does not replace the spoken copy.",
+  provider: "When the run's video provider is auto, Produce uses this engine. A run that names a provider keeps that name.",
+  dailyGenerationCap: "Produce writes no more new variants than this for the brand today. A retry does not count a variant twice. The spend caps still apply.",
   winnerScoreMin: "Pick skips a concept whose observed winner score is below this floor. A brand with no saved line does not apply it.",
   pBeatMin: "Pick ignores a learned pattern whose measured P(beat) is below this floor. A pattern with no probability is still used.",
-  retention3sMin: "No factory job checks 3 s retention against this value yet.",
-  confidenceMin: "No factory job reads this value yet.",
-  autoApproveEnabled: "No job reads this switch. JEV's own approval rules run separately.",
-  strictClaimGate: "The claims check runs on every variant with the brand's own claims. No job reads this switch yet, so it does not change that check.",
-  prompt: "No model call reads this text yet.",
+  retention3sMin: "Pick ignores a learned 3 second retention pattern whose measured rate is below this floor. Other metrics are not compared to it. A pattern with no measured rate is still used.",
+  confidenceMin: "Pick skips a concept whose decoded angle confidence is below this floor. A decode with no confidence is still used.",
+  autoApproveEnabled: "Manual mode does not wait at the review step when this is on. A creative still has to be approved before it is published.",
+  strictClaimGate: "On, an unapproved claim blocks the variant. Off, that claim waits for a person. Banned words still block. A missing claim still waits.",
+  prompt: "Brief, perception, and grading prompts are not read. Grading stays on the versioned JEV questions.",
+  scriptPrompt: "Stored with the video as visual direction, after the spoken copy. It does not replace the spoken copy.",
 } as const;
 
 // ---------------------------------------------------------------------------------------------------------------------

@@ -73,11 +73,7 @@ keys (NORTH_STAR decision 1), so every live step is the owner's.
 
 ### Factory items
 
-The Factory's open items are listed in [FACTORY.md](FACTORY.md#not-built-yet). They are: video cost is not metered spend; Factory images run
-no preflight or claim check; learning is not re-run on a schedule; no cross-surface proposals; a re-grade overwrites the stored grade; organic
-outcomes are one per post; perception reads are not metered; the Factory Line editor is saved but read by no job; a live paid publish uses the
-run's Facebook Page id and destination link and is refused without them; uploads are not connected to Gather; a stored grade keeps its old threshold until its ad is graded
-again; and live outcomes are missing, because organic channels return no metrics.
+The Factory's open items are listed in [FACTORY.md](FACTORY.md#not-built-yet). They include: video cost is an estimate, not metered spend; the engine claim question is not asked before a Factory image call; no cross-surface proposals; a re-grade overwrites the stored grade; organic outcomes are one per post; perception reads are not metered; brief, perception, and grading prompts are saved and not read; uploads are not connected to Gather; a stored grade keeps its threshold until the ad is graded again; and live organic metrics are missing. A saved Factory Line is read for the floors, volume, engine, pacing, script prompt, review wait, and claim strictness named in FACTORY.md. Learning is rechecked while a run waits at learn. A live paid publish uses the run's page id and destination link and is refused without them.
 
 ## Built, not verified against the live service
 

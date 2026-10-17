@@ -83,6 +83,15 @@ test("a learned win on the concept's angle raises its weight, and a learned loss
   assert.ok(loser.weight >= 0.1, "a learned loss never removes the concept outright");
 });
 
+test("a low 3 second retention measurement is ignored, and another metric is not compared to that floor", () => {
+  const concept = conceptOf(dnaFor("ad-retention", "demo", "question", "problem-solution"));
+  assert.ok(concept);
+  const low = learnedWeightOf(concept, [{ ...LEARNED_WIN, metric: "retention_3s", observed: 0.2 }], PAID_RUN, null, 0.45);
+  assert.equal(low.weight, 1);
+  const clicks = learnedWeightOf(concept, [{ ...LEARNED_WIN, observed: 0.01 }], PAID_RUN, null, 0.45);
+  assert.ok(clicks.weight > 1);
+});
+
 test("a pattern on another value, or on no attribute the concept has, leaves the weight at one", () => {
   const concept = conceptOf(dnaFor("ad-5", "demo", "question", "problem-solution"));
   assert.ok(concept);

@@ -83,6 +83,14 @@ export type CreativeSpec = {
   idempotencyKey?: string;
 };
 
+/** Spoken lines stay first. Visual direction, when present, is a separate instruction and is not spoken copy. */
+export function providerPromptOf(spec: { hookLine?: string; script: string; visualDirection?: string }): string {
+  const spoken = spec.hookLine ? `${spec.hookLine}\n${spec.script}` : spec.script;
+  const direction = spec.visualDirection?.trim();
+  if (!direction) return spoken;
+  return `${spoken}\n\nVisual direction (do not speak this):\n${direction}`;
+}
+
 export type ProductionJob = {
   jobId: string;
   meridianJobId?: string;

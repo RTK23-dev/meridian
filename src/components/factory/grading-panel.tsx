@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { DEFAULT_GRADING_THRESHOLDS, type PipelineGradingThresholds } from "@/lib/meridian/factory/pipeline-config";
 import { Button, DisabledReason } from "@/components/ui";
-import { NotAppliedNote, SettingSlider, SettingSwitch } from "./pipeline-controls";
+import { SettingSlider, SettingSwitch } from "./pipeline-controls";
 import {
   GRADING_META,
   GRADING_RANGES,
@@ -50,7 +50,7 @@ export function GradingPanel({
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-fg-muted">
-        These thresholds save to this brand. Pick uses the winner-score floor and the P(beat) floor when a line is saved. The other two floors are saved and not read yet.
+        These thresholds save to this brand. Pick uses them when a line is saved. A brand with no saved line does not apply them.
       </p>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -70,9 +70,7 @@ export function GradingPanel({
                 hint={`${GRADING_META[key].detail} Default ${formatPercent(DEFAULT_GRADING_THRESHOLDS[key])}. Allowed ${min}% to ${max}%.`}
                 disabled={!canEdit}
                 onChange={(percent) => onChange(gradingPatch(key, fromPercent(percent)))}
-                note={key === "winnerScoreMin" || key === "pBeatMin"
-                  ? <p className="text-sm text-fg-muted">{NOT_READ_REASON[key]}</p>
-                  : <NotAppliedNote reason={NOT_READ_REASON[key]} />}
+                note={<p className="text-sm text-fg-muted">{NOT_READ_REASON[key]}</p>}
               />
             </div>
           );
@@ -83,24 +81,24 @@ export function GradingPanel({
         <SettingSwitch
           id={autoId}
           label="Auto-approve high-confidence winners"
-          hint="Lets a winner pass the review step without a person. Saving this does not change the review step."
+          hint="Lets manual mode pass the review step without a person. Publishing still needs the creative to be approved."
           checked={thresholds.autoApproveEnabled}
           disabled={!canEdit}
           onCheckedChange={(autoApproveEnabled) => onChange({ autoApproveEnabled })}
           onText="On"
           offText="Off. Review stays with a person."
-          note={<NotAppliedNote reason={NOT_READ_REASON.autoApproveEnabled} />}
+          note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.autoApproveEnabled}</p>}
         />
         <SettingSwitch
           id={claimId}
           label="Strict claim gate"
-          hint="Blocks claims that are not backed by approved claims. Saving this does not change the claim check."
+          hint="On, a claim that is not approved blocks the variant. Off, a person reviews it. Banned words still block."
           checked={thresholds.strictClaimGate}
           disabled={!canEdit}
           onCheckedChange={(strictClaimGate) => onChange({ strictClaimGate })}
           onText="On"
           offText="Off"
-          note={<NotAppliedNote reason={NOT_READ_REASON.strictClaimGate} />}
+          note={<p className="text-sm text-fg-muted">{NOT_READ_REASON.strictClaimGate}</p>}
         />
       </div>
 
