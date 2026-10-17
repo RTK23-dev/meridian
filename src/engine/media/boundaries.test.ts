@@ -3,7 +3,7 @@
 // environment; no local models are imported. These are static checks over the source tree, run by npm test.
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
@@ -46,14 +46,27 @@ function importSpecifiers(source: string): Array<{ specifier: string; typeOnly: 
 const HANDLER_MODULES =
   /functions\/ffmpeg\/(probe|frames|loudness|cuts|timeline|picture|detectors|http|exec|source)\.ts$/;
 const LOCAL_ONLY = /(\/|^)local\.ts$/;
+/**
+ * The one production file outside src/engine/media that may import the in-process implementation: the engine's composition root,
+ * which chooses between the in-process and the HTTP media functions (MEDIA_FUNCTIONS_MODE, owner decision 2026-10-16).
+ */
+const COMPOSITION_ROOT = join("jobs", "runtime.ts");
 
 describe("media boundaries", () => {
   const productionFiles = files(ENGINE).filter((path) => !isTest(path));
 
-  it("no production file outside src/engine/media imports the in-process implementation", () => {
+  it("only the composition root imports the in-process implementation; no other production file outside src/engine/media does", () => {
+    assert.equal(
+      statSync(join(ENGINE, COMPOSITION_ROOT)).isFile(),
+      true,
+      "the composition root named in this test must exist",
+    );
     const offenders: string[] = [];
     for (const path of productionFiles) {
       if (relative(ENGINE, path).startsWith(`media${sep}`)) {
+        continue;
+      }
+      if (relative(ENGINE, path) === COMPOSITION_ROOT) {
         continue;
       }
       for (const { specifier } of importSpecifiers(readFileSync(path, "utf8"))) {
@@ -63,6 +76,12 @@ describe("media boundaries", () => {
       }
     }
     assert.deepEqual(offenders, []);
+  });
+
+  it("the in-process implementation is not re-exported from the media index, so nothing reaches it through the index", () => {
+    const index = readFileSync(join(ENGINE, "media", "index.ts"), "utf8");
+    assert.doesNotMatch(index, /inProcessMediaFunctions/);
+    assert.doesNotMatch(index, /\.\/local\.ts/);
   });
 
   it("no production file uses the recorded speech-to-text adapter (it is for tests and CI)", () => {
@@ -86,7 +105,7 @@ describe("media boundaries", () => {
       exported.some((specifier) => LOCAL_ONLY.test(specifier)),
       false,
     );
-    assert.doesNotMatch(index.replace(/\/\/.*$/gm, ""), /localMediaFunctions|recordedSpeechToText/);
+    assert.doesNotMatch(index.replace(/\/\/.*$/gm, ""), /localMediaFunctions|inProcessMediaFunctions|recordedSpeechToText/);
   });
 
   it("no production file outside src/engine/media runs a function handler (only types may come from functions/ffmpeg)", () => {

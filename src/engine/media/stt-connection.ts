@@ -1,8 +1,9 @@
-// Whether a speech-to-text vendor can be called (Bible 20.2, CLAUDE.md working rule 1). The vendor is an open owner decision,
-// so the stt route has no model and this returns not_connected with a NOT_CONNECTED reason. It sends nothing. A stage that
-// needs speech-to-text asks this first, so it fails closed before it reserves or spends anything. The check reads the route
-// table through the gateway (gateway.route), and never picks a vendor itself.
+// Whether a speech-to-text vendor can be called (Bible 20.2, CLAUDE.md working rule 1). The stt route names Deepgram (owner decision
+// 2026-10-16), and this returns not_connected with a NOT_CONNECTED reason until the composition root wires its adapter and the
+// gateway can reach the provider. It sends nothing. A stage that needs speech-to-text asks this first, so it fails closed before it
+// reserves or spends anything. The check reads the route table through the gateway (gateway.route), and never picks a vendor itself.
 
+import { priceFor } from "../config/prices.ts";
 import type { Gateway, ResolvedRoute } from "../gateway/gateway.ts";
 import type { SpeechToText } from "./stt.ts";
 
@@ -17,8 +18,18 @@ export function notConnectedReason(detail: string): string {
 }
 
 /**
+ * The list price per minute of a routed target (config/prices.ts), or null when the route has no price key or its price is not per
+ * minute. A null price refuses the call (estimateSttUsd), so nothing is estimated as zero.
+ */
+export function pricePerMinuteOf(route: ResolvedRoute): number | null {
+  if (route.priceKey === null) return null;
+  const price = priceFor(route.priceKey);
+  return price.unit === "per_minute" ? price.usd : null;
+}
+
+/**
  * The speech-to-text connection for this deployment. `resolve` maps a routed target to a wired adapter, or null when none is
- * wired; the composition root passes it once a vendor is chosen. Without it, nothing is ready.
+ * wired: the composition root passes deepgramForRoute (stt-deepgram.ts) with the gateway and the project id. Without it, nothing is ready.
  */
 export function speechToTextConnection(
   gateway: Gateway,
@@ -31,7 +42,7 @@ export function speechToTextConnection(
     const detail = error instanceof Error ? error.message : "the stt route is not set";
     return {
       status: "not_connected",
-      reason: notConnectedReason(`speech-to-text has no vendor (Bible 20.2): ${detail}`),
+      reason: notConnectedReason(`the speech-to-text route cannot be used (Bible 20.2): ${detail}`),
     };
   }
   const stt = options.resolve?.(route) ?? null;

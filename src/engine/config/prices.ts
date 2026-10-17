@@ -17,7 +17,11 @@ export type PriceUnit =
 export type Price = {
   readonly unit: PriceUnit;
   readonly usd: number | null;
-  readonly source: "list_oct_2026";
+  /**
+   * list_oct_2026: a list price checked for this table. third_party_unverified: a price from a third-party source, not checked against
+   * the vendor's own price page. The owner's live run verifies it before it is relied on (Bible 10.3).
+   */
+  readonly source: "list_oct_2026" | "third_party_unverified";
 };
 
 const LIST = "list_oct_2026" as const;
@@ -51,7 +55,10 @@ const priceEntries = {
     eleven_v4: { unit: "per_million_characters", usd: 40, source: LIST },
     gemini_3_8_flash_tts: { unit: "per_million_output_tokens", usd: null, source: LIST },
 
-    // Speech-to-text: the vendor is an open owner decision (Bible 20.2).
+    // Speech-to-text: the vendor is Deepgram (owner decision 2026-10-16, Bible 20.2). Nova-3 pre-recorded at $0.0043 a minute is from
+    // third-party sources, not checked against Deepgram's own price page, so it is unverified until the owner's live run.
+    deepgram_nova3_prerecorded: { unit: "per_minute", usd: 0.0043, source: "third_party_unverified" },
+    // The generic speech-to-text placeholder before the vendor was chosen. It stays null: nothing is priced from it.
     stt_vendor: { unit: "per_minute", usd: null, source: LIST },
 
     // Lip-sync, background removal and upscaling: vendors are chosen in E2.

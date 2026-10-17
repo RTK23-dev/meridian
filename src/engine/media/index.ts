@@ -55,7 +55,9 @@ export {
   type RenderIntegrityInput,
 } from "./integrity.ts";
 export {
+  attemptKey,
   estimateSttUsd,
+  isRefusalBeforeWork,
   normaliseTranscript,
   transcribeMetered,
   sttIdempotencyKey,
@@ -70,6 +72,19 @@ export { mediaConfig } from "./config.ts";
 export {
   NOT_CONNECTED,
   notConnectedReason,
+  pricePerMinuteOf,
   speechToTextConnection,
   type SpeechToTextConnection,
 } from "./stt-connection.ts";
+export {
+  DEEPGRAM_PROVIDER,
+  deepgramForRoute,
+  deepgramSpeechToText,
+  type DeepgramOptions,
+} from "./stt-deepgram.ts";
+export {
+  MEDIA_FUNCTIONS_MODE_SETTING,
+  MEDIA_FUNCTIONS_MODES,
+  parseMediaFunctionsMode,
+  type MediaFunctionsMode,
+} from "./mode.ts";

@@ -14,14 +14,16 @@ const fixture: RecordedSttFixture = {
   responses: [],
 };
 
-describe("speech-to-text connection (Bible 20.2: the vendor is an owner decision)", () => {
-  it("is not connected while the stt route has no vendor, and says so with NOT_CONNECTED, sending nothing", () => {
+describe("speech-to-text connection (Bible 20.2: the vendor is Deepgram, owner decision 2026-10-16)", () => {
+  it("is not connected while the gateway cannot reach the stt route's provider, and says so with NOT_CONNECTED, sending nothing", () => {
+    // The stt route names deepgram; the gateway's provider list does not include it yet, so the route cannot be resolved.
     const script = scripted({});
     const connection = speechToTextConnection(gatewayFor(script.transport));
     assert.equal(connection.status, "not_connected");
     if (connection.status !== "not_connected") return;
     assert.match(connection.reason, new RegExp(`^${NOT_CONNECTED}:`));
     assert.match(connection.reason, /Bible 20\.2/);
+    assert.match(connection.reason, /deepgram/);
     assert.equal(script.requests.length, 0);
   });
 

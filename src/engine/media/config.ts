@@ -37,4 +37,24 @@ export const mediaConfig = {
     /** A word may end this many milliseconds after the audio ends (rounding and encoder padding). */
     endToleranceMs: 500,
   },
+
+  /**
+   * The speech-to-text vendor call (Bible 10.3, 10.4). Initial values, replaced by the owner's live run. Timeouts are transport
+   * timeouts for one request; the caps bound the bytes read from one answer before it is parsed.
+   */
+  speechToText: {
+    /** One transcription request: a 60 s reel takes seconds, and the cap leaves room for long audio. */
+    listenTimeoutMs: 180_000,
+    /** The request-lookup call that reads the bill. */
+    billTimeoutMs: 30_000,
+    /** The largest transcription answer read (about 3000 words of JSON is well under this). */
+    maxResponseBytes: 4 * 1024 * 1024,
+    /** The largest bill answer read. */
+    maxBillResponseBytes: 64 * 1024,
+    /**
+     * Attempts under new keys after the vendor refused the input before any work (contract v6). Each refusal is settled as
+     * confirmed absent, so the next attempt needs a new key. Past this many, the wrapper stops and names the input.
+     */
+    maxRefusedAttempts: 5,
+  },
 } as const;

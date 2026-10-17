@@ -19,17 +19,30 @@ vendor is open, so no vendor is wired here).
   and a wire form (production). `frames.ts` also holds the frame plan of Bible 6.2: a frame at every cut, then 2 per
   second, capped at 60, cuts first. If the cuts alone exceed the cap, the plan says `cutsCovered: false`. Each returned
   PNG is checked against its request (order, structure and declared size).
-- `local.ts`: `localMediaFunctions`, **for tests and CI only**. It runs the handlers in this process through the ffmpeg
-  on the machine. `boundaries.test.ts` fails if any production file imports it.
+- `local.ts`: `inProcessMediaFunctions()`, the in-process form. It runs the handlers in this process through the ffmpeg on
+  the machine, with the serverless limits unchanged, and refuses URL inputs (the engine never calls fetch). Tests and CI use
+  it. The worker uses it when the composition root chooses it. Only `src/engine/jobs/runtime.ts` may import it
+  (`boundaries.test.ts`).
+- `mode.ts`: `parseMediaFunctionsMode(raw)`, the mode a deployment names (`MEDIA_FUNCTIONS_MODE`): `http` (the default, which
+  is NOT_CONNECTED without a base URL) or `in_process`. Any other value is a config error. The composition root reads the
+  setting outside `src/engine` and passes the raw value here.
 - `integrity.ts`: `checkRenderIntegrity(input)`, the render-integrity gate (6.11, 12.3). Pure. It returns a `GateResult`
   for gate `render_integrity`. Unknown values fail (Bible 12), including a null platform size limit.
 - `stt.ts`: the `SpeechToText` interface (returns `Word[]` with word ids and integer millisecond timings), the transcript
   validation every vendor's answer passes (`normaliseTranscript`), the metered wrapper `transcribeMetered`
   (estimate, authorise with an idempotency key, call, reconcile to the bill), and `recordedSpeechToText`, a replay
-  adapter for tests. Production must not use the replay adapter, and `boundaries.test.ts` checks that.
-- `config.ts`: the scene-cut score (initial 0.3, tunable), the EDL frame duration, call timeouts, and transcript limits.
-  These should move to `src/engine/config/` (see `STATUS.md`).
-- `index.ts`: the production surface. It exports no in-process or replay implementation.
+  adapter for tests. Production must not use the replay adapter, and `boundaries.test.ts` checks that. A refusal the vendor
+  made before any work (`SttCallError.refusedBeforeWork`: a rejected input or key) is settled as confirmed absent (contract
+  v6), and the next attempt under the same input takes a new attempt key (`attemptKey`).
+- `stt-deepgram.ts`: the Deepgram adapter (owner decision 2026-10-16). `POST /v1/listen` for the transcript and
+  `GET /v1/projects/{project_id}/requests/{request_id}` for the bill, both through `gateway.call`, so the gateway attaches the
+  key and holds the host. The bill settles the call; a bill that cannot be read leaves it unsettled, with a `billNote`.
+  `deepgramForRoute` is the resolver the composition root passes to `speechToTextConnection`.
+- `stt-connection.ts`: `speechToTextConnection` (NOT_CONNECTED until a resolver is wired and the gateway can reach the
+  route's provider) and `pricePerMinuteOf` (the route's list price, null without one).
+- `config.ts`: the scene-cut score (initial 0.3, tunable), the EDL frame duration, call timeouts, transcript limits, and the
+  speech-to-text call limits. These should move to `src/engine/config/` (see `STATUS.md`).
+- `index.ts`: the production surface. It exports neither the in-process nor the replay implementation.
 
 ## Rules this folder keeps
 
@@ -57,8 +70,13 @@ Run from the repo root (`npm test` runs `src/**/*.test.ts`, so these run in CI):
   refused URL, malformed answer), the route table and error statuses, and an end-to-end round trip through the handler.
 - `integrity.test.ts`: every check of 6.11, including the 100 ms boundary and the null platform limit.
 - `stt.test.ts`: transcript validation, the four recorded outcome classes (success, rate limit, timeout, policy refusal),
-  and the budget wrapper.
-- `boundaries.test.ts`: static checks of the import rules above.
+  the confirmed-absent settlement of refusals, the attempt keys, and the budget wrapper.
+- `stt-deepgram.test.ts`: the Deepgram adapter against synthetic recorded answers (`test/deepgram-fixtures.ts`): the request
+  shape, no key in the request, the bill settlement, a failed or unusable bill, the refusals (400, 401, 403) and the holds
+  (404, 408, 429, 5xx, timeouts). No call is made.
+- `mode.test.ts`: the mode setting (unset is http, a typo is refused).
+- `boundaries.test.ts`: static checks of the import rules above, including that only the composition root imports the
+  in-process implementation.
 
 The tests that need ffmpeg are skipped with a visible reason when ffmpeg is not installed. With
 `MERIDIAN_REQUIRE_FFMPEG=1`, `ffmpeg-required.test.ts` fails the run instead.

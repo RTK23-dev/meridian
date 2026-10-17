@@ -1,11 +1,11 @@
-// Speech-to-text (Bible 6.2 step 3, 6.3 step 3, 20.2). The vendor is an open owner decision, so this file has the
-// interface, the validation every vendor's answer must pass, the metered wrapper, and recordedSpeechToText, which
-// replays recorded responses for tests. No vendor is wired here. Production code must not use recordedSpeechToText.
+// Speech-to-text (Bible 6.2 step 3, 6.3 step 3, 10.3, 20.2): the interface, the validation every vendor's answer must pass,
+// the metered wrapper, and recordedSpeechToText, which replays recorded responses for tests. The Deepgram adapter is in
+// stt-deepgram.ts. Production code must not use recordedSpeechToText.
 
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { authorizeCall } from "../budget/reserve.ts";
-import { reconcileCall } from "../budget/reconcile.ts";
+import { confirmAbsentCall, reconcileCall } from "../budget/reconcile.ts";
 import type { LedgerStore } from "../budget/store.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { canonicalJson } from "../contracts/hash.ts";
@@ -43,6 +43,11 @@ export type SttResult = {
   language: string;
   /** The vendor's bill for the call, or null when the vendor did not report one. */
   billedUsd: number | null;
+  /**
+   * Why no bill is recorded, when none is (the bill lookup failed or its answer was not usable). The transcript is still valid, and
+   * the call stays held (contract v6). Absent when a bill is recorded.
+   */
+  billNote?: string;
 };
 
 /**
@@ -167,17 +172,31 @@ export function checkBilledUsd(value: unknown): number | null {
   return parsed.data;
 }
 
+/**
+ * A refusal the vendor made before any work: its input was rejected, so no bill can follow. Contract v6 settles such a call as
+ * confirmed absent. A rate limit, a timeout and a server error are not in this set: the vendor may have billed them.
+ */
+export function isRefusalBeforeWork(error: ProviderError): boolean {
+  return error.kind === "invalid_input" || error.kind === "content_policy";
+}
+
 /** A failed call, typed. retryable comes from the vendor's classification (rate limit, timeout and server errors retry). */
 export class SttCallError extends EngineError {
   providerKind: ProviderError["kind"];
+  /**
+   * True when the vendor refused the call before any work (contract v6): the wrapper then settles the call as confirmed absent, so
+   * the next attempt needs a new key. False for every other failure, whose hold stays until the operator settles it.
+   */
+  refusedBeforeWork: boolean;
 
-  constructor(error: ProviderError, stage: string = STAGE) {
+  constructor(error: ProviderError, stage: string = STAGE, refusedBeforeWork: boolean = false) {
     super("provider", `speech-to-text ${error.kind}: ${error.message}`, {
       retryable: error.retryable,
       stage,
     });
     this.name = "SttCallError";
     this.providerKind = error.kind;
+    this.refusedBeforeWork = refusedBeforeWork;
   }
 }
 
@@ -208,6 +227,35 @@ export function sttIdempotencyKey(
     )
     .digest("hex");
   return `stt:${digest}`;
+}
+
+/**
+ * The key of the n-th attempt at one input. The first attempt uses the input's key. A later attempt, made after the vendor refused
+ * the input before any work (settled confirmed absent), adds ":a<n>", so it is a new key and the ledger does not treat it as a repeat.
+ */
+export function attemptKey(baseKey: string, attempt: number): string {
+  return attempt === 1 ? baseKey : `${baseKey}:a${attempt}`;
+}
+
+/**
+ * The key a call is authorised under. A key whose call the vendor refused before any work is confirmed absent (contract v6), so the
+ * next attempt takes the next attempt key. A key whose call is unsettled or billed is returned as it is: authorisation then refuses it
+ * as a repeat, so nothing is sent twice. Past maxRefusedAttempts refusals the input is named and the call is stopped.
+ */
+async function nextAttemptKey(store: LedgerStore, baseKey: string): Promise<string> {
+  const limit = mediaConfig.speechToText.maxRefusedAttempts;
+  for (let attempt = 1; attempt <= limit; attempt += 1) {
+    const key = attemptKey(baseKey, attempt);
+    const row = await store.getEntryByKey(key);
+    if (row === null || row.settlement !== "confirmed_absent") {
+      return key;
+    }
+  }
+  throw new EngineError(
+    "conflict",
+    `speech-to-text input was refused before any work ${limit} times (${baseKey}): change the input before it is sent again`,
+    { stage: STAGE, retryable: false },
+  );
 }
 
 /**
@@ -256,6 +304,8 @@ export type MeteredSttResult = {
   actualUsd: number | null;
   /** True when the call is settled (its bill is recorded). A transcript whose call is unsettled is still returned, and its cost stays unknown. */
   settled: boolean;
+  /** Why no bill is recorded, when the vendor's bill could not be read (SttResult.billNote). */
+  billNote?: string;
 };
 
 /**
@@ -263,7 +313,9 @@ export type MeteredSttResult = {
  * vendor, then settle to the vendor's bill. With no bill the call stays held and its cost unknown; nothing is estimated (contract v6).
  * - A key already on the ledger is never sent again. A settled one is refused and its stored transcript is reused; an unsettled one
  *   (the last call failed or returned no bill) waits to be settled, because the vendor may have billed it (contract v6).
- * - A failed call leaves its hold in place. It is not released here, because the vendor may have billed the call.
+ * - A refusal the vendor made before any work (SttCallError.refusedBeforeWork: a rejected input, or a rejected key) is settled as
+ *   confirmed absent, with a hold of zero. The next attempt under the same input uses a new attempt key (nextAttemptKey).
+ * - Any other failed call leaves its hold in place. It is not released here, because the vendor may have billed the call.
  */
 export async function transcribeMetered(
   stt: SpeechToText,
@@ -271,7 +323,7 @@ export async function transcribeMetered(
   meter: SttMeter,
 ): Promise<MeteredSttResult> {
   const estimateUsd = estimateSttUsd(request.durationMs, meter.pricePerMinuteUsd, meter.stage);
-  const idempotencyKey = sttIdempotencyKey(stt, request);
+  const idempotencyKey = await nextAttemptKey(meter.store, sttIdempotencyKey(stt, request));
   const authorised = await authorizeCall(meter.store, {
     reservationId: meter.reservationId,
     stage: meter.stage,
@@ -298,7 +350,17 @@ export async function transcribeMetered(
     );
   }
 
-  const result = await stt.transcribe(request, idempotencyKey);
+  let result: SttResult;
+  try {
+    result = await stt.transcribe(request, idempotencyKey);
+  } catch (error) {
+    // Contract v6 (settlement): a refusal made before any work cannot have been billed, so the call is settled as confirmed absent.
+    // Every other failure keeps its hold, because the vendor may have billed it.
+    if (error instanceof SttCallError && error.refusedBeforeWork) {
+      await confirmAbsentCall(meter.store, { idempotencyKey, evidence: error.message });
+    }
+    throw error;
+  }
   const reconciled = await reconcileCall(meter.store, {
     idempotencyKey,
     ...(result.billedUsd === null ? {} : { billedUsd: result.billedUsd }),
@@ -310,6 +372,7 @@ export async function transcribeMetered(
     estimateUsd,
     actualUsd: reconciled.entry.actualUsd ?? null,
     settled: reconciled.settled,
+    ...(result.billNote === undefined ? {} : { billNote: result.billNote }),
   };
 }
 
@@ -358,7 +421,7 @@ export function recordedSpeechToText(fixture: RecordedSttFixture): RecordedSpeec
       }
       cursor += 1;
       if (next.outcome === "error") {
-        throw new SttCallError(next.error, STAGE);
+        throw new SttCallError(next.error, STAGE, isRefusalBeforeWork(next.error));
       }
       const normalised = normaliseTranscript(
         { language: next.language, words: next.words },

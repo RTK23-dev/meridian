@@ -6,10 +6,14 @@ import { describe, it } from "node:test";
 import { budgetReservationFixture } from "../contracts/fixtures/index.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { wordSchema } from "../contracts/analysis.ts";
+import type { ProviderError } from "../contracts/index.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
+import { mediaConfig } from "./config.ts";
 import {
+  attemptKey,
   checkBilledUsd,
   estimateSttUsd,
+  isRefusalBeforeWork,
   normaliseTranscript,
   recordedSpeechToText,
   SttCallError,
@@ -407,14 +411,80 @@ describe("transcribeMetered: reserve, authorise with a key, call, reconcile", ()
     assert.equal(stt.calls.length, 1);
   });
 
-  it("a policy refusal leaves its hold on the ledger, not released, because the vendor may have billed it", async () => {
+  it("a refusal before any work is settled as confirmed absent, with an actual of 0 (contract v6), so its hold is released", async () => {
     const ledger = await store();
     await rejects(
       transcribeMetered(recordedSpeechToText(sttPolicyRefusalRecording), REQUEST, meter(ledger)),
       "provider",
     );
     const [entry] = await ledger.listEntries(budgetReservationFixture.reservationId);
+    assert.equal(entry?.settlement, "confirmed_absent");
+    assert.equal(entry?.actualUsd, 0);
+  });
+
+  it("a timeout keeps its hold: the vendor may have billed the call, so nothing is confirmed absent", async () => {
+    const ledger = await store();
+    await rejects(
+      transcribeMetered(recordedSpeechToText(sttTimeoutRecording), REQUEST, meter(ledger)),
+      "provider",
+    );
+    const [entry] = await ledger.listEntries(budgetReservationFixture.reservationId);
+    assert.equal(entry?.settlement, undefined);
     assert.equal(entry?.actualUsd, undefined);
+  });
+
+  it("the next attempt under the same input takes a new key, so a refused input is sent again once it is changed", async () => {
+    const ledger = await store();
+    const stt = recordedSpeechToText({
+      ...sttPolicyRefusalRecording,
+      responses: [sttPolicyRefusalRecording.responses[0]!, sttSuccessRecording.responses[0]!],
+    });
+    const base = sttIdempotencyKey(stt, REQUEST);
+    await rejects(transcribeMetered(stt, REQUEST, meter(ledger)), "provider");
+    const outcome = await transcribeMetered(stt, REQUEST, meter(ledger));
+    assert.equal(outcome.idempotencyKey, attemptKey(base, 2));
+    assert.equal(outcome.actualUsd, 0.0043);
+    assert.deepEqual(stt.calls, [base, attemptKey(base, 2)]);
+    assert.equal((await ledger.listEntries(budgetReservationFixture.reservationId)).length, 2);
+  });
+
+  it("stops after the refused-attempt limit and names the input, without calling the vendor again", async () => {
+    const ledger = await store();
+    const limit = mediaConfig.speechToText.maxRefusedAttempts;
+    const refusal = sttPolicyRefusalRecording.responses[0]!;
+    const stt = recordedSpeechToText({
+      ...sttPolicyRefusalRecording,
+      responses: Array.from({ length: limit }, () => refusal),
+    });
+    for (let attempt = 0; attempt < limit; attempt += 1) {
+      await rejects(transcribeMetered(stt, REQUEST, meter(ledger)), "provider");
+    }
+    await rejects(transcribeMetered(stt, REQUEST, meter(ledger)), "conflict");
+    assert.equal(stt.calls.length, limit, "the vendor was called once per refused attempt, and no more");
+  });
+
+  it("isRefusalBeforeWork is true for a rejected input only, never for a rate limit, a timeout, a server error or an unknown failure", () => {
+    const kind = (value: ProviderError["kind"]): ProviderError => ({ kind: value, retryable: false, message: value });
+    assert.equal(isRefusalBeforeWork(kind("invalid_input")), true);
+    assert.equal(isRefusalBeforeWork(kind("content_policy")), true);
+    assert.equal(isRefusalBeforeWork(kind("rate_limit")), false);
+    assert.equal(isRefusalBeforeWork(kind("timeout")), false);
+    assert.equal(isRefusalBeforeWork(kind("server")), false);
+    assert.equal(isRefusalBeforeWork(kind("unknown")), false);
+  });
+
+  it("the recorded adapter marks only a refusal before any work on the error it throws", async () => {
+    const policy = recordedSpeechToText(sttPolicyRefusalRecording);
+    const refused = await rejects(policy.transcribe(REQUEST, "k"), "provider");
+    assert.equal((refused as SttCallError).refusedBeforeWork, true);
+    const limited = recordedSpeechToText(sttRateLimitThenSuccessRecording);
+    const held = await rejects(limited.transcribe(REQUEST, "k"), "provider");
+    assert.equal((held as SttCallError).refusedBeforeWork, false);
+  });
+
+  it("attemptKey keeps the input's key for the first attempt and adds an attempt suffix after it", () => {
+    assert.equal(attemptKey("stt:abc", 1), "stt:abc");
+    assert.equal(attemptKey("stt:abc", 2), "stt:abc:a2");
   });
 
   it("gives a different idempotency key for a different source, so two inputs never share a bill", () => {

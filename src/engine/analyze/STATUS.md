@@ -156,9 +156,11 @@ Results on this branch are in the report to the lead.
 
 ## Live steps: owner (agents hold no keys)
 
-1. **Speech-to-text vendor (Bible 20.2).** Choose it. Write one adapter in `src/engine/media/`, put its price per minute in
-   `config/prices.ts` (`stt_vendor`, null today), and set the `stt` route. Then record one transcription of a 30 s reference
-   with music under the speech: word timings, the bill, and a repeat with the same key that is not billed.
+1. **Speech-to-text vendor (Bible 20.2).** The vendor is Deepgram (owner decision 2026-10-16). The adapter is
+   `src/engine/media/stt-deepgram.ts`, the stt route names `deepgram` / `nova-3`, and the price is `deepgram_nova3_prerecorded`
+   (third-party, unverified). The gateway, the credential category and the project id are still to be wired (see
+   `src/engine/media/STATUS.md`). Then record one transcription of a 30 s reference with music under the speech: word timings,
+   the bill, and a repeat with the same key that is not billed.
 2. **Deploy and record the functions.** Deploy `functions/ffmpeg` (see `functions/ffmpeg/STATUS.md`) with `/timeline`. Run the
    timeline, cuts, probe and frames on the reference through `httpMediaFunctions` and record the answers as `captured`.
 3. **Captions reader and motion readers.** The grammar needs captions (blocker 2), and shake and speed ramps (blocker 3). The
