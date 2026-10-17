@@ -7,7 +7,7 @@ import { applyLearnedPatterns, type Sql } from "./store.ts";
 
 type Staged = { op: "delete" } | { op: "insert"; id: string };
 
-function fakeDatabase(options: { failInsertAt?: number } = {}) {
+function fakeDatabase(options: { failInsertAt?: number; failOrganicRead?: boolean } = {}) {
   let committed: string[] = ["old-pattern"];
   let inserts = 0;
 
@@ -43,7 +43,10 @@ function fakeDatabase(options: { failInsertAt?: number } = {}) {
   function runStatement(text: string, staged: Staged[] | null): unknown[] {
     if (text.includes("from creative_records")) return creativeRows;
     if (text.includes("from performance_observations")) return observationRows;
-    if (text.includes("from organic_observations")) return [];
+    if (text.includes("from organic_observations")) {
+      if (options.failOrganicRead) throw new Error("connection reset");
+      return [];
+    }
     if (text.includes("pg_advisory_xact_lock")) return [];
     if (text.includes("delete from learned_patterns")) {
       if (!staged) throw new Error("a write outside a transaction");
@@ -102,6 +105,13 @@ test("a successful replacement swaps the old set for the new one in a single com
   assert.ok(count > 0, "the fixture produces at least one learned pattern");
   assert.ok(!database.committed.includes("old-pattern"), "the previous patterns are gone after the commit");
   assert.equal(database.committed.length, count);
+});
+
+test("a failed organic read fails the recomputation: the brand keeps its previous patterns, and nothing is deleted", async () => {
+  // An empty organic read would learn without the organic rows and replace the brand's patterns with a set that lacks them.
+  const database = fakeDatabase({ failOrganicRead: true });
+  await assert.rejects(applyLearnedPatterns(database.sql, "org-learning", "brand-learning"), /connection reset/);
+  assert.deepEqual(database.committed, ["old-pattern"], "the failed read happens before the replacement, so no delete is staged or committed");
 });
 
 test("the replacement refuses to run without a transaction, before any write", async () => {

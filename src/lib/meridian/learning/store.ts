@@ -92,28 +92,25 @@ export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: st
     revenueCents: row.revenue_cents == null ? null : asNumber(row.revenue_cents),
     channel: asText(row.platform),
   }));
-  let organicObservations: OrganicObservationRow[] = [];
-  try {
-    const organicRows = await sql<Record<string, unknown>>`
-      select creative_id, organization_id, brand_id, platform, views, three_second_views, completion_rate, shares, likes, comments
-      from organic_observations
-      where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
-    `;
-    organicObservations = organicRows.map((row) => ({
-      creativeId: asText(row.creative_id),
-      organizationId: asText(row.organization_id),
-      brandId: asText(row.brand_id),
-      channel: asText(row.platform),
-      views: optionalNumber(row.views),
-      threeSecondViews: optionalNumber(row.three_second_views),
-      completionRate: optionalNumber(row.completion_rate),
-      shares: optionalNumber(row.shares),
-      likes: optionalNumber(row.likes),
-      comments: optionalNumber(row.comments),
-    }));
-  } catch {
-    organicObservations = [];
-  }
+  // The organic read is not optional, and a failed read is never an empty one. It throws here, before the replacement below, so the
+  // brand's learned patterns stay as they were. Learning from a set that lacks its organic rows would replace patterns it cannot reproduce.
+  const organicRows = await sql<Record<string, unknown>>`
+    select creative_id, organization_id, brand_id, platform, views, three_second_views, completion_rate, shares, likes, comments
+    from organic_observations
+    where brand_id = ${brandId} and organization_id = ${organizationId} and creative_id is not null
+  `;
+  const organicObservations: OrganicObservationRow[] = organicRows.map((row) => ({
+    creativeId: asText(row.creative_id),
+    organizationId: asText(row.organization_id),
+    brandId: asText(row.brand_id),
+    channel: asText(row.platform),
+    views: optionalNumber(row.views),
+    threeSecondViews: optionalNumber(row.three_second_views),
+    completionRate: optionalNumber(row.completion_rate),
+    shares: optionalNumber(row.shares),
+    likes: optionalNumber(row.likes),
+    comments: optionalNumber(row.comments),
+  }));
   // Learned once over every channel (channel ''), and once per channel that a row names. A channel set holds only its own rows, so a
   // pattern for one platform never comes from another platform's outcomes. Paid and organic metrics are disjoint, so each call
   // learns each surface from its own rows only.
