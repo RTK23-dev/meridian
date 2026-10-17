@@ -21,4 +21,4 @@ It does not invent a result. A step with no key, no account, or no bill says so 
 - [Product loop](Product-loop.md)
 - [Credentials](Credentials.md)
 
-This release is `0.1.0-beta.12`. Tests cover the loop with fixtures. A live provider run is recorded only after the keys are on the server.
+This release is `0.1.0-beta.13`. Tests cover the loop with fixtures. A live provider run is recorded only after the keys are on the server.

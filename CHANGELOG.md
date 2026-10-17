@@ -2,23 +2,28 @@
 
 ## Unreleased
 
-- **Held-call reconciler.** The scheduler inserts one `engine.reconcile_holds` row per organization when none exists. A disabled row stays disabled.
-- **Rate limits.** With `DATABASE_URL`, auth and model calls share one Postgres window (`rate_limit_windows`, migration `0103`). Without it, the limit stays in the one local process.
-- **Factory images.** An empty still is refused before a provider is chosen. Duration does not apply to a still. A deterministic claim rejection stops the image and spends nothing. An uncalibrated engine answer still does not approve.
-- **Scores.** Opportunity workflow coverage is 1, 0.5, or 0 from whether a product and a known template exist. It is not 0.9, 0.62, or 0.35, and it is not a measured reproduction rate. The heuristic grader does not fill a missing score. A calibration row with no score is left out of the report.
-- **Video engine.** Contracts v7 to v9: model choice on asset specs, brief requests with the engine's own script
-  (`write_script`), and the ledger's `providerRef` (migration `0101`). The orchestrator picks each production model from OpenRouter's
-  catalog, and a chosen call is priced from its catalog price. Narration goes through OpenRouter speech (`elevenlabs/eleven-v4`, with
-  `google/gemini-3.8-flash-tts` as fallback). Held calls are settled by `engine.reconcile_holds` once a provider's bill is readable.
-  Speech-to-text is Deepgram. ffmpeg runs on the worker (`MEDIA_FUNCTIONS_MODE=in_process`). Live runs are not recorded.
-- **Content Factory page** (`/content-factory`), admin only: a chat that starts a video from instructions, files and Meridian records.
-  Text files up to 4000 characters are read into the brief; PDFs are kept but not read.
-- **Factory fixes.** Sleep caps per scope; learned patterns kept on a failed read; a minimum confidence is never skipped; measurement
-  duplicates (migration `0098`, which archives removed rows); stuck image jobs stop the run; trial reads claim a slot.
-- **Operations.** One advisory lock for the migration runner; the migration plan test pins known gaps; build and preview load `.env`;
-  `Dockerfile.worker` removed.
-- **Known open, owner decisions.** The render fallback conflicts with the 2026-10-14 policy. Rate limits are per process. Video-DNA frame
-  labelling bypasses the perception provider. See [docs/engine/CHECKPOINT_2026-10-17_final.md](docs/engine/CHECKPOINT_2026-10-17_final.md).
+## 0.1.0-beta.13 — prerelease
+
+The factory, connection, and scoring work after 0.1.0-beta.12. Tests use fixtures. No live provider call is recorded in this release.
+
+**Upgrade notes.** Migrations `0103` through `0106` are new: a shared rate-limit window, the OAuth return path, grade history, and Content Factory revisions. `GOOGLE_ADS_DEVELOPER_TOKEN` is used only when `GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT=deployment`. A Google customer id and a TikTok advertiser id come from the brand's connected account, not from the process environment.
+
+- **Integrations.** The page no longer loads the credential vault into the browser. Provider cards stay inside a narrow screen.
+- **Accounts.** A pasted profile link stores the profile. A video, reel, short, or watch link is not an account id. Signing in from a brand returns to that brand.
+- **Content Factory.** A session can be revised after its video is delivered or has failed. The earlier request stays stored. Analysis does not delete the session's reference file. A PDF within 4,000 characters is read into the brief. A longer PDF says it exceeded the limit. An unreadable PDF says it could not be read.
+- **Factory.** A saved Factory Line is read for pick and produce. A refused image or an empty video hook is skipped, and the run stops only when nothing was produced. A full run does not approve its own plan when no spend cap is set. Sleep starts at the saved automation and stops above the owner ceiling. A later organic measurement of the same post is stored. A cross-surface win is proposed without changing the other surface's weight.
+- **Spend.** A video bill is stored only when the provider reports one. That bill is kept if the file cannot be stored, and the cap does not add the estimate on top of it. The job cost and the run cost are written in one transaction when the database can do that.
+- **Grades.** An earlier grade is kept when an ad is graded again. A grade is not rewritten when calibration changes. An unknown country count or platform count is not scored as zero.
+- **Publishing and measurement.** Organic posts can go to a connected Facebook, Instagram, YouTube, or TikTok account. Paid ads are created paused. Facebook video reads request views and average watch time only. Unique views are not stored as reach. An Instagram token that declares scopes without `instagram_content_publish` is refused before a publish request.
+- **Rate limits.** With `DATABASE_URL`, auth and model calls share one Postgres window (`rate_limit_windows`, migration `0103`). A database error is not reported as a rate limit. Without `DATABASE_URL`, the limit stays in the one local process. An idle database disconnect does not exit the process.
+- **Learning.** An organic measurement stored on the sync day, before observation keys existed, is adopted instead of copied. The measurement day is kept.
+- **Held calls.** The scheduler inserts one `engine.reconcile_holds` row per organization when none exists. A disabled row stays disabled.
+- **Scores.** Opportunity workflow coverage is 1, 0.5, or 0 from whether a product and a known template exist. The heuristic grader does not fill a missing score. A calibration row with no score is left out of the report.
+- **Video engine, carried from the unreleased notes.** Contracts v7 to v9: model choice on asset specs, brief requests with `write_script`, and the ledger's `providerRef` (migration `0101`). A chosen call is priced from its catalog price. Narration goes through OpenRouter speech. Speech-to-text is Deepgram. ffmpeg can run on the worker. Live runs are not recorded.
+- **Operations.** One advisory lock for the migration runner. Build and preview load `.env`.
+- **Docs.** The README, the product docs, and `wiki/` describe the product. The sign-in panel says what Meridian does.
+
+**Still open, and not invented here.** Live keys and live acceptance. Prices Meridian does not guess: HyperFrames per minute, Apify per 1,000 results, and `image.edit`. The render fallback and video-DNA frame labelling remain owner decisions.
 
 ## 0.1.0-beta.12 — prerelease
 

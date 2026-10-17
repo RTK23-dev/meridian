@@ -78,4 +78,4 @@ A stored grade is not rewritten when calibration changes. The next run grades th
 | [docs/README.md](docs/README.md) | The full document index |
 | [wiki/Home.md](wiki/Home.md) | The same guide, as wiki pages: setup, the loop, and credentials |
 
-This release is `0.1.0-beta.12`. Tests cover the product loop with fixtures. A live provider run is recorded only after the keys are on the server.
+This release is `0.1.0-beta.13`. Tests cover the product loop with fixtures. A live provider run is recorded only after the keys are on the server.
