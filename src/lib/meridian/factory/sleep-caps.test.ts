@@ -62,6 +62,34 @@ async function nightRecord(sql: Sql): Promise<{ status: string; reason: string }
   return rows[0] as { status: string; reason: string };
 }
 
+test("a saved full automation above the owner ceiling stops the night before a run starts", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedNight(sql, { brandDailyCents: 1000, runDefaults: { automation: "full", caps: { dailyCents: 300 } } }, 0);
+  assert.equal(await runSleepNight(sql, nightJob(), NOW, haltAtDiscover), "sleep:stopped");
+  const night = await nightRecord(sql);
+  assert.equal(night.reason, "That automation is above the owner ceiling for this brand.");
+  const runs = await sql<{ n: number }>`
+    select count(*)::int as n from factory_runs where organization_id = ${FACTORY_TEST_ORG} and created_by = 'user-1' and niche = 'sleep aids' and id <> ${FACTORY_TEST_RUN}
+  `;
+  assert.equal(runs[0]?.n, 0, "no night run is started above the ceiling");
+});
+
+test("a night run uses the saved automation level, not the old Live tests level", async () => {
+  const sql = await makeFactoryTestSql();
+  await seedNight(sql, { brandDailyCents: 1000, runDefaults: { automation: "manual", caps: { dailyCents: 300 } } }, 0);
+  await sql`
+    insert into factory_settings (organization_id, brand_id, level, ceiling, updated_by)
+    values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, 0, 3, 'user-1')
+  `;
+  assert.equal(await runSleepNight(sql, nightJob(), NOW, haltAtDiscover), "sleep:stopped");
+  const runs = await sql<{ level: number }>`
+    select level from factory_runs
+    where organization_id = ${FACTORY_TEST_ORG} and brand_id = ${FACTORY_TEST_BRAND} and id <> ${FACTORY_TEST_RUN}
+  `;
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0]?.level, 1, "manual automation is level 1 even when Live tests still says 0");
+});
+
 test("a brand's total cap reached by its spend across all runs stops the night, and the reason names the brand", async () => {
   const sql = await makeFactoryTestSql();
   await seedNight(sql, { brandTotalCents: 5000 }, 6000);

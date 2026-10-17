@@ -16,10 +16,11 @@ import { thresholds } from "../../../engine/config/thresholds.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { adsMustPause } from "./kill-switch.ts";
+import { assertAutopilotLevelAllowed } from "./autopilot.ts";
 import type { FactoryStage } from "./pipeline.ts";
 import { brandCapFiguresOf, capOrNull } from "./spend.ts";
 import { capStopReason } from "./stage-decision.ts";
-import { runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
+import { factoryLevelOfAutomation, runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
 import { challengerArmOf, holdoutArmOf } from "./sleep-holdout.ts";
 import { localDateKey, nextNightAt, SLEEP_JOB_TYPE, sleepScheduleIdOf } from "./sleep-time.ts";
 import { nightlyTuningOf, tuningSummaryOf, type TunedProposal } from "./sleep-tuning.ts";
@@ -399,13 +400,41 @@ async function runNight(
       });
     }
   } else {
-    const levelRows = await sql<{ level: number }>`
-      select level from factory_settings where organization_id = ${organizationId} and brand_id = ${brandId} limit 1
+    // The run's level is the brand's saved automation, held to the owner ceiling. The old Live tests level is not the level this night runs at.
+    const requested = factoryLevelOfAutomation(defaults.automation);
+    const ceilingRows = await sql<{ ceiling: number }>`
+      select ceiling from factory_settings where organization_id = ${organizationId} and brand_id = ${brandId} limit 1
     `;
+    const ceiling = Number(ceilingRows[0]?.ceiling ?? 1);
+    if (requested > ceiling) {
+      return conclude({
+        end: "stopped",
+        reason: "That automation is above the owner ceiling for this brand.",
+        summary: "Stopped: the saved automation is above the owner ceiling.",
+        runStatus: null,
+        runError: "",
+        runStage: "",
+      });
+    }
+    if (requested > 1) {
+      try {
+        await assertAutopilotLevelAllowed(sql, brandId, requested);
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "The saved automation is not allowed yet.";
+        return conclude({
+          end: "stopped",
+          reason,
+          summary: "Stopped: the saved automation is not allowed yet.",
+          runStatus: null,
+          runError: "",
+          runStage: "",
+        });
+      }
+    }
     runId = crypto.randomUUID();
     await sql`
       insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by, settings)
-      values (${runId}, ${organizationId}, ${brandId}, ${niche}, ${Number(levelRows[0]?.level ?? 0)}, 'running', 'factory.discover',
+      values (${runId}, ${organizationId}, ${brandId}, ${niche}, ${requested}, 'running', 'factory.discover',
         ${input.updatedBy}, ${JSON.stringify(defaults)})
     `;
     await sql`update sleep_mode_nights set run_id = ${runId} where id = ${nightId} and organization_id = ${organizationId}`;
