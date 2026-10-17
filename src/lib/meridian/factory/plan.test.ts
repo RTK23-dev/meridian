@@ -140,6 +140,21 @@ test("a plan is made only under an engine decision, and names the product it is 
   assert.throws(() => creativePlanFor(planInput({ productName: "   " })), /no product/);
 });
 
+test("a full run auto-approves the plan when the estimate is within the cap, and a manual or semi plan stays pending", () => {
+  const full = creativePlanFor(planInput({ run: { formats: ["video"], automation: "full", intent: "ad", capTotalCents: 5000 } }));
+  assert.equal(full.status, "approved");
+  assert.equal(full.autonomy, "fully_automatic");
+  assert.equal(full.approvalRequirements[0]?.status, "auto_approved");
+  assert.match(full.approvalRequirements[0]?.reason ?? "", /within the spend cap/);
+
+  const semi = creativePlanFor(planInput({ run: { formats: ["video"], automation: "semi", intent: "ad", capTotalCents: 5000 } }));
+  assert.equal(semi.status, "draft");
+  assert.equal(semi.approvalRequirements[0]?.status, "pending");
+
+  const manual = creativePlanFor(planInput());
+  assert.equal(manual.approvalRequirements[0]?.status, "pending");
+});
+
 test("the plan is a draft for the brand's product, with its deliverables unpriced and no production step written", () => {
   const plan = creativePlanFor(planInput());
   assert.equal(plan.status, "draft");

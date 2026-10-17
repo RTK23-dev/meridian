@@ -188,7 +188,7 @@ function deliverablesOf(
 }
 
 /**
- * The CreativePlan for one pick. It is a draft that names the product and the decision it came from, and it spends nothing: no
+ * The CreativePlan for one pick. A manual or semi plan stays a draft and waits for a person. A full plan is approved on its own when the estimate is within the spend cap. It spends nothing: no
  * production step is written here, and the estimate lists every deliverable as unpriced, since no provider has been chosen.
  * Throws when the plan has no lineage, no product, or no formats, so the caller records the refusal and writes no variant.
  */
@@ -208,6 +208,10 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   requireCitedDeliverables(lineage, deliverables.length);
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
   const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];
+  const estimateUsd = 0;
+  const maxSpendUsd = input.run.capTotalCents > 0 ? input.run.capTotalCents / 100 : undefined;
+  const withinCap = maxSpendUsd === undefined || estimateUsd <= maxSpendUsd;
+  const autoApproved = autonomy === "fully_automatic" && withinCap;
   const objective: CampaignObjective = input.run.intent === "organic" ? "engagement" : "conversion";
   const rationale: DecisionRationale[] = [
     {
@@ -239,7 +243,7 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   return {
     id: `plan-${input.templateId}`,
     version: "factory.v2.plan.1",
-    status: "draft",
+    status: autoApproved ? "approved" : "draft",
     scope,
     autonomy,
     objective,
@@ -249,20 +253,22 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
     assetPlan: [],
     productionPlan: [],
     estimatedCost: {
-      totalEstimatedUsd: 0,
+      totalEstimatedUsd: estimateUsd,
       perDeliverableUsd: {},
       unpricedDeliverableIds: deliverables.map((deliverable) => deliverable.id),
       isHardCapped: input.run.capTotalCents > 0,
-      maxSpendUsd: input.run.capTotalCents > 0 ? input.run.capTotalCents / 100 : undefined,
+      maxSpendUsd,
       currency: "USD",
       label: "PRE_GENERATION_ESTIMATE",
     },
     approvalRequirements: [
       {
         id: `approval-production-${input.templateId}`,
-        level: "human_creative_director",
-        status: "pending",
-        reason: "Production spends money. A manual or semi run waits for a person before it.",
+        level: autoApproved ? "spend_threshold" : "human_creative_director",
+        status: autoApproved ? "auto_approved" : "pending",
+        reason: autoApproved
+          ? "Full automation is within the spend cap, so this plan is approved without a person."
+          : "Production spends money. A manual or semi run waits for a person before it.",
         requiredBeforeAction: "production_execution",
       },
     ],
