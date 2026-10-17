@@ -121,6 +121,14 @@ export type ProductionJob = {
   updatedAt: string;
 };
 
+/** A bill the provider itself reported. An estimate, or a placeholder zero, is not a bill. */
+export function providerReportedUsd(job: Pick<ProductionJob, "costActualUsd" | "metadata">): number | null {
+  if (job.metadata?.costBasis !== "provider_reported") return null;
+  const value = job.costActualUsd;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return null;
+  return value;
+}
+
 export interface ProductionProvider {
   readonly id: string;
   readonly capabilities: ProductionCapabilities;

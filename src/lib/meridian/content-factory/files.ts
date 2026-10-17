@@ -46,6 +46,68 @@ export function sniffBinaryMediaType(bytes: Uint8Array): string | null {
   return null;
 }
 
+/** Width and height read from the image header. Null when the header does not say. No pixels are inspected. */
+export function imageDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  return pngDimensions(bytes) ?? jpegDimensions(bytes) ?? webpDimensions(bytes);
+}
+
+function u16(bytes: Uint8Array, offset: number): number {
+  return ((bytes[offset] ?? 0) << 8) | (bytes[offset + 1] ?? 0);
+}
+
+function u32(bytes: Uint8Array, offset: number): number {
+  return (((bytes[offset] ?? 0) << 24) | ((bytes[offset + 1] ?? 0) << 16) | ((bytes[offset + 2] ?? 0) << 8) | (bytes[offset + 3] ?? 0)) >>> 0;
+}
+
+function positiveSize(width: number, height: number): { width: number; height: number } | null {
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1 || width > 100_000 || height > 100_000) return null;
+  return { width, height };
+}
+
+function pngDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 24 || sniffBinaryMediaType(bytes) !== "image/png") return null;
+  if (ascii(bytes, 12, 4) !== "IHDR") return null;
+  return positiveSize(u32(bytes, 16), u32(bytes, 20));
+}
+
+function jpegDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (sniffBinaryMediaType(bytes) !== "image/jpeg") return null;
+  let index = 2;
+  while (index + 8 < bytes.length) {
+    if (bytes[index] !== 0xff) return null;
+    while (bytes[index] === 0xff) index += 1;
+    const marker = bytes[index];
+    index += 1;
+    if (marker === undefined || marker === 0xd9 || marker === 0xda) return null;
+    const length = u16(bytes, index);
+    if (length < 2 || index + length > bytes.length) return null;
+    const startOfFrame = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+    if (startOfFrame) return positiveSize(u16(bytes, index + 5), u16(bytes, index + 3));
+    index += length;
+  }
+  return null;
+}
+
+function webpDimensions(bytes: Uint8Array): { width: number; height: number } | null {
+  if (bytes.length < 30 || sniffBinaryMediaType(bytes) !== "image/webp") return null;
+  const chunk = ascii(bytes, 12, 4);
+  if (chunk === "VP8X") {
+    const width = 1 + ((bytes[24] ?? 0) | ((bytes[25] ?? 0) << 8) | ((bytes[26] ?? 0) << 16));
+    const height = 1 + ((bytes[27] ?? 0) | ((bytes[28] ?? 0) << 8) | ((bytes[29] ?? 0) << 16));
+    return positiveSize(width, height);
+  }
+  if (chunk === "VP8 " && bytes[23] === 0x9d && bytes[24] === 0x01 && bytes[25] === 0x2a) {
+    const width = (bytes[26] ?? 0) | ((bytes[27] ?? 0) << 8);
+    const height = (bytes[28] ?? 0) | ((bytes[29] ?? 0) << 8);
+    return positiveSize(width & 0x3fff, height & 0x3fff);
+  }
+  if (chunk === "VP8L" && bytes[20] === 0x2f && bytes.length >= 25) {
+    const bits = (bytes[21] ?? 0) | ((bytes[22] ?? 0) << 8) | ((bytes[23] ?? 0) << 16) | ((bytes[24] ?? 0) << 24);
+    return positiveSize((bits & 0x3fff) + 1, ((bits >>> 14) & 0x3fff) + 1);
+  }
+  return null;
+}
+
 /** The text type of a text file, named by its extension. The bytes decide that it is text; the extension only picks the type. */
 export function textMediaTypeOf(fileName: string): string {
   const extension = /\.([^./\\]+)$/.exec(fileName.trim())?.[1]?.toLowerCase() ?? "";

@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { characterCount, checkFile, decodeUpload, MAX_BASE64_CHARS, referenceVideoUri, safeFileName, sessionFileKey, sniffBinaryMediaType, TEXT_FILE_MAX_CHARS, textMediaTypeOf } from "./files.ts";
+import { characterCount, checkFile, decodeUpload, imageDimensions, MAX_BASE64_CHARS, referenceVideoUri, safeFileName, sessionFileKey, sniffBinaryMediaType, TEXT_FILE_MAX_CHARS, textMediaTypeOf } from "./files.ts";
 
 function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -30,6 +30,21 @@ test("a binary type is read from its bytes, and text is not a binary type", () =
   assert.equal(sniffBinaryMediaType(PDF), "application/pdf");
   assert.equal(sniffBinaryMediaType(TEXT), null);
   assert.equal(sniffBinaryMediaType(EXE), null, "a Windows program is not a binary type the session takes");
+});
+
+test("an image header gives width and height, and a header that does not is not a size", () => {
+  const png = new Uint8Array(24);
+  png.set(PNG);
+  png.set([0x49, 0x48, 0x44, 0x52], 12);
+  png[16] = 0;
+  png[17] = 0;
+  png[18] = 0x02;
+  png[19] = 0x80;
+  png[22] = 0x01;
+  png[23] = 0x40;
+  assert.deepEqual(imageDimensions(png), { width: 640, height: 320 });
+  assert.equal(imageDimensions(PNG), null, "a PNG signature without an IHDR size is not a size");
+  assert.equal(imageDimensions(TEXT), null);
 });
 
 test("a text file takes its type from its name, and the bytes still decide what is text", () => {

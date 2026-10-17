@@ -26,8 +26,9 @@ import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts"
 import { productionRouter } from "../production/router.ts";
 import { productionCostMode } from "../production/cost-mode.ts";
 import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
-import { openProductionReview, settleProductionReservation } from "../production/materialization.ts";
+import { openProductionReview, settleProductionReservation, storeReportedProductionCost } from "../production/materialization.ts";
 import type { CreativeSpec, ProductionJob } from "../production/types.ts";
+import { providerReportedUsd } from "../production/types.ts";
 import type { CreativePlan } from "../creative/plan.ts";
 import { BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
@@ -245,6 +246,8 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
     const reason = `Preflight refused the video for ${req.label} before any provider call: ${submission.reasons.join(" ")}`;
     await markJob(sql, scope, req.jobId, "PREFLIGHT_FAILED", "PREFLIGHT_BLOCKED", reason);
     await BudgetLedgerService.release(sql, { reservationId, reason });
+    const missingHook = submission.reasons.length > 0 && submission.reasons.every((item) => item === "Missing required hook line.");
+    if (missingHook) return { kind: "failed" };
     return { kind: "stop", reason };
   }
   const submitted: ProductionJob = submission.job;
@@ -291,6 +294,16 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
   }
 
   // The provider returned the video: store it, then materialize it through the shared materializer, which settles the reservation.
+  const billed = providerReportedUsd(submitted);
+  if (billed !== null) {
+    await storeReportedProductionCost(sql, {
+      organizationId: scope.organizationId,
+      brandId: scope.brandId,
+      productionJobId: req.jobId,
+      runId: input.runId,
+      provider: provider.id,
+    }, billed);
+  }
   const finalized = await finalizeProductionArtifact(sql, {
     jobId: req.jobId,
     organizationId: scope.organizationId,

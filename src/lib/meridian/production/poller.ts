@@ -9,9 +9,9 @@
 import type { Sql } from "../learning/store.ts";
 import { productionRouter, type ProductionRouter } from "./router.ts";
 import { defaultArtifactDrive, type ArtifactDrive } from "../storage/artifact-drive.ts";
-import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
-import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComplete } from "./materialization.ts";
+import { completeProductionJob, settleCarouselParent, settleCreativePlanIfComplete, storeReportedProductionCost } from "./materialization.ts";
+import { providerReportedUsd, type ProductionJob } from "./types.ts";
 import {
   SUBMISSION_EXPIRED_CODE,
   SUBMISSION_REVIEW_CODE,
@@ -610,6 +610,16 @@ export async function pollProductionJobs(
       });
 
       if (finalized.success) {
+        const billed = providerReportedUsd(polledJob);
+        if (billed !== null) {
+          await storeReportedProductionCost(sql, {
+            organizationId: row.organization_id,
+            brandId: row.brand_id,
+            productionJobId: row.id,
+            runId: runId ?? null,
+            provider: row.provider,
+          }, billed);
+        }
         try {
           await completeProductionJob(sql, {
             organizationId: row.organization_id,

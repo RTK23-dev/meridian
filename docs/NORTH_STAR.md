@@ -157,8 +157,8 @@ merged and tested on recorded fixtures. No criterion has been checked against a 
    _Accept:_ no `S3` references outside the changelog; no fixed cost figures in `factory/worker.ts`; tests cover the null
    and no-receipt cases.
    _Status: partly done. `storage/s3.ts` is gone and `.env.example` has no `S3_` variable. Factory cost estimates were removed
-   (CHANGELOG 0.1.0-beta.11), and telemetry stores an unknown impression count as null. Open: S3 is still named in text in `src/engine`
-   and `src/lib/meridian/storage`, and `src/engine/render/hyperframesCloud.ts` (line 42) describes a direct upload to S3 presigned URLs.
+   (CHANGELOG 0.1.0-beta.11), and telemetry stores an unknown impression count as null. The HyperFrames upload comment no longer names S3.
+   Open: S3 is still named in comments that record the retirement, in `src/engine` and `src/lib/meridian/storage`.
    The no-receipt rule was not re-checked in this pass._
 2. **Run settings.** One settings model (section 4) with brand defaults and per-run overrides, a migration, server-side
    validation, and the old three vocabularies mapped onto it.

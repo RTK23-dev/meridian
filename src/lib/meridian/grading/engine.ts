@@ -33,11 +33,11 @@ export function winnerScoreGradingEngine(): GradingEngine {
     async grade(input: GradingInput): Promise<GradingResult> {
       const evidence: WinnerEvidence = {
         daysRunning: input.evidence?.daysRunning ?? 0,
-        // Unknown delivery, countries and platforms are unknown, not a default that the score would read as evidence.
+        // Unknown delivery, countries and platforms are unknown, not a count of zero.
         stillRunning: input.evidence?.stillRunning ?? null,
         iterationCount: input.evidence?.iterationCount ?? 0,
-        countries: input.evidence?.countries ?? 0,
-        platforms: input.evidence?.platforms ?? 0,
+        countries: input.evidence?.countries ?? null,
+        platforms: input.evidence?.platforms ?? null,
         advertiserSurvivorRate: input.evidence?.advertiserSurvivorRate ?? null,
         creativeQuality: input.evidence?.creativeQuality ?? null,
       };

@@ -470,13 +470,13 @@ export async function openProductionReview(
 }
 
 /**
- * Settles the budget reservation held for one production job. Runs only after the artifact is materialized. A job with a
- * known price settles at its reserved estimate. A job without one settles at the reserved ceiling, which is the most it
- * could have cost. Reservations for failed or ambiguous jobs are never settled here.
+ * Settles the budget reservation held for one production job. Runs only after the artifact is materialized. A job whose provider
+ * reported a bill settles at that bill. Otherwise a priced job settles at its reserved estimate, and a job without a price
+ * settles at the reserved ceiling. Reservations for failed or ambiguous jobs are never settled here.
  */
 export async function settleProductionReservation(sql: Sql, ref: ProductionJobRef): Promise<boolean> {
-  const rows = await sql<{ id: string; amount_micros: string | number | bigint; cost_status: string | null }>`
-    select r.id, r.amount_micros, j.cost_status
+  const rows = await sql<{ id: string; amount_micros: string | number | bigint; cost_status: string | null; actual_cost_cents: number | null }>`
+    select r.id, r.amount_micros, j.cost_status, j.actual_cost_cents
     from budget_reservations r
     join production_jobs j on j.id = r.production_job_id
     where r.production_job_id = ${ref.productionJobId}
@@ -486,6 +486,14 @@ export async function settleProductionReservation(sql: Sql, ref: ProductionJobRe
   `;
   const reservation = rows[0];
   if (!reservation) return false;
+  const reported = Number(reservation.actual_cost_cents);
+  if (reservation.actual_cost_cents !== null && reservation.actual_cost_cents !== undefined && Number.isFinite(reported) && reported >= 0) {
+    await BudgetLedgerService.reconcile(sql, {
+      reservationId: reservation.id,
+      cost: { basis: "PROVIDER_ACTUAL", amountMicros: BigInt(Math.round(reported * 10_000)) },
+    });
+    return true;
+  }
   const unpriced = reservation.cost_status === "unknown" || reservation.cost_status === "stale";
   await BudgetLedgerService.reconcile(sql, {
     reservationId: reservation.id,
@@ -496,6 +504,28 @@ export async function settleProductionReservation(sql: Sql, ref: ProductionJobRe
     },
   });
   return true;
+}
+
+/** Writes a provider's own bill onto the job, and as metered spend when the job belongs to a run. An estimate is not written. */
+export async function storeReportedProductionCost(
+  sql: Sql,
+  ref: { organizationId: string; brandId: string; productionJobId: string; runId: string | null; provider: string },
+  usd: number,
+): Promise<void> {
+  if (!Number.isFinite(usd) || usd < 0) return;
+  const cents = Math.round(usd * 100);
+  await sql`
+    update production_jobs set actual_cost_cents = ${cents}, updated_at = now()
+    where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+      and actual_cost_cents is null
+  `;
+  if (!ref.runId) return;
+  await sql`
+    insert into factory_costs (id, organization_id, brand_id, run_id, stage, cents, seconds, provider, production_job_id, basis, created_at)
+    values (${`cost-${ref.productionJobId}`.slice(0, 180)}, ${ref.organizationId}, ${ref.brandId}, ${ref.runId}, 'factory.produce', ${cents}, 0,
+      ${ref.provider}, ${ref.productionJobId}, 'provider_reported', now())
+    on conflict (id) do nothing
+  `;
 }
 
 /**

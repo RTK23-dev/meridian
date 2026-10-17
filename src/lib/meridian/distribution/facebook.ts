@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import { readFacebookVideoMetrics } from "./metric-reads.ts";
 import type {
   ConnectionCheck,
   DistributionChannel,
@@ -13,8 +14,6 @@ import type {
 
 const LABEL = "Facebook Page";
 const NOT_CONNECTED_REASON = "No Facebook Page is connected for this brand. Add the Page ID and a Page access token in Accounts.";
-const FACEBOOK_METRICS_NOT_IMPLEMENTED =
-  "Facebook Page video metrics are not implemented in this build, so no request was sent and nothing was stored.";
 const MIN_SCHEDULE_AHEAD_MS = 10 * 60 * 1000;
 const MAX_SCHEDULE_AHEAD_MS = 75 * 24 * 60 * 60 * 1000;
 
@@ -62,16 +61,12 @@ export class FacebookPagesChannel implements DistributionChannel {
     });
   }
 
-  /**
-   * Not implemented. The Page video insights reference names post_video_* metrics that were not confirmed for a Page video, and the
-   * Video node carries no view or like counts, so no request is built. A connected Page still gets this reason, not a success.
-   */
+  /** Reads the video insights of a Page video through the connected Page token. With no connection, no request is sent. */
   async fetchMetrics(externalId: string, connection: OrganicConnection | undefined): Promise<OrganicMetricsReading> {
-    void externalId;
     if (!connection?.connected) {
       return { status: "not_connected", reason: this.checkConnection(connection).reason ?? NOT_CONNECTED_REASON };
     }
-    return { status: "not_implemented", reason: FACEBOOK_METRICS_NOT_IMPLEMENTED };
+    return readFacebookVideoMetrics(this.transport, { externalId, accessToken: connection.accessToken }, new Date());
   }
 }
 

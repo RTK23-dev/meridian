@@ -80,18 +80,21 @@ export function referenceOf(attachments: readonly Attachment[]): FileAttachment 
   return (attachments.find((item) => item.kind === "file" && item.purpose === "reference_video") as FileAttachment | undefined) ?? null;
 }
 
-/** A text file read into the brief: a material file that carries its text. */
+/** A text file read into the brief: a material file that carries its text. An image's content is its measured size, not text. */
 function isTextFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null;
+  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null && !item.mediaType.startsWith("image/");
 }
 
 /** A file that goes to the engine as an attachment: not the reference and not read into the brief. */
 function isMaterialFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content === null;
+  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/"));
 }
 
-/** The note a brief attachment carries. A PDF whose text was not readable says so. A readable PDF is a brief source, not this note. */
+const IMAGE_SIZE = /^(\d+)×(\d+)$/;
+
+/** The note a brief attachment carries. A measured image names its size. A PDF whose text was not readable says so. */
 function attachmentNote(file: FileAttachment): string {
+  if (file.mediaType.startsWith("image/") && file.content && IMAGE_SIZE.test(file.content)) return `${file.fileName}: ${file.content}`;
   return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
 }
 
@@ -105,12 +108,14 @@ function textFileLine(file: FileAttachment): string {
 
 /**
  * The lines the decision panel lists under Inputs: what each file does on its way to the engine. A text file is read into the brief
- * (its length is shown); a PDF whose text could not be read says so. Images and the reference video have no line here.
+ * (its length is shown). A PDF whose text could not be read says so. An image whose header gave a size shows that size. The
+ * reference video has no line here.
  */
 export function inputNotes(attachments: readonly Attachment[]): string[] {
   return attachments.flatMap((item): string[] => {
     if (item.kind !== "file" || item.purpose === "reference_video") return [];
-    if (item.content !== null) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
+    if (item.mediaType.startsWith("image/") && item.content && IMAGE_SIZE.test(item.content)) return [`${item.fileName}: ${item.content}. Pixels were not read.`];
+    if (item.content !== null && !item.mediaType.startsWith("image/")) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
     return item.mediaType === "application/pdf" ? [attachmentNote(item)] : [];
   });
 }

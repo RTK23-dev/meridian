@@ -49,7 +49,7 @@ export const CREATIVE_QUESTIONS: Record<string, JevQuestionSpec> = {
       true: "Every claim in the copy is within the brand's stored claims.",
       false: "The copy makes a claim outside the stored claims, or implies a guarantee.",
     },
-    evidenceRequirements: ["creative_copy", "brand_prohibited_claims"],
+    evidenceRequirements: ["creative_copy", "brand_claim_facts"],
     policyMapping: { predicateDirection: "pass_if_true", approveMinProbability: 0.95, reviewMinProbability: 0.8 },
   },
 
@@ -95,7 +95,7 @@ export const CREATIVE_QUESTIONS: Record<string, JevQuestionSpec> = {
 export const CREATIVE_EVIDENCE_SCOPES: Record<string, readonly string[]> = {
   "creative.brand_fit.v1": ["creative_copy", "transcript", "brand_positioning"],
   "creative.opportunity_fit.v1": ["creative_copy", "transcript", "opportunity_angle"],
-  "creative.claim_compliance.v1": ["creative_copy", "transcript", "brand_prohibited_claims"],
+  "creative.claim_compliance.v1": ["creative_copy", "transcript", "brand_claim_facts", "brand_prohibited_claims", "brand_allowed_claims"],
   "creative.visual_quality.v1": ["image", "visual_coverage"],
   "creative.product_visible.v1": ["image", "visual_coverage", "product_name"],
 };

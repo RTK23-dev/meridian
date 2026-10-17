@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { liveTransport, type Transport, type TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
+import { INSTAGRAM_PUBLISH_SCOPE } from "./connection.ts";
 import { readInstagramMetrics } from "./metric-reads.ts";
 import type { TrialReading, TrialRequest } from "./trial.ts";
 import type {
@@ -88,6 +89,9 @@ export class InstagramReelsChannel implements DistributionChannel {
 
     if (!request.mimeType.startsWith("video/")) {
       return failure("instagram", "REJECTED", `An Instagram Reel needs a video file (received ${request.mimeType}).`);
+    }
+    if (connection.scopes && !connection.scopes.includes(INSTAGRAM_PUBLISH_SCOPE)) {
+      return failure("instagram", "NOT_CONNECTED", `The stored Instagram token does not grant ${INSTAGRAM_PUBLISH_SCOPE}. Reconnect the account with that permission.`);
     }
     if (request.scheduledFor) {
       return failure("instagram", "REJECTED", "Instagram Reels cannot be scheduled by this channel yet. Publish now, or export the package and post it by hand.");

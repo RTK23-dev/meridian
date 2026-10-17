@@ -201,3 +201,14 @@ test("a brand with no stored prohibited claims gives the claim question no evide
   assert.notEqual(judged.claim.judgment, "passed");
   assert.notEqual(judged.decision.decision, "AUTO_APPROVE");
 });
+
+test("stored allowed claims are enough for the claim question when no prohibited list is stored", async () => {
+  const calls: DecisionEngineId[] = [];
+  const engines: DecisionEngineRegistry = {
+    jev: answeringEngine("jev", answerEvery(0.97, "calibrated"), calls),
+    "openai-decisions": forbiddenEngine("openai-decisions", calls),
+  };
+  const judged = await judgeCopy({ ...input(CLEAN_COPY, "", engines), copy: { ...input(CLEAN_COPY, "", engines).copy, allowedClaims: "lifts grease" } });
+  assert.equal(judged.claim.judgment, "passed");
+  assert.deepEqual(calls, ["jev"]);
+});

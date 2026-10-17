@@ -262,7 +262,9 @@ function creativeTextEvidence(facts: MediaFacts): GateEvidenceInput[] {
     items.push({ kind: "text", name: "brand_positioning", source: "brand_brain", content: { positioning: facts.positioning, tone: facts.tone } });
   }
   if (facts.prohibited.trim()) {
-    items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain", content: { prohibitedClaims: facts.prohibited } });
+    const prohibitedClaims = facts.prohibited.trim();
+    items.push({ kind: "text", name: "brand_prohibited_claims", source: "brand_brain", content: { prohibitedClaims } });
+    items.push({ kind: "text", name: "brand_claim_facts", source: "brand_brain", content: { prohibitedClaims } });
   }
   if (facts.angle.trim()) items.push({ kind: "text", name: "opportunity_angle", source: "opportunity", content: { angle: facts.angle } });
   if (facts.productName.trim()) items.push({ kind: "text", name: "product_name", source: "products", content: { productName: facts.productName } });

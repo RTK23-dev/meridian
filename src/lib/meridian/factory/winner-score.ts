@@ -10,8 +10,10 @@ export type WinnerEvidence = {
   /** Null when the source did not say whether the ad was still delivering at its last sighting. */
   stillRunning: boolean | null;
   iterationCount: number;
-  countries: number;
-  platforms: number;
+  /** Null when the source did not report a country count. Zero means the source reported none. */
+  countries: number | null;
+  /** Null when the source did not report a platform count. Zero means the source reported none. */
+  platforms: number | null;
   advertiserSurvivorRate: number | null;
   creativeQuality: number | null;
 };
@@ -50,8 +52,10 @@ function iterationScore(count: number): number {
   return clamp01(Math.log2(1 + Math.max(0, count)) / 4);
 }
 
-function spreadScore(countries: number, platforms: number): number {
-  return clamp01(Math.min(1, Math.max(0, countries) / 9) * 0.7 + Math.min(1, Math.max(0, platforms) / 4) * 0.3);
+function spreadScore(countries: number | null, platforms: number | null): number {
+  const countryPart = countries == null ? 0 : Math.min(1, Math.max(0, countries) / 9) * 0.7;
+  const platformPart = platforms == null ? 0 : Math.min(1, Math.max(0, platforms) / 4) * 0.3;
+  return clamp01(countryPart + platformPart);
 }
 
 export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): WinnerScore {
@@ -68,6 +72,8 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
     quality * weights.quality;
   const missing: string[] = [];
   if (input.stillRunning == null) missing.push("delivery status");
+  if (input.countries == null) missing.push("country count");
+  if (input.platforms == null) missing.push("platform count");
   if (input.advertiserSurvivorRate == null) missing.push("advertiser track record");
   if (input.creativeQuality == null) missing.push("creative quality");
   const uncertainty = 0.08 + missing.length * 0.06 + (input.daysRunning < 7 ? 0.08 : 0);
@@ -80,8 +86,8 @@ export function winnerScore(input: WinnerEvidence, weights = DEFAULT_WEIGHTS): W
         ? `${runLength}; still delivering at its last sighting`
         : `${runLength}; stopped`,
     `${input.iterationCount} variant${input.iterationCount === 1 ? "" : "s"}`,
-    `${input.countries} countr${input.countries === 1 ? "y" : "ies"}`,
-    `${input.platforms} platform${input.platforms === 1 ? "" : "s"}`,
+    input.countries == null ? "countries not reported" : `${input.countries} countr${input.countries === 1 ? "y" : "ies"}`,
+    input.platforms == null ? "platforms not reported" : `${input.platforms} platform${input.platforms === 1 ? "" : "s"}`,
   ];
   if (input.advertiserSurvivorRate != null) {
     evidence.push(`advertiser survivor rate ${(input.advertiserSurvivorRate * 100).toFixed(0)}%`);

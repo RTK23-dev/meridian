@@ -4,7 +4,7 @@ import type { Transport, TransportRequest } from "../providers/http.ts";
 import { YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
 import { FacebookPagesChannel } from "./facebook.ts";
 import { InstagramReelsChannel } from "./instagram.ts";
-import { parseInstagramInsights, readInstagramMetrics, readTikTokMetrics, readYouTubeMetrics } from "./metric-reads.ts";
+import { parseFacebookVideoInsights, parseInstagramInsights, readFacebookVideoMetrics, readInstagramMetrics, readTikTokMetrics, readYouTubeMetrics } from "./metric-reads.ts";
 import { TikTokOrganicChannel } from "./tiktok.ts";
 import type { OrganicConnection, OrganicPlatform } from "./types.ts";
 import { YouTubeShortsChannel } from "./youtube.ts";
@@ -255,14 +255,28 @@ test("the TikTok channel reads a video the connected account can list", async ()
   assert.equal(requests.length, 1);
 });
 
-test("Facebook Page metrics are not implemented: a connected Page gets not_implemented and no request, never a success", async () => {
-  const { transport, requests } = recording(200, { id: "1", views: 10 });
+test("Facebook Page video insights read views and watch time, and unique views are not stored as reach", async () => {
+  const { transport, requests } = recording(200, {
+    data: [
+      { name: "total_video_views", values: [{ value: 40 }] },
+      { name: "total_video_views_unique", values: [{ value: 12 }] },
+      { name: "total_video_avg_time_watched", values: [{ value: 2500 }] },
+    ],
+  });
   const channel = new FacebookPagesChannel({ transport });
-  const reading = await channel.fetchMetrics("1", connectedAs("facebook"));
-  assert.equal(reading.status, "not_implemented");
-  if (reading.status === "not_implemented") assert.match(reading.reason, /not implemented in this build/);
-  assert.equal(requests.length, 0, "no request is built for a Page video");
+  const reading = await channel.fetchMetrics("99", connectedAs("facebook"));
+  assert.equal(reading.status, "observed");
+  if (reading.status !== "observed") return;
+  assert.equal(reading.metrics.views, 40);
+  assert.equal(reading.metrics.reach, null, "unique views are not reach");
+  assert.equal(reading.metrics.averageWatchTimeSeconds, 2.5);
+  assert.equal(requests.length, 1);
+  assert.match(requests[0]?.url ?? "", /\/99\/video_insights\?metric=total_video_views/);
 
-  const none = await channel.fetchMetrics("1", undefined);
+  const direct = await readFacebookVideoMetrics(transport, { externalId: "99", accessToken: "t" }, NOW);
+  assert.equal(direct.status, "observed");
+  assert.equal(parseFacebookVideoInsights({ data: [{ name: "total_video_views_unique", values: [{ value: 3 }] }] }), null);
+
+  const none = await channel.fetchMetrics("99", undefined);
   assert.equal(none.status, "not_connected");
 });

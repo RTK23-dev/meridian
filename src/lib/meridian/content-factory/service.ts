@@ -25,7 +25,7 @@ import { hasRole, isRole } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
 import { extractPdf } from "../ingestion/pdf.ts";
-import { characterCount, checkFile, decodeUpload, driveFileStore, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
+import { characterCount, checkFile, decodeUpload, driveFileStore, imageDimensions, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
 import {
   isKeepableGene,
   isPriority,
@@ -368,6 +368,10 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   if (file.mediaType === "application/pdf") {
     const extracted = await extractPdf(decoded.bytes);
     if (extracted.status === "stored" && characterCount(extracted.text) <= TEXT_FILE_MAX_CHARS) file.content = extracted.text;
+  }
+  if (file.kind === "image") {
+    const size = imageDimensions(decoded.bytes);
+    if (size) file.content = `${size.width}×${size.height}`;
   }
   const key = sessionFileKey(row.id, file);
   let storageObjectId: string | null;

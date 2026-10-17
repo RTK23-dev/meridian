@@ -13,13 +13,17 @@
  *     The statistics for a video are read here, not the YouTube Analytics reports, so watch time and shares stay null.
  *   TikTok: POST /v2/video/query/?fields=id,view_count,like_count,comment_count,share_count with filters.video_ids (up to 20), scope
  *     video.list. Its error object carries code "ok" on success. https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query
+ *   Facebook Page video: GET /{video-id}/video_insights?metric=total_video_views,total_video_views_unique,total_video_avg_time_watched.
+ *     `data` is one item per metric, with `name` and `values[0].value`. total_video_avg_time_watched is milliseconds and is stored as
+ *     seconds. Unique views are not reach, so reach stays null. Likes, comments and shares are not on this edge.
+ *     https://developers.facebook.com/docs/graph-api/reference/video/video_insights
  *
  * Not verified live: no request in this build has been sent to any of these services.
  */
 
 import { redactSecrets } from "../observability/redact.ts";
 import type { Transport, TransportRequest, TransportResponse } from "../providers/http.ts";
-import { TRIAL_GRAPH_BASE, parseJsonBody } from "./graph.ts";
+import { GRAPH_BASE, TRIAL_GRAPH_BASE, parseJsonBody } from "./graph.ts";
 import type { OrganicMetricsReading, OrganicTelemetryMetrics } from "./types.ts";
 
 export type MetricReadInput = {
@@ -43,6 +47,9 @@ const INSTAGRAM_FIELD: Record<string, keyof OrganicTelemetryMetrics> = {
 
 const YOUTUBE_STATISTICS_URL = "https://www.googleapis.com/youtube/v3/videos";
 const TIKTOK_VIDEO_QUERY_URL = "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count,share_count";
+
+/** The Page video metrics requested. Unique views are not stored as reach. */
+export const FACEBOOK_VIDEO_METRICS = ["total_video_views", "total_video_views_unique", "total_video_avg_time_watched"] as const;
 
 export function emptyOrganicMetrics(): OrganicTelemetryMetrics {
   return {
@@ -133,6 +140,42 @@ export async function readTikTokMetrics(transport: Transport, input: MetricReadI
     return failed(`${label} returned no count for this video. Nothing was stored.`);
   }
   return observed(metrics, now);
+}
+
+/** Reads a Facebook Page video's insights. Needs the video id the publish returned. */
+export async function readFacebookVideoMetrics(transport: Transport, input: MetricReadInput, now: Date): Promise<OrganicMetricsReading> {
+  const label = "Facebook Page";
+  const videoId = input.externalId.trim();
+  if (!videoId) return failed(`${label} has no video id for this post, so nothing was read. Nothing was stored.`);
+  const answer = await ask(label, transport, {
+    method: "GET",
+    url: `${GRAPH_BASE}/${encodeURIComponent(videoId)}/video_insights?metric=${FACEBOOK_VIDEO_METRICS.join(",")}`,
+    headers: { Authorization: `Bearer ${input.accessToken}` },
+  });
+  if (!answer.ok) return failed(answer.reason);
+  const metrics = parseFacebookVideoInsights(answer.json);
+  if (!metrics) return failed(`${label} returned no metric for this video. Nothing was stored.`);
+  return observed(metrics, now);
+}
+
+/** The metric values of a Page video insights answer. Null when the answer carries none of the requested metrics. */
+export function parseFacebookVideoInsights(json: unknown): OrganicTelemetryMetrics | null {
+  const data = recordOf(json).data;
+  if (!Array.isArray(data)) return null;
+  const metrics = emptyOrganicMetrics();
+  let found = 0;
+  for (const item of data) {
+    const row = recordOf(item);
+    const name = typeof row.name === "string" ? row.name : "";
+    const values = Array.isArray(row.values) ? row.values : [];
+    const value = numberOf(recordOf(values[0]).value);
+    if (value === null) continue;
+    if (name === "total_video_views") metrics.views = value;
+    else if (name === "total_video_avg_time_watched") metrics.averageWatchTimeSeconds = value / 1000;
+    else continue;
+    found += 1;
+  }
+  return found > 0 ? metrics : null;
 }
 
 /** The metric values of an Instagram insights answer. Null when the answer carries none of the requested metrics. */

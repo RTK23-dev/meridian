@@ -268,8 +268,8 @@ published organic posts and its paused paid ads (`measurement/pull.ts`):
 
 - **Organic metrics** come from the channel's `fetchMetrics`, through the workspace's stored token. A read returns observed values with
   the time they were read, `not_connected` (no stored token, no request sent), `not_implemented`, or `failed` with its reason. Only
-  observed readings are stored. Instagram Reels, YouTube Shorts and TikTok are read through their own read scopes; Instagram and TikTok
-  are not verified live. Facebook Page is not implemented: no request is built until its metric set is confirmed from the current docs.
+  observed readings are stored. Instagram Reels, YouTube Shorts, TikTok and Facebook Page video insights are read through their stored
+  tokens. None of these reads is verified live. Facebook Page stores views and average watch time, and does not store unique views as reach.
 - **Paid metrics** come from the workspace's stored token through the insights reader. Without a stored token, nothing is measured. The
   test publisher has no insights source.
 
@@ -473,27 +473,27 @@ this page makes one video with the video engine. It is admin only.
   pages and market intelligence). Each message stays with the session.
 - **Files.** A video is the reference: the engine analyses it and never reuses its footage, words, voice or music (Bible principle 4). Text
   files up to 4000 characters are read into the brief; longer ones are refused with a plain message. Images and PDFs are kept with the
-  session. A readable PDF within the text limit is used in the brief. A PDF whose text cannot be read is kept and says so. The engine does not use an image's pixels yet.
+  session. A readable PDF within the text limit is used in the brief. A PDF whose text cannot be read is kept and says so. An image whose header gives a width and height records that size. The pixels are not read.
 - **Brief.** A session is sent as a brief request by default. The engine writes the script from the brief and the reference's analysis, and
   a run of six or more words copied from the reference is refused. A session that has script lines typed by hand sends those instead.
 - **Run.** "Make the video" is enabled when the session has a reference video, a theme page with its kits, a length, a budget and a priority.
   The decision panel lists what is missing, and each engine reason as it happens.
 - **Decisions.** Each stage shows its inputs, its output, the model and provider it used, and its cost as estimate, reserved and billed. A
   cost with no bill shows as unknown, never as a number.
-- **Not built yet.** Revisions after the first run; image pixels; avatar and lip-sync shots (no vendor chosen, so those shots
-  stay not connected). The narration and speech-to-text bills are unverified live.
+- **Not built yet.** Revisions after the first run; avatar and lip-sync shots (no vendor chosen, so those shots
+  stay not connected). Image pixels are not read; a header that names a size is recorded, and a header that does not leaves the size unknown. The narration and speech-to-text bills are unverified live.
 
 ## Not built yet
 
 Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
 [ROADMAP.md](ROADMAP.md):
 
-- The Content Factory page: revisions after the first run, image pixels, and text files that need a connected Drive (see the
-  Content Factory page section above). A readable PDF is used in the brief.
-- A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
-  `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
+- The Content Factory page: revisions after the first run, and text files that need a connected Drive (see the
+  Content Factory page section above). A readable PDF is used in the brief. An image records its header size and does not read pixels.
+- A video's cost is metered only when the provider returns its own bill (`costUsd` on a Hypit job, stored as `provider_reported`).
+  A declared estimate is held against the run's caps and is not written as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
-- Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. A deterministic prohibited or unsupported claim rejects the image before a provider is called. The engine claim question is still not asked on this path: an uncalibrated answer cannot approve, and the creative's later review is where that question belongs. Images still have no duration, so they are not sent through the video preflight.
+- Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. A deterministic prohibited or unsupported claim rejects the image before a provider is called. The Factory image path does not ask the engine claim question: an uncalibrated answer cannot approve, and the creative's later review is where that question belongs. The copy check used by Studio and jobs asks the question when the brand has stored allowed claims or stored prohibited claims, and a brand with neither gets no judgment. A Factory video with an empty hook skips that variant and the run continues. Another preflight refusal still stops the run.
 - Learning is rechecked on the measurement cadence while a run is waiting at its learn step. The Check learning button still checks immediately.
 - Cross-surface proposals are stored when a learned win on one surface matches a concept the run can make. The other surface's pick weight is not changed. The proposal says which attribute won, and which surface it is proposed for.
 - A re-grade writes the new grade on `ad_timelines` and keeps the grade it replaced in `ad_timeline_grades`. The copy is not updated. A stored grade is not rewritten when a calibration report changes. A new run grades the ad again.

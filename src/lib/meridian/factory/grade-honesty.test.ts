@@ -38,6 +38,16 @@ test("an ad that stopped scores lower on survival than one still delivering, ove
   assert.ok(stopped.evidence.some((line) => /stopped/.test(line)));
 });
 
+test("an unknown country or platform count is not stored as zero", () => {
+  const unknown = winnerScore({ ...complete, countries: null, platforms: null });
+  assert.equal(unknown.components.spread, 0);
+  assert.ok(unknown.evidence.some((line) => line === "countries not reported"));
+  assert.ok(unknown.evidence.some((line) => line === "platforms not reported"));
+  assert.ok(!unknown.evidence.some((line) => line.startsWith("0 countr")));
+  const measuredNone = winnerScore({ ...complete, countries: 0, platforms: 0 });
+  assert.ok(measuredNone.evidence.some((line) => line.startsWith("0 countr")));
+});
+
 test("missing evidence widens the range, and complete evidence gives the narrowest one", () => {
   const full = winnerScore(complete);
   const missing = winnerScore({ ...complete, stillRunning: null, advertiserSurvivorRate: null, creativeQuality: null });

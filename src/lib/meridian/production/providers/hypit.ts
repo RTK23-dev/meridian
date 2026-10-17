@@ -7,6 +7,12 @@ import type {
   ProviderHealth,
 } from "../types.ts";
 
+/** A finite cost Hypit returned on the job. Anything else is not a bill, so the estimate stays an estimate. */
+function reportedBill(costUsd: unknown): Pick<ProductionJob, "costActualUsd" | "metadata"> {
+  if (typeof costUsd !== "number" || !Number.isFinite(costUsd) || costUsd < 0) return {};
+  return { costActualUsd: costUsd, metadata: { costBasis: "provider_reported" } };
+}
+
 export class HypitProvider implements ProductionProvider {
   readonly id = "hypit";
   readonly capabilities: ProductionCapabilities = {
@@ -156,7 +162,7 @@ export class HypitProvider implements ProductionProvider {
         };
       }
 
-      const data = (await res.json()) as { id?: string; jobId?: string; status?: string };
+      const data = (await res.json()) as { id?: string; jobId?: string; status?: string; costUsd?: unknown };
       const externalId = data.id || data.jobId;
       if (!externalId) {
         return {
@@ -181,6 +187,7 @@ export class HypitProvider implements ProductionProvider {
         providerId: this.id,
         status: data.status === "completed" || data.status === "succeeded" ? "RENDERED" : "RUNNING",
         costEstimateUsd: costEstimate,
+        ...reportedBill(data.costUsd),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -221,6 +228,7 @@ export class HypitProvider implements ProductionProvider {
       status?: string;
       error?: string;
       outputArtifactId?: string;
+      costUsd?: unknown;
     };
 
     let status: ProductionJob["status"] = "RUNNING";
@@ -238,6 +246,7 @@ export class HypitProvider implements ProductionProvider {
       costEstimateUsd: 0,
       outputArtifactId: data.outputArtifactId,
       error: data.error,
+      ...reportedBill(data.costUsd),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
