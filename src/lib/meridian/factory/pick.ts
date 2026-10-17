@@ -27,6 +27,79 @@ import { thompsonRank, type ThompsonArm } from "./thompson.ts";
 import type { Intent } from "./run-settings.ts";
 import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 
+export type SurfaceProposal = {
+  concept: string;
+  fromSurface: LearningSurface;
+  toSurface: LearningSurface;
+  attribute: string;
+  value: string;
+  reason: string;
+};
+
+/**
+ * A positive learned pattern on one surface, proposed as a test on the other. A pattern that is already positive on the other surface
+ * is not proposed again. The proposal is a record only: it does not change either surface's weight.
+ */
+export function crossSurfaceProposals(
+  concept: { label: string; angle: string; hookType: string; format: string },
+  patterns: ReadonlyArray<{
+    attribute: string;
+    value: string;
+    surface: string;
+    lift: number;
+    sampleSize: number;
+    impressions: number;
+    pBeat?: number;
+    ciLow?: number;
+    ciHigh?: number;
+  }>,
+): SurfaceProposal[] {
+  const own: Record<string, string> = {
+    angle: concept.angle,
+    hook: concept.hookType,
+    hook_type: concept.hookType,
+    format: concept.format,
+  };
+  const wins = patterns.filter(
+    (row) =>
+      (row.surface === "organic" || row.surface === "paid")
+      && learningDirection({
+        lift: row.lift,
+        sampleSize: row.sampleSize,
+        impressions: row.impressions,
+        pBeat: row.pBeat,
+        ciLow: row.ciLow,
+        ciHigh: row.ciHigh,
+      }) === "POSITIVE",
+  );
+  const proposals: SurfaceProposal[] = [];
+  const seen = new Set<string>();
+  for (const row of wins) {
+    const owned = own[row.attribute];
+    if (!owned || owned.trim().toLowerCase() !== row.value.trim().toLowerCase()) continue;
+    const toSurface: LearningSurface = row.surface === "organic" ? "paid" : "organic";
+    const alreadyThere = wins.some(
+      (other) =>
+        other.surface === toSurface
+        && other.attribute === row.attribute
+        && other.value.trim().toLowerCase() === row.value.trim().toLowerCase(),
+    );
+    if (alreadyThere) continue;
+    const key = `${row.surface}|${toSurface}|${row.attribute}|${row.value.trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    proposals.push({
+      concept: concept.label,
+      fromSurface: row.surface as LearningSurface,
+      toSurface,
+      attribute: row.attribute,
+      value: row.value,
+      reason: `${row.attribute} ${row.value} won on ${row.surface}. It is proposed as a ${toSurface} test. The ${toSurface} weight is not changed.`,
+    });
+  }
+  return proposals;
+}
+
 /** A saved winner-score floor excludes a lower score. No saved line means every scored concept can be picked. */
 export function winnerClearsFloor(score: number, floor: number | null): boolean {
   return floor === null || score >= floor;
@@ -316,12 +389,39 @@ export async function pickConceptsForRun(
         where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
           and surface = any(${surfaces}) and (channel = '' or channel = any(${channels}))
       `;
+  const proposalPatterns = await sql<{
+    attribute: string;
+    value: string;
+    surface: string;
+    lift: number;
+    sample_size: number;
+    impressions: number;
+    p_beat: number | null;
+    ci_low: number | null;
+    ci_high: number | null;
+  }>`
+    select attribute, value, surface, lift, sample_size, impressions, p_beat, ci_low, ci_high from learned_patterns
+    where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and scope = 'brand'
+      and surface in ('organic', 'paid') and channel = ''
+  `;
+  const proposalRows = proposalPatterns.map((row) => ({
+    attribute: row.attribute,
+    value: row.value,
+    surface: row.surface,
+    lift: Number(row.lift),
+    sampleSize: Number(row.sample_size),
+    impressions: Number(row.impressions),
+    pBeat: row.p_beat ?? undefined,
+    ciLow: row.ci_low ?? undefined,
+    ciHigh: row.ci_high ?? undefined,
+  }));
   const filtered: Array<{ concept: string; reason: string }> = [];
   const arms: ThompsonArm[] = [];
   const weights: PickWeight[] = [];
   // Without a scope the arm is the concept itself, as before. With several scopes each arm is named by its surface, so the two arms of
   // a concept are separate draws.
   const scopes: Array<LearningScope | null> = input.learning.length > 0 ? input.learning : [null];
+  const proposals: SurfaceProposal[] = [];
   const armById = new Map<string, { candidate: Candidate; surface: LearningSurface | ""; weight: number }>();
   for (const candidate of candidates.values()) {
     const fit = brandFitOf(candidate.concept, brain.values, brain.completeness);
@@ -343,6 +443,7 @@ export async function pickConceptsForRun(
       filtered.push({ concept: candidate.concept.label, reason: fit.reason });
       continue;
     }
+    proposals.push(...crossSurfaceProposals(candidate.concept, proposalRows));
     for (const scope of scopes) {
       const { weight, notes } = learnedWeightOf(candidate.concept, learned, scope, beatFloor, retentionFloor);
       const surface: LearningSurface | "" = scope ? scope.surface : "";
@@ -369,6 +470,19 @@ export async function pickConceptsForRun(
   }
 
   await sql`delete from factory_picks where run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}`;
+  await sql`delete from factory_surface_proposals where run_id = ${input.runId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}`;
+  for (const proposal of proposals) {
+    await sql`
+      insert into factory_surface_proposals (
+        id, organization_id, brand_id, run_id, concept, from_surface, to_surface, attribute, value, reason
+      ) values (
+        ${`proposal:${input.runId}:${proposal.concept}:${proposal.fromSurface}:${proposal.toSurface}:${proposal.attribute}:${proposal.value}`},
+        ${input.organizationId}, ${input.brandId}, ${input.runId}, ${proposal.concept},
+        ${proposal.fromSurface}, ${proposal.toSurface}, ${proposal.attribute}, ${proposal.value}, ${proposal.reason}
+      )
+      on conflict (organization_id, run_id, concept, from_surface, to_surface, attribute, value) do nothing
+    `;
+  }
   const picks: Pick[] = [];
   for (const item of chosen) {
     const arm = armById.get(item.id);

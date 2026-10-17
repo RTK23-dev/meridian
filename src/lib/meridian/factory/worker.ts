@@ -17,6 +17,7 @@ import { queueStagesFrom } from "./queue-stages.ts";
 import { KILL_SWITCH_STOP_REASON, stageDecision } from "./stage-decision.ts";
 import { brandCapFiguresOf, capOrNull, capStopForRun, meteredSpendOf, pauseRunEngineSpend } from "./spend.ts";
 import { produceFactoryCreatives, scheduleProduceRecheck } from "./produce.ts";
+import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 import type { FactoryEngineSeams } from "./produce-shared.ts";
 import { launchFactoryRun, recordTestPlan, scheduleRunMeasurement } from "./publish.ts";
 import { snapshotMediaAllowed } from "./sources.ts";
@@ -645,6 +646,7 @@ async function gradeStoredAds(
       }
     }
     const id = `tl:${brandId}:${ad.id}`;
+    await keepEarlierGrade(sql, organizationId, brandId, ad.id, previous, stored);
     await sql`
       insert into ad_timelines (
         id, organization_id, brand_id, research_ad_id, first_seen, last_seen, still_running, days_running,
@@ -671,6 +673,44 @@ async function gradeStoredAds(
     count += 1;
   }
   return { count, stop };
+}
+
+function gradeRecordOf(grade: StoredGrade): GradeRecord {
+  return {
+    jev_status: grade.status,
+    jev_action: grade.action,
+    jev_reason: grade.reason,
+    jev_engine_id: grade.engineId,
+    jev_model: grade.model,
+    jev_question_versions: grade.questionVersions,
+    jev_policy_version: grade.policyVersion,
+    jev_gate_record_id: grade.gateRecordId,
+  };
+}
+
+/** Copies the grade a new grade replaces. The same grade is not copied again, and the copy is never updated. */
+async function keepEarlierGrade(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+  researchAdId: string,
+  previous: StoredGrade | null,
+  next: StoredGrade,
+): Promise<void> {
+  if (!previous) return;
+  const fingerprint = predictionFingerprint(gradeRecordOf(previous));
+  if (fingerprint === predictionFingerprint(gradeRecordOf(next))) return;
+  await sql`
+    insert into ad_timeline_grades (
+      id, organization_id, brand_id, research_ad_id, fingerprint, jev_status, jev_action, jev_reason,
+      jev_engine_id, jev_model, jev_question_versions, jev_policy_version, jev_gate_record_id, graded_by_run_id
+    ) values (
+      ${`grade:${brandId}:${researchAdId}:${fingerprint}`}, ${organizationId}, ${brandId}, ${researchAdId}, ${fingerprint},
+      ${previous.status}, ${previous.action}, ${previous.reason}, ${previous.engineId}, ${previous.model},
+      ${previous.questionVersions}, ${previous.policyVersion}, ${previous.gateRecordId}, ${previous.gradedBy ?? ""}
+    )
+    on conflict (organization_id, brand_id, research_ad_id, fingerprint) do nothing
+  `;
 }
 
 /**

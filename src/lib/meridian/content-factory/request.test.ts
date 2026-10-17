@@ -90,7 +90,7 @@ test("a session with instructions and no script lines maps to a brief the engine
       {
         uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
         mediaType: "application/pdf",
-        note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+        note: "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
       },
     ],
   });
@@ -201,7 +201,7 @@ test("a PDF stays an attachment, and its note says its text is not read yet", ()
     {
       uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
       mediaType: "application/pdf",
-      note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+      note: "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
     },
   ]);
   assert.deepEqual(built.request.brief?.sources, []);
@@ -210,7 +210,7 @@ test("a PDF stays an attachment, and its note says its text is not read yet", ()
 test("the decision panel's inputs name a text file's length and a PDF's note, and list no image", () => {
   assert.deepEqual(inputNotes([REFERENCE, textFile("a".repeat(27)), PDF, IMAGE]), [
     "angle.txt: read into the brief, 27 characters.",
-    "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+    "specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session.",
   ]);
 });
 

@@ -137,6 +137,13 @@ test("an organic win and a paid win each produce a pattern, and the next both-ru
   assert.ok(offerOrganic.weight < 1, "the organic arm of the paid winner is moved only by organic patterns, which mark it a loser");
   assert.ok(curiosityOrganic.notes.length > 0 && curiosityOrganic.notes.every((note) => note.endsWith("on organic")), "the organic arm names organic patterns only");
   assert.ok(curiosityPaid.notes.length > 0 && curiosityPaid.notes.every((note) => note.endsWith("on paid")), "the paid arm names paid patterns only");
+  const proposals = await sql<{ from_surface: string; to_surface: string; value: string }>`
+    select from_surface, to_surface, value from factory_surface_proposals
+    where organization_id = ${FACTORY_TEST_ORG} and run_id = ${FACTORY_TEST_RUN}
+  `;
+  assert.ok(proposals.some((row) => row.from_surface === "organic" && row.to_surface === "paid" && row.value === "curiosity"));
+  assert.ok(proposals.some((row) => row.from_surface === "paid" && row.to_surface === "organic" && row.value === "offer"));
+  assert.ok(curiosityPaid.weight < 1, "the proposal does not raise the paid weight");
 
   // One pick per concept, each tagged with the surface whose arm drew it, and stored with that surface.
   assert.equal(result.picks.length, 2, "two concepts are graded, so two are picked, once each");

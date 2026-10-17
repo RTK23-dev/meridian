@@ -24,7 +24,7 @@ export function predictionText(view: PredictionView): string {
 export function predictionStatusText(status: PredictionStatus): string {
   if (status === "same") return "This is the prediction the pick was made under.";
   if (status === "regraded") {
-    return "The ad was graded again after this pick. The grade the pick was made under is not kept, so the grade shown is the current one.";
+    return "The ad was graded again after this pick. The earlier grade is kept. The grade shown is the current one.";
   }
   return "No grade was stored with this pick, so the prediction it was made under is not known.";
 }

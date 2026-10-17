@@ -69,3 +69,37 @@ export async function recordDecisionSpend(sql: Sql, input: DecisionSpendInput): 
   `;
   return inserted[0] ? "recorded" : "already-recorded";
 }
+
+/**
+ * Writes the tokens a perception read reported. There is no published price for a perception model in the price table, so the dollar
+ * cost is null and caps do not count it. A read that reported no tokens writes nothing.
+ */
+export async function recordPerceptionSpend(
+  sql: Sql,
+  input: {
+    organizationId: string;
+    brandId: string;
+    perceptionRunId: string;
+    providerId: string;
+    model: string;
+    usage?: { inputTokens?: number; outputTokens?: number } | null;
+  },
+): Promise<DecisionSpendOutcome> {
+  const promptTokens = typeof input.usage?.inputTokens === "number" ? input.usage.inputTokens : null;
+  const completionTokens = typeof input.usage?.outputTokens === "number" ? input.usage.outputTokens : null;
+  if (promptTokens === null && completionTokens === null) return "not-metered";
+  const id = `spend:perception:${input.perceptionRunId}`;
+  const inserted = await sql<{ id: string }>`
+    insert into factory_costs (
+      id, organization_id, brand_id, run_id, stage, cents, seconds, provider, production_job_id, basis, created_at,
+      micros, engine, model, prompt_tokens, completion_tokens, price_version, gate_record_id
+    ) values (
+      ${id}, ${input.organizationId}, ${input.brandId}, ${null}, 'perception', null, 0, ${input.providerId},
+      ${null}, 'tokens', now(), ${null}, ${input.providerId}, ${input.model}, ${promptTokens}, ${completionTokens},
+      ${""}, ${""}
+    )
+    on conflict (id) do nothing
+    returning id
+  `;
+  return inserted[0] ? "recorded" : "already-recorded";
+}

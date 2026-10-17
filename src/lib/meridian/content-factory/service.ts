@@ -24,7 +24,8 @@ import {
 import { hasRole, isRole } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
-import { checkFile, decodeUpload, driveFileStore, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
+import { extractPdf } from "../ingestion/pdf.ts";
+import { characterCount, checkFile, decodeUpload, driveFileStore, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
 import {
   isKeepableGene,
   isPriority,
@@ -32,6 +33,7 @@ import {
   isSourcePage,
   MAX_SECONDS,
   MIN_SECONDS,
+  TEXT_FILE_MAX_CHARS,
   type Attachment,
   type FilePurpose,
   type KeepableGene,
@@ -363,6 +365,10 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   if (ready.status !== "ready") return { status: "not_connected", reason: ready.reason };
 
   const file = checked.file;
+  if (file.mediaType === "application/pdf") {
+    const extracted = await extractPdf(decoded.bytes);
+    if (extracted.status === "stored" && characterCount(extracted.text) <= TEXT_FILE_MAX_CHARS) file.content = extracted.text;
+  }
   const key = sessionFileKey(row.id, file);
   let storageObjectId: string | null;
   try {
@@ -483,7 +489,7 @@ export type RunView =
       files: FileStoreReadiness;
       hasReference: boolean;
       referenceNote: string;
-      /** What each file does on its way to the engine (a text file is read into the brief; a PDF's text is not read yet). */
+      /** What each file does on its way to the engine. A readable PDF is in the brief. An unreadable PDF says so. */
       inputs: string[];
     }
   | { stage: "started"; feed: RunFeed; referenceNote: string; inputs: string[] }

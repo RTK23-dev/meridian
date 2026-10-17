@@ -186,7 +186,7 @@ describe("Content Factory sessions", () => {
     const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: store });
     assert.equal(view.stage, "draft");
     assert.ok(view.stage === "draft" && view.inputs.includes(`angle.txt: read into the brief, ${note.length} characters.`));
-    assert.ok(view.stage === "draft" && view.inputs.includes("specs.pdf: PDF text is not read yet; the file is kept with the session."));
+    assert.ok(view.stage === "draft" && view.inputs.includes("specs.pdf: PDF text could not be read, so it is not in the brief. The file is kept with the session."));
   });
 
   test("a file cannot be attached to another session's message", async () => {

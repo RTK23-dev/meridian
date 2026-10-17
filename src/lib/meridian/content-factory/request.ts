@@ -90,7 +90,7 @@ function isMaterialFile(item: Attachment): item is FileAttachment {
   return item.kind === "file" && item.purpose !== "reference_video" && item.content === null;
 }
 
-/** The note a brief attachment carries. A PDF's note says its text is not read yet. */
+/** The note a brief attachment carries. A PDF whose text was not readable says so. A readable PDF is a brief source, not this note. */
 function attachmentNote(file: FileAttachment): string {
   return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
 }
@@ -105,7 +105,7 @@ function textFileLine(file: FileAttachment): string {
 
 /**
  * The lines the decision panel lists under Inputs: what each file does on its way to the engine. A text file is read into the brief
- * (its length is shown); a PDF's text is not read yet. Images and the reference video have no line here.
+ * (its length is shown); a PDF whose text could not be read says so. Images and the reference video have no line here.
  */
 export function inputNotes(attachments: readonly Attachment[]): string[] {
   return attachments.flatMap((item): string[] => {

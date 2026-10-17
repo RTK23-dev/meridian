@@ -198,13 +198,19 @@ test("a pick stores the grade its ad carried, and the grade is shown as the pred
   assert.equal(stored, predictionFingerprint(graded), "the pick holds the fingerprint of the grade its ad carried");
   assert.equal(predictionStatusOf(stored, graded), "same");
 
-  // The ad is graded again, by another engine, after the pick. The grade it was made under is not kept, so the view says it changed.
+  // The ad is graded again, by another engine, after the pick. The current grade changes. The earlier grade is kept.
   await sql`update factory_runs set settings = ${JSON.stringify({ ...MANUAL, decisionEngine: "openai-decisions" })} where id = ${FACTORY_TEST_RUN}`;
   assert.equal(await runGrade(sql, seamsWith(readyEngine(), readyEngine("openai-decisions"))), "graded:1");
   const regraded = await gradeOf(sql);
   assert.equal(regraded.jev_engine_id, "openai-decisions");
   assert.equal(predictionStatusOf(stored, regraded), "regraded");
   assert.equal(await storedFingerprint(sql), stored, "the pick is not rewritten by a later grade");
+  const history = await sql<{ jev_engine_id: string | null }>`
+    select jev_engine_id from ad_timeline_grades
+    where organization_id = ${FACTORY_TEST_ORG} and brand_id = ${FACTORY_TEST_BRAND} and research_ad_id = 'ad-1'
+  `;
+  assert.equal(history.length, 1, "the grade the pick was made under is kept");
+  assert.equal(history[0]?.jev_engine_id, "jev");
 });
 
 test("with no decision engine ready, the pick is recorded as observed only, and its prediction reads not graded, never as a score", async () => {
