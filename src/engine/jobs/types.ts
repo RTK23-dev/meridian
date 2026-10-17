@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Decision, ProviderAdapter, ProviderPoll, ModelClass, TakeVerdict, VisualType, GateResult } from "../contracts/index.ts";
 import { EngineError, idSchema } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
-import { ENGINE_STAGES, type EngineStage } from "./registry.ts";
+import { ENGINE_STAGES, type EngineMaintenanceJob, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
 import type { GoldMetrics } from "../review/gold.ts";
 import type { VariantWorkItem } from "../variants/work.ts";
@@ -202,10 +202,20 @@ export interface ProviderResolver {
   resolve(providerId: string, organizationId: string): ProviderAdapter | null;
 }
 
+/**
+ * A maintenance job's handler (contract v9). It is not a stage: it has no request and writes no artifact. It runs on the workspace of its
+ * job, and returns the result string Meridian stores.
+ */
+export type EngineJobHandler = {
+  run(ctx: { sql: Sql; organizationId: string; jobId: string }): Promise<string>;
+};
+
 export type EngineRuntime = {
   handlers: Partial<Record<EngineStage, StageHandler>>;
   providers: ProviderResolver;
   now: () => number;
+  /** The maintenance jobs built for this runtime (registry.ts ENGINE_MAINTENANCE_JOBS). Absent, a maintenance job is not implemented. */
+  jobs?: Partial<Record<EngineMaintenanceJob, EngineJobHandler>>;
 };
 
 /** Bible 17.2 rule 5 types errors by kind. A stage with no handler is refused as not_implemented, never retried. */

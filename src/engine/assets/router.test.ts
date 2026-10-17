@@ -518,18 +518,33 @@ describe("image routes", () => {
   });
 });
 
+/** A speech answer as OpenRouter documents audio output: a stream with the audio in base64 chunks, the generation id, and [DONE]. */
+function speechStream(audio: Uint8Array, generationId = "gen-speech-1"): Reply {
+  const events = [
+    `data: ${JSON.stringify({ id: generationId, choices: [{ index: 0, delta: { audio: { data: base64(audio.subarray(0, 1000)) } } }] })}`,
+    "",
+    `data: ${JSON.stringify({ id: generationId, choices: [{ index: 0, delta: { audio: { data: base64(audio.subarray(1000)) } } }] })}`,
+    "",
+    "data: [DONE]",
+    "",
+  ];
+  return raw(200, new TextEncoder().encode(events.join("\n")), { "content-type": "text/event-stream" });
+}
+
 describe("speech voices (Bible 10.4): the voice is part of the cache key", () => {
-  const SPEECH_PATH = "POST /api/v1/audio/speech";
+  const SPEECH_PATH = "POST /api/v1/chat/completions";
+  const STATS_PATH = "GET /api/v1/generation";
   const SPEECH_MODEL = "test/eleven-v4";
   const SPEECH_ID = `openrouter:${SPEECH_MODEL}`;
   const speechTable = () => routesWith("tts", [{ provider: "openrouter", model: SPEECH_MODEL, priceKey: "eleven_v4", verified: false }], routes.table);
-  const answer = () => raw(200, mp3Bytes(), { "content-type": "audio/mpeg" });
+  const answer = () => speechStream(mp3Bytes());
+  const billed = (totalCost: number) => json(200, { data: { id: "gen-speech-1", total_cost: totalCost } });
 
   it("the voice is part of the cache key: a take cached for one voice is a hit for that voice only, and another voice is a call", async () => {
-    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()] } });
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()], [STATS_PATH]: billed(0.002) } });
     const spec = assetSpec({ modelClass: "tts", prompt: "Two scoops, one sentence.", durationMs: 1000 });
-    const speak = (voiceId: string) => ({ ...h.input(spec), stage: "voice", voiceId });
-    const calls = () => h.requests.filter((request) => request.url.endsWith("/audio/speech")).length;
+    const speak = (voiceId: string) => ({ ...h.input(spec), stage: "voice", voiceId, voiceProvider: "test" });
+    const calls = () => h.requests.filter((request) => request.method === "POST" && request.url.endsWith("/chat/completions")).length;
     // A take already cached for voice_a (the first write wins, Bible 5.2).
     await h.cache.put({
       workspaceId: WORKSPACE,
@@ -559,5 +574,39 @@ describe("speech voices (Bible 10.4): the voice is part of the cache key", () =>
     assert.notEqual(routeCacheKey(speech, "openrouter:test", { voiceId: "a" }), routeCacheKey(speech, "openrouter:test", { voiceId: "b" }));
     assert.equal(routeCacheKey(speech, "openrouter:test", { voiceId: null }) === routeCacheKey(speech, "openrouter:test", { voiceId: "a" }), false);
     assert.equal(routeCacheKey(video, "openrouter:test", { voiceId: "a" }), assetCacheKey(video, "openrouter:test"));
+  });
+
+  it("a speech take is settled to its generation's bill, and its generation id is read back on the ledger entry", async () => {
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()], [STATS_PATH]: billed(0.0031) } });
+    const spec = assetSpec({ modelClass: "tts", prompt: "Settled by its bill.", durationMs: 1000 });
+    const report = await h.router.produce({ ...h.input(spec), stage: "voice", voiceId: "voice_a", voiceProvider: "test" });
+    assert.equal(report.outcome.status, "done");
+    if (report.outcome.status === "done") assert.equal(report.outcome.asset.costUsd, 0.0031);
+    const [entry] = await h.ledger.listEntries(h.reservationId);
+    assert.equal(entry?.settlement, "billed");
+    assert.equal(entry?.actualUsd, 0.0031, "the bill, not the estimate");
+    assert.equal(entry?.providerRef, "gen-speech-1", "the generation id is recorded (contract v9)");
+  });
+
+  it("a speech take whose bill cannot be read is unsettled: held at its reservation, with its generation id kept for the reconciler", async () => {
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()], [STATS_PATH]: json(404, { error: "not yet" }) } });
+    const spec = assetSpec({ modelClass: "tts", prompt: "The stats lag.", durationMs: 1000 });
+    const report = await h.router.produce({ ...h.input(spec), stage: "voice", voiceId: "voice_a", voiceProvider: "test" });
+    assert.equal(report.outcome.status, "unsettled", "no estimate is booked as the cost: the submit is unsettled");
+    const [entry] = await h.ledger.listEntries(h.reservationId);
+    assert.equal(entry?.settlement, undefined);
+    assert.equal(entry?.actualUsd, undefined);
+    assert.equal(entry?.reservedUsd, entry?.estimateUsd, "the call stays held at its reservation");
+    assert.equal(entry?.providerRef, "gen-speech-1");
+    const readBack = await h.ledger.getEntryByKey(entry?.idempotencyKey ?? "");
+    assert.equal(readBack?.providerRef, "gen-speech-1", "read back from the store");
+  });
+
+  it("a voice of another vendor is never sent to this speech model", async () => {
+    const h = await harness({ table: speechTable(), script: { [SPEECH_PATH]: [answer()], [STATS_PATH]: billed(0.002) } });
+    const spec = assetSpec({ modelClass: "tts", prompt: "Wrong vendor.", durationMs: 1000 });
+    const report = await h.router.produce({ ...h.input(spec), stage: "voice", voiceId: "voice_a", voiceProvider: "elevenlabs" });
+    assert.equal(report.outcome.status, "not_connected");
+    assert.equal(h.requests.filter((request) => request.url.endsWith("/chat/completions")).length, 0, "nothing is sent");
   });
 });

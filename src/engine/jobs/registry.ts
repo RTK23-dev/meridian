@@ -34,6 +34,21 @@ export type EngineJobType = `engine.${EngineStage}`;
 /** Infrastructure job that polls an asynchronous provider call (Bible 15.2). It is not one of the 14 stages. */
 export const ENGINE_POLL_JOB_TYPE = "engine.poll" as const;
 
+/**
+ * The engine's maintenance jobs (contract v9). They are not stages: each has no request and no artifact, and runs on the workspace of its job.
+ * Each is one job type on Meridian's queue. A workspace schedules one with a job_schedules row (jobs/STATUS.md, "Scheduling").
+ */
+export const ENGINE_MAINTENANCE_JOBS = { reconcile_holds: "engine.reconcile_holds" } as const;
+export type EngineMaintenanceJob = keyof typeof ENGINE_MAINTENANCE_JOBS;
+
+/** The maintenance job a job type names, or null when it names none. */
+export function maintenanceJobOf(jobType: string): EngineMaintenanceJob | null {
+  for (const name of Object.keys(ENGINE_MAINTENANCE_JOBS) as EngineMaintenanceJob[]) {
+    if (ENGINE_MAINTENANCE_JOBS[name] === jobType) return name;
+  }
+  return null;
+}
+
 /** Bible 5.1 lease classes: 2 minutes for Claude calls, 10 minutes for generation, 5 minutes for render. */
 export type TimeoutClass = "claude" | "generation" | "render";
 

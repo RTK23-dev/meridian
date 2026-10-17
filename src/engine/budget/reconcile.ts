@@ -2,7 +2,7 @@
 // contract v6). A call's actual cost is the provider's verified bill, or a confirmation that the call created no job. An estimate is
 // never an actual. Without a bill or a confirmation the call stays held at its reservation, and the hold counts toward the budget.
 
-import { EngineError, roundUsd, sumUsd, type BudgetReservation } from "../contracts/index.ts";
+import { EngineError, providerRefSchema, roundUsd, sumUsd, type BudgetReservation } from "../contracts/index.ts";
 import { committedFor, type BudgetAlert } from "./reserve.ts";
 import type { LedgerRow, LedgerStore } from "./store.ts";
 
@@ -11,6 +11,11 @@ export type ReconcileInput = {
   idempotencyKey: string;
   /** The provider's verified bill for the call. Omit when the provider reported none: the call then stays held, and nothing is estimated. */
   billedUsd?: number;
+  /**
+   * The provider's own id for the call (contract v9: a Deepgram request id, an OpenRouter generation id). It is recorded whether or not a
+   * bill is given, so a call held without its bill can be settled later from its id (budget/reconcile-holds.ts).
+   */
+  providerRef?: string;
 };
 
 export type ReconcileResult = {
@@ -50,7 +55,18 @@ function billUsdUp(usd: number): number {
  * authorized for it.
  */
 export async function reconcileCall(store: LedgerStore, input: ReconcileInput): Promise<ReconcileResult> {
-  const { row, reservation } = await loadCall(store, input.idempotencyKey);
+  const loaded = await loadCall(store, input.idempotencyKey);
+  const reservation = loaded.reservation;
+  let row = loaded.row;
+  if (input.providerRef !== undefined) {
+    const checked = providerRefSchema.safeParse(input.providerRef);
+    if (!checked.success) {
+      throw new EngineError("invalid_input", "a provider ref must be a non-empty id of at most 512 characters", { stage: row.stage });
+    }
+    if ((row.providerRef ?? null) !== input.providerRef) {
+      row = await store.setProviderRef(row.entryId, input.providerRef);
+    }
+  }
   if (input.billedUsd === undefined) {
     return { entry: row, reservation, alerts: [], settled: row.settlement !== undefined };
   }

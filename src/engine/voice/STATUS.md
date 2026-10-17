@@ -1,5 +1,11 @@
 # STATUS: voice stage (W6), `src/engine/voice/`, and `src/engine/jobs/handlers/voice.ts`
 
+**Speech through chat completions (contract v9, 2026-10-17).** The speech call is OpenRouter's audio output (`POST /chat/completions`, a
+stream), not `/audio/speech`. `voice.ts` passes the voice kit's `provider` as `voiceProvider`, so a speech model is used only for a voice of
+its own vendor. The voice test's harness answers the speech calls and the tightener's calls on the same path, by request body, and reads the
+bill from the generation stats. The speech model ids are `elevenlabs/eleven-v4` and `google/gemini-3.8-flash-tts` (routes.ts, unverified);
+the Gemini target is not estimated, so it is unusable until the owner sets a basis. Blocker 2 below is resolved in part: the route has a model.
+
 **Brief requests (contract v8, this branch).** `VoiceRun` takes `script` (the resolved words, `script/resolve.ts`) next to `request`: the
 request's maxMs and voice page are still read from the request, and the beats and language from the script. The handler reads the written
 script of a brief through its inputs. Production's voice ports are per reservation (`VoicePortsFor`, `jobs/production-stages.ts`). Round 2

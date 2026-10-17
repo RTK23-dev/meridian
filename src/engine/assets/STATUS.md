@@ -1,6 +1,26 @@
 # Asset router and adapters (W5): E3 asynchronous submit and settle
 
-## Speech bill from the generation stats (round 2, lead decision 2026-10-17; branch worktree-agent-a16624873a0973b89)
+## Speech through chat completions, provider refs and the voice's provider (contract v9, owner decision 2026-10-17)
+
+- `providers/openrouterSpeech.ts` now sends `POST /chat/completions` with `modalities: ["text", "audio"]`, `audio: {voice, format: "mp3"}`
+  and `stream: true` (OpenRouter's audio output). `speechFromStream` reads the server-sent events: each `delta.audio.data` is decoded on its
+  own and the bytes are joined in order (a base64 chunk is not joined as text), the first event's `id` is the generation id, and `[DONE]` is
+  required. An error event, a non-base64 chunk, no audio, or a stream that ends before `[DONE]` is refused, never completed.
+- The bill is read once after the audio is stored, through `gateway/generation.ts` (`openRouterGenerationBill`). Every miss is unavailable,
+  and the submit stays unsettled (contract v6). The generation id is recorded on the entry (below), so the reconciler can read the bill later.
+- `voiceProvider` (new on `ProduceInput` and `AdapterContext`, from the voice kit's `provider`): a speech model is connected for a page only
+  when its vendor (the model id's part before the slash) is the page's voice provider. Otherwise the router never sends the voice id.
+- `router.ts` records the adapter's generation id (`detailsFor(...).generationId`) as the ledger entry's `providerRef` in `settleClaimed`,
+  whether or not the bill arrived. An unsettled speech submit keeps its generation id, so `reconcileHolds` can settle it (contract v9).
+- `routes.ts` `tts`: `elevenlabs/eleven-v4` (price key `eleven_v4`, $40 per million characters) and `google/gemini-3.8-flash-tts` (price key
+  `gemini_3_8_flash_tts`, $9 per million output tokens). The Gemini target is not estimated: its price is per output token, so `price()`
+  refuses it with unknown_price, and the router excludes it. Both ids are unverified.
+- Tests: `providers/openrouterSpeech.test.ts` (the stream join and its refusals, the request, the voice's provider, the bill, the speed);
+  `router.test.ts` ("speech voices": the cache key, a billed take, an unsettled take with its generation id, a wrong vendor).
+- UNVERIFIED LIVE: the request shape, the speech text as the user's message, the top-level `speed` (not documented for audio output), the
+  stream's id as the generation id, and the stats' `total_cost`. The owner's live run records one take with its stream, id and bill.
+
+## Speech bill from the generation stats (round 2, lead decision 2026-10-17; branch worktree-agent-a16624873a0973b89; superseded in its request shape by the v9 section above)
 
 - `providers/openrouterSpeech.ts`: the speech call is still `POST /audio/speech` (the repo's PROVIDER_APIS.md and the adapter's recorded
   shape). Its answer header carries the generation id. The bill is read ONCE, after the answer is stored, with `readGenerationBill`:

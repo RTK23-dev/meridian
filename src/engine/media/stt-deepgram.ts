@@ -22,6 +22,7 @@
 import { z } from "zod";
 import { FFMPEG_LIMITS } from "../../../functions/ffmpeg/limits.ts";
 import type { MediaSource } from "../../../functions/ffmpeg/types.ts";
+import type { BillRead } from "../budget/reconcile-holds.ts";
 import { classifyError, excerpt, providerErrorForStatus } from "../assets/classify.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { roundUsd } from "../contracts/money.ts";
@@ -274,11 +275,29 @@ async function transcribe(deps: Deps, request: SttRequest): Promise<SttResult> {
     request,
   );
   const bill = await readBill(deps, organizationId, answer.metadata.request_id);
+  // The request id is the call's providerRef (contract v9): recorded on the ledger entry even when no bill is read.
+  const providerRef = answer.metadata.request_id !== undefined && REQUEST_ID_PATTERN.test(answer.metadata.request_id) ? answer.metadata.request_id : undefined;
   return {
     words: normalised.words,
     language: normalised.language,
     billedUsd: bill.billedUsd,
     ...(bill.billNote === undefined ? {} : { billNote: bill.billNote }),
+    ...(providerRef === undefined ? {} : { providerRef }),
+  };
+}
+
+/**
+ * The bill reader of a Deepgram call for the reconciler (budget/reconcile-holds.ts, contract v9). The call's request id is its providerRef,
+ * and the bill is read from the same request lookup transcribe uses, in the workspace's project. Any miss is unavailable with its reason,
+ * and nothing is estimated.
+ */
+export function deepgramBillReader(options: Pick<DeepgramOptions, "gateway" | "projects">): (input: { organizationId: string; providerRef: string }) => Promise<BillRead> {
+  return async ({ organizationId, providerRef }) => {
+    const bill = await readBill(options, organizationId, providerRef);
+    if (bill.billedUsd === null) {
+      return { status: "unavailable", reason: bill.billNote ?? "the Deepgram bill is not available" };
+    }
+    return { status: "billed", usd: bill.billedUsd };
   };
 }
 
@@ -293,7 +312,7 @@ function held(reason: string): Bill {
  * answer for another request, or a project that cannot be named (NOT_CONNECTED) leaves the call unsettled. The transcript is kept, and
  * nothing is booked as the actual cost.
  */
-async function readBill(deps: Deps, organizationId: string | null, requestId: string | undefined): Promise<Bill> {
+async function readBill(deps: Pick<Deps, "gateway" | "projects">, organizationId: string | null, requestId: string | undefined): Promise<Bill> {
   if (requestId === undefined || !REQUEST_ID_PATTERN.test(requestId)) {
     return held("the answer names no usable request id, so the bill cannot be read");
   }
@@ -390,7 +409,7 @@ type Call = Omit<GatewayCall, "provider" | "organizationId">;
  * cannot reach or a workspace with no key: those calls were never sent, so they are refused before any work. Any other failure came from
  * the transport after the request was sent, and is classified as the router classifies it: a timeout or a server error keeps its hold.
  */
-async function send(deps: Deps, organizationId: string | null, call: Call): Promise<HttpResponse> {
+async function send(deps: Pick<Deps, "gateway">, organizationId: string | null, call: Call): Promise<HttpResponse> {
   let result: GatewayResult;
   try {
     result = await deps.gateway.call({ ...call, provider: DEEPGRAM_PROVIDER, organizationId });

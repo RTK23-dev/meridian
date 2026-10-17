@@ -19,9 +19,10 @@ export type Price = {
   readonly usd: number | null;
   /**
    * list_oct_2026: a list price checked for this table. third_party_unverified: a price from a third-party source, not checked against
-   * the vendor's own price page. The owner's live run verifies it before it is relied on (Bible 10.3).
+   * the vendor's own price page. openrouter_listing (owner decision 2026-10-17): the price OpenRouter's public listing shows, read
+   * 2026-10-17 and not checked against the vendor's page. The owner's live run verifies any of them before it is relied on (Bible 10.3).
    */
-  readonly source: "list_oct_2026" | "third_party_unverified";
+  readonly source: "list_oct_2026" | "third_party_unverified" | "openrouter_listing";
 };
 
 const LIST = "list_oct_2026" as const;
@@ -51,9 +52,10 @@ const priceEntries = {
     nano_banana_2: { unit: "per_token", usd: null, source: LIST },
     gpt_image_2: { unit: "per_token", usd: null, source: LIST },
 
-    // tts.
+    // tts. Eleven v4 is the Bible's $40 per million characters. Gemini 3.8 Flash TTS is $9 per million output tokens on OpenRouter's
+    // listing (owner decision 2026-10-17). Its output tokens are not known before the call, so the speech adapter never estimates it.
     eleven_v4: { unit: "per_million_characters", usd: 40, source: LIST },
-    gemini_3_8_flash_tts: { unit: "per_million_output_tokens", usd: null, source: LIST },
+    gemini_3_8_flash_tts: { unit: "per_million_output_tokens", usd: 9, source: "openrouter_listing" },
 
     // Speech-to-text: the vendor is Deepgram (owner decision 2026-10-16, Bible 20.2). Nova-3 pre-recorded at $0.0043 a minute is from
     // third-party sources, not checked against Deepgram's own price page, so it is unverified until the owner's live run.

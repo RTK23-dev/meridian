@@ -47,11 +47,19 @@ Request: `model` (for example `bytedance-seed/seedream-4.5`), `prompt`, optional
 - Image-input page (`https://openrouter.ai/docs/features/multimodal/image-inputs` and `.../guides/overview/multimodal/images`): both
   returned HTTP 404 on 2026-10-15 and were not read. The image generation guide above is the only source used for this check.
 
-### Speech (TTS): `POST /audio/speech`
-Request: `model`, `input` (text), `voice` (provider-specific; required unless the provider documents a default),
-`response_format` (`mp3` or `pcm`, default `pcm`), `speed`, `input_references` (voice cloning; not used without the
-owner's approval). Response 200: raw audio bytes (`audio/mpeg` for mp3), with the generation id in the `X-Generation-Id`
-header. The response carries no cost: reconcile from the price table, flagged as an estimate.
+### Speech (TTS): chat completions with audio output (owner decision 2026-10-17; UNVERIFIED LIVE)
+The adapter (`src/engine/assets/providers/openrouterSpeech.ts`) sends `POST /chat/completions` with `model`, `modalities: ["text",
+"audio"]`, `audio: { voice, format: "mp3" }`, `messages` (the text as the user's message) and `stream: true`. `speed` is sent only when it
+is not 1, and the page does not document it for audio output. The answer is a server-sent event stream: each event's
+`delta.audio.data` is a base64 chunk of the MP3, the chunks are decoded one by one and joined in order, the event's `id` is the
+generation id, and `data: [DONE]` ends it. The bill is read once after the audio is stored: `GET /generation?id=<generation id>`,
+`data.total_cost` in USD (`src/engine/gateway/generation.ts`). A miss leaves the call held, with its generation id recorded for the
+reconciler (`src/engine/budget/reconcile-holds.ts`); no list price is booked. The `input_references` voice cloning is not used.
+
+### Deepgram request and bill (owner decision 2026-10-16; the request id is the providerRef)
+`POST /v1/listen` answers `metadata.request_id`, which the adapter records as the ledger entry's providerRef. The bill is read from
+`GET /v1/projects/{project_id}/requests/{request_id}` at `request.response.details.usd`
+(`src/engine/media/stt-deepgram.ts`, `deepgramBillReader`).
 
 ### Chat with structured output
 Already wrapped by `gateway/openrouter.ts` (`structuredChat`); used by `src/engine/claude`.

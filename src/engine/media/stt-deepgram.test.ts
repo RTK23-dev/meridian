@@ -24,7 +24,7 @@ import {
   refusal,
 } from "./test/deepgram-fixtures.ts";
 import { pricePerMinuteOf } from "./stt-connection.ts";
-import { deepgramForRoute, deepgramProjects, deepgramSpeechToText, type DeepgramOptions } from "./stt-deepgram.ts";
+import { deepgramBillReader, deepgramForRoute, deepgramProjects, deepgramSpeechToText, type DeepgramOptions } from "./stt-deepgram.ts";
 import { attemptKey, SttCallError, sttIdempotencyKey, transcribeMetered, type SttRequest } from "./stt.ts";
 import { mediaConfig } from "./config.ts";
 
@@ -588,5 +588,63 @@ describe("refusals and failures follow the router's classification (Bible 10.4, 
   it("pricePerMinuteOf reads the route's list price, and is null for a route with no price key", () => {
     assert.equal(pricePerMinuteOf(ROUTE), PRICE_PER_MINUTE);
     assert.equal(pricePerMinuteOf({ ...ROUTE, priceKey: null }), null);
+  });
+});
+
+describe("the request id is the call's providerRef, and the bill reader of a held call (contract v9)", () => {
+  it("the transcript names its request id as the providerRef", async () => {
+    const { gateway } = scriptedGateway([listenOk(), billOk()]);
+    const result = await deepgramSpeechToText(optionsWith(gateway)).transcribe(URL_REQUEST, "k");
+    assert.equal(result.providerRef, DEEPGRAM_REQUEST_ID);
+  });
+
+  it("a transcript with no request id names no providerRef", async () => {
+    const { gateway } = scriptedGateway([listenOk({ requestId: null }), billOk()]);
+    const result = await deepgramSpeechToText(optionsWith(gateway)).transcribe(URL_REQUEST, "k");
+    assert.equal(result.providerRef, undefined);
+  });
+
+  it("a metered call that is billed settles to the bill and keeps its request id on the entry", async () => {
+    const ledger = await ledgerWithReservation();
+    const { gateway } = scriptedGateway([listenOk(), billOk()]);
+    const outcome = await transcribeMetered(deepgramSpeechToText(optionsWith(gateway)), URL_REQUEST, meterFor(ledger));
+    assert.equal(outcome.settled, true);
+    const [entry] = await ledger.listEntries(budgetReservationFixture.reservationId);
+    assert.equal(entry?.settlement, "billed");
+    assert.equal(entry?.providerRef, DEEPGRAM_REQUEST_ID);
+  });
+
+  it("a metered call with no bill stays held, and its request id is recorded for the reconciler", async () => {
+    const ledger = await ledgerWithReservation();
+    const { gateway } = scriptedGateway(
+      [listenOk()],
+      projectsOk(["11111111-aaaa-4bbb-8ccc-000000000001", "22222222-aaaa-4bbb-8ccc-000000000002"]),
+    );
+    const outcome = await transcribeMetered(deepgramSpeechToText(optionsWith(gateway)), URL_REQUEST, meterFor(ledger));
+    assert.equal(outcome.settled, false);
+    const [entry] = await ledger.listEntries(budgetReservationFixture.reservationId);
+    assert.equal(entry?.settlement, undefined);
+    assert.equal(entry?.providerRef, DEEPGRAM_REQUEST_ID);
+  });
+
+  it("the bill reader reads a call's bill from its request id, in the workspace's project", async () => {
+    const { gateway, calls } = scriptedGateway([billOk()]);
+    const read = await deepgramBillReader(optionsWith(gateway))({ organizationId: ORGANIZATION, providerRef: DEEPGRAM_REQUEST_ID });
+    assert.deepEqual(read, { status: "billed", usd: roundUsd(DEEPGRAM_BILL_USD) });
+    const lookups = calls.filter((call) => call.method === "GET" && (call.path ?? "").includes(`/requests/${DEEPGRAM_REQUEST_ID}`));
+    assert.equal(lookups.length, 1);
+    assert.equal(lookups[0]?.organizationId, ORGANIZATION);
+  });
+
+  it("the bill reader is unavailable, with its reason, when the lookup refuses or no workspace is in scope", async () => {
+    const refused = scriptedGateway([refusal(404)]);
+    const missed = await deepgramBillReader(optionsWith(refused.gateway))({ organizationId: ORGANIZATION, providerRef: DEEPGRAM_REQUEST_ID });
+    assert.equal(missed.status, "unavailable");
+    assert.match(missed.status === "unavailable" ? missed.reason : "", /HTTP 404/);
+
+    const unscoped = scriptedGateway([billOk()]);
+    const noWorkspace = await deepgramBillReader(optionsWith(unscoped.gateway))({ organizationId: "", providerRef: DEEPGRAM_REQUEST_ID });
+    assert.equal(noWorkspace.status, "unavailable");
+    assert.equal(unscoped.calls.length, 0, "no bill is requested without a workspace");
   });
 });

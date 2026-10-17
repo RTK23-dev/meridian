@@ -47,8 +47,24 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 8 (the brief, the written script, model_choices and two roles, Bible section 4 v8 note)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@8");
+test("the contract set is at version 9 (the ledger's providerRef, Bible section 4 v9 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@9");
+});
+
+test("the speech targets are the OpenRouter ids of the owner's decision (2026-10-17), unverified, and each has a price key", () => {
+  const speech = routes.table.tts.targets;
+  assert.deepEqual(
+    speech.map((target) => [target.provider, target.model, target.priceKey, target.verified]),
+    [
+      ["openrouter", "elevenlabs/eleven-v4", "eleven_v4", false],
+      ["openrouter", "google/gemini-3.8-flash-tts", "gemini_3_8_flash_tts", false],
+    ],
+  );
+  assert.equal(priceFor("eleven_v4").usd, 40);
+  assert.equal(priceFor("eleven_v4").unit, "per_million_characters");
+  assert.equal(priceFor("gemini_3_8_flash_tts").usd, 9);
+  assert.equal(priceFor("gemini_3_8_flash_tts").unit, "per_million_output_tokens");
+  assert.equal(priceFor("gemini_3_8_flash_tts").source, "openrouter_listing");
 });
 
 test("the tiers the v8 roles run on are routed to priced Claude models: scriptwriter on llm.direction, model_chooser on llm.check", () => {
@@ -390,7 +406,6 @@ test("prices the Bible does not state as a number are null, never a guess", () =
     "i2v_pinned_model",
     "nano_banana_2",
     "gpt_image_2",
-    "gemini_3_8_flash_tts",
     "stt_vendor",
     "lipsync_vendor",
     "background_removal_vendor",

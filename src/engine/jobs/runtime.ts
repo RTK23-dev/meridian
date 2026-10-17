@@ -43,7 +43,9 @@ import { productionAnalysisPortsFor, productionReferenceSource, productionVoiceP
 import { engineReferenceStore } from "../../lib/meridian/storage/engine-reference-store.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
-import { deepgramForRoute, deepgramProjects, speechPortsOf, type MediaFunctionsMode, type PictureClient, type SpeechPorts } from "../media/index.ts";
+import { deepgramBillReader, deepgramForRoute, deepgramProjects, speechPortsOf, type MediaFunctionsMode, type PictureClient, type SpeechPorts } from "../media/index.ts";
+import { reconcileHolds, type BillReader } from "../budget/reconcile-holds.ts";
+import { openRouterGenerationBill } from "../gateway/generation.ts";
 import type { HttpMediaFunctions } from "../media/http.ts";
 // The one production file outside src/engine/media that imports the in-process media functions (boundaries.test.ts): the composition
 // root chooses them when MEDIA_FUNCTIONS_MODE=in_process (owner decision 2026-10-16).
@@ -199,6 +201,12 @@ export type EngineComposition = {
    * route's list price per minute. The analyze_reference and voice ports take these two values. Absent, nothing is speech-ready.
    */
   speech?: SpeechPorts;
+  /**
+   * The bill readers of held calls, by provider (contract v9): the reconcile_holds maintenance job settles a held call from its bill
+   * through them (budget/reconcile-holds.ts). Production: OpenRouter's generation stats and Deepgram's request lookup. Absent, the job is not
+   * implemented, so no held call is read or settled.
+   */
+  holdReaders?: Partial<Record<string, BillReader>>;
 };
 
 /** The model classes whose adapters can be polled (the router's submit targets). A poll resolves the adapter by its id. */
@@ -223,6 +231,7 @@ export function pollAdapterFor(composition: EngineComposition, providerId: strin
         media: ports.assetMedia,
         videoProfiles: new Map<string, VideoProfile>(),
         voice: null,
+        voiceProvider: null,
         speechSpeed: 1,
       });
     }
@@ -370,6 +379,19 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
     providers: { resolve: (providerId, organizationId) => pollAdapterFor(composition, providerId, organizationId) },
     now: () => Date.parse(now()),
   };
+  if (composition.holdReaders !== undefined) {
+    // The reconcile_holds maintenance job (contract v9): settles the workspace's held calls whose bills can now be read. It names no
+    // stage, so it is dispatched as a maintenance job (dispatch.ts) and not as a stage handler.
+    const readers = composition.holdReaders;
+    runtime.jobs = {
+      reconcile_holds: {
+        run: async (ctx) => {
+          const held = await reconcileHolds(ctx.sql, { organizationId: ctx.organizationId, now: runtime.now(), readers });
+          return `reconciled:settled=${held.settled.count},open=${held.stillOpen.count},operator=${held.needsOperator.count}`;
+        },
+      },
+    };
+  }
   const kits = kitPorts(composition.sql);
   const roles = rolesFor(composition);
 
@@ -523,6 +545,11 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     workspaceBudget,
     media,
     picture: media.picture,
+    // The bill readers of held calls (contract v9). A call's providerRef is the OpenRouter generation id, or the Deepgram request id.
+    holdReaders: {
+      openrouter: (input) => openRouterGenerationBill(gateway, { organizationId: input.organizationId, generationId: input.providerRef }),
+      deepgram: deepgramBillReader({ gateway, projects }),
+    },
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),

@@ -6,7 +6,7 @@ import { EngineError } from "../contracts/index.ts";
 import type { ExecutableJob } from "../../lib/meridian/jobs/execute.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { applyEngineEvent } from "./orchestrator-sql.ts";
-import { ENGINE_POLL_JOB_TYPE, STAGE_SPECS, stageFromJobType, type EngineStage } from "./registry.ts";
+import { ENGINE_POLL_JOB_TYPE, STAGE_SPECS, maintenanceJobOf, stageFromJobType, type EngineMaintenanceJob, type EngineStage } from "./registry.ts";
 import { pollPayloadSchema, runPollJob, scheduleProviderPoll, type PollPayload } from "./poller.ts";
 import { validateStageOutput } from "./validate.ts";
 import { enginePayloadSchema, epochOf, notImplementedError, withTimeout, type EnginePayload, type EngineRuntime, type StageContext } from "./types.ts";
@@ -57,6 +57,8 @@ function parsePayload(job: ExecutableJob): { base: EnginePayload; poll: PollPayl
  * marks the job dead.
  */
 export async function executeEngineJob(sql: Sql, job: ExecutableJob, runtime: EngineRuntime = engineRuntime): Promise<string> {
+  const maintenance = maintenanceJobOf(job.job_type);
+  if (maintenance !== null) return runMaintenanceJob(sql, job, maintenance, runtime);
   const { base, poll } = parsePayload(job);
   const finalAttempt = job.attempts + 1 >= job.max_attempts;
   try {
@@ -67,6 +69,18 @@ export async function executeEngineJob(sql: Sql, job: ExecutableJob, runtime: En
     }
     throw error;
   }
+}
+
+/**
+ * Runs one maintenance job (contract v9). It has no request, so a failure is not recorded as a dead letter on a stage: Meridian marks the
+ * job itself. A job with no handler in this runtime is refused as not implemented, and nothing runs.
+ */
+async function runMaintenanceJob(sql: Sql, job: ExecutableJob, name: EngineMaintenanceJob, runtime: EngineRuntime): Promise<string> {
+  const handler = runtime.jobs?.[name];
+  if (!handler) {
+    throw notImplementedError(`${job.job_type} has no handler registered, so the job did not run and was not marked done`);
+  }
+  return handler.run({ sql, organizationId: job.organization_id, jobId: job.id });
 }
 
 async function run(sql: Sql, job: ExecutableJob, base: EnginePayload, poll: PollPayload | null, runtime: EngineRuntime): Promise<string> {

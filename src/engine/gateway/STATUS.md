@@ -1,5 +1,15 @@
 # Gateway status
 
+## Generation bill (contract v9, owner decision 2026-10-17)
+
+- `generation.ts`: `openRouterGenerationBill(gateway, { organizationId, generationId })` reads `GET /generation?id=<generation id>` through
+  `gateway.call` (one read, no retry) and returns `billed` with `data.total_cost` in USD, or `unavailable` with the reason. A non-200, a body
+  that is not JSON, a missing or non-finite `total_cost`, a negative cost, a generation id the engine would not send, and a provider that is not
+  connected are all `unavailable`. Nothing is estimated and no zero is invented.
+- Exported from `index.ts`. Its test is `generation.test.ts`, on the recorded answers in `test/fixtures/openrouter-generation*.json`.
+- UNVERIFIED LIVE: the path and the field (OpenRouter's documented generation stats, read 2026-10-17). The owner's live run confirms them.
+- `boundaries.test.ts` is unchanged: the reader calls only `gateway.call`, so no file gained a `fetch`.
+
 ## Model catalog (Bible 10.5 step 1, contract v7; 2026-10-17)
 
 - `catalog.ts`: `readModelCatalog(gateway, { organizationId, now? }): Promise<CatalogRead>` reads `GET /videos/models`,

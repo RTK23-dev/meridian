@@ -279,6 +279,7 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
     reservedUsd: estimate,
     idempotencyKey: input.idempotencyKey,
     at: input.at,
+    providerRef: null,
     ...trace,
     workspaceId: reservation.workspaceId,
     reservationId: reservation.reservationId,

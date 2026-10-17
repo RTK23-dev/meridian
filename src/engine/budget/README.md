@@ -15,8 +15,10 @@ of **6.1** and the ledger's storage interface for **5.4**. Pure logic over `Ledg
   `authorizeCall` authorizes one paid call against its reservation before it is submitted.
 - `preflight.ts`: `reserveFixed(store, input)` is the pre-flight hold at intake. `extendReservation(store, input)` raises it
   to the plan's estimate at estimate_reserve. Both are in the section below.
-- `reconcile.ts`: `reconcileCall` records the actual cost (the bill, else the list price flagged as an estimate, else the
-  held amount flagged). `releaseReservation` releases the unused part.
+- `reconcile.ts`: `reconcileCall` records the actual cost from the provider's bill (contract v6: never an estimate), and the
+  provider's own id for the call (`providerRef`, contract v9). `releaseReservation` releases the unused part.
+- `reconcile-holds.ts`: `reconcileHolds(sql, ...)` settles a workspace's held calls whose bill can now be read (contract v9). It is
+  the one file here with database access (see budget/STATUS.md).
 
 ## Pre-flight hold (lead decision, 2026-10-14)
 

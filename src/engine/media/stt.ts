@@ -57,6 +57,11 @@ export type SttResult = {
    * the call stays held (contract v6). Absent when a bill is recorded.
    */
   billNote?: string;
+  /**
+   * The vendor's own id for the call (contract v9: Deepgram's request id). It is recorded on the ledger entry whether or not a bill is
+   * recorded, so a held call can be settled later from it (budget/reconcile-holds.ts). Absent when the vendor named none.
+   */
+  providerRef?: string;
 };
 
 /**
@@ -374,6 +379,7 @@ export async function transcribeMetered(
   const reconciled = await reconcileCall(meter.store, {
     idempotencyKey,
     ...(result.billedUsd === null ? {} : { billedUsd: result.billedUsd }),
+    ...(result.providerRef === undefined ? {} : { providerRef: result.providerRef }),
   });
   return {
     result,

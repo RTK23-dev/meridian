@@ -140,13 +140,19 @@ async function speak(
     reservationId: run.reservationId,
     stage: VOICE_STAGE,
     voiceId: run.voice.providerVoiceId,
+    // The voice kit's provider: a speech model of another vendor cannot speak this voice (contract v9, openrouterSpeech.ts).
+    voiceProvider: run.voice.provider,
     speechSpeed: speed,
   });
-  return interpret(report.outcome);
+  return interpret(report.outcome, report.attempts.length === 0);
 }
 
-/** Maps the router's outcome. Only a done take is a take; a refusal of the content is a gate failure; the rest stop the stage. */
-function interpret(outcome: ProduceOutcome): Spoken {
+/**
+ * Maps the router's outcome. Only a done take is a take; a refusal of the content is a gate failure; the rest stop the stage. `nothingSent`
+ * is true when the router made no submit at all: then an unavailable outcome means no speech target is usable for this page (no connection,
+ * no price, or no capability), which the stage reports as NOT_CONNECTED with the reason (Bible 6.3, owner rule 9). A failed submit is an error.
+ */
+function interpret(outcome: ProduceOutcome, nothingSent: boolean): Spoken {
   switch (outcome.status) {
     case "done":
       return {
@@ -198,6 +204,15 @@ function interpret(outcome: ProduceOutcome): Spoken {
         { stage: VOICE_STAGE },
       );
     case "unavailable":
+      if (nothingSent) {
+        return {
+          kind: "stop",
+          outcome: {
+            status: "not_connected",
+            reason: notConnectedReason(`no speech target is usable for this page: ${outcome.reasons.join("; ")}`),
+          },
+        };
+      }
       throw new EngineError(
         "provider",
         `no speech target produced a take: ${outcome.reasons.join("; ")}`,

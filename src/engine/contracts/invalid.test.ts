@@ -347,6 +347,9 @@ const cases: Case[] = [
   { name: "ledger: prompt version of another role", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "segmenter@1")) },
   { name: "ledger: prompt version without a number", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner")) },
   { name: "ledger: prompt version 0", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner@0")) },
+  { name: "ledger (v9): an empty providerRef", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.providerRef = "")) },
+  { name: "ledger (v9): a providerRef of 513 characters", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.providerRef = "g".repeat(513))) },
+  { name: "ledger (v9): a providerRef that is not a string", schema: ledgerEntrySchema, value: edit(ledgerRenderFixture, (d) => (d.providerRef = 7)) },
   { name: "ledger: prompt version with a path", schema: ledgerEntrySchema, value: edit(ledgerClaudeFixture, (d) => (d.promptVersion = "planner@1/../x")) },
 
   // Contract v4: the frame_reader role, and the editor as a decision author (Bible L7).

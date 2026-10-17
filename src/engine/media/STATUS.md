@@ -1,5 +1,14 @@
 # STATUS: media clients, integrity and speech-to-text (W4), `src/engine/media/`
 
+## Deepgram request id as the providerRef, and its bill reader (contract v9, 2026-10-17)
+
+- `stt-deepgram.ts`: a transcript carries `providerRef` = `metadata.request_id` (when it is a usable id), on `SttResult`. A transcript with no
+  id names none. `deepgramBillReader({ gateway, projects })` reads a call's bill from its request id in the workspace's project, through the
+  same lookup `transcribe` uses. A miss is unavailable with the reason, and no project is guessed.
+- `stt.ts`: `transcribeMetered` passes the providerRef to `reconcileCall`, so the entry keeps its request id whether or not the bill arrived.
+- Tests: `stt-deepgram.test.ts` ("the request id is the call's providerRef ..."), on the synthetic answers in `test/deepgram-fixtures.ts`.
+  UNVERIFIED LIVE, as before: the project listing and the request lookup.
+
 ## Ffmpeg on the worker and Deepgram speech-to-text (owner decisions 2026-10-16)
 
 Branch `worktree-agent-a251b7ad049432bbf`: commit `d513866` (the first pass), then the follow-up commit that wires the rest (its hash is in the report). Fixture-tested code only. No live call was made, and no agent held a key. The project id, the Deepgram project list and the bill path are UNVERIFIED LIVE.

@@ -202,6 +202,6 @@ test("the two new roles are Claude roles: a ledger row and a manifest role call 
   assert.equal(manifestRoleCallSchema.safeParse(call).success, true);
 });
 
-test("the contract set is engine-contracts@8 (the version the v8 note of Bible section 4 records)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@8");
+test("the contract set includes v8 (the exact version is pinned by v9.test.ts and config.test.ts)", () => {
+  assert.ok(Number(CONTRACTS_VERSION.slice("engine-contracts@".length)) >= 8);
 });

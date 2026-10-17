@@ -12,3 +12,7 @@ the documented shape (PROVIDER_APIS.md for the video fields; the lead's brief of
 `per-video-second` and `per-video-second-1080p` and for the `pricing` strings `prompt`, `completion`, `image_output` and
 `request`). **Unverified live**: no live answer was recorded. Each file mixes usable rows with rows the catalog must drop (no
 price, a zero or variable price, token-only pricing, a malformed row), so the parse tests cover every drop reason.
+
+## Generation stats (contract v9, `gateway/generation.ts`)
+
+`openrouter-generation.json` (`total_cost` 0.0031) and `openrouter-generation-no-cost.json` (no `total_cost`) stand for `GET /api/v1/generation?id=` after a speech call. They are synthetic, written to the documented shape. **Unverified live**: the owner's live run records one real stats answer.

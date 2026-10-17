@@ -1,11 +1,21 @@
-// OpenRouter speech (Bible 10.3 tts; PROVIDER_APIS.md "Speech"). POST /audio/speech returns raw MP3 bytes with the generation id in a
-// header. The call's bill is read once, after the answer is stored, from the generation stats: GET /generation?id=<generation id>, the
-// `data.total_cost` in USD (owner decision, lead, 2026-10-17). A miss (an error, no generation id, no total_cost, or stats not yet
-// there) leaves the submit unsettled, as contract v6 says: no list price is booked as the cost. The bytes are validated and stored through
-// the MediaStore. The read is not verified live (the owner's run).
+// OpenRouter speech (Bible 10.3 tts; owner decision 2026-10-17). The speech is OpenRouter's audio output, as its chat completions document
+// it: POST /chat/completions with modalities ["text", "audio"], audio {voice, format: "mp3"} and stream: true. The answer is a server-sent
+// event stream. Each event's delta.audio.data is a base64 chunk of the MP3; the chunks are decoded one by one and joined in order. The
+// stream's id is the call's generation id. The bill is read once, right after the audio is stored (gateway/generation.ts). A miss leaves
+// the submit unsettled (contract v6): no list price is booked as the cost, and the router records the generation id so the reconciler can
+// read the bill later (budget/reconcile-holds.ts).
 //
-// The voice is a per-page setting (the voice kit), so the adapter takes it at construction. No voice means not connected:
-// a request without a voice is never sent. Voice cloning (input_references) is not used without the owner's approval.
+// UNVERIFIED LIVE. The request shape is the one the owner chose from OpenRouter's audio output documentation. Not confirmed by a live call:
+//   1. that a speech model speaks the user message as it stands (the page's text is sent as the user's message);
+//   2. the top-level `speed`, which that documentation does not name for audio output. It is sent only when the pace is not 1. The voice
+//      stage's pacing depends on it, and the take's measured length decides the gate either way;
+//   3. that the stream's id is the generation id the stats endpoint takes.
+// The owner's live run records one take with its stream, its generation id and its bill.
+//
+// A page's voice belongs to one provider: the voice kit names it (voiceProvider), and a speech model is the page's only when its vendor is
+// that provider (the vendor is the part of the model id before the slash). Any other model is not connected for that page, so the router
+// never gives a voice id to a provider that does not own it. No voice means not connected: a request without a voice is never sent.
+// Voice cloning (input_references) is not used without the owner's approval.
 
 import { z } from "zod";
 import { adapters } from "../../config/adapters.ts";
@@ -14,6 +24,7 @@ import type { AssetSpec, ProviderPoll } from "../../contracts/assets.ts";
 import type { ModelClass } from "../../contracts/plan.ts";
 import { contentHash } from "../../contracts/hash.ts";
 import type { Gateway, ResolvedRoute } from "../../gateway/gateway.ts";
+import { openRouterGenerationBill } from "../../gateway/generation.ts";
 import { bodyText } from "../../gateway/errors.ts";
 import { callProvider, ensureOk, listPriceUsd, UNVERIFIED_CAPABILITIES, type AdapterConnection, type MediaStore, type RoutedAdapter } from "../adapter.ts";
 import { normaliseSpeech } from "../normalise.ts";
@@ -23,32 +34,79 @@ const PROVIDER = "openrouter";
 
 export const SPEECH_TIMEOUT_MS = adapters.timeoutsMs.speech.value;
 
-/** The generation stats answer: `data.total_cost` is the bill in USD. Other fields are not read. */
-export const generationStatsSchema = z.object({ data: z.object({ total_cost: z.number() }) });
+/** The speaking rates the adapter accepts. Anything else is refused before a request is made. */
+export const SPEECH_SPEED_RANGE = { min: 0.5, max: 2 } as const;
 
 /**
- * The bill of one generation, from its stats, or null when it cannot be read. One read, no retry here: the caller records a miss as
- * unsettled. A non-finite or negative cost is a miss, never a bill of zero.
+ * One event of the stream. Only the fields read below are used, and every field is nullable: a provider may send null for a field it
+ * has no value for, and that is not a refusal. Everything else in an event is untrusted and ignored.
  */
-export async function readGenerationBill(gateway: Gateway, organizationId: string | null, generationId: string): Promise<number | null> {
-  let body: unknown;
-  try {
-    const response = await callProvider(gateway, {
-      provider: PROVIDER,
-      organizationId,
-      method: "GET",
-      path: `/generation?id=${encodeURIComponent(generationId)}`,
-      timeoutMs: SPEECH_TIMEOUT_MS,
-    });
-    if (response.status !== 200) return null;
-    body = JSON.parse(bodyText(response));
-  } catch {
-    return null;
+const streamEventSchema = z.object({
+  id: z.string().nullish(),
+  error: z.unknown().nullish(),
+  choices: z
+    .array(z.object({ delta: z.object({ audio: z.object({ data: z.string().nullish() }).nullish() }).nullish() }).nullish())
+    .nullish(),
+});
+
+/** The audio of a finished stream, or why there is none. */
+export type SpeechStream = { ok: true; bytes: Uint8Array; generationId: string | null } | { ok: false; reason: string };
+
+const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * The audio of one server-sent event stream. A `data:` line is one JSON event, a line starting with `:` is a comment, and `data: [DONE]`
+ * ends the stream. Each chunk of delta.audio.data is base64 on its own, so each is decoded on its own and the bytes are joined in order:
+ * joining the base64 text first would corrupt a chunk whose length is not a multiple of four. The generation id is the first event's id.
+ * A stream with an error event, a chunk that is not base64, no audio, or no [DONE] is refused. It is never completed from what came
+ * before it, because the take would then be a guess.
+ */
+export function speechFromStream(text: string): SpeechStream {
+  const chunks: Uint8Array[] = [];
+  let generationId: string | null = null;
+  let done = false;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice("data:".length).trim();
+    if (payload === "[DONE]") {
+      done = true;
+      break;
+    }
+    let json: unknown;
+    try {
+      json = JSON.parse(payload);
+    } catch {
+      return { ok: false, reason: "a stream event is not JSON" };
+    }
+    const parsed = streamEventSchema.safeParse(json);
+    if (!parsed.success) return { ok: false, reason: "a stream event has an unexpected shape" };
+    const event = parsed.data;
+    if (event.error !== undefined && event.error !== null) {
+      return { ok: false, reason: `the stream reported an error: ${excerpt(JSON.stringify(event.error))}` };
+    }
+    if (generationId === null && typeof event.id === "string" && event.id.length > 0) generationId = event.id;
+    for (const choice of event.choices ?? []) {
+      const data = choice?.delta?.audio?.data;
+      if (data === undefined || data === null || data.length === 0) continue;
+      if (!BASE64_PATTERN.test(data)) return { ok: false, reason: "a stream audio chunk is not base64" };
+      chunks.push(new Uint8Array(Buffer.from(data, "base64")));
+    }
   }
-  const parsed = generationStatsSchema.safeParse(body);
-  if (!parsed.success) return null;
-  const cost = parsed.data.data.total_cost;
-  return Number.isFinite(cost) && cost >= 0 ? cost : null;
+  if (!done) return { ok: false, reason: "the stream ended before its [DONE] event" };
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  if (total === 0) return { ok: false, reason: "the stream carried no audio" };
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { ok: true, bytes, generationId };
+}
+
+/** The vendor of an OpenRouter model id: the part before the slash ("elevenlabs" for "elevenlabs/eleven-v4"). */
+export function vendorOf(model: string): string {
+  return (model.split("/")[0] ?? "").trim().toLowerCase();
 }
 
 export type OpenRouterSpeechOptions = {
@@ -57,14 +115,13 @@ export type OpenRouterSpeechOptions = {
   workspaceId: string;
   route: ResolvedRoute;
   media: MediaStore;
-  /** The provider-specific voice id from the page's voice kit. Null means the adapter is not connected. */
+  /** The provider-specific voice id from the page's voice kit (its providerVoiceId). Null means the adapter is not connected. */
   voice: string | null;
-  /** The speaking rate (PROVIDER_APIS "speed"). 1 is the default and is not sent. The voice stage paces a take with it (Bible 6.3). */
+  /** The provider the page's voice belongs to (the voice kit's provider, for example "elevenlabs" or "google"). Null: not connected. */
+  voiceProvider: string | null;
+  /** The speaking rate (1 is the vendor's default and is not sent). The voice stage paces a take with it (Bible 6.3). */
   speed?: number;
 };
-
-/** The speaking rates the adapter accepts. Anything else is refused before a request is made. */
-export const SPEECH_SPEED_RANGE = { min: 0.5, max: 2 } as const;
 
 /** One OpenRouter speech model as a RoutedAdapter. Priced per million characters of the script text. */
 export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): RoutedAdapter {
@@ -76,6 +133,7 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
   const model = route.model;
   if (route.capability !== "tts") throw new EngineError("config", `openRouterSpeechAdapter cannot serve ${route.capability}`);
   const modelClass: ModelClass = "tts";
+  const belongsTo = options.voiceProvider === null ? "" : options.voiceProvider.trim().toLowerCase();
   const results = new Map<string, ProviderPoll>();
   const details = new Map<string, { generationId?: string; mediaType: string }>();
   /** The one bill read of each finished job: its cost, or null for a miss. */
@@ -95,6 +153,15 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
 
     async connection(organization: string | null): Promise<AdapterConnection> {
       if (voice === null || voice.trim() === "") return { connected: false, reason: "this page has no voice id; no speech request is made" };
+      if (belongsTo === "") {
+        return { connected: false, reason: "this page's voice names no provider, so it is not matched to a speech model; no request is made" };
+      }
+      if (belongsTo !== vendorOf(model)) {
+        return {
+          connected: false,
+          reason: `this page's voice belongs to ${belongsTo}, not to ${vendorOf(model)}, so this speech model does not speak it; no request is made`,
+        };
+      }
       const connection = await gateway.connection(PROVIDER, organization);
       return connection.connected ? { connected: true } : { connected: false, reason: connection.reason ?? "OpenRouter is not connected" };
     },
@@ -107,15 +174,25 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
         provider: PROVIDER,
         organizationId,
         method: "POST",
-        path: "/audio/speech",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model, input: spec.prompt, voice, response_format: "mp3", ...(speed === 1 ? {} : { speed }) }),
+        path: "/chat/completions",
+        headers: { "content-type": "application/json", accept: "text/event-stream" },
+        body: JSON.stringify({
+          model,
+          modalities: ["text", "audio"],
+          audio: { voice, format: "mp3" },
+          messages: [{ role: "user", content: spec.prompt }],
+          stream: true,
+          ...(speed === 1 ? {} : { speed }),
+        }),
         timeoutMs: SPEECH_TIMEOUT_MS,
       });
       ensureOk(response);
-      const generationId = response.headers["x-generation-id"];
-      const declared = response.headers["content-type"] ?? "";
-      const checked = normaliseSpeech(response.body, declared);
+      const stream = speechFromStream(bodyText(response));
+      if (!stream.ok) {
+        results.set(jobRef, { state: "failed", error: { kind: "unknown", retryable: false, message: stream.reason } });
+        return { jobRef };
+      }
+      const checked = normaliseSpeech(stream.bytes, "audio/mpeg");
       if (!checked.ok) {
         results.set(jobRef, { state: "failed", error: { kind: "unknown", retryable: false, message: checked.reason } });
         return { jobRef };
@@ -139,7 +216,10 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
         });
         return { jobRef };
       }
-      details.set(jobRef, { mediaType: checked.value.mediaType, ...(generationId === undefined ? {} : { generationId }) });
+      details.set(jobRef, {
+        mediaType: checked.value.mediaType,
+        ...(stream.generationId === null ? {} : { generationId: stream.generationId }),
+      });
       results.set(jobRef, { state: "done", uri: stored.uri });
       return { jobRef };
     },
@@ -150,7 +230,12 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
       // The bill is read once for a finished job: a miss is remembered too, so the stats are not asked again (the router settles on it).
       if (!bills.has(jobRef)) {
         const generationId = details.get(jobRef)?.generationId;
-        bills.set(jobRef, generationId === undefined ? null : await readGenerationBill(gateway, organizationId, generationId));
+        if (generationId === undefined) {
+          bills.set(jobRef, null);
+        } else {
+          const read = await openRouterGenerationBill(gateway, { organizationId, generationId });
+          bills.set(jobRef, read.status === "billed" ? read.usd : null);
+        }
       }
       const bill = bills.get(jobRef) ?? null;
       return bill === null ? result : { ...result, actualUsd: bill };

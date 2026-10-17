@@ -1,7 +1,7 @@
 // The ledger's storage interface (Bible 5.4, 14) and an in-memory implementation for tests. The budget logic in
 // this folder is written against LedgerStore only. eng-pipeline implements it on the engine_ledger table.
 
-import { EngineError, sumUsd, type BudgetReservation, type LedgerEntry, type LedgerSettlement } from "../contracts/index.ts";
+import { EngineError, providerRefSchema, sumUsd, type BudgetReservation, type LedgerEntry, type LedgerSettlement } from "../contracts/index.ts";
 
 /** A ledger entry with the storage context the contract does not carry: the workspace and the reservation. */
 export type LedgerRow = LedgerEntry & {
@@ -32,6 +32,11 @@ export interface LedgerStore {
    * is never passed here. Throws not_found if the entry does not exist, and conflict if it is already settled.
    */
   settle(entryId: string, settlement: { actualUsd: number; settlement: LedgerSettlement }): Promise<LedgerRow>;
+  /**
+   * Record the provider's own id for a paid call (contract v9), settled or not. Idempotent: the same id again changes nothing. A
+   * different id for an entry that already has one is a conflict, and an unknown entry is not_found.
+   */
+  setProviderRef(entryId: string, providerRef: string): Promise<LedgerRow>;
   /**
    * Reserved total: the reservedUsd of the workspace's reservations created in the month, excluding paused ones.
    * Actual total: the actuals of the workspace's entries that happened in the month.
@@ -97,6 +102,23 @@ export function memoryLedgerStore(): LedgerStore {
       }
       row.actualUsd = settlement.actualUsd;
       row.settlement = settlement.settlement;
+      return copy(row);
+    },
+
+    async setProviderRef(entryId, providerRef) {
+      const checked = providerRefSchema.safeParse(providerRef);
+      if (!checked.success) {
+        throw new EngineError("invalid_input", "a provider ref must be a non-empty id of at most 512 characters");
+      }
+      const row = rows.find((candidate) => candidate.entryId === entryId);
+      if (!row) {
+        throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
+      }
+      const current = row.providerRef ?? null;
+      if (current !== null && current !== providerRef) {
+        throw new EngineError("conflict", `ledger entry ${entryId} already has a different provider ref`);
+      }
+      row.providerRef = providerRef;
       return copy(row);
     },
 

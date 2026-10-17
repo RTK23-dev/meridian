@@ -19,7 +19,9 @@
 // Ledger (Bible 14.1, contract v6). Every submit is authorized before it is sent, under its own key: the first submit of a target uses
 // the target's cache key, and a retry uses that key with an attempt suffix. A submit is settled only to the provider's verified bill, or
 // as absent when the provider refused it before any job existed. With no bill the submit stays held at its reservation and its cost is
-// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target.
+// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target. The provider's own
+// id for the call (the generation id an adapter reports, contract v9) is recorded on its entry whether or not the bill arrives, so the
+// reconciler can read a held bill later (budget/reconcile-holds.ts).
 //
 // The router never sends a request itself: every call is an adapter's, and every adapter calls only the gateway.
 
@@ -175,6 +177,8 @@ export type ProduceInput = {
   continuityProvider?: string | null;
   /** The page's voice id, for speech routes. */
   voiceId?: string | null;
+  /** The provider the page's voice belongs to (the voice kit's provider). A speech model of another vendor is not used for the page. */
+  voiceProvider?: string | null;
   /** The speaking rate for speech routes (1 is the vendor's default). Part of the adapter's identity, so it is part of the cache key. */
   speechSpeed?: number;
 };
@@ -386,6 +390,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     voiceId: string | null | undefined,
     speechSpeed: number | undefined,
     profiles: ReadonlyMap<string, VideoProfile>,
+    voiceProvider: string | null | undefined,
   ): AdapterContext {
     return {
       gateway: deps.gateway,
@@ -394,6 +399,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
       media: deps.media,
       videoProfiles: profiles,
       voice: voiceId ?? null,
+      voiceProvider: voiceProvider ?? null,
       speechSpeed: speechSpeed ?? 1,
     };
   }
@@ -409,12 +415,13 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     voiceId: string | null | undefined,
     speechSpeed?: number,
     profiles: ReadonlyMap<string, VideoProfile> = videoProfiles,
+    voiceProvider?: string | null,
   ): RoutedAdapter | null {
     const profile = isVideoClass(route.capability) ? (profiles.get(route.model) ?? null) : null;
-    const key = `${route.capability}\u0000${route.provider.id}:${route.model}\u0000${workspaceId}\u0000${voiceId ?? ""}\u0000${speechSpeed ?? 1}\u0000${profile === null ? "" : JSON.stringify(profile)}`;
+    const key = `${route.capability}\u0000${route.provider.id}:${route.model}\u0000${workspaceId}\u0000${voiceId ?? ""}\u0000${voiceProvider ?? ""}\u0000${speechSpeed ?? 1}\u0000${profile === null ? "" : JSON.stringify(profile)}`;
     const cached = adapterCache.get(key);
     if (cached) return cached;
-    const adapter = buildAdapter(route, contextFor(workspaceId, voiceId, speechSpeed, profiles));
+    const adapter = buildAdapter(route, contextFor(workspaceId, voiceId, speechSpeed, profiles, voiceProvider));
     if (adapter !== null) adapterCache.set(key, adapter);
     return adapter;
   }
@@ -437,8 +444,8 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     // A chosen video model's profile comes from the catalog read its submit was checked against (kept in chosenProfiles). In a process
     // that has not read it, the profile is unknown, which a poll does not need; a submit then refuses before any request.
     const adapter = chosen
-      ? adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed, withChosenProfiles())
-      : adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed);
+      ? adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed, withChosenProfiles(), input.voiceProvider)
+      : adapterFor(route, input.workspaceId, input.voiceId, input.speechSpeed, videoProfiles, input.voiceProvider);
     if (adapter === null || adapter.id !== target.adapterId) {
       throw new EngineError("config", `${target.adapterId} has no adapter in this runtime`, { stage: input.stage });
     }
@@ -715,7 +722,10 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     const notConnected: string[] = [];
     const excluded: string[] = [];
     for (const [priority, route] of routes.entries()) {
-      const built = chosen === null ? adapterFor(route, workspaceId, input.voiceId, input.speechSpeed) : adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, chosen.profiles);
+      const built =
+        chosen === null
+          ? adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, videoProfiles, input.voiceProvider)
+          : adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, chosen.profiles, input.voiceProvider);
       // A chosen model is estimated from its catalog price (Bible 10.5 step 5), not from the route table's price key.
       const adapter: RoutedAdapter | null =
         built === null || chosen === null ? built : { ...built, price: (priced: AssetSpec) => ({ estimateUsd: catalogEstimateUsd(chosen.entry, priced) }) };
@@ -904,9 +914,13 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     // The ledger settles this submit to the provider's bill. A bill is taken only when it is a finite, non-negative number. With no bill
     // the submit stays unsettled: no estimate is booked, the asset is not cached, and nothing is retried or fallen back from.
     const bill = typeof polled.actualUsd === "number" && Number.isFinite(polled.actualUsd) && polled.actualUsd >= 0 ? polled.actualUsd : undefined;
+    // The provider's own id for the call (contract v9), when the adapter has one: recorded on the entry whether or not the bill arrived, so a
+    // held call can be settled later from it (budget/reconcile-holds.ts).
+    const providerRef = adapter.detailsFor(job.jobRef)?.generationId;
     const reconciled = await reconcileSubmit(deps.ledger, {
       idempotencyKey: job.idempotencyKey,
       ...(bill === undefined ? {} : { billedUsd: bill }),
+      ...(providerRef === undefined ? {} : { providerRef }),
     });
     session.alerts.push(...reconciled.alerts);
     if (!reconciled.settled || reconciled.entry.actualUsd === undefined) {

@@ -924,6 +924,7 @@ export const ledgerRenderFixture: LedgerEntry = {
   settlement: "billed",
   idempotencyKey: compositionFixture.contentHash,
   at: "2026-10-13T09:06:00.000Z",
+  providerRef: null,
 };
 
 export const ledgerSttFixture: LedgerEntry = {
@@ -938,6 +939,7 @@ export const ledgerSttFixture: LedgerEntry = {
   settlement: "billed",
   idempotencyKey: `voice:${ID.request}`,
   at: "2026-10-13T09:00:40.000Z",
+  providerRef: null,
 };
 
 export const ledgerShot3Fixture: LedgerEntry = {
@@ -952,6 +954,7 @@ export const ledgerShot3Fixture: LedgerEntry = {
   settlement: "billed",
   idempotencyKey: `produce:${ID.shot3}:1`,
   at: "2026-10-13T09:02:10.000Z",
+  providerRef: null,
 };
 
 // A Claude call, traced to its role and prompt version (LedgerEntry, contract v2). The estimate is the planner's
@@ -970,6 +973,7 @@ export const ledgerClaudeFixture: LedgerEntry = {
   at: "2026-10-13T09:01:30.000Z",
   role: "planner",
   promptVersion: "planner@1",
+  providerRef: null,
 };
 
 // A frame_reader call (contract v4): Haiku reads the captions, shake and speed ramps of the sampled frames, as measurements.
@@ -989,6 +993,7 @@ export const ledgerFrameReaderFixture: LedgerEntry = {
   at: "2026-10-13T09:01:50.000Z",
   role: "frame_reader",
   promptVersion: "frame_reader@1",
+  providerRef: null,
 };
 
 const generatedUsd = takesFixture.map((take) => take.costUsd);

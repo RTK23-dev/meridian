@@ -557,6 +557,37 @@ they refuse the new values until a migration extends them:
 3. A brief has no language. The written script carries one, and the choice is the writer's.
 4. Not in this change: the rows of Bible 11.1 for the two roles (to add with their prompts), the prompt files, and the stages.
 
+### v9 changes and migration (speech through chat completions, held-call reconciliation, contract version `engine-contracts@9`)
+
+Approved by the lead, 2026-10-17, on the owner's decisions of the same day. The set version is `CONTRACTS_VERSION` in
+`src/engine/contracts/version.ts`. The change is additive: no field is removed and no field changes its meaning.
+
+**Why.** A held call (a submit whose bill did not arrive, section 14.1 step 4) could only be settled by an operator, because the
+provider's own id for the call was not kept, so nothing could read its bill later. Speech also moved from `POST /audio/speech` to
+OpenRouter's audio output in chat completions, and the owner chose the two speech models of 10.3.
+
+**What changed.**
+- `LedgerEntry` takes `providerRef`: the provider's own id for a paid call (the Deepgram request id, or the OpenRouter generation
+  id), or null. It is recorded as soon as the provider names the call, settled or held. An entry written before v9 reads as null.
+  `providerRefSchema` bounds it to 1 to 512 characters, and `ProviderRef` is its type.
+- Settlement is unchanged. A call settles only to a verified bill (`billed`) or a confirmed absence (`confirmed_absent`), as v6 says.
+  A provider ref settles nothing by itself, and an estimate is never booked as the cost.
+- Speech (`tts`, owner decision 2026-10-17; ids from OpenRouter's public listing, read 2026-10-17, unverified): target 1 is
+  `elevenlabs/eleven-v4` at the table's $40 per million characters; target 2 is `google/gemini-3.8-flash-tts` at $9 per million output
+  tokens (`openrouter_listing`). The Gemini output tokens are unknown before the call, so the router never estimates that target and
+  does not use it until the owner sets a basis. A page's voice kit names its provider (`VoiceKit.provider`), and a speech model speaks the
+  page only when its vendor (the part of the id before the slash) is that provider.
+- Reconciliation: `reconcileHolds` (`budget/reconcile-holds.ts`) settles a workspace's held calls whose provider ref is set and whose
+  bill can now be read, at least 5 minutes after they were made, under the reservation lock. A held call with no provider ref is reported
+  for an operator and is never settled automatically. The job `engine.reconcile_holds` is a maintenance job, not a stage (section 5.1).
+
+**Migration.** `0101_engine_ledger_provider_ref` adds `engine_ledger.provider_ref` (nullable) and a partial index on the unsettled rows of
+a workspace. No row is rewritten.
+
+**Open (unverified live).** The speech request shape (chat completions with audio output, a plain user message as the text, the top-level
+`speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
+records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.

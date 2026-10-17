@@ -82,9 +82,12 @@ export const routes = {
       targets: [openrouter(null, "nano_banana_2"), openrouter(null, "gpt_image_2")],
       note: "The OpenRouter image model ids are set in E2.",
     },
+    // Speech (Bible 10.3; owner decision 2026-10-17). The ids are from OpenRouter's public listing, read 2026-10-17, and are unverified
+    // live. A page's voice belongs to one provider (its voice kit names it), so a target of another vendor is not used for that page
+    // (assets/providers/openrouterSpeech.ts). The Gemini target is priced per output token, which no call can know before it is made,
+    // so the router refuses to estimate it and it is not used until the owner sets a basis for that estimate.
     tts: {
-      targets: [openrouter(null, "eleven_v4"), openrouter(null, "gemini_3_8_flash_tts")],
-      note: "The OpenRouter speech model ids are set with the voice stage (W6).",
+      targets: [openrouter("elevenlabs/eleven-v4", "eleven_v4"), openrouter("google/gemini-3.8-flash-tts", "gemini_3_8_flash_tts")],
     },
     lipsync: { targets: [], note: "The lip-sync vendor is chosen in E2." },
 

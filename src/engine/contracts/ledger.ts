@@ -99,10 +99,18 @@ export type PromptVersion = z.infer<typeof promptVersionSchema>;
  *
  * role and promptVersion (contract v2) trace a Claude call to its role and prompt version. They are set together, and the
  * prompt version must be a version of that role. Entries written before v2 have neither and stay valid.
+ *
+ * providerRef (contract v9) is the provider's own id for a paid call: the Deepgram request id, or the OpenRouter generation id. It is
+ * recorded as soon as the provider names the call, whether or not a bill has arrived, so a held call can be settled later from its bill
+ * (budget/reconcile-holds.ts). Null when the provider named none, and for every entry written before v9.
  */
 export const LEDGER_SETTLEMENTS = ["billed", "confirmed_absent"] as const;
 export const ledgerSettlementSchema = z.enum(LEDGER_SETTLEMENTS);
 export type LedgerSettlement = z.infer<typeof ledgerSettlementSchema>;
+
+/** The provider's own id for one paid call (contract v9). Bounded, and never executed or followed: it is an id, not text. */
+export const providerRefSchema = z.string().min(1).max(512);
+export type ProviderRef = z.infer<typeof providerRefSchema>;
 
 export const ledgerEntrySchema = z
   .object({
@@ -119,6 +127,7 @@ export const ledgerEntrySchema = z
     at: z.iso.datetime(),
     role: claudeRoleSchema.optional(),
     promptVersion: promptVersionSchema.optional(),
+    providerRef: providerRefSchema.nullable().default(null),
   })
   .refine((entry) => (entry.actualUsd === undefined) === (entry.settlement === undefined), {
     message: "an actual cost needs a settlement, and a settlement needs an actual cost",

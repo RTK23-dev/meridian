@@ -80,6 +80,7 @@ export {
 } from "./stt-connection.ts";
 export {
   DEEPGRAM_PROVIDER,
+  deepgramBillReader,
   deepgramForRoute,
   deepgramProjects,
   deepgramSpeechToText,

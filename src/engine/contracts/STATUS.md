@@ -1,5 +1,16 @@
 # STATUS: engine contracts (W1, with config)
 
+## Contract v9: the ledger's providerRef (`engine-contracts@9`, current; owner-approved, lead approval 2026-10-17)
+
+1. **What changed.** `ledgerEntrySchema` takes `providerRef: providerRefSchema.nullable().default(null)`: the provider's own id for a paid
+   call (1 to 512 characters). `ProviderRef` is exported. The chain fixtures (`fixtures/chain.ts`, five ledger entries) carry `providerRef: null`.
+2. **Version.** `CONTRACTS_VERSION = "engine-contracts@9"`. `config.test.ts` pins it. `v8.test.ts` now checks only that the set is at least v8.
+3. **Tests.** `v9.test.ts` (a pre-v9 entry reads as null, a ref is accepted and read back, the bounds); `invalid.test.ts` refuses an empty,
+   over-long and non-string ref.
+4. **Bible.** Section 4, "v9 changes and migration".
+5. **Migration.** `migrations/0101_engine_ledger_provider_ref.sql` (the column and the unsettled index). Not a contract file, but the schema
+   reads it.
+
 ## Round 2 (lead decision, 2026-10-17): the reference's speech language on the DNA transcript (additive, NOT version-bumped here)
 
 - `analysis.ts` `videoDnaSchema.transcript` gains `language: z.string().min(1).max(16).optional()`. It is the speech language the transcript

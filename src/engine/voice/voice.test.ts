@@ -11,13 +11,12 @@ import { memoryProviderStats } from "../assets/stats.ts";
 import { memoryBreakerStore } from "../assets/breaker.ts";
 import { memoryBucketStore } from "../assets/buckets.ts";
 import { memoryMediaStore } from "../assets/adapter.ts";
-import { gatewayFor, json, mp3Bytes, raw, routesWith, scripted } from "../assets/test/recorded.ts";
+import { base64, gatewayFor, json, mp3Bytes, raw, routesWith, scripted } from "../assets/test/recorded.ts";
 import { routes } from "../config/routes.ts";
 import { budgetReservationSchema, EngineError } from "../contracts/index.ts";
 import { productionRequestFixture, voiceKitFixture } from "../contracts/fixtures/index.ts";
 import type { ProductionRequest, ScriptBeat } from "../contracts/request.ts";
-import type { HttpTransport } from "../gateway/types.ts";
-import { reconcileCall } from "../budget/reconcile.ts";
+import type { HttpResponse, HttpTransport } from "../gateway/types.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
 import { deps, REQUEST_ID, RESERVATION_ID, NOW } from "../claude/test/helpers.ts";
 import type { MediaFunctions } from "../media/index.ts";
@@ -27,9 +26,12 @@ import { runVoice, type VoicePorts, type VoiceRun } from "./voice.ts";
 import { wordTokens } from "../analyze/copy.ts";
 
 const ORG = "org_1";
-const SPEECH_PATH = "POST /api/v1/audio/speech";
 const CHAT_PATH = "POST /api/v1/chat/completions";
-const TTS_MODEL = "test/eleven-v4";
+// The speech model is the kit's provider's (the fixture voice kit is fixture-tts), so the voice is spoken by that vendor's model.
+const TTS_MODEL = "fixture-tts/eleven-v4";
+const GENERATION_ID = "gen-voice-speech-1";
+/** The bill the generation stats give for one take (USD). */
+const SPEECH_BILL_USD = 0.0004;
 
 const BEATS: ScriptBeat[] = [
   {
@@ -149,15 +151,6 @@ async function ledger(): Promise<LedgerStore> {
   return store;
 }
 
-/** Records the bill of every open narration call of the reservation, at its list estimate (the bill its recorded speech answer stands for). */
-async function billOpenVoiceCalls(store: LedgerStore): Promise<void> {
-  for (const row of await store.listEntries(RESERVATION_ID)) {
-    if (row.stage === "voice" && row.settlement === undefined) {
-      await reconcileCall(store, { idempotencyKey: row.idempotencyKey, billedUsd: row.estimateUsd });
-    }
-  }
-}
-
 type Harness = {
   ports: VoicePorts;
   readonly speech: { requests: Array<{ body: string }> };
@@ -169,8 +162,26 @@ type Harness = {
 };
 
 /**
- * The stage's ports on recorded answers. `takes` are the lengths of the speech answers in order (one per speak). `chat` is the
- * tightener's answer, or none. `stt` is the recorded speech-to-text, or null for not connected.
+ * The speech answer of one take, as OpenRouter documents audio output: a stream of base64 chunks with the generation id and [DONE]. Its
+ * bytes are the take's (the take is the audio the stream carries).
+ */
+function speechStreamOf(audio: Uint8Array): HttpResponse {
+  const half = Math.floor(audio.byteLength / 2);
+  const events = [
+    `data: ${JSON.stringify({ id: GENERATION_ID, choices: [{ index: 0, delta: { audio: { data: base64(audio.subarray(0, half)) } } }] })}`,
+    "",
+    `data: ${JSON.stringify({ id: GENERATION_ID, choices: [{ index: 0, delta: { audio: { data: base64(audio.subarray(half)) } } }] })}`,
+    "",
+    "data: [DONE]",
+    "",
+  ];
+  return raw(200, new TextEncoder().encode(events.join("\n")), { "content-type": "text/event-stream" });
+}
+
+/**
+ * The stage's ports on recorded answers. `takes` are the lengths of the speech answers in order (one per speak; the last repeats). `chat`
+ * is the tightener's answer, or none. `stt` is the recorded speech-to-text, or null for not connected. The speech calls and the tightener
+ * share the chat completions path, so the transport tells them apart by the request: a speech call asks for audio output.
  */
 async function harness(options: {
   takes: number[];
@@ -178,38 +189,42 @@ async function harness(options: {
   stt?: RecordedSttFixture | null;
   speechModel?: string | null;
   loudness?: number | null;
-  /** False: the speech answers report no bill, so each narration call stays held (contract v6). Default true. */
+  /** False: the generation stats have no bill for the speech calls, so each narration call stays held (contract v6). Default true. */
   speechBilled?: boolean;
+  /** The price key of the speech target. Default eleven_v4 (per million characters). */
+  speechPriceKey?: "eleven_v4" | "gemini_3_8_flash_tts";
 }): Promise<Harness> {
   const store = memoryMediaStore();
-  const speechReplies = options.takes.map((durationMs, position) =>
-    raw(200, take(durationMs, position), { "content-type": "audio/mpeg" }),
-  );
-  const replies: Record<string, unknown> = { [SPEECH_PATH]: speechReplies };
-  if (options.chat !== undefined) replies[CHAT_PATH] = chatReply(options.chat);
-  const script = scripted(replies as Parameters<typeof scripted>[0]);
+  const speechAnswers: HttpResponse[] = options.takes.map((durationMs, position) => speechStreamOf(take(durationMs, position)));
+  const speechRequests: Array<{ body: string }> = [];
+  const chatScript = scripted(options.chat === undefined ? {} : { [CHAT_PATH]: chatReply(options.chat) });
   const table = routesWith(
     "tts",
     [
       {
         provider: "openrouter",
         model: options.speechModel === undefined ? TTS_MODEL : options.speechModel,
-        priceKey: "eleven_v4",
+        priceKey: options.speechPriceKey ?? "eleven_v4",
         verified: false,
       },
     ],
     routes.table,
   );
   const store2 = await ledger();
-  // The speech route answers with raw bytes and no bill (assets/providers/openrouterSpeech.ts), so the gateway cannot read one from it.
-  // After each recorded speech answer the harness records the bill the provider's invoice gives, which is the call's list estimate. With
-  // speechBilled false, the call stays held: the router and the stage must then refuse to go on.
   const transport: HttpTransport = async (request) => {
-    const response = await script.transport(request);
-    if (request.url.endsWith("/audio/speech") && response.status === 200 && options.speechBilled !== false) {
-      await billOpenVoiceCalls(store2);
+    const path = new URL(request.url).pathname;
+    if (request.method === "POST" && path.endsWith("/chat/completions") && String(request.body).includes('"modalities"')) {
+      speechRequests.push({ body: String(request.body) });
+      const position = Math.min(speechRequests.length - 1, speechAnswers.length - 1);
+      const answer = speechAnswers[position];
+      if (answer === undefined) throw new Error("no recorded speech answer is left");
+      return answer;
     }
-    return response;
+    if (request.method === "GET" && path.endsWith("/generation")) {
+      // The bill of a finished take, read once after its audio is stored (contract v9). With speechBilled false the stats have none yet.
+      return options.speechBilled === false ? json(404, { error: "the generation stats are not there yet" }) : json(200, { data: { id: GENERATION_ID, total_cost: SPEECH_BILL_USD } });
+    }
+    return chatScript.transport(request);
   };
   const gateway = gatewayFor(transport, { routes: table });
   const router: AssetRouter = createAssetRouter({
@@ -277,22 +292,22 @@ async function harness(options: {
   return {
     ports,
     get speech() {
-      return {
-        requests: script.requests
-          .filter((item) => item.url.endsWith("/audio/speech"))
-          .map((item) => ({ body: String(item.body) })),
-      };
+      return { requests: speechRequests };
     },
     get chat() {
-      return {
-        requests: script.requests.filter((item) => item.url.endsWith("/chat/completions")).length,
-      };
+      return { requests: chatScript.requests.length };
     },
     stt,
     media: store,
     probed,
     ledger: store2,
   };
+}
+
+/** The text a speech request asks to be spoken (the user's message, contract v9 speech request). */
+function spokenOf(body: string): string {
+  const parsed = JSON.parse(body) as { messages: Array<{ content: string }> };
+  return parsed.messages[0]?.content ?? "";
 }
 
 describe("the voice stage on recorded answers (Bible 6.3)", () => {
@@ -313,7 +328,7 @@ describe("the voice stage on recorded answers (Bible 6.3)", () => {
     assert.equal(outcome.track.voiceId, request().page.voiceId);
     assert.match(outcome.track.audioUri, /^memory:\/\/org_1\//);
     assert.equal(
-      JSON.parse(h.speech.requests[0]?.body ?? "{}").input,
+      spokenOf(h.speech.requests[0]?.body ?? "{}"),
       ORIGINAL_TEXT,
       "the first speech request is the script with its pacing",
     );
@@ -348,7 +363,7 @@ describe("the voice stage on recorded answers (Bible 6.3)", () => {
       JSON.stringify(outcome.gate.checks.filter((check) => !check.pass)),
     );
     const bodies = h.speech.requests.map(
-      (item) => JSON.parse(item.body) as { input: string; speed?: number },
+      (item) => ({ ...(JSON.parse(item.body) as { speed?: number }), input: spokenOf(item.body) }),
     );
     assert.deepEqual(
       bodies.map((body) => body.speed ?? 1),
@@ -477,5 +492,18 @@ describe("the voice stage on recorded answers (Bible 6.3)", () => {
     assert.equal(rows.filter((row) => row.settlement !== undefined).length, 0, "no call is settled without a bill");
     assert.equal(h.stt.calls.length, 0, "no take is transcribed before the narration is settled");
     assert.equal(h.speech.requests.length, 1, "the narration is sent once; no retry follows an unsettled call");
+  });
+
+  it("no speech target is usable for the page (its only model is priced per output token, so it is not estimated): NOT_CONNECTED with the reason, and nothing is sent", async () => {
+    const h = await harness({
+      takes: [2900],
+      stt: sttWith([spokenWords(ORIGINAL_TEXT)]),
+      speechModel: "fixture-tts/gemini-3.8-flash-tts",
+      speechPriceKey: "gemini_3_8_flash_tts",
+    });
+    const outcome = await runVoice(runFor(), h.ports);
+    assert.equal(outcome.status, "not_connected");
+    if (outcome.status === "not_connected") assert.match(outcome.reason, /^NOT_CONNECTED: no speech target is usable for this page/);
+    assert.equal(h.speech.requests.length, 0, "nothing is sent");
   });
 });

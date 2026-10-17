@@ -4,7 +4,7 @@
 //   reservation for authorize and reconcile, the workspace for reserve, which sums the month before it stores a new one).
 // - the unique key (organization_id, idempotency_key) on engine_ledger makes a duplicate call return the stored entry.
 
-import { EngineError, roundUsd, type BudgetReservation, type LedgerSettlement } from "../contracts/index.ts";
+import { EngineError, providerRefSchema, roundUsd, type BudgetReservation, type LedgerSettlement } from "../contracts/index.ts";
 import type { AppendResult, LedgerRow, LedgerStore, MonthTotals } from "../budget/store.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { transaction } from "./orchestrator-sql.ts";
@@ -39,6 +39,7 @@ type LedgerDbRow = {
   settlement: LedgerSettlement | null;
   idempotency_key: string;
   at: unknown;
+  provider_ref: string | null;
 };
 
 
@@ -78,6 +79,7 @@ function rowToLedger(row: LedgerDbRow): LedgerRow {
     reservedUsd: Number(row.reserved_usd),
     idempotencyKey: row.idempotency_key,
     at: toIso(row.at),
+    providerRef: row.provider_ref ?? null,
     workspaceId: row.organization_id,
     reservationId: row.reservation_id,
   };
@@ -108,7 +110,7 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
 
   const getEntryByKey = async (idempotencyKey: string): Promise<LedgerRow | null> => {
     const rows = await sql<LedgerDbRow>`
-      select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at from engine_ledger where organization_id = ${organizationId} and idempotency_key = ${idempotencyKey} limit 1
+      select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at, provider_ref from engine_ledger where organization_id = ${organizationId} and idempotency_key = ${idempotencyKey} limit 1
     `;
     return rows[0] ? rowToLedger(rows[0]) : null;
   };
@@ -155,9 +157,10 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       try {
         const inserted = await sql<{ id: string }>`
           insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd,
-            actual_usd, settlement, idempotency_key, at)
+            actual_usd, settlement, idempotency_key, at, provider_ref)
           values (${row.entryId}, ${organizationId}, ${row.requestId}, ${row.reservationId}, ${row.stage}, ${row.provider}, ${row.model},
-            ${row.estimateUsd}, ${row.reservedUsd}, ${row.actualUsd ?? null}, ${row.settlement ?? null}, ${row.idempotencyKey}, ${row.at})
+            ${row.estimateUsd}, ${row.reservedUsd}, ${row.actualUsd ?? null}, ${row.settlement ?? null}, ${row.idempotencyKey}, ${row.at},
+            ${row.providerRef ?? null})
           on conflict (organization_id, idempotency_key) do nothing
           returning id
         `;
@@ -175,7 +178,7 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
 
     async listEntries(reservationId) {
       const rows = await sql<LedgerDbRow>`
-        select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at from engine_ledger where organization_id = ${organizationId} and reservation_id = ${reservationId}
+        select id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at, provider_ref from engine_ledger where organization_id = ${organizationId} and reservation_id = ${reservationId}
         order by at asc, id asc
       `;
       return rows.map(rowToLedger);
@@ -186,12 +189,27 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       const rows = await sql<LedgerDbRow>`
         update engine_ledger set actual_usd = ${settlement.actualUsd}, settlement = ${settlement.settlement}
         where id = ${entryId} and organization_id = ${organizationId} and settlement is null
-        returning id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at
+        returning id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at, provider_ref
       `;
       if (rows[0]) return rowToLedger(rows[0]);
       const existing = await sql<{ id: string }>`select id from engine_ledger where id = ${entryId} and organization_id = ${organizationId}`;
       if (existing.length === 0) throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
       throw new EngineError("conflict", `ledger entry ${entryId} is already settled`);
+    },
+
+    async setProviderRef(entryId, providerRef) {
+      const checked = providerRefSchema.safeParse(providerRef);
+      if (!checked.success) throw new EngineError("invalid_input", "a provider ref must be a non-empty id of at most 512 characters");
+      // Only an entry with no ref, or with this same ref, is written, so one call's ref never changes to another.
+      const rows = await sql<LedgerDbRow>`
+        update engine_ledger set provider_ref = ${providerRef}
+        where id = ${entryId} and organization_id = ${organizationId} and (provider_ref is null or provider_ref = ${providerRef})
+        returning id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at, provider_ref
+      `;
+      if (rows[0]) return rowToLedger(rows[0]);
+      const existing = await sql<{ id: string }>`select id from engine_ledger where id = ${entryId} and organization_id = ${organizationId}`;
+      if (existing.length === 0) throw new EngineError("not_found", `ledger entry ${entryId} does not exist`);
+      throw new EngineError("conflict", `ledger entry ${entryId} already has a different provider ref`);
     },
 
     async sumForMonth(workspaceId, month): Promise<MonthTotals> {

@@ -35,6 +35,7 @@ async function ledgerWithOpenCall(): Promise<LedgerStore> {
     reservedUsd: 0.15,
     idempotencyKey: OPEN_KEY,
     at: "2026-10-13T09:03:00.000Z",
+    providerRef: null,
   };
   await ledger.appendEntry({ ...open, workspaceId: budgetReservationFixture.workspaceId, reservationId: budgetReservationFixture.reservationId });
   return ledger;

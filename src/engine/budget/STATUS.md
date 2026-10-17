@@ -5,6 +5,19 @@ call whose model the orchestrator chose at its catalog estimate (`ChosenCallPric
 chosen model as the line's `provider`. A chosen price that is not positive throws `unknown_price`; no chosen price means the price table.
 Tests: `estimate.test.ts` is unchanged; the behaviour is covered in `jobs/handlers/estimate-chosen*.test.ts`.: engine budget and cost ledger (W12)
 
+## Provider refs and the held-call reconciler (contract v9, owner decisions 2026-10-17)
+
+- `store.ts`: `LedgerStore.setProviderRef(entryId, ref)`. Idempotent for the same ref; a different ref for an entry that has one is a conflict.
+  Both stores implement it (the memory store here, `jobs/sql-ledger-store.ts` on `engine_ledger.provider_ref`).
+- `reconcile.ts`: `reconcileCall` takes an optional `providerRef`, recorded whether or not a bill is given. A bill still settles only
+  to a verified bill, and nothing is estimated.
+- `reconcile-holds.ts` (new): `reconcileHolds(sql, { organizationId, now, readers })`. It is the one file in this folder with database
+  access, which the README above says the folder does not have: it reads the workspace's unsettled rows and settles each under the
+  reservation lock (`withReservationLedger`). It reads a bill outside the lock. Readers are per provider (`BillReader`). Rows older than
+  five minutes only; no provider ref means `needsOperator`, never a settlement.
+- Tests: `reconcile-holds.test.ts` (memory and PGlite): a billed settlement, a late bill, no ref, a young call, another workspace, a
+  throwing reader, no reader, and a ref written and read back through the SQL store. Not run by the agent that wrote them.
+
 ## Chains: contract version `engine-contracts@5` (current)
 
 - `estimatePlan` prices every call of a chain (contracts `ShotSpec.source` kind `chain`, Bible section 4 "v5"). A chain has one
