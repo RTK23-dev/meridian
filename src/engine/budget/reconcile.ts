@@ -34,6 +34,16 @@ async function loadCall(store: LedgerStore, idempotencyKey: string): Promise<{ r
 }
 
 /**
+ * A bill in the ledger's four decimals (usdSchema, the contract's money type). The bill is rounded UP. Rounding to nearest can record up
+ * to $0.00005 less than the provider billed, which under-counts a hard budget. Rounding up records at most $0.0001 more, the safe side.
+ * Six decimals would need a contract change and a column change (actual_usd is numeric(14, 4)), so they are an owner decision.
+ */
+function billUsdUp(usd: number): number {
+  // The small offset stops a bill that is already on four decimals from rounding up through floating-point noise.
+  return Math.ceil(usd * 10000 - 1e-6) / 10000;
+}
+
+/**
  * Settle a call to the provider's verified bill. Settling a call twice with the same bill changes nothing; a different bill for a
  * settled call is a conflict. The bill is recorded even when it is above the call's authorized amount: it was spent. What happens
  * next depends on the reservation's mode (settleAndCheck): in cap mode the reservation is marked exceeded and no further paid call is
@@ -47,8 +57,8 @@ export async function reconcileCall(store: LedgerStore, input: ReconcileInput): 
   if (!Number.isFinite(input.billedUsd) || input.billedUsd < 0) {
     throw new EngineError("invalid_input", `a verified bill must be a finite, non-negative USD amount, not ${input.billedUsd}`);
   }
-  // The ledger keeps four decimals, as the contract's money type does. A bill is rounded to them, never estimated.
-  const billed = roundUsd(input.billedUsd);
+  // The ledger keeps four decimals, as the contract's money type does. The bill is rounded up to them, never estimated and never down.
+  const billed = billUsdUp(input.billedUsd);
   if (row.settlement !== undefined) {
     if (row.settlement === "billed" && row.actualUsd === billed) return { entry: row, reservation, alerts: [], settled: true };
     throw new EngineError("conflict", `ledger entry ${row.entryId} is already settled as ${row.settlement}`, { stage: row.stage });

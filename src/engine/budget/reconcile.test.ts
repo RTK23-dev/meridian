@@ -49,6 +49,20 @@ test("a bill from the provider is recorded as the actual, and is not flagged as 
   assert.deepEqual(result.alerts, []);
 });
 
+test("a bill with more decimals than the ledger keeps is rounded up, never down; a bill on four decimals is kept as it is", async () => {
+  for (const [billed, recorded] of [
+    [0.12341, 0.1235],
+    [0.00001, 0.0001],
+    [0.1234, 0.1234],
+    [0.19, 0.19],
+  ] as const) {
+    const store = await reservedWithOneCall();
+    const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: billed });
+    assert.equal(result.entry.actualUsd, recorded, `a bill of ${billed} is recorded as ${recorded}`);
+    assert.ok((result.entry.actualUsd ?? 0) >= billed, `the recorded actual of ${billed} is never below the bill`);
+  }
+});
+
 test("with no bill, a call stays held at its reservation: no actual and no settlement, and it is not settled", async () => {
   const store = await reservedWithOneCall();
   const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1" });
