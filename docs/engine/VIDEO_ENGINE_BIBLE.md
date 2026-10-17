@@ -98,7 +98,7 @@ The engine is a set of stateless workers inside Meridian that pull jobs from the
 
 ## 3. The pipeline at a glance
 
-Fourteen stages, grouped into the eight steps drawn below. Each stage is one job type, reads typed artifacts, writes one artifact, and passes a gate before the next job is queued. Full specifications are in section 6.
+Fifteen stages, grouped into the eight steps drawn below (`write_script` added with contract v8, owner decision 2026-10-16). Each stage is one job type, reads typed artifacts, writes one artifact, and passes a gate before the next job is queued. Full specifications are in section 6.
 
 &#91;embedded content: the pipeline, eight groups of stages\]
 
@@ -106,7 +106,8 @@ Fourteen stages, grouped into the eight steps drawn below. Each stage is one job
 | --- | --- | --- | --- | --- | --- |
 | 1 | `intake` | 1 | ProductionRequest | ValidatedRequest | Request validity |
 | 2 | `analyze_reference` | 2 | Reference video | VideoDNA with EditGrammar | DNA completeness |
-| 3 | `voice` | 2 | Script, voice kit | VoiceTrack with WordTimings | Length and clarity |
+| 2a | `write_script` (brief requests only) | 2 | Brief, VideoDNA | WrittenScript | Script validity, no copied words |
+| 3 | `voice` | 2 | Script (the request's or the WrittenScript), voice kit | VoiceTrack with WordTimings | Length and clarity |
 | 4 | `plan` | 3 | VideoDNA, VoiceTrack, request, kits | ScenePlan | Plan validity |
 | 5 | `estimate_reserve` | 3 | ScenePlan | BudgetReservation | Budget |
 | 6 | `produce_shot` (one per shot) | 4 | ShotSpec | Take | none |
@@ -119,7 +120,7 @@ Fourteen stages, grouped into the eight steps drawn below. Each stage is one job
 | 13 | `variants` | 8 | Master EDL, variant matrix | Variant EDLs, then stages 9 to 12 each | Same gates |
 | 14 | `deliver` | 8 | All of the above | Manifest and reconciled cost | none |
 
-**Parallelism:** stages 2 and 3 run in parallel (analysis is cached per format). Stage 6 fans out to one job per shot; stage 7 to one per take. Each variant fans out to its own stages 9 to 12. Everything else is sequential per request.
+**Parallelism:** stages 2 and 3 run in parallel (analysis is cached per format). A brief request runs 2, then 2a, then 3, because its script is written from the analysis. Stage 6 fans out to one job per shot; stage 7 to one per take. Each variant fans out to its own stages 9 to 12. Everything else is sequential per request.
 
 ## 4. Data contracts
 
@@ -618,6 +619,12 @@ Each stage below lists what it does, step by step, how it fails, and the tests t
 - **Fails:** missing transcript on a speech video, or fewer than 3 segments, retries once with denser frames; then the request is escalated.
 - **Tests:** a fixture reel with known cuts yields cut times within 2 frames; the grammar of a fixture matches hand-labelled values within 10%.
 
+### 6.2a `write_script` (contract v8, owner decision 2026-10-16)
+
+- **Does:** writes the script of a brief request from the user's brief and the reference's DNA. A request that carries its own script skips it.
+- **Steps:** (1) Read the brief (text, source snapshots, attachment notes) and the `VideoDNA` (genome, genes, beat structure, durations). (2) The `scriptwriter` role (Opus) returns beats, a language and a rationale. The language is the one the brief states, else the reference's detected language. (3) Validate against the `written_script` schema and the request's constraints (`maxMs`, beat roles). (4) Refuse any run of 6 or more consecutive words copied from the reference transcript (principle 4). (5) Store `WrittenScript`; voice reads it.
+- **Fails:** an invalid answer or copied words fails the stage with its reason; nothing is guessed.
+
 ### 6.3 `voice`
 
 - **Does:** produces our narration and word timings.
@@ -932,7 +939,7 @@ Prices live in `engine/config/prices.ts` and are overwritten by reconciled actua
 For the production model classes (video, avatar, image, speech), the orchestrator chooses the model for each shot from OpenRouter's live catalog, not from a fixed table. The table in 10.3 and `config/routes.ts` keep the platform and the fallback targets.
 
 1. **Candidates.** The gateway reads OpenRouter's catalog (`GET /api/v1/videos/models` for video, `GET /api/v1/models?output_modalities=...` for image and speech), cached with its read time. A candidate must fit the shot (duration, aspect ratio 9:16, first or last frame when the shot needs one) and must have a price the engine can estimate from (for video, a per-second SKU). A model with no usable price is not a candidate, because its call could not be reserved.
-2. **Choice.** The director role receives the shot and the candidates (id, capabilities, price) and returns one model id with its reason. Its answer is untrusted: code accepts it only if the id is one of the candidates, and otherwise the shot uses the first eligible fallback target from the route table, recorded as such.
+2. **Choice.** The `model_chooser` role (one call per request, after the plan) receives each call's need and its candidates (id, capabilities, price) and returns one model id with its reason. Its answer is untrusted: code accepts it only if the id is one of the candidates, and otherwise the shot uses the first eligible fallback target from the route table, recorded as such.
 3. **Record.** The asset spec of each call carries the chosen model, the reason and the catalog read time, and every choice is a `Decision` on the shot, so the user sees why each model was used.
 4. **Preferences (later).** `config/model-preferences.ts` will rank candidates per model class from the gold sets and the scoring in 10.2. It starts empty, so for now the director picks from the whole eligible catalog.
 5. **Cost.** The estimate comes from the catalog price; the bill is OpenRouter's `usage.cost` on the completed job. The ledger rules of 14.1 apply unchanged.
@@ -962,6 +969,8 @@ Claude is called through one adapter (`engine/claude/`), which sends every call 
 | `critic_final` | post\_render | Haiku, vision; Sonnet if unsure | 12 frames, EDL summary | checks with scores | 15k / 1k | \~$0.02 |
 | `prompt_fixer` | produce | Haiku | Failed prompt, failure kind | rewritten prompt | 1k / 0.3k | <$0.01 |
 | `variant_writer` | variants | Haiku | Master script, matrix row, voice file | new lines | 2k / 0.5k | <$0.01 |
+| `scriptwriter` | write\_script | Opus | Brief, DNA genome and beats | beats, language, rationale | 10k / 2k (proposed) | ~$0.08 (proposed) |
+| `model_chooser` | plan (after the plan) | Haiku | Each pending call's need and its eligible catalog candidates | one model id and reason per call | 6k / 1k (proposed) | ~$0.01 (proposed) |
 | `frame_reader` | analyze | Haiku, vision | Sampled frames of the reference (768 px), cut list | captions, shake and speed-ramp measurements (no text) | 12k / 1k (proposed) | ~$0.02 (proposed) |
 
 Rates used: Opus 5.5 $4 / $20 and Sonnet 5.5 $2 / $10 per million tokens in / out; Haiku costed at Haiku 4.5's $1 / $5 until Haiku 5.5's rate is confirmed; cached reads $0.20 per million; Batch API at half price. About $0.40 of Claude per master, plus Critic calls per take and render.
