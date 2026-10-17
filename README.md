@@ -4,7 +4,7 @@ Meridian is a multi-tenant advertising operating system. It holds a brand's own 
 creatives may go out, exports them for posting, and records what happened afterwards.
 
 **Status: prerelease.** The package version and the tag are `0.1.0-beta.12`. Read the upgrade notes in [docs/OPERATIONS.md](docs/OPERATIONS.md)
-before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.md](CHANGELOG.md).
+before deploying. Migrations 0077 to 0102 are new in this line. See [CHANGELOG.md](CHANGELOG.md).
 
 ## What works in this release
 
@@ -16,12 +16,19 @@ before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.m
   the composition compiler and components, the budget engine (reserve, extend, cap mode), the asset router, the Claude roles, the take,
   pre-render and post-render gates, variants, the Shotstack fallback, chains for cartoon shots (stop motion is refused until `image.edit`
   has a price), and the operations layer. Every model, API and render call goes through one gateway, with OpenRouter as the default
-  platform. No live run is recorded for any phase. See [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+  platform. Since 2026-10-17 a brief request writes its own script, narration goes through OpenRouter speech, an orchestrator picks each
+  production model from OpenRouter's catalog, speech-to-text is Deepgram, ffmpeg runs on the worker, and held calls are settled by a
+  reconciler once their bill is readable. No live run is recorded for any phase. See [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
 - **Content Factory.** One run settings object with brand defaults. `manual`, `semi` and `full` automation stop at the steps that spend or
   publish, and a person approves a stop. Before each engine call in the grade stage, the kill switch and the run's daily and total caps are
   checked; a refused call leaves that ad graded on observed signal only, with the reason. Ads are graded from their observed stop time and,
   with a decision engine, by JEV, both stored side by side. A run can name the Meridian video engine as its video provider. See
   [docs/FACTORY.md](docs/FACTORY.md).
+- **Content Factory page (`/content-factory`).** Admin only. A chat that starts a video from any idea: type instructions, attach files from
+  your computer (a video as the reference, images, text up to 4000 characters; PDFs are kept but their text is not read yet), and attach
+  records from Meridian pages. The engine analyses the reference, writes the script, picks the models, and makes the video. Each stage
+  shows its model and its cost; a cost with no bill shows as unknown. Built on recorded fixtures. See
+  [docs/FACTORY.md](docs/FACTORY.md#content-factory-page-content-factory).
 - **Discovery at volume (Factory Gather).** Instagram reels are gathered per niche through Apify, each with its creator's baseline and a
   tier from S to C, or "not rated" with the reason. Snapshots are scheduled at 24 and 72 hours after discovery. Tested on fixtures.
 - **Theme pages.** An account-level object that a Factory run can target: its linked platform account, persona, voice and style kits, posting
@@ -41,15 +48,19 @@ before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.m
 
 ## What is not connected or not verified
 
-- **Live spend is not ready.** Do not connect a live provider key to the video engine yet. Open in this pre-release: the render's cost is
-  a fixed estimate recorded as an actual (`src/engine/budget/reconcile.ts`); a server error on a submit can start a second paid job
-  (`src/engine/assets/router.ts`); failed calls are held as spend; a reconciled bill can raise a reservation past its caps without a pause;
-  and holds are not released when a request stops short of delivery. The Factory's own caps are now checked per run and per brand, and
-  unpriced image providers are refused. See the pre-release entry in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md).
+- **Live spend is not proven.** Do not connect a live provider key to the video engine until the owner's live run is recorded. The render's
+  cost is no longer booked from an estimate, a server error no longer retries a paid submit, and a cap-mode raise pauses (see the
+  2026-10-17 entry in [docs/engine/PHASE_LOG.md](docs/engine/PHASE_LOG.md)). Held calls from a failed or stopped request stay in the monthly
+  total until a rejection or a delivery releases them. Whether a held call should alert is an owner decision. The Factory's own caps are
+  checked per run and per brand, and unpriced image providers are refused.
 - **No live run of the video engine.** Agents hold no keys, so each phase's live acceptance (Bible section 19) is the owner's run. Production
-  shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set, the workspace has a Google Drive connection and an OpenRouter key. Some
-  models stay NOT_CONNECTED even then, and so do speech and non-PNG images. The engine's owner items are listed in
-  [docs/ROADMAP.md](docs/ROADMAP.md), including the speech-to-text vendor, the HyperFrames price and the platform file-size limit.
+  shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set (or `MEDIA_FUNCTIONS_MODE=in_process` on the worker), the workspace has a
+  Google Drive connection and an OpenRouter key. Narration (OpenRouter speech) and speech-to-text (Deepgram) run on request shapes that are
+  not yet verified live, so their bills are unverified. The HyperFrames price, the platform file-size limit, and the lip-sync and avatar
+  vendors are still owner items, listed in [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Content Factory page.** Built on recorded fixtures. PDF text is not read, and an image's pixels are not used. Text files need a connected
+  Google Drive and a brand. Revisions after the first run are not built. The first brief run with a reference video is the owner's to record.
+- **Docker.** The compose stack has not been built in the repository's checks. The base image pull was rate-limited when it was last tried.
 - **Factory discovery.** The Apify key and plan price are not set, and the cost per 1,000 results is unknown, so no discovery cost is
   estimated. Without a key the source reports not connected.
 - **Trial reel feed step.** Meta documents no field that reports graduation, so the feed step is recorded only when Meridian observes a
@@ -62,9 +73,9 @@ before deploying. Migrations 0077 to 0096 are new in this line. See [CHANGELOG.m
 - **Factory caps.** Caps count priced, metered spend only. A video's estimate is held against the caps but is not metered spend, and a
   provider call that reports no cost is not counted. Without a decision engine, a Factory ad is graded on its observed signal only.
 - Live source APIs are built and tested against fixtures. No live key was used, so their live responses are unverified.
-- Live organic metrics are not pulled from any platform. Instagram Reels and TikTok regular videos publish through a connected account and a
-  signed media link (`MEDIA_LINK_SECRET`, `APP_URL`, and for TikTok `TIKTOK_VERIFIED_MEDIA_DOMAINS`), and show not connected until those are
-  set. No live call was made to any of them in this release.
+- **Live organic metrics.** Instagram Reels, YouTube Shorts and TikTok metrics are read through each channel's stored token and stored only as
+  observed values. No live call was made. Facebook Page is not implemented. Regular posts publish through a connected account and a signed
+  media link (`MEDIA_LINK_SECRET`, `APP_URL`, and for TikTok `TIKTOK_VERIFIED_MEDIA_DOMAINS`), and show not connected until those are set.
 - Calibration. Every probability and score is uncalibrated, so none approves or rejects on its own.
 
 [ROADMAP.md](docs/ROADMAP.md) lists what is open, with the reason for each item.
@@ -109,7 +120,8 @@ inside `npm run dev` as well, so you do not need a second terminal. Set `DATABAS
 
 Start with [docs/README.md](docs/README.md). It indexes the setup guide, the architecture, the numbered contracts the code follows,
 the provider and key reference, the decision engine, the product workflow, operations, testing and the roadmap. The video engine's
-specification, handoff and phase log are in [docs/engine/](docs/engine/).
+specification, handoff and phase log are in [docs/engine/](docs/engine/). The latest checkpoint, with what is verified, what is not and
+the owner's open decisions, is [docs/engine/CHECKPOINT_2026-10-17_final.md](docs/engine/CHECKPOINT_2026-10-17_final.md).
 
 ## Verification
 

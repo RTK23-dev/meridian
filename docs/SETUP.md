@@ -74,6 +74,8 @@ release reads are:
 | `SHOPIFY_WEBHOOK_SECRET`, `SHOPIFY_SHARED_DEFAULT` | per-workspace secret, with a deployment opt-in | Verifies the Shopify `orders/create` deliveries to `/api/webhooks/shopify`. |
 | `OPENROUTER_API_KEY`, `HEYGEN_API_KEY`, `ANTHROPIC_API_KEY`, each with its `*_SHARED_DEFAULT` | per-workspace key, with a deployment opt-in | The video engine's keys. Save them in Settings for each workspace. |
 | `MEDIA_FUNCTIONS_BASE_URL` | deployment configuration | The HTTPS base URL of the ffmpeg media functions. Restrict its host before setting it, because the functions carry no credential. |
+| `MEDIA_FUNCTIONS_MODE` | deployment configuration | `in_process` runs the ffmpeg handlers in the worker's own process (the root image installs ffmpeg), and needs no base URL. Unset or `http` uses `MEDIA_FUNCTIONS_BASE_URL`. Any other value is a configuration error. |
+| `DEEPGRAM_API_KEY` | deployment key (opt-in) | Speech-to-text for reference analysis and the held-call reconciler. Used only with `DEEPGRAM_SHARED_DEFAULT=deployment`; a workspace can save its own key in Settings. |
 | `MEDIA_LINK_SECRET` | infrastructure (secret) | Signs the 15-minute media links for Instagram and TikTok. At least 32 characters. |
 | `APP_URL`, `PUBLIC_APP_URL` | deployment configuration | The public `https` origin the platforms fetch from. No path. |
 

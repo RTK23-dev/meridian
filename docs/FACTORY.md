@@ -465,11 +465,32 @@ A night:
   proposals yet, so the cap has nothing to hold in production. A night writes no engine configuration: an accepted change is recorded only.
 - **Stops, and says why,** when there is no budget, no connected source, or the kill switch is engaged.
 
+## Content Factory page (`/content-factory`)
+
+A standalone page for starting a video from any idea. It is separate from the pipeline above: the pipeline grades and publishes ads, and
+this page makes one video with the video engine. It is admin only.
+
+- **Chat.** Type instructions, attach files from your computer, and attach records from Meridian pages (brand brain, products, library,
+  pages and market intelligence). Each message stays with the session.
+- **Files.** A video is the reference: the engine analyses it and never reuses its footage, words, voice or music (Bible principle 4). Text
+  files up to 4000 characters are read into the brief; longer ones are refused with a plain message. Images and PDFs are kept with the
+  session. The engine does not read PDF text yet, and does not use an image's pixels yet.
+- **Brief.** A session is sent as a brief request by default. The engine writes the script from the brief and the reference's analysis, and
+  a run of six or more words copied from the reference is refused. A session that has script lines typed by hand sends those instead.
+- **Run.** "Make the video" is enabled when the session has a reference video, a theme page with its kits, a length, a budget and a priority.
+  The decision panel lists what is missing, and each engine reason as it happens.
+- **Decisions.** Each stage shows its inputs, its output, the model and provider it used, and its cost as estimate, reserved and billed. A
+  cost with no bill shows as unknown, never as a number.
+- **Not built yet.** Revisions after the first run; PDF text and image pixels; avatar and lip-sync shots (no vendor chosen, so those shots
+  stay not connected). The narration and speech-to-text bills are unverified live.
+
 ## Not built yet
 
 Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
 [ROADMAP.md](ROADMAP.md):
 
+- The Content Factory page: revisions after the first run, PDF text, image pixels, and text files that need a connected Drive (see the
+  Content Factory page section above).
 - A video's cost is an estimate from the provider's declared price, not a price the provider reports, so it is not metered in
   `factory_costs`. Its estimate is held against the run's caps, but it does not appear as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
@@ -494,7 +515,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
   graded again by a new run.
 - Calibration beyond the five grading questions (creative QA and the others), and a success definition per question. The one rule above
   applies to every grading question.
-- Live outcomes. Organic channels return no metrics, and the test publisher has no insights source, so a brand is calibrated only from paid
+- Live outcomes. Organic metrics are read for Instagram Reels, YouTube Shorts and TikTok through each stored token (not verified live), and the test publisher has no insights source, so a brand is calibrated only from paid
   rows that a stored token has measured. The Calibration screen shows how many outcomes each brand has. Until a brand reaches the minimum,
   its grades stay uncalibrated.
 

@@ -481,3 +481,55 @@ and are recorded here.
 **Checks on this pre-release.** The targeted test files for every changed area pass (OAuth, Factory caps and approvals, the asset router and
 its cache key, the chain store and the migration tests, accounts, workspace, configuration). `npm run typecheck` is clean. The full
 `npm test`, lint and build are run on the release commit, and their results are recorded in the release notes.
+
+## 2026-10-17 Final code pass: open items closed, Content Factory brief flow, narration and reconciler
+
+Supersedes the "Open" list of the pre-release entry above. Every merge below was checked by reading the code. The full suite was run once,
+on `3747445`, before the last code commit: 5539 engine and source tests passed, 0 failed, 41 skipped (env-gated); 160 script tests passed.
+Typecheck, lint (0 errors) and the production build passed on the same tree.
+
+**Merged to `main`.**
+- Budget: `estimate_reserve` prices a chosen call from its catalog estimate; an over-budget chosen total pauses in cap mode (`386124b`,
+  `f7e42d3`). The source was first on the WIP checkpoint `95c6b11`, which the first merge missed.
+- Brief requests: `write_script`, production analysis and voice ports, MP3 storage (`bc5478d`).
+- Content Factory: text files up to 4000 characters are read into the brief; longer ones are refused; PDF text is not read yet (`a610ca2`).
+- Hygiene, one commit each (`ba0b396` to `df9121d`): see the closed list below.
+- Narration, provider references and held-call reconciliation: `engine-contracts@9`, migration `0101`, `engine.reconcile_holds`, speech
+  through OpenRouter with its bill read from `GET /api/v1/generation`, and the Deepgram bill read through `providerRef` (`e60417f`).
+- Test types matched to the merged types (`3747445`).
+
+**Closed on 2026-10-17** (each confirmed by reading the code):
+- Factory Apify cap, sleep retry and sleep caps per scope, measurement duplicates (migration `0098`), stuck image jobs, trial-read slots,
+  learning-bridge receipts, and organic metrics per channel (from the 2026-10-16 entry).
+- Engine render cost, failed-call retries, cap-mode raise without a pause, and alerts averaging unsettled holds: closed by the v6 settlement
+  rules, with the cap-mode pause added here.
+- Learned patterns erased by a failed organic read (`1721d1c`); `minConfidence` skipped for an answer that reports none (`84cc957`).
+- Sleep caps are checked per scope (`ba0b396`).
+- Migration runner: one advisory lock for the whole run, not taken on PGlite (`b845fc8`).
+- Env scanner: names read through tables and lists (`6d11741`).
+- Build and preview load `.env` the way dev does (`c647cea`).
+- Migration numbering: the known gaps and the duplicate are pinned, so a new gap fails the test (`a8c641f`).
+- Bill rounding: rounded up to four decimals, so a recorded actual is never below its bill (`bb6e4a1`).
+- `Dockerfile.worker` deleted: nothing built or named it (`c0530ae`).
+
+**Still open, as owner decisions** (none is resolved in code):
+- Render fallback: a second HyperFrames attempt is refused while its cost is unsettled, so Shotstack waits. This conflicts with the
+  2026-10-14 policy.
+- Video-DNA frame labelling calls OpenRouter directly, outside the perception provider (`factory/decode.ts`). Routing needs a schema change.
+- Rate limits are per process (`security/limits.ts`). A shared store is needed before a second instance.
+- Held calls from a failed or stopped request stay in the monthly total until a rejection or delivery releases them. Whether they alert is
+  open.
+- Six-decimal bills need a contract and column change.
+- Lip-sync and avatar vendors are not chosen.
+- Text files are stored in Drive, so they need a connected Drive.
+
+**Decisions made on the owner's behalf, to confirm:**
+- Narration: `elevenlabs/eleven-v4`, with `google/gemini-3.8-flash-tts` as fallback, both read from OpenRouter's public listing on
+  2026-10-17. Both are `verified: false`.
+- The text-file limit is 4000 characters, refused rather than cut.
+- Bills are rounded up to four decimals.
+- The reconciler is one job type, `engine.reconcile_holds`, and needs its `job_schedules` row before it runs.
+
+**Not verified live.** No live key was used. Narration (request shape, generation id, `total_cost`, voice ids), Deepgram (project listing,
+request lookup, `detect_language`), OpenRouter's video catalog, HyperFrames, the Shotstack fallback, Drive release, and the Docker image
+(not built here).

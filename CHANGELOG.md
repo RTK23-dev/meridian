@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Video engine.** Contracts v7 to v9: model choice on asset specs, brief requests with the engine's own script
+  (`write_script`), and the ledger's `providerRef` (migration `0101`). The orchestrator picks each production model from OpenRouter's
+  catalog, and a chosen call is priced from its catalog price. Narration goes through OpenRouter speech (`elevenlabs/eleven-v4`, with
+  `google/gemini-3.8-flash-tts` as fallback). Held calls are settled by `engine.reconcile_holds` once a provider's bill is readable.
+  Speech-to-text is Deepgram. ffmpeg runs on the worker (`MEDIA_FUNCTIONS_MODE=in_process`). Live runs are not recorded.
+- **Content Factory page** (`/content-factory`), admin only: a chat that starts a video from instructions, files and Meridian records.
+  Text files up to 4000 characters are read into the brief; PDFs are kept but not read.
+- **Factory fixes.** Sleep caps per scope; learned patterns kept on a failed read; a minimum confidence is never skipped; measurement
+  duplicates (migration `0098`, which archives removed rows); stuck image jobs stop the run; trial reads claim a slot.
+- **Operations.** One advisory lock for the migration runner; the migration plan test pins known gaps; build and preview load `.env`;
+  `Dockerfile.worker` removed.
+- **Known open, owner decisions.** The render fallback conflicts with the 2026-10-14 policy. Rate limits are per process. Video-DNA frame
+  labelling bypasses the perception provider. See [docs/engine/CHECKPOINT_2026-10-17_final.md](docs/engine/CHECKPOINT_2026-10-17_final.md).
+
 ## 0.1.0-beta.12 — prerelease
 
 This pre-release is the checkpoint of the video engine (E1 to E6), the Factory integration (I1 to I3) and the business layer (B1 to B6),

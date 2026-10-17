@@ -2,15 +2,18 @@
 
 What is still open in this release. Each item says whether it is built and verified, built but unverified, or not built. Nothing here is listed as finished unless it is verified.
 
-## Video engine and Factory: open now (2026-10-15)
+## Video engine and Factory: open now (2026-10-17)
 
-Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md) (the 2026-10-15 completion and final passes), the open items in
+Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md) (the 2026-10-17 final code pass, which supersedes the open list of the pre-release entry), the open items in
 [engine/VIDEO_ENGINE_BIBLE.md](engine/VIDEO_ENGINE_BIBLE.md) section 20, and [FACTORY.md](FACTORY.md#not-built-yet). Engine phases E1 to E6
 are code complete on recorded fixtures. No phase is done until its live acceptance test (Bible section 19) is recorded. Agents hold no
 keys (NORTH_STAR decision 1), so every live step is the owner's.
 
 ### Live runs (owner)
 
+- **Content Factory brief run.** A brief request with a reference video has never run end to end. The run needs OpenRouter, Deepgram (key
+  and project id), Google Drive, the media functions (in-process on the worker, or an HTTPS base URL) and a HyperFrames key. The owner runs
+  it and records the artifact ids and costs.
 - **Video engine acceptance, E1 to E6.** Each phase needs a recorded live run with its artifact ids, costs and output. None is recorded.
   The reason is the keys: agents hold none. The E1 run is in [scripts/engine/README.md](../scripts/engine/README.md).
 - **Production shots.** Cartoon and other generated shots stay NOT_CONNECTED until `MEDIA_FUNCTIONS_BASE_URL` is set, the workspace has a
@@ -36,8 +39,12 @@ keys (NORTH_STAR decision 1), so every live step is the owner's.
 - **`stopmotion.player` confirmation.** Reason: the owner-facing confirmation of the component is still open.
 - **Shotstack credential.** The gateway has a Shotstack route, but Meridian's credential resolver has no Shotstack category, so the fallback
   renderer is not connected. The PHASE_LOG (2026-10-15) lists the credential slot as an owner item.
-- **Speech-to-text vendor (Bible 20.2).** Reason: word timestamps, music robustness and price are the owner's choice. Only the interface and a
-  recorded adapter exist.
+- **Speech-to-text (Bible 20.2).** Deepgram Nova-3 is chosen (owner decision 2026-10-16). Its price, $0.0043 per minute, is third-party and
+  unverified. The bill is read from Deepgram's request lookup, which needs the key and the project id on the deployment. Word timestamps
+  and music robustness are not yet verified live.
+- **Narration model (owner decision 2026-10-17).** OpenRouter's `elevenlabs/eleven-v4`, with `google/gemini-3.8-flash-tts` as fallback, both
+  read from OpenRouter's public listing. The request shape, the generation id and `total_cost` are unverified (`engine/PROVIDER_APIS.md`,
+  Speech).
 - **Background removal, upscaling and lip-sync vendors (Bible 20.2).** Reason: not chosen.
 - **Music source (Bible 20.2).** Reason: the licensed library and its terms for social use are not chosen.
 - **Disclosure wording and placement (Bible 20.2).** Reason: the standard for AI presenters is not decided. Until it is, the
@@ -54,6 +61,8 @@ keys (NORTH_STAR decision 1), so every live step is the owner's.
 
 ### Engineering work still open
 
+- **Held-call reconciler schedule.** `engine.reconcile_holds` runs only when its `job_schedules` row is inserted (`src/engine/jobs/STATUS.md`).
+  It is not scheduled by default.
 - **Image references and frames.** The `input_references` shape matches OpenRouter's documented shape (read 2026-10-15), but the reference
   limit (`IMAGE_REFERENCES_MAX`) is unverified until a live call is made.
 - **Chain end-to-end test.** It uses stand-ins, which are listed in `src/engine/jobs/handlers/STATUS.md`.
@@ -84,7 +93,8 @@ again; and live outcomes are missing, because organic channels return no metrics
 ## Open
 
 - **Instagram Reels token scope.** The connected-account check does not read `instagram_content_publish`, so a token without it fails at Meta, not in Meridian. The media route is built (see above).
-- **Provider lookup for held budget.** Held budget is released only when a provider's own lookup confirms it holds no job for the submission. None of the wired providers has a documented lookup for a submission whose response never arrived: Google's Interactions API (image and omni) finds an interaction only by its server id, Higgsfield's documented paths use a request id, and Hypit's status path is by job id. Until one is registered in `SUBMISSION_LOOKUPS`, every such hold stays for an admin.
+- **Provider lookup for held budget.** Held budget is released only when a provider's own lookup confirms it holds no job for the submission. None of the wired providers has a documented lookup for a submission whose response never arrived: Google's Interactions API (image and omni) finds an interaction only by its server id, Higgsfield's documented paths use a request id, and Hypit's status path is by job id. Until one is registered in `SUBMISSION_LOOKUPS`, every such hold stays for an admin. Deepgram's request lookup and OpenRouter's generation lookup settle held calls that carry a provider
+  reference (migration 0101, `engine.reconcile_holds`); a submission with no reference still waits for an admin.
 - **TikTok app audit.** Until TikTok audits the app, posts are private and TikTok returns no public post id, so this channel reports them as unconfirmed. Check the audit status before expecting a published receipt.
 - **Facebook Page token.** Meta sign-in requests only ads scopes, so the Page token has to be pasted.
 - **YouTube upload visibility.** Uploads default to public. Confirm that default before release.
@@ -98,7 +108,8 @@ again; and live outcomes are missing, because organic channels return no metrics
   with the caps and kill switch checked before each engine call, Gather (including Instagram volume through Apify), the video engine as a
   video producer, publishing and measurement on both surfaces, learning per surface, theme pages, trial reels, Shopify attribution and sleep
   mode are described in [FACTORY.md](FACTORY.md). The live gaps are listed there under "Not built yet". Screenshots of the changed screens
-  are in [feature-screens](feature-screens/README.md). The PHASE_LOG records no run of the button audit for these changes.
+  are in [feature-screens](feature-screens/README.md). The PHASE_LOG records no run of the button audit for these changes. The standalone page at `/content-factory` (brief requests, file and
+  source attachments, the decision feed) is built on fixtures; see FACTORY.md, Content Factory page.
 - **JEV grade for the Factory.** The five grading questions have specs in the registry (`market.competitive_strength.v1`,
   `production.reproducibility.v1`, `creative.brand_fit.v1`, `brand.positioning_fit.v1` and `safety.policy_risk_level.v1`). The thresholds of
   the first two are marked uncalibrated, so their grades go to review until the brand has its own calibrated report. The per-brand
@@ -110,8 +121,10 @@ again; and live outcomes are missing, because organic channels return no metrics
 - **Audit log error.** The baseline fixture shows a generic error on the audit log. The cause is not reproduced; the Details text from a running workspace is needed.
 - **Environment reads outside the contract.** `GOOGLE_ADS_DEVELOPER_TOKEN` has no entry in `credentials/contract.ts`. Other reads sit outside it in `discovery/cyclone-scout-adapter.ts`, `settings/provider-config.ts`, `notifications/email.ts`, `factory/sources.ts`, `embeddings/external.ts`, `system.ts`, `routes/api/webhooks/receive.ts` and `storage/google-auth.ts`.
 - **Cyclone console field.** The Cyclone gateway is configured by the deployment's environment only.
-- **Lint warnings.** Six `react-refresh/only-export-components` warnings remain in existing files. They are not errors.
-- **Static review, P2 items still open** (from the review of `01307e8`): a failed organic-observation query can erase learned patterns, and replacement is not transactional; rate limiting remains process-local; video-DNA frame labelling bypasses the perception provider; `minConfidence` is skipped when confidence is absent. The generic provider transport now has a timeout and response cap on this branch, pending CI verification.
+- **Lint warnings.** Four `react-refresh/only-export-components` warnings remain in existing files. They are not errors.
+- **Static review, P2 items still open** (from the review of `01307e8`): rate limiting remains process-local, and video-DNA frame labelling
+  bypasses the perception provider. Both are owner decisions (PHASE_LOG, 2026-10-17). The learned-pattern erasure and the `minConfidence`
+  skip are closed.
 - **Production decision evidence.** The Factory and Studio video visual decisions now read one representative frame selection (`decisions/frames.ts`, `FRAME_SELECTION_VERSION`) and record its frame ids and timestamps. The engine's review code (`src/engine/review`) does not use this selection; it keeps its own frame times. Whether it should is an owner decision, because the Bible governs `src/engine/`.
 - **Production preflight and the claim gate (written, not run locally; CI runs the tests).** Connected: a video spec passes `evaluateProductionPreflight` in `production/submit.ts` before any provider's `submitJob`. The callers are the Studio video branch and the Factory video path (`factory/produce-video.ts`). A BLOCK records the refusal on the job as `PREFLIGHT_FAILED` with its reasons, releases the budget hold, and no provider is called. The run then stops with the same reason. The copy check (`judgeCopy` in `production/assess.ts`) asks the existing `creative.claim_compliance.v1` question through `runEngineGate`. An uncalibrated answer goes to review and never passes. With no engine answer, the claim is shown as not judged. The deterministic prohibited and unsupported claim rules still reject first, with no engine call. Still open: (1) images are not preflighted. Studio and Factory image specs have no duration (0), so the 1-300 second rule would refuse every image, and the owner needs to decide a structural rule for images. (2) The Factory image path runs no claim check. (3) The claim question is judged against the copy and the stored prohibited claims. Its evidence scope has no stored allowed claims, so it cannot check "outside the stored claims" against a list. Adding that evidence changes an existing question's scope, so it needs a decision. (4) A brand with no stored prohibited claims gets no claim judgment, because the question abstains without its evidence. (5) A Factory video whose variant has an empty hook is refused with "Missing required hook line." and stops the run. A variant's hook is the winning ad's hook type (`factory/plan.ts`), or a line from the brain, and it can be empty. The check does not fill it. Whether such variants should be made some other way is the owner's decision.
 - **Review P1 follow-ups still open.** The Higgsfield status path `/v1/requests/<id>/status` is derived from mocks and must be confirmed against provider documentation. Provider artifact host allowlisting and verification of the webhook edge rate limit/body cap remain open. The product-name rule judges the job's own copy; its rejection rate on real data still needs measurement.

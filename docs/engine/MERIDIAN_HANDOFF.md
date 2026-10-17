@@ -63,6 +63,17 @@ Oct 11, 2026 · @Victor
 
 **Cyclone** ([RTK23-dev/cyclone-fleet](https://github.com/RTK23-dev/cyclone-fleet)), the Android phone agent, works through MCP `observe` / `act` and a Skill Compiler; its physical Pixel 8 acceptance is still marked **unverified**.
 
+## Status on 2026-10-17
+
+The engine and the Content Factory page are code complete on recorded fixtures, and the owner's live runs are the gate for each phase.
+The open items and decisions are in [PHASE_LOG.md](PHASE_LOG.md) (2026-10-17 entry) and [CHECKPOINT_2026-10-17_final.md](CHECKPOINT_2026-10-17_final.md).
+
+- **Engine.** Contracts through v9. Model choice, brief requests (the engine writes the script), narration through OpenRouter speech,
+  held-call reconciliation, and speech-to-text through Deepgram. ffmpeg runs on the worker. No live run is recorded.
+- **Content Factory page** (`/content-factory`). Built on fixtures: a session is a brief request, text files up to 4000 characters are read
+  into it, and PDFs are kept but not read.
+- **Owner decisions** are listed in the checkpoint. The render fallback conflict is not resolved in code.
+
 ## Status on 2026-10-15
 
 The state table above is the state on 11 October. This section is the state on 15 October, from [PHASE_LOG.md](PHASE_LOG.md) and a check of

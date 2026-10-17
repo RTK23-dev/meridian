@@ -1,4 +1,6 @@
-# Checkpoint: 2026-10-17 (final code pass)
+# Checkpoint: 2026-10-17 (usage limit, earlier)
+
+> Superseded by [CHECKPOINT_2026-10-17_final.md](CHECKPOINT_2026-10-17_final.md). Kept for the record.
 
 All code for the open list is on `main`. Tests were run once, after the last code change (see the commit that carries this note).
 
