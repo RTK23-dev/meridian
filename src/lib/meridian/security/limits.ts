@@ -4,6 +4,7 @@
  * Used when DATABASE_URL is unset (one local process, and the unit tests).
  * When DATABASE_URL is set, enforceNamedLimit counts the same bucket in
  * rate_limit_windows so a second instance cannot multiply the allowance.
+ * A database error is left as a database error. Only a full window throws RateLimitError.
  */
 import { consumeWindow, type WindowQuery } from "./shared-limit.ts";
 
@@ -36,6 +37,32 @@ export function createRateLimit(limit: number, windowMs: number) {
 
 export const RATE_LIMIT_MESSAGE = "Too many requests. Wait a minute and try again.";
 
+/** A real limit breach. A database failure is a different error and must not be reported as this. */
+export class RateLimitError extends Error {
+  constructor() {
+    super(RATE_LIMIT_MESSAGE);
+    this.name = "RateLimitError";
+  }
+}
+
+export function isRateLimitError(error: unknown): boolean {
+  return error instanceof RateLimitError;
+}
+
+/** 429 only for a real limit. Any other failure is unavailable, not a lockout. */
+export function authFailureResponse(error: unknown): Response {
+  if (isRateLimitError(error)) {
+    return new Response(JSON.stringify({ message: RATE_LIMIT_MESSAGE }), {
+      status: 429,
+      headers: { "content-type": "application/json" },
+    });
+  }
+  return new Response(JSON.stringify({ message: "Sign-in is temporarily unavailable." }), {
+    status: 503,
+    headers: { "content-type": "application/json" },
+  });
+}
+
 /** Sign-in, password, and OAuth callbacks: 20 attempts / minute per route and client (or per targeted account). */
 export const authLimit = createRateLimit(20, 60_000);
 /** Invites and invite accepts: 10 / minute per user. */
@@ -50,7 +77,7 @@ export function refuseIfLimited(
   key: string,
   now = Date.now(),
 ): void {
-  if (!limiter.allow(key, now)) throw new Error(RATE_LIMIT_MESSAGE);
+  if (!limiter.allow(key, now)) throw new RateLimitError();
 }
 
 const NAMED_LIMITS = {
@@ -97,7 +124,7 @@ export async function enforceNamedLimit(name: NamedLimit, key: string): Promise<
   }
   const spec = NAMED_SPEC[name];
   const allowed = await consumeWindow(query, `${name}:${key}`, spec.limit, spec.windowMs);
-  if (!allowed) throw new Error(RATE_LIMIT_MESSAGE);
+  if (!allowed) throw new RateLimitError();
 }
 
 export function clientKey(request: Request): string {

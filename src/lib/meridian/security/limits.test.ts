@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { attemptedAccount, authAttemptKey, authLimit, clientKey, createRateLimit, inviteLimit, modelLimit, refuseIfLimited, RATE_LIMIT_MESSAGE, uploadLimit } from "./limits.ts";
+import { attemptedAccount, authAttemptKey, authFailureResponse, authLimit, clientKey, createRateLimit, inviteLimit, isRateLimitError, modelLimit, refuseIfLimited, RateLimitError, RATE_LIMIT_MESSAGE, uploadLimit } from "./limits.ts";
 
 test("a limiter refuses the next call after the window fills", () => {
   const limiter = createRateLimit(2, 60_000);
@@ -8,7 +8,16 @@ test("a limiter refuses the next call after the window fills", () => {
   assert.equal(limiter.allow("user-1", 1_001), true);
   assert.equal(limiter.allow("user-1", 1_002), false);
   assert.equal(limiter.allow("user-2", 1_002), true);
-  assert.throws(() => refuseIfLimited(limiter, "user-1", 1_003), (error: Error) => error.message === RATE_LIMIT_MESSAGE);
+  assert.throws(() => refuseIfLimited(limiter, "user-1", 1_003), (error: Error) => error instanceof RateLimitError && error.message === RATE_LIMIT_MESSAGE);
+});
+
+test("a database failure is not reported as a rate limit", () => {
+  const limited = authFailureResponse(new RateLimitError());
+  const failed = authFailureResponse(new Error("connect ECONNREFUSED"));
+  assert.equal(limited.status, 429);
+  assert.equal(failed.status, 503);
+  assert.equal(isRateLimitError(new RateLimitError()), true);
+  assert.equal(isRateLimitError(new Error("connect ECONNREFUSED")), false);
 });
 
 test("sign-in, invite, upload, and model limiters are distinct named budgets", () => {

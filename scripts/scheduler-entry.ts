@@ -25,7 +25,8 @@ async function tick() {
      from organizations o
      where not exists (
        select 1 from job_schedules existing where existing.id = 'reconcile_holds:' || o.id
-     )`,
+     )
+     on conflict (id) do nothing`,
   );
   const due = await pool.query<{
     id: string;
