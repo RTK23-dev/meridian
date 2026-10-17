@@ -266,10 +266,9 @@ export async function executeFactoryJob(
       return `stopped:${job.job_type}`;
     }
     if (produced.waiting) {
-      // A video is still at its provider. The run stays running with the reason, the stages after produce are held, and the stage checks
-      // again later. Nothing is marked produced.
+      const note = produced.notes.length > 0 ? `${produced.notes.join(" ")} ` : "";
       await sql`
-        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${produced.waiting}, updated_at = now()
+        update factory_runs set status = 'running', current_stage = ${job.job_type}, waiting_on = ${job.job_type}, error = ${`${note}${produced.waiting}`}, updated_at = now()
         where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
       `;
       await scheduleProduceRecheck(sql, { organizationId: job.organization_id, brandId: job.brand_id, runId, niche: owned[0].niche });
@@ -277,8 +276,9 @@ export async function executeFactoryJob(
     }
     // Every variant is produced or has its reason. The wait, if there was one, is over, so the stages after produce are queued from gate.
     const wasWaiting = owned[0].waiting_on !== "";
+    const skipped = produced.notes.join(" ").slice(0, 500);
     await sql`
-      update factory_runs set waiting_on = '', error = '', updated_at = now()
+      update factory_runs set waiting_on = '', error = ${skipped}, updated_at = now()
       where id = ${runId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}
     `;
     if (wasWaiting && payload.resumeWait === true) {

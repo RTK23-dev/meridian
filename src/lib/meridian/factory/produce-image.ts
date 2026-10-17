@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { loadBrandContext } from "../context/load.ts";
-import { assessCopy } from "../production/assess.ts";
+import { judgeCopy } from "../production/assess.ts";
 import { evaluateImagePreflight } from "../production/preflight.ts";
 import { productionRouter } from "../production/router.ts";
 import type { ImageGenerationOutcome, ProductionImageProvider } from "../production/image-providers.ts";
@@ -140,19 +140,26 @@ export async function produceImage(sql: Sql, input: ProduceInput, req: ImageRequ
   try {
     const loaded = await loadBrandContext(sql, scope.organizationId, scope.brandId);
     const product = loaded.products.find((item) => item.name === productName) ?? null;
-    const assessed = assessCopy({
-      text: copy,
-      productName,
-      allowedClaims: product?.allowedClaims ?? "",
-      prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims ?? ""].filter(Boolean).join("\n"),
-      requiredDisclaimers: loaded.brain.requiredDisclaimers,
-      wordsToAvoid: loaded.brain.wordsToAvoid,
-      hook: req.hook,
-      cta: req.variant.cta,
+    const judged = await judgeCopy({
+      copy: {
+        text: copy,
+        productName,
+        allowedClaims: product?.allowedClaims ?? "",
+        prohibitedClaims: [loaded.brain.prohibitedClaims, product?.prohibitedClaims ?? ""].filter(Boolean).join("\n"),
+        requiredDisclaimers: loaded.brain.requiredDisclaimers,
+        wordsToAvoid: loaded.brain.wordsToAvoid,
+        hook: req.hook,
+        cta: req.variant.cta,
+      },
+      sql,
+      organizationId: scope.organizationId,
+      brandId: scope.brandId,
+      subject: { type: "factory_variant", id: req.variant.id },
+      engines: input.engines,
     });
-    if (assessed.decision.decision === "REJECT") {
-      const reason = assessed.decision.reasons[0] ?? "The copy breaks a stored claim rule.";
-      return { kind: "stop", reason: `The image copy was rejected before a provider was called. ${reason} Nothing was spent.` };
+    if (judged.decision.decision === "REJECT") {
+      const reason = judged.decision.reasons[0] ?? "The copy breaks a stored claim rule.";
+      return { kind: "failed", reason: `The image for ${req.label} was refused before a provider was called. ${reason} Nothing was spent.` };
     }
   } catch (error) {
     return { kind: "stop", reason: `The image copy could not be checked, so nothing was spent. ${errorText(error)}` };

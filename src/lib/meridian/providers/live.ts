@@ -3,6 +3,7 @@ import { probeAdLibrary, probeMeta, publishMetaPaused } from "./meta.ts";
 import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
 import { probeTikTok, publishTikTokFlow } from "./tiktok.ts";
 import { connectionPhase, type ConnectionPhase } from "./phase.ts";
+import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
 
 export const LIVE_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 export type LiveProvider = (typeof LIVE_PROVIDERS)[number];
@@ -22,8 +23,12 @@ export function providerConfigured(provider: LiveProvider): boolean {
 
 /**
  * Probes a provider with the token the caller passes, which is the workspace's stored token. The probe never reads an access
- * token from the environment. The Google developer token and the account ids are deployment settings, read from `env`.
+ * token from the environment. The Google developer token is the deployment-only key. The account ids are deployment settings, read from `env`.
  */
+function googleDeveloperToken(env: NodeJS.ProcessEnv): string {
+  const resolved = resolveDeploymentOnlyKey("google_ads_developer", env);
+  return resolved.status === "ready" ? resolved.secret : "";
+}
 export async function probeLive(
   provider: LiveProvider,
   env: NodeJS.ProcessEnv = process.env,
@@ -60,7 +65,7 @@ export async function probeLive(
         accessToken: token,
         // The developer token identifies the deployment's Google Ads API client. It is not an account token, and it is the one
         // deployment token the probe still reads from the environment.
-        developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
+        developerToken: googleDeveloperToken(env),
         customerId: env.GOOGLE_ADS_CUSTOMER_ID,
       },
       transport,
@@ -201,7 +206,7 @@ export async function publishPausedStages(input: {
   const published = await publishGoogleFlow(
     {
       accessToken: token,
-      developerToken: env.GOOGLE_ADS_DEVELOPER_TOKEN ?? "",
+      developerToken: googleDeveloperToken(env),
       customerId: env.GOOGLE_ADS_CUSTOMER_ID,
     },
     {

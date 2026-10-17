@@ -72,7 +72,7 @@ export type VariantRow = {
 export type Step =
   | { kind: "linked"; creatives?: number }
   | { kind: "skipped" }
-  | { kind: "failed"; creatives?: number }
+  | { kind: "failed"; creatives?: number; reason?: string }
   | { kind: "stop"; reason: string }
   | { kind: "waiting"; reason: string };
 

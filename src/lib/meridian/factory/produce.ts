@@ -36,6 +36,8 @@ export type ProduceOutcome = {
   stop: string | null;
   /** The reason the run waits for a provider job that has not finished, or null. A waiting run keeps its status running. */
   waiting: string | null;
+  /** Variants that were refused and skipped. They do not stop a run that still produced something. */
+  notes: string[];
 };
 
 /** How long a waiting run waits before the stage checks its provider jobs again. The poller reads the jobs on its own schedule. */
@@ -55,10 +57,10 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
       and t.id like ${`tpl:${input.runId}:%`} and t.plan <> ''
     order by v.created_at asc, v.id asc
   `;
-  if (variants.length === 0) return { produced: 0, stop: null, waiting: null };
+  if (variants.length === 0) return { produced: 0, stop: null, waiting: null, notes: [] };
   const unknown = input.formats.filter((format) => format !== "image" && format !== "video" && format !== "carousel");
   if (unknown.length > 0) {
-    return { produced: 0, stop: `${unknown.join(" and ")} is not a format the Factory makes. Nothing was spent.`, waiting: null };
+    return { produced: 0, stop: `${unknown.join(" and ")} is not a format the Factory makes. Nothing was spent.`, waiting: null, notes: [] };
   }
   const qcBrand = qcBrandOf(await loadBrandContext(sql, scope.organizationId, scope.brandId));
   const approver = await approverOf(sql, scope, input.runId);
@@ -70,6 +72,7 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
 
   let produced = 0;
   const waits: string[] = [];
+  const notes: string[] = [];
   for (const [index, variant] of variants.entries()) {
     if (held.has(variant.template_id)) continue;
     const stored = parseStoredPlan(variant.plan);
@@ -77,15 +80,21 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
     await recordPlan(sql, scope, stored.creativePlan, approver);
     for (const format of input.formats) {
       const step = await produceVariantFormat(sql, input, { variant, plan: stored.creativePlan, index, format, qcBrand });
-      if (step.kind === "stop") return { produced, stop: step.reason, waiting: null };
+      if (step.kind === "stop") return { produced, stop: step.reason, waiting: null, notes };
       if (step.kind === "waiting") waits.push(step.reason);
       if (step.kind === "linked") produced += step.creatives ?? 1;
-      if (step.kind === "failed") produced += step.creatives ?? 0;
+      if (step.kind === "failed") {
+        produced += step.creatives ?? 0;
+        if (step.reason) notes.push(step.reason);
+      }
     }
   }
   const extra = waits.length - 1;
   const waiting = waits.length === 0 ? null : extra === 0 ? (waits[0] ?? null) : `${waits[0]} ${extra} more ${extra === 1 ? "job is" : "jobs are"} waiting as well.`;
-  return { produced, stop: null, waiting };
+  if (produced === 0 && waiting === null && notes.length > 0) {
+    return { produced: 0, stop: notes.join(" "), waiting: null, notes };
+  }
+  return { produced, stop: null, waiting, notes };
 }
 
 /** One variant in one format. Each format has its own path, and each path finds what the run already made before it spends. */

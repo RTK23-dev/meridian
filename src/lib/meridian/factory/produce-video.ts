@@ -247,7 +247,7 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
     await markJob(sql, scope, req.jobId, "PREFLIGHT_FAILED", "PREFLIGHT_BLOCKED", reason);
     await BudgetLedgerService.release(sql, { reservationId, reason });
     const missingHook = submission.reasons.length > 0 && submission.reasons.every((item) => item === "Missing required hook line.");
-    if (missingHook) return { kind: "failed" };
+    if (missingHook) return { kind: "failed", reason };
     return { kind: "stop", reason };
   }
   const submitted: ProductionJob = submission.job;
