@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { requestProblems } from "../../../engine/api/index.ts";
 import { BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX } from "../../../engine/contracts/request.ts";
 import type { Attachment, FileAttachment, Message, SessionSettings } from "./model.ts";
-import { TEXT_FILE_MAX_CHARS } from "./model.ts";
+import { PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, TEXT_FILE_MAX_CHARS } from "./model.ts";
 import { buildProductionRequest, inputNotes, problemWords, type SessionForRequest } from "./request.ts";
 
 const REFERENCE: FileAttachment = {
@@ -207,6 +207,16 @@ test("a PDF stays an attachment, and its note says its text is not read yet", ()
     },
   ]);
   assert.deepEqual(built.request.brief?.sources, []);
+});
+
+test("a PDF whose text is longer than the brief limit stays an attachment, and says why", () => {
+  const longPdf: Attachment = { ...PDF, content: PDF_OVER_LIMIT_CONTENT };
+  const built = buildProductionRequest(session({ messages: [message("Use the specs.", null, [REFERENCE, longPdf])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.equal(built.request.brief?.attachments?.[0]?.note, `specs.pdf: ${PDF_TEXT_LIMIT_NOTE}`);
+  assert.deepEqual(built.request.brief?.sources, [], "the text is not copied into the brief");
+  assert.deepEqual(inputNotes([longPdf]), [`specs.pdf: ${PDF_TEXT_LIMIT_NOTE}`]);
 });
 
 test("the decision panel's inputs name a text file's length and a PDF's note, and list no image", () => {

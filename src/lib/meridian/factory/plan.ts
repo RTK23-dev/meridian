@@ -188,7 +188,7 @@ function deliverablesOf(
 }
 
 /**
- * The CreativePlan for one pick. A manual or semi plan stays a draft and waits for a person. A full plan is approved on its own when the estimate is within the spend cap. It spends nothing: no
+ * The CreativePlan for one pick. A manual or semi plan stays a draft and waits for a person. A full plan is approved on its own only when a spend cap is set and the estimate is within it. With no cap, a full plan stays a draft: an unpriced estimate of zero is not a cap. It spends nothing: no
  * production step is written here, and the estimate lists every deliverable as unpriced, since no provider has been chosen.
  * Throws when the plan has no lineage, no product, or no formats, so the caller records the refusal and writes no variant.
  */
@@ -209,8 +209,8 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
   const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];
   const estimateUsd = 0;
-  const maxSpendUsd = input.run.capTotalCents > 0 ? input.run.capTotalCents / 100 : undefined;
-  const withinCap = maxSpendUsd === undefined || estimateUsd <= maxSpendUsd;
+  const hasCap = input.run.capTotalCents > 0;
+  const withinCap = hasCap && estimateUsd <= input.run.capTotalCents / 100;
   const autoApproved = autonomy === "fully_automatic" && withinCap;
   const objective: CampaignObjective = input.run.intent === "organic" ? "engagement" : "conversion";
   const rationale: DecisionRationale[] = [
@@ -256,8 +256,8 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
       totalEstimatedUsd: estimateUsd,
       perDeliverableUsd: {},
       unpricedDeliverableIds: deliverables.map((deliverable) => deliverable.id),
-      isHardCapped: input.run.capTotalCents > 0,
-      maxSpendUsd,
+      isHardCapped: hasCap,
+      maxSpendUsd: hasCap ? input.run.capTotalCents / 100 : undefined,
       currency: "USD",
       label: "PRE_GENERATION_ESTIMATE",
     },
@@ -268,7 +268,9 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
         status: autoApproved ? "auto_approved" : "pending",
         reason: autoApproved
           ? "Full automation is within the spend cap, so this plan is approved without a person."
-          : "Production spends money. A manual or semi run waits for a person before it.",
+          : autonomy === "fully_automatic"
+            ? "Full automation has no spend cap, so this plan is not approved on its own."
+            : "Production spends money. A manual or semi run waits for a person before it.",
         requiredBeforeAction: "production_execution",
       },
     ],

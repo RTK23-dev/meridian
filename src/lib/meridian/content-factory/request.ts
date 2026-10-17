@@ -22,7 +22,7 @@ import { BRIEF_LIST_MAX, BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX, productionReques
 import { engineRequestIdFor } from "../factory/engine-request.ts";
 import type { PageRequestKits } from "../pages/model.ts";
 import { characterCount, referenceVideoUri } from "./files.ts";
-import { type Attachment, type FileAttachment, type Message, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
+import { type Attachment, type FileAttachment, type Message, PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
 import { SOURCE_PAGE_LABELS } from "./model.ts";
 
 export type SessionForRequest = {
@@ -82,14 +82,18 @@ export function referenceOf(attachments: readonly Attachment[]): FileAttachment 
   return (attachments.find((item) => item.kind === "file" && item.purpose === "reference_video") as FileAttachment | undefined) ?? null;
 }
 
+function isOverLimitPdf(item: FileAttachment): boolean {
+  return item.mediaType === "application/pdf" && item.content === PDF_OVER_LIMIT_CONTENT;
+}
+
 /** A text file read into the brief: a material file that carries its text. An image's content is its measured size, not text. */
 function isTextFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null && !item.mediaType.startsWith("image/");
+  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null && !item.mediaType.startsWith("image/") && !isOverLimitPdf(item);
 }
 
 /** A file that goes to the engine as an attachment: not the reference and not read into the brief. */
 function isMaterialFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/"));
+  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/") || isOverLimitPdf(item));
 }
 
 const IMAGE_SIZE = /^(\d+)×(\d+)$/;
@@ -97,6 +101,7 @@ const IMAGE_SIZE = /^(\d+)×(\d+)$/;
 /** The note a brief attachment carries. A measured image names its size. A PDF whose text was not readable says so. */
 function attachmentNote(file: FileAttachment): string {
   if (file.mediaType.startsWith("image/") && file.content && IMAGE_SIZE.test(file.content)) return `${file.fileName}: ${file.content}`;
+  if (isOverLimitPdf(file)) return `${file.fileName}: ${PDF_TEXT_LIMIT_NOTE}`;
   return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
 }
 
@@ -117,6 +122,7 @@ export function inputNotes(attachments: readonly Attachment[]): string[] {
   return attachments.flatMap((item): string[] => {
     if (item.kind !== "file" || item.purpose === "reference_video") return [];
     if (item.mediaType.startsWith("image/") && item.content && IMAGE_SIZE.test(item.content)) return [`${item.fileName}: ${item.content}. Pixels were not read.`];
+    if (isOverLimitPdf(item)) return [`${item.fileName}: ${PDF_TEXT_LIMIT_NOTE}`];
     if (item.content !== null && !item.mediaType.startsWith("image/")) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
     return item.mediaType === "application/pdf" ? [attachmentNote(item)] : [];
   });

@@ -13,9 +13,10 @@
  *     The statistics for a video are read here, not the YouTube Analytics reports, so watch time and shares stay null.
  *   TikTok: POST /v2/video/query/?fields=id,view_count,like_count,comment_count,share_count with filters.video_ids (up to 20), scope
  *     video.list. Its error object carries code "ok" on success. https://developers.tiktok.com/docs/en/tiktok-api-v2-video-query
- *   Facebook Page video: GET /{video-id}/video_insights?metric=total_video_views,total_video_views_unique,total_video_avg_time_watched.
+ *   Facebook Page video: GET /{video-id}/video_insights?metric=total_video_views,total_video_avg_time_watched.
  *     `data` is one item per metric, with `name` and `values[0].value`. total_video_avg_time_watched is milliseconds and is stored as
- *     seconds. Unique views are not reach, so reach stays null. Likes, comments and shares are not on this edge.
+ *     seconds. Unique views are not requested: they are not reach, and a removed metric can fail the whole read. Likes, comments and
+ *     shares are not on this edge.
  *     https://developers.facebook.com/docs/graph-api/reference/video/video_insights
  *
  * Not verified live: no request in this build has been sent to any of these services.
@@ -48,8 +49,8 @@ const INSTAGRAM_FIELD: Record<string, keyof OrganicTelemetryMetrics> = {
 const YOUTUBE_STATISTICS_URL = "https://www.googleapis.com/youtube/v3/videos";
 const TIKTOK_VIDEO_QUERY_URL = "https://open.tiktokapis.com/v2/video/query/?fields=id,view_count,like_count,comment_count,share_count";
 
-/** The Page video metrics requested. Unique views are not stored as reach. */
-export const FACEBOOK_VIDEO_METRICS = ["total_video_views", "total_video_views_unique", "total_video_avg_time_watched"] as const;
+/** The Page video metrics requested. Unique views are not requested and are not stored as reach. */
+export const FACEBOOK_VIDEO_METRICS = ["total_video_views", "total_video_avg_time_watched"] as const;
 
 export function emptyOrganicMetrics(): OrganicTelemetryMetrics {
   return {

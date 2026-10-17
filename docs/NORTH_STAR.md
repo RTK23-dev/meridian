@@ -1,9 +1,9 @@
 # North Star: what Meridian is for
 
-Read this before any other document. It is written by the owner's lead engineer for the coding agents that build Meridian.
+People running Meridian should start with the [README](../README.md). This file is the product direction for anyone changing the code.
 It says what the owner is trying to build, which decisions are already made, how the existing code maps onto the goal, and
 what to build next, in order. When this file and another document disagree about direction, this file wins. The numbered
-rules in `ARCHITECTURE_CONTRACTS.md` still hold.
+rules in `ARCHITECTURE_CONTRACTS.md` still hold. The dated build record is under [engine/](engine/PHASE_LOG.md). It is not the product guide.
 
 ## 1. The product in one paragraph
 
@@ -43,7 +43,7 @@ These were decided by the owner. Do not reopen them in code, docs or PRs.
    providers, manual upload, and others later). The person chooses a provider or lets the capability matrix choose. No
    provider is hard-wired as the only path.
 7. **Choice everywhere** (section 4): automation mode, decision engine, intent (post or ad), format, platform and provider.
-8. **The Content Factory must be made better.** Today most of its stages are placeholders (section 5).
+8. **The Content Factory must keep getting better.** The stages are built and tested on recorded fixtures. A live path is not done until a live run is recorded. What is still open is [ROADMAP.md](ROADMAP.md). Do not mark a live provider done without that run, and do not invent its result.
 
 ## 3. What already exists, mapped to the loop
 

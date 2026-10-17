@@ -35,6 +35,7 @@ import {
 import { conceptOf } from "./pick.ts";
 import { linesOf } from "./brain-facts.ts";
 import { buildAdTimeline } from "./timeline.ts";
+import { deliveryFactsOf } from "../research/store.ts";
 import { winnerScore } from "./winner-score.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
@@ -429,23 +430,6 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
   return count;
 }
 
-/** The delivery facts the collector stored with an ad. A row without the stop-time key predates it, so nothing is known. */
-type Delivery = { stillRunning: boolean | null; countries: string[] };
-
-function deliveryOf(sourceMetrics: string): Delivery {
-  let record: Record<string, unknown> = {};
-  try {
-    const parsed = JSON.parse(sourceMetrics) as unknown;
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) record = parsed as Record<string, unknown>;
-  } catch {
-    record = {};
-  }
-  if (!("stoppedAt" in record)) return { stillRunning: null, countries: [] };
-  const stoppedAt = typeof record.stoppedAt === "string" && record.stoppedAt ? record.stoppedAt : null;
-  const countries = Array.isArray(record.countries) ? record.countries.filter((item): item is string => typeof item === "string") : [];
-  return { stillRunning: stoppedAt === null, countries };
-}
-
 /** The caps a grade's engine calls are held to, in cents: the run's effective caps, null where none is set. */
 type GradeCaps = { totalCents: number | null; dailyCents: number | null };
 
@@ -499,7 +483,7 @@ async function gradeStoredAds(
     order by captured_at desc
     limit 80
   `;
-  const delivered = new Map(ads.map((ad) => [ad.id, deliveryOf(ad.source_metrics)]));
+  const delivered = new Map(ads.map((ad) => [ad.id, deliveryFactsOf(ad.source_metrics)]));
   // Variants and track record are counted per advertiser page, from the ads this brand has collected.
   const variantsByPage = new Map<string, number>();
   const knownByPage = new Map<string, number>();
@@ -557,14 +541,14 @@ async function gradeStoredAds(
   // The first reason an engine call was refused in this stage, or null. Every ad is still written, so a refused ad is never left unrecorded.
   let stop: string | null = null;
   for (const ad of ads) {
-    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: [] };
+    const facts = delivered.get(ad.id) ?? { stillRunning: null, countries: null };
     const known = knownByPage.get(ad.page_id) ?? 0;
     const timeline = buildAdTimeline({
       sightings: [
         {
           seenAt: String(ad.published_at || ad.captured_at),
           platforms: parseList(ad.platforms),
-          countries: facts.countries,
+          countries: facts.countries ?? [],
           reachLow: null,
           reachHigh: null,
           stillRunning: facts.stillRunning,
@@ -573,12 +557,20 @@ async function gradeStoredAds(
       siblingVariants: variantsByPage.get(ad.page_id) ?? 1,
     });
     if (!timeline) continue;
+    const countryCount = facts.countries === null ? null : timeline.countries.length;
+    let platformCount: number | null;
+    try {
+      const parsed = JSON.parse(ad.platforms) as unknown;
+      platformCount = Array.isArray(parsed) ? timeline.platforms.length : null;
+    } catch {
+      platformCount = null;
+    }
     const scored = winnerScore({
       daysRunning: timeline.daysRunning,
       stillRunning: timeline.stillRunning,
       iterationCount: Math.max(1, timeline.siblingVariants),
-      countries: timeline.countries.length,
-      platforms: timeline.platforms.length,
+      countries: countryCount,
+      platforms: platformCount,
       // Of this advertiser's ads whose delivery the source reported, the share still delivering. Unknown when none are.
       advertiserSurvivorRate: known > 0 ? (runningByPage.get(ad.page_id) ?? 0) / known : null,
       // No quality measure is stored for an ad yet, so quality is unknown, not a fixed value.
@@ -645,6 +637,7 @@ async function gradeStoredAds(
         }
       }
     }
+    const countriesJson = facts.countries === null ? "null" : JSON.stringify(timeline.countries);
     const id = `tl:${brandId}:${ad.id}`;
     await keepEarlierGrade(sql, organizationId, brandId, ad.id, previous, stored);
     await sql`
@@ -655,7 +648,7 @@ async function gradeStoredAds(
         jev_gate_record_id, jev_votes, graded_by_run_id
       ) values (
         ${id}, ${organizationId}, ${brandId}, ${ad.id}, ${timeline.firstSeen}, ${timeline.lastSeen}, ${timeline.stillRunning},
-        ${timeline.daysRunning}, ${timeline.siblingVariants}, ${JSON.stringify(timeline.platforms)}, ${JSON.stringify(timeline.countries)},
+        ${timeline.daysRunning}, ${timeline.siblingVariants}, ${JSON.stringify(timeline.platforms)}, ${countriesJson},
         ${timeline.reachLow}, ${timeline.reachHigh}, ${scored.score}, ${scored.low}, ${scored.high}, ${JSON.stringify(scored.evidence)},
         ${stored.status}, ${stored.action}, ${stored.reason}, ${stored.engineId}, ${stored.model}, ${stored.questionVersions},
         ${stored.policyVersion}, ${stored.gateRecordId}, ${stored.votes}, ${stored.gradedBy}

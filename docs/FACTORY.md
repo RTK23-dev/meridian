@@ -1,7 +1,6 @@
-# Content Factory: run settings, stop points and approvals
+# Content Factory
 
-This is the Factory as it works in this release. The plan it follows is [NORTH_STAR.md](NORTH_STAR.md) sections 4 and 5. Where this
-document and that plan differ, the plan is the target and this file says what is built.
+This is how the Factory works. The direction it follows is [NORTH_STAR.md](NORTH_STAR.md). Where this document and that direction differ, the direction is the target and this file says what is built. Live runs that still need a credential are in [ROADMAP.md](ROADMAP.md).
 
 ## One settings model
 

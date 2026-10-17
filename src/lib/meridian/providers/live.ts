@@ -3,7 +3,7 @@ import { probeAdLibrary, probeMeta, publishMetaPaused } from "./meta.ts";
 import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
 import { probeTikTok, publishTikTokFlow } from "./tiktok.ts";
 import { connectionPhase, type ConnectionPhase } from "./phase.ts";
-import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
+import { DEPLOYMENT_ONLY_KEY_ENV } from "../credentials/contract.ts";
 
 export const LIVE_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 export type LiveProvider = (typeof LIVE_PROVIDERS)[number];
@@ -26,8 +26,9 @@ export function providerConfigured(provider: LiveProvider): boolean {
  * token from the environment. The Google developer token is the deployment-only key. The account ids are deployment settings, read from `env`.
  */
 function googleDeveloperToken(env: NodeJS.ProcessEnv): string {
-  const resolved = resolveDeploymentOnlyKey("google_ads_developer", env);
-  return resolved.status === "ready" ? resolved.secret : "";
+  const rule = DEPLOYMENT_ONLY_KEY_ENV.google_ads_developer;
+  if ((env[rule.variable] ?? "").trim().toLowerCase() !== rule.accepts) return "";
+  return (env[rule.keyVariable] ?? "").trim();
 }
 export async function probeLive(
   provider: LiveProvider,

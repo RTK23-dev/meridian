@@ -18,7 +18,7 @@ const LOOP = ["Gather", "Grade", "Make", "Publish", "Learn"] as const;
  * The left side of the sign-in and welcome screens. It says what Meridian does in one sentence, shows the loop it runs, and states
  * the two things people ask about first: where keys live, and that ads start paused.
  */
-export function BrandStage({ headline = "Find what works. Make the next one.", lead }: { headline?: string; lead?: ReactNode }) {
+export function BrandStage({ headline = "Watch the market. Make the next ad.", lead }: { headline?: string; lead?: ReactNode }) {
   return (
     <section aria-label="About Meridian" className="space-y-8">
       <div className="flex items-center gap-3">
@@ -26,10 +26,10 @@ export function BrandStage({ headline = "Find what works. Make the next one.", l
         <span className="font-wordmark text-2xl font-semibold tracking-tight text-fg">Meridian</span>
       </div>
       <div className="space-y-4">
-        <p className="eyebrow">An advertising factory that learns</p>
+        <p className="eyebrow">For one brand at a time</p>
         <h2 className="text-2xl font-semibold leading-tight text-fg sm:text-3xl">{headline}</h2>
         <p className="max-w-prose text-lg text-fg-muted">
-          {lead ?? "Add a brand and what you know about it. Meridian gathers what already works in its niche, grades it, makes new creatives, and learns from what happens next."}
+          {lead ?? "Meridian keeps what you know about the brand, finds an opportunity, and makes the ads. You review them before they go out. Paid ads are created paused."}
         </p>
       </div>
       <ol className="flex flex-wrap items-center gap-2" aria-label="The loop Meridian runs">

@@ -15,22 +15,22 @@ export function ProviderCard({ card, actions = [], link, note, extra }: {
   extra?: ReactNode;
 }) {
   return (
-    <li className="flex flex-col gap-3 panel transition duration-200 hover:shadow-md">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <h3 className="text-base font-semibold text-fg">{card.label}</h3>
+    <li className="flex min-w-0 flex-col gap-3 panel transition duration-200 hover:shadow-md">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
+        <h3 className="min-w-0 text-base font-semibold text-fg">{card.label}</h3>
         <StatusBadge status={card.status} label={card.label} />
       </div>
-      <p className="text-sm text-fg-muted">{card.summary}</p>
-      {card.facts.map((fact) => <p key={fact} className="text-sm text-fg">{fact}</p>)}
+      <p className="break-words text-sm text-fg-muted [overflow-wrap:anywhere]">{card.summary}</p>
+      {card.facts.map((fact) => <p key={fact} className="break-words text-sm text-fg [overflow-wrap:anywhere]">{fact}</p>)}
       {card.missing ? (
-        <p className="flex items-start gap-2 border-t border-border pt-3 text-sm text-fg-muted">
+        <p className="flex min-w-0 items-start gap-2 border-t border-border pt-3 text-sm text-fg-muted">
           <Circle aria-hidden="true" className="mt-1 size-3 shrink-0" />
-          <span>{card.missing}</span>
+          <span className="min-w-0 break-words [overflow-wrap:anywhere]">{card.missing}</span>
         </p>
       ) : null}
       {extra}
       {actions.length || link ? (
-        <div className="mt-auto flex flex-wrap items-center gap-2 pt-1">
+        <div className="mt-auto flex min-w-0 flex-wrap items-center gap-2 pt-1">
           {actions.map((action, index) => (
             <Button key={action.key} type="button" variant={index === 0 ? "primary" : "secondary"} size="lg" disabled={action.disabled || action.pending} onClick={action.onClick}>
               {action.pending ? "Working…" : action.label}

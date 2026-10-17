@@ -78,7 +78,7 @@ export function predictionOf(grade: GradeRecord | null): PredictionView {
  * Whether the grade a pick stored is still the ad's grade:
  * - `unrecorded`: the pick was written before fingerprints were stored, so the prediction it was made under is not known;
  * - `same`: the ad carries the grade the pick was made under;
- * - `regraded`: the ad was graded again after the pick. The earlier grade is kept in ad_timeline_grades. The grade shown is the current one.
+ * - `regraded`: the ad was graded again after the pick. The grade shown is the current one. An earlier grade is kept in ad_timeline_grades only when that row was stored; a pick regraded before that history existed has no earlier grade to show.
  */
 export type PredictionStatus = "unrecorded" | "same" | "regraded";
 

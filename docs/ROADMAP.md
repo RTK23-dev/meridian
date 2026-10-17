@@ -1,13 +1,14 @@
 # Roadmap
 
-What is still open in this release. Each item says whether it is built and verified, built but unverified, or not built. Nothing here is listed as finished unless it is verified.
+What is still open. An item is finished only when it is verified. A path that needs a key, a price, or a live account is listed here and stays not connected until that exists on the server. Nothing in this list is a substitute for that run.
 
-## Video engine and Factory: open now (2026-10-17)
+The product loop, and how to run it, is in the [README](../README.md) and [PRODUCT.md](PRODUCT.md). This file is the open work, not a session log.
 
-Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md) (the 2026-10-17 final code pass, which supersedes the open list of the pre-release entry), the open items in
+## Video engine and Factory: open now
+
+Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md), the open items in
 [engine/VIDEO_ENGINE_BIBLE.md](engine/VIDEO_ENGINE_BIBLE.md) section 20, and [FACTORY.md](FACTORY.md#not-built-yet). Engine phases E1 to E6
-are code complete on recorded fixtures. No phase is done until its live acceptance test (Bible section 19) is recorded. Agents hold no
-keys (NORTH_STAR decision 1), so every live step is the owner's.
+are code complete on recorded fixtures. No phase is done until its live acceptance test (Bible section 19) is recorded. Live steps need credentials on the server.
 
 ### Live runs (owner)
 

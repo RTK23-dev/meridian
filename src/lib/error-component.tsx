@@ -18,7 +18,7 @@ function errorMessage(error: unknown): string {
 export function AppErrorComponent({ error, reset }: ErrorComponentProps) {
   if (isForbiddenError(error)) return <ForbiddenPage />;
   return (
-    <section className="mx-auto max-w-2xl">
+    <section className="mx-auto min-w-0 max-w-2xl">
       <ErrorState message={errorMessage(error)} onRetry={reset} />
     </section>
   );

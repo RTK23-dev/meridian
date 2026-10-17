@@ -628,8 +628,10 @@ async function bridgePaidObservation(sql: Sql, organizationId: string, brandId: 
 
 /**
  * Writes the organic observation of one measured telemetry row. The observation is keyed by that row, so a later day of the same
- * post is a new observation, and running the sync again adds nothing. A row written before keys existed is adopted when its day
- * and values match, so that measurement is not counted a second time.
+ * post is a new observation, and running the sync again adds nothing. A row written before keys existed is adopted when its values
+ * match. Its stored day may be the day it was synced rather than the measurement day, so a single matching row is adopted even
+ * when that day differs, and the measurement day is written onto it. Two different unkeyed rows with the same counts are left
+ * alone, because it is not known which measurement they are.
  */
 async function bridgeOrganicObservation(
   sql: Sql,
@@ -678,16 +680,17 @@ async function bridgeOrganicObservation(
     where organization_id = ${organizationId} and brand_id = ${brandId} and organic_post_id = ${postId}
       and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
   `;
-  const adopted = earlier.find((row) =>
-    dayOf(row.observed_on) === day
-    && sameCount(row.views, record.views)
+  const countMatches = earlier.filter((row) =>
+    sameCount(row.views, record.views)
     && sameCount(row.shares, record.shares)
     && sameCount(row.likes, record.engagements)
     && sameCount(row.saves, record.saves));
+  const adopted = countMatches.find((row) => dayOf(row.observed_on) === day) ?? (countMatches.length === 1 ? countMatches[0] : undefined);
   if (adopted) {
     await sql`
       update organic_observations
-      set raw_metrics = coalesce(raw_metrics, '{}'::jsonb) || ${JSON.stringify({ observationKey: key })}::jsonb
+      set observed_on = ${day},
+          raw_metrics = coalesce(raw_metrics, '{}'::jsonb) || ${JSON.stringify({ observationKey: key })}::jsonb
       where id = ${adopted.id}
         and (raw_metrics->>'observationKey' is null or raw_metrics->>'observationKey' = '')
     `;

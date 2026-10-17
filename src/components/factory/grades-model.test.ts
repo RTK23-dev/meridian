@@ -23,7 +23,7 @@ test("a grade reads as the engine's answer with the engine and questions it was 
 test("the prediction status says whether the grade is the one the pick was made under", () => {
   assert.match(predictionStatusText("same"), /made under/);
   assert.match(predictionStatusText("regraded"), /graded again/);
-  assert.match(predictionStatusText("regraded"), /kept/);
+  assert.match(predictionStatusText("regraded"), /only when it was stored/);
   assert.match(predictionStatusText("unrecorded"), /not known/);
 });
 

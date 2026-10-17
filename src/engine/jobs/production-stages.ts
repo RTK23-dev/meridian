@@ -31,7 +31,8 @@ export function storeKeyOfReference(referenceVideo: string): string | null {
 /**
  * The reference source of production (Bible 6.2 steps 1 and 7). The reference is read from the store under the request's brand, as bytes
  * for the media functions (in-process ffmpeg refuses URL inputs). Any other reference (an ig: reel, an s3: uri) is not connected. A missing
- * object is a refused request: it is not guessed as absent.
+ * object is a refused request: it is not guessed as absent. A Content Factory upload stays: the session still names that file, including
+ * after a revision, so releasing it would make the next request fail. Other store objects are deleted when analysis ends.
  */
 export function productionReferenceSource(input: { sql: Sql; store: EngineReferenceStore }): ReferenceSource {
   return {
@@ -54,7 +55,7 @@ export function productionReferenceSource(input: { sql: Sql; store: EngineRefere
     },
     async release(referenceVideo, organizationId, requestId) {
       const key = storeKeyOfReference(referenceVideo);
-      if (key === null) return;
+      if (key === null || key.startsWith("content-factory/")) return;
       const brandId = await brandOfRequest(input.sql, organizationId, requestId);
       await input.store.release(organizationId, brandId, key);
     },

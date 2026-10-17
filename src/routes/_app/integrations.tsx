@@ -170,7 +170,7 @@ function Integrations() {
   }
 
   return (
-    <div className="space-y-10">
+    <div className="min-w-0 space-y-10">
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Integrations</p>
         <h1 className="page-title">Workspace logins</h1>
@@ -194,7 +194,7 @@ function Integrations() {
               <h2 id={`group-${group.id}`} className="text-section font-semibold text-fg">{group.label}</h2>
               <p className="text-sm text-fg-muted">{group.hint}</p>
             </div>
-            <ul className="grid min-w-0 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            <ul className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
               {groupCards.map((card) => (
                 <ProviderCard
                   key={card.id}

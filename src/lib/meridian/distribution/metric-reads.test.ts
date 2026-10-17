@@ -271,7 +271,8 @@ test("Facebook Page video insights read views and watch time, and unique views a
   assert.equal(reading.metrics.reach, null, "unique views are not reach");
   assert.equal(reading.metrics.averageWatchTimeSeconds, 2.5);
   assert.equal(requests.length, 1);
-  assert.match(requests[0]?.url ?? "", /\/99\/video_insights\?metric=total_video_views/);
+  assert.match(requests[0]?.url ?? "", /metric=total_video_views,total_video_avg_time_watched$/);
+  assert.doesNotMatch(requests[0]?.url ?? "", /total_video_views_unique/);
 
   const direct = await readFacebookVideoMetrics(transport, { externalId: "99", accessToken: "t" }, NOW);
   assert.equal(direct.status, "observed");

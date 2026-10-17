@@ -1,5 +1,7 @@
 # Operations
 
+How a running Meridian is kept up. Install steps are in [SETUP.md](SETUP.md).
+
 ## Processes
 
 | Process | Command | Needed for |

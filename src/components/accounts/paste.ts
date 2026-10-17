@@ -11,9 +11,12 @@ function clip(value: string): string {
   return value.trim().slice(0, LIMIT);
 }
 
+const CONTENT_ROUTES = new Set(["watch", "p", "reel", "reels", "video", "share", "shorts", "stories", "photos"]);
+
 /**
  * Accepts an Instagram, Facebook, YouTube, or TikTok link, an @handle, or a bare account ID.
  * A link with no profile path is rejected, so a bare domain is never stored as the account.
+ * The account is the first profile segment, not a later content id. Facebook `profile.php` uses the `id` query.
  * The display name starts as the handle or the ID. The form still lets the person change it.
  */
 export function parseAccountPaste(raw: string): ParsedAccount | null {
@@ -25,15 +28,17 @@ export function parseAccountPaste(raw: string): ParsedAccount | null {
     if (!id) return null;
     return { externalAccountId: id, handle: trimmed.startsWith("@") ? clip(`@${id}`) : "", name: clip(id) };
   }
-  let path = "";
+  let url: URL;
   try {
-    const url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
-    path = url.pathname;
+    url = new URL(trimmed.includes("://") ? trimmed : `https://${trimmed}`);
   } catch {
     return null;
   }
-  const parts = path.split("/").map((part) => part.trim()).filter((part) => part && part !== "channel" && part !== "c" && part !== "user");
-  const id = clip((parts.at(-1) ?? "").replace(/^@+/, ""));
+  const parts = url.pathname.split("/").map((part) => part.trim()).filter((part) => part && part !== "channel" && part !== "c" && part !== "user");
+  const first = parts[0] ?? "";
+  const rawId = first === "profile.php" ? url.searchParams.get("id") ?? "" : first;
+  if (!rawId || CONTENT_ROUTES.has(rawId.toLowerCase())) return null;
+  const id = clip(rawId.replace(/^@+/, ""));
   if (!id) return null;
   const social = /instagram|tiktok|youtube/i.test(trimmed) || trimmed.includes("@");
   return { externalAccountId: id, handle: social ? clip(`@${id}`) : "", name: clip(id) };

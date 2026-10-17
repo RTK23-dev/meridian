@@ -153,6 +153,11 @@ test("a full run auto-approves the plan when the estimate is within the cap, and
 
   const manual = creativePlanFor(planInput());
   assert.equal(manual.approvalRequirements[0]?.status, "pending");
+
+  const uncapped = creativePlanFor(planInput({ run: { formats: ["video"], automation: "full", intent: "ad", capTotalCents: 0 } }));
+  assert.equal(uncapped.status, "draft", "an unpriced estimate is not within a cap that was never set");
+  assert.equal(uncapped.approvalRequirements[0]?.status, "pending");
+  assert.match(uncapped.approvalRequirements[0]?.reason ?? "", /no spend cap/);
 });
 
 test("the plan is a draft for the brand's product, with its deliverables unpriced and no production step written", () => {

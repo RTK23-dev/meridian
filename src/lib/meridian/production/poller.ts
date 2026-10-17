@@ -609,17 +609,18 @@ export async function pollProductionJobs(
         },
       });
 
+      const billed = providerReportedUsd(polledJob);
+      if (billed !== null) {
+        await storeReportedProductionCost(sql, {
+          organizationId: row.organization_id,
+          brandId: row.brand_id,
+          productionJobId: row.id,
+          runId: runId ?? null,
+          provider: row.provider,
+        }, billed);
+      }
+
       if (finalized.success) {
-        const billed = providerReportedUsd(polledJob);
-        if (billed !== null) {
-          await storeReportedProductionCost(sql, {
-            organizationId: row.organization_id,
-            brandId: row.brand_id,
-            productionJobId: row.id,
-            runId: runId ?? null,
-            provider: row.provider,
-          }, billed);
-        }
         try {
           await completeProductionJob(sql, {
             organizationId: row.organization_id,

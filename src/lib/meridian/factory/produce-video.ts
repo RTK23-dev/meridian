@@ -361,7 +361,8 @@ async function submitVideo(sql: Sql, input: ProduceInput, scope: Scope, req: Vid
 
 /**
  * Whether one more video estimate would pass the run's cap. The metered spend and the estimates of the run's own video jobs that have not
- * failed are the spend the cap is held against. Returns the reason, or null.
+ * failed and have no provider bill yet are the spend the cap is held against. A job whose bill is already in factory_costs is not
+ * counted again as an estimate. Returns the reason, or null.
  */
 async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimateCents: number): Promise<string | null> {
   const metered = await meteredSpendOf(sql, scope.organizationId, scope.brandId, input.runId);
@@ -371,6 +372,7 @@ async function videoCapStop(sql: Sql, input: ProduceInput, scope: Scope, estimat
     from production_jobs
     where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and modality = 'video'
       and input->>'runId' = ${input.runId} and status not in ('FAILED', 'CANCELLED', 'PREFLIGHT_FAILED', 'NOT_CONFIGURED', 'POSTFLIGHT_FAILED')
+      and actual_cost_cents is null
   `;
   // The unspent budgets of the run's engine requests are held against the same caps (one ledger, one cap).
   const engineHold = await engineHeldOf(sql, scope.organizationId, scope.brandId, input.runId);

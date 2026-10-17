@@ -111,6 +111,8 @@ async function databaseQuery(): Promise<WindowQuery | null> {
     max: 2,
     ssl: url.includes("sslmode=disable") ? false : undefined,
   });
+  // An idle client emits `error` when Postgres drops it. With no listener, Node exits the process.
+  pool.on("error", () => undefined);
   sharedQuery = async (sql, params) => pool.query(sql, params);
   return sharedQuery;
 }

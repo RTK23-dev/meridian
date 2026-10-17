@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { sourceMetricsOf } from "../research/store.ts";
+import { sourceMetricsOf, deliveryFactsOf } from "../research/store.ts";
 import { buildAdTimeline } from "./timeline.ts";
 import { winnerScore, type WinnerEvidence } from "./winner-score.ts";
 
@@ -62,4 +62,7 @@ test("the stored source metrics keep the stop time and the countries, so a later
 
   const stopped = JSON.parse(sourceMetricsOf({ stoppedAt: "2026-09-20T00:00:00.000Z", countries: [], capturedAt: "2026-10-01T00:00:00.000Z" })) as Record<string, unknown>;
   assert.equal(stopped.stoppedAt, "2026-09-20T00:00:00.000Z");
+  assert.deepEqual(deliveryFactsOf(JSON.stringify(stopped)).countries, []);
+  assert.equal(deliveryFactsOf("{}").countries, null, "a row from before delivery was stored does not report zero countries");
+  assert.equal(deliveryFactsOf(JSON.stringify({ stoppedAt: null })).countries, null);
 });

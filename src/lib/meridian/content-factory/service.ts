@@ -35,6 +35,7 @@ import {
   MAX_SECONDS,
   MIN_SECONDS,
   TEXT_FILE_MAX_CHARS,
+  PDF_OVER_LIMIT_CONTENT,
   type Attachment,
   type FilePurpose,
   type KeepableGene,
@@ -374,7 +375,9 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   const file = checked.file;
   if (file.mediaType === "application/pdf") {
     const extracted = await extractPdf(decoded.bytes);
-    if (extracted.status === "stored" && characterCount(extracted.text) <= TEXT_FILE_MAX_CHARS) file.content = extracted.text;
+    if (extracted.status === "stored") {
+      file.content = characterCount(extracted.text) <= TEXT_FILE_MAX_CHARS ? extracted.text : PDF_OVER_LIMIT_CONTENT;
+    }
   }
   if (file.kind === "image") {
     const size = imageDimensions(decoded.bytes);

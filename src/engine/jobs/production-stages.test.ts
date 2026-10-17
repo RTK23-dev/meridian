@@ -66,6 +66,16 @@ test("the store:// reference is read as bytes under its request's brand, and rel
   assert.deepEqual(calls, [`get ${ORG} ${BRAND} uploads/reel-1.mp4`, `release ${ORG} ${BRAND} uploads/reel-1.mp4`]);
 });
 
+test("a Content Factory reference is not deleted, because the session still names that file", async () => {
+  const key = "content-factory/sess-1/reel.mp4";
+  const { store, calls } = recordingStore(key);
+  const source = productionReferenceSource({ sql: db.sql, store });
+  const resolved = await source.resolve(`store://${key}`, ORG, REQ);
+  assert.equal(resolved.status, "ready");
+  await source.release(`store://${key}`, ORG, REQ);
+  assert.deepEqual(calls, [`get ${ORG} ${BRAND} ${key}`], "analysis can read the file, and does not release it");
+});
+
 test("a reference that is not in the store is refused as invalid input, never guessed as absent", async () => {
   const { store } = recordingStore("uploads/other.mp4");
   const source = productionReferenceSource({ sql: db.sql, store });

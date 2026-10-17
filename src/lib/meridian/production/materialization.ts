@@ -514,18 +514,22 @@ export async function storeReportedProductionCost(
 ): Promise<void> {
   if (!Number.isFinite(usd) || usd < 0) return;
   const cents = Math.round(usd * 100);
-  await sql`
-    update production_jobs set actual_cost_cents = ${cents}, updated_at = now()
-    where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
-      and actual_cost_cents is null
-  `;
-  if (!ref.runId) return;
-  await sql`
-    insert into factory_costs (id, organization_id, brand_id, run_id, stage, cents, seconds, provider, production_job_id, basis, created_at)
-    values (${`cost-${ref.productionJobId}`.slice(0, 180)}, ${ref.organizationId}, ${ref.brandId}, ${ref.runId}, 'factory.produce', ${cents}, 0,
-      ${ref.provider}, ${ref.productionJobId}, 'provider_reported', now())
-    on conflict (id) do nothing
-  `;
+  const write = async (db: Sql) => {
+    await db`
+      update production_jobs set actual_cost_cents = ${cents}, updated_at = now()
+      where id = ${ref.productionJobId} and organization_id = ${ref.organizationId} and brand_id = ${ref.brandId}
+        and actual_cost_cents is null
+    `;
+    if (!ref.runId) return;
+    await db`
+      insert into factory_costs (id, organization_id, brand_id, run_id, stage, cents, seconds, provider, production_job_id, basis, created_at)
+      values (${`cost-${ref.productionJobId}`.slice(0, 180)}, ${ref.organizationId}, ${ref.brandId}, ${ref.runId}, 'factory.produce', ${cents}, 0,
+        ${ref.provider}, ${ref.productionJobId}, 'provider_reported', now())
+      on conflict (id) do nothing
+    `;
+  };
+  if (sql.begin) await sql.begin(write);
+  else await write(sql);
 }
 
 /**
