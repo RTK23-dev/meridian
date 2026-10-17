@@ -18,12 +18,19 @@
  *
  * Vite picks the values up because `loadEnv` prefix-matches entries already in
  * `process.env`, which is why the merge has to happen before Vite starts.
+ *
+ * `.env` is loaded here as well, the way scripts/dev.mjs loads it (applyEnv: a value already set wins, a blank value is ignored). This is
+ * the fix for `build` and `preview`. The server reads VITE_AUTH_ENABLED from process.env (src/lib/auth/server.ts), while Vite reads
+ * `.env` only for the client bundle. Before this, these two commands started without the `.env` values in process.env, so the server and
+ * the client could disagree about the flag. This is done here, not by a `with-dotenv.mjs` wrapper in package.json, because that wrapper
+ * does not forward signals to the preview server.
  */
 import { spawn } from "node:child_process";
-import { readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { constants as osConstants } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { applyEnv } from "./with-dotenv.mjs";
 
 export const APP_ENV_REL_PATH = ".meridian/app-env.json";
 
@@ -63,6 +70,15 @@ export function readAppEnv(root) {
 /** File values under the process environment: an explicit override wins. */
 export function mergeAppEnv(appEnv, processEnv) {
   return { ...appEnv, ...processEnv };
+}
+
+/**
+ * Applies the workspace's `.env` to `env`, as scripts/dev.mjs does: a value already set wins, and a blank value is ignored. Absent
+ * `.env` changes nothing.
+ */
+export function applyWorkspaceDotenv(root, env = process.env) {
+  const path = join(root, ".env");
+  if (existsSync(path)) applyEnv(readFileSync(path, "utf8"), env);
 }
 
 /**
@@ -110,7 +126,9 @@ function main(argv) {
     console.error("usage: node scripts/with-app-env.mjs <command> [args…]");
     process.exit(2);
   }
-  const env = mergeAppEnv(readAppEnv(projectRoot()), process.env);
+  const root = projectRoot();
+  applyWorkspaceDotenv(root);
+  const env = mergeAppEnv(readAppEnv(root), process.env);
   const child = spawn(command, args, {
     stdio: "inherit",
     env,

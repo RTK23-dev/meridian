@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import {
   APP_ENV_REL_PATH,
+  applyWorkspaceDotenv,
   mergeAppEnv,
   parseAppEnv,
   projectRoot,
@@ -57,6 +58,30 @@ test("an explicit process-env override wins over the file", () => {
   );
   assert.equal(merged.VITE_AUTH_ENABLED, "true");
   assert.equal(merged.PATH, "/usr/bin");
+});
+
+test("the workspace .env reaches the wrapped environment, and beats the app env file, as it does under dev", () => {
+  // The server reads VITE_AUTH_ENABLED from process.env, so the .env value must be there before the merge (build and preview).
+  const root = makeWorkspace('{"VITE_AUTH_ENABLED":"true"}');
+  writeFileSync(join(root, ".env"), "VITE_AUTH_ENABLED=false\n");
+  const env = {};
+  applyWorkspaceDotenv(root, env);
+  assert.equal(mergeAppEnv(readAppEnv(root), env).VITE_AUTH_ENABLED, "false");
+});
+
+test("a shell value wins over the workspace .env, and a blank .env value is ignored", () => {
+  const root = makeWorkspace();
+  writeFileSync(join(root, ".env"), "VITE_AUTH_ENABLED=false\nVITE_EMPTY=\n");
+  const env = { VITE_AUTH_ENABLED: "true" };
+  applyWorkspaceDotenv(root, env);
+  assert.equal(env.VITE_AUTH_ENABLED, "true");
+  assert.equal("VITE_EMPTY" in env, false);
+});
+
+test("a workspace without .env changes nothing", () => {
+  const env = { PATH: "/usr/bin" };
+  applyWorkspaceDotenv(makeWorkspace(), env);
+  assert.deepEqual(env, { PATH: "/usr/bin" });
 });
 
 test("this workspace does not disable auth", () => {
