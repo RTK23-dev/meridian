@@ -6,7 +6,7 @@
  * for a person's approval, through the existing approval gate, so nothing is produced or published on the night's own authority.
  *
  * Every planned item is assigned to the holdout or to the treated arm by a hash of its id, and each assignment is stored
- * (factory_holdouts). The night's morning summary (sleep_mode_nights) says what ran, the counts, the holdout ids, the failures and
+ * (factory_holdouts). Produce skips a holdout item and makes the treated ones. The night's morning summary (sleep_mode_nights) says what ran, the counts, the holdout ids, the failures and
  * why the night stopped, if it did, and each tuned-value change it refused under the nightly change cap (sleep-tuning.ts). A night with no budget, no connected source or the kill switch engaged records why and stops.
  *
  * A night that fails is retried by its job. The retry continues the night's run and does not run the stages an earlier attempt
@@ -495,7 +495,7 @@ async function runNight(
   const summary = [
     `Gathered: ${counts.sourcesOk} source(s) ok, ${counts.sourcesNotConnected} not connected, ${counts.sourcesFailed} failed.`,
     `Picked ${picks}, planned ${planned.length}.`,
-    `Holdout: ${holdoutIds.length} item(s) assigned to the holdout and recorded for the learning step. Production does not read the holdout yet.`,
+    `Holdout: ${holdoutIds.length} item(s) assigned to the holdout. Production does not make those items. The treated items wait for a person to approve produce.`,
     waitText,
   ].join(" ");
   return conclude({

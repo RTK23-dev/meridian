@@ -94,6 +94,7 @@ async function bridgeDatabase(): Promise<Sql> {
       comments integer,
       saves integer,
       observed_on date not null default current_date,
+      raw_metrics jsonb not null default '{}'::jsonb,
       created_at timestamptz not null default now()
     );
 
@@ -261,6 +262,46 @@ test("Telemetry bridge: running the sync twice does not duplicate a post or its 
   assert.equal(posts.length, 1);
   const observed = await sql<{ id: string }>`select id from organic_observations where organization_id = ${organizationId}`;
   assert.equal(observed.length, 1);
+});
+
+test("Telemetry bridge: a later organic measurement of a post reaches learning, and a repeated sync adds nothing", async () => {
+  const sql = await bridgeDatabase();
+  const organizationId = "org_bridge_organic_later";
+  const brandId = "brand_bridge_organic_later";
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "instagram",
+    sourceType: "organic",
+    creativeId: "cr_ig_later",
+    externalPostId: "ig_later",
+    views: 100,
+    recordedAt: "2026-10-01T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  await recordTelemetry(sql, {
+    organizationId,
+    brandId,
+    platform: "instagram",
+    sourceType: "organic",
+    creativeId: "cr_ig_later",
+    externalPostId: "ig_later",
+    views: 250,
+    recordedAt: "2026-10-02T00:00:00.000Z",
+  });
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+  await syncTelemetryToLearning(sql, organizationId, brandId);
+
+  const rows = await sql<{ views: number | null; observed_on: string }>`
+    select views, observed_on::text as observed_on from organic_observations
+    where organization_id = ${organizationId}
+    order by observed_on
+  `;
+  assert.equal(rows.length, 2, "both days reach learning, and the repeated sync adds nothing");
+  assert.deepEqual(rows.map((row) => Number(row.views)), [100, 250]);
+  assert.deepEqual(rows.map((row) => String(row.observed_on).slice(0, 10)), ["2026-10-01", "2026-10-02"]);
 });
 
 test("Telemetry bridge: a later paid measurement of a creative reaches learning, and repeated syncs count each measurement once", async () => {

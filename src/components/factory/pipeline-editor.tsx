@@ -116,7 +116,7 @@ export function PipelineEditor({
       await applyPipelinePreset({ data: { brandId, presetName: key } });
       refreshSaved();
       setDraft(getPresetConfig(key));
-      setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. A run reads this line. Brief, perception, and grading prompts stay unused.` });
+      setFeedback({ tone: "success", message: `${PRESET_LABEL[key]} is saved to this brand. A run reads this line. Perception and grading prompts stay unused.` });
     } catch (error) {
       setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
@@ -131,7 +131,7 @@ export function PipelineEditor({
     try {
       await savePipelineConfig({ data: { brandId, config: configToSave(draft) } });
       refreshSaved();
-      setFeedback({ tone: "success", message: "Saved to this brand. A run reads this line. Brief, perception, and grading prompts stay unused." });
+      setFeedback({ tone: "success", message: "Saved to this brand. A run reads this line. Perception and grading prompts stay unused." });
     } catch (error) {
       setFeedback({ tone: "error", message: plainError(error).message, detail: plainError(error).raw });
     } finally {
@@ -171,7 +171,7 @@ export function PipelineEditor({
         <p className="eyebrow">Factory line</p>
         <h2 id="factory-pipeline-settings" className="text-section text-fg font-semibold">Pipeline settings</h2>
         <p className="max-w-3xl text-sm text-fg-muted">
-          Settings save to this brand. A saved line is read by Pick, Produce, the review step, and the claim check. The autopilot level and spend caps stay on the Live tests tab. Brief, perception, and grading prompts are saved and not read.
+          Settings save to this brand. A saved line is read by Pick, the plan, Produce, the review step, and the claim check. The autopilot level and spend caps stay on the Live tests tab. Perception and grading prompts are saved and not sent.
         </p>
       </header>
 

@@ -152,6 +152,7 @@ test("the plan is a draft for the brand's product, with its deliverables unprice
     assert.equal(plan.deliverables[0].aspectRatio, "9:16");
   }
   assert.equal(plan.deliverables[0]?.copy, "", "no words are taken from the winning ad");
+  assert.equal(plan.deliverables[0]?.visualDirection, undefined, "no saved brief means no extra direction");
   assert.deepEqual(plan.productionPlan, [], "production writes its steps, not the plan");
   assert.equal(plan.estimatedCost.totalEstimatedUsd, 0);
   assert.deepEqual(plan.estimatedCost.unpricedDeliverableIds, plan.deliverables.map((deliverable) => deliverable.id));
@@ -168,6 +169,13 @@ test("a saved Factory Line sets the video plan's ratio and length", () => {
     assert.equal(video.targetDurationSeconds, 15);
   }
 });
+test("a saved brief prompt is stored as visual direction and does not become the spoken copy", () => {
+  const plan = creativePlanFor(planInput({ briefPrompt: "  Stay on the product.  " }));
+  const video = plan.deliverables[0];
+  assert.equal(video?.copy, "");
+  assert.equal(video?.visualDirection, "Stay on the product.");
+});
+
 test("a stored plan reads back with its control's attributes, and a missing one reads as none", () => {
   const input = planInput();
   const plan = creativePlanFor(input);

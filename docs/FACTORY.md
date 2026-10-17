@@ -458,8 +458,7 @@ A night:
   never runs produce, gate, review, launch or test. The run it creates **waits at produce** for a person's approval, so nothing is produced or
   published on the night's own authority.
 - **Assigns a holdout.** Each planned item goes to the holdout or to the treated arm by a hash of its id. The holdout share is 10%
-  (`thresholds.learning.holdoutShare`). Each assignment is stored in `factory_holdouts`. The summary says that production does not read the
-  holdout yet.
+  (`thresholds.learning.holdoutShare`). Each assignment is stored in `factory_holdouts`. Produce skips the holdout and makes the treated items.
 - **Holds tuned values to a change cap.** A proposed change to a tuned value is held to 15% of its value a night (`MAX_NIGHTLY_CHANGE_SHARE`).
   The part beyond the cap is refused and the value is kept at the cap, and the summary lists each refusal. Production passes a night no
   proposals yet, so the cap has nothing to hold in production. A night writes no engine configuration: an accepted change is recorded only.
@@ -500,12 +499,11 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
   own arm, but no pattern on one surface is proposed as a test on the other.
 - A re-grade overwrites the grade of record on `ad_timelines`. A pick made under the earlier grade can no longer show that grade, only that
   the ad was graded again. Keeping every grade needs a grade history table, which is not built.
-- Organic outcomes are still one observation per post. A later organic measurement of the same post is not added to `organic_observations`.
-  The paid path is per measurement (see [Learning per surface](#learning-per-surface)).
+- Organic outcomes are one observation per telemetry row. A later measurement of the same post is stored on its own day. Running the same sync again does not add a second copy of that row.
 - Spend from perception reads is not metered. A perception read is a separate call from the decision, and it writes no row.
 - Screens: before and after screenshots of the changed screens are in [feature-screens](feature-screens/README.md). The studio publish dialog
   and the B2 tier counts were not captured. The PHASE_LOG records no run of the button audit (`npm run ui:button-audit`) for these changes.
-- The Factory Line editor is read when the brand has saved a line. Pick uses the winner-score, P(beat), confidence, and 3 second retention floors. The retention floor applies only to a learned pattern whose metric is 3 second retention. Produce caps new variants per concept and per day, and uses the saved video engine when the run's video provider is auto. The video plan uses the saved aspect ratio and duration. Cut pacing and the script prompt are stored on the video request as visual direction, after the spoken copy, and are not spoken as the script. Brief, perception, and grading prompts are not read. A brand with no saved line is unchanged. Auto-approve skips only the manual review step; a creative still has to be approved before publish. The strict claim switch blocks an unapproved claim when on and sends it to a person when off. A banned word still blocks.
+- The Factory Line editor is read when the brand has saved a line. Pick uses the winner-score, P(beat), confidence, and 3 second retention floors. The retention floor applies only to a learned pattern whose metric is 3 second retention. Produce caps new variants per concept and per day, and uses the saved video engine when the run's video provider is auto. The video plan uses the saved aspect ratio and duration. The brief prompt, cut pacing, and the script prompt are stored on the video request as visual direction, after the spoken copy, and are not spoken as the script. Perception instructions are fixed, so the perception prompt is not sent. Grading stays on the versioned JEV questions, so the grading prompt is not sent. A brand with no saved line is unchanged. Auto-approve skips only the manual review step; a creative still has to be approved before publish. The strict claim switch blocks an unapproved claim when on and sends it to a person when off. A banned word still blocks. Produce skips items assigned to the sleep-mode holdout and makes the treated items.
 - The owner's running level and ceiling are still set in Live tests with the older levels, not with run settings.
 - A live paid publish from a run uses the run's Facebook Page id and destination link. It is refused, and nothing is sent, when either is missing.
 - Uploads are not connected to Gather.

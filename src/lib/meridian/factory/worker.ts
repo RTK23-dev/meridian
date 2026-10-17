@@ -10,6 +10,7 @@ import { adsMustPause } from "./kill-switch.ts";
 import { isFactoryStage } from "./pipeline.ts";
 import { clearLearnRecheck, learnForRun, scheduleLearnRecheck } from "./learn.ts";
 import { loadSavedFactoryPipelineConfig } from "./pipeline-config-store.ts";
+import { holdoutItemIds } from "./sleep-holdout.ts";
 import { runSettingsFromStorage } from "./run-settings.ts";
 import { recordDecisionSpend } from "./decision-spend.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
@@ -216,12 +217,14 @@ export async function executeFactoryJob(
   }
   // No stage below marks the run succeeded. The run finishes only when learn finds a measured outcome of its own (see learn.ts).
   if (job.job_type === "factory.template") {
+    const line = job.brand_id ? await savedPlanLine(sql, job.organization_id, job.brand_id) : null;
     const planned = await persistTemplates(sql, job.organization_id, job.brand_id, runId, {
       formats: settings.formats,
       automation: settings.automation,
       intent: settings.intent,
       capTotalCents: settings.caps.totalCents,
-      video: job.brand_id ? await savedVideoShape(sql, job.organization_id, job.brand_id) : null,
+      video: line?.video ?? null,
+      briefPrompt: line?.briefPrompt ?? null,
     });
     return `templates:${planned.templates};plans:${planned.plans};refused:${planned.refused.length}`;
   }
@@ -681,12 +684,18 @@ async function gradeCallStop(sql: Sql, input: { organizationId: string; brandId:
 }
 
 /** The run's settings the plan reads. The plan takes its formats, automation, intent and spend cap from the run, and nothing else. */
-type PlanSettings = PlanRun & { video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null };
+type PlanSettings = PlanRun & {
+  video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null;
+  briefPrompt?: string | null;
+};
 
-async function savedVideoShape(sql: Sql, organizationId: string, brandId: string) {
+async function savedPlanLine(sql: Sql, organizationId: string, brandId: string) {
   const line = await loadSavedFactoryPipelineConfig(sql, organizationId, brandId);
   if (!line) return null;
-  return { aspectRatio: line.generationParams.aspectRatio, durationSeconds: line.generationParams.durationSeconds };
+  return {
+    video: { aspectRatio: line.generationParams.aspectRatio, durationSeconds: line.generationParams.durationSeconds },
+    briefPrompt: line.prompts.briefPrompt,
+  };
 }
 
 /**
@@ -760,6 +769,7 @@ async function persistTemplates(
           run: settings,
           now,
           video: settings.video,
+          briefPrompt: settings.briefPrompt,
         });
         plan = storedPlanOf(attributes, creativePlan);
         plans += 1;
@@ -806,12 +816,17 @@ async function persistVariants(
   `;
   const brain = await loadFactoryBrain(sql, organizationId, brandId);
   const entries = brainEntriesOf(brain.values);
+  const held = holdoutItemIds(await sql<{ item_id: string; arm: string }>`
+    select item_id, arm from factory_holdouts
+    where organization_id = ${organizationId} and brand_id = ${brandId} and run_id = ${runId}
+  `);
   const madeToday = dailyCap === null ? 0 : await variantsMadeToday(sql, organizationId, brandId);
   let dailyRoom = dailyCap === null ? Number.POSITIVE_INFINITY : Math.max(0, dailyCap - madeToday);
   let budget = Math.max(0, maxVariants);
   let count = 0;
   for (const template of templates) {
     if (budget <= 0 || dailyRoom <= 0) break;
+    if (held.has(template.id)) continue;
     const stored = parseStoredPlan(template.plan);
     if (!stored) continue;
     const control: PlanAttributes = stored.attributes;

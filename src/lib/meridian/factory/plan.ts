@@ -138,6 +138,8 @@ export type PlanInput = {
   now: string;
   /** A saved Factory Line video shape. Absent means the plan keeps the DNA length and 9:16. */
   video?: { aspectRatio: "9:16" | "1:1" | "16:9" | "4:5"; durationSeconds: number } | null;
+  /** Saved brief instructions. Absent means the plan carries no extra direction. Spoken copy is still written at production. */
+  briefPrompt?: string | null;
 };
 
 const SCOPE_BY_FORMAT: Record<string, CreationScope> = { image: "image_only", video: "video_only", carousel: "carousel_only" };
@@ -154,9 +156,19 @@ function deliverablesOf(
   attributes: PlanAttributes,
   formats: string[],
   video: PlanInput["video"],
+  briefPrompt: string | null | undefined,
 ): CreativeDeliverable[] {
+  const direction = briefPrompt?.trim() ?? "";
   return formats.map((format, index): CreativeDeliverable => {
-    const base = { id: `deliv-${templateId}-${format}`, sequenceIndex: index, title: concept.label, copy: "", provider: "auto", model: "" };
+    const base = {
+      id: `deliv-${templateId}-${format}`,
+      sequenceIndex: index,
+      title: concept.label,
+      copy: "",
+      provider: "auto",
+      model: "",
+      ...(direction ? { visualDirection: direction } : {}),
+    };
     if (format === "video") {
       return {
         ...base,
@@ -192,7 +204,7 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   if (formats.length === 0) {
     throw new Error("Creative plan refused: the run names no format the plan can make.");
   }
-  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats, input.video);
+  const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats, input.video, input.briefPrompt);
   requireCitedDeliverables(lineage, deliverables.length);
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
   const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];

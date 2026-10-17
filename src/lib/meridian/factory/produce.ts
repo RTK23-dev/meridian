@@ -24,6 +24,7 @@ import { produceImage } from "./produce-image.ts";
 import { produceVideo } from "./produce-video.ts";
 import { produceCarousel } from "./produce-carousel.ts";
 import { NOT_A_SLIDE, approverOf, recordPlan, linkedCreativeOf, type ProduceInput, type Scope, type Step, type VariantRow } from "./produce-shared.ts";
+import { holdoutItemIds } from "./sleep-holdout.ts";
 
 export { FACTORY_IMAGE_CEILING_USD } from "./produce-image.ts";
 export type { ProduceInput } from "./produce-shared.ts";
@@ -61,10 +62,16 @@ export async function produceFactoryCreatives(sql: Sql, input: ProduceInput): Pr
   }
   const qcBrand = qcBrandOf(await loadBrandContext(sql, scope.organizationId, scope.brandId));
   const approver = await approverOf(sql, scope, input.runId);
+  const holdoutRows = await sql<{ item_id: string; arm: string }>`
+    select item_id, arm from factory_holdouts
+    where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and run_id = ${input.runId}
+  `;
+  const held = holdoutItemIds(holdoutRows);
 
   let produced = 0;
   const waits: string[] = [];
   for (const [index, variant] of variants.entries()) {
+    if (held.has(variant.template_id)) continue;
     const stored = parseStoredPlan(variant.plan);
     if (!stored) continue;
     await recordPlan(sql, scope, stored.creativePlan, approver);

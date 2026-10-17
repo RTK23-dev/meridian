@@ -335,7 +335,8 @@ export const NOT_READ_REASON = {
   confidenceMin: "Pick skips a concept whose decoded angle confidence is below this floor. A decode with no confidence is still used.",
   autoApproveEnabled: "Manual mode does not wait at the review step when this is on. A creative still has to be approved before it is published.",
   strictClaimGate: "On, an unapproved claim blocks the variant. Off, that claim waits for a person. Banned words still block. A missing claim still waits.",
-  prompt: "Brief, perception, and grading prompts are not read. Grading stays on the versioned JEV questions.",
+  prompt: "Perception instructions are fixed, so this text is not sent. Grading stays on the versioned JEV questions, so this text is not sent.",
+  briefPrompt: "Stored on the plan as visual direction. It does not replace the spoken copy.",
   scriptPrompt: "Stored with the video as visual direction, after the spoken copy. It does not replace the spoken copy.",
 } as const;
 
