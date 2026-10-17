@@ -54,9 +54,10 @@ export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
 export type FileKind = "video" | "image" | "text" | "document";
 
-export type MediaTypeRule = { mediaType: string; kind: FileKind; extension: string; maxBytes: number };
+/** One accepted media type. A binary type has a size limit; a text file is limited by its characters (TEXT_FILE_MAX_CHARS) instead. */
+export type MediaTypeRule = { mediaType: string; kind: FileKind; extension: string; maxBytes?: number };
 
-/** The types a session accepts, with the size limit of each. */
+/** The types a session accepts. Binary types are read from their bytes; a text type is named by the file's extension (files.ts). */
 export const FILE_RULES: readonly MediaTypeRule[] = [
   { mediaType: "video/mp4", kind: "video", extension: "mp4", maxBytes: 40_000_000 },
   { mediaType: "video/quicktime", kind: "video", extension: "mov", maxBytes: 40_000_000 },
@@ -64,16 +65,25 @@ export const FILE_RULES: readonly MediaTypeRule[] = [
   { mediaType: "image/png", kind: "image", extension: "png", maxBytes: 10_000_000 },
   { mediaType: "image/jpeg", kind: "image", extension: "jpg", maxBytes: 10_000_000 },
   { mediaType: "image/webp", kind: "image", extension: "webp", maxBytes: 10_000_000 },
-  { mediaType: "text/plain", kind: "text", extension: "txt", maxBytes: 1_000_000 },
+  { mediaType: "text/plain", kind: "text", extension: "txt" },
+  { mediaType: "text/markdown", kind: "text", extension: "md" },
+  { mediaType: "text/csv", kind: "text", extension: "csv" },
+  { mediaType: "application/json", kind: "text", extension: "json" },
   { mediaType: "application/pdf", kind: "document", extension: "pdf", maxBytes: 10_000_000 },
 ];
 
-/** The largest file of any type. The server refuses a larger upload before it decodes it. */
-export const MAX_FILE_BYTES = Math.max(...FILE_RULES.map((rule) => rule.maxBytes));
+/** The largest binary file. The server refuses a larger upload before it decodes it. */
+export const MAX_FILE_BYTES = Math.max(...FILE_RULES.map((rule) => rule.maxBytes ?? 0));
 /** The base64 length of the largest file, with its padding. */
 export const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4;
 
-export const ACCEPTED_FILE_LABEL = "MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and plain text up to 1 MB";
+/** A text file is read into the brief when it has at most this many characters: the engine's brief source limit (BRIEF_SOURCE_TEXT_MAX). */
+export const TEXT_FILE_MAX_CHARS = 4000;
+
+/** What the session says about a PDF: the engine does not read PDF text yet, so the file is kept and its text is not used. */
+export const PDF_TEXT_NOTE = "PDF text is not read yet; the file is kept with the session.";
+
+export const ACCEPTED_FILE_LABEL = `MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and text files (TXT, Markdown, CSV or JSON) of at most ${TEXT_FILE_MAX_CHARS} characters`;
 
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_TITLE_CHARS = 120;
@@ -112,6 +122,8 @@ export type FileAttachment = {
   mediaType: string;
   bytes: number;
   sha256: string;
+  /** A text file's content, read into the brief (at most TEXT_FILE_MAX_CHARS characters). Null for every other file. */
+  content: string | null;
   createdAt: string;
 };
 

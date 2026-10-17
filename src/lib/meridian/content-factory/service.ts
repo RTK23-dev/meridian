@@ -43,7 +43,7 @@ import {
   type SourcePage,
   type SourceResult,
 } from "./model.ts";
-import { buildProductionRequest, referenceOf } from "./request.ts";
+import { buildProductionRequest, inputNotes, referenceOf } from "./request.ts";
 import { readSourceRecord, searchSourceRecords, themePageKits } from "./sources.ts";
 
 export const WORKSPACE_REFUSAL = "This workspace is not available to you.";
@@ -211,7 +211,7 @@ async function messagesOf(sql: Sql, row: SessionRow): Promise<Message[]> {
     order by m.created_at asc, m.id asc
   `;
   const attachmentRows = await sql<Record<string, unknown>>`
-    select id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256,
+    select id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content,
       source_page, source_brand_id, source_record_id, snapshot, created_at
     from content_factory_attachments
     where session_id = ${row.id} and organization_id = ${row.organization_id}
@@ -233,6 +233,7 @@ async function messagesOf(sql: Sql, row: SessionRow): Promise<Message[]> {
         mediaType: String(item.media_type ?? ""),
         bytes: Number(item.byte_size ?? 0),
         sha256: String(item.sha256 ?? ""),
+        content: item.content === null || item.content === undefined ? null : String(item.content),
         createdAt: iso(item.created_at),
       });
     } else if (isSourcePage(item.source_page)) {
@@ -346,7 +347,7 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   await requireMessage(sql, row, input.messageId);
   const decoded = decodeUpload(input.base64);
   if (!decoded.ok) return { status: "refused", reason: decoded.reason };
-  const checked = checkFile(decoded.bytes, input.purpose);
+  const checked = checkFile(decoded.bytes, input.purpose, input.fileName);
   if (!checked.ok) return { status: "refused", reason: checked.reason };
   if (input.purpose === "reference_video") {
     const existing = await sql<{ id: string }>`
@@ -371,9 +372,9 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   }
   const id = randomUUID();
   await sql`
-    insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256)
+    insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content)
     values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'file', ${input.purpose}, ${safeFileName(input.fileName)}, ${storageObjectId}, ${key},
-      ${file.mediaType}, ${file.bytes}, ${file.sha256})
+      ${file.mediaType}, ${file.bytes}, ${file.sha256}, ${file.content})
   `;
   await touch(sql, row);
   await audit(sql, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.file_stored", objectId: row.id, metadata: { attachmentId: id, mediaType: file.mediaType } });
@@ -482,19 +483,22 @@ export type RunView =
       files: FileStoreReadiness;
       hasReference: boolean;
       referenceNote: string;
+      /** What each file does on its way to the engine (a text file is read into the brief; a PDF's text is not read yet). */
+      inputs: string[];
     }
-  | { stage: "started"; feed: RunFeed; referenceNote: string }
+  | { stage: "started"; feed: RunFeed; referenceNote: string; inputs: string[] }
   | { stage: "missing"; reason: string };
 
 /** The run of a session: before the start, what is still missing; after it, the decision feed read from the engine. */
 export async function readRun(sql: Sql, userId: string, input: { sessionId: string }, ports: ContentFactoryPorts = {}): Promise<RunView> {
   const row = await sessionAccess(sql, userId, input.sessionId);
+  const messages = await messagesOf(sql, row);
+  const inputs = inputNotes(messages.flatMap((message) => message.attachments));
   if (row.status === "started" && row.engine_request_id !== null) {
     const feed = await engineRequestFeed(sql, row.organization_id, row.engine_request_id);
     if (!feed) return { stage: "missing", reason: `The engine has no request ${row.engine_request_id} in this workspace.` };
-    return { stage: "started", feed: feedCards(feed), referenceNote: REFERENCE_NOTE };
+    return { stage: "started", feed: feedCards(feed), referenceNote: REFERENCE_NOTE, inputs };
   }
-  const messages = await messagesOf(sql, row);
   const build = await buildFor(sql, row, messages);
   const readiness = await readinessOf(sql, row.organization_id, ports);
   const files: FileStoreReadiness = row.brand_id === null
@@ -507,5 +511,6 @@ export async function readRun(sql: Sql, userId: string, input: { sessionId: stri
     files,
     hasReference: referenceOf(messages.flatMap((message) => message.attachments)) !== null,
     referenceNote: REFERENCE_NOTE,
+    inputs,
   };
 }

@@ -163,6 +163,32 @@ describe("Content Factory sessions", () => {
     assert.equal(store.puts.length, 1);
   });
 
+  test("a text file keeps its content for the brief, a PDF says its text is not read, and a long text file is refused", async () => {
+    const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Text inputs" });
+    const message = await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Use the angle in the note.", beatRole: null });
+    const store = memoryStore();
+    const note = "Lead with the quiet test, not the price.";
+    const text = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "angle.txt", purpose: "material", base64: Buffer.from(note).toString("base64") }, { files: store });
+    assert.equal(text.status, "stored");
+    assert.equal(text.status === "stored" ? text.mediaType : "", "text/plain");
+    const pdf = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "specs.pdf", purpose: "material", base64: Buffer.from("%PDF-1.7\n").toString("base64") }, { files: store });
+    assert.equal(pdf.status, "stored");
+    const long = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "long.txt", purpose: "material", base64: Buffer.from("a".repeat(4001)).toString("base64") }, { files: store });
+    assert.equal(long.status, "refused");
+    assert.equal(long.status === "refused" ? long.reason : "", "This file has 4001 characters; the limit for a text file is 4000. Shorten it or split it into two files.");
+    assert.equal(store.puts.length, 2, "the text file and the PDF are stored; the refused file is not");
+
+    const detail = await getSession(db.sql, ADMIN, { sessionId: session.id });
+    const files = detail.messages.flatMap((item) => item.attachments).flatMap((item) => (item.kind === "file" ? [item] : []));
+    assert.equal(files.find((item) => item.fileName === "angle.txt")?.content, note);
+    assert.equal(files.find((item) => item.fileName === "specs.pdf")?.content, null);
+
+    const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: store });
+    assert.equal(view.stage, "draft");
+    assert.ok(view.stage === "draft" && view.inputs.includes(`angle.txt: read into the brief, ${note.length} characters.`));
+    assert.ok(view.stage === "draft" && view.inputs.includes("specs.pdf: PDF text is not read yet; the file is kept with the session."));
+  });
+
   test("a file cannot be attached to another session's message", async () => {
     const one = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "One" });
     const two = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Two" });

@@ -40,6 +40,7 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
         </CardDescription>
       </CardHeader>
       <p className="mb-2 text-sm text-fg-muted">{view.referenceNote}</p>
+      {view.inputs.length > 0 ? <div className="mb-4"><Lines title="Inputs" lines={view.inputs} /></div> : null}
       <p className="mb-4 text-sm">
         Whole request: {feed.total.calls} paid {feed.total.calls === 1 ? "call" : "calls"} · estimate {costLabel(feed.total.estimateUsd)} · reserved {costLabel(feed.total.reservedUsd)} · billed {costLabel(feed.total.billedUsd)}
         {feed.unattributedCalls > 0 ? <span className="block text-xs text-fg-muted">{feed.unattributedCalls} of these calls are not tied to one step on the ledger (for example a Claude check), so they appear only in this total.</span> : null}
@@ -87,6 +88,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
       ) : (
         <p className="mb-4 text-sm">The session has everything the engine's request needs.</p>
       )}
+      {view.inputs.length > 0 ? <div className="mb-4"><Lines title="Inputs" lines={view.inputs} /></div> : null}
       {view.notConnected.length > 0 ? (
         <section aria-labelledby="cf-not-connected" className="mb-4 space-y-2 rounded-md border border-border bg-surface-2 p-3">
           <h3 id="cf-not-connected" className="flex items-center gap-2 text-sm font-semibold"><PlugZap aria-hidden="true" className="size-4" />The video engine is not connected</h3>

@@ -1,12 +1,14 @@
 // The mapping from a Content Factory session to the engine's production request (contract v8). A session is a brief by default, and a
-// script when the person marked script lines. The engine's own schema decides; each missing field is named in plain words, and nothing is
-// defaulted.
+// script when the person marked script lines. A text file is read into the brief as a source; a PDF stays an attachment with its note.
+// The engine's own schema decides; each missing field is named in plain words, and nothing is defaulted.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { requestProblems } from "../../../engine/api/index.ts";
+import { BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX } from "../../../engine/contracts/request.ts";
 import type { Attachment, Message, SessionSettings } from "./model.ts";
-import { buildProductionRequest, problemWords, type SessionForRequest } from "./request.ts";
+import { TEXT_FILE_MAX_CHARS } from "./model.ts";
+import { buildProductionRequest, inputNotes, problemWords, type SessionForRequest } from "./request.ts";
 
 const REFERENCE: Attachment = {
   id: "att-ref",
@@ -19,11 +21,27 @@ const REFERENCE: Attachment = {
   mediaType: "video/mp4",
   bytes: 2048,
   sha256: "b".repeat(64),
+  content: null,
   createdAt: "2026-10-16T10:00:00.000Z",
 };
 
 const IMAGE: Attachment = { ...REFERENCE, id: "att-img", purpose: "material", fileName: "product.png", storageKey: `content-factory/sess-1/${"c".repeat(64)}.png`, mediaType: "image/png", sha256: "c".repeat(64) };
 const PDF: Attachment = { ...REFERENCE, id: "att-pdf", purpose: "material", fileName: "specs.pdf", storageKey: `content-factory/sess-1/${"d".repeat(64)}.pdf`, mediaType: "application/pdf", sha256: "d".repeat(64) };
+
+/** A text file of the session, with its content read into the brief. */
+function textFile(content: string, fileName = "angle.txt"): Attachment {
+  return {
+    ...REFERENCE,
+    id: `att-${fileName}`,
+    purpose: "material",
+    fileName,
+    storageKey: `content-factory/sess-1/${"e".repeat(64)}.txt`,
+    mediaType: "text/plain",
+    bytes: content.length,
+    sha256: "e".repeat(64),
+    content,
+  };
+}
 
 const SOURCE: Attachment = {
   id: "att-src",
@@ -69,7 +87,11 @@ test("a session with instructions and no script lines maps to a brief the engine
     sources: [{ label: "Products", text: "Blender X · Benefits: quiet" }],
     attachments: [
       { uri: `store://content-factory/sess-1/${"c".repeat(64)}.png`, mediaType: "image/png", note: "product.png" },
-      { uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`, mediaType: "application/pdf", note: "specs.pdf" },
+      {
+        uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
+        mediaType: "application/pdf",
+        note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+      },
     ],
   });
   assert.equal(request.workspaceId, "org-1");
@@ -151,6 +173,83 @@ test("more than 20 extra files is refused by the schema in plain words, not cut"
   const built = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, ...files])] }));
   assert.equal(built.status, "incomplete");
   assert.deepEqual(built.status === "incomplete" ? built.problems : [], [problemWords("brief.attachments")]);
+});
+
+test("a text file becomes a brief source labelled with its file name, and is not an attachment", () => {
+  const built = buildProductionRequest(session({ messages: [message("Make a reel from this angle.", null, [REFERENCE, textFile("Lead with the quiet test, not the price.")])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.deepEqual(built.request.brief, {
+    text: "Make a reel from this angle.",
+    sources: [{ label: "angle.txt", text: "Lead with the quiet test, not the price." }],
+    attachments: [],
+  });
+  assert.deepEqual(requestProblems(built.request), []);
+});
+
+test("a text file at the limit is accepted by the engine's schema, even when each character is two UTF-16 units", () => {
+  assert.equal(TEXT_FILE_MAX_CHARS, BRIEF_SOURCE_TEXT_MAX, "the text file limit is the engine's brief source limit");
+  const built = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, textFile("😀".repeat(TEXT_FILE_MAX_CHARS))])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+});
+
+test("a PDF stays an attachment, and its note says its text is not read yet", () => {
+  const built = buildProductionRequest(session({ messages: [message("Use the specs.", null, [REFERENCE, PDF])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.deepEqual(built.request.brief?.attachments, [
+    {
+      uri: `store://content-factory/sess-1/${"d".repeat(64)}.pdf`,
+      mediaType: "application/pdf",
+      note: "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+    },
+  ]);
+  assert.deepEqual(built.request.brief?.sources, []);
+});
+
+test("the decision panel's inputs name a text file's length and a PDF's note, and list no image", () => {
+  assert.deepEqual(inputNotes([REFERENCE, textFile("a".repeat(27)), PDF, IMAGE]), [
+    "angle.txt: read into the brief, 27 characters.",
+    "specs.pdf: PDF text is not read yet; the file is kept with the session.",
+  ]);
+});
+
+test("text files and records share the 20 sources limit, and the limit is named in plain words", () => {
+  const records = (count: number): Attachment[] => Array.from({ length: count }, (_, index): Attachment => ({ ...SOURCE, id: `src-${index}`, recordId: `prod-${index}` }));
+  const fits = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, ...records(19), textFile("Hook.")])] }));
+  assert.equal(fits.status, "ready", fits.status === "incomplete" ? fits.problems.join(" | ") : "");
+
+  const over = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, ...records(20), textFile("Hook.")])] }));
+  assert.equal(over.status, "incomplete");
+  assert.deepEqual(over.status === "incomplete" ? over.problems : [], [problemWords("brief.sources")]);
+  assert.match(problemWords("brief.sources"), /records and text files/);
+});
+
+test("the instructions and the text files share the brief's total limit", () => {
+  const instructions = "x".repeat(BRIEF_TEXT_MAX - 20);
+  const fits = buildProductionRequest(session({ messages: [message(instructions, null, [REFERENCE, textFile("y".repeat(20))])] }));
+  assert.equal(fits.status, "ready", fits.status === "incomplete" ? fits.problems.join(" | ") : "");
+
+  const over = buildProductionRequest(session({ messages: [message(instructions, null, [REFERENCE, textFile("y".repeat(21))])] }));
+  assert.equal(over.status, "incomplete");
+  assert.deepEqual(over.status === "incomplete" ? over.problems : [], ["Keep the instructions and text files to 8000 characters in all."]);
+});
+
+test("a script request sends a text file as a change line, never as a source", () => {
+  const built = buildProductionRequest(
+    session({
+      settings: { ...SETTINGS, language: "en" },
+      messages: [
+        message("Make it feel like the reference.", null, [REFERENCE, textFile("Lead with the quiet test.")]),
+        message("Your smoothie is lying to you.", "hook"),
+        message("Send BLEND for the link.", "cta"),
+      ],
+    }),
+  );
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.equal(built.request.brief, undefined);
+  assert.deepEqual(built.request.format.change, ["Make it feel like the reference.", "Context from the text file angle.txt: Lead with the quiet test."]);
 });
 
 test("an unknown schema path is still named", () => {

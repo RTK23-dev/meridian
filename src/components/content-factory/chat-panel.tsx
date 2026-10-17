@@ -24,6 +24,7 @@ import {
   ACCEPTED_FILE_LABEL,
   bytesLabel,
   MAX_MESSAGE_CHARS,
+  PDF_TEXT_NOTE,
   SCRIPT_ROLES,
   SOURCE_PAGE_LABELS,
   SOURCE_PAGES,
@@ -41,7 +42,7 @@ type FilesState = { status: "ready" } | { status: "not_connected"; reason: strin
 
 const ROLE_LABELS: Record<ScriptRole, string> = { hook: "Hook", setup: "Setup", item: "Item", proof: "Proof", twist: "Twist", payoff: "Payoff", cta: "Call to action" };
 /** The file input's accept list. The server checks the bytes again; this only narrows the picker. */
-const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp,text/plain,application/pdf,.txt,.md,.pdf";
+const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp,text/plain,text/markdown,text/csv,application/json,application/pdf,.txt,.md,.markdown,.csv,.json,.pdf";
 
 function fileBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -217,7 +218,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
           <span className="text-fg-muted">or drop files here</span>
         </div>
         <input ref={inputRef} type="file" multiple accept={ACCEPT} className="sr-only" aria-label="Choose files" onChange={(event) => { addFiles(event.target.files); event.target.value = ""; }} />
-        <p className="mt-2 text-xs text-fg-muted">{ACCEPTED_FILE_LABEL}. Files are checked on the server and kept in the brand's Google Drive folder.</p>
+        <p className="mt-2 text-xs text-fg-muted">{ACCEPTED_FILE_LABEL}. Files are checked on the server and kept in the brand's Google Drive folder. {PDF_TEXT_NOTE}</p>
         {files && files.status === "not_connected" ? <p className="mt-2 flex items-start gap-2 text-xs text-fg-muted"><PlugZap aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{files.reason}</p> : null}
       </div>
 

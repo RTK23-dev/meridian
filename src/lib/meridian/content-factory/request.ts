@@ -5,23 +5,24 @@
  * What maps, and from where:
  * - format.referenceVideo: the session's reference video file. format.formatId: named after that file's SHA-256, so the same reference
  *   is the same format. format.keep: the genes the person ticked.
- * - By default the request carries a brief and the engine writes the script (contract v8, write_script): the chat instructions are the
- *   brief's text, the snapshots of the attached Meridian records are its sources, and every file that is not the reference (images,
- *   text, PDFs) is an attachment with its store:// uri and media type. All of it is data to the engine, never instructions.
+ * - By default the request carries a brief and the engine writes the script (contract v8, write_script). The chat instructions are the
+ *   brief's text. The snapshots of the attached Meridian records and the text files (each at most TEXT_FILE_MAX_CHARS characters) are its
+ *   sources, labelled by page or by file name. Every other file that is not the reference (images and PDFs) is an attachment with its
+ *   store:// uri, media type and a note. The instructions and the text files share the brief's total limit (BRIEF_TEXT_MAX).
  * - When the person marked script lines, the request carries that script instead (never both): the lines in order, each with its beat
- *   role, in the language the person set. The instructions and record snapshots then go to format.change as plain text.
+ *   role, in the language the person set. The instructions, record snapshots and text files then go to format.change as plain text.
  * - page: the kits of an attached theme page. constraints: the length, budget and priority the person set. The aspect is 9:16, the only
  *   one the engine renders.
  *
- * Nothing is defaulted: a field the session does not give stays absent, and the engine's own schema (src/engine/api requestProblems)
- * names it. Each problem is then put in plain words.
+ * All of it is data to the engine, never instructions. Nothing is defaulted: a field the session does not give stays absent, and the
+ * engine's own schema (src/engine/api requestProblems) names it. Each problem is then put in plain words.
  */
 import { requestProblems } from "../../../engine/api/index.ts";
 import { BRIEF_LIST_MAX, BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX, productionRequestSchema, type ProductionRequest } from "../../../engine/contracts/request.ts";
 import { engineRequestIdFor } from "../factory/engine-request.ts";
 import type { PageRequestKits } from "../pages/model.ts";
-import { referenceVideoUri } from "./files.ts";
-import type { Attachment, FileAttachment, Message, SessionSettings, SourceAttachment } from "./model.ts";
+import { characterCount, referenceVideoUri } from "./files.ts";
+import { type Attachment, type FileAttachment, type Message, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
 import { SOURCE_PAGE_LABELS } from "./model.ts";
 
 export type SessionForRequest = {
@@ -46,7 +47,7 @@ const PROBLEM_WORDS: Record<string, string> = {
   "format.keep": "Choose which parts of the reference to keep.",
   "script.language": "You wrote script lines, so set the language they are written in. Without script lines, the engine writes the script and chooses the language.",
   "brief.text": "Tell the engine what the video is for: send at least one instruction in the chat. The engine writes the script from it.",
-  "brief.sources": `Attach at most ${BRIEF_LIST_MAX} Meridian records to one session.`,
+  "brief.sources": `Attach at most ${BRIEF_LIST_MAX} Meridian records and text files to one session.`,
   "brief.attachments": `Attach at most ${BRIEF_LIST_MAX} files besides the reference video to one session.`,
   "page.pageId": "Attach a theme page from the Pages screen. Its style, persona and voice kits are used.",
   "page.styleKitId": "The attached theme page has no style kit. Set one on the page.",
@@ -55,6 +56,9 @@ const PROBLEM_WORDS: Record<string, string> = {
   "constraints.budgetUsd": "Set the budget for this video. No default is used.",
   "constraints.priority": "Choose a priority.",
 };
+
+/** The instructions and the text files together are over the brief's total limit. The engine checks the instructions alone, so this is ours. */
+const BRIEF_TOTAL_WORDS = `Keep the instructions and text files to ${BRIEF_TEXT_MAX} characters in all.`;
 
 export function problemWords(path: string): string {
   const exact = PROBLEM_WORDS[path];
@@ -76,8 +80,39 @@ export function referenceOf(attachments: readonly Attachment[]): FileAttachment 
   return (attachments.find((item) => item.kind === "file" && item.purpose === "reference_video") as FileAttachment | undefined) ?? null;
 }
 
+/** A text file read into the brief: a material file that carries its text. */
+function isTextFile(item: Attachment): item is FileAttachment {
+  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null;
+}
+
+/** A file that goes to the engine as an attachment: not the reference and not read into the brief. */
+function isMaterialFile(item: Attachment): item is FileAttachment {
+  return item.kind === "file" && item.purpose !== "reference_video" && item.content === null;
+}
+
+/** The note a brief attachment carries. A PDF's note says its text is not read yet. */
+function attachmentNote(file: FileAttachment): string {
+  return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
+}
+
 function sourceLine(source: SourceAttachment): string {
   return `Context from ${SOURCE_PAGE_LABELS[source.page]}: ${source.snapshot}`;
+}
+
+function textFileLine(file: FileAttachment): string {
+  return `Context from the text file ${file.fileName}: ${file.content ?? ""}`;
+}
+
+/**
+ * The lines the decision panel lists under Inputs: what each file does on its way to the engine. A text file is read into the brief
+ * (its length is shown); a PDF's text is not read yet. Images and the reference video have no line here.
+ */
+export function inputNotes(attachments: readonly Attachment[]): string[] {
+  return attachments.flatMap((item): string[] => {
+    if (item.kind !== "file" || item.purpose === "reference_video") return [];
+    if (item.content !== null) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
+    return item.mediaType === "application/pdf" ? [attachmentNote(item)] : [];
+  });
 }
 
 /** Maps a session to the engine's request and checks it with the engine's own schema. */
@@ -88,8 +123,8 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
     .filter((message) => message.beatRole === null)
     .map((message) => message.text.trim())
     .filter(Boolean);
-  const sourceAttachments = attachments.filter((item): item is SourceAttachment => item.kind === "source");
-  const materials = attachments.filter((item): item is FileAttachment => item.kind === "file" && item.purpose !== "reference_video");
+  const materials = attachments.filter(isMaterialFile);
+  const textFiles = attachments.filter(isTextFile);
   const beats = session.messages
     .filter((message) => message.beatRole !== null)
     .map((message, index) => ({ beatId: `b${index + 1}`, role: message.beatRole, text: message.text.trim() }));
@@ -98,14 +133,25 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
   const page = session.themePage;
 
   const briefText = instructions.join("\n\n");
+  // Record sources and text files, in the order the person attached them. Each is the brief's source: its label and its text.
+  const sources = attachments.flatMap((item): Array<{ label: string; text: string }> => {
+    if (item.kind === "source") return [{ label: SOURCE_PAGE_LABELS[item.page], text: item.snapshot.slice(0, BRIEF_SOURCE_TEXT_MAX) }];
+    return isTextFile(item) ? [{ label: item.fileName, text: item.content ?? "" }] : [];
+  });
+  // The instructions and the text files share the brief's total limit. Record snapshots are not counted, as before.
+  const briefCharacters = characterCount(briefText) + textFiles.reduce((total, file) => total + characterCount(file.content ?? ""), 0);
+  const overTotal = !scripted && briefCharacters > BRIEF_TEXT_MAX;
+
   // A brief over a limit is refused by the schema rather than cut, so nothing the person wrote is dropped silently.
   const brief = scripted
     ? undefined
     : {
         ...(briefText ? { text: briefText } : {}),
-        sources: sourceAttachments.map((source) => ({ label: SOURCE_PAGE_LABELS[source.page], text: source.snapshot.slice(0, BRIEF_SOURCE_TEXT_MAX) })),
-        attachments: materials.map((file) => ({ uri: referenceVideoUri(file.storageKey), mediaType: file.mediaType, note: file.fileName })),
+        sources,
+        attachments: materials.map((file) => ({ uri: referenceVideoUri(file.storageKey), mediaType: file.mediaType, note: attachmentNote(file) })),
       };
+  // A script request has no brief, so the records and text files travel as plain change lines, in the order attached.
+  const context = attachments.flatMap((item) => (item.kind === "source" ? [sourceLine(item)] : isTextFile(item) ? [textFileLine(item)] : []));
 
   const candidate = present({
     schema: "meridian.production_request/v1",
@@ -115,7 +161,7 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
       formatId: reference ? `ref_${reference.sha256.slice(0, 24)}` : undefined,
       referenceVideo: reference ? referenceVideoUri(reference.storageKey) : undefined,
       keep: settings.keepGenes,
-      change: scripted ? [...instructions.map((text) => text.replace(/\s+/g, " ")), ...sourceAttachments.map(sourceLine)] : [],
+      change: scripted ? [...instructions.map((text) => text.replace(/\s+/g, " ")), ...context] : [],
     }),
     script: scripted ? present({ language: settings.language ?? undefined, beats }) : undefined,
     brief,
@@ -136,11 +182,11 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
   });
 
   const paths = requestProblems(candidate);
-  if (paths.length === 0) return { status: "ready", request: productionRequestSchema.parse(candidate) };
+  if (paths.length === 0 && !overTotal) return { status: "ready", request: productionRequestSchema.parse(candidate) };
   // With no theme page attached, the page's kit fields are one gap: the page itself.
   const named = paths.map((path) => (page === null && path.startsWith("page.") ? "page.pageId" : path.replace(/^(brief\.(?:sources|attachments))\..*$/, "$1")));
   const words = named.map((path) =>
     path === "brief.text" && briefText.length > BRIEF_TEXT_MAX ? `Keep the instructions to ${BRIEF_TEXT_MAX} characters in all.` : problemWords(path),
   );
-  return { status: "incomplete", candidate, problems: [...new Set(words)] };
+  return { status: "incomplete", candidate, problems: [...new Set([...words, ...(overTotal ? [BRIEF_TOTAL_WORDS] : [])])] };
 }
