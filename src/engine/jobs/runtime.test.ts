@@ -23,6 +23,7 @@ import { EngineError } from "../contracts/index.ts";
 import { memoryMediaStore } from "../assets/adapter.ts";
 import { createGateway } from "../gateway/gateway.ts";
 import { engineMediaLinkSigner } from "../../lib/meridian/storage/engine-media-link.ts";
+import { mediaFunctionsProblem } from "./production-ports.ts";
 
 /** Ports that are only registered, never called: the runtime builds handlers and does not run them. */
 function fakeRenderPorts(): RenderPorts {
@@ -286,4 +287,62 @@ test("check_take is refused with its reason, before it reads the take, when the 
     (error: unknown) =>
       error instanceof EngineError && error.kind === "config" && error.message === "NOT_CONNECTED: Google Drive is not connected for this workspace",
   );
+});
+
+// The media functions' mode and the speech ports (owner decisions 2026-10-16, Bible 15.2, 20.2).
+
+test("MEDIA_FUNCTIONS_MODE=in_process: the media functions run in this process, connected with no base URL", async () => {
+  const composition = productionComposition(db.sql, {
+    gateway: gatewayWith(recordedTransport({}).transport),
+    mediaLinks: prodSigner(),
+    mediaFunctionsMode: "in_process",
+  });
+  // The in-process form refuses a URL before any handler runs (a bytes-only function); the HTTP form would call the gateway instead.
+  await assert.rejects(
+    () => composition.shotPorts?.media.probe({ source: { kind: "url", url: "https://media.example.com/reel.mp4" } }) ?? Promise.resolve(),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input" && error.message.includes("take bytes"),
+    "the media functions are the in-process ones",
+  );
+  assert.equal(await mediaFunctionsProblem(composition.gateway, "in_process"), null, "no media functions base URL is needed");
+});
+
+test("MEDIA_FUNCTIONS_MODE=http, the default: the media functions are NOT_CONNECTED without a base URL, with the gateway's reason", async () => {
+  const composition = productionComposition(db.sql, {
+    gateway: gatewayWith(recordedTransport({}).transport),
+    mediaLinks: prodSigner(),
+    mediaFunctionsMode: "http",
+  });
+  await assert.rejects(
+    () => composition.shotPorts?.media.probe({ source: { kind: "url", url: "https://media.example.com/reel.mp4" } }) ?? Promise.resolve(),
+    (error: unknown) => error instanceof EngineError && error.kind === "config" && error.message.startsWith("NOT_CONNECTED: "),
+    "the media functions are the gateway's, NOT_CONNECTED without a base URL",
+  );
+  const problem = await mediaFunctionsProblem(composition.gateway, "http");
+  assert.ok(problem !== null && problem.startsWith("NOT_CONNECTED: "), "NOT_CONNECTED with its reason");
+});
+
+test("the shot connection names the media functions in http mode, and names only a missing Drive in in_process mode", async () => {
+  const http = productionComposition(db.sql, {
+    gateway: gatewayWith(recordedTransport({}).transport),
+    mediaLinks: prodSigner(),
+    mediaFunctionsMode: "http",
+  });
+  const httpReason = await http.shotPorts?.shotConnection?.(PROD_ORG);
+  assert.match(httpReason ?? "", /media functions are not connected/, "http: the media functions are checked first");
+
+  const inProcess = productionComposition(db.sql, {
+    gateway: gatewayWith(recordedTransport({}).transport),
+    mediaLinks: prodSigner(),
+    mediaFunctionsMode: "in_process",
+  });
+  const inProcessReason = await inProcess.shotPorts?.shotConnection?.(PROD_ORG);
+  assert.doesNotMatch(inProcessReason ?? "", /media functions/, "in_process: the media functions are not the reason");
+  assert.match(inProcessReason ?? "", /Google Drive is not connected/, "the workspace's Drive is still required");
+});
+
+test("the speech ports resolve the stt route to Deepgram, with the route's list price, and the composition carries them", () => {
+  const composition = productionComposition(db.sql, { gateway: gatewayWith(recordedTransport({}).transport), mediaLinks: prodSigner() });
+  assert.equal(composition.speech?.connection.status, "ready", "the stt route names Deepgram and its adapter is resolved");
+  if (composition.speech?.connection.status === "ready") assert.equal(composition.speech.connection.stt.provider, "deepgram");
+  assert.equal(composition.speech?.sttPricePerMinuteUsd, 0.0043, "the deepgram_nova3_prerecorded list price");
 });

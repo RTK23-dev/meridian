@@ -35,6 +35,12 @@ export type SttRequest = {
   durationMs: number;
   /** The script or reference language, for example "en". */
   language: string;
+  /**
+   * The workspace the call is for. A vendor that keys its calls to a workspace (Deepgram: its key and its project) reads it here. Null
+   * or absent means no workspace is in scope, and such a vendor is not connected. It is not part of the idempotency key: the ledger is
+   * per reservation, and a reservation belongs to one workspace.
+   */
+  organizationId?: string | null;
 };
 
 export type SttResult = {

@@ -27,9 +27,27 @@ export function pricePerMinuteOf(route: ResolvedRoute): number | null {
   return price.unit === "per_minute" ? price.usd : null;
 }
 
+/** What the composition root gives the speech stages: the connection, and the list price the metered call is estimated at. */
+export type SpeechPorts = { connection: SpeechToTextConnection; sttPricePerMinuteUsd: number | null };
+
+/**
+ * The speech ports of this deployment: the connection (speechToTextConnection) and the route's list price (pricePerMinuteOf), read from
+ * the same stt route. A route the gateway cannot resolve has no price, so a call is refused with unknown_price, never estimated as zero.
+ */
+export function speechPortsOf(gateway: Gateway, options: { resolve?: (route: ResolvedRoute) => SpeechToText | null } = {}): SpeechPorts {
+  const connection = speechToTextConnection(gateway, options);
+  let sttPricePerMinuteUsd: number | null = null;
+  try {
+    sttPricePerMinuteUsd = pricePerMinuteOf(gateway.route("stt"));
+  } catch {
+    sttPricePerMinuteUsd = null;
+  }
+  return { connection, sttPricePerMinuteUsd };
+}
+
 /**
  * The speech-to-text connection for this deployment. `resolve` maps a routed target to a wired adapter, or null when none is
- * wired: the composition root passes deepgramForRoute (stt-deepgram.ts) with the gateway and the project id. Without it, nothing is ready.
+ * wired: the composition root passes deepgramForRoute (stt-deepgram.ts) with the gateway and the project lookup. Without it, nothing is ready.
  */
 export function speechToTextConnection(
   gateway: Gateway,
@@ -50,7 +68,7 @@ export function speechToTextConnection(
     return {
       status: "not_connected",
       reason: notConnectedReason(
-        `the stt route names ${route.provider.id}:${route.model}, but no speech-to-text adapter is wired in this release. No call is made.`,
+        `the stt route names ${route.provider.id}:${route.model}, but no speech-to-text adapter is resolved for it on this deployment. No call is made.`,
       ),
     };
   }

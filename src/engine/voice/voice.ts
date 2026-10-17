@@ -302,7 +302,7 @@ export async function runVoice(run: VoiceRun, ports: VoicePorts): Promise<VoiceO
     // Transcript (Bible 6.3 step 3): the speech-to-text gives the word timings.
     const metered = await transcribeMetered(
       stt,
-      { source: { kind: "bytes", bytes }, durationMs, language },
+      { source: { kind: "bytes", bytes }, durationMs, language, organizationId: run.organizationId },
       {
         store: ports.roles.ledger,
         reservationId: run.reservationId,

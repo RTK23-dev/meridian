@@ -3,7 +3,17 @@
 
 import type { ProviderSpec } from "./types.ts";
 
-export const PROVIDER_IDS = ["openrouter", "anthropic", "heygen", "media_functions", "pexels", "pixabay", "shotstack", "apify"] as const;
+export const PROVIDER_IDS = [
+  "openrouter",
+  "anthropic",
+  "heygen",
+  "media_functions",
+  "pexels",
+  "pixabay",
+  "shotstack",
+  "apify",
+  "deepgram",
+] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
 export type ProviderRegistry = Record<ProviderId, ProviderSpec>;
@@ -65,6 +75,15 @@ export const DEFAULT_PROVIDERS: ProviderRegistry = {
     baseUrl: "https://api.apify.com/v2",
     auth: { kind: "api_key", header: "Authorization", scheme: "Bearer" },
     credentialId: "apify",
+    defaultHeaders: {},
+  },
+  // Deepgram: speech-to-text (owner decision 2026-10-16, Bible 10.3). "Authorization: Token <key>" is the documented scheme. The
+  // stt route names it (config/routes.ts). The project id is read from GET /v1/projects, not from a setting (media/STATUS.md).
+  deepgram: {
+    id: "deepgram",
+    baseUrl: "https://api.deepgram.com",
+    auth: { kind: "api_key", header: "Authorization", scheme: "Token" },
+    credentialId: "deepgram",
     defaultHeaders: {},
   },
   // The serverless ffmpeg functions. The deployment sets the base URL; until then they are not connected.

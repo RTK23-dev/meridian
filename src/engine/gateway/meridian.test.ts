@@ -25,7 +25,7 @@ function recorded(answer: (call: Call) => Awaited<ReturnType<MeridianResolver["w
 }
 
 describe("Meridian credential connector", () => {
-  for (const id of ["openrouter", "heygen", "anthropic"] as const) {
+  for (const id of ["openrouter", "heygen", "anthropic", "deepgram"] as const) {
     it(`maps ${id} to the workspace's own ${id} category when an organization is in scope`, async () => {
       const { resolver, calls } = recorded(() => ({ status: "ready", secret: `sk-${id}-workspace` }));
       const found = await meridianCredentialSource(resolver).get(id, "org_1");
@@ -69,8 +69,8 @@ describe("Meridian credential connector", () => {
     assert.deepEqual(await meridianCredentialSource(resolver).get("openrouter", null), { status: "not_connected", reason: "not opted in" });
   });
 
-  it("with no organization, HeyGen and Anthropic are not connected, and nothing is read", async () => {
-    for (const id of ["heygen", "anthropic"]) {
+  it("with no organization, HeyGen, Anthropic and Deepgram are not connected, and nothing is read", async () => {
+    for (const id of ["heygen", "anthropic", "deepgram"]) {
       const { resolver, calls } = recorded(() => ({ status: "ready", secret: "sk-should-not-be-used" }));
       const found = await meridianCredentialSource(resolver).get(id, null);
       assert.equal(found.status, "not_connected");

@@ -75,6 +75,7 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
   openrouter: "OpenRouter",
   heygen: "HeyGen",
   anthropic: "Anthropic",
+  deepgram: "Deepgram",
   meta_ad_library: "Meta Ad Library",
   meta_graph: "Meta Graph",
   instagram: "Instagram",

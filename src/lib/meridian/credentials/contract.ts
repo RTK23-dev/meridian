@@ -21,9 +21,10 @@ export type CredentialCategory =
 
 /**
  * The video engine's provider keys (read by src/engine/gateway/meridian.ts). `openrouter` is the workspace's own OpenRouter
- * key, `heygen` its HeyGen key and `anthropic` its Anthropic key. Each follows the same rules as every other category.
+ * key, `heygen` its HeyGen key, `anthropic` its Anthropic key and `deepgram` its Deepgram key (speech-to-text, owner decision
+ * 2026-10-16). Each follows the same rules as every other category.
  */
-export const VIDEO_ENGINE_CREDENTIAL_CATEGORIES = ["openrouter", "heygen", "anthropic"] as const;
+export const VIDEO_ENGINE_CREDENTIAL_CATEGORIES = ["openrouter", "heygen", "anthropic", "deepgram"] as const;
 
 export type VideoEngineCredentialCategory = (typeof VIDEO_ENGINE_CREDENTIAL_CATEGORIES)[number];
 
@@ -95,6 +96,7 @@ export const CREDENTIAL_VAULT_TYPE: Record<CredentialCategory, string> = {
   openrouter: "provider_config:openrouter",
   heygen: "provider_config:heygen",
   anthropic: "provider_config:anthropic",
+  deepgram: "provider_config:deepgram",
   meta_ad_library: "provider_config:source:meta_ad_library",
   meta_graph: "provider_config:source:meta_graph",
   instagram: "provider_config:source:instagram",
@@ -124,6 +126,7 @@ export const SHARED_DEFAULT_ENV: Record<CredentialCategory, { variable: string; 
   openrouter: { variable: "OPENROUTER_SHARED_DEFAULT", accepts: "deployment" },
   heygen: { variable: "HEYGEN_SHARED_DEFAULT", accepts: "deployment" },
   anthropic: { variable: "ANTHROPIC_SHARED_DEFAULT", accepts: "deployment" },
+  deepgram: { variable: "DEEPGRAM_SHARED_DEFAULT", accepts: "deployment" },
   meta_ad_library: { variable: "META_AD_LIBRARY_SHARED_DEFAULT", accepts: "deployment" },
   meta_graph: { variable: "META_GRAPH_SHARED_DEFAULT", accepts: "deployment" },
   instagram: { variable: "INSTAGRAM_SHARED_DEFAULT", accepts: "deployment" },

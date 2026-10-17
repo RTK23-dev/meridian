@@ -78,6 +78,7 @@ const KEYED_LABEL: Record<CredentialCategory, string> = {
   openrouter: "OpenRouter",
   heygen: "HeyGen",
   anthropic: "Anthropic",
+  deepgram: "Deepgram (speech)",
   meta_ad_library: "Meta Ad Library",
   meta_graph: "Meta Graph",
   instagram: "Instagram",
@@ -102,6 +103,7 @@ const SPECIFIC_GROUP: Partial<Record<CredentialCategory, SetupGroup>> = {
   openrouter: "video",
   heygen: "video",
   anthropic: "video",
+  deepgram: "video",
   meta_ad_library: "sources",
 };
 

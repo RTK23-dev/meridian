@@ -200,7 +200,7 @@ export async function analyzeReference(
   // (3) Speech-to-text with word timings. The metered wrapper reserves, keys and reconciles the call (Bible 14.1).
   const metered = await transcribeMetered(
     stt,
-    { source, durationMs, language: request.script.language },
+    { source, durationMs, language: request.script.language, organizationId: run.organizationId },
     {
       store: ports.roles.ledger,
       reservationId: run.reservationId,

@@ -10,6 +10,7 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { textTransport } from "../gateway/text.ts";
 import { httpMediaFunctions, type HttpMediaFunctions } from "../media/http.ts";
+import type { MediaFunctionsMode } from "../media/mode.ts";
 import type { MediaFunctions } from "../media/interface.ts";
 import { checkRenderIntegrity } from "../media/integrity.ts";
 import { notConnectedReason } from "../media/stt-connection.ts";
@@ -33,9 +34,12 @@ const MINUTE_MS = 60_000;
 
 /**
  * The reason the media functions cannot be called on this deployment, or null when they are connected. The gateway says why (the base
- * URL is not set). Sends nothing.
+ * URL is not set). Sends nothing. In the in-process mode (MEDIA_FUNCTIONS_MODE=in_process) there is no base URL to check: the handlers run
+ * in this process, so they are connected, and the ffmpeg binary is the one thing that can be missing (it fails as a config error on the
+ * first run, with nothing spent).
  */
-export async function mediaFunctionsProblem(gateway: Gateway): Promise<string | null> {
+export async function mediaFunctionsProblem(gateway: Gateway, mode: MediaFunctionsMode = "http"): Promise<string | null> {
+  if (mode === "in_process") return null;
   const status = await gateway.connection("media_functions", null);
   if (status.connected) return null;
   return notConnectedReason(`the media functions are not connected: ${status.reason ?? "no base URL is set on this deployment"}`);
@@ -324,9 +328,9 @@ export type ShotConnection = (organizationId: string) => Promise<string | null>;
  * finished image or take is stored there after it is paid for. Sends nothing and makes no paid call (Bible 10.4, 14, fail closed).
  * The Drive check reads whether the workspace has a connection, not whether its token opens: an unreadable token still fails the store.
  */
-export function productionShotConnection(input: { sql: Sql; gateway: Gateway }): ShotConnection {
+export function productionShotConnection(input: { sql: Sql; gateway: Gateway; mediaFunctionsMode?: MediaFunctionsMode }): ShotConnection {
   return async (organizationId) => {
-    const media = await mediaFunctionsProblem(input.gateway);
+    const media = await mediaFunctionsProblem(input.gateway, input.mediaFunctionsMode ?? "http");
     if (media !== null) return media;
     const drive = await readDriveConnectionMeta(input.sql, organizationId);
     if (!drive.connected) {

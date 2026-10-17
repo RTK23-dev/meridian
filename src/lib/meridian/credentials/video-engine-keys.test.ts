@@ -25,6 +25,7 @@ const RULES: Record<VideoEngineCredentialCategory, { keyVariable: string; optIn:
   openrouter: { keyVariable: "OPENROUTER_API_KEY", optIn: "OPENROUTER_SHARED_DEFAULT", deployment: "deployment-openrouter-key-1001", workspace: "workspace-openrouter-key-2001" },
   heygen: { keyVariable: "HEYGEN_API_KEY", optIn: "HEYGEN_SHARED_DEFAULT", deployment: "deployment-heygen-key-1002", workspace: "workspace-heygen-key-2002" },
   anthropic: { keyVariable: "ANTHROPIC_API_KEY", optIn: "ANTHROPIC_SHARED_DEFAULT", deployment: "deployment-anthropic-key-1003", workspace: "workspace-anthropic-key-2003" },
+  deepgram: { keyVariable: "DEEPGRAM_API_KEY", optIn: "DEEPGRAM_SHARED_DEFAULT", deployment: "deployment-deepgram-key-1004", workspace: "workspace-deepgram-key-2004" },
 };
 /** Every other provider's deployment key, set at once, so a borrowed key would show. */
 const OTHER_KEYS = {
@@ -36,7 +37,7 @@ const OTHER_KEYS = {
 const ALL_DEPLOYMENT_KEYS = Object.fromEntries(Object.values(RULES).map((rule) => [rule.keyVariable, rule.deployment]));
 
 test("each video engine category has its own vault entry and its own shared-default rule", () => {
-  assert.deepEqual([...VIDEO_ENGINE_CREDENTIAL_CATEGORIES], ["openrouter", "heygen", "anthropic"]);
+  assert.deepEqual([...VIDEO_ENGINE_CREDENTIAL_CATEGORIES], ["openrouter", "heygen", "anthropic", "deepgram"]);
   for (const category of VIDEO_ENGINE_CREDENTIAL_CATEGORIES) {
     assert.equal(CREDENTIAL_VAULT_TYPE[category], `provider_config:${category}`);
     assert.deepEqual(SHARED_DEFAULT_ENV[category], { variable: RULES[category].optIn, accepts: "deployment" });

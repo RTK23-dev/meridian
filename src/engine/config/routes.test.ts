@@ -27,10 +27,18 @@ describe("route table", () => {
   it("uses OpenRouter for every model API", () => {
     for (const capability of CAPABILITIES) {
       if (capability === "render.cloud" || capability === "render.fallback" || capability === "media.functions" || capability === "stock") continue;
+      // Speech-to-text is Deepgram, called directly (owner decision 2026-10-16), not through OpenRouter. Its own route is checked where declared.
+      if (capability === "stt") continue;
       // Instagram discovery runs Apify actors, which are not model APIs. Its own routes are checked where they are declared.
       if (capability.startsWith("discovery.")) continue;
       for (const target of routes.table[capability].targets) assert.equal(target.provider, "openrouter", capability);
     }
+  });
+
+  it("routes speech-to-text to Deepgram's nova-3, priced at its list price key and unverified (owner decision 2026-10-16)", () => {
+    assert.deepEqual(routes.table.stt.targets, [
+      { provider: "deepgram", model: "nova-3", priceKey: "deepgram_nova3_prerecorded", verified: false },
+    ]);
   });
 
   it("marks no model as verified before a live check", () => {

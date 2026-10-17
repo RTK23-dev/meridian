@@ -25,6 +25,7 @@ function summaries(overrides: Record<string, unknown> = {}) {
     openrouter: summary("not_configured"),
     heygen: summary("not_configured"),
     anthropic: summary("not_configured"),
+    deepgram: summary("not_configured"),
     meta_ad_library: summary("not_configured"),
     meta_graph: summary("not_configured"),
     instagram: summary("not_configured"),

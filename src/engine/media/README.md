@@ -37,7 +37,9 @@ vendor is open, so no vendor is wired here).
 - `stt-deepgram.ts`: the Deepgram adapter (owner decision 2026-10-16). `POST /v1/listen` for the transcript and
   `GET /v1/projects/{project_id}/requests/{request_id}` for the bill, both through `gateway.call`, so the gateway attaches the
   key and holds the host. The bill settles the call; a bill that cannot be read leaves it unsettled, with a `billNote`.
-  `deepgramForRoute` is the resolver the composition root passes to `speechToTextConnection`.
+  `deepgramProjects` names the workspace's project from `GET /v1/projects` (one project, cached per workspace; otherwise
+  NOT_CONNECTED, so no bill is read). `deepgramForRoute` is the resolver the composition root passes to `speechToTextConnection`,
+  and `speechPortsOf` gives the composition the connection and the route's price.
 - `stt-connection.ts`: `speechToTextConnection` (NOT_CONNECTED until a resolver is wired and the gateway can reach the
   route's provider) and `pricePerMinuteOf` (the route's list price, null without one).
 - `config.ts`: the scene-cut score (initial 0.3, tunable), the EDL frame duration, call timeouts, transcript limits, and the

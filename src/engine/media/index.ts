@@ -73,14 +73,19 @@ export {
   NOT_CONNECTED,
   notConnectedReason,
   pricePerMinuteOf,
+  speechPortsOf,
   speechToTextConnection,
+  type SpeechPorts,
   type SpeechToTextConnection,
 } from "./stt-connection.ts";
 export {
   DEEPGRAM_PROVIDER,
   deepgramForRoute,
+  deepgramProjects,
   deepgramSpeechToText,
   type DeepgramOptions,
+  type DeepgramProjects,
+  type ProjectLookup,
 } from "./stt-deepgram.ts";
 export {
   MEDIA_FUNCTIONS_MODE_SETTING,

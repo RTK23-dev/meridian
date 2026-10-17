@@ -19,7 +19,9 @@ describe("gateway routing", () => {
   it("refuses a capability whose first target has no model instead of falling back", () => {
     const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
     assert.throws(() => gateway.route("video.budget"), (error: unknown) => error instanceof EngineError && error.kind === "config");
-    assert.throws(() => gateway.route("stt"), /speech-to-text vendor/);
+    // stt is routed to Deepgram (owner decision 2026-10-16): its first target has a model, so it resolves to deepgram's nova-3.
+    assert.equal(gateway.route("stt").provider.id, "deepgram");
+    assert.equal(gateway.route("stt").model, "nova-3");
     // The fallbacks with a model are still listed for the asset router.
     assert.deepEqual(gateway.routes("video.budget").map((route) => route.model), ["google/veo-3.1-lite"]);
   });

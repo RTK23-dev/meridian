@@ -115,3 +115,21 @@ const ERRORS: Record<number, { err_code: string; err_msg: string }> = {
 export function refusal(status: keyof typeof ERRORS): HttpResponse {
   return jsonResponse(status, ERRORS[status]);
 }
+
+/**
+ * A project-list answer (GET /v1/projects): one entry per project the key reaches. SYNTHETIC, written to the documented shape
+ * (projects[].project_id). UNVERIFIED LIVE: the owner's live run records a real answer.
+ */
+export function projectsAnswer(projectIds: readonly string[]): unknown {
+  return {
+    projects: projectIds.map((projectId) => ({
+      project_id: projectId,
+      name: "Synthetic project",
+      mip_opt_out: false,
+    })),
+  };
+}
+
+export function projectsOk(projectIds: readonly string[] = [DEEPGRAM_PROJECT_ID]): HttpResponse {
+  return jsonResponse(200, projectsAnswer(projectIds));
+}

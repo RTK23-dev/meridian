@@ -1,3 +1,5 @@
+import { parseMediaFunctionsMode, type MediaFunctionsMode } from "../../../engine/media/mode.ts";
+
 /**
  * The base URL of the engine's media functions on this deployment (MEDIA_FUNCTIONS_BASE_URL). The engine never reads the environment
  * (src/engine has no process.env): the production composition root reads the setting here and gives it to the gateway's providers
@@ -25,4 +27,13 @@ export function engineMediaFunctionsBaseUrl(env: NodeJS.ProcessEnv = process.env
   if (parsed.protocol !== "https:" || parsed.username !== "" || parsed.password !== "") return null;
   if (parsed.search !== "" || parsed.hash !== "") return null;
   return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+}
+
+/**
+ * The media functions' mode on this deployment: "http" (the default, through MEDIA_FUNCTIONS_BASE_URL) or "in_process" (the ffmpeg
+ * handlers run in the worker's own process). The rule is in src/engine/media/mode.ts: unset is "http", and any other value is a config
+ * error, so a typo never picks a mode silently. The engine reads the value through this function, not from the environment itself.
+ */
+export function engineMediaFunctionsMode(env: NodeJS.ProcessEnv = process.env): MediaFunctionsMode {
+  return parseMediaFunctionsMode(env.MEDIA_FUNCTIONS_MODE);
 }

@@ -35,7 +35,11 @@ import { createAnalyzeReferenceHandler } from "./handlers/analyze-reference.ts";
 import { createVoiceHandler, type VoiceStagePorts } from "./handlers/voice.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
-import type { PictureClient } from "../media/index.ts";
+import { deepgramForRoute, deepgramProjects, speechPortsOf, type MediaFunctionsMode, type PictureClient, type SpeechPorts } from "../media/index.ts";
+import type { HttpMediaFunctions } from "../media/http.ts";
+// The one production file outside src/engine/media that imports the in-process media functions (boundaries.test.ts): the composition
+// root chooses them when MEDIA_FUNCTIONS_MODE=in_process (owner decision 2026-10-16).
+import { inProcessMediaFunctions } from "../media/local.ts";
 import type { TakeDetectors } from "./gate-measures.ts";
 import {
   brandOfRequest,
@@ -50,7 +54,7 @@ import {
 } from "./production-ports.ts";
 import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
 import { engineAssetMediaFor } from "../../lib/meridian/storage/engine-asset-media.ts";
-import { engineMediaFunctionsBaseUrl } from "../../lib/meridian/storage/engine-media-functions.ts";
+import { engineMediaFunctionsBaseUrl, engineMediaFunctionsMode } from "../../lib/meridian/storage/engine-media-functions.ts";
 import type { MediaLinkSigner } from "./media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
@@ -169,6 +173,11 @@ export type EngineComposition = {
    * a chain's stored uris are sent as they are and the adapters refuse them (fail closed).
    */
   providerUrl?: ProviderUrl;
+  /**
+   * The speech-to-text ports (media/stt-connection.ts): the connection, which resolves the stt route to the Deepgram adapter, and the
+   * route's list price per minute. The analyze_reference and voice ports take these two values. Absent, nothing is speech-ready.
+   */
+  speech?: SpeechPorts;
 };
 
 /** The model classes whose adapters can be polled (the router's submit targets). A poll resolves the adapter by its id. */
@@ -424,6 +433,11 @@ export type ProductionDeps = {
    * leaves the media functions NOT_CONNECTED. Ignored when a gateway is given.
    */
   mediaFunctionsBaseUrl?: string | null;
+  /**
+   * The media functions' mode (MEDIA_FUNCTIONS_MODE). Production reads it (engine-media-functions.ts); a test passes its own. "in_process"
+   * runs the ffmpeg handlers in this process, and "http" calls the functions through the gateway.
+   */
+  mediaFunctionsMode?: MediaFunctionsMode;
 };
 
 /**
@@ -446,7 +460,14 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
   // The render and post-render deps (owner decision 2026-10-14): HyperFrames and Shotstack through the gateway, the engine's objects in
   // Meridian's store, and the 15-minute source links signed by Meridian. Each is fail closed on its own (NOT_CONNECTED, price unknown).
   const objects = deps.objects ?? engineObjectStore(sql);
-  const media = gatewayMediaFunctions(gateway);
+  // The media functions: in the in-process mode the ffmpeg handlers run in this process (the worker's image installs ffmpeg), and
+  // there is no base URL to check. In the http mode they are called through the gateway, NOT_CONNECTED without a base URL.
+  const mediaFunctionsMode = deps.mediaFunctionsMode === undefined ? engineMediaFunctionsMode() : deps.mediaFunctionsMode;
+  const media: HttpMediaFunctions = mediaFunctionsMode === "in_process" ? inProcessMediaFunctions() : gatewayMediaFunctions(gateway);
+  // The speech-to-text vendor (owner decision 2026-10-16): Deepgram for the stt route. The project of each workspace is named once per
+  // process from GET /v1/projects (cached per workspace), and a call's workspace comes from the request.
+  const projects = deepgramProjects(gateway);
+  const speech = speechPortsOf(gateway, { resolve: (route) => deepgramForRoute(route, { gateway, projects }) });
   const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
   // The shot ports (Bible 6.6, 6.7): the take and image stores under each request's brand, the video profiles of the listing, and the
   // connection check that refuses a shot before any paid call when the media functions or the workspace's Drive are not connected.
@@ -461,7 +482,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       ),
     videoProfiles: videoProfileLoader({ gateway }),
     catalog: modelCatalogCache({ gateway }),
-    shotConnection: productionShotConnection({ sql, gateway }),
+    shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
   };
   return {
     sql,
@@ -471,6 +492,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
     shotPorts,
+    speech,
   };
 }
 

@@ -38,7 +38,8 @@ export interface CredentialSource {
 
 /** How a provider wants to be authenticated. */
 export type AuthSpec =
-  | { kind: "api_key"; header: string; scheme: "Bearer" | null }
+  /** Bearer: "Bearer <key>". Token: "Token <key>" (Deepgram). null: the key alone. */
+  | { kind: "api_key"; header: string; scheme: "Bearer" | "Token" | null }
   /** The key travels as a query parameter (Pixabay). It is added only to URLs on the provider's own host, like a header. */
   | { kind: "api_key_query"; param: string }
   | { kind: "oauth"; header: string }

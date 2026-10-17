@@ -1,11 +1,13 @@
-// Deepgram pre-recorded speech-to-text (Bible 10.3, 20.2; owner decision 2026-10-16). Two calls: POST /v1/listen for the transcript,
-// then GET /v1/projects/{project_id}/requests/{request_id} for the bill. Both go through the API gateway (gateway.call, provider
-// "deepgram"). The gateway holds the key (Meridian's credential resolver, gateway/meridian.ts) and the host (gateway/providers.ts), so
-// this file names neither and never sees a key. The model comes from the stt route (config/routes.ts) and the price from prices.ts.
+// Deepgram pre-recorded speech-to-text (Bible 10.3, 20.2; owner decision 2026-10-16). Two calls for the transcript and the bill:
+// POST /v1/listen, then GET /v1/projects/{project_id}/requests/{request_id}. The project comes from GET /v1/projects, which lists the
+// projects the workspace's key reaches. All three go through the API gateway (gateway.call, provider "deepgram"). The gateway holds the
+// key (Meridian's credential resolver, gateway/meridian.ts) and the host (gateway/providers.ts), so this file names neither and never
+// sees a key. The model comes from the stt route (config/routes.ts) and the price from prices.ts.
 //
 // Deepgram's answer is untrusted (Bible 2). The transcript goes through normaliseTranscript before anything stores it, the transcribed
 // audio may not be longer than the audio asked about, and the bill is read only from its documented field. A bill that cannot be read
-// leaves the call unsettled (contract v6): the transcript is still returned, with billNote saying why.
+// leaves the call unsettled (contract v6): the transcript is still returned, with billNote saying why. A key that reaches no project, or
+// more than one, has no bill to read, so the call stays unsettled too: the project is never guessed.
 //
 // Facts the adapter relies on, from Deepgram's API reference read on 2026-10-16 (the owner's live run confirms them):
 //   - POST /v1/listen?model=<model>&smart_format=true&language=<primary tag>, with "Authorization: Token <key>" added by the gateway.
@@ -13,6 +15,7 @@
 //   - The words are at results.channels[0].alternatives[0].words[] (word, start, end in seconds, confidence).
 //   - metadata.request_id and metadata.duration (seconds).
 //   - The bill is at request.response.details.usd (USD) in the request lookup.
+//   - GET /v1/projects lists the projects, as projects[].project_id. UNVERIFIED LIVE: the listing is not read from the reference yet.
 // Deepgram documents no idempotency header in that reference, so the idempotency key stays on the ledger and is not sent. The ledger
 // refuses a repeat before the call (stt.ts), and that is the only dedupe.
 
@@ -38,8 +41,8 @@ const MAX_URL_CHARS = 2048;
 /** Bytes of an error answer read for its message. The excerpt is shorter still. */
 const ERROR_TEXT_BYTES = 2048;
 /**
- * Statuses that refuse the call before any work (contract v6, Bible 10.4): a bad request, a bad key, a forbidden call. Deepgram
- * bills nothing for them, so the hold is settled as confirmed absent. Every other status keeps its hold: the vendor may have billed it.
+ * Statuses that refuse the call before any work (contract v6, Bible 10.4): a bad request, a bad key, a forbidden call. Deepgram bills
+ * nothing for them, so the hold is settled as confirmed absent. Every other status keeps its hold: the vendor may have billed it.
  */
 const REFUSAL_STATUSES: ReadonlySet<number> = new Set([400, 401, 403]);
 
@@ -81,28 +84,111 @@ const billAnswerSchema = z.object({
   }),
 });
 
+const projectsAnswerSchema = z.object({
+  projects: z.array(z.object({ project_id: z.string() })),
+});
+
+/** The Deepgram project a workspace's bills belong to: one project, or why none can be named. */
+export type ProjectLookup = { status: "ready"; projectId: string } | { status: "not_connected"; reason: string };
+
+/** Names the project of a workspace. The composition root builds one per process, so each workspace is asked once. */
+export interface DeepgramProjects {
+  forWorkspace(organizationId: string | null): Promise<ProjectLookup>;
+}
+
+/**
+ * The project of each workspace, from GET /v1/projects through the gateway (owner decision 2026-10-16; the listing is UNVERIFIED LIVE).
+ * Exactly one project is used, and it is cached per workspace for this process. Zero projects, or more than one, is NOT_CONNECTED with
+ * its reason: the bill is not read and the call stays unsettled, because the project is never guessed. A failed lookup is not cached,
+ * so the next call asks again. A key change to another Deepgram account needs a restart to drop the cache (media/STATUS.md).
+ */
+export function deepgramProjects(gateway: Pick<Gateway, "call">): DeepgramProjects {
+  const cache = new Map<string, string>();
+  return {
+    async forWorkspace(organizationId: string | null): Promise<ProjectLookup> {
+      const scope = organizationId?.trim() ?? "";
+      if (scope === "") {
+        return {
+          status: "not_connected",
+          reason: notConnectedReason("the Deepgram project cannot be named: no workspace is in scope, so the bill is not read"),
+        };
+      }
+      const cached = cache.get(scope);
+      if (cached !== undefined) return { status: "ready", projectId: cached };
+      const lookup = await listProjects(gateway, scope);
+      if (lookup.status === "ready") cache.set(scope, lookup.projectId);
+      return lookup;
+    },
+  };
+}
+
+async function listProjects(gateway: Pick<Gateway, "call">, organizationId: string): Promise<ProjectLookup> {
+  const unavailable = (reason: string): ProjectLookup => ({
+    status: "not_connected",
+    reason: notConnectedReason(`the Deepgram project cannot be named: ${reason}; the bill is not read`),
+  });
+  let result: GatewayResult;
+  try {
+    result = await gateway.call({
+      provider: DEEPGRAM_PROVIDER,
+      organizationId,
+      method: "GET",
+      path: "/v1/projects",
+      timeoutMs: mediaConfig.speechToText.billTimeoutMs,
+    });
+  } catch (error) {
+    return unavailable(`the project list did not answer (${error instanceof Error ? excerpt(error.message) : "unknown error"})`);
+  }
+  if (result.status === "not_connected") {
+    return unavailable(`deepgram is not connected: ${result.reason}`);
+  }
+  const response = result.response;
+  if (!isSuccess(response.status)) {
+    return unavailable(`the project list answered HTTP ${response.status}`);
+  }
+  let raw: unknown;
+  try {
+    raw = jsonAnswer(response.body, mediaConfig.speechToText.maxProjectsResponseBytes, "project list");
+  } catch (error) {
+    return unavailable(error instanceof Error ? excerpt(error.message) : "the project list is unreadable");
+  }
+  const parsed = projectsAnswerSchema.safeParse(raw);
+  if (!parsed.success) {
+    return unavailable("the project list has no usable shape");
+  }
+  const ids = [...new Set(parsed.data.projects.map((project) => project.project_id))];
+  if (ids.some((id) => !PROJECT_ID_PATTERN.test(id))) {
+    return unavailable("the project list holds an id this adapter cannot use");
+  }
+  const [first, ...rest] = ids;
+  if (first === undefined) {
+    return unavailable("the key reaches no Deepgram project");
+  }
+  if (rest.length > 0) {
+    return unavailable(`the key reaches ${ids.length} Deepgram projects, so the bill cannot be attributed without a choice`);
+  }
+  return { status: "ready", projectId: first };
+}
+
 export type DeepgramOptions = {
   /** The stt route (gateway.route("stt")). Its provider must be deepgram, and its model is the one requested. */
   route: ResolvedRoute;
   /** The API gateway. Only its call() is used, so the key and the host stay inside it. */
   gateway: Pick<Gateway, "call">;
-  /** The workspace the call is for. Its key is the workspace's. */
-  organizationId: string | null;
-  /** Deepgram's project id: a non-secret setting the composition root supplies (media/STATUS.md). */
-  projectId: string;
+  /** The project of each workspace (deepgramProjects). The workspace of a call is SttRequest.organizationId. */
+  projects: DeepgramProjects;
 };
 
 type Deps = {
   gateway: Pick<Gateway, "call">;
-  organizationId: string | null;
-  projectId: string;
+  projects: DeepgramProjects;
   model: string;
 };
 
 /**
- * The Deepgram adapter for the stt route. It refuses a route that is not Deepgram's, a model id or project id that is not valid, and
- * sends nothing. A request the adapter cannot make (a URL that is not https, an empty file, a language it cannot send) is refused before
- * anything is sent, and is marked as refused before any work, so the ledger settles it as confirmed absent.
+ * The Deepgram adapter for the stt route. It refuses a route that is not Deepgram's, or a model id that is not valid, and sends nothing.
+ * A request the adapter cannot make (a URL that is not https, an empty file, a language it cannot send) is refused before anything is
+ * sent, and is marked as refused before any work, so the ledger settles it as confirmed absent.
  */
 export function deepgramSpeechToText(options: DeepgramOptions): SpeechToText {
   const { route } = options;
@@ -112,15 +198,7 @@ export function deepgramSpeechToText(options: DeepgramOptions): SpeechToText {
   if (!MODEL_PATTERN.test(route.model)) {
     throw new EngineError("config", "the deepgram model id in the stt route is not valid", { stage: STAGE });
   }
-  if (!PROJECT_ID_PATTERN.test(options.projectId)) {
-    throw new EngineError("config", "the deepgram project id is not valid (a non-secret setting, see media/STATUS.md)", { stage: STAGE });
-  }
-  const deps: Deps = {
-    gateway: options.gateway,
-    organizationId: options.organizationId,
-    projectId: options.projectId,
-    model: route.model,
-  };
+  const deps: Deps = { gateway: options.gateway, projects: options.projects, model: route.model };
   return {
     provider: DEEPGRAM_PROVIDER,
     model: route.model,
@@ -137,13 +215,19 @@ export function deepgramForRoute(route: ResolvedRoute, deps: Omit<DeepgramOption
 }
 
 async function transcribe(deps: Deps, request: SttRequest): Promise<SttResult> {
+  const organizationId = request.organizationId?.trim() || null;
   let listen: { path: string; contentType: string; body: string | Uint8Array };
   try {
+    if (organizationId === null) {
+      throw new EngineError("config", notConnectedReason("no workspace is in scope, so no Deepgram key can be chosen for this call"), {
+        stage: STAGE,
+      });
+    }
     listen = listenRequest(deps.model, request);
   } catch (error) {
     throw notSent(error);
   }
-  const response = await send(deps, {
+  const response = await send(deps, organizationId, {
     method: "POST",
     path: listen.path,
     headers: { "Content-Type": listen.contentType },
@@ -181,7 +265,7 @@ async function transcribe(deps: Deps, request: SttRequest): Promise<SttResult> {
     },
     request,
   );
-  const bill = await readBill(deps, answer.metadata.request_id);
+  const bill = await readBill(deps, organizationId, answer.metadata.request_id);
   return {
     words: normalised.words,
     language: normalised.language,
@@ -197,17 +281,27 @@ function held(reason: string): Bill {
 }
 
 /**
- * The bill of one transcription, from the request lookup. Any failure, a missing or unusable amount, or an answer for another request
- * leaves the call unsettled. The transcript is kept, and nothing is booked as the actual cost.
+ * The bill of one transcription, from the request lookup in the workspace's project. Any failure, a missing or unusable amount, an
+ * answer for another request, or a project that cannot be named (NOT_CONNECTED) leaves the call unsettled. The transcript is kept, and
+ * nothing is booked as the actual cost.
  */
-async function readBill(deps: Deps, requestId: string | undefined): Promise<Bill> {
+async function readBill(deps: Deps, organizationId: string | null, requestId: string | undefined): Promise<Bill> {
   if (requestId === undefined || !REQUEST_ID_PATTERN.test(requestId)) {
     return held("the answer names no usable request id, so the bill cannot be read");
   }
-  const path = `/v1/projects/${encodeURIComponent(deps.projectId)}/requests/${encodeURIComponent(requestId)}`;
+  let project: ProjectLookup;
+  try {
+    project = await deps.projects.forWorkspace(organizationId);
+  } catch (error) {
+    return held(`the project lookup failed (${error instanceof Error ? excerpt(error.message) : "unknown error"})`);
+  }
+  if (project.status === "not_connected") {
+    return held(project.reason);
+  }
+  const path = `/v1/projects/${encodeURIComponent(project.projectId)}/requests/${encodeURIComponent(requestId)}`;
   let response: HttpResponse;
   try {
-    response = await send(deps, { method: "GET", path, timeoutMs: mediaConfig.speechToText.billTimeoutMs });
+    response = await send(deps, organizationId, { method: "GET", path, timeoutMs: mediaConfig.speechToText.billTimeoutMs });
   } catch (error) {
     return held(`the bill lookup did not answer (${error instanceof Error ? excerpt(error.message) : "unknown error"})`);
   }
@@ -284,14 +378,14 @@ function primaryLanguage(tag: string): string {
 type Call = Omit<GatewayCall, "provider" | "organizationId">;
 
 /**
- * One request through the gateway. The gateway returns not_connected, or throws before it sends, for a provider it cannot reach: those
- * calls were never sent, so they are refused before any work. Any other failure came from the transport after the request was sent,
- * and is classified as the router classifies it: a timeout or a server error keeps its hold.
+ * One request through the gateway, for one workspace. The gateway returns not_connected, or throws before it sends, for a provider it
+ * cannot reach or a workspace with no key: those calls were never sent, so they are refused before any work. Any other failure came from
+ * the transport after the request was sent, and is classified as the router classifies it: a timeout or a server error keeps its hold.
  */
-async function send(deps: Deps, call: Call): Promise<HttpResponse> {
+async function send(deps: Deps, organizationId: string | null, call: Call): Promise<HttpResponse> {
   let result: GatewayResult;
   try {
-    result = await deps.gateway.call({ ...call, provider: DEEPGRAM_PROVIDER, organizationId: deps.organizationId });
+    result = await deps.gateway.call({ ...call, provider: DEEPGRAM_PROVIDER, organizationId });
   } catch (error) {
     if (error instanceof EngineError) {
       throw notSent(error);

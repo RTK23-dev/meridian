@@ -60,6 +60,8 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://meridian:meridian@postgres:5432/meridian?sslmode=disable
+      # The worker runs the ffmpeg media functions in its own process (the image installs ffmpeg), so it needs no media functions host.
+      MEDIA_FUNCTIONS_MODE: in_process
     command: ["node", "--experimental-strip-types", "scripts/worker-entry.ts"]
     depends_on:
       web:

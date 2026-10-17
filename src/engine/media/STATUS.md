@@ -2,114 +2,62 @@
 
 ## Ffmpeg on the worker and Deepgram speech-to-text (owner decisions 2026-10-16)
 
-Branch `worktree-agent-a251b7ad049432bbf`, fast-forwarded to main's owner-decision commit (6bf831f) first. Fixture-tested code only:
-no live call was made, and no key was held. The composition root wiring is NOT in this branch: it lives in files outside this
-workstream (see "Needed outside this folder"). Until it lands, the in-process mode is not selectable and the stt route is NOT_CONNECTED.
+Branch `worktree-agent-a251b7ad049432bbf`: commit `d513866` (the first pass), then the follow-up commit that wires the rest (its hash is in the report). Fixture-tested code only. No live call was made, and no agent held a key. The project id, the Deepgram project list and the bill path are UNVERIFIED LIVE.
 
-### What changed here
+### Wired on this branch
 
-- **`local.ts`**: `inProcessMediaFunctions()` replaces `localMediaFunctions`. It runs the same handlers, with the same limits from
-  `functions/ffmpeg/limits.ts` (unchanged), and returns the `HttpMediaFunctions` shape (picture and detectors included), so the
-  composition root can pass either form where production takes the media functions. URL sources are refused before any handler
-  runs: the handlers would fetch a URL with the global `fetch`, and the engine never calls fetch outside `gateway/transport.ts`.
-  Production passes bytes. Temporary directories: `withWorkdir` removes each run's directory in a `finally`; `local.test.ts` checks
-  it on success and on failure with `TMPDIR` set to a fresh directory.
-- **`mode.ts`**: `parseMediaFunctionsMode(raw)`. Unset or blank is `http` (NOT_CONNECTED without a base URL, so nothing runs by
-  default). `in_process` selects the worker form. Any other value is a config error, so a typo never picks a mode silently.
-- **`boundaries.test.ts`**: only `src/engine/jobs/runtime.ts` (the composition root) may import `local.ts` outside media. The test
-  also fails if that file moves.
-- **`stt.ts`** (contract v6 settlement, Bible 10.4): a refusal the vendor made before any work is settled as `confirmed_absent`
-  with an actual of 0: `invalid_input` and `content_policy` (recorded adapter), and HTTP 400, 401 and 403 (Deepgram). The next
-  attempt under the same input takes a new key, `attemptKey(base, n)` (`...:a2`), up to `mediaConfig.speechToText.maxRefusedAttempts`
-  (5). Every other failure keeps its hold: rate limit, timeout, server error, unknown status, and an answer the validation refuses.
-  Changed test: the recorded policy-refusal test used to assert a held call; it now asserts confirmed absent, because v6 settles
-  refusals before any work.
-- **`stt-deepgram.ts`**: the Deepgram adapter. `POST /v1/listen?model=<route model>&smart_format=true&language=<primary tag>` for the
-  transcript, then `GET /v1/projects/{project_id}/requests/{request_id}` for the bill. Both go through `gateway.call` with provider
-  `deepgram`, so the gateway attaches the key and holds the host. The file names neither. The transcript goes through
-  `normaliseTranscript`; the transcribed audio may not exceed the requested duration by more than 500 ms (it may be shorter, since a
-  video track can run longer than its audio). The bill is `request.response.details.usd`, rounded to four decimals (the ledger's
-  precision). A bill that cannot be read (failed, unusable, or for another request) leaves the call unsettled, and the transcript is
-  still returned with `billNote`. `deepgramForRoute` is the resolver for `speechToTextConnection`.
-- **`stt-connection.ts`**: `pricePerMinuteOf(route)`, and the not-routed reason no longer says "no vendor".
-- **`config/routes.ts`** (stt route, the brief's allowed entry): `deepgram` / `nova-3` / `deepgram_nova3_prerecorded` / `verified: false`.
-- **`config/prices.ts`** (the brief's allowed entry): `deepgram_nova3_prerecorded` at 0.0043 per minute, `source:
-  "third_party_unverified"` (a new `Price.source` value). `stt_vendor` stays null, because `config.test.ts` pins it.
-- **Root `Dockerfile`**: `apt-get update`, `apt-get install -y --no-install-recommends ffmpeg`, `rm -rf /var/lib/apt/lists/*`. The
-  update is needed on the slim base image, where the lists are empty. `Dockerfile.worker` is not touched.
+- **Gateway** (eng-pipeline's files, changed on the lead's instruction): `providers.ts` lists `deepgram` (`https://api.deepgram.com`, `Authorization: Token <key>`, credential id `deepgram`). `types.ts` widens the API-key scheme to `"Bearer" | "Token" | null`. `meridian.ts` maps the `deepgram` workspace category, and `gateway.test.ts` now asserts that `stt` routes to `deepgram` / `nova-3`.
+- **Credentials** (`src/lib/meridian/credentials/`): `deepgram` is a video-engine category, the same shape as `heygen`, not a source connector like `apify`. Deepgram is a speech provider the engine reads through the gateway. It has a vault type (`provider_config:deepgram`), the shared-default switch `DEEPGRAM_SHARED_DEFAULT=deployment`, and a deployment key `DEEPGRAM_API_KEY` read only with that switch. Labels are in `resolve.ts`, `provider-config.ts` and `setup-model.ts` (the Setup row is in the video group and is testable like its siblings). `test-databases.ts` clears both names. `.env.example` lists both, with their kinds and the opt-in value.
+- **Project id, with no setting.** `deepgramProjects(gateway)` calls `GET /v1/projects` through the gateway for the call's workspace. It reads `projects[].project_id`. Exactly one project is used, and it is cached per workspace for this process. Zero projects, or more than one, is `NOT_CONNECTED` with its reason. The bill is then not read, and the call stays unsettled, so the project is never guessed. A failed listing is not cached, so the next call asks again.
+- **Workspace per call.** `SttRequest.organizationId` carries the workspace. The analyze and voice stages set it on every metered call. The adapter refuses a call with no workspace before sending anything.
+- **Composition root** (`src/engine/jobs/runtime.ts`). `productionComposition` builds `composition.speech` with `speechPortsOf(gateway, { resolve: route => deepgramForRoute(route, { gateway, projects }) })`. That gives the connection and `sttPricePerMinuteUsd` from `pricePerMinuteOf`, read from the same stt route.
+- **Media mode.** `engine-media-functions.ts` reads `MEDIA_FUNCTIONS_MODE` with `parseMediaFunctionsMode` (unset is `http`, a typo is a config error). In `in_process`, `productionComposition` uses `inProcessMediaFunctions()`. `mediaFunctionsProblem(gateway, "in_process")` is null, so `productionShotConnection` reports the media functions connected, and the workspace's Drive is still checked. In `http`, nothing changes.
+- **Compose.** `docker-compose.yml` sets `MEDIA_FUNCTIONS_MODE: in_process` on the worker service only. `.env.example` lists `MEDIA_FUNCTIONS_MODE` with a comment.
+- **Tests.** `routes.test.ts` exempts `stt` from the OpenRouter-only rule, and pins its target. `gateway.test.ts` is updated as above.
 
-### What the Deepgram docs say (read 2026-10-16, Deepgram's API reference) and what is still unverified live
+### Not wired (the analyze and voice ports)
 
-- Listen: `Authorization: Token <key>`; body `{"url": ...}` as `application/json`; `language` is a BCP-47 hint, default `en`; `smart_format`.
-- Raw bytes: the reference's example uses `Content-Type: application/octet-stream` with `--data-binary`. The brief expected the
-  media's own type, and the adapter follows the reference: octet-stream.
-- Words at `results.channels[0].alternatives[0].words[]` (`word`, `start`, `end` in seconds, `confidence`), and
-  `metadata.request_id` and `metadata.duration` (seconds). The transcript names no language, so the adapter uses the requested one.
-- Bill: `GET /v1/projects/{project_id}/requests/{request_id}` answers `request.response.details.usd` (the reference's sample shows
-  0.0075 for 30 s).
-- The listen reference documents no idempotency header. The key is kept on the ledger and is not sent, so the ledger is the only
-  dedupe. The owner's live run confirms whether Deepgram offers one.
-- **Unverified live (every item above is from the docs, not from a call):** the bill path and amount on a real request, the raw-bytes
-  content type, the `language=en` query for nova-3, the 400 and 401 body texts (the fixtures are synthetic in Deepgram's `err_code`
-  shape), and the list price of $0.0043 a minute, which is third-party and marked unverified.
+The `analysis` (`ReferencePorts`) and `voice` (`VoiceStagePorts`) ports are still not built in production, so `analyze_reference` and `voice` stay not_implemented. That fails closed. The reason is not the speech adapter. Their port objects are static, but production's ledger and role deps are per reservation (`scopedLedgerStore`, and the role journal of the request). The analyze stage also needs a reference store (`ReferenceSource` has no store). The voice stage needs an asset router with a speech route, and `loadAudio`. `composition.speech` is ready for them, so they can take it once the per-run ports exist. That change is W6 plus the jobs handlers.
 
-### Choices for review
+### Open for review
 
-- `language=<primary tag>` is added to the brief's URL. Without it, Deepgram transcribes English whatever the request names, and the
-  adapter would store that as the requested language.
-- A rate limit (429) keeps its hold. The router settles it as confirmed absent and retries under a new attempt key, but the wrapper has
-  no retry yet, so settling it here would stop the same input from being sent again. The lead or owner decides whether 429 joins
-  400, 401 and 403.
-- An answer the validation refuses (out-of-order words, too long, no usable shape) keeps its hold, because the vendor processed the
-  audio and may have billed it. The operator settles it from the invoice.
-- A bill that lags or fails stays unsettled, and nothing re-reads it yet. A reconciliation job for held calls is needed before
-  delivery depends on Deepgram bills (contract v6: delivery refuses while a call is unsettled).
-- The fixtures in `test/deepgram-fixtures.ts` are SYNTHETIC: written to the documented shape, not captured. Nothing here is a live
-  artifact.
-- `functions/ffmpeg/source.ts` fetches a URL input with the global `fetch`. That is the serverless deployment's own egress, and
-  nothing changes there. The in-process form refuses URL inputs, so the worker never fetches anything itself.
-
-### Needed outside this folder (not done here; the brief keeps them out of this workstream)
-
-1. **`src/engine/gateway/providers.ts`** (eng-pipeline): add `deepgram` to `PROVIDER_IDS` and `DEFAULT_PROVIDERS`:
-   `baseUrl: "https://api.deepgram.com"`, `auth: { kind: "api_key", header: "Authorization", scheme: "Token" }`, `credentialId:
-   "deepgram"`, `defaultHeaders: {}`. Until then `gateway.route("stt")` throws `unknown provider deepgram`, which
-   `speechToTextConnection` turns into NOT_CONNECTED. Nothing is sent.
-2. **`src/engine/gateway/types.ts`** (eng-pipeline): `AuthSpec`'s api-key `scheme` accepts only `"Bearer" | null`. Deepgram needs
-   `"Token"`. Widen it to `"Bearer" | "Token" | null`. Without this, item 1 cannot express the scheme.
-3. **`src/engine/gateway/meridian.ts`** and Meridian's credential categories (`src/lib/meridian/credentials/`): a `deepgram`
-   workspace category in `CATEGORY_OF`, `LABEL` and `MeridianWorkspaceCategory`, so the key resolves through the credential resolver.
-4. **The project id** (a non-secret setting). The gateway's `CredentialSource` returns only the key, so the id needs another path:
-   a non-secret field on Meridian's `deepgram` credential, or a deployment setting such as `DEEPGRAM_PROJECT_ID`, read in
-   `src/lib/meridian/storage/` the way `MEDIA_FUNCTIONS_BASE_URL` is, and passed into `productionComposition`. The owner chooses.
-5. **The composition root** (`src/engine/jobs/runtime.ts`, and the analyze and voice ports): pass
-   `speechToTextConnection(gateway, { resolve: (route) => deepgramForRoute(route, { gateway, organizationId, projectId }) })`, and
-   price the call with `pricePerMinuteOf(route)`.
-6. **In-process mode** (`src/engine/jobs/runtime.ts`, `src/engine/jobs/production-ports.ts`, `src/lib/meridian/storage/engine-media-functions.ts`):
-   read `MEDIA_FUNCTIONS_MODE` there with `parseMediaFunctionsMode`. In `in_process`, `productionComposition` uses
-   `inProcessMediaFunctions()` instead of `gatewayMediaFunctions(gateway)`. `mediaFunctionsProblem` checks the HTTP base URL and
-   `productionShotConnection` calls it, so it must return null in `in_process` mode. Otherwise every shot stays NOT_CONNECTED.
-7. **Tests that the stt route change breaks** (owned by other workstreams; not edited here): `src/engine/config/routes.test.ts`,
-   "uses OpenRouter for every model API", must exempt `stt`, as it exempts render and stock (Deepgram is a direct API by owner
-   decision). `src/engine/gateway/gateway.test.ts` line 22 expects `/speech-to-text vendor/` from `gateway.route("stt")`; the message is
-   now `unknown provider deepgram` until item 1 lands. Each is a one-line change.
+- The project listing is UNVERIFIED LIVE. The owner's live run must show exactly one project on the key's account. A key that reaches two projects keeps every bill unsettled, by design.
+- The project is cached per workspace per process. A key changed to another Deepgram account keeps the old project until restart. A bill read under the wrong project is a 404 and stays unsettled, so nothing is booked wrongly.
+- The project lookup runs after the paid listen call, as decided. Checking the project before the listen would avoid spending on a call whose bill cannot be read. This is an option for the lead.
+- **Reconciliation job: out of scope.** A call whose bill lags or cannot be read stays held. Delivery refuses while any paid call is unsettled (contract v6), so a held call blocks delivery until someone settles it from the invoice. A job that re-reads held Deepgram bills is needed before delivery depends on this vendor.
+- **429 keeps its hold** (the lead's decision). The router settles a rate limit as confirmed absent and retries it under a new key. The wrapper has no retry, so settling it here would stop the same input from being sent again.
+- Raw bytes are sent as `application/octet-stream`, which is what the reference shows. The brief expected the media's own type.
+- `language=<primary tag>` is added to the brief's URL. Without it Deepgram transcribes English whatever the request names.
+- A bill is rounded to four decimals, the ledger's precision. A 2.6 s clip bills 0.000186 and settles at 0.0002.
+- An answer the validation refuses (out-of-order words, too long, no usable shape) keeps its hold. The vendor processed the audio and may have billed it.
+- The fixtures in `src/engine/media/test/deepgram-fixtures.ts` are SYNTHETIC. They are written to the documented shape and are not captured.
+- `functions/ffmpeg/source.ts` fetches a URL input with the global `fetch`. That is the serverless deployment's own egress. The in-process form refuses URL inputs, so the worker never fetches anything itself.
+- The in-process handlers share the worker's CPU and memory. The tool timeouts and input caps still apply. No separate concurrency cap is added here.
 
 ### Owner live steps (agents hold no keys)
 
-1. Put a Deepgram key in Meridian's credentials for a workspace, once items 1 to 3 exist. Supply the project id (item 4).
-2. Transcribe one real 30 s reference audio by URL, then the same audio as bytes (octet-stream). Check the words against the audio, the
-   `request_id`, and the bill from the request lookup (`details.usd`). Record the artifacts and the ledger line.
-3. Send the same input again: the ledger must refuse it without a call. Record one bad-key call (401) to check the refusal settles as
-   confirmed absent.
-4. Confirm the nova-3 list price on Deepgram's own page and the `language=en` query. Then set `verified` on the route and the price
-   source, or correct them.
-5. Set `MEDIA_FUNCTIONS_MODE=in_process` on the worker (and web, which runs the same runtime) once item 6 is applied. The image has
-   ffmpeg. Run one probe and one frames call on a real reference through the worker, and record the ids and the temporary-directory
-   check.
+1. Save a Deepgram key on a workspace in Setup (category Deepgram), or set `DEEPGRAM_API_KEY` with `DEEPGRAM_SHARED_DEFAULT=deployment`.
+2. Check that the key's account lists exactly one project at `GET /v1/projects` (`projects[].project_id`). Bills settle only with one project.
+3. Transcribe one real 30 s reference audio by URL, then the same audio as bytes. Check the words against the audio, the `request_id`, and the bill from `GET /v1/projects/{project}/requests/{request}` (`request.response.details.usd`). Record the artifacts and the ledger lines.
+4. Send the same input again. The ledger must refuse it without a call. Record one bad-key call (401) to check that it settles as confirmed absent.
+5. Confirm the nova-3 list price on Deepgram's own page, the `language=en` query, the bill path and the raw-bytes content type. Then set `verified` on the route and the price source, or correct them.
+6. The compose file sets `MEDIA_FUNCTIONS_MODE=in_process` on the worker. Run one probe and one frames call through the worker on a real reference. Record the ids and the temporary-directory check.
 
 ### Verification on this branch
 
 See the result block at the end of this section.
+
+Result block (this branch, NODE_ENV=development node --experimental-strip-types --test, run from the worktree):
+
+- `npx tsc --noEmit`: exit 0.
+- `npx eslint` on the 29 changed and new TypeScript files: exit 0.
+- `src/engine/gateway/**/*.test.ts`: 57 pass, 0 fail.
+- `src/engine/media/**/*.test.ts`, `src/engine/voice/*.test.ts`, `src/engine/analyze/**/*.test.ts`: 402 pass, 0 fail, 0 skipped (ffmpeg present).
+- `src/engine/jobs/**/*.test.ts`: 423 pass, 0 fail, 0 skipped (includes the in-process, HTTP and speech composition cases).
+- `src/lib/meridian/credentials/**/*.test.ts`: 58 pass, 0 fail (the deepgram cases run on the embedded database).
+- Settings, environment contract, setup facts and the engine media-functions reader (`setup-model`, `provider-config`, `provider-save-keys`, `env-example`, `facts`, `engine-media-functions`): 58 pass, 0 fail.
+- `src/engine/config/routes.test.ts`, `gateway/gateway.test.ts`, `gateway/meridian.test.ts`: 37 pass, 0 fail (the two previously broken tests are fixed).
+- Not run: the full `npm test` (the lead runs it after merging).
 
 ## W2 wiring pass (branch `eng-e45-leftovers-2`)
 

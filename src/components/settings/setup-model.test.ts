@@ -237,9 +237,9 @@ test("every row belongs to a listed group, and the groups hold the rows the view
   for (const row of rows) assert.ok(groupIds.has(row.group), `${row.id} is in a group`);
   assert.deepEqual(rowsIn(rows, "decisions").map((row) => row.id), ["decision_engine", "jev", "openai"]);
   assert.deepEqual(rowsIn(rows, "media").map((row) => row.id), ["perception", "production", "hypit"]);
-  assert.deepEqual(rowsIn(rows, "video").map((row) => row.id), ["openrouter", "heygen", "anthropic"]);
+  assert.deepEqual(rowsIn(rows, "video").map((row) => row.id), ["openrouter", "heygen", "anthropic", "deepgram"]);
   assert.deepEqual(rowsIn(rows, "sources").map((row) => row.id), ["meta_ad_library"]);
-  assert.equal(rowsIn(rows, "other_sources").length, KEYED.length - 9, "every other source connector is listed");
+  assert.equal(rowsIn(rows, "other_sources").length, KEYED.length - 10, "every other source connector is listed");
   assert.deepEqual(rowsIn(rows, "storage").map((row) => row.id), ["google_drive"]);
 });
 
@@ -275,7 +275,7 @@ test("the counts and the headline state counts only, and never claim a live prov
   assert.match(headline, /Nothing is checked against a live provider here\./);
 });
 
-test("the video engine group lists OpenRouter, HeyGen and Anthropic, each with a key form and Test Connection", () => {
+test("the video engine group lists OpenRouter, HeyGen, Anthropic and Deepgram, each with a key form and Test Connection", () => {
   const rows = setupRows({
     summaries: summaries({
       openrouter: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...4321" },
@@ -285,7 +285,8 @@ test("the video engine group lists OpenRouter, HeyGen and Anthropic, each with a
     engines: READY_ENGINES,
   });
   const video = rowsIn(rows, "video");
-  assert.deepEqual(video.map((row) => [row.id, row.label]), [["openrouter", "OpenRouter"], ["heygen", "HeyGen"], ["anthropic", "Anthropic"]]);
+  assert.deepEqual(video.map((row) => [row.id, row.label]), [["openrouter", "OpenRouter"], ["heygen", "HeyGen"], ["anthropic", "Anthropic"], ["deepgram", "Deepgram (speech)"]]);
+  assert.equal(rowOf(rows, "deepgram").testable, true, "a video engine key is testable, as its siblings are");
 
   const openrouter = rowOf(rows, "openrouter");
   assert.equal(openrouter.status, "usable");

@@ -45,12 +45,14 @@ export const mediaConfig = {
   speechToText: {
     /** One transcription request: a 60 s reel takes seconds, and the cap leaves room for long audio. */
     listenTimeoutMs: 180_000,
-    /** The request-lookup call that reads the bill. */
+    /** The request-lookup call that reads the bill, and the project list that names the project the bill belongs to. */
     billTimeoutMs: 30_000,
     /** The largest transcription answer read (about 3000 words of JSON is well under this). */
     maxResponseBytes: 4 * 1024 * 1024,
     /** The largest bill answer read. */
     maxBillResponseBytes: 64 * 1024,
+    /** The largest project-list answer read (one entry per project a key can reach). */
+    maxProjectsResponseBytes: 256 * 1024,
     /**
      * Attempts under new keys after the vendor refused the input before any work (contract v6). Each refusal is settled as
      * confirmed absent, so the next attempt needs a new key. Past this many, the wrapper stops and names the input.
