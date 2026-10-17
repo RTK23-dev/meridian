@@ -164,10 +164,11 @@ test("a brief's script is written from the recorded answer: the output names it,
   assert.deepEqual(body.beats.map((beat) => beat.beatId), ["b1", "b2", "b3", "b4", "b5"]);
   assert.equal(body.basedOn.videoDnaId, videoDnaFixture.videoDnaId);
   assert.equal(requests.length, 1, "one paid call was made");
+  assert.match(String(requests[0]?.body), /referenceLanguage/, "the writer is told the reference language (null here: the DNA names none)");
   assert.equal(await scriptRows(BRIEF.requestId), 1);
 });
 
-test("a script that copies three words of the reference, twice, fails the stage with the check and stores nothing", async () => {
+test("a script that copies six words of the reference, twice, fails the stage with the check and stores nothing", async () => {
   const { built, requests } = await portsOver([json(200, fixture("openrouter-scriptwriter-copies")), json(200, fixture("openrouter-scriptwriter-copies"))]);
   await assert.rejects(
     createWriteScriptHandler(built).run(contextFor({ requestId: OTHER_REQUEST, artifactIds: [otherArtifact, dnaArtifact] })),

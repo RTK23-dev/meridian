@@ -35,7 +35,6 @@ import {
   type MeasuredCaptions,
   type MeasuredZoom,
 } from "../edit/grammar.ts";
-import { notConnectedReason } from "../media/stt-connection.ts";
 import { check, gateResult } from "../review/gates/common.ts";
 import {
   framesAtCutsAndSamples,
@@ -71,9 +70,9 @@ export type ReferenceSource = {
 };
 
 /**
- * The speech language of the reference, which speech-to-text is asked for (the adapter sends it, with detection off). A script request
- * names its script's language. A brief has none (contract v8, open point 3): its speech language is null until a port says otherwise,
- * and the stage then stops before any call, with the reason.
+ * The speech language the reference is transcribed in. A script request names its script's language, and the vendor is asked for it. A
+ * brief has none (contract v8, open point 3), so its language is null: the vendor is asked to detect it (lead decision 2026-10-17), and the
+ * detected language is stored in the DNA transcript. A port may still set the language (ReferencePorts.speechLanguage).
  */
 export function referenceSpeechLanguageOf(request: ProductionRequest): string | null {
   return request.script?.language ?? null;
@@ -117,7 +116,7 @@ export type ReferencePorts = {
   newDnaId?: () => string;
   /**
    * The reference's speech language for speech-to-text (see referenceSpeechLanguageOf). Absent, a script request's language is used
-   * and a brief stops (null). A port returns the language it knows, or null to stop.
+   * and a brief's is null, which asks the vendor to detect it. A port returns the language it knows, or null for detection.
    */
   speechLanguage?: (run: ReferenceRun) => string | null;
 };
@@ -181,16 +180,8 @@ export async function analyzeReference(
     return { status: "not_connected", reason: ports.speech.reason };
   const stt: SpeechToText = ports.speech.stt;
   const { request } = run;
-  // The language is read before anything is measured: a reference with no known language stops here, with nothing spent.
+  // The speech language, read before anything is measured. Null asks the vendor to detect it (a brief); the result names it.
   const language = ports.speechLanguage ? ports.speechLanguage(run) : referenceSpeechLanguageOf(request);
-  if (language === null) {
-    return {
-      status: "not_connected",
-      reason: notConnectedReason(
-        "the reference's speech language is not known: a brief request has no language, and speech-to-text is not asked without one (contract v8, open point 3)",
-      ),
-    };
-  }
   const attempt = attemptOf(run.attempt);
   const resolved = await ports.source.resolve(request.format.referenceVideo, run.organizationId, run.requestId);
   if (resolved.status === "not_connected")
@@ -443,7 +434,7 @@ export async function analyzeReference(
       formatId: request.format.formatId,
       sourceRef: request.format.referenceVideo,
       durationMs,
-      transcript: { words },
+      transcript: { words, language: metered.result.language },
       segments: dnaSegments,
       genome: genomeAnswer.genome,
       editGrammar: grammar.grammar,

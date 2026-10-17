@@ -69,6 +69,8 @@ const listenAnswerSchema = z.object({
               }),
             )
             .min(1),
+          // Named when the request asked for detection (detect_language=true). Owner decision (lead, 2026-10-17); not verified live.
+          detected_language: z.string().min(1).optional(),
         }),
       )
       .min(1),
@@ -252,10 +254,16 @@ async function transcribe(deps: Deps, request: SttRequest): Promise<SttResult> {
   if (alternative === undefined) {
     throw invalidAnswer("the transcription has no alternative");
   }
-  // The response names no language (detect_language is off), so the language is the one the request asked the vendor to use.
+  // A request with a language asks the vendor for it, and the response names no language, so the language is the one requested. A request
+  // with no language asks for detection (detect_language=true): the channel names the language the vendor detected, and nothing else is
+  // taken as the language. A detection that names no language is an invalid answer.
+  const detected = answer.results.channels[0]?.detected_language;
+  if (request.language === null && detected === undefined) {
+    throw invalidAnswer("the transcription was asked to detect the language and names none");
+  }
   const normalised = normaliseTranscript(
     {
-      language: request.language,
+      language: request.language ?? detected,
       words: alternative.words.map((word) => ({
         text: word.word,
         start: word.start,
@@ -328,11 +336,11 @@ async function readBill(deps: Deps, organizationId: string | null, requestId: st
 type ListenRequest = { path: string; contentType: string; body: string | Uint8Array };
 
 function listenRequest(model: string, request: SttRequest): ListenRequest {
-  const query = new URLSearchParams({
-    model,
-    smart_format: "true",
-    language: primaryLanguage(request.language),
-  });
+  // No language means detection (Deepgram's detect_language, lead decision 2026-10-17). A language is sent as its primary subtag.
+  const query =
+    request.language === null
+      ? new URLSearchParams({ model, smart_format: "true", detect_language: "true" })
+      : new URLSearchParams({ model, smart_format: "true", language: primaryLanguage(request.language) });
   return { path: `/v1/listen?${query.toString()}`, ...payloadOf(request.source) };
 }
 

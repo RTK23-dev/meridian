@@ -194,6 +194,21 @@ describe("the request sent through the gateway", () => {
     assert.equal(queryOf(calls[0]?.path).get("language"), "en");
   });
 
+  it("with no language (a brief's reference), asks the vendor to detect it, and the result names the language detected", async () => {
+    const { gateway, calls } = scriptedGateway([listenOk({ detectedLanguage: "de" }), billOk()]);
+    const result = await deepgramSpeechToText(optionsWith(gateway)).transcribe({ ...URL_REQUEST, language: null }, "stt:key");
+    const query = queryOf(calls[0]?.path);
+    assert.equal(query.get("detect_language"), "true", "detection is on (Deepgram's detect_language, not verified live)");
+    assert.equal(query.has("language"), false, "no language is sent when the vendor detects it");
+    assert.equal(result.language, "de", "the result's language is the one detected");
+  });
+
+  it("with detection asked, an answer that names no language is an invalid answer, never a guessed language", async () => {
+    const { gateway } = scriptedGateway([listenOk(), billOk()]);
+    const error = await rejection(deepgramSpeechToText(optionsWith(gateway)).transcribe({ ...URL_REQUEST, language: null }, "stt:key"));
+    assert.match(error.message, /detect/);
+  });
+
   it("refuses a route that is not Deepgram's, or a model id that is not valid, and builds nothing", () => {
     const gateway = scriptedGateway([]).gateway;
     assert.throws(

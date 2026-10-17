@@ -5,6 +5,11 @@
 
 **scriptwriter@1.md (contract v8, this branch).** The four-part prompt of Bible 11.2 for the scriptwriter (see `../claude/roles/STATUS.md`).
 Its hash is pinned in `load.test.ts`. A change to the file is a new version (scriptwriter@2), not an edit.
+**scriptwriter@2.md (contract v8, round 2 on this branch).** The four-part prompt of Bible 11.2 for the scriptwriter (see
+`../claude/roles/STATUS.md`). Version 2 changes the copy run to six words (COPY_RUN_WORDS = 6) and adds the language rule: the brief's stated
+language, else `referenceLanguage` (the DNA transcript's detected language, null when unknown), else the brief's text language; the answer
+names the language. Its sha256 is pinned in `load.test.ts` with `scriptwriter@1.md`, which is kept as shipped and still pinned. A change to
+a file is a new version, not an edit.
 
 ## E5 generation variants (this worktree, `agent-a88fc87eb7108bf53`)
 

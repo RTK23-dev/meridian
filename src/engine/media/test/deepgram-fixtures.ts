@@ -36,7 +36,7 @@ export const DEEPGRAM_WORDS: DeepgramWord[] = [
 
 /** A transcription answer. Pass requestId: null to leave the request id out. */
 export function listenAnswer(
-  overrides: { words?: DeepgramWord[]; duration?: number; requestId?: string | null } = {},
+  overrides: { words?: DeepgramWord[]; duration?: number; requestId?: string | null; detectedLanguage?: string } = {},
 ): unknown {
   const metadata: Record<string, unknown> = { duration: overrides.duration ?? 2.6, channels: 1 };
   if (overrides.requestId !== null) {
@@ -54,6 +54,8 @@ export function listenAnswer(
               words: overrides.words ?? DEEPGRAM_WORDS,
             },
           ],
+          // Named when the request asked for detection (detect_language=true). Not verified live.
+          ...(overrides.detectedLanguage === undefined ? {} : { detected_language: overrides.detectedLanguage }),
         },
       ],
     },

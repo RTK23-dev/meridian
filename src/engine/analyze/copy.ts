@@ -3,8 +3,11 @@
 // the transcript, in order, is copied content. The roles and the stage both use this check, so a model answer that copies is
 // refused by the role (and retried once), and a stored field is checked again before the DNA is written.
 
-/** Words in a row from the transcript that make a label copied content. Initial value. */
-export const COPY_RUN_WORDS = 3;
+/**
+ * Words in a row from the transcript that make a label copied content. Owner decision (lead, 2026-10-17): 6. Three words in a row refuse
+ * ordinary phrases; six is a run of the example's own wording. Shared by the reference copy check, the genome and the scriptwriter.
+ */
+export const COPY_RUN_WORDS = 6;
 
 /** Lower-case word tokens: letters, digits and apostrophes. Punctuation and spacing are not words. */
 export function wordTokens(text: string): string[] {

@@ -1,10 +1,33 @@
 # STATUS: engine jobs and orchestration (W2)
 
-## Brief requests and write_script (contract v8, engine-contracts@8; branch worktree-agent-a16624873a0973b89)
+## Brief requests: analyze_reference, write_script and voice in production (round 2; contract v8 with an additive transcript.language)
 
-Built on this branch, not merged (the lead merges). Commits: 4b3ca24 and 65bb76b (the worker's in-process ffmpeg and Deepgram), 823cbf7
-(contract v8), 429faa0 (WIP checkpoint), then the work of this pass on top. Typecheck: `npx tsc --noEmit` exit 0. Engine tests: 3015 pass, 0
-fail (with src/lib/meridian/storage and scripts/migration-plan.test.mjs). Lint: exit 0 on the touched folders.
+Branch worktree-agent-a16624873a0973b89, not merged (the lead merges). Round 1 (876e6fa, 899aa33) and the Bible commit (ed53a70) are on main.
+Round 2 is one commit on top of ed53a70, which is an ancestor of main (main has moved on to 710b839; not merged here). Typecheck: `npx tsc --noEmit` exit 0. Engine tests:
+`src/engine/**/*.test.ts` and `src/lib/meridian/storage/*.test.ts`: 3026 pass, 0 fail. Lint (eslint on the touched folders): exit 0, no warnings.
+The full `npm test` is the lead's run. The plan/ and produce handlers are untouched (another agent's work).
+
+**Round 2 decisions, implemented (lead, 2026-10-17)**
+- Brief reference language: a brief has no language, so the Deepgram request asks for detection (`detect_language=true`, media/stt-deepgram.ts).
+  The detected language is stored in the DNA transcript as `transcript.language` (contract v8, additive optional field, not version-bumped:
+  eng-contracts to bump and note Bible section 4). The scriptwriter (`scriptwriter@2`) gets `referenceLanguage` (null when unknown) and writes
+  in the brief's stated language, else the detected one, and names the language in its answer. A detection the vendor did not return is
+  refused (invalidAnswer), never guessed. Not verified live.
+- Speech format: the engine's media store and link route accept `audio/mpeg` (stored and linked as `mp3`, lib/meridian/storage/
+  engine-asset-media.ts, engine-media-link.ts, jobs/artifact-store.ts). The speech adapter keeps requesting MP3.
+- Speech bill: a speech call's bill is read once, after the answer is stored, from `GET https://openrouter.ai/api/v1/generation?id=<generation
+  id>` through the gateway (`readGenerationBill`, assets/providers/openrouterSpeech.ts): `data.total_cost` in USD. A miss (an error, no
+  generation id, no total_cost, or stats not yet there) leaves the submit unsettled. Not verified live. The lead's premise (chat completions
+  with `stream: true`) is not what the adapter sends: the adapter keeps `POST /audio/speech` (the repo's PROVIDER_APIS.md), and the bill is
+  read from the generation id in its header. The owner's live run decides whether that premise holds.
+- COPY_RUN_WORDS = 6 (analyze/copy.ts, a named constant). Applies to the reference copy check, the genome, and the scriptwriter's answer
+  contract (copied runs of six words or more in order are refused).
+
+**What changed in round 2**
+- `production-stages.ts`: `SPEECH_OUTPUT_BLOCKERS` is removed. The voice port sends through the asset router's speech route (with the job's
+  reservation); with no router built for the job (no shot ports) it reports NOT_CONNECTED and sends nothing.
+- `analyze/reference.ts`: a brief no longer stops before the call. `referenceSpeechLanguageOf` is the script's language or null for a brief;
+  the stage passes null to speech-to-text, which detects it.
 
 **What changed**
 - `registry.ts`: a 15th stage, `write_script`, after analyze_reference and before voice (group 2, claude lease, paid, no gate). Voice reads
@@ -23,8 +46,8 @@ fail (with src/lib/meridian/storage and scripts/migration-plan.test.mjs). Lint: 
   script through it: edit, plan (build.ts takes `script`), pre-render gate (`checkPreRender` takes `script`), variants (expand, work, writer,
   speak, the assembly), voice (`VoiceRun.script`), intake and the request gate (no beat checks for a brief; visual requests refused).
 - Intake for a brief: speech length estimated from the brief's words (one beat at the voice's words per minute, labelled in the check's
-  detail); the format minimum is not an intake check (write_script computes it). Reference analysis: `referenceSpeechLanguageOf` (a brief has
-  none, so analyze stops with NOT_CONNECTED before any call unless a `speechLanguage` port gives one).
+  detail); the format minimum is not an intake check (write_script computes it). Reference analysis: `referenceSpeechLanguageOf` is the script's
+  language, or null for a brief, which the speech-to-text request turns into detection (round 2).
 - `production-stages.ts` (new): the production ports. The reference is read from Meridian's store under the request's brand (store://
   keys, as bytes for the media functions) and released when the analysis ends (`lib/meridian/storage/engine-reference-store.ts`, Drive
   delete of the index's file id, then the index row). Analysis and voice ports are per reservation (`ReferencePortsFor`, `VoicePortsFor`),
@@ -38,49 +61,72 @@ fail (with src/lib/meridian/storage and scripts/migration-plan.test.mjs). Lint: 
 - analyze_reference, script request: reads the store:// reference as bytes, probes, cuts, frames, timeline, speech-to-text (Deepgram, the stt
   route), the segmenter, the genome and the frame reader (Claude through the gateway, on the reservation), then releases the reference. Live
   behaviour is not verified: no key is held here.
-- analyze_reference, brief: stops before any call with NOT_CONNECTED (speech language not known). Open decision (see below).
+- analyze_reference, brief: the same stages as a script request. Speech-to-text asks Deepgram to detect the language (`detect_language=true`);
+  the detected language is stored in the DNA transcript. A detection the vendor did not return is refused, never guessed. Not verified live.
 - write_script, brief: the scriptwriter (Opus) through the gateway, on the reservation, then the checks above. A refused answer is retried once,
   and a second refusal fails the stage with the failing paths. Meridian's queue retries the job; the role journal reuses the stored answers,
   so a retry does not pay for the same answer twice (claude/client.ts resume rules).
-- voice: refuses before any call with NOT_CONNECTED and the two blockers in `SPEECH_OUTPUT_BLOCKERS` (production-stages.ts): speech is MP3,
-  which the engine's asset store does not hold, and a speech call has no bill source, so it stays unsettled. Voice does not speak in
-  production until the owner decides both.
+- voice (brief and script requests): speaks through the asset router's speech route on the job's reservation. The speech is MP3 (stored as
+  `mp3`, audio/mpeg). The bill is read once from the generation stats after the answer is stored (`readGenerationBill`); a miss leaves the
+  submit unsettled, and the stage does not book a list price. With no router built for the job (no shot ports) it reports NOT_CONNECTED and
+  sends nothing. **Blocker for live speech:** `config/routes.ts` has no speech model id (`tts` is `openrouter(null, ...)`), so the router
+  reports the route not connected and the stage stops with NOT_CONNECTED naming `tts`, sending nothing. Setting the id is an eng-contracts
+  change and an owner choice; no id is guessed. Not verified live: the speech call, the stats endpoint and its lag, the MP3 storage path.
+- Variants: unchanged this round. The variants' voice stays NOT_CONNECTED (VOICE_NOT_WIRED in production-ports.ts).
 
 **Tests (all fixture-based, no live call)**
 - `script/resolve.test.ts` (10): script and brief paths, the refusal of a script given a written script, a brief with none, another request's
   script, the artifact reader's refusals.
-- `claude/roles/scriptwriter.test.ts` (11): the role's metadata, the sent message (no transcript words, no attachment uri), the four recorded
-  answers (ok, copies, unknown label, long), each contract refusal by path, the client on recorded calls (one retry, then RoleAnswerError).
+- `claude/roles/scriptwriter.test.ts` (12): the role's metadata (scriptwriter@2), the sent message (the reference language, no transcript words,
+  no attachment uri), the four recorded answers (ok, copies, unknown label, long), each contract refusal by path, the client on recorded
+  calls (one retry, then RoleAnswerError).
 - `jobs/handlers/write-script.test.ts` (7, PGlite): accepted, copied twice (nothing stored), over maxMs (nothing stored), script request
   refused, no words per minute, budget below the minimum, no reservation.
 - `jobs/orchestrator-brief.test.ts` (8): script and brief routing, the script slot in voice and plan inputs, a dead write_script.
 - `jobs/handlers/intake-brief.test.ts` (6): the brief's intake decision.
-- `jobs/production-stages.test.ts` (7, PGlite): the reference read and release, the not-connected reference, a brief stopping before any call,
-  the voice guard sending nothing, the three registrations.
+- `jobs/production-stages.test.ts` (8, PGlite): the reference read and release, the not-connected reference, a brief's language (no language
+  named, so the vendor detects it; a script's is its own), the voice port passing through the router, the voice port with no router
+  (NOT_CONNECTED, nothing sent), the two registrations (the stages and the runtime).
+- `analyze/brief-reference.test.ts` (2): a brief's DNA carries the detected language ("en", recorded STT answer); its script keeps it.
+- `jobs/handlers/voice-brief.test.ts` (2, PGlite): the real voice handler on a brief with a written script, a fake router's done asset, a
+  recorded STT double; the track's words and beat spans; no script is refused.
+- `media/stt-deepgram.test.ts` (34): includes the detection request (no language parameter, detect_language=true) and a detection the
+  vendor did not return (refused).
+- `assets/providers/openrouterSpeech.test.ts` (12): includes the bill read (recorded generation stats with and without total_cost; a miss
+  leaves the submit unsettled).
+- `analyze/copy.test.ts` (6): COPY_RUN_WORDS = 6 (three words in a row are not a copy); an explicit run size of three still flags three words.
 - `jobs/brief-pipeline.test.ts` (2, PGlite): analyze, write_script, voice and plan on fixtures, the orchestrator queuing each stage on the
   artifacts the previous one wrote. Two fixtures are stated in the file: the voice track (the written script's words on the fixture's spans),
   and the plan's DNA (the fixture's, because the recorded planner answer names the fixture's reference segments; a plan on the analysed DNA
   needs an answer recorded on it, which the live run gives).
 - `jobs/migration-0100.test.ts` (5, PGlite): the two checks and the two new artifact types.
-- Updated: `registry.test.ts` (15 stages), `prompts/load.test.ts` (scriptwriter@1 pinned), and the brief fixtures in the tests that read the
-  script through the resolver (plan, review, variants, voice).
+- Updated: `registry.test.ts` (15 stages), `prompts/load.test.ts` (scriptwriter@1 and @2 pinned), and the brief fixtures in the tests that read
+  the script through the resolver (plan, review, variants, voice).
 
 **Not verified live (the owner's run)**
 1. Every Claude call (segmenter, genome, frame_reader, scriptwriter, planner, director) on OpenRouter, with the recorded answers replaced by
    live answers. The fixtures are authored in the recorded shape (claude/test/fixtures/README.md).
 2. The reference store: a store:// upload read from Drive and released (Drive delete and the index row). The key format of the Content
    Factory's upload is not in this branch (main 7edb203 has the Factory page; not merged here).
-3. Speech-to-text on the reference (Deepgram, nova-3) for a script request, with its bill.
+3. Speech-to-text on the reference (Deepgram, nova-3) for a brief and a script request, with its bill. The detection (`detect_language=true`)
+   is the first live question: Deepgram's answer must carry `detected_language` (media/stt-deepgram.ts names the field; not captured).
 4. The media functions on the reference (in-process ffmpeg under MEDIA_FUNCTIONS_MODE=in_process, or the HTTP form).
+5. The speech model id for the `tts` route (config/routes.ts, eng-contracts; blocks speech in production), and the speech call itself:
+   `POST /audio/speech` (the adapter), its generation id header, and the generation stats read
+   (`GET /api/v1/generation?id=`, `data.total_cost`). The stats can lag the answer: a miss leaves the submit unsettled and is not retried
+   later. The lead's premise (chat completions with `stream: true`) is not what the adapter sends; the owner's live run decides.
+6. The MP3 storage path: an upload of `audio/mpeg` to the engine's media store and its signed link (engine-media-link.ts).
 
 **Decisions for the lead (the owner's where marked)**
-1. A brief's reference speech language (owner). Options: a language on the brief (a contract change), speech-to-text detection (a media
-   change: detect_language is off in the Deepgram adapter), or the page's language. Until one is chosen, a brief stops at analyze_reference.
-2. Speech output format (owner). The speech adapter asks for MP3 and the engine stores png, mp4 and wav (lib/meridian/storage/engine-asset-media.ts,
-   and the link route). Storing MP3 is a storage change; a WAV output is a provider change. Until decided, voice refuses before any call.
-3. Speech billing (owner). A speech call has no bill source (openrouterSpeech.ts, contract v6), so it stays unsettled after the call.
-4. COPY_RUN_WORDS = 3 applies to scripts too (analyze/copy.ts, a named constant, not in config). Three words in a row may refuse ordinary
-   phrases ("this is the"). A separate script constant (5?) is the lead's call; the test fixtures are written to pass the current value.
+1. A brief's reference speech language: decided in round 2 (lead, 2026-10-17): speech-to-text detection, stored in the DNA transcript
+   (`transcript.language`, optional and additive; contract v8 was not bumped for it; eng-contracts to bump and note Bible section 4). The
+   scriptwriter names the language in its answer.
+2. Speech output format: decided in round 2 (lead, 2026-10-17): the engine's media store and link route accept `audio/mpeg`, stored as `mp3`;
+   the adapter keeps requesting MP3. No WAV provider change.
+3. Speech billing: decided in round 2 (lead, 2026-10-17): read once from the generation stats (`data.total_cost`, USD); a miss leaves the
+   submit unsettled. Not verified live.
+4. COPY_RUN_WORDS = 6 (lead, 2026-10-17; analyze/copy.ts, a named constant). It applies to the reference copy check, the genome and the
+   scriptwriter's answer contract. Round 1 had 3; the scriptwriter@2 prompt and its fixtures say six.
 5. The Bible needs: section 3 (15 stages: write_script), a write_script section (6.x), a scriptwriter row in 11.1 with its prompt, and the
    10.5 "director role" = model_chooser (contract v8 open point 1). Not edited here (Bible owned by the lead).
 6. Not built: model_chooser (another agent), the variants of a brief (the script slot is wired and the variant jobs read it; no test of a brief
@@ -162,9 +208,9 @@ store) and `src/lib/meridian/storage/engine-media-functions.ts` (the media funct
 - **Video models the listing does not name.** The `video.budget` model is absent from the recorded listing, so its shots are
   refused with "does not name" until the live listing names it. `video.i2v_pinned` has no model in `routes.ts` (the first-and-last-frame
   test chooses one), so its shots are refused with "no OpenRouter model routed".
-- **Speech.** The asset store refuses audio/mpeg (the speech adapter's mp3), because the engine's object keys carry only png, mp4 and wav.
-  No production path requests speech through the shot ports (the voice stage is not registered in production). A jpeg or webp image is
-  refused the same way; the image adapter asks for png.
+- **Speech.** Earlier note, superseded in round 2: the asset store now stores audio/mpeg as `mp3` (lead decision 2026-10-17), and the voice
+  stage is registered in production (its speech still needs the `tts` model id, see "Round 2" above). A jpeg or webp image is refused the
+  same way; the image adapter asks for png.
 - **check_take's measurements.** The similarity scorer and the detectors are not wired in production, so their checks are missing evidence
   and the take escalates (Bible 12). They are not NOT_CONNECTED errors.
 - **Not in this pass:** avatar, lip-sync, image.edit (model null in `routes.ts`), stock (the Pexels and Pixabay keys) and the rest of the

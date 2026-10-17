@@ -13,11 +13,14 @@ composition root, never by importing them into a stage.
 
 - `engineAssetMediaFor({ objects, brandOf }, { organizationId, requestId })`: the asset router's image store, bound to one request.
   It satisfies the engine's MediaStore shape structurally (src/engine/assets/adapter.ts), so the engine never imports this file.
-- Keys: `engine/{organizationId}/{requestId}/assets/{sha256 hex}.{png|mp4|wav}`, the engine's key rule. `isEngineMediaKey` (engine-media-link.ts)
-  accepts them, so the signer links them for the organization only, and the route reads the brand from the request.
+- Keys: `engine/{organizationId}/{requestId}/assets/{sha256 hex}.{png|mp4|wav|mp3}`, the engine's key rule. `isEngineMediaKey`
+  (engine-media-link.ts) accepts them, so the signer links them for the organization only, and the route reads the brand from the request.
+- Round 2 (lead decision, 2026-10-17): the speech output, `audio/mpeg`, is stored as `mp3` (EXTENSION_BY_MEDIA_TYPE). The link route's key
+  pattern and its MIME map (`mp3` to `audio/mpeg`) carry it too. A key whose stored type is not its extension's type is not served (a test).
+  Not verified live: the Drive upload and the signed link of an mp3 object.
 - Refused before the object store is touched: a write for another workspace, a content hash that does not match the bytes, an empty file,
-  a media type other than image/png, video/mp4 or audio/wav (speech's audio/mpeg has no engine extension), a request with no brand (the
-  `brandOf` lookup throws), and a read of a key outside the workspace.
+  a media type other than image/png, video/mp4, audio/wav or audio/mpeg (for example image/gif), a request with no brand (the `brandOf`
+  lookup throws), and a read of a key outside the workspace.
 - No S3 and no vendor SDK. The bytes go to the object store passed in (Meridian's Drive-backed `engineObjectStore` in production).
 
 ## engine-media-functions.ts (new)

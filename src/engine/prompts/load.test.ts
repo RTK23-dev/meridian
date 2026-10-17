@@ -11,6 +11,7 @@ const PINNED = {
   "variant_writer@2": "sha256:8a61f29242ff6f546ee1d8e078a818536a70f292fe4cd167ea8bf550ee2421f0",
   "scriptwriter@1": "sha256:e97b4e3426bc77af9e7221e8916c6c45267779d5ab3ab230a82bcd03502d867a",
   "model_chooser@1": "sha256:8e1b9bd1c4cffa8d532bae1053aa5d0f985415b9dbc6317f92e195fec84a3eb4",
+  "scriptwriter@2": "sha256:ba5d1406721ea0a7d1d42d8bbde7734759c16c500b2a52acba80baea7f8c6710",
 } as const;
 
 describe("prompt loading", () => {

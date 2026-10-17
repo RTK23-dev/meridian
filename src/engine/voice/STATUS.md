@@ -2,8 +2,11 @@
 
 **Brief requests (contract v8, this branch).** `VoiceRun` takes `script` (the resolved words, `script/resolve.ts`) next to `request`: the
 request's maxMs and voice page are still read from the request, and the beats and language from the script. The handler reads the written
-script of a brief through its inputs. Production's voice ports are per reservation (`VoicePortsFor`, `jobs/production-stages.ts`) and refuse
-before any call while `SPEECH_OUTPUT_BLOCKERS` lists a reason (MP3 storage, unsettled speech billing; see `../jobs/STATUS.md`, decisions 2 and 3).
+script of a brief through its inputs. Production's voice ports are per reservation (`VoicePortsFor`, `jobs/production-stages.ts`). Round 2
+(lead, 2026-10-17) removed the blockers: the speech sends through the job's asset router (NOT_CONNECTED, nothing sent, when no router is
+built), the MP3 is stored as `mp3`, and the speech bill is read once from the generation stats (a miss leaves the submit unsettled). See
+`../jobs/STATUS.md`, "Round 2". Not verified live. Live speech also needs a model id on the `tts` route (`config/routes.ts` is null, an
+eng-contracts change): until then the stage is NOT_CONNECTED with a reason that names `tts`.
 
 Phase E3, branch `eng-e3-analyze-voice`, cut from `code/beautiful-cori-1zfk11` (aa3bcf8). Covers Bible 6.3 (steps 1 to 5) and
 the tightener of 11.1. `README.md` lists the files.

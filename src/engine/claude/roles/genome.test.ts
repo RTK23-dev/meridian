@@ -37,6 +37,9 @@ const transcript = [
   { wordId: "w1", text: "Watch", startMs: 100, endMs: 400, confidence: 0.97 },
   { wordId: "w2", text: "this", startMs: 450, endMs: 700, confidence: 0.98 },
   { wordId: "w3", text: "blender", startMs: 720, endMs: 1200, confidence: 0.96 },
+  { wordId: "w4", text: "crush", startMs: 1250, endMs: 1500, confidence: 0.96 },
+  { wordId: "w5", text: "ice", startMs: 1520, endMs: 1800, confidence: 0.95 },
+  { wordId: "w6", text: "fast", startMs: 1820, endMs: 2100, confidence: 0.95 },
 ];
 
 function input(): GenomeInput {

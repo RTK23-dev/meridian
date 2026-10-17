@@ -27,7 +27,11 @@ The `analysis` (`ReferencePorts`) and `voice` (`VoiceStagePorts`) ports are stil
 - **Reconciliation job: out of scope.** A call whose bill lags or cannot be read stays held. Delivery refuses while any paid call is unsettled (contract v6), so a held call blocks delivery until someone settles it from the invoice. A job that re-reads held Deepgram bills is needed before delivery depends on this vendor.
 - **429 keeps its hold** (the lead's decision). The router settles a rate limit as confirmed absent and retries it under a new key. The wrapper has no retry, so settling it here would stop the same input from being sent again.
 - Raw bytes are sent as `application/octet-stream`, which is what the reference shows. The brief expected the media's own type.
-- `language=<primary tag>` is added to the brief's URL. Without it Deepgram transcribes English whatever the request names.
+- `language=<primary tag>` is added to the brief's URL when the request names a language. Without it Deepgram transcribes English whatever
+  the request names. Round 2 (lead, 2026-10-17): a request with no language (a brief's reference) sends `detect_language=true` instead, and
+  the answer's channel `detected_language` is the transcript's language (`SttResult.language`). A detection the vendor does not return is
+  refused (invalidAnswer), never guessed. UNVERIFIED LIVE: the field's name and its presence in nova-3 answers are from the documented shape
+  (the fixture `listenAnswer({ detectedLanguage })` is synthetic). The owner's live run must record one detecting call.
 - A bill is rounded to four decimals, the ledger's precision. A 2.6 s clip bills 0.000186 and settles at 0.0002.
 - An answer the validation refuses (out-of-order words, too long, no usable shape) keeps its hold. The vendor processed the audio and may have billed it.
 - The fixtures in `src/engine/media/test/deepgram-fixtures.ts` are SYNTHETIC. They are written to the documented shape and are not captured.
@@ -40,7 +44,7 @@ The `analysis` (`ReferencePorts`) and `voice` (`VoiceStagePorts`) ports are stil
 2. Check that the key's account lists exactly one project at `GET /v1/projects` (`projects[].project_id`). Bills settle only with one project.
 3. Transcribe one real 30 s reference audio by URL, then the same audio as bytes. Check the words against the audio, the `request_id`, and the bill from `GET /v1/projects/{project}/requests/{request}` (`request.response.details.usd`). Record the artifacts and the ledger lines.
 4. Send the same input again. The ledger must refuse it without a call. Record one bad-key call (401) to check that it settles as confirmed absent.
-5. Confirm the nova-3 list price on Deepgram's own page, the `language=en` query, the bill path and the raw-bytes content type. Then set `verified` on the route and the price source, or correct them.
+5. Confirm the nova-3 list price on Deepgram's own page, the `language=en` query, the `detect_language=true` query and its `detected_language` field (a brief's reference), the bill path and the raw-bytes content type. Then set `verified` on the route and the price source, or correct them.
 6. The compose file sets `MEDIA_FUNCTIONS_MODE=in_process` on the worker. Run one probe and one frames call through the worker on a real reference. Record the ids and the temporary-directory check.
 
 ### Verification on this branch

@@ -10,8 +10,15 @@ recorded answer `test/fixtures/openrouter-model-chooser-ok.json` (authored, not 
 input carries the brief, its sources, the attachments' types and notes, the reference's structure (genome, genes, segments with durations),
 the constraints and the approved claims. The reference's transcript is an input of the answer check only and is never sent (the test
 asserts that). The answer contract refuses copied runs (COPY_RUN_WORDS = 3, a named constant, see `../../jobs/STATUS.md` decision 4), a
+**scriptwriter (contract v8, round 2 on this branch).** `scriptwriter.ts`: Opus (llm.direction), stage write_script, prompt
+`scriptwriter@2.md` (`@1` is kept and pinned). Its input carries the brief, its sources, the attachments' types and notes, the reference's
+structure (genome, genes, segments with durations), the constraints, the approved claims and `referenceLanguage` (the DNA transcript's
+detected language, null when unknown). The writer's language rule: the brief's stated language, else `referenceLanguage`, else the language
+of the brief's own text.
+The answer names its language. The reference's transcript is an input of the answer check only and is never sent (the test asserts that).
+The answer contract refuses copied runs (COPY_RUN_WORDS = 6, a named constant, lead decision 2026-10-17, see `../../jobs/STATUS.md`), a
 script over maxMs, a forbidden term, an emphasis word outside its beat, an unknown source label and a bad language tag. Tests:
-`scriptwriter.test.ts` (11) on the recorded answers in `../test/fixtures/openrouter-scriptwriter-*.json`. The live run is the owner's.
+`scriptwriter.test.ts` (12) on the recorded answers in `../test/fixtures/openrouter-scriptwriter-*.json`. The live run is the owner's.
 `model_chooser` (contract v8) is not built here: another agent builds its call.
 
 Branch `eng-e5-variants`, then this worktree (`agent-a88fc87eb7108bf53`). Covers `variant_writer.ts` and its test in this folder, and the

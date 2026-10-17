@@ -87,10 +87,20 @@ test("bytes that do not match their content hash, an empty file and a type the e
   const objects = fakeObjects();
   const store = storeFor(objects);
   await assert.rejects(store.put({ workspaceId: ORG, bytes: PNG, mediaType: "image/png", contentHash: `sha256:${"0".repeat(64)}` }), /content hash/);
-  await assert.rejects(store.put({ workspaceId: ORG, bytes: PNG, mediaType: "audio/mpeg", contentHash: hashOf(PNG) }), /audio\/mpeg/);
+  await assert.rejects(store.put({ workspaceId: ORG, bytes: PNG, mediaType: "image/gif", contentHash: hashOf(PNG) }), /image\/gif/);
   const empty = new Uint8Array(0);
   await assert.rejects(store.put({ workspaceId: ORG, bytes: empty, mediaType: "image/png", contentHash: hashOf(empty) }), /empty/);
   assert.equal(objects.stored.size, 0);
+});
+
+test("the speech output (audio/mpeg) is stored under an .mp3 key of its request, with its own mime type", async () => {
+  const objects = fakeObjects();
+  const store = storeFor(objects);
+  const mp3 = new Uint8Array([0x49, 0x44, 0x33, 1, 2, 3]);
+  const { uri } = await store.put({ workspaceId: ORG, bytes: mp3, mediaType: "audio/mpeg", contentHash: hashOf(mp3) });
+  assert.match(uri, /^engine\/[^/]+\/[^/]+\/assets\/[0-9a-f]{64}\.mp3$/);
+  const read = await store.read({ workspaceId: ORG, uri });
+  assert.equal(read?.mediaType, "audio/mpeg");
 });
 
 test("a request with no brand stores nothing: the brand lookup refuses first", async () => {

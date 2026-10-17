@@ -1,5 +1,19 @@
 # Asset router and adapters (W5): E3 asynchronous submit and settle
 
+## Speech bill from the generation stats (round 2, lead decision 2026-10-17; branch worktree-agent-a16624873a0973b89)
+
+- `providers/openrouterSpeech.ts`: the speech call is still `POST /audio/speech` (the repo's PROVIDER_APIS.md and the adapter's recorded
+  shape). Its answer header carries the generation id. The bill is read ONCE, after the answer is stored, with `readGenerationBill`:
+  `GET https://openrouter.ai/api/v1/generation?id=<generation id>` through the gateway, `data.total_cost` in USD.
+- A miss (a failed read, no generation id, no `total_cost`, or stats not yet there) leaves the submit unsettled (contract v6). No list price
+  is booked as the cost. The poll answers `done` with `actualUsd` only when the bill was read; the router settles from it.
+- A memory of the read per job (`bills`) means a second poll does not read the stats again. The read is not retried in the adapter.
+- Fixtures: `test/fixtures/openrouter-generation-stats.json` (a total_cost) and `openrouter-generation-stats-no-cost.json` (none). Synthetic
+  in the documented shape. UNVERIFIED LIVE: the endpoint, its field, and how long the stats take to appear after the answer. The lead's
+  premise (chat completions with `stream: true`) is not what the adapter sends; the owner's live run decides.
+- MP3: the speech output is stored as `mp3` (lib/meridian/storage/engine-asset-media.ts), so the link route and the engine's media store
+  accept it. See `../../lib/meridian/storage/STATUS.md`.
+
 ## Orchestrator model choice in the router (Bible 10.5, contract v7; 2026-10-17)
 
 - `router.ts`: `RouterDeps.catalog?: ModelCatalogSource`. When `spec.modelChoice` is set, the router reads the (cached) catalog, checks

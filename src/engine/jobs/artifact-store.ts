@@ -65,6 +65,8 @@ const ENVELOPE_SCHEMA_NAMES: Partial<Record<ArtifactType, string>> = {
 export const MEDIA_MIME_TYPES = {
   mp4: "video/mp4",
   wav: "audio/wav",
+  // The speech output (openrouterSpeech.ts asks for mp3). Owner decision (lead, 2026-10-17): the engine stores it.
+  mp3: "audio/mpeg",
   png: "image/png",
 } as const;
 export type MediaExtension = keyof typeof MEDIA_MIME_TYPES;

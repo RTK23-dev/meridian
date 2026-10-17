@@ -135,6 +135,24 @@ test("the route serves a verified object for the organization its request belong
   assert.deepEqual(store.lookups, [`${ORG_A}/brand_a/${KEY_A}`]);
 });
 
+test("a speech object (.mp3, audio/mpeg) is linked and served under its own type; a mismatched type is not served", async () => {
+  const mp3Key = `engine/${ORG_A}/${REQ_A}/assets/${"ab".repeat(32)}.mp3`;
+  const mp3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0]);
+  const store = storeWith({
+    [`${ORG_A}/brand_a/${mp3Key}`]: { bytes: mp3, mimeType: "audio/mpeg" },
+  });
+  assert.equal(isEngineMediaKey(ORG_A, mp3Key), true, "an mp3 key of its request is an engine media key");
+  const url = await link({ organizationId: ORG_A, key: mp3Key });
+  const served = await serveEngineMedia({ request: new Request(url), getSql: async () => db.sql, objectStore: () => store, secret: SECRET, nowSeconds: () => NOW + 60 });
+  assert.equal(served.status, 200);
+  assert.equal(served.headers.get("content-type"), "audio/mpeg");
+  assert.deepEqual(new Uint8Array(await served.arrayBuffer()), mp3);
+
+  const wrongType = storeWith({ [`${ORG_A}/brand_a/${mp3Key}`]: { bytes: mp3, mimeType: "video/mp4" } });
+  const refused = await serveEngineMedia({ request: new Request(url), getSql: async () => db.sql, objectStore: () => wrongType, secret: SECRET, nowSeconds: () => NOW + 60 });
+  assert.equal(refused.status, 404, "an object whose stored type is not the key's type is not served");
+});
+
 test("the route refuses an expired link, a forged one, and reads nothing for either", async () => {
   const store = storeWith({ [`${ORG_A}/brand_a/${KEY_A}`]: { bytes: BYTES, mimeType: "video/mp4" } });
   const url = await link({ organizationId: ORG_A, key: KEY_A });

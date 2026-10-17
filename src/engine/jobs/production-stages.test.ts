@@ -5,16 +5,14 @@
 
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
-import { analyzeReference, type ReferenceRun, type ReferenceSource } from "../analyze/reference.ts";
-import type { SpeechToText } from "../media/stt.ts";
+import { referenceSpeechLanguageOf, type ReferenceSource } from "../analyze/reference.ts";
 import { productionRequestBriefFixture, productionRequestFixture } from "../contracts/fixtures/index.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { gatewayWith, recordedTransport } from "./test/harness.ts";
 import { productionComposition, productionEngineRuntime, type EngineComposition } from "./runtime.ts";
-import { productionReferenceSource, productionVoicePortsFor, SPEECH_OUTPUT_BLOCKERS, storeKeyOfReference } from "./production-stages.ts";
+import { productionReferenceSource, productionVoicePortsFor, storeKeyOfReference } from "./production-stages.ts";
 import { notConnectedReason } from "../media/stt-connection.ts";
 import { EngineError } from "../contracts/index.ts";
-import type { ReferencePorts } from "../analyze/reference.ts";
 import type { AssetRouter } from "../assets/router.ts";
 
 const ORG = "ws_production_stages";
@@ -86,34 +84,16 @@ test("an ig: or s3: reference is not connected: nothing is read, and the reason 
   assert.equal(storeKeyOfReference("s3://bucket/key.mp4"), null);
 });
 
-test("a brief's reference stops before any call: the speech language is not known, and nothing is measured", async () => {
-  const { store } = recordingStore("uploads/reel-1.mp4");
-  let sttCalls = 0;
-  const stt = { transcribe: async () => { sttCalls += 1; return null; } } as unknown as SpeechToText;
-  const ports = {
-    speech: { status: "ready", stt },
-    sttPricePerMinuteUsd: 0.0043,
-    source: productionReferenceSource({ sql: db.sql, store }),
-  } as unknown as ReferencePorts;
-  const run: ReferenceRun = {
-    organizationId: ORG,
-    requestId: BRIEF_REQ,
-    reservationId: "res_production_stages",
-    attempt: 1,
-    subjectId: BRIEF_REQ,
-    request: productionRequestBriefFixture,
-  };
-  const outcome = await analyzeReference(run, ports);
-  assert.equal(outcome.status, "not_connected");
-  assert.match(outcome.status === "not_connected" ? outcome.reason : "", /speech language is not known: a brief request has no language/);
-  assert.equal(sttCalls, 0, "speech-to-text is not asked without a language");
+test("a brief's reference is transcribed with the vendor's language detection (no language is named); a script's is its own language", () => {
+  assert.equal(referenceSpeechLanguageOf(productionRequestBriefFixture), null, "a brief names no language: the vendor detects it");
+  assert.equal(referenceSpeechLanguageOf(productionRequestFixture), productionRequestFixture.script?.language, "a script names its language");
 });
 
-test("the voice port refuses before the speech route is called, with each blocker named (SPEECH_OUTPUT_BLOCKERS)", async () => {
-  assert.ok(SPEECH_OUTPUT_BLOCKERS.length > 0, "production voice is blocked by the owner's open decisions");
-  const { requests } = recordedTransport({});
-  const router = { produce: async () => assert.fail("the router is not called while speech is blocked") } as unknown as AssetRouter;
+test("the voice port sends the speech through the job's asset router, and returns the router's report as it is", async () => {
   const { store } = recordingStore("x");
+  const calls: unknown[] = [];
+  const report = { outcome: { status: "unavailable" as const, reasons: ["the test router answered"] }, decisions: [], alerts: [], attempts: [] };
+  const router = { produce: async (input: unknown) => (calls.push(input), report) } as unknown as AssetRouter;
   const voice = productionVoicePortsFor({
     sql: db.sql,
     objects: store as never,
@@ -123,9 +103,25 @@ test("the voice port refuses before the speech route is called, with each blocke
     router: () => router,
   });
   const ports = voice({ organizationId: ORG, requestId: REQ, reservationId: "res_production_stages" });
+  assert.equal(await ports.router.produce({ spec: "the spec" } as never), report);
+  assert.equal(calls.length, 1, "the router is called once");
+});
+
+test("with no asset router built for the job, the speech is not sent: NOT_CONNECTED with its reason", async () => {
+  const { store } = recordingStore("x");
+  const { requests } = recordedTransport({});
+  const voice = productionVoicePortsFor({
+    sql: db.sql,
+    objects: store as never,
+    media: {} as never,
+    speech: { connection: { status: "not_connected", reason: notConnectedReason("test") }, sttPricePerMinuteUsd: null },
+    roles: () => ({}) as never,
+    router: () => null,
+  });
+  const ports = voice({ organizationId: ORG, requestId: REQ, reservationId: "res_production_stages" });
   const report = await ports.router.produce({} as never);
   assert.equal(report.outcome.status, "not_connected");
-  assert.deepEqual(report.outcome.status === "not_connected" ? report.outcome.reasons : [], [...SPEECH_OUTPUT_BLOCKERS]);
+  assert.match(report.outcome.status === "not_connected" ? report.outcome.reasons.join(" ") : "", /asset router is not built/);
   assert.equal(requests.length, 0, "no speech call is sent");
 });
 

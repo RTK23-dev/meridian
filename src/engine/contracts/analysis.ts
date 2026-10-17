@@ -103,7 +103,9 @@ export const videoDnaSchema = z.object({
   formatId: z.string().min(1),
   sourceRef: z.string().min(1),
   durationMs: positiveMsSchema,
-  transcript: z.object({ words: z.array(wordSchema) }),
+  // `language` is the reference's speech language: the one the transcript was made in (lead decision 2026-10-17). It is the detected language
+  // when the reference was analysed with detection (a brief), else the script's language. Optional, so an earlier DNA parses unchanged.
+  transcript: z.object({ words: z.array(wordSchema), language: z.string().min(1).max(16).optional() }),
   segments: z.array(dnaSegmentSchema),
   genome: z.partialRecord(geneIdSchema, z.string().min(1)),
   editGrammar: editGrammarSchema,

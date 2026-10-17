@@ -41,6 +41,7 @@ function writerInput(overrides: Partial<ScriptwriterInput["constraints"]> = {}):
     constraints: { maxMs: 30000, wordsPerMinute: 150, ...overrides },
     claims: ["Makes four smoothies in under two minutes"],
     forbidden: ["cures"],
+    referenceLanguage: "en",
   });
 }
 
@@ -56,14 +57,25 @@ function answerIssues(input: ScriptwriterInput, answer: unknown): string[] {
 }
 
 describe("the scriptwriter role (contract v8, Bible 6.x write_script, 11.1)", () => {
-  it("is a direction call on scriptwriter@1, Opus, with a bounded answer and a priced estimate", () => {
+  it("is a direction call on scriptwriter@2, Opus, with a bounded answer and a priced estimate", () => {
     assert.equal(scriptwriter.role, "scriptwriter");
     assert.equal(scriptwriter.capability, "llm.direction");
     assert.equal(scriptwriter.stage, "write_script");
-    assert.deepEqual(scriptwriter.prompt, { role: "scriptwriter", version: 1 });
+    assert.deepEqual(scriptwriter.prompt, { role: "scriptwriter", version: 2 });
     assert.equal(scriptwriter.maxOutputTokens, 2000);
     assert.ok(estimateClaudeUsd("anthropic/claude-opus-5.5", scriptwriter.estimateTokens) > 0);
-    assert.equal(loadPrompt(scriptwriter.prompt).id, "scriptwriter@1");
+    assert.equal(loadPrompt(scriptwriter.prompt).id, "scriptwriter@2");
+  });
+
+  it("the sent message names the reference's language, so the writer can choose the script's language", () => {
+    const content = scriptwriterUserContent(writerInput())
+      .map((part) => (typeof part === "string" ? part : part.type === "text" ? part.text : ""))
+      .join("\n");
+    assert.match(content, /"referenceLanguage":"en"/);
+    const unknown = scriptwriterUserContent({ ...writerInput(), referenceLanguage: null })
+      .map((part) => (typeof part === "string" ? part : part.type === "text" ? part.text : ""))
+      .join("\n");
+    assert.match(unknown, /"referenceLanguage":null/, "an unknown reference language is sent as null, not guessed");
   });
 
   it("the sent message carries the brief, the structure and the constraints, never the reference's words or an attachment's uri", () => {
@@ -88,10 +100,10 @@ describe("the scriptwriter role (contract v8, Bible 6.x write_script, 11.1)", ()
     assert.equal(parsed.beats[0]?.role, "hook");
   });
 
-  it("refuses a beat that repeats three words of the reference in order, at the beat's text", () => {
+  it("refuses a beat that repeats six words of the reference in order, at the beat's text", () => {
     const issues = answerIssues(writerInput(), answerOf("openrouter-scriptwriter-copies"));
     assert.ok(
-      issues.some((issue) => issue.startsWith("beats.2.text:") && /repeats 3 or more words of the reference/.test(issue)),
+      issues.some((issue) => issue.startsWith("beats.2.text:") && /repeats 6 or more words of the reference/.test(issue)),
       issues.join(" | "),
     );
   });
@@ -150,7 +162,7 @@ describe("the scriptwriter role (contract v8, Bible 6.x write_script, 11.1)", ()
     assert.equal(outcome.status, "done");
     assert.equal(outcome.calls.length, 2, "the first answer failed its contract, so the retry is the second call");
     assert.equal(requests.length, 2);
-    assert.match(textOf(sentMessages(requests[1]?.body).at(-1)?.content), /beats\.2\.text|repeats 3 or more words/);
+    assert.match(textOf(sentMessages(requests[1]?.body).at(-1)?.content), /beats\.2\.text|repeats 6 or more words/);
   });
 
   it("a script refused twice is a RoleAnswerError: the stage fails with the checks, and no script is returned", async () => {

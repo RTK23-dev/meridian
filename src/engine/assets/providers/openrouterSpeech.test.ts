@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import { EngineError } from "../../contracts/errors.ts";
 import { ProviderCallError } from "../classify.ts";
@@ -8,6 +11,10 @@ import { openRouterSpeechAdapter, SPEECH_SPEED_RANGE } from "./openrouterSpeech.
 import { routes } from "../../config/routes.ts";
 
 const PATH = "POST /api/v1/audio/speech";
+const STATS = "GET /api/v1/generation";
+const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), "..", "test", "fixtures");
+const statsWithCost = JSON.parse(readFileSync(join(FIXTURES, "openrouter-generation-stats.json"), "utf8")) as unknown;
+const statsWithoutCost = JSON.parse(readFileSync(join(FIXTURES, "openrouter-generation-stats-no-cost.json"), "utf8")) as unknown;
 
 function setup(replies: Parameters<typeof scripted>[0], voice: string | null = "voice_warm_01", model: string | null = "test/eleven-v4", speed?: number) {
   const script = scripted(replies);
@@ -24,6 +31,7 @@ describe("OpenRouter speech", () => {
   it("sends the voice and text as MP3, stores the bytes, and keeps the generation id", async () => {
     const { adapter, script, media } = setup({
       [PATH]: raw(200, mp3Bytes(), { "content-type": "audio/mpeg", "x-generation-id": "gen-speech-1" }),
+      [STATS]: json(200, statsWithoutCost),
     });
     const spec = assetSpec({ modelClass: "tts", prompt: "Two scoops, one sentence.", durationMs: 1000 });
     const { jobRef } = await adapter.submit(spec, "sha256:tts");
@@ -31,7 +39,7 @@ describe("OpenRouter speech", () => {
 
     assert.equal(poll.state, "done");
     assert.match(poll.uri ?? "", /^memory:\/\/org_1\//);
-    assert.equal(poll.actualUsd, undefined, "no bill in the answer: the router holds the list estimate");
+    assert.equal(poll.actualUsd, undefined, "the stats name no cost: the submit stays unsettled");
     assert.equal([...media.objects.values()][0]?.mediaType, "audio/mpeg");
     assert.deepEqual(adapter.detailsFor(jobRef), { mediaType: "audio/mpeg", generationId: "gen-speech-1" });
 
@@ -72,6 +80,52 @@ describe("OpenRouter speech", () => {
       assert.equal(error.providerError.kind, "rate_limit");
       return true;
     });
+  });
+});
+
+describe("OpenRouter speech bill (the generation stats, read once after the answer)", () => {
+  it("settles a finished take to the stats' total_cost in USD, and reads the stats once", async () => {
+    const { adapter, script } = setup({
+      [PATH]: raw(200, mp3Bytes(), { "content-type": "audio/mpeg", "x-generation-id": "gen-speech-1" }),
+      [STATS]: json(200, statsWithCost),
+    });
+    const { jobRef } = await adapter.submit(assetSpec({ modelClass: "tts", prompt: "Settled." }), "k");
+    const first = await adapter.poll(jobRef);
+    const second = await adapter.poll(jobRef);
+    assert.equal(first.actualUsd, 0.0031);
+    assert.equal(second.actualUsd, 0.0031);
+    const reads = script.requests.filter((request) => request.method === "GET");
+    assert.equal(reads.length, 1, "the stats are read once");
+    assert.equal(reads[0]?.url, "https://openrouter.ai/api/v1/generation?id=gen-speech-1");
+  });
+
+  it("a stats read that misses leaves the submit unsettled, and is not asked again", async () => {
+    const { adapter, script } = setup({
+      [PATH]: raw(200, mp3Bytes(), { "content-type": "audio/mpeg", "x-generation-id": "gen-speech-1" }),
+      [STATS]: json(404, { error: "generation not found yet" }),
+    });
+    const { jobRef } = await adapter.submit(assetSpec({ modelClass: "tts", prompt: "Stats lag." }), "k");
+    const poll = await adapter.poll(jobRef);
+    await adapter.poll(jobRef);
+    assert.equal(poll.state, "done");
+    assert.equal(poll.actualUsd, undefined, "no bill: the router keeps the submit unsettled");
+    assert.equal(script.requests.filter((request) => request.method === "GET").length, 1);
+  });
+
+  it("stats with no total_cost are a miss, not a bill of zero", async () => {
+    const { adapter } = setup({
+      [PATH]: raw(200, mp3Bytes(), { "content-type": "audio/mpeg", "x-generation-id": "gen-speech-1" }),
+      [STATS]: json(200, statsWithoutCost),
+    });
+    const { jobRef } = await adapter.submit(assetSpec({ modelClass: "tts", prompt: "No cost." }), "k");
+    assert.equal((await adapter.poll(jobRef)).actualUsd, undefined);
+  });
+
+  it("an answer with no generation id makes no stats read, and stays unsettled", async () => {
+    const { adapter, script } = setup({ [PATH]: raw(200, mp3Bytes(), { "content-type": "audio/mpeg" }) });
+    const { jobRef } = await adapter.submit(assetSpec({ modelClass: "tts", prompt: "No id." }), "k");
+    assert.equal((await adapter.poll(jobRef)).actualUsd, undefined);
+    assert.equal(script.requests.filter((request) => request.method === "GET").length, 0);
   });
 });
 

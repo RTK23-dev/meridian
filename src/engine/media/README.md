@@ -39,7 +39,8 @@ vendor is open, so no vendor is wired here).
   key and holds the host. The bill settles the call; a bill that cannot be read leaves it unsettled, with a `billNote`.
   `deepgramProjects` names the workspace's project from `GET /v1/projects` (one project, cached per workspace; otherwise
   NOT_CONNECTED, so no bill is read). `deepgramForRoute` is the resolver the composition root passes to `speechToTextConnection`,
-  and `speechPortsOf` gives the composition the connection and the route's price.
+  and `speechPortsOf` gives the composition the connection and the route's price. Round 2: a request with no language (a brief's
+  reference) sends `detect_language=true`, and the answer's `detected_language` is the transcript's language (unverified live).
 - `stt-connection.ts`: `speechToTextConnection` (NOT_CONNECTED until a resolver is wired and the gateway can reach the
   route's provider) and `pricePerMinuteOf` (the route's list price, null without one).
 - `config.ts`: the scene-cut score (initial 0.3, tunable), the EDL frame duration, call timeouts, transcript limits, and the

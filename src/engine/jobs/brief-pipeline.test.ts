@@ -137,13 +137,13 @@ test("a brief is carried through analyze, write_script, voice and plan, each sta
   assert.deepEqual(jobs.map((job) => job.stage), ["intake"]);
   succeed({ stage: "intake", subjectId: REQ, gate: gateOf("request"), budgetReservationId: RES, budgetPause: null, artifacts: { request: briefArtifact } });
 
-  // 1. analyze_reference: the real handler on the recorded speech and segmenter answers. The reference's speech language is the one the test
-  // gives: a brief has none, and production stops there (production-stages.test.ts).
+  // 1. analyze_reference: the real handler on the recorded speech and segmenter answers. A brief names no speech language, so the recorded
+  // speech answer's detected language is the one the DNA names (analyze/brief-reference.test.ts).
   assert.deepEqual(jobs.map((job) => job.stage), ["analyze_reference"]);
   const analysis = await referencePorts({ responses: [segmenterBody, genomeBody] });
   const analysisRoles = await depsWith([json(200, segmenterBody), json(200, genomeBody)], 4);
   const analysisContext = contextOf("analyze_reference", [briefArtifact]);
-  const analyzed = await createAnalyzeReferenceHandler({ ...analysis.ports, roles: analysisRoles.deps, speechLanguage: () => "en" }).run(analysisContext);
+  const analyzed = await createAnalyzeReferenceHandler({ ...analysis.ports, roles: analysisRoles.deps }).run(analysisContext);
   assert.equal(analyzed.kind, "done");
   if (analyzed.kind !== "done") return;
   const analysisOutput = analyzed.output;

@@ -1,17 +1,20 @@
-// OpenRouter speech (Bible 10.3 tts; PROVIDER_APIS.md "Speech"). POST /audio/speech returns raw MP3 bytes with the generation
-// id in a header and no bill. Under contract v6 no list price is booked as the cost: the call stays unsettled until a verified bill
-// is recorded (the owner's decision: a bill source for speech, or a per-call settlement). The bytes are validated and stored through
-// the MediaStore.
+// OpenRouter speech (Bible 10.3 tts; PROVIDER_APIS.md "Speech"). POST /audio/speech returns raw MP3 bytes with the generation id in a
+// header. The call's bill is read once, after the answer is stored, from the generation stats: GET /generation?id=<generation id>, the
+// `data.total_cost` in USD (owner decision, lead, 2026-10-17). A miss (an error, no generation id, no total_cost, or stats not yet
+// there) leaves the submit unsettled, as contract v6 says: no list price is booked as the cost. The bytes are validated and stored through
+// the MediaStore. The read is not verified live (the owner's run).
 //
 // The voice is a per-page setting (the voice kit), so the adapter takes it at construction. No voice means not connected:
 // a request without a voice is never sent. Voice cloning (input_references) is not used without the owner's approval.
 
+import { z } from "zod";
 import { adapters } from "../../config/adapters.ts";
 import { EngineError } from "../../contracts/errors.ts";
 import type { AssetSpec, ProviderPoll } from "../../contracts/assets.ts";
 import type { ModelClass } from "../../contracts/plan.ts";
 import { contentHash } from "../../contracts/hash.ts";
 import type { Gateway, ResolvedRoute } from "../../gateway/gateway.ts";
+import { bodyText } from "../../gateway/errors.ts";
 import { callProvider, ensureOk, listPriceUsd, UNVERIFIED_CAPABILITIES, type AdapterConnection, type MediaStore, type RoutedAdapter } from "../adapter.ts";
 import { normaliseSpeech } from "../normalise.ts";
 import { excerpt } from "../classify.ts";
@@ -19,6 +22,34 @@ import { excerpt } from "../classify.ts";
 const PROVIDER = "openrouter";
 
 export const SPEECH_TIMEOUT_MS = adapters.timeoutsMs.speech.value;
+
+/** The generation stats answer: `data.total_cost` is the bill in USD. Other fields are not read. */
+export const generationStatsSchema = z.object({ data: z.object({ total_cost: z.number() }) });
+
+/**
+ * The bill of one generation, from its stats, or null when it cannot be read. One read, no retry here: the caller records a miss as
+ * unsettled. A non-finite or negative cost is a miss, never a bill of zero.
+ */
+export async function readGenerationBill(gateway: Gateway, organizationId: string | null, generationId: string): Promise<number | null> {
+  let body: unknown;
+  try {
+    const response = await callProvider(gateway, {
+      provider: PROVIDER,
+      organizationId,
+      method: "GET",
+      path: `/generation?id=${encodeURIComponent(generationId)}`,
+      timeoutMs: SPEECH_TIMEOUT_MS,
+    });
+    if (response.status !== 200) return null;
+    body = JSON.parse(bodyText(response));
+  } catch {
+    return null;
+  }
+  const parsed = generationStatsSchema.safeParse(body);
+  if (!parsed.success) return null;
+  const cost = parsed.data.data.total_cost;
+  return Number.isFinite(cost) && cost >= 0 ? cost : null;
+}
 
 export type OpenRouterSpeechOptions = {
   gateway: Gateway;
@@ -47,6 +78,8 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
   const modelClass: ModelClass = "tts";
   const results = new Map<string, ProviderPoll>();
   const details = new Map<string, { generationId?: string; mediaType: string }>();
+  /** The one bill read of each finished job: its cost, or null for a miss. */
+  const bills = new Map<string, number | null>();
 
   return {
     // The speed is part of the identity: a take at another rate is another call, with its own cache key and breaker bucket.
@@ -112,7 +145,15 @@ export function openRouterSpeechAdapter(options: OpenRouterSpeechOptions): Route
     },
 
     async poll(jobRef: string): Promise<ProviderPoll> {
-      return results.get(jobRef) ?? { state: "failed", error: { kind: "unknown", retryable: false, message: "no result for this job" } };
+      const result = results.get(jobRef) ?? { state: "failed" as const, error: { kind: "unknown" as const, retryable: false, message: "no result for this job" } };
+      if (result.state !== "done") return result;
+      // The bill is read once for a finished job: a miss is remembered too, so the stats are not asked again (the router settles on it).
+      if (!bills.has(jobRef)) {
+        const generationId = details.get(jobRef)?.generationId;
+        bills.set(jobRef, generationId === undefined ? null : await readGenerationBill(gateway, organizationId, generationId));
+      }
+      const bill = bills.get(jobRef) ?? null;
+      return bill === null ? result : { ...result, actualUsd: bill };
     },
 
     detailsFor(jobRef: string) {

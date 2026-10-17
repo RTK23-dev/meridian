@@ -92,6 +92,8 @@ function writerInputOf(input: {
     constraints: { maxMs: input.request.constraints.maxMs, wordsPerMinute: input.wordsPerMinute },
     claims: input.claims,
     forbidden: input.forbidden,
+    // The reference's speech language (the DNA transcript's): the writer's language when the brief states none (contract v8, lead 2026-10-17).
+    referenceLanguage: input.dna.transcript.language ?? null,
   };
 }
 

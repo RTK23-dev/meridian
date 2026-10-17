@@ -161,7 +161,7 @@ describe("analyze_reference on recorded measurements and role answers", () => {
 
   it("refuses a segment layer that repeats the transcript, so no source words enter the DNA through a layer", async () => {
     const { ports } = await portsFor({
-      responses: [segmenterWithLayer("watch this blender crush ice"), genomeBody],
+      responses: [segmenterWithLayer("watch this blender crush ice fast"), genomeBody],
     });
     const outcome = await analyzeReference(run(), ports);
     assert.equal(outcome.status, "done");

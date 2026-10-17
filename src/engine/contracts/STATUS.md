@@ -1,5 +1,16 @@
 # STATUS: engine contracts (W1, with config)
 
+## Round 2 (lead decision, 2026-10-17): the reference's speech language on the DNA transcript (additive, NOT version-bumped here)
+
+- `analysis.ts` `videoDnaSchema.transcript` gains `language: z.string().min(1).max(16).optional()`. It is the speech language the transcript
+  was made in: the detected language for a brief (speech-to-text `detect_language=true`), else the script's language. Optional, so a DNA
+  written before this parses unchanged.
+- It is an additive change to a v8 contract, made on the lead's instruction without a version bump. eng-contracts must bump it (to
+  `engine-contracts@9`, `config.test.ts` pins the version), add the Bible section 4 migration note, and get lead approval, as the rule
+  requires. Until then the field is an unversioned addition on this branch.
+- Consumers: `analyze/reference.ts` (writes it), `claude/roles/scriptwriter.ts` (`referenceLanguage`, null when absent).
+- No other contract changed this round. `ledger.ts`, `envelope.ts` and the request schema are as v8.
+
 ## Contract v8: brief, written script, model choices and two roles (`engine-contracts@8`, current)
 
 Lead-approved change (engine-contracts@8), with the coordinator's addition (the brief and the written script) on the same version.

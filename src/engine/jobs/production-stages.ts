@@ -3,11 +3,10 @@
 // router) and returns the ports the stage handler takes. Nothing here reads an environment variable or a key: the Claude deps come from
 // the gateway (through the composition's roleDeps), the bytes from the stores the composition passes, and the speech from the speech ports.
 //
-// Two things are not connected in production, and the voice port says so before any paid call (SPEECH_OUTPUT_BLOCKERS):
-//   - the speech output is MP3, which the engine's asset store does not hold (engine-asset-media.ts holds png, mp4 and wav);
-//   - a speech call has no bill source, so it stays unsettled after it is made (openrouterSpeech.ts, contract v6).
-// A brief's reference has no speech language until the owner decides one (analyze/reference.ts, referenceSpeechLanguageOf): the analysis
-// stops with that reason before any call.
+// Speech in production (owner decisions, lead 2026-10-17): the speech output is MP3 and the engine's asset store holds it (engine-asset-media.ts,
+// audio/mpeg); a speech call's bill is read once from the generation stats (openrouterSpeech.ts) and the submit stays unsettled on a miss. A
+// brief's reference is transcribed with the vendor's language detection (analyze/reference.ts, referenceSpeechLanguageOf). Nothing here is
+// blocked any more: the voice port sends through the asset router, and refuses only when no router is built.
 
 import type { ReferencePorts, ReferenceSource } from "../analyze/reference.ts";
 import type { AssetRouter, ProduceReport } from "../assets/router.ts";
@@ -23,15 +22,6 @@ import { readKit } from "./kit-store.ts";
 import type { ReferencePortsFor } from "./handlers/analyze-reference.ts";
 import type { VoicePortsFor } from "./handlers/voice.ts";
 import { brandOfRequest, objectKeyOfUri, STORE_URI_PREFIX } from "./production-ports.ts";
-
-/**
- * Why the voice stage cannot speak on this deployment, one reason each. Empty when the speech output can be stored and billed. Each
- * reason is an open owner decision (Bible 20.2); the voice port refuses before any call while any reason is listed.
- */
-export const SPEECH_OUTPUT_BLOCKERS: readonly string[] = [
-  "the speech output is audio/mpeg (openrouterSpeech.ts asks for mp3), and the engine's asset store holds png, mp4 and wav only (lib/meridian/storage/engine-asset-media.ts): the storage of speech is an owner decision",
-  "a speech call has no bill source, so it stays unsettled after it is made until the owner decides how speech is billed (openrouterSpeech.ts, contract v6)",
-];
 
 /** The reference video of a request is read from Meridian's store only: a store:// uri (the Content Factory upload). */
 export function storeKeyOfReference(referenceVideo: string): string | null {
@@ -118,8 +108,8 @@ async function approvedClaimTexts(sql: Sql, organizationId: string, request: Pro
 
 /**
  * The voice ports of production, per job's reservation (Bible 6.3). The speech goes through the asset router's speech route with the
- * reservation's ledger. Before the router is called, the blockers above are checked: while any is listed, the speech is not sent, and the
- * stage reports NOT_CONNECTED with its reasons.
+ * reservation's ledger. With no router built for the job (no shot ports), the speech is not sent and the stage reports NOT_CONNECTED with
+ * that reason.
  */
 export function productionVoicePortsFor(deps: VoiceDeps): VoicePortsFor {
   return (scope) => {
@@ -127,7 +117,6 @@ export function productionVoicePortsFor(deps: VoiceDeps): VoicePortsFor {
     return {
       router: {
         async produce(input) {
-          if (SPEECH_OUTPUT_BLOCKERS.length > 0) return unsentReport(SPEECH_OUTPUT_BLOCKERS);
           if (router === null) return unsentReport(["the asset router is not built: the composition has no shot ports for it"]);
           return router.produce(input);
         },

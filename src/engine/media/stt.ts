@@ -33,8 +33,11 @@ export type SttRequest = {
   source: MediaSource;
   /** The audio duration in ms, from probe. The transcript must fit inside it. */
   durationMs: number;
-  /** The script or reference language, for example "en". */
-  language: string;
+  /**
+   * The script or reference language, for example "en". Null asks the vendor to detect it (a brief's reference, lead decision 2026-10-17):
+   * the transcript then names the language it detected, and that is the language of the result.
+   */
+  language: string | null;
   /**
    * The workspace the call is for. A vendor that keys its calls to a workspace (Deepgram: its key and its project) reads it here. Null
    * or absent means no workspace is in scope, and such a vendor is not connected. It is not part of the idempotency key: the ledger is
@@ -102,7 +105,7 @@ function primaryLanguage(tag: string): string {
  */
 export function normaliseTranscript(
   raw: unknown,
-  request: { durationMs: number; language: string },
+  request: { durationMs: number; language: string | null },
 ): { words: Word[]; language: string } {
   const parsed = rawTranscriptSchema.safeParse(raw);
   if (!parsed.success) {
@@ -111,7 +114,8 @@ export function normaliseTranscript(
       first ? `${first.path.map(String).join(".")}: ${first.message}` : "unreadable shape",
     );
   }
-  if (primaryLanguage(parsed.data.language) !== primaryLanguage(request.language)) {
+  // With no requested language (detection), the vendor's detected language is the result's; with one, it must match the request.
+  if (request.language !== null && primaryLanguage(parsed.data.language) !== primaryLanguage(request.language)) {
     throw invalidTranscript(
       `language ${parsed.data.language} does not match the requested ${request.language}`,
     );

@@ -1,0 +1,7 @@
+{
+  "data": {
+    "id": "gen-speech-1",
+    "model": "test/eleven-v4",
+    "api_type": "tts"
+  }
+}

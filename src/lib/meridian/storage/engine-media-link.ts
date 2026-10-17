@@ -5,7 +5,7 @@
  * src/engine/jobs/media-link.ts), and this file is the Meridian implementation that the production runtime passes in.
  *
  * Two kinds of object can be linked, each for its own organization only:
- *   - an engine media object (a take, a voice file, a rendered video): engine/{org}/{requestId}/{stage}/{artifactId}.{mp4|wav|png};
+ *   - an engine media object (a take, a voice file, a rendered video): engine/{org}/{requestId}/{stage}/{artifactId}.{mp4|wav|mp3|png};
  *   - a kit image (Bible 13), the character sheet, persona portrait or product image a page's kit names:
  *     kits/{org}/{brand}/{kind}/{kitId}/{name}.png, where kind is character, persona or product. The brand is in the key because the
  *     store keys an object by organization, brand and name, so the route reads the object under the brand its key names.
@@ -36,7 +36,7 @@ const SIGNING_LABEL = "meridian-engine-media-link:v1";
 const SAFE_PART = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 
 /** The engine's media extensions and the MIME type each one is served as. */
-const MIME_BY_EXTENSION: Readonly<Record<string, string>> = { mp4: "video/mp4", wav: "audio/wav", png: "image/png" };
+const MIME_BY_EXTENSION: Readonly<Record<string, string>> = { mp4: "video/mp4", wav: "audio/wav", mp3: "audio/mpeg", png: "image/png" };
 
 /**
  * The kit-store prefix (Bible 13). A kit image is a png under its organization, its brand, the kind of kit it belongs to (only the kinds
@@ -67,7 +67,7 @@ export type MediaLinkCheck = "ok" | "malformed" | "bad_signature" | "expired";
 
 /** Whether a key is an engine media key for this organization: engine/{org}/{requestId}/{stage}/{artifactId}.{ext}. */
 export function isEngineMediaKey(organizationId: string, key: string): boolean {
-  const match = /^engine\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)\.(mp4|wav|png)$/.exec(key);
+  const match = /^engine\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)\.(mp4|wav|mp3|png)$/.exec(key);
   if (!match) return false;
   const parts = [match[1], match[2], match[3], match[4]];
   return organizationId === match[1] && parts.every((part) => part !== undefined && SAFE_PART.test(part) && !part.includes(".."));

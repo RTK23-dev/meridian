@@ -1,0 +1,10 @@
+{
+  "data": {
+    "id": "gen-speech-1",
+    "model": "test/eleven-v4",
+    "api_type": "tts",
+    "total_cost": 0.0031,
+    "tokens_prompt": 0,
+    "tokens_completion": 0
+  }
+}

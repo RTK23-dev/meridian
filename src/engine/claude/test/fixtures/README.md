@@ -17,7 +17,7 @@ against those.
 | `openrouter-segmenter-enum.json` | An answer with a shot type outside the enum. Its marker text must never reach a retry. |
 | `openrouter-segmenter-prose.json` | An answer that is prose, not JSON. |
 | `openrouter-scriptwriter-ok.json` | The scriptwriter's script for the brief fixture: five beats in new words, within maxMs, with the brief's source label (contract v8). |
-| `openrouter-scriptwriter-copies.json` | A script whose beat repeats "this blender trick", three words of the reference in order (the copy check refuses it). |
+| `openrouter-scriptwriter-copies.json` | A script whose beat repeats "stop scrolling now this blender trick", six words of the reference in order (the copy check refuses it). |
 | `openrouter-scriptwriter-unknown-label.json` | A script that names a source label the brief does not have. |
 | `openrouter-scriptwriter-long.json` | A script of about 150 words, over the 30-second maxMs at 150 words per minute. |
 | `openrouter-model-chooser-ok.json` | A model_chooser answer (Bible 10.5): c1 picks an eligible candidate, c2 picks an id outside its candidates (with an instruction in its reason), and c3 gets no pick. |

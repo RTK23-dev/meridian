@@ -16,9 +16,9 @@
 //     `voice` ports). Without ports each stays not_implemented. Production gives all three (productionComposition, production-stages.ts):
 //     analyze_reference reads the uploaded reference from Meridian's store (store:// uris) as bytes, through the media functions and the speech ports;
 //     write_script writes a brief's script with the scriptwriter; voice speaks through the asset router's speech route. Each is fail closed
-//     on its own: a brief's reference has no speech language yet (analyze stops, nothing is called); the speech output is MP3 and speech has
-//     no bill source, so voice refuses before any call (SPEECH_OUTPUT_BLOCKERS). A composition may also pass a handler for render (W10)
-//     through `handlers`.
+//     on its own: a brief's reference is transcribed with the vendor's language detection (lead decision 2026-10-17), the speech output is MP3
+//     and the engine stores it, and a speech call's bill is read once from the generation stats (unsettled on a miss). A composition may
+//     also pass a handler for render (W10) through `handlers`.
 //   - E4 and E5 (this file, later pass): compose, pre_render_gate, variants and deliver are always registered. They need no provider:
 //     the kit store, the engine tables and the reservation's ledger. render (the HyperFrames and Shotstack deps) and
 //     post_render_review (the media, the object store and the Critic) are registered only when composition.render and

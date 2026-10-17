@@ -1,9 +1,11 @@
 # STATUS: analyze_reference (W6), `src/engine/analyze/`, `src/engine/edit/grammar.ts`, `src/engine/claude/roles/genome.ts` and `tightener.ts`
 
-**Brief requests (contract v8, this branch).** `ReferenceSource.resolve` and `release` take the request id (the store's brand). The speech
-language is `referenceSpeechLanguageOf(request)`: a script's language, or null for a brief, which stops the stage with NOT_CONNECTED before
-any call. `ReferencePorts.speechLanguage` is the port that sets it (the owner's decision, `../jobs/STATUS.md` decision 1). Production's
-reference source is `jobs/production-stages.ts`. `copy.ts` is unchanged; write_script uses it through the scriptwriter's answer contract.
+**Brief requests (contract v8, round 2 on this branch).** `ReferenceSource.resolve` and `release` take the request id (the store's brand). The
+speech language is `referenceSpeechLanguageOf(request)`: a script's language, or null for a brief. A null language is not a stop (round 2,
+lead decision 2026-10-17): speech-to-text asks Deepgram to detect it (`detect_language=true`), and the stage stores the detected language in
+the DNA transcript (`transcript.language`, an additive optional field). A detection the vendor does not return is refused, never guessed.
+`ReferencePorts.speechLanguage` still sets the language when a port knows it. Production's reference source is `jobs/production-stages.ts`.
+`copy.ts` uses COPY_RUN_WORDS = 6 (round 2); write_script uses it through the scriptwriter's answer contract.
 
 ## W2 wiring pass (branch `eng-e45-leftovers-2`)
 
@@ -184,7 +186,9 @@ Results on this branch are in the report to the lead.
 
 ## Blockers and decisions for the lead
 
-1. **Speech-to-text vendor (Bible 20.2): owner decision.** Blocks analyze and voice. Both stop with NOT_CONNECTED before any spend.
+1. **Speech-to-text vendor: decided (Deepgram nova-3, owner decision 2026-10-16), not verified live.** The stt route is listed in
+   `gateway/providers.ts`. Its note in `config/routes.ts` still says the route stays NOT_CONNECTED until the gateway lists Deepgram; that note
+   is stale (an eng-contracts change). Brief requests detect the language (round 2).
 2. **Captions: answered by `frame_reader` (eng-detectors).** `frame_reader` is in `CLAUDE_ROLES` (contracts@4). The role and its
    aggregation are built (see "frame_reader" above). Open: the jobs wiring (`analysisReadings`), and the owner's live run that checks
    the captions against hand labels. The highlight is a single-frame proxy (decision 1 above).
@@ -200,8 +204,10 @@ Results on this branch are in the report to the lead.
    `src/lib/meridian/study/bible.ts` (11 dimensions, 17 entries). `analyze/angle-bible.ts` reads it and passes the entries to
    the genome role as input, so the Claude folder stays free of study code (its boundary test). Lead: confirm the engine may
    read that module, or name the vocabulary another way.
-7. **Speech route (TTS) model is null** in `config/routes.ts` (`tts`). The voice stage refuses with NOT_CONNECTED from the
-   router. The model id is an eng-contracts change.
+7. **Speech route (TTS) model is null** in `config/routes.ts` (`tts`: `openrouter(null, ...)`). Round 2 removed the voice guard, so
+   voice now sends through the router; with the model null the router reports the route as not connected, and the voice stage stops with
+   NOT_CONNECTED (its reason names `tts`), sending nothing. Voice does not speak in production until a speech model id is set in
+   `config/routes.ts`. That is an eng-contracts change and an owner choice of model; no id is guessed here.
 8. **Config placement.** `analyze/config.ts` and `voice/config.ts` hold initial values that should move to `engine/config`
    (eng-contracts). Each value is named in its file.
 

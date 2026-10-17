@@ -29,8 +29,10 @@ import type { RoleDefinition } from "../role.ts";
 
 export const SCRIPTWRITER_ROLE = "scriptwriter";
 
-/** The prompt version this code is written against. The file is prompts/scriptwriter@1.md. */
-export const SCRIPTWRITER_PROMPT = { role: SCRIPTWRITER_ROLE, version: 1 } as const;
+/** The prompt version this code is written against. The file is prompts/scriptwriter@2.md. */
+// Version 2 (lead decision 2026-10-17): the copy run is six words, and the language follows the brief or the reference (@1 is shipped and
+// is not edited).
+export const SCRIPTWRITER_PROMPT = { role: SCRIPTWRITER_ROLE, version: 2 } as const;
 
 /** Beats in one written script (initial). A script of this many beats is well over a minute of speech. */
 export const SCRIPTWRITER_MAX_BEATS = 16;
@@ -75,6 +77,11 @@ export const scriptwriterInputSchema = z.object({
   }),
   /** The reference's words. They are the copy check's material and are never sent to the model. */
   transcript: z.array(wordSchema).max(1200),
+  /**
+   * The reference's speech language (the transcript's, detected or the script's), or null when it is not known. The writer writes in the
+   * brief's stated language, else in this one, else in the language of the brief's own text.
+   */
+  referenceLanguage: z.string().min(1).max(16).nullable(),
   constraints: z.object({
     maxMs: positiveMsSchema,
     /** The voice's words per minute (the persona's, or the voice kit's). The length of the script is estimated at this pace. */
@@ -209,6 +216,7 @@ export function scriptwriterUserContent(input: ScriptwriterInput): ContentPart[]
         wordsPerMinute: input.constraints.wordsPerMinute,
         claims: input.claims,
         forbiddenTerms: input.forbidden,
+        referenceLanguage: input.referenceLanguage,
       }),
     },
   ];

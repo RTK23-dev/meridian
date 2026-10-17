@@ -9,8 +9,8 @@
  *     comes from the caller, the router, and never from the bytes or the key).
  *   - The key is content-addressed: its name is the sha256 of the bytes, and the caller's content hash must match it. The same bytes
  *     under the same request are one object; the store's put is idempotent for identical content.
- *   - Only the engine's own media types are stored (png, mp4, wav). Anything else, such as the mp3 of speech, is refused with its
- *     reason, because the engine's keys carry no other extension (the voice stage's storage is decided separately).
+ *   - Only the engine's own media types are stored (png, mp4, wav, and mp3 for the speech output, audio/mpeg, lead decision 2026-10-17).
+ *     Anything else is refused with its reason, because the engine's keys carry no other extension.
  *   - No S3 and no vendor SDK: the bytes go to the object store the caller passes (Google Drive, through engineObjectStore).
  *
  * Structurally the engine's MediaStore (src/engine/assets/adapter.ts). The engine never imports this file, so the dependency points one
@@ -46,14 +46,16 @@ export const ASSET_STAGE = "assets";
 const SAFE_PART = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 
 /** The engine's media types, and the extension each one is stored under (the engine's MEDIA_MIME_TYPES, artifact-store.ts). */
-const EXTENSION_BY_MEDIA_TYPE: Readonly<Record<string, "png" | "mp4" | "wav">> = {
+const EXTENSION_BY_MEDIA_TYPE: Readonly<Record<string, "png" | "mp4" | "wav" | "mp3">> = {
   "image/png": "png",
   "video/mp4": "mp4",
   "audio/wav": "wav",
+  // The speech output (the voice stage's narration). Owner decision (lead, 2026-10-17).
+  "audio/mpeg": "mp3",
 };
 
 /** The key of one stored asset: engine/{organization}/{request}/assets/{sha256 hex}.{ext}. Every part follows the engine's rule. */
-export function engineAssetKey(scope: EngineAssetScope, digestHex: string, extension: "png" | "mp4" | "wav"): string {
+export function engineAssetKey(scope: EngineAssetScope, digestHex: string, extension: "png" | "mp4" | "wav" | "mp3"): string {
   const parts = [scope.organizationId, scope.requestId, ASSET_STAGE, digestHex];
   for (const part of parts) {
     if (!SAFE_PART.test(part) || part.includes("..")) throw new Error("the asset key has a part the engine does not allow");
@@ -83,7 +85,7 @@ export function engineAssetMediaFor(input: EngineAssetMediaInput, scope: EngineA
       }
       const extension = EXTENSION_BY_MEDIA_TYPE[request.mediaType];
       if (extension === undefined) {
-        throw new Error(`the engine stores png, mp4 and wav objects, not ${request.mediaType}; nothing was stored`);
+        throw new Error(`the engine stores png, mp4, wav and mp3 objects, not ${request.mediaType}; nothing was stored`);
       }
       if (request.bytes.byteLength === 0) throw new Error("the asset is empty; nothing was stored");
       const digest = sha256Hex(request.bytes);
