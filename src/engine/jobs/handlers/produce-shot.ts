@@ -53,6 +53,7 @@ import { mediaKey, readJobInputs, writeArtifact, type MediaStorePort, type Store
 import { modelChoicesSchema } from "../../contracts/model-choices.ts";
 import type { ModelChoice } from "../../contracts/assets.ts";
 import { SINGLE_CALL_OUTPUT } from "../../plan/model-choices.ts";
+import { directivesOf, promptWithDirectives } from "../remake.ts";
 import { stableId, seedFor } from "../stable-id.ts";
 import { epochOf, type ProduceHold, type StageContext, type StageHandler, type StageOutput, type StageRunResult } from "../types.ts";
 
@@ -252,6 +253,8 @@ export function assetSpecFor(input: {
   shot: ShotSpec;
   attempt: number;
   hints: readonly string[];
+  /** The reviewer's directions for a remade shot (remake.ts). They join the prompt after the rules. Absent: none. */
+  directives?: readonly string[];
   subject?: string;
   /** The orchestrator's model for this call, from the request's model_choices (Bible 10.5). Absent or null: the route table applies. */
   modelChoice?: ModelChoice | null;
@@ -268,7 +271,7 @@ export function assetSpecFor(input: {
     specId: stableId("asp_", `asset|${label}`),
     shotId: input.shot.shotId,
     modelClass: source.modelClass,
-    prompt: promptWithHints(source.prompt, input.hints),
+    prompt: promptWithDirectives(promptWithHints(source.prompt, input.hints), input.directives ?? []),
     refs: [...source.refs],
     ...(source.firstFrame === undefined ? {} : { firstFrame: source.firstFrame }),
     ...(source.lastFrame === undefined ? {} : { lastFrame: source.lastFrame }),
@@ -561,6 +564,8 @@ export function chainCallSpecFor(input: {
   index: number;
   attempt: number;
   hints: readonly string[];
+  /** The reviewer's directions for a remade shot (remake.ts). Each call of the chain gets them. Absent: none. */
+  directives?: readonly string[];
   outputs: readonly ChainOutput[];
   linkOf?: (uri: string) => string;
   /** The orchestrator's model for this call (Bible 10.5). Absent or null: the route table applies. */
@@ -581,7 +586,7 @@ export function chainCallSpecFor(input: {
     specId: stableId("asp_", `asset|${label}`),
     shotId: input.shot.shotId,
     modelClass: call.modelClass,
-    prompt: promptWithHints(call.prompt, input.hints),
+    prompt: promptWithDirectives(promptWithHints(call.prompt, input.hints), input.directives ?? []),
     refs: call.refs.map(resolve),
     ...(firstFrame === undefined ? {} : { firstFrame }),
     ...(lastFrame === undefined ? {} : { lastFrame }),
@@ -660,6 +665,7 @@ async function specOfCall(run: ChainRun, index: number, outputs: readonly ChainO
     index,
     attempt: run.attempt,
     hints: run.ctx.payload.hints,
+    directives: directivesOf(run.ctx.payload.details),
     outputs,
     linkOf: (uri) => links.get(uri) ?? uri,
     modelChoice: run.choices.get(call.output) ?? null,
@@ -862,6 +868,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
           shot,
           attempt,
           hints: ctx.payload.hints,
+          directives: directivesOf(ctx.payload.details),
           subject: ctx.subjectId,
           modelChoice: choices.get(SINGLE_CALL_OUTPUT) ?? null,
         });
@@ -996,6 +1003,7 @@ export function createProduceShotHandler(ports: ProduceShotPorts): StageHandler 
         shot,
         attempt,
         hints: ctx.payload.hints,
+        directives: directivesOf(ctx.payload.details),
         subject: ctx.subjectId,
         modelChoice: choices.get(SINGLE_CALL_OUTPUT) ?? null,
       });

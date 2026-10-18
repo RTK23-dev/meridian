@@ -10,6 +10,7 @@ import { thresholds } from "../config/thresholds.ts";
 import { decideGate, type GateVerdict, type GoldMetrics } from "../review/gold.ts";
 import { gateReviewItem, takeReviewItem } from "../review/inbox.ts";
 import { STAGE_SPECS, engineJobKey, priorityNumber, type EngineStage } from "./registry.ts";
+import { remakeDirectiveOf, REMAKE_DIRECTIVES_MAX } from "./remake.ts";
 import { jobSettings, type RequestPriority } from "./settings.ts";
 import type { EngineEvent, EnginePayload, ProduceHold, QueuedJob, ShotSourceKind, ShotSummary, StageOutput } from "./types.ts";
 import { nextPhaseOf } from "../variants/work.ts";
@@ -64,6 +65,15 @@ export type ShotState = ShotSummary & {
   /** What the next plan job asks for: a downgrade (Bible 5.3) or a prompt rewrite (Bible 10.4), with its rule-name hints. */
   replanDirective: "downgrade" | "rewrite";
   replanHints: string[];
+  /**
+   * A person remade this shot (Bible 5.5). Its later failures go to a person: the shot escalates instead of downgrading, because a
+   * downgrade replans the whole plan. Absent in states written before remakes, which reads as false.
+   */
+  remade?: boolean;
+  /** How many times a person has remade this shot. Absent reads as 0. */
+  remakes?: number;
+  /** The reviewer's directions for this shot, oldest first. Each produce job of the shot carries them (remake.ts). */
+  directives?: string[];
 };
 
 export type TakeVerdictState = {
@@ -137,6 +147,11 @@ export type OrchestratorState = {
    * before the variant work list, which reads as no run.
    */
   variantRuns?: Record<string, VariantRun>;
+  /**
+   * How many times a person has remade a shot of this delivered video (Bible 5.5). Each remake makes a new revision, which delivers a
+   * new master. Absent before the first remake, which reads as 0.
+   */
+  revision?: number;
 };
 
 export type EngineEffect =
@@ -277,7 +292,8 @@ export function advance(current: OrchestratorState | null, event: EngineEvent): 
     return { state, jobs: schedule(state), effects: [] };
   }
   if (current === null) throw new EngineError("not_found", "this request has no orchestrator state");
-  if (current.status === "rejected" || current.status === "delivered") {
+  // A delivered request accepts one kind of event: a person remaking a shot, which starts its next revision (Bible 5.5).
+  if (current.status === "rejected" || (current.status === "delivered" && event.type !== "remake")) {
     conflict(`the request is ${current.status}; ${event.type} cannot change it`);
   }
   const state = structuredClone(current);
@@ -294,6 +310,9 @@ export function advance(current: OrchestratorState | null, event: EngineEvent): 
       break;
     case "human_choice":
       applyHumanChoice(state, event, effects);
+      break;
+    case "remake":
+      applyRemake(state, event, effects);
       break;
   }
   settleVariantAssembly(state, effects);
@@ -665,6 +684,11 @@ function takesOf(state: OrchestratorState, shotId: string, round: number, epoch:
 }
 
 function downgradeOrEscalate(state: OrchestratorState, shot: ShotState, why: string, effects: EngineEffect[]): void {
+  // A person chose this shot's remake. If it fails, the person decides, rather than a downgrade that replans the whole master (Bible 5.5).
+  if (shot.remade === true) {
+    escalateShot(state, shot, `${why}; a person remade ${shot.shotId}, so it goes to review instead of a downgrade`, effects);
+    return;
+  }
   if (shot.downgradeTo !== null) {
     startReplan(shot, "downgrade", []);
     shot.downgrades += 1;
@@ -1252,6 +1276,79 @@ function applyHumanChoice(state: OrchestratorState, event: Extract<EngineEvent, 
   }
 }
 
+/**
+ * Why a shot cannot be remade now, or null when it can (Bible 5.5). The one answer for the state machine, the caller that reserves the
+ * remake, and the screen that shows the reason.
+ */
+export function remakeRefusalOf(state: OrchestratorState, shotId: string): string | null {
+  if (state.status !== "delivered") {
+    return state.status === "rejected"
+      ? "A shot cannot be remade: this request was rejected."
+      : "A shot is remade after its video is delivered. This video is still being made.";
+  }
+  if (state.variantCount > 0) {
+    return "This video has variants, and a new take would make them stale. Remaking a shot of a video with variants is not built yet.";
+  }
+  const shot = state.shots[shotId];
+  if (!shot) return "That shot is not in this video.";
+  if (shot.status !== "accepted") return "That shot has no accepted take to replace.";
+  if (!needsProduce(shot.sourceKind)) {
+    return "A component or asset shot is not made by a take, so it cannot be remade. Changing it needs a new plan.";
+  }
+  return null;
+}
+
+/**
+ * A person asked for one accepted shot of a delivered video to be made again (Bible 5.5). The request runs again from the edit: the
+ * shot gets a new take, the edit is cut again, and the chain to delivery runs on the new master. Plan, voice, script and every other
+ * accepted take are kept. The shot starts a new epoch, so its old takes stop counting and its redo budget starts again. The old
+ * master is superseded and stays on record. The remake's own reservation pays for it.
+ */
+function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { type: "remake" }>, effects: EngineEffect[]): void {
+  const refusal = remakeRefusalOf(state, event.shotId);
+  if (refusal !== null) conflict(refusal, "produce_shot");
+  const shot = state.shots[event.shotId];
+  if (!shot) conflict(`shot ${event.shotId} is not in this video`, "produce_shot");
+  if (event.budgetReservationId.length === 0) invalid("a remake needs its own budget reservation", "produce_shot");
+  const directive = remakeDirectiveOf(event.directive);
+  const directives = shot.directives ?? [];
+  if (directive !== null && directives.length >= REMAKE_DIRECTIVES_MAX) {
+    conflict(`${shot.shotId} already has ${REMAKE_DIRECTIVES_MAX} directions, and no more are kept for it`, "produce_shot");
+  }
+
+  state.revision = (state.revision ?? 0) + 1;
+  state.status = "running";
+  state.manifestId = null;
+  state.budgetReservationId = event.budgetReservationId;
+  const master = state.masterEdlId === null ? undefined : state.branches[state.masterEdlId];
+  if (master !== undefined && master.status === "passed") master.status = "superseded";
+
+  shot.epoch += 1;
+  shot.round = 0;
+  shot.issued = 0;
+  shot.status = "pending";
+  shot.acceptedTakeId = null;
+  shot.hints = [];
+  shot.replanQueued = false;
+  shot.replanFailed = false;
+  shot.remade = true;
+  shot.remakes = (shot.remakes ?? 0) + 1;
+  shot.directives = directive === null ? [...directives] : [...directives, directive];
+
+  state.nodes.edit = { status: "idle", redos: 0, hints: [] };
+  state.nodes.deliver = { status: "idle", redos: 0, hints: [] };
+  effects.push({
+    kind: "decision",
+    decision: {
+      at: event.at,
+      chose: `remake ${shot.shotId} as revision ${state.revision}`,
+      alternatives: [],
+      reason: directive ?? "A reviewer asked for another take of this shot.",
+      by: "human",
+    },
+  });
+}
+
 // --- Scheduling -------------------------------------------------------------------------------------------------------
 
 function nextAttempt(state: OrchestratorState, stage: EngineStage, subjectId: string): string {
@@ -1412,6 +1509,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
             takesWanted: shot.takesWanted,
             round: shot.round,
             epoch: shot.epoch,
+            directives: shot.directives ?? [],
           },
           // The request's model choices (Bible 10.5, contract v8), when the plan stage wrote them. A request without them has no slot,
           // and its produce jobs keep the route table.
@@ -1516,5 +1614,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
 
 function nodeDetails(state: OrchestratorState, node: SingleNode): Record<string, unknown> {
   if (node === "variants") return { masterEdlId: state.masterEdlId, variantCount: state.variantCount };
+  // Delivery names the current master, so a revision delivers its own edit, not the superseded one (Bible 5.5, 6.14).
+  if (node === "deliver") return { masterEdlId: state.masterEdlId, revision: state.revision ?? 0 };
   return {};
 }

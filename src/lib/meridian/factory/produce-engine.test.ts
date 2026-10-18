@@ -132,13 +132,15 @@ async function deliverRecordedRequest(sql: Sql, organizationId: string, requestI
     createdAt: NOW,
     artifactId: manifestId,
   });
+  // As deliver leaves it: the state names the master's video id, and the manifest artifact is under its manifest:<videoId> slot.
+  const videoId = renderedVideoFixture.videoId;
   const state: OrchestratorState = {
     ...read.state,
     status: "delivered",
     pause: null,
     masterEdlId: edlId,
-    manifestId,
-    artifacts: { ...read.state.artifacts, [`render:${edlId}`]: renderId },
+    manifestId: videoId,
+    artifacts: { ...read.state.artifacts, [`render:${edlId}`]: renderId, [`manifest:${videoId}`]: manifestId },
   };
   await sql`
     update engine_requests set status = 'delivered', state = ${JSON.stringify(state)}, updated_at = now()

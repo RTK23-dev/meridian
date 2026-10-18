@@ -26,13 +26,19 @@ export type VideoSelection = {
   undelivered: Undelivered[];
 };
 
-/** Chooses the delivered video of each EDL. Throws when there is no single master, or the master does not deliver. */
+/**
+ * Chooses the delivered video of each EDL. Throws when there is no single master, or the master does not deliver. A remade shot
+ * (Bible 5.5) leaves its superseded master on record, so delivery names the current master: `masterEdlId`. Absent, the request must have
+ * exactly one master.
+ */
 export function selectVideos(input: {
   edls: readonly Stored<EditDecisionList>[];
   renders: readonly Stored<RenderedVideo>[];
   reviews: readonly Stored<ReviewResult>[];
+  masterEdlId?: string | null;
 }): VideoSelection {
-  const masters = input.edls.filter((edl) => edl.body.variantOf === undefined);
+  const named = input.masterEdlId ?? null;
+  const masters = input.edls.filter((edl) => edl.body.variantOf === undefined && (named === null || edl.body.edlId === named));
   if (masters.length !== 1) {
     throw new EngineError("invalid_input", `delivery needs exactly one master EDL, and it has ${masters.length}`, { stage: "deliver" });
   }

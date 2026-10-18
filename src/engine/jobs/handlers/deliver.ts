@@ -183,7 +183,9 @@ export function createDeliverHandler(ports: DeliverPorts): StageHandler {
         compositionIds.set(body.edlId, body.compositionId);
       }
 
-      const selection = selectVideos({ edls, renders, reviews });
+      // The orchestrator names the current master (Bible 5.5): a remade shot leaves the superseded master's EDL on record.
+      const namedMaster = ctx.payload.details.masterEdlId;
+      const selection = selectVideos({ edls, renders, reviews, masterEdlId: typeof namedMaster === "string" ? namedMaster : null });
       const masterVideoId = selection.master.videoId;
       const videos: VideoPick[] = [selection.master, ...selection.variants];
       const masterEdl = selection.master.edl;
