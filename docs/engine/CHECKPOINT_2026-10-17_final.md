@@ -1,6 +1,6 @@
 # Checkpoint: 2026-10-17, final code pass
 
-This checkpoint supersedes [CHECKPOINT_2026-10-17.md](CHECKPOINT_2026-10-17.md). The earlier note was written before the last merges.
+Later changes on `origin/main` (release `0.1.0-beta.13` and other commits of 2026-10-17) supersede some lines here; they are listed in [docs/LAUNCHPAD.md](../LAUNCHPAD.md). This checkpoint supersedes [CHECKPOINT_2026-10-17.md](CHECKPOINT_2026-10-17.md). The earlier note was written before the last merges.
 
 **Last tested tree:** `3747445`. `npm test`: 5539 engine and source tests passed, 0 failed, 41 skipped (env-gated); 160 script tests passed.
 `npm run typecheck`, `npm run lint` (0 errors, 4 existing warnings) and `npm run build` passed on the same tree. No later commit changes code.
