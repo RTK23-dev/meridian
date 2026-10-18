@@ -2,6 +2,8 @@
 
 The [README](../README.md) says what Meridian is and how to run it. These documents go further. If a document and the app disagree, the app is what is running and the document should be corrected.
 
+Starting a new chat about Meridian? Open [LAUNCHPAD.md](LAUNCHPAD.md) first: it has the opening prompt, the current state and the open decisions.
+
 ## Run the product
 
 | Document | Read it for |
