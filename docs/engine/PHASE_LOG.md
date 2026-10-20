@@ -568,3 +568,18 @@ connected. Nothing has run against a live provider.
 inbox's `change_visual_type` and `edit_prompt` actions are defined but unwired; take previews on the board; a sweep for a reservation left by a
 crash between its reserve and its event. `npm run typecheck` fails before it reaches code at HEAD (TS5101, the `baseUrl` option under the locked
 TypeScript 5.9.3); `tsc --ignoreDeprecations 5.0` passes. `tsconfig.json` is not changed here.
+
+## 2026-10-20 Owner direction: replan, merge, orchestrator core
+
+Owner direction (overrides the earlier run plan, which was never copied into the repo): one loop and no subagents; no fixed models, with
+the orchestrating model chosen by the user from the live OpenRouter catalog; live runs and budgets approved; checkpoint times may move;
+push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`. State: `docs/engine/run/RUN_STATE.md`.
+
+- Merged `origin/claude/nice-tesla-zrf6un` into `run/factory-6h`, no conflicts. `session/product-fixes` and `session/review-followups`
+  were already in `main`.
+- Added `src/engine/orchestrator/`: plan contract, live catalog snapshot (recorded 2026-10-20: 585 entries from four public listings),
+  fail-closed validation, surgical edits with cache keys, executor with pause at budget and `not_connected`, layout, replay. 52 tests.
+- Added the canvas component `src/components/content-factory/orchestrator-canvas.tsx` and its keyframes in `src/styles.css`.
+- Open, not resolved in code: no live run (no `OPENROUTER_API_KEY` in the environment); fixed ids remain in
+  `src/engine/config/routes.ts` and `prices.ts` for the legacy pipeline; artifact storage (S3 vs Postgres and Drive), Veo and Hypit
+  remain owner decisions.

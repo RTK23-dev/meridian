@@ -200,6 +200,19 @@ details > summary:hover { color: var(--color-fg); }
   animation: cf-flow 0.8s linear infinite;
 }
 
+/* The orchestrator canvas. A step pops in as the orchestrator draws it, and the line that leads into it draws itself. The global
+   reduced-motion rule below cuts both to their final state. */
+@keyframes orch-pop {
+  from { opacity: 0; transform: scale(0.94) translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes orch-draw {
+  from { stroke-dashoffset: 1; }
+  to { stroke-dashoffset: 0; }
+}
+.orch-node { animation: orch-pop 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
+
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
    chart animation is turned off in the chart components, which read the same media query. */
 @media (prefers-reduced-motion: reduce) {
