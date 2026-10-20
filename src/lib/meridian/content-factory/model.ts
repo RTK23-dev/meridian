@@ -94,6 +94,8 @@ export const ACCEPTED_FILE_LABEL = `MP4, MOV or WEBM video up to 40 MB, PNG, JPE
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_TITLE_CHARS = 120;
 export const MAX_SNAPSHOT_CHARS = 600;
+/** The longest direction a reviewer can give one shot. The engine keeps the same limit (src/engine/jobs/remake.ts), and a test keeps them equal. */
+export const REMAKE_DIRECTION_MAX_CHARS = 280;
 export const MIN_SECONDS = 5;
 export const MAX_SECONDS = 180;
 

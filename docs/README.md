@@ -44,5 +44,6 @@ These are the dated record of the video engine. They are not the guide for runni
 | [engine/PROVIDER_APIS.md](engine/PROVIDER_APIS.md) | Request and response shapes taken from provider documentation, with the date read |
 | [engine/MERIDIAN_HANDOFF.md](engine/MERIDIAN_HANDOFF.md) | The Content Factory handoff: locked decisions and phase status |
 | [engine/PHASE_LOG.md](engine/PHASE_LOG.md) | The dated phase record |
+| [engine/CONTENT_FACTORY_STATE_2026-10-18.md](engine/CONTENT_FACTORY_STATE_2026-10-18.md) | Where the Content Factory stands: what is built, the shot remake, and what is left |
 | [engine/CHECKPOINT_2026-10-17_final.md](engine/CHECKPOINT_2026-10-17_final.md) | The checkpoint of what was verified on 17 October 2026 |
 | [feature-screens/README.md](feature-screens/README.md) | Screenshots of screens as they changed |

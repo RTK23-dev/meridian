@@ -16,11 +16,14 @@ import {
   engineRequestStatus,
   engineSpendOf,
   openEngineReviewItems,
+  engineRequestFeed,
   pauseEngineSpend,
+  remakeEngineShot,
   requestProblems,
   reservationState,
   startEngineRequest,
   type EngineReadinessPorts,
+  type RemakePorts,
 } from "./index.ts";
 
 const ORG = "org_api";
@@ -224,4 +227,28 @@ test("the engine is ready only with a monthly budget, the model key and a render
 
   const noHandlers = reasonsOf(await engineReadiness(ORG, { ...full, runtime: { handlers: {} } }));
   assert.ok(noHandlers.some((reason) => reason.startsWith("Engine stages with no handler")), noHandlers.join("; "));
+});
+
+test("a shot of a video that is still being made is not remade: the refusal says why, and no money is held", async () => {
+  const { sql } = await db();
+  const request = requestFor(ORG);
+  await startIn(sql, ORG, BRAND, request);
+  const ports: RemakePorts = { monthBudget: { monthBudget: async () => ({ status: "known", usd: 1000 }) } };
+
+  const outcome = await remakeEngineShot(sql, { organizationId: ORG, requestId: request.requestId, shotId: "shot_0000000000000000000000000", directive: "a close-up", now: NOW }, ports);
+  assert.equal(outcome.status, "refused");
+  if (outcome.status !== "refused") return;
+  assert.ok(outcome.reasons.some((reason) => /still being made/.test(reason)), outcome.reasons.join("; "));
+  const [held] = await sql<{ n: number }>`select count(*)::int as n from engine_reservations where request_id = ${request.requestId}`;
+  assert.equal(held?.n, 0, "a refused remake reserves nothing");
+});
+
+test("the feed of a video that has not been delivered reads revision 0 and no shot rows yet", async () => {
+  const { sql } = await db();
+  const request = requestFor(ORG);
+  await startIn(sql, ORG, BRAND, request);
+  const feed = await engineRequestFeed(sql, ORG, request.requestId);
+  assert.ok(feed);
+  assert.equal(feed?.revision, 0);
+  assert.deepEqual(feed?.shots, []);
 });

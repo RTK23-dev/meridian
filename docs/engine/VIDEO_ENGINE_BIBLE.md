@@ -632,6 +632,43 @@ Every stage is a job row on Meridian's existing queue. New job types are registe
 
 `engine_requests`, `engine_artifacts`, `engine_jobs` (or the existing jobs table with engine types), `engine_gate_results`, `engine_decisions`, `engine_ledger` (or extended usage tables), `engine_manifests`, `engine_review_items`, `engine_kits` (style, persona, character, product), `engine_cache_index`. Every table carries `workspaceId` and is covered by tenancy checks.
 
+### 5.5 Remakes: hot-swapping one shot of a delivered video (owner request, 2026-10-18)
+
+A person who reviews a delivered video can ask for one accepted shot to be made again. The rest of the video is kept: the plan, the voice, the
+script, every other accepted take, and the edit rules. Nothing before the shot is re-run.
+
+- **Who and when.** Only an admin of the session's workspace (Content Factory's access check). Only a delivered request, with no variants.
+  A shot that is still being made, a component or asset shot (it has no take), and a shot not in the video are each refused with a reason.
+  The refusal is computed in one place (`remakeRefusalOf`, `engine/jobs/orchestrator.ts`) and shown on the screen.
+- **What it does.** The orchestrator's `remake` event (`engine/jobs/types.ts`) moves the request back to running, starts a new epoch for the
+  shot (round 0, so its redo budget starts again, and its old takes stop counting), and queues one produce job with a new attempt. A new
+  attempt means a new seed and a new cache key, so the same prompt is not served from the cache. The edit, compose, pre-render gate, render,
+  post-render review and deliver then run again on the new take. The old master is marked superseded and stays on record.
+- **Reviewer's direction.** An optional text of at most 280 characters, cleaned of control characters (`engine/jobs/remake.ts`). It is kept
+  on the shot and carried in the produce job's details. The produce stage adds it to the prompt after the rules, in a labelled block
+  (`promptWithDirectives`). It is a person's text, so it is not read as a rule and the gates still decide every take. A shot keeps at most 8
+  directions.
+- **Failures after a remake.** A remade take is redone within the same limit as any shot (two redos). After that it goes to a person
+  (`escalate`), and is never downgraded: a downgrade replans the whole plan, and a remake is a person's choice about one shot.
+- **Money.** A remake reserves its own estimate before its event is applied: the one shot's line, the fixed per-master lines (render, Claude
+  roles, critic, media) and the redo allowance, priced at the chosen models' catalog prices where the orchestrator chose them (Bible 10.5).
+  The request's own reservation was released at delivery, and a released reservation takes no new holds. If the event is refused, or
+  another click made the same revision first, the new reservation is released.
+- **Delivery.** Deliver names the current master (`masterEdlId` in the stage details), so a superseded master's EDL is never delivered.
+  The revision's video is new (a new render, a new review, a new manifest). `selectVideos` picks the named master.
+- **Identity.** No artifact id is reused. The edit's EDL id hashes its input, which includes the takes, so a remade take gives a new EDL id.
+  The request's `revision` counts the remakes (0 before the first).
+- **Contracts.** No contract changes. `EngineEvent`, `OrchestratorState`, `ShotState` and the stage payload are engine internals, and the new
+  fields are optional. `engine-contracts@9` stands.
+- **Not built.** Remaking mid-run (the in-flight jobs would need cancelling first); remaking a video with variants (its variants would be
+  stale); a splice render that re-renders only the changed window (the render is the whole composition, so a remake re-renders the video);
+  directions for the whole video rather than one shot; a sweep for a reservation left by a crash between its reserve and its event.
+- **Verified on fixtures.** `engine/jobs/remake.test.ts` (the state machine: refusals, the new produce job, the second master, the
+  redo-then-escalate path); `engine/ops/remake.test.ts` (the real chain on PGlite: a delivered video's shot is remade, checked, cut again,
+  rendered and delivered as a second master, and the feed shows it); `engine/api/index.test.ts` (a refused remake holds no money).
+  Not verified live: the render and review of a second video on HyperFrames (its price per minute is still unset, so the render stays
+  not connected, Bible 20.3 item 1).
+
 ## 6. Stage specifications
 
 Each stage below lists what it does, step by step, how it fails, and the tests that prove it works. Thresholds marked initial live in `engine/config/thresholds.ts`.

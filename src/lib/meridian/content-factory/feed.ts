@@ -7,7 +7,7 @@
  * is the shot's recorded choice (the shot spec's modelChoice, contract v7) when it exists; until then the card names the route the
  * shot is sent on, and says that it is the route, not a recorded choice.
  */
-import type { EngineRequestFeed, EngineRequestStatus, FeedArtifact, FeedGate, FeedLedgerRow } from "../../../engine/api/index.ts";
+import type { EngineRequestFeed, EngineRequestStatus, FeedArtifact, FeedGate, FeedLedgerRow, FeedShotRow } from "../../../engine/api/index.ts";
 
 export const CARD_IDS = ["reference_analysis", "plan", "model_choices", "script", "voice", "visuals", "edit", "render", "gates", "delivery"] as const;
 export type CardId = (typeof CARD_IDS)[number];
@@ -53,7 +53,68 @@ export type RunFeed = {
   /** Every paid call of the request, including calls the ledger does not tie to one step (for example a Claude role call). */
   total: CardCost;
   unattributedCalls: number;
+  /** The board: the shots of the video and the revision it is on (Bible 5.5). */
+  board: RunBoard;
 };
+
+/** One shot on the board: where it sits in the video, what it is doing now, and whether a reviewer can remake it (Bible 5.5). */
+export type BoardShot = {
+  shotId: string;
+  /** "Shot 1" in the plan's time order. */
+  label: string;
+  /** The plan's visual type with its underscores read as spaces, or null when the plan has no record of the shot. */
+  visualLabel: string | null;
+  /** "0:04 to 0:09", or null when the plan's timing is unknown. */
+  span: string | null;
+  status: FeedShotRow["status"];
+  statusText: string;
+  takes: number;
+  remakes: number;
+  lastVerdict: { pass: boolean; failing: string[] } | null;
+  directives: string[];
+  /** Why this shot cannot be remade now. Null: the reviewer can remake it. */
+  remakeRefusal: string | null;
+};
+
+/** The board of a run: the revision the video is on, and its shots in time order. */
+export type RunBoard = { revision: number; shots: BoardShot[] };
+
+/** A time in the video as m:ss. */
+export function clockOf(ms: number): string {
+  const seconds = Math.round(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
+/** One shot of the board. `index` is its place in the plan's time order. */
+export function boardShotOf(row: FeedShotRow, index: number): BoardShot {
+  return {
+    shotId: row.shotId,
+    label: `Shot ${index + 1}`,
+    visualLabel: row.visualType === null ? null : row.visualType.replace(/_/g, " "),
+    span: row.startMs === null || row.endMs === null ? null : `${clockOf(row.startMs)} to ${clockOf(row.endMs)}`,
+    status: row.status,
+    statusText: shotStatusText(row),
+    takes: row.takes,
+    remakes: row.remakes,
+    lastVerdict: row.lastVerdict,
+    directives: row.directives,
+    remakeRefusal: row.remakeRefusal,
+  };
+}
+
+function shotStatusText(row: FeedShotRow): string {
+  switch (row.status) {
+    case "accepted":
+      return row.remakes > 0 ? "Remade and accepted" : "Accepted";
+    case "escalated":
+      return "Needs a person";
+    case "replanning":
+      return "Being replanned";
+    case "pending":
+      if (row.takes === 0) return "Being made";
+      return row.lastVerdict?.pass === false ? "Being redone" : "Being checked";
+  }
+}
 
 const CARD_TITLES: Record<CardId, string> = {
   reference_analysis: "Reference analysis",
@@ -356,5 +417,6 @@ export function feedCards(feed: EngineRequestFeed): RunFeed {
     cards,
     total: costOf(feed.ledger),
     unattributedCalls: feed.ledger.filter((row) => !attributed.has(row.stage)).length,
+    board: { revision: feed.revision, shots: feed.shots.map(boardShotOf) },
   };
 }

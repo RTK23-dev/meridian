@@ -188,6 +188,18 @@
 details > summary { transition: color 160ms ease; }
 details > summary:hover { color: var(--color-fg); }
 
+/* The line into a running step of the Content Factory board. Its dashes move down the line while the step works. The reduced-motion rule
+   below cuts the movement, so the line is then a steady dashed line. */
+@keyframes cf-flow {
+  from { background-position: 0 0; }
+  to { background-position: 0 1rem; }
+}
+.cf-flow {
+  background-image: repeating-linear-gradient(to bottom, var(--color-accent) 0 0.25rem, transparent 0.25rem 0.5rem);
+  background-size: 100% 1rem;
+  animation: cf-flow 0.8s linear infinite;
+}
+
 /* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
    chart animation is turned off in the chart components, which read the same media query. */
 @media (prefers-reduced-motion: reduce) {

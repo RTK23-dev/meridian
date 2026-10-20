@@ -111,4 +111,30 @@ describe("choosing the delivered video of each edit", () => {
       (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
     );
   });
+
+  it("a remade video names its current master: the superseded master's EDL is not delivered, and two masters are refused without a name", () => {
+    const REVISED_EDL = fixtureId("edl_", 73);
+    const REVISED_VIDEO = fixtureId("vid_", 74);
+    const revised: Stored<EditDecisionList> = {
+      body: { ...edlFixture, edlId: REVISED_EDL },
+      createdAt: "2026-10-18T09:05:00.000Z",
+    };
+    const edls = [master, revised];
+    const renders = [render(FIXTURE_IDS.video, FIXTURE_IDS.edl, "2026-10-13T09:10:00.000Z"), render(REVISED_VIDEO, REVISED_EDL, "2026-10-18T09:10:00.000Z")];
+    const reviews = [review(FIXTURE_IDS.video, true, "2026-10-13T09:12:00.000Z"), review(REVISED_VIDEO, true, "2026-10-18T09:12:00.000Z")];
+
+    const selection = selectVideos({ edls, renders, reviews, masterEdlId: REVISED_EDL });
+    assert.equal(selection.master.edl.edlId, REVISED_EDL);
+    assert.equal(selection.master.videoId, REVISED_VIDEO);
+    assert.deepEqual(selection.variants, []);
+
+    assert.throws(
+      () => selectVideos({ edls, renders, reviews }),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    );
+    assert.throws(
+      () => selectVideos({ edls, renders, reviews, masterEdlId: fixtureId("edl_", 99) }),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    );
+  });
 });

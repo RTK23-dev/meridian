@@ -4,10 +4,12 @@
 
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
-import { engineRequestFeed, type EngineRequestFeed } from "../../../engine/api/index.ts";
+import { engineRequestFeed, type EngineRequestFeed, type FeedShotRow } from "../../../engine/api/index.ts";
+import { REMAKE_DIRECTIVE_MAX_CHARS } from "../../../engine/jobs/remake.ts";
 import { chainWorld, drain, startChainRequest } from "../../../engine/ops/test/chain.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
-import { CARD_IDS, costLabel, costOf, feedCards, type FeedCard } from "./feed.ts";
+import { boardShotOf, CARD_IDS, clockOf, costLabel, costOf, feedCards, type FeedCard } from "./feed.ts";
+import { REMAKE_DIRECTION_MAX_CHARS } from "./model.ts";
 
 const WS = "ws_cf_feed";
 const BRAND = "brand_cf_feed";
@@ -146,5 +148,73 @@ describe("Content Factory decision feed", () => {
     assert.equal(run.active, true);
     assert.equal(card(run.cards, "render").status, "running");
     assert.equal(card(run.cards, "delivery").status, "not_started");
+  });
+
+  test("the board lists the delivered video's shots in time order, each accepted, on revision 0 with nothing remade", () => {
+    const board = feedCards(recorded).board;
+    assert.equal(board.revision, 0);
+    assert.equal(board.shots.length, recorded.shots.length);
+    assert.ok(board.shots.length > 0, "the chain's plan has shots");
+    assert.ok(board.shots.every((shot) => shot.status === "accepted" && shot.remakes === 0), "every shot of the delivered video is accepted, none remade");
+    assert.deepEqual(board.shots.map((shot) => shot.label), board.shots.map((_, index) => `Shot ${index + 1}`));
+    const starts = recorded.shots.map((shot) => shot.startMs ?? 0);
+    assert.deepEqual(starts, [...starts].sort((a, b) => a - b), "the feed's shots are in time order");
+  });
+});
+
+describe("the Content Factory board: shots as the reviewer reads them", () => {
+  const row: FeedShotRow = {
+    shotId: "shot_01M4T7V8BR00000000000AFP71",
+    beatId: "beat_1",
+    startMs: 4_000,
+    endMs: 9_500,
+    visualType: "ugc_presenter",
+    sourceKind: "generate",
+    status: "pending",
+    round: 0,
+    remakes: 0,
+    takes: 0,
+    acceptedTakeId: null,
+    lastVerdict: null,
+    directives: [],
+    remakeRefusal: null,
+  };
+
+  test("a time reads as m:ss, and a span reads from start to end", () => {
+    assert.equal(clockOf(0), "0:00");
+    assert.equal(clockOf(65_400), "1:05");
+    const shot = boardShotOf(row, 0);
+    assert.equal(shot.label, "Shot 1");
+    assert.equal(shot.span, "0:04 to 0:10");
+    assert.equal(shot.visualLabel, "ugc presenter");
+  });
+
+  test("a shot with no plan record has no span and no visual, not a zero", () => {
+    const shot = boardShotOf({ ...row, startMs: null, endMs: null, visualType: null, sourceKind: null }, 2);
+    assert.equal(shot.label, "Shot 3");
+    assert.equal(shot.span, null);
+    assert.equal(shot.visualLabel, null);
+  });
+
+  test("a pending shot reads as being made, then being checked, then being redone, by its takes and its last check", () => {
+    assert.equal(boardShotOf(row, 0).statusText, "Being made");
+    assert.equal(boardShotOf({ ...row, takes: 1, lastVerdict: { pass: true, failing: [] } }, 0).statusText, "Being checked");
+    assert.equal(boardShotOf({ ...row, takes: 1, lastVerdict: { pass: false, failing: ["slop.hands"] } }, 0).statusText, "Being redone");
+  });
+
+  test("an accepted shot that was remade says so; an escalated shot says a person decides", () => {
+    assert.equal(boardShotOf({ ...row, status: "accepted", takes: 1, remakes: 1 }, 0).statusText, "Remade and accepted");
+    assert.equal(boardShotOf({ ...row, status: "accepted", takes: 1 }, 0).statusText, "Accepted");
+    assert.equal(boardShotOf({ ...row, status: "escalated" }, 0).statusText, "Needs a person");
+  });
+
+  test("the remake refusal and the reviewer's directions reach the shot as they are", () => {
+    const refused = boardShotOf({ ...row, remakeRefusal: "A shot is remade after its video is delivered. This video is still being made.", directives: ["close-up"] }, 0);
+    assert.match(refused.remakeRefusal ?? "", /still being made/);
+    assert.deepEqual(refused.directives, ["close-up"]);
+  });
+
+  test("the direction limit on the screen is the limit the engine keeps", () => {
+    assert.equal(REMAKE_DIRECTION_MAX_CHARS, REMAKE_DIRECTIVE_MAX_CHARS);
   });
 });

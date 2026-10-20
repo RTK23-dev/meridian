@@ -18,9 +18,11 @@ import {
   engineRequestFeed,
   engineRequestStatus,
   productionReadinessPorts,
+  remakeEngineShot,
   startEngineRequest,
   type EngineReadiness,
   type EngineReadinessPorts,
+  type RemakePorts,
 } from "../../../engine/api/index.ts";
 import { hasRole, isRole } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
@@ -54,7 +56,7 @@ export const WORKSPACE_REFUSAL = "This workspace is not available to you.";
 export const SESSION_REFUSAL = "This session is not available to you.";
 export const ADMIN_REFUSAL = "Content Factory is for workspace admins. Your role in this workspace does not include it.";
 export const BRAND_REFUSAL = "That brand is not in this workspace.";
-export const STARTED_REFUSAL = "This session has already made its video. Revisions are not built yet, so start a new session.";
+export const STARTED_REFUSAL = "This session has already made its video. Revise it to make another, or start a new session.";
 export const MESSAGE_REFUSAL = "That message is not in this session.";
 
 /** The engine's own statement about the reference video, shown on the screen (Bible principle 4 and 6.2 step 7). */
@@ -530,6 +532,36 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
     metadata: { priorRequestId: row.engine_request_id, revision: String(revision) },
   });
   return { status: "draft", revision, priorRequestId: row.engine_request_id };
+}
+
+export type RemakeOutcome = { status: "queued"; revision: number } | { status: "refused"; reasons: string[] };
+
+/**
+ * Makes one shot of the session's delivered video again (Bible 5.5). Only an admin of the session's workspace can: the session's access
+ * check is the same one every change in Content Factory uses. The session keeps its request, so the shot's new take, its edit, its render
+ * and its review run on the same video, and the video is delivered again as its next revision. A refusal says why, and nothing is
+ * reserved for it.
+ */
+export async function remakeShot(sql: Sql, userId: string, input: { sessionId: string; shotId: string; directive: string | null }, ports?: RemakePorts): Promise<RemakeOutcome> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
+  }
+  const outcome = await remakeEngineShot(
+    sql,
+    { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, directive: input.directive, now: new Date().toISOString() },
+    ports,
+  );
+  if (outcome.status === "refused") return outcome;
+  await audit(sql, {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    actorId: userId,
+    action: "content_factory.shot_remade",
+    objectId: row.id,
+    metadata: { requestId: row.engine_request_id, shotId: input.shotId, revision: String(outcome.revision) },
+  });
+  return { status: "queued", revision: outcome.revision };
 }
 
 export type RunView =

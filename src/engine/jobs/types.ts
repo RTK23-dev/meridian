@@ -153,7 +153,13 @@ export type EngineEvent =
   /** epoch is the plan epoch of a produce job (from its payload), so a dead job of an older plan does not pause the request. */
   | { type: "dead"; stage: EngineStage; subjectId: string; reason: string; epoch?: number }
   | { type: "resume" }
-  | { type: "human_choice"; shotId: string; takeId: string };
+  | { type: "human_choice"; shotId: string; takeId: string }
+  /**
+   * A person asked for one accepted shot of a delivered video to be made again (Bible 5.5). `at` is the time the caller recorded, so
+   * replaying the event gives the same state. `budgetReservationId` is the reservation the caller made for this remake: the request's
+   * own reservation was released at delivery.
+   */
+  | { type: "remake"; shotId: string; directive: string | null; budgetReservationId: string; at: string };
 
 export type StageContext = {
   sql: Sql;

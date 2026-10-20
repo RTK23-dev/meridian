@@ -140,6 +140,13 @@ function describeEvent(event: EngineEvent): { kind: string; stage: string; subje
       return { kind: "resume", stage: "", subjectId: "", body: {} };
     case "human_choice":
       return { kind: "human_choice", stage: "check_take", subjectId: event.shotId, body: { takeId: event.takeId } };
+    case "remake":
+      return {
+        kind: "remake",
+        stage: "produce_shot",
+        subjectId: event.shotId,
+        body: { directive: event.directive, budgetReservationId: event.budgetReservationId, at: event.at },
+      };
   }
 }
 

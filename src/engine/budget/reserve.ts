@@ -16,7 +16,7 @@ import {
   type ClaudeRole,
   type ScenePlan,
 } from "../contracts/index.ts";
-import { estimatePlan } from "./estimate.ts";
+import { estimatePlan, type ChosenCallPrices } from "./estimate.ts";
 import type { LedgerRow, LedgerStore } from "./store.ts";
 
 function usdInput(value: number, name: string): number {
@@ -56,6 +56,8 @@ export type ReserveInput = {
   now: string;
   /** Pass an id to make the call idempotent: a second call with the same id returns the first reservation. */
   reservationId?: string;
+  /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: the price table prices every call. */
+  chosenPrices?: ChosenCallPrices;
 };
 
 export type ReserveResult = {
@@ -84,7 +86,7 @@ export async function reserve(store: LedgerStore, input: ReserveInput): Promise<
   }
 
   const reservationId = input.reservationId ?? newId("res_");
-  const estimate = estimatePlan(input.plan);
+  const estimate = estimatePlan(input.plan, input.chosenPrices ?? new Map());
   const reservedUsd = estimate.reservedUsd;
 
   const reasons: string[] = [];

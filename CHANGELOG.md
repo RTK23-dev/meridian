@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Hot swap.** A reviewer can make one accepted shot of a delivered Content Factory video again. The rest of the video is kept, and the video is delivered again as its next revision. The shot can take a short direction (280 characters). Bible 5.5. Verified on fixtures; the second render needs the HyperFrames price, which is not set.
+- **Flow board.** The Content Factory run is drawn as a flow of steps, with each shot as a node, and the step that is running shows a moving line. Phone and dark layouts are checked on a fixture feed.
+- **Fix.** A delivered engine video's manifest is read from its own slot. Before this, the Factory's engine path could not read a delivered master.
 - **Performance accounts.** Google Ads sync reads the brand's `google_ads` account. TikTok sync reads `tiktok_ads`. A TikTok creator profile is not sent as an advertiser id.
 - **Organic observations.** A measurement key is stored on the row (migration `0107`). Two syncs cannot insert that measurement twice.
 - **Rate limits.** A shared Postgres window gives up after 10 seconds if the database does not answer.

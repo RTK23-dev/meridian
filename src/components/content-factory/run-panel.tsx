@@ -4,18 +4,10 @@ import { PlugZap } from "lucide-react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { reviseContentFactorySession, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
-import { costLabel, type CardStatus, type FeedCard } from "@/lib/meridian/content-factory/feed";
+import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import type { RunView } from "@/lib/meridian/content-factory/service";
-
-const STATUS_LABELS: Record<CardStatus, { label: string; variant: "neutral" | "success" | "warning" | "danger" | "info" }> = {
-  not_started: { label: "Not started", variant: "neutral" },
-  waiting: { label: "Queued", variant: "info" },
-  running: { label: "Running", variant: "info" },
-  done: { label: "Done", variant: "success" },
-  failed: { label: "Failed", variant: "danger" },
-  needs_review: { label: "Needs review", variant: "warning" },
-  paused: { label: "Paused", variant: "warning" },
-};
+import { FlowBoard } from "./run-board";
+import { STATUS_LABELS } from "./status";
 
 export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void }) {
   if (run.isError && !run.data) return <PlainErrorState error={run.error} onRetry={() => void run.refetch()} />;
@@ -45,9 +37,13 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
         Whole request: {feed.total.calls} paid {feed.total.calls === 1 ? "call" : "calls"} · estimate {costLabel(feed.total.estimateUsd)} · reserved {costLabel(feed.total.reservedUsd)} · billed {costLabel(feed.total.billedUsd)}
         {feed.unattributedCalls > 0 ? <span className="block text-xs text-fg-muted">{feed.unattributedCalls} of these calls are not tied to one step on the ledger (for example a Claude check), so they appear only in this total.</span> : null}
       </p>
-      <ol aria-label="Engine steps" className="space-y-3">
-        {feed.cards.map((card, index) => <StepCard key={card.id} card={card} index={index + 1} />)}
-      </ol>
+      <FlowBoard sessionId={sessionId} feed={feed} onChanged={onStarted} />
+      <details className="mb-4">
+        <summary className="cursor-pointer text-sm font-semibold">Step details: inputs, outputs, reasons and models</summary>
+        <ol aria-label="Engine steps" className="mt-3 space-y-3">
+          {feed.cards.map((card, index) => <StepCard key={card.id} card={card} index={index + 1} />)}
+        </ol>
+      </details>
       {view.canRevise ? <ReviseControl sessionId={sessionId} onStarted={onStarted} /> : null}
     </Card>
   );

@@ -10,6 +10,7 @@ import {
   isSourcePage,
   MAX_MESSAGE_CHARS,
   MAX_TITLE_CHARS,
+  REMAKE_DIRECTION_MAX_CHARS,
   type FilePurpose,
   type KeepableGene,
   type ScriptRole,
@@ -50,6 +51,18 @@ export function workspaceInput(input: unknown): { organizationId: string } {
 
 export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
+}
+
+/** A remake of one shot: the session, the shot of its video, and the reviewer's direction. The engine trims and checks the direction. */
+export function remakeShotInput(input: unknown): { sessionId: string; shotId: string; directive: string | null } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  const directive = typeof body.directive === "string" ? body.directive : null;
+  if (directive !== null && directive.length > REMAKE_DIRECTION_MAX_CHARS) {
+    throw new Error(`Keep a direction to ${REMAKE_DIRECTION_MAX_CHARS} characters.`);
+  }
+  return { sessionId: idOf(body.sessionId, "session"), shotId, directive };
 }
 
 export function createSessionInput(input: unknown): { organizationId: string; brandId: string | null; title: string } {

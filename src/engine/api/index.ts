@@ -25,19 +25,29 @@ import {
   type Manifest,
   type ProductionRequest,
   type RenderedVideo,
+  type ScenePlan,
 } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { readArtifact, writeArtifact } from "../jobs/artifact-store.ts";
-import { readEngineRequest, startEngineRequest as startOrchestratorRequest } from "../jobs/orchestrator-sql.ts";
+import { applyEngineEvent, readEngineRequest, startEngineRequest as startOrchestratorRequest } from "../jobs/orchestrator-sql.ts";
 import { ENGINE_STAGES, type EngineStage } from "../jobs/registry.ts";
-import { sqlLedgerStore, withReservationLedger } from "../jobs/sql-ledger-store.ts";
+import { sqlLedgerStore, withReservationLedger, withWorkspaceLedger } from "../jobs/sql-ledger-store.ts";
 import type { EngineRuntime } from "../jobs/types.ts";
 import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts";
 import type { BudgetReservation } from "../contracts/index.ts";
 import type { CredentialSource } from "../gateway/types.ts";
+import type { CatalogRead, ModelCatalogSource } from "../gateway/catalog.ts";
 import type { GoldMetrics } from "../review/gold.ts";
 import { takeReviewItemSchema } from "../review/inbox.ts";
 import { routes } from "../config/routes.ts";
+import { budgets } from "../config/budgets.ts";
+import { reserve } from "../budget/reserve.ts";
+import { releaseReservation } from "../budget/reconcile.ts";
+import type { ChosenCallPrices } from "../budget/estimate.ts";
+import { modelChoicesSchema } from "../contracts/model-choices.ts";
+import { chosenCallPricesOf } from "../plan/model-choices.ts";
+import { remakeRefusalOf, type OrchestratorState } from "../jobs/orchestrator.ts";
+import { remakeDirectiveOf } from "../jobs/remake.ts";
 
 // --- Start -----------------------------------------------------------------------------------------------------------------
 
@@ -216,7 +226,13 @@ export async function engineDeliveredMaster(sql: Sql, organizationId: string, re
   const masterEdlId = read.state.masterEdlId;
   const renderArtifactId = masterEdlId === null ? undefined : read.state.artifacts[`render:${masterEdlId}`];
   if (renderArtifactId === undefined) throw new EngineError("internal", `request ${requestId} is delivered and names no rendered master`);
-  const manifestStored = await readArtifact(sql, { organizationId, artifactId: read.state.manifestId });
+  // The state names the master's video id. Its manifest artifact is stored under the slot manifest:<videoId> (deliver/handlers), not under
+  // that id, so the artifact is read from its slot.
+  const manifestArtifactId = read.state.artifacts[`manifest:${read.state.manifestId}`];
+  if (manifestArtifactId === undefined) {
+    throw new EngineError("internal", `request ${requestId} is delivered and names no manifest artifact for ${read.state.manifestId}`);
+  }
+  const manifestStored = await readArtifact(sql, { organizationId, artifactId: manifestArtifactId });
   const renderStored = await readArtifact(sql, { organizationId, artifactId: renderArtifactId });
   if (manifestStored.envelope.requestId !== requestId || renderStored.envelope.requestId !== requestId) {
     throw new EngineError("internal", `an artifact of ${requestId} belongs to another request`);
@@ -234,6 +250,131 @@ export async function engineDeliveredMaster(sql: Sql, organizationId: string, re
     renderedVideo,
     recordHash: renderStored.envelope.contentHash,
   };
+}
+
+// --- Remakes (Bible 5.5) -----------------------------------------------------------------------------------------------------
+
+export type RemakeInput = {
+  organizationId: string;
+  requestId: string;
+  shotId: string;
+  /** The reviewer's direction for the shot, as typed. Null or blank: no direction. */
+  directive: string | null;
+  /** When the reviewer asked, as an ISO time. The event carries it, so replaying the event gives the same state. */
+  now: string;
+};
+
+/** What a remake reads to price itself: the workspace's monthly budget, and the model catalog that prices the chosen models (Bible 10.5). */
+export type RemakePorts = {
+  monthBudget: WorkspaceBudgetSource;
+  catalog?: ModelCatalogSource;
+};
+
+export type RemakeResult = { status: "queued"; revision: number; reservationId: string } | { status: "refused"; reasons: string[] };
+
+/**
+ * Makes one accepted shot of a delivered video again (Bible 5.5). The remake reserves its own estimate first: the shot's take, the edit
+ * that follows, the render and the review, with the fixed per-master lines. The event is applied only with that reservation held. When
+ * the event is refused, or another remake of the same revision got there first, the reservation is released, so no money stays held
+ * for a remake that did not happen. A refusal names its reasons and changes nothing.
+ */
+export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: RemakePorts): Promise<RemakeResult> {
+  const read = await readEngineRequest(sql, input.organizationId, input.requestId);
+  if (!read) throw new EngineError("not_found", `request ${input.requestId} is not in this workspace`);
+  const state = read.state;
+  const refusal = remakeRefusalOf(state, input.shotId);
+  if (refusal !== null) return { status: "refused", reasons: [refusal] };
+  let directive: string | null;
+  try {
+    directive = remakeDirectiveOf(input.directive);
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+
+  const planId = state.artifacts.plan;
+  const requestId = state.artifacts.request;
+  if (planId === undefined || requestId === undefined) {
+    return { status: "refused", reasons: ["this video has no plan or request record to price a remake from"] };
+  }
+  const plan = scenePlanSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: planId })).envelope.body);
+  const request = productionRequestSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: requestId })).envelope.body);
+  const shot = plan.shots.find((candidate) => candidate.shotId === input.shotId);
+  if (shot === undefined) return { status: "refused", reasons: ["That shot is not in the plan of this video."] };
+  const resolved = ports ?? (await productionRemakePorts(sql));
+
+  const month = await resolved.monthBudget.monthBudget({ organizationId: input.organizationId, requestId: input.requestId, now: input.now });
+  if (month.status !== "known") return { status: "refused", reasons: [month.reason] };
+
+  const reservationId = newId("res_");
+  const revision = (state.revision ?? 0) + 1;
+  try {
+    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state, plan, catalog: resolved.catalog });
+    const reserved = await withWorkspaceLedger(sql, input.organizationId, (store) =>
+      reserve(store, {
+        requestId: input.requestId,
+        workspaceId: input.organizationId,
+        mode: budgets.productionMode,
+        plan: { ...plan, shots: [shot] },
+        requestBudgetUsd: request.constraints.budgetUsd,
+        workspaceMonthBudgetUsd: month.usd,
+        now: input.now,
+        reservationId,
+        ...(chosenPrices === undefined ? {} : { chosenPrices }),
+      }),
+    );
+    if (reserved.reservation.state !== "reserved") {
+      return { status: "refused", reasons: [reserved.reservation.pausedReason ?? "the remake would take the request or the month over its budget"] };
+    }
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+
+  try {
+    const outcome = await applyEngineEvent(sql, {
+      organizationId: input.organizationId,
+      requestId: input.requestId,
+      event: { type: "remake", shotId: input.shotId, directive, budgetReservationId: reservationId, at: input.now },
+      dedupeKey: `remake|${input.requestId}|${input.shotId}|${revision}`,
+    });
+    if (outcome.applied) return { status: "queued", revision, reservationId };
+    // Another click made this revision first. Its reservation is the one in force, and this one is not used.
+    await releaseRemakeReservation(sql, input.organizationId, reservationId);
+    const current = await readEngineRequest(sql, input.organizationId, input.requestId);
+    return { status: "queued", revision: current?.state.revision ?? revision, reservationId: current?.state.budgetReservationId ?? reservationId };
+  } catch (error) {
+    await releaseRemakeReservation(sql, input.organizationId, reservationId);
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+}
+
+/** The chosen models' catalog prices for a remake (Bible 10.5), read the way estimate_reserve reads them. Absent: no model was chosen. */
+async function chosenPricesFor(input: {
+  sql: Sql;
+  organizationId: string;
+  state: OrchestratorState;
+  plan: ScenePlan;
+  catalog: ModelCatalogSource | undefined;
+}): Promise<ChosenCallPrices | undefined> {
+  const slot = input.state.artifacts.model_choices;
+  if (slot === undefined) return undefined;
+  const choices = modelChoicesSchema.parse((await readArtifact(input.sql, { organizationId: input.organizationId, artifactId: slot })).envelope.body);
+  const catalog: CatalogRead =
+    input.catalog === undefined ? { status: "not_connected", reason: "this runtime has no model catalog" } : await input.catalog.read(input.organizationId);
+  return chosenCallPricesOf({ plan: input.plan, choices, catalog }).prices;
+}
+
+async function releaseRemakeReservation(sql: Sql, organizationId: string, reservationId: string): Promise<void> {
+  await withWorkspaceLedger(sql, organizationId, (store) => releaseReservation(store, reservationId));
+}
+
+/** The production ports of a remake: the workspace's monthly budget and the composition's model catalog. */
+export async function productionRemakePorts(sql: Sql): Promise<RemakePorts> {
+  const [{ monthBudget }, { productionComposition }] = await Promise.all([productionReadinessPorts(sql), import("../jobs/runtime.ts")]);
+  return { monthBudget, catalog: productionComposition(sql).shotPorts?.catalog };
+}
+
+function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : "the remake was not made";
 }
 
 // --- Spend -----------------------------------------------------------------------------------------------------------------
@@ -487,6 +628,36 @@ export type EngineRequestFeed = {
   ledger: FeedLedgerRow[];
   reservation: { state: string; estimateUsd: number; reservedUsd: number; pausedReason: string | null } | null;
   openReviewItems: number;
+  /** How many times a person has remade a shot of this video (Bible 5.5). 0 for the first delivery. */
+  revision: number;
+  /** One row per shot of the plan, in time order. The board draws each shot from its row. */
+  shots: FeedShotRow[];
+};
+
+/**
+ * A shot as the board shows it (Bible 5.5). Unknown values stay null: a shot with no plan record has no timing. `remakeRefusal` says why a
+ * remake is not possible now, or is null when it is.
+ */
+export type FeedShotRow = {
+  shotId: string;
+  beatId: string | null;
+  startMs: number | null;
+  endMs: number | null;
+  visualType: string | null;
+  sourceKind: string | null;
+  status: "pending" | "accepted" | "replanning" | "escalated";
+  /** The produce round of the shot's current attempt, starting at 0. */
+  round: number;
+  /** How many times a person has remade this shot. */
+  remakes: number;
+  /** The takes of the shot's current plan, across its rounds, that still count. */
+  takes: number;
+  acceptedTakeId: string | null;
+  /** The newest verdict of the shot's current takes: pass or fail, and the rule names of the failing checks. */
+  lastVerdict: { pass: boolean; failing: string[] } | null;
+  /** The reviewer's directions for the shot, oldest first. */
+  directives: string[];
+  remakeRefusal: string | null;
 };
 
 const modelChoiceSchema = z.object({
@@ -653,6 +824,36 @@ const emptyCounts = (): FeedJobCounts => ({ queued: 0, running: 0, retry: 0, suc
  * Everything the engine recorded for one request of a workspace, in the order it was recorded, or null when the workspace has no such
  * request. Read only: nothing is written, queued or called.
  */
+/** The board's rows for the shots of a request: the plan's timing, the orchestrator's shot state and its takes (Bible 5.5). */
+async function feedShotsOf(sql: Sql, organizationId: string, state: OrchestratorState): Promise<FeedShotRow[]> {
+  const planId = state.artifacts.plan;
+  const parsed = planId === undefined ? null : scenePlanSchema.safeParse((await readArtifact(sql, { organizationId, artifactId: planId })).envelope.body);
+  const specs = new Map((parsed?.success ? parsed.data.shots : []).map((spec) => [spec.shotId, spec]));
+  const takes = Object.values(state.takes);
+  const rows = Object.values(state.shots).map((shot): FeedShotRow => {
+    const spec = specs.get(shot.shotId);
+    const current = takes.filter((take) => take.shotId === shot.shotId && take.epoch === shot.epoch && !take.stale);
+    const newest = current.filter((take) => take.verdict !== null).at(-1)?.verdict ?? null;
+    return {
+      shotId: shot.shotId,
+      beatId: spec?.beatId ?? null,
+      startMs: spec?.startMs ?? null,
+      endMs: spec?.endMs ?? null,
+      visualType: spec?.visualType ?? null,
+      sourceKind: spec?.source.kind ?? null,
+      status: shot.status,
+      round: shot.round,
+      remakes: shot.remakes ?? 0,
+      takes: current.length,
+      acceptedTakeId: shot.acceptedTakeId,
+      lastVerdict: newest === null ? null : { pass: newest.pass, failing: [...newest.failing] },
+      directives: [...(shot.directives ?? [])],
+      remakeRefusal: remakeRefusalOf(state, shot.shotId),
+    };
+  });
+  return rows.sort((a, b) => (a.startMs ?? Number.MAX_SAFE_INTEGER) - (b.startMs ?? Number.MAX_SAFE_INTEGER) || a.shotId.localeCompare(b.shotId));
+}
+
 export async function engineRequestFeed(sql: Sql, organizationId: string, requestId: string): Promise<EngineRequestFeed | null> {
   const read = await readEngineRequest(sql, organizationId, requestId);
   if (!read) return null;
@@ -772,6 +973,8 @@ export async function engineRequestFeed(sql: Sql, organizationId: string, reques
         }
       : null,
     openReviewItems: Number(open[0]?.n ?? 0),
+    revision: state.revision ?? 0,
+    shots: await feedShotsOf(sql, organizationId, state),
   };
 }
 

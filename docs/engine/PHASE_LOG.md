@@ -533,3 +533,38 @@ Typecheck, lint (0 errors) and the production build passed on the same tree.
 **Not verified live.** No live key was used. Narration (request shape, generation id, `total_cost`, voice ids), Deepgram (project listing,
 request lookup, `detect_language`), OpenRouter's video catalog, HyperFrames, the Shotstack fallback, Drive release, and the Docker image
 (not built here).
+
+## 2026-10-18 Hot swap: remake one shot of a delivered video, and the Content Factory flow board
+
+Owner request: a reviewer can make one accepted shot of a delivered video again, and the rest of the video is kept. Bible 5.5 has the rules;
+`docs/engine/CONTENT_FACTORY_STATE_2026-10-18.md` has the state of the Content Factory.
+
+**Built on fixtures.** The orchestrator's `remake` event (`engine/jobs/orchestrator.ts`, `remakeRefusalOf`, `applyRemake`): a new epoch and
+round 0 for the shot, one produce job with a new attempt, the edit cut again on the new take, and a second master delivered. A remade shot
+that fails goes to a person, never to a downgrade. The reviewer's direction is plain text (`engine/jobs/remake.ts`, at most 280 characters)
+and joins the prompt after the rules. `remakeEngineShot` (`engine/api/index.ts`) reserves the shot's own estimate, with chosen models priced
+at their catalog price, applies the event, and releases the reservation when the event is refused or another click made the revision first.
+`deliver` names the current master, so `selectVideos` (`engine/deliver/videos.ts`) picks it when a superseded master is on record. The feed
+carries a row per shot and the revision. The Content Factory adds `remakeShot` (admin only, audited), the server function
+`remakeContentFactoryShot`, and the flow board (`components/content-factory/run-board.tsx`).
+
+**Contracts.** No change. The event, the orchestrator state, the shot state and the stage payload are engine internals, and the new fields
+are optional. No migration.
+
+**Fixed.** `engineDeliveredMaster` read the manifest by the state's `manifestId`, which deliver sets to the video id. The manifest is under
+`manifest:<videoId>`. The Factory's engine path calls this reader, so a delivered engine video could not be linked to a creative at HEAD. The
+test helper that stood in for a delivery wrote the old shape, and now writes the shape deliver writes. The "revisions are not built" refusal
+for a started session is corrected.
+
+**Tests.** `engine/jobs/remake.test.ts` (14), `engine/ops/remake.test.ts` (the real chain on PGlite, one delivered video remade and delivered
+again), `engine/deliver/videos.test.ts` (a remade video names its master), `engine/api/index.test.ts` (a refused remake holds no money, the
+feed reads revision 0), `content-factory/feed.test.ts`, `input.test.ts`, `service.test.ts`, and `factory/produce-engine.test.ts` (fixture
+corrected). Visual check of the board in light, dark and phone widths, on a fixture feed (screenshots only; the harness is not committed).
+
+**Not verified live.** The second render and its review need a HyperFrames price per minute, which is still unset, so the render stays not
+connected. Nothing has run against a live provider.
+
+**Open.** Mid-run remakes; remakes of videos with variants; a splice render; a whole-video direction; choosing a model for a remake; the review
+inbox's `change_visual_type` and `edit_prompt` actions are defined but unwired; take previews on the board; a sweep for a reservation left by a
+crash between its reserve and its event. `npm run typecheck` fails before it reaches code at HEAD (TS5101, the `baseUrl` option under the locked
+TypeScript 5.9.3); `tsc --ignoreDeprecations 5.0` passes. `tsconfig.json` is not changed here.

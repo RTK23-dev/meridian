@@ -19,6 +19,7 @@ import {
   MESSAGE_REFUSAL,
   postMessage,
   readRun,
+  remakeShot,
   reviseSession,
   saveSettings,
   searchSources,
@@ -124,6 +125,17 @@ describe("Content Factory sessions", () => {
 
     const theirs = await listSessions(db.sql, OTHER_ADMIN, { organizationId: OTHER_WS });
     assert.equal(theirs.length, 0, "the other workspace sees none of this workspace's sessions");
+  });
+
+  test("a shot is remade only by an admin of the session's workspace, and only once the video exists; before that the refusal says so", async () => {
+    const shot = "shot_01M4T7V8BR00000000000AFP71";
+    const created = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Remake" });
+    await assert.rejects(remakeShot(db.sql, MEMBER, { sessionId: created.id, shotId: shot, directive: null }), { message: ADMIN_REFUSAL });
+    await assert.rejects(remakeShot(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot, directive: null }), { message: SESSION_REFUSAL });
+    assert.deepEqual(await remakeShot(db.sql, ADMIN, { sessionId: created.id, shotId: shot, directive: "close up" }), {
+      status: "refused",
+      reasons: ["This session has no video yet. Make the video first."],
+    });
   });
 
   test("a session is read and changed only in its own workspace, by its admins; an unknown id gets the same refusal", async () => {
