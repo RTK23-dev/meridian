@@ -22,6 +22,7 @@ import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppInviteRouteImport } from './routes/_app/invite'
 import { Route as AppJobsRouteImport } from './routes/_app/jobs'
 import { Route as AppNotificationsRouteImport } from './routes/_app/notifications'
+import { Route as AppOrchestratorRouteImport } from './routes/_app/orchestrator'
 import { Route as AppSettingsRouteImport } from './routes/_app/settings'
 import { Route as AppSetupRouteImport } from './routes/_app/setup'
 import { Route as AppUsageRouteImport } from './routes/_app/usage'
@@ -114,6 +115,11 @@ const AppJobsRoute = AppJobsRouteImport.update({
 const AppNotificationsRoute = AppNotificationsRouteImport.update({
   id: '/notifications',
   path: '/notifications',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOrchestratorRoute = AppOrchestratorRouteImport.update({
+  id: '/orchestrator',
+  path: '/orchestrator',
   getParentRoute: () => AppRoute,
 } as any)
 const AppSettingsRoute = AppSettingsRouteImport.update({
@@ -281,6 +287,7 @@ export interface FileRoutesByFullPath {
   '/invite': typeof AppInviteRoute
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
+  '/orchestrator': typeof AppOrchestratorRoute
   '/settings': typeof AppSettingsRoute
   '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
@@ -323,6 +330,7 @@ export interface FileRoutesByTo {
   '/invite': typeof AppInviteRoute
   '/jobs': typeof AppJobsRoute
   '/notifications': typeof AppNotificationsRoute
+  '/orchestrator': typeof AppOrchestratorRoute
   '/settings': typeof AppSettingsRoute
   '/setup': typeof AppSetupRoute
   '/usage': typeof AppUsageRoute
@@ -368,6 +376,7 @@ export interface FileRoutesById {
   '/_app/invite': typeof AppInviteRoute
   '/_app/jobs': typeof AppJobsRoute
   '/_app/notifications': typeof AppNotificationsRoute
+  '/_app/orchestrator': typeof AppOrchestratorRoute
   '/_app/settings': typeof AppSettingsRoute
   '/_app/setup': typeof AppSetupRoute
   '/_app/usage': typeof AppUsageRoute
@@ -414,6 +423,7 @@ export interface FileRouteTypes {
     | '/invite'
     | '/jobs'
     | '/notifications'
+    | '/orchestrator'
     | '/settings'
     | '/setup'
     | '/usage'
@@ -456,6 +466,7 @@ export interface FileRouteTypes {
     | '/invite'
     | '/jobs'
     | '/notifications'
+    | '/orchestrator'
     | '/settings'
     | '/setup'
     | '/usage'
@@ -500,6 +511,7 @@ export interface FileRouteTypes {
     | '/_app/invite'
     | '/_app/jobs'
     | '/_app/notifications'
+    | '/_app/orchestrator'
     | '/_app/settings'
     | '/_app/setup'
     | '/_app/usage'
@@ -639,6 +651,13 @@ declare module '@tanstack/react-router' {
       path: '/notifications'
       fullPath: '/notifications'
       preLoaderRoute: typeof AppNotificationsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/orchestrator': {
+      id: '/_app/orchestrator'
+      path: '/orchestrator'
+      fullPath: '/orchestrator'
+      preLoaderRoute: typeof AppOrchestratorRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/settings': {
@@ -857,6 +876,7 @@ interface AppRouteChildren {
   AppInviteRoute: typeof AppInviteRoute
   AppJobsRoute: typeof AppJobsRoute
   AppNotificationsRoute: typeof AppNotificationsRoute
+  AppOrchestratorRoute: typeof AppOrchestratorRoute
   AppSettingsRoute: typeof AppSettingsRoute
   AppSetupRoute: typeof AppSetupRoute
   AppUsageRoute: typeof AppUsageRoute
@@ -889,6 +909,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppInviteRoute: AppInviteRoute,
   AppJobsRoute: AppJobsRoute,
   AppNotificationsRoute: AppNotificationsRoute,
+  AppOrchestratorRoute: AppOrchestratorRoute,
   AppSettingsRoute: AppSettingsRoute,
   AppSetupRoute: AppSetupRoute,
   AppUsageRoute: AppUsageRoute,

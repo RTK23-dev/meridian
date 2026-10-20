@@ -583,3 +583,10 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - Open, not resolved in code: no live run (no `OPENROUTER_API_KEY` in the environment); fixed ids remain in
   `src/engine/config/routes.ts` and `prices.ts` for the legacy pipeline; artifact storage (S3 vs Postgres and Drive), Veo and Hypit
   remain owner decisions.
+
+## 2026-10-20 Planner, recorded example screen, route decision
+
+- Added `src/engine/orchestrator/planner.ts`: builds the prompt from live candidates, asks the orchestrating model through an injected call, and validates the reply. A reply with no plan, a schema error, an unknown model or a failed call gives no plan, with the reasons.
+- Added a recorded example run (`example.ts`, events in `fixtures/example-events.ts`, checked against a fresh run by test) and the screen `/orchestrator` that replays it. It calls no provider; its costs are estimates.
+- Tried removing the fixed media fallback ids from `routes.ts`. Reverted: 35 tests assert those fallbacks through the adapters. Next block: adapters take the live choice explicitly, then the ids go.
+- Still fixed, owner decision needed: the three Claude role models in `routes.ts` (production LLM path) and the Deepgram `nova-3` id.

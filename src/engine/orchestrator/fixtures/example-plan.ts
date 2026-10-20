@@ -1,0 +1,166 @@
+// The authored example plan (the same content as fixtures/sample-plan.json), as a module the screen can import. A test keeps the two
+// equal. Hand-written, not model output.
+
+export const examplePlanRaw: unknown = {
+  "version": "orchestrator-plan@1",
+  "orchestrator": {
+    "provider": "openrouter",
+    "id": "anthropic/claude-opus-5.5"
+  },
+  "budgetUsd": 2,
+  "nodes": [
+    {
+      "id": "ref_viral",
+      "kind": "reference",
+      "title": "Viral reference (user upload)",
+      "why": "The format the user wants to rebuild.",
+      "dependsOn": [],
+      "model": null,
+      "params": {
+        "asset": "upload"
+      },
+      "estimateUsd": null
+    },
+    {
+      "id": "brand",
+      "kind": "reference",
+      "title": "Brand kit and product photo",
+      "why": "Colours, logo and the product the video sells.",
+      "dependsOn": [],
+      "model": null,
+      "params": {
+        "asset": "brand_kit"
+      },
+      "estimateUsd": null
+    },
+    {
+      "id": "analyze_ref",
+      "kind": "analysis",
+      "title": "What the reference does",
+      "why": "Shots, pacing and hook, read from the reference.",
+      "dependsOn": [
+        "ref_viral"
+      ],
+      "model": {
+        "provider": "openrouter",
+        "id": "anthropic/claude-haiku-5.5"
+      },
+      "params": {
+        "task": "format_structure"
+      },
+      "estimateUsd": 0.02
+    },
+    {
+      "id": "script",
+      "kind": "script",
+      "title": "Script in the brand's voice",
+      "why": "The format's structure, filled with the product.",
+      "dependsOn": [
+        "analyze_ref",
+        "brand"
+      ],
+      "model": {
+        "provider": "openrouter",
+        "id": "anthropic/claude-opus-5.5"
+      },
+      "params": {
+        "seconds": 15
+      },
+      "estimateUsd": 0.1
+    },
+    {
+      "id": "hero_still",
+      "kind": "visual",
+      "title": "Hero still matched to the brand",
+      "why": "The opening frame the product sits in.",
+      "dependsOn": [
+        "script"
+      ],
+      "model": {
+        "provider": "openrouter",
+        "id": "black-forest-labs/flux.2-pro"
+      },
+      "params": {
+        "aspect": "9:16",
+        "hero_line": "script.hook"
+      },
+      "estimateUsd": 0.06
+    },
+    {
+      "id": "voice",
+      "kind": "voice",
+      "title": "Voice-over",
+      "why": "The script read aloud; the engine's track is the clock.",
+      "dependsOn": [
+        "script"
+      ],
+      "model": {
+        "provider": "openrouter",
+        "id": "elevenlabs/eleven-multilingual-v2"
+      },
+      "params": {
+        "text_from": "script.lines"
+      },
+      "estimateUsd": 0.05
+    },
+    {
+      "id": "shot_1",
+      "kind": "video",
+      "title": "Product shot, 5 seconds",
+      "why": "The one moving shot the format opens on.",
+      "dependsOn": [
+        "hero_still"
+      ],
+      "model": {
+        "provider": "openrouter",
+        "id": "alibaba/wan-3.0"
+      },
+      "params": {
+        "seconds": 5,
+        "aspect": "9:16",
+        "resolution": "1080p"
+      },
+      "estimateUsd": 0.9
+    },
+    {
+      "id": "edit",
+      "kind": "edit",
+      "title": "Cut, timing and grade",
+      "why": "Deterministic: the same inputs give the same cut.",
+      "dependsOn": [
+        "shot_1",
+        "voice"
+      ],
+      "model": null,
+      "params": {},
+      "estimateUsd": null
+    },
+    {
+      "id": "compose",
+      "kind": "compose",
+      "title": "Layout, captions and brand",
+      "why": "Components from the kit, styled by the brand's variables.",
+      "dependsOn": [
+        "edit",
+        "brand"
+      ],
+      "model": null,
+      "params": {},
+      "estimateUsd": null
+    },
+    {
+      "id": "render",
+      "kind": "render",
+      "title": "Final 1080x1920 MP4",
+      "why": "The encode the delivery step checks.",
+      "dependsOn": [
+        "compose"
+      ],
+      "model": null,
+      "params": {
+        "container": "mp4"
+      },
+      "estimateUsd": null
+    }
+  ]
+};
