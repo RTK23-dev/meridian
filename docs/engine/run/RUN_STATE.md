@@ -15,6 +15,8 @@ Governing plan: `REPLAN_2026-10-20.md`.
 - 2026-10-20 23:2xZ. Planner added (`planner.ts`): asks the orchestrating model for a plan, treats the reply as untrusted, validates it against the live catalog; no plan on any failure. Recorded example run added (`example.ts`, stored as `fixtures/example-events.ts`, checked by test). Screen and route added: `/orchestrator` (recorded example, no provider called).
 - Browser check of `/orchestrator` on the dev server (auth off, dev user): no console errors; no horizontal overflow at 390px; screenshots in the session scratchpad.
 - Attempted: remove the fixed media fallback ids from `routes.ts` (Kling, Veo lite, Seedream 4.5, ElevenLabs v4, Gemini TTS). Reverted: 35 tests assert those fallbacks through adapters, so the change needs the adapters to take the live choice explicitly. That is the next block, not a one-line edit.
+- 2026-10-20 23:5xZ. Pushed `bf7854e` (planner, recorded example, `/orchestrator`). Full suite on that tree: 5711 tests, 5670 pass, 0 fail, 41 skipped, exit 0. Lint exit 0 (0 errors, 4 pre-existing warnings). Typecheck exit 0.
+- Status page published (private, no wake subscription registered): https://claude.ai/artifact/1szjYSNUowxC2ozQkK7ygD
 - Still fixed: the three Claude role models (`llm.direction`, `llm.analysis`, `llm.check`) and the Deepgram `nova-3` model in the stt route. The Claude roles are the production LLM path; changing them needs the owner's cutover decision.
 
 ## Current state
