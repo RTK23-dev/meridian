@@ -80,6 +80,7 @@ export const CLAUDE_ROLES = [
   "frame_reader",
   "model_chooser",
   "scriptwriter",
+  "orchestrator_plan",
 ] as const;
 export const claudeRoleSchema = z.enum(CLAUDE_ROLES);
 export type ClaudeRole = z.infer<typeof claudeRoleSchema>;

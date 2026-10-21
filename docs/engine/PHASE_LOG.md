@@ -605,3 +605,12 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - `stale.ts` holds the edit and stale-set logic with no Node-only imports; `browser-safety.test.ts` fails if a browser module imports one.
 - `/orchestrator` has an offline editor: change one paid step, see the new cost, the steps to re-run, or the refusal reasons. Labels sit beside their controls, so option text is not part of a label's name.
 - Proposed, not applied: the orchestrator's Claude role (`PROPOSED_MIGRATION_ORCHESTRATOR_ROLE.md`). It needs a contract entry and a migration to extend the role check constraints.
+
+## 2026-10-21 Orchestrator role, plan store and runner (owner direction: build everything before the key)
+
+- Owner approval, recorded here: the orchestrator's Claude role (`orchestrator_plan`, contract entry in `CLAUDE_ROLES`) and migration `0108_orchestrator_plans.sql` (the role check, the plan and event tables, and the step-output table). Both are additive.
+- The Claude client takes a chosen model with a live price (`RoleRequest.chosenModel`): the call goes to it, and the reservation is priced from its live price, rounded up to the micro-dollar.
+- `structuredChat` passes the resolved route through, so a chosen model is the model that is called. Existing roles pass the same route they always used.
+- `planWithRole` (orchestrator/planner.ts): the chosen model writes the plan through the client, is checked against the live catalog, and gives no plan with reasons on every failure path. Tests use stand-in answers labelled as such in the fixtures README.
+- Plan store (orchestrator/store.ts) and runner (orchestrator/run.ts) run on the migrated database (PGlite in the suite). Every read and write is scoped to the organization; another organization gets not-found. Spend accumulates across runs; cached outputs persist, so an edited plan re-runs only what the edit touched.
+- Tests: 259 across the orchestrator and Claude folders; the store (6) and the runner (8) run against the migrated database.

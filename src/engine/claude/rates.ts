@@ -34,3 +34,16 @@ export function estimateClaudeUsd(model: string, tokens: TokenCount): number {
   const usd = (tokens.input * rate.inputUsdPerMillion + tokens.output * rate.outputUsdPerMillion) / TOKENS_PER_MILLION;
   return roundUsd(usd);
 }
+
+/**
+ * The estimate of one call at a live price, for a model the rate table does not name (the user's orchestrator model, read from the
+ * catalog at run time). It rounds up to the micro-dollar, so a reservation is never short of the price. Refuses a negative or missing price.
+ */
+export function estimateFromPriceUsd(price: { promptUsdPerToken: number; completionUsdPerToken: number }, tokens: TokenCount): number {
+  const values = [price.promptUsdPerToken, price.completionUsdPerToken];
+  if (values.some((value) => !Number.isFinite(value) || value < 0)) {
+    throw new EngineError("unknown_price", "the live price of this model is not usable, so the estimate refuses to guess");
+  }
+  const usd = tokens.input * price.promptUsdPerToken + tokens.output * price.completionUsdPerToken;
+  return Math.ceil(usd * 1_000_000) / 1_000_000;
+}

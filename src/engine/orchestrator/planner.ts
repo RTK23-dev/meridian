@@ -10,6 +10,9 @@
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import { orchestratorPlanSchema, type ModelRef, type OrchestratorPlan } from "./contracts.ts";
 import { validatePlan, KIND_CATALOG } from "./validate.ts";
+import { runRole, type RoleDeps } from "../claude/client.ts";
+import { RoleAnswerError } from "../claude/errors.ts";
+import { orchestratorPlan, ORCHESTRATOR_MAX_CANDIDATES_PER_KIND, type OrchestratorPlanInput } from "../claude/roles/orchestrator_plan.ts";
 
 /** What the user gave the run: the format to rebuild or make, their inputs, and Meridian's brand and product context. */
 export type PlannerBrief = {
@@ -101,6 +104,74 @@ export async function planWithModel(opts: {
   }
 
   const checked = validatePlan(parsed.data, opts.catalog);
+  if (!checked.ok) return { ok: false, reasons: checked.reasons };
+  return { ok: true, plan: checked.plan, order: checked.order };
+}
+
+/** The live candidates the orchestrator may choose from: up to the per-kind cap of each kind, in the catalog's order. */
+export function candidatesFor(catalog: Map<string, CatalogEntry>): Array<{ id: string; name: string; kind: CatalogKind }> {
+  const taken = new Map<CatalogKind, number>();
+  const out: Array<{ id: string; name: string; kind: CatalogKind }> = [];
+  for (const entry of catalog.values()) {
+    const count = taken.get(entry.kind) ?? 0;
+    if (count >= ORCHESTRATOR_MAX_CANDIDATES_PER_KIND) continue;
+    taken.set(entry.kind, count + 1);
+    out.push({ id: entry.id, name: entry.name, kind: entry.kind });
+  }
+  return out;
+}
+
+export type RoleCallScope = {
+  deps: RoleDeps;
+  requestId: string;
+  workspaceId: string;
+  reservationId: string;
+  attempt?: number;
+  signal?: AbortSignal;
+};
+
+/**
+ * The plan written by the user's chosen model, through the Claude client (orchestrator_plan role): reserved, budgeted and on the ledger.
+ * Fail closed. The chosen model must be a live text model with a per-token price in the catalog, or no call is made. A refused call, a
+ * failed call, an answer that does not match the plan contract, and a plan the engine refuses all give no plan, with the reasons.
+ */
+export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRef; brief: PlannerBrief; catalog: Map<string, CatalogEntry> }): Promise<PlanOutcome> {
+  const id = opts.orchestrator.id;
+  const entry = opts.catalog.get(id);
+  if (!entry) return { ok: false, reasons: [`orchestrator ${id} is not in the live catalog, so no call is made`] };
+  if (entry.kind !== "text") return { ok: false, reasons: [`orchestrator ${id} is a ${entry.kind} model, not a text model, so no call is made`] };
+  const { promptUsdPerToken, completionUsdPerToken } = entry.pricing;
+  if (promptUsdPerToken === null || completionUsdPerToken === null) {
+    return { ok: false, reasons: [`orchestrator ${id} has no per-token price in the listing, so its call cannot be priced and no call is made`] };
+  }
+
+  const input: OrchestratorPlanInput = {
+    brief: { ...opts.brief },
+    orchestratorModelId: id,
+    candidates: candidatesFor(opts.catalog),
+  };
+
+  let outcome: Awaited<ReturnType<typeof runRole<OrchestratorPlanInput, OrchestratorPlan>>>;
+  try {
+    outcome = await runRole(opts.deps, orchestratorPlan, {
+      requestId: opts.requestId,
+      workspaceId: opts.workspaceId,
+      reservationId: opts.reservationId,
+      attempt: opts.attempt,
+      signal: opts.signal,
+      input,
+      chosenModel: { modelId: id, price: { promptUsdPerToken, completionUsdPerToken } },
+    });
+  } catch (error) {
+    if (error instanceof RoleAnswerError) return { ok: false, reasons: ["the orchestrating model's answer did not match the plan contract"] };
+    const message = error instanceof Error ? error.message : "the call failed";
+    return { ok: false, reasons: [`the orchestrating model did not answer: ${message.slice(0, 300)}`] };
+  }
+
+  if (outcome.status === "refused") return { ok: false, reasons: [`the orchestrating model's call was refused: ${outcome.reason}`] };
+  if (outcome.status === "duplicate") return { ok: false, reasons: ["this plan call already has a stored answer that is not read here, so it is not asked again"] };
+
+  const checked = validatePlan(outcome.value, opts.catalog);
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }

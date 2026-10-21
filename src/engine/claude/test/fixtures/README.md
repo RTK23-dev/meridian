@@ -25,3 +25,5 @@ against those.
 The scriptwriter answers are authored in the same shape. They are not captures of a live call.
 
 Every answer's `usage.cost` is an example value, not a measured price.
+
+- openrouter-orchestrator-plan-ok.json, openrouter-orchestrator-plan-other-model.json: stand-in answers for the orchestrator_plan role, written from the authored example plan (orchestrator/fixtures/sample-plan.json). They are not a model's recorded output. The first names the orchestrator the test chooses; the second names another model and must be refused.

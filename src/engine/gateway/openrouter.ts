@@ -21,6 +21,8 @@ export type ChatMessage = { role: "system" | "user" | "assistant"; content: stri
 export type StructuredChatInput<T> = {
   organizationId: string | null;
   capability: Capability;
+  /** The route the call goes to. Without it the capability's route table entry is used (a chosen model passes its own route). */
+  route?: ResolvedRoute;
   messages: ChatMessage[];
   /** The answer's schema. It is sent as a JSON schema and the answer is parsed with it. */
   schema: ZodType<T>;
@@ -84,7 +86,7 @@ export function jsonSchemaFor(schema: ZodType): Record<string, unknown> {
 }
 
 export async function structuredChat<T>(gateway: Gateway, input: StructuredChatInput<T>): Promise<StructuredChatResult<T>> {
-  const route = openRouterRoute(gateway, input.capability);
+  const route = input.route ?? openRouterRoute(gateway, input.capability);
   const result = await gateway.call({
     provider: PROVIDER,
     organizationId: input.organizationId,

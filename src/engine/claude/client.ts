@@ -20,7 +20,7 @@ import { StructuredOutputError, structuredChat, type ChatMessage, type ChatUsage
 import { loadPrompt } from "../prompts/load.ts";
 import { RoleAnswerError } from "./errors.ts";
 import { type JournalEntry, type RoleCall, type RoleCallJournal } from "./journal.ts";
-import { estimateClaudeUsd } from "./rates.ts";
+import { estimateClaudeUsd, estimateFromPriceUsd } from "./rates.ts";
 import type { RoleDefinition } from "./role.ts";
 
 export type { JournalEntry, RoleCall, RoleCallJournal } from "./journal.ts";
@@ -54,6 +54,11 @@ export type RoleRequest<Input> = {
   attempt?: number;
   signal?: AbortSignal;
   input: Input;
+  /**
+   * A model the user chose for this call, from the live catalog (the orchestrator, owner direction 2026-10-20). The call goes to it, and
+   * the reservation is priced from its live price, not from the fixed rate table. Without it the route table decides, as before.
+   */
+  chosenModel?: { modelId: string; price: { promptUsdPerToken: number; completionUsdPerToken: number } };
 };
 
 type OutcomeBase = {
@@ -177,6 +182,7 @@ async function settle<Input, Answer>(
         const answer = await structuredChat(ctx.deps.gateway, {
           organizationId: ctx.workspaceId,
           capability: ctx.role.capability,
+          route: ctx.route,
           messages,
           schema: ctx.answer,
           schemaName: ctx.role.schemaName,
@@ -309,7 +315,7 @@ export async function runRole<Input, Answer>(
     throw new EngineError("not_found", `no reservation ${reservationId} for this request in this workspace; no call is made`, { stage });
   }
 
-  const route = deps.gateway.route(role.capability);
+  const route = request.chosenModel === undefined ? deps.gateway.route(role.capability) : deps.gateway.chosen(role.capability, request.chosenModel.modelId);
   const connection = await deps.gateway.connection(route.provider.id, request.workspaceId);
   if (!connection.connected) {
     throw new EngineError(
@@ -328,7 +334,10 @@ export async function runRole<Input, Answer>(
     reservationId,
     route,
     promptVersion: prompt.id,
-    estimateUsd: estimateClaudeUsd(route.model, role.estimateTokens),
+    estimateUsd:
+      request.chosenModel === undefined
+        ? estimateClaudeUsd(route.model, role.estimateTokens)
+        : estimateFromPriceUsd(request.chosenModel.price, role.estimateTokens),
     input,
     answer: role.answer(input),
     attempt,
