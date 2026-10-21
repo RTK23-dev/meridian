@@ -257,15 +257,15 @@ The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL
 
 **The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 6 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it twice per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns.
 
-**The view move.** Once per loop the camera swings 71 degrees up and over, about the horizontal axis, and lands on the globe's axis. Its up direction turns with it, so the globe tips sideways and the spinning meridian is seen side-on, sweeping round the pole like a clock hand. It holds for 1.3 s, then swings back. Each swing takes 0.75 s on cubic-bezier(0.8, 0, 0.2, 1): fast through the middle, soft at both ends. The globe, its spin and the comet do not change; only the viewpoint moves. The swing starts at 1.6 s.
+**The loading move.** Once per loop the camera eases round to face the meridian side-on, so the meridian lies on the globe's outline. The swing starts at 1.6 s and takes 0.8 s on cubic-bezier(0.8, 0, 0.2, 1). While the camera eases in, the comet's trail shrinks to nothing. With the camera side-on, the comet sets off from the top of the meridian and fills it all the way round in 1.2 s, like a loading ring. The camera follows the meridian as the globe turns, so the ring stays on the outline. At the full ring the camera eases back to the front over 0.8 s, and the trail returns to its normal length. The comet's speed is steady outside this move, with a smooth surge across it, sized so it makes exactly one turn while loading and two over the rest of the loop. The camera blends its angles, not its position vectors, so the swing never flips. The globe and its spin do not change.
 
 **Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
 **Files.**
-- `meridian-logo-mark.png`: the hero still at t = 1.3 s, 1440 px.
+- `meridian-logo-mark.png`: the hero still at t = 3.2 s, mid-loading, 1440 px.
 - `meridian-logo.gif`: 150 frames at 25 fps, 480 px.
 - `meridian-logo.mp4`: the same frames at 600 px.
-- `frames/`: four reference stills at 600 px: the front view (t = 0), mid-swing (1.98 s), the side view (3.0 s) and the swing back (4.02 s).
+- `frames/`: four reference stills at 600 px: the front view (t = 0), loading (2.6 s and 3.2 s) and the full ring (3.55 s).
 
 **Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 
