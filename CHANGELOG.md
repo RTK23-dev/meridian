@@ -5,6 +5,7 @@
 - **Performance accounts.** Google Ads sync reads the brand's `google_ads` account. TikTok sync reads `tiktok_ads`. A TikTok creator profile is not sent as an advertiser id.
 - **Organic observations.** A measurement key is stored on the row (migration `0107`). Two syncs cannot insert that measurement twice.
 - **Rate limits.** A shared Postgres window gives up after 10 seconds if the database does not answer.
+- **Status.** The system status no longer reports provider tokens found in the environment. Its unused `providers` field is removed.
 
 ## 0.1.0-beta.13 — prerelease
 
