@@ -90,6 +90,11 @@ function rotateAbout(k, a, v) {
   return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
 
+/** How far round the meridian the comet's head is at time t, in radians. */
+function headAngle(time) {
+  return TAU * CONFIG.headTurnsPerLoop * (time / LOOP) + Math.PI / 2;
+}
+
 /**
  * The meridian's plane and the head's position at time t. The meridian is one of the globe's own meridian lines (longitude 90 in the
  * globe's coordinates): the globe spins about its axis and carries the meridian with it, so e2 is the globe's spin applied to its z axis.
@@ -100,7 +105,7 @@ function meridianAt(time) {
   const e1 = [0, 1, 0];
   const e2 = [Math.sin(theta), 0, Math.cos(theta)];
   const normal = [Math.cos(theta), 0, -Math.sin(theta)];
-  const psi = TAU * CONFIG.headTurnsPerLoop * u + Math.PI / 2;
+  const psi = headAngle(time);
   return { e1, e2, normal, head: add(scale(e1, Math.cos(psi)), scale(e2, Math.sin(psi))) };
 }
 
@@ -111,7 +116,9 @@ function frame(time) {
   const points = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const k = i / CONFIG.arcSamples;
-    points.push({ k, radial: meridianAt(t - CONFIG.trailSeconds * (1 - k)).head });
+    // The trail lies on the meridian as it is now: the head's earlier positions along the line, not its path through space.
+    const psi = headAngle(t - CONFIG.trailSeconds * (1 - k));
+    points.push({ k, radial: add(scale(now.e1, Math.cos(psi)), scale(now.e2, Math.sin(psi))) });
   }
   const ring = [];
   for (let i = 0; i <= RING_SEGMENTS; i++) {
