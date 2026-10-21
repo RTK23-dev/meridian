@@ -61,15 +61,14 @@ const CONFIG = {
   latitudeStepDeg: 45,          // Latitude lines every this many degrees (the equator is one of them).
   meridianStepDeg: 45,          // Meridian lines every this many degrees. 45 gives four great circles.
   gridHalfWidth: 0.0095,        // Half the grid line's width on the sphere, in radians.
-  rimStrength: 0.14,            // Edge light on the globe.
-  glossStrength: 0.7,           // The crisp highlight the key light makes on the globe.
+  backLineAlpha: 0.3,           // Grid lines on the far side, seen through the globe. 0 hides them.
   // The camera.
   cameraDistance: 6.7,
   cameraHeight: 0.55,
   fovDeg: 24,
   colours: {
-    dark: { bg: [0, 0, 0], globe: [0.03, 0.03, 0.035], grid: [0.92, 0.92, 0.92], red: [1.0, 0.16, 0.2], core: [1.0, 0.86, 0.86] },
-    light: { bg: [1, 1, 1], globe: [0.95, 0.95, 0.95], grid: [0.06, 0.06, 0.07], red: [0.78, 0.06, 0.18], core: [1.0, 0.8, 0.82] },
+    dark: { bg: [0, 0, 0], grid: [0.92, 0.92, 0.92], red: [1.0, 0.16, 0.2], core: [1.0, 0.86, 0.86] },
+    light: { bg: [1, 1, 1], grid: [0.06, 0.06, 0.07], red: [0.78, 0.06, 0.18], core: [1.0, 0.8, 0.82] },
   },
 };
 
@@ -266,17 +265,13 @@ void main() {
 const GLOBE_FRAG = `#version 300 es
 precision highp float;
 in vec3 vWorld; in vec3 vNormal; in vec3 vObj;
-uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uBase; uniform vec3 uGrid;
-uniform float uLatStep; uniform float uLonStep; uniform float uHalfWidth;
-uniform float uRim; uniform float uGloss;
+uniform vec3 uEye; uniform vec3 uGrid;
+uniform float uLatStep; uniform float uLonStep; uniform float uHalfWidth; uniform float uBackAlpha;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
   vec3 V = normalize(uEye - vWorld);
-  vec3 L = normalize(uLight);
-  vec3 H = normalize(L + V);
-  float ndv = max(dot(N, V), 0.0);
-  float ndl = max(dot(N, L), 0.0);
+  float ndv = dot(N, V);
 
   // The grid is engraved on the surface, in the globe's own coordinates, so it turns with the globe.
   vec3 p = normalize(vObj);
@@ -288,16 +283,11 @@ void main() {
   float fLon = min(fwidth(dLon), 0.02);
   float lineLat = 1.0 - smoothstep(uHalfWidth - fLat, uHalfWidth + fLat, dLat);
   float lineLon = 1.0 - smoothstep(uHalfWidth - fLon, uHalfWidth + fLon, dLon);
-  float grid = max(lineLat, lineLon) * smoothstep(0.0, 0.5, ndv);
+  float grid = max(lineLat, lineLon) * smoothstep(0.0, 0.5, abs(ndv));
 
-  // Soft studio light: a diffuse term, a glossy highlight, an environment sheen and an edge light.
-  vec3 R = reflect(-V, N);
-  float sheen = smoothstep(-0.3, 0.9, R.y) * 0.035;
-  float gloss = pow(max(dot(N, H), 0.0), 700.0) * uGloss;
-  float rim = pow(1.0 - ndv, 4.0) * uRim;
-  vec3 base = uBase * (0.7 + 0.3 * ndl) + vec3(sheen) + vec3(gloss) + vec3(rim);
-  vec3 lined = uGrid * (0.82 + 0.18 * ndl);
-  outColor = vec4(mix(base, lined, grid), 1.0);
+  // The near side is drawn in full; the far side shows through the globe at uBackAlpha. The globe has no fill.
+  float strength = ndv > 0.0 ? 1.0 : uBackAlpha;
+  outColor = vec4(uGrid, grid * strength);
 }`;
 
 const TUBE_FRAG = `#version 300 es
@@ -319,6 +309,9 @@ void main() {
   vec3 col = uRed * intensity * (0.55 + 0.45 * ndl);
   col += uCore * centre * pow(vK, 3.0) * uHot * 0.9;
   col += vec3(pow(max(dot(N, H), 0.0), 40.0) * 0.35 * vK);
+  float inside = smoothstep(1.03, 0.97, length(vWorld.xy));
+  float behind = step(vWorld.z, 0.0);
+  col *= mix(1.0, 0.22, inside * behind);
   outColor = vec4(col, 1.0);
 }`;
 
@@ -519,25 +512,27 @@ function draw(f) {
   gl.viewport(0, 0, w, h);
   gl.clearColor(bg[0], bg[1], bg[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.enable(gl.DEPTH_TEST);
+  // The globe is see-through: its lines blend over the background and do not block the blade behind them.
+  gl.disable(gl.DEPTH_TEST);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
-  // The globe turns; the light and the camera stay still.
+  // The globe turns; the camera stays still.
   useProgram(globeProgram);
   setMat(globeProgram, "uModel", rotationY(f.spinDeg));
   setMat(globeProgram, "uView", view);
   setMat(globeProgram, "uProj", proj);
   gl.uniform1i(globeProgram.uniforms.uCap, 0);
   setVec3(globeProgram, "uEye", eye);
-  setVec3(globeProgram, "uLight", LIGHT);
-  setVec3(globeProgram, "uBase", colours.globe);
   setVec3(globeProgram, "uGrid", colours.grid);
+  setFloat(globeProgram, "uBackAlpha", CONFIG.backLineAlpha);
   setFloat(globeProgram, "uLatStep", CONFIG.latitudeStepDeg * DEG);
   setFloat(globeProgram, "uLonStep", CONFIG.meridianStepDeg * DEG);
   setFloat(globeProgram, "uHalfWidth", CONFIG.gridHalfWidth);
-  setFloat(globeProgram, "uRim", CONFIG.rimStrength);
-  setFloat(globeProgram, "uGloss", CONFIG.glossStrength);
   gl.bindVertexArray(globeMesh.vao);
   gl.drawElements(gl.TRIANGLES, globeMesh.count, gl.UNSIGNED_INT, 0);
+  gl.disable(gl.BLEND);
+  gl.enable(gl.DEPTH_TEST);
 
   // The blade, then its glowing head.
   useProgram(tubeProgram);

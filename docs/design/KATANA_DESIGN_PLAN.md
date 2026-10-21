@@ -253,7 +253,7 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 The prototype is `docs/design/logo/meridian-logo.html`. It is one self-contained file: WebGL 2 with no libraries and no network. Its timing, camera, materials and glow sit in one `CONFIG` object at the top of the script.
 
-**The mark.** A glossy black globe with a white engraved grid: three latitudes and four meridians, one every 45 degrees. The grid is cut into the surface, so it turns with the globe, and it fades toward the edge. One red blade sits on a great circle just outside the surface. The blade is a lit 3D tube: its centre is a hot white core, its tail fades into dark red, and the part behind the globe is hidden by depth. The globe has one key light from the upper left, a crisp highlight, a soft environment sheen and an edge light.
+**The mark.** A see-through globe: no fill, only a white engraved grid of three latitudes and four meridians, one every 45 degrees. The near side is drawn in full, and the far side shows through the globe at 30% strength. The grid fades toward the edge. One red blade sits on a great circle just outside the surface. It is a lit 3D tube, with a hot white core at its head and a tail that fades into dark red. Its part behind the globe shows faintly, as if seen through it. The globe has no highlight or glow spot.
 
 **Glow.** The scene is drawn with 4x multisampling. A bright pass keeps only the red and the hot core, so the white grid does not glow. Two blur rounds at half resolution, a tight one and a wide one, are added back over the scene. The glow strength is 1.1.
 
