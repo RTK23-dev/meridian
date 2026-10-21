@@ -1,6 +1,8 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, Input, SelectInput, Textarea } from "@/components/ui";
+import { useWorkspace } from "@/components/workspace";
+import { hasRole } from "@/lib/meridian/access";
 import { createOrchestratorDraft, planOrchestratorDraft } from "@/lib/meridian/orchestrator/actions";
 import { cn } from "@/lib/cn";
 import { KindIcon } from "./orchestrator-canvas-parts";
@@ -49,6 +51,8 @@ export function OrchestratorComposer({
   const [budget, setBudget] = useState("2");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const { data: workspace } = useWorkspace();
+  const canAdmin = hasRole(workspace?.active?.role ?? "viewer", "admin");
 
   const missing = missingFields({ brandId, title, goal, format, budget, storedModel });
   const budgetValue = parseBudget(budget);
@@ -57,7 +61,7 @@ export function OrchestratorComposer({
 
   async function planTheRun(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (missing.length > 0 || budgetValue === null) return;
+    if (!canAdmin || missing.length > 0 || budgetValue === null) return;
     setBusy(true);
     setNotice(null);
     let planId: string | null = null;
@@ -267,7 +271,11 @@ export function OrchestratorComposer({
               {notice.text}
             </p>
           ) : null}
-          {missing.length > 0 ? (
+          {!canAdmin ? (
+            <p id="composer-role" className="text-fg-muted">
+              Only a workspace admin can plan a run.
+            </p>
+          ) : missing.length > 0 ? (
             <p id="composer-missing" className="text-fg-muted">
               Still needed: {listWords(missing)}.
             </p>
@@ -279,8 +287,8 @@ export function OrchestratorComposer({
           type="submit"
           size="lg"
           loading={busy}
-          disabled={busy || missing.length > 0}
-          aria-describedby={missing.length > 0 ? "composer-missing" : undefined}
+          disabled={busy || !canAdmin || missing.length > 0}
+          aria-describedby={!canAdmin ? "composer-role" : missing.length > 0 ? "composer-missing" : undefined}
           className="w-full sm:w-auto"
         >
           {busy ? "Planning the run" : "Plan the run"}

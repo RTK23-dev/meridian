@@ -23,16 +23,16 @@ Before screenshots are in `/tmp/claude-0/-home-user-meridian/275fb824-c45c-5a60-
 ## 2. Ownership and conflicts
 
 1. **`attentionItems` name clash.** Resolved by the coordinator: `needsYouItems` sits beside the old export, and `routes/_app/index.tsx` stays on the old export until wave 2.
-2. **`src/routes/_app/brands/new.tsx`** (first-run "Add a brand") is on no agent's list. It needs an owner. This inventory treats it as part of first run.
-3. **The login form** (`src/components/settings/auth-shell.tsx`, `email-auth-form.tsx`) is in Agent C's folder. The `/login` route (`src/routes/login.tsx`) and the signed-out front door (`Welcome` in `src/components/gate.tsx`, B's) both use it.
+2. **`src/routes/_app/brands/new.tsx`** (first-run "Add a brand") is Create's (lead decision). Its page already returns a notice to anyone below member (`hasRole(…, "member")`), the role `createBrand` requires on the server.
+3. **The login form** (`src/components/settings/auth-shell.tsx`, `email-auth-form.tsx`) sits in Places' `settings/**` folder. Lead decision: the login form is Create's. These files were not edited, so they stay in Places' folder until the lead moves them. The `/login` route and the signed-out front door (`Welcome` in `src/components/gate.tsx`) both use them.
 4. **The alerts screen** is `src/components/ops/alerts-center.tsx` (Agent C's `ops/**`). The route `src/routes/_app/alerts.tsx` is B's.
 5. **The setup guide** (`src/components/setup/setup-guide.tsx`, B's) is rendered by `src/routes/_app/setup.tsx` (Agent C's route).
-6. **First-run brand.** The plan asks for a name and a website. `newBrandSchema` (`src/lib/meridian/schemas/brand.ts`) also requires "What you sell". This is an owner decision. The schema is server code and is not changed here.
+6. **First-run brand.** The plan asks for a name and a website. `newBrandSchema` (`src/lib/meridian/schemas/brand.ts`) also requires "What you sell". Lead decision: keep the requirement. The brand step shows "What do you sell?" as a required, labelled field. The schema is not changed.
 7. **The orchestrator model picker** (`src/components/content-factory/orchestrator-model-panel.tsx`) has to leave `/content-factory` for the read-only model chip in Brief. Settings has no slot for it yet (Agent C).
 8. **Two systems.** Content-factory sessions (`src/lib/meridian/content-factory/actions.ts`) and orchestrator plans (`src/lib/meridian/orchestrator/actions.ts`, statuses in `PLAN_STATUSES`) both exist. B4's Create steps use plan statuses, so a Create `planId` is an orchestrator plan. Where content-factory sessions go (into Create, into Library, or retired) is an owner decision.
 9. **Approve.** No plan-level approve action exists. Studio has `approveAndExecuteCreativePlan` and `reviewStudioVariant` (`src/lib/meridian/studio/actions.ts`). Read both before wiring; the first may start execution.
 10. **Gate verdicts.** `GateVerdict` (`src/lib/meridian/factory/gates.ts`) covers originality, brand, claims, policy, rights and jev. The plan lists four. The read path for a Create run's verdicts is not confirmed.
-11. **Roles.** `/content-factory` and the alerts screen check `hasRole(role, "admin")`. The orchestrator composer, plan list and step editor (`src/components/content-factory/orchestrator-*.tsx`) have no UI role check. Wave 1 leaves them as they are. Wave 2 adds the check, after confirming that the server actions enforce roles.
+11. **Roles.** `/content-factory` and the alerts screen check `hasRole(role, "admin")`. Lead decision: the orchestrator plan, run, step-edit, model-save and model-clear controls are admin-only in the UI, each with a visible reason. The server still requires member for plan, run and step edit, and admin for the model. The server checks are unchanged, so members lose these controls in the UI.
 12. **Unsaved-changes bar and guard** (`src/components/forms/unsaved-bar.tsx`, `unsaved-guard.tsx`) are used in 31 files. These include B's `home/create-workspace.tsx`, `brand-overview/brand-details-card.tsx` and the studio steps. Plan 7.5 has no discard dialogs, so wave 2 replaces them with the draft store.
 13. **Home shows five numbers.** Plan 6.2 allows three.
 14. **Without a workspace,** the notifications and alerts pages never resolve, and `/content-factory` renders nothing (item 1 above).
@@ -129,7 +129,7 @@ Code today: `/content-factory` (`src/components/content-factory/*`) and `/orches
 | "Plan the run" | Replaced | "Plan it". Saves the draft, then opens Plan. |
 
 - **Server functions:** `createOrchestratorDraft` and `planOrchestratorDraft` (`src/lib/meridian/orchestrator/actions`); `getBrandOrchestratorModel` for the model chip; `getOrchestratorModelSetting`, `listOrchestratorTextModels` and `saveOrchestratorModelSetting` for the picker that is still on `/content-factory`. Content-factory chat and sessions (`src/lib/meridian/content-factory/actions`): `listContentFactorySessions`, `createContentFactorySession`, `getContentFactorySession`, `postContentFactoryMessage`, `saveContentFactorySettings`, `attachContentFactorySource`, `searchContentFactorySources`, `uploadContentFactoryFile`.
-- **Roles:** `/content-factory` is admin only (`hasRole(role, "admin")`). `/orchestrator` has no UI role check (item 11).
+- **Roles:** `/content-factory` is admin only (`hasRole(role, "admin")`). The orchestrator composer's submit is admin-only in the UI (item 11).
 - **States:**
   - Empty (no brand): "No brand yet. Add a brand to start a brief." and "Add a brand".
   - Loading: a 24 px loading mark with "Loading the brief". Today a skeleton that says "Loading Content Factory sessions".
@@ -157,7 +157,7 @@ Code today: `/orchestrator` (`orchestrator-screen.tsx`, `orchestrator-canvas.tsx
 | "Run" (primary), then "Review" when complete | Stays | |
 
 - **Server functions:** `listOrchestratorPlans`, `getOrchestratorPlan`, `runOrchestratorPlan` and `editOrchestratorStep` (`src/lib/meridian/orchestrator/actions`). Today's run panel uses `readContentFactoryRun` and `startContentFactoryRun` (`src/lib/meridian/content-factory/actions`); which run path Create uses is item 8.
-- **Roles:** no UI role check on the run or edit controls (item 11).
+- **Roles:** the plan list's Plan, Run and Save step controls are admin-only in the UI (item 11).
 - **States:**
   - Empty: "No plan yet. Steps appear here once the brief is planned." and "Back to brief".
   - Loading and planning: a 48 px loading mark with "Planning the video" (plan 6.3).
