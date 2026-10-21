@@ -2,12 +2,32 @@
 
 ## Unreleased
 
+Nothing yet.
+
+## 0.1.0-beta.14 — prerelease
+
+The Katana redesign's first waves, the connection-state fix, and the Create progress model, with the Content Factory work listed below. Tests use fixtures. No live provider call or live video run is recorded in this release.
+
+**Upgrade notes.** Migrations `0107` through `0109` are new: an organic measurement key (`0107`), orchestrator plans and their events (`0108`), and the orchestrator model stored per workspace (`0109`). Run `npm ci` once. Archivo, Instrument Sans and JetBrains Mono replace Inter and Fraunces.
+
+- **Settings and connections.** A connection that is not disconnected now shows its real state. Before, every connection read NOT CONFIGURED. A stored credential that cannot be used shows FAILED with its reason, so an earlier success never reads HEALTHY. Performance schedules follow the same credential state. Before, a schedule was always refused.
+- **Design.** Archivo, Instrument Sans and JetBrains Mono. Buttons, fields, cards, badges and feedback are restyled in the Katana palette, with dark as the default theme and a light theme inverted from it. The new step bar, link tabs, drawer, save state and loading mark are built and tested, and the screens move to them in the next wave. The loading mark stops still when reduced motion is on. The primitive gallery is available in development only.
+- **Content Factory.** The orchestrator model is stored per workspace, and each plan records the model that wrote it. Plan, run, step edit and model changes are shown to workspace admins only, with the reason shown to other people.
+- **Create and Home.** The Create step model, progress helpers and the Needs you list are built and tested. The Create screens and Home do not use them yet.
 - **Hot swap.** A reviewer can make one accepted shot of a delivered Content Factory video again. The rest of the video is kept, and the video is delivered again as its next revision. The shot can take a short direction (280 characters). Bible 5.5. Verified on fixtures; the second render needs the HyperFrames price, which is not set.
 - **Flow board.** The Content Factory run is drawn as a flow of steps, with each shot as a node, and the step that is running shows a moving line. Phone and dark layouts are checked on a fixture feed.
 - **Fix.** A delivered engine video's manifest is read from its own slot. Before this, the Factory's engine path could not read a delivered master.
 - **Performance accounts.** Google Ads sync reads the brand's `google_ads` account. TikTok sync reads `tiktok_ads`. A TikTok creator profile is not sent as an advertiser id.
 - **Organic observations.** A measurement key is stored on the row (migration `0107`). Two syncs cannot insert that measurement twice.
 - **Rate limits.** A shared Postgres window gives up after 10 seconds if the database does not answer.
+
+**Known issues.**
+
+- Orchestrator production steps are not connected. Each step reports NOT CONNECTED, and none reports success.
+- The orchestrator's server checks still let a member plan, run and edit steps. The UI requires an admin. The owner decides whether the server changes.
+- The provider status field in system status still reads environment tokens. It changes provider logic, so it waits for the owner's decision.
+- Credentials are not yet in one API and hub. Phase 3, the connection-state fix, is in this release.
+- Brand, Home and Create ready states are not checked against a real workspace. The development database cannot create a workspace yet.
 
 ## 0.1.0-beta.13 — prerelease
 
