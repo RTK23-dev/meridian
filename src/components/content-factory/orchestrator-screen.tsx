@@ -8,6 +8,7 @@ import { examplePlanRaw } from "@/engine/orchestrator/fixtures/example-plan.ts";
 import { editNode, staleSet, type NodeChange } from "@/engine/orchestrator/stale";
 import { KIND_CATALOG, PRICING_LIMITS, validatePlan } from "@/engine/orchestrator/validate";
 import { OrchestratorCanvas } from "./orchestrator-canvas";
+import { OrchestratorPlans } from "./orchestrator-plans";
 
 const STEP_MS = 380;
 
@@ -103,6 +104,10 @@ export function OrchestratorScreen() {
           not charges. Change one step below to see what it would cost and which steps would run again.
         </p>
       </header>
+
+      <OrchestratorPlans />
+
+      <h2 className="text-base font-semibold">Example run</h2>
 
       <div className="flex flex-wrap items-center gap-2">
         <Button size="md" onClick={finished ? restart : () => setPlaying(true)} disabled={playing}>

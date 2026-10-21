@@ -1,0 +1,213 @@
+// Server functions for the orchestrator's plans (owner direction 2026-10-20). Every one resolves the brand's organization, checks the
+// caller's role (viewer to read, member to change anything), validates its input, and then calls the engine's orchestrator entry points.
+// Without a connected OpenRouter key, anything that needs the live catalog says NOT_CONNECTED and calls nothing.
+
+import { createServerFn } from "@tanstack/react-start";
+import { randomUUID } from "node:crypto";
+import { authMiddleware } from "@/lib/auth/middleware";
+import { getSql } from "@/lib/db";
+import { assertRole, isRole, type Role } from "@/lib/meridian/access";
+import { editPlanStepFor, planDraftFor, runPlanFor } from "@/engine/orchestrator/api";
+import type { NodeChange } from "@/engine/orchestrator/stale";
+import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
+
+const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
+
+function text(value: unknown, max: number, label: string, required = false): string {
+  if (typeof value !== "string") {
+    if (!required && (value === undefined || value === null)) return "";
+    throw new Error(`${label} must be text.`);
+  }
+  const trimmed = value.trim();
+  if (required && trimmed.length === 0) throw new Error(`${label} is required.`);
+  if (trimmed.length > max) throw new Error(`${label} is too long.`);
+  return trimmed;
+}
+
+function objectInput(input: unknown): Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("Invalid request.");
+  return input as Record<string, unknown>;
+}
+
+function number(value: unknown, label: string, min: number, max: number): number {
+  const parsed = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed < min || parsed > max) throw new Error(`${label} must be a number from ${min} to ${max}.`);
+  return parsed;
+}
+
+/** The brand's organization and the caller's role in it, checked against the minimum the action needs. */
+async function requireBrand(userId: string, brandId: string, minimum: Role) {
+  const sql = await getSql();
+  const rows = await sql<{ organization_id: string; name: string }>`
+    select organization_id, name from brands where id = ${brandId} and deleted_at is null limit 1
+  `;
+  const brand = rows[0];
+  if (!brand) throw new Error("Brand not found.");
+  const members = await sql<{ role: string }>`
+    select role from memberships where user_id = ${userId} and organization_id = ${brand.organization_id} limit 1
+  `;
+  const role = members[0]?.role;
+  if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
+  assertRole(role, minimum);
+  return { sql, organizationId: brand.organization_id, brandName: brand.name, now: () => new Date().toISOString() };
+}
+
+/** A plan as the screens show it: its status, its reasons and its steps, without the stored JSON strings. */
+function summaryOf(plan: StoredPlan) {
+  const estimate = plan.plan ? plan.plan.nodes.reduce((sum, node) => sum + (node.estimateUsd ?? 0), 0) : null;
+  return {
+    id: plan.id,
+    title: plan.title,
+    status: plan.status,
+    orchestratorModel: plan.orchestratorModel,
+    budgetUsd: plan.budgetUsd,
+    estimateUsd: estimate,
+    reasons: plan.reasons,
+    catalogReadAt: plan.catalogReadAt,
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
+    steps: plan.plan ? plan.plan.nodes.map((node) => ({
+      id: node.id,
+      kind: node.kind,
+      title: node.title,
+      why: node.why,
+      dependsOn: node.dependsOn,
+      model: node.model ? node.model.id : null,
+      params: node.params,
+      estimateUsd: node.estimateUsd,
+    })) : [],
+  };
+}
+
+export const listOrchestratorPlans = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    const plans = await listPlans(sql, organizationId, 50);
+    return { plans: plans.map(summaryOf) };
+  });
+
+export const getOrchestratorPlan = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    const plan = await getPlan(sql, organizationId, data.planId);
+    if (plan === null) throw new Error("Plan not found.");
+    const events = await listPlanEvents(sql, organizationId, data.planId, 0);
+    return { plan: summaryOf(plan), events };
+  });
+
+export const createOrchestratorDraft = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const model = text(body.orchestratorModelId, 200, "Orchestrating model", true);
+    if (!MODEL_ID.test(model)) throw new Error("The orchestrating model must be an OpenRouter id, vendor/model.");
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      title: text(body.title, 120, "Title", true),
+      goal: text(body.goal, 2000, "Goal", true),
+      format: text(body.format, 4000, "Format", true),
+      userInputs: text(body.userInputs, 4000, "Your inputs"),
+      brandSummary: text(body.brandSummary, 2000, "Brand summary"),
+      budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+      orchestratorModelId: model,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "member");
+    const brief = {
+      goal: data.goal,
+      format: data.format,
+      userInputs: data.userInputs,
+      brand: { name: brandName, summary: data.brandSummary },
+      budgetUsd: data.budgetUsd,
+    };
+    const stored = await createPlanDraft(sql, {
+      id: `plan_${randomUUID().replace(/-/g, "")}`,
+      organizationId,
+      title: data.title,
+      brief,
+      orchestratorModel: data.orchestratorModelId,
+      budgetUsd: data.budgetUsd,
+    });
+    return { plan: summaryOf(stored) };
+  });
+
+export const planOrchestratorDraft = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const outcome = await planDraftFor(sql, { organizationId, planId: data.planId, now });
+    if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
+    if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
+    if (outcome.status === "not_found") throw new Error("Plan not found.");
+    if (outcome.status === "not_planned") return { status: "not_planned", reasons: outcome.reasons, plan: summaryOf(outcome.stored) };
+    if (outcome.status === "refused") return { status: "refused", reasons: outcome.reasons, plan: summaryOf(outcome.stored) };
+    if (!("stored" in outcome)) throw new Error("The plan outcome has no stored plan.");
+    return { status: "ready", reasons: [], plan: summaryOf(outcome.stored) };
+  });
+
+export const runOrchestratorPlan = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now });
+    if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
+    if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
+    if (outcome.status === "not_found") throw new Error("Plan not found.");
+    if (outcome.status === "not_runnable") return { status: "not_runnable", reasons: outcome.reasons };
+    const stored = await getPlan(sql, organizationId, data.planId);
+    if (!("spentUsd" in outcome)) throw new Error("The run did not finish.");
+    return { status: outcome.status, spentUsd: outcome.spentUsd, plan: stored ? summaryOf(stored) : null };
+  });
+
+export const editOrchestratorStep = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const patch: Record<string, number | string> = {};
+    if (body.seconds !== undefined) patch.seconds = number(body.seconds, "Seconds", 1, 60);
+    if (body.characters !== undefined) patch.characters = number(body.characters, "Characters", 1, 20000);
+    if (body.maxTokens !== undefined) patch.max_tokens = number(body.maxTokens, "Output tokens", 1, 32000);
+    const model = body.modelId === undefined || body.modelId === null || body.modelId === "" ? undefined : text(body.modelId, 200, "Model", true);
+    if (model !== undefined && !MODEL_ID.test(model)) throw new Error("The model must be an OpenRouter id, vendor/model.");
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      planId: text(body.planId, 80, "Plan", true),
+      nodeId: text(body.nodeId, 40, "Step", true),
+      patch,
+      modelId: model,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const stored = await getPlan(sql, organizationId, data.planId);
+    if (stored === null || stored.plan === null) throw new Error("Plan not found.");
+    const node = stored.plan.nodes.find((candidate) => candidate.id === data.nodeId);
+    if (node === undefined) throw new Error("That step is not in this plan.");
+    const change: NodeChange = {
+      params: { ...node.params, ...data.patch },
+      ...(data.modelId === undefined ? {} : { model: { provider: "openrouter", id: data.modelId } }),
+    };
+    const outcome = await editPlanStepFor(sql, { organizationId, planId: data.planId, nodeId: data.nodeId, change, now });
+    if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
+    if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
+    if (outcome.status === "not_found") throw new Error("Plan not found.");
+    if (outcome.status === "refused") return { status: "refused", reasons: outcome.reasons };
+    const after = await getPlan(sql, organizationId, data.planId);
+    return { status: "edited", plan: after ? summaryOf(after) : null };
+  });

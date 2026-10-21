@@ -32,9 +32,12 @@ export type BudgetLine = z.infer<typeof budgetLineSchema>;
  * Contract v6 adds the budgets the reservation was authorized against: the request's budget and the workspace month's budget.
  * A reservation written before v6 has neither, and is checked against its own reservedUsd only.
  */
+/** The name the reservation's schema field carries (contract v1). */
+export const BUDGET_RESERVATION_SCHEMA = "meridian.budget_reservation/v1" as const;
+
 export const budgetReservationSchema = z
   .object({
-    schema: z.literal("meridian.budget_reservation/v1"),
+    schema: z.literal(BUDGET_RESERVATION_SCHEMA),
     reservationId: idSchema("res_"),
     requestId: idSchema("req_"),
     workspaceId: z.string().min(1),

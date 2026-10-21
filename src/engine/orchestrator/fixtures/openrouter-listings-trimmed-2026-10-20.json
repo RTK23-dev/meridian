@@ -1,0 +1,142 @@
+{
+  "source": "trimmed recording of OpenRouter's public listings, 2026-10-20: the fields the engine reads, and the entries the tests need",
+  "takenAt": "2026-10-20",
+  "listings": {
+    "/models": {
+      "data": [
+        {
+          "id": "anthropic/claude-haiku-5.5",
+          "name": "Anthropic: Claude Haiku 5.5",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image",
+              "file"
+            ],
+            "output_modalities": [
+              "text"
+            ]
+          },
+          "pricing": {
+            "prompt": "0.0000001",
+            "completion": "0.0000005"
+          }
+        },
+        {
+          "id": "anthropic/claude-opus-5.5",
+          "name": "Anthropic: Claude Opus 5.5",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image",
+              "file"
+            ],
+            "output_modalities": [
+              "text"
+            ]
+          },
+          "pricing": {
+            "prompt": "0.000004",
+            "completion": "0.00002"
+          }
+        },
+        {
+          "id": "anthropic/claude-fable-5",
+          "name": "Anthropic: Claude Fable 5",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image",
+              "file"
+            ],
+            "output_modalities": [
+              "text"
+            ]
+          },
+          "pricing": {
+            "prompt": "0.00001",
+            "completion": "0.00005"
+          }
+        },
+        {
+          "name": "a row with no id"
+        }
+      ]
+    },
+    "/models?output_modalities=image": {
+      "data": [
+        {
+          "id": "bytedance-seed/seedream-5-0-pro",
+          "name": "ByteDance Seed: Seedream 5.0 Pro",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image"
+            ],
+            "output_modalities": [
+              "image"
+            ]
+          },
+          "pricing": {
+            "prompt": "0",
+            "completion": "0",
+            "image": "0.003"
+          }
+        },
+        {
+          "id": "black-forest-labs/flux.2-pro",
+          "name": "Black Forest Labs: FLUX.2 Pro",
+          "architecture": {
+            "input_modalities": [
+              "text",
+              "image"
+            ],
+            "output_modalities": [
+              "image"
+            ]
+          },
+          "pricing": {
+            "prompt": "0",
+            "completion": "0"
+          }
+        }
+      ]
+    },
+    "/models?output_modalities=speech": {
+      "data": [
+        {
+          "id": "elevenlabs/eleven-multilingual-v2",
+          "name": "ElevenLabs: Eleven Multilingual v2",
+          "architecture": {
+            "input_modalities": [
+              "text"
+            ],
+            "output_modalities": [
+              "speech"
+            ]
+          },
+          "pricing": {
+            "prompt": "0.00008",
+            "completion": "0"
+          }
+        }
+      ]
+    },
+    "/videos/models": {
+      "data": [
+        {
+          "id": "alibaba/wan-3.0",
+          "name": "Alibaba: Wan 3.0",
+          "pricing_skus": {
+            "duration_seconds_1080p": "0.2"
+          }
+        },
+        {
+          "id": "kwaivgi/kling-v3.0-std",
+          "name": "Kling: Video v3.0 Standard",
+          "pricing_skus": {}
+        }
+      ]
+    }
+  }
+}
