@@ -2,7 +2,8 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
-import { phaseForProbe, type LiveProvider } from "../providers/live.ts";
+import { providerCredentialState } from "../providers/access-token.ts";
+import { phaseForStoredConnection, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
 import { validatePerformanceOwnership } from "./ownership.ts";
 
@@ -87,11 +88,25 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
       where organization_id = ${data.organizationId} and provider = ${data.provider}
       limit 1
     `;
+    const secrets = await sql<{ sealed_token: string }>`
+      select sealed_token from provider_secrets
+      where organization_id = ${data.organizationId} and provider = ${data.provider}
+      limit 1
+    `;
+    // The schedule follows the workspace's real credential, the same as the connection status does.
+    const credential = await providerCredentialState(sql, {
+      organizationId: data.organizationId,
+      provider: data.provider,
+      sealed: secrets[0]?.sealed_token ?? "",
+      encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
+      env: process.env,
+    });
     const row = connections[0];
-    const phase = phaseForProbe({
+    const phase = phaseForStoredConnection({
       provider: data.provider as LiveProvider,
-      ok: row?.last_success_at ? true : row?.last_error ? false : null,
-      error: row?.last_error ?? "",
+      credential,
+      lastSuccessAt: row?.last_success_at,
+      lastError: row?.last_error ?? "",
       disconnected: Boolean(row?.disconnected_at),
     });
     const plan = planPerformanceSchedule({

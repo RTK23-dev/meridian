@@ -6,7 +6,7 @@ import { isLiveProvider, phaseForProbe, probeLive, type LiveProvider } from "./l
 import { liveTransport } from "./http.ts";
 
 export type { LiveProvider };
-export { isLiveProvider, phaseForProbe, probeLive, providerConfigured, publishPausedCampaign } from "./live.ts";
+export { isLiveProvider, phaseForProbe, probeLive, publishPausedCampaign } from "./live.ts";
 
 function id(): string {
   return crypto.randomUUID();

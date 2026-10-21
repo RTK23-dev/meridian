@@ -7,7 +7,10 @@ import { objectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { emailDeliveryState, isoOrNull } from "@/lib/meridian/notifications/email-state";
 import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
-import { isLiveProvider, phaseForProbe, providerConfigured, type LiveProvider } from "@/lib/meridian/providers/live";
+import { providerCredentialState, type ProviderCredentialState } from "@/lib/meridian/providers/access-token";
+import { isLiveProvider, phaseForProbe, phaseForStoredConnection, type LiveProvider } from "@/lib/meridian/providers/live";
+
+const CONNECTION_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 
 function ageMs(value: unknown, now: number): number | null {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
@@ -58,20 +61,35 @@ export const getSystemStatus = createServerFn({ method: "POST" })
             select provider, status, account_id, account_name, last_error, last_success_at, disconnected_at
             from provider_connections where organization_id = ${data.organizationId}
           `;
-          connections = (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => {
-            const row = rows.find((item) => item.provider === provider);
-            const phase = phaseForProbe({
+          // The sealed tokens of this workspace only. Each provider's credential state comes from providerCredentialState, so no
+          // environment variable can make a provider connected.
+          const secrets = await sql<{ provider: string; sealed_token: string }>`
+            select provider, sealed_token from provider_secrets where organization_id = ${data.organizationId}
+          `;
+          const encryptionKey = process.env.TOKEN_ENCRYPTION_KEY ?? "";
+          const credentials: Record<string, ProviderCredentialState> = {};
+          for (const provider of CONNECTION_PROVIDERS) {
+            const sealed = secrets.find((item) => item.provider === provider)?.sealed_token ?? "";
+            credentials[provider] = await providerCredentialState(sql, {
+              organizationId: data.organizationId,
               provider,
-              ok: row?.last_success_at ? true : row?.last_error ? false : null,
-              error: row?.last_error ?? "",
+              sealed,
+              encryptionKey,
+              env: process.env,
+            });
+          }
+          connections = CONNECTION_PROVIDERS.map((provider) => {
+            const row = rows.find((item) => item.provider === provider);
+            const phase = phaseForStoredConnection({
+              provider,
+              credential: credentials[provider],
+              lastSuccessAt: row?.last_success_at,
+              lastError: row?.last_error ?? "",
               disconnected: Boolean(row?.disconnected_at),
             });
-            if (!row && providerConfigured(provider)) {
-              return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "", lastSuccessAt: null };
-            }
             return {
               provider,
-              phase: row ? phase.phase : phase.phase,
+              phase: phase.phase,
               detail: phase.detail,
               accountId: row?.account_id ?? "",
               accountName: row?.account_name ?? "",
@@ -86,8 +104,9 @@ export const getSystemStatus = createServerFn({ method: "POST" })
       }
     }
     if (connections.length === 0) {
+      // No workspace is in scope, or the database could not be read. No credential is in scope, so none is configured.
       connections = (["meta", "tiktok", "google", "ad_library"] as const).filter(isLiveProvider).map((provider) => {
-        const phase = phaseForProbe({ provider, ok: null, error: "", disconnected: false });
+        const phase = phaseForProbe({ provider, ok: null, error: "", disconnected: false, configured: false });
         return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "", lastSuccessAt: null };
       });
     }
