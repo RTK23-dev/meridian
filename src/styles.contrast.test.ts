@@ -4,41 +4,42 @@ import { readFileSync } from "node:fs";
 import { contrastRatio } from "./lib/meridian/a11y/contrast.ts";
 
 const stylesheet = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-const lightTokens = stylesheet.match(/@theme\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
-const darkTokens = stylesheet.match(/\.dark\s*\{([\s\S]*?)\n\}/)?.[1] ?? "";
-function token(block: string, name: string): string {
-  const value = block.match(new RegExp(`--color-${name}:\\s*(#[0-9a-fA-F]{6})`))?.[1];
-  assert.ok(value, `Stylesheet must define a literal --color-${name} token.`);
+const tokenFile = JSON.parse(readFileSync(new URL("../docs/design/tokens/katana-tokens.json", import.meta.url), "utf8")) as {
+  themes: Record<"dark" | "light", Record<string, string>>;
+  contrast: Array<{ fg: string; bg: string; min: number }>;
+};
+
+/** The body of a top-level rule. Its selector starts a line and its closing brace sits at column 0. */
+function ruleBody(selector: string): string {
+  const start = stylesheet.indexOf(`\n${selector} {`);
+  assert.notEqual(start, -1, `styles.css has no top-level ${selector} rule`);
+  const open = stylesheet.indexOf("{", start);
+  return stylesheet.slice(open + 1, stylesheet.indexOf("\n}", open));
+}
+
+function declared(body: string, name: string): string {
+  const value = body.match(new RegExp(`--${name}:\\s*([^;]+);`))?.[1]?.trim();
+  assert.ok(value, `styles.css does not declare --${name}`);
   return value;
 }
 
-const tokenPairs = [
-  ["foreground/background", "fg", "bg", 4.5, lightTokens],
-  ["foreground/surface", "fg", "surface", 4.5, lightTokens],
-  ["muted/background", "fg-muted", "bg", 4.5, lightTokens],
-  ["muted/surface", "fg-muted", "surface", 4.5, lightTokens],
-  ["accent foreground/accent", "accent-fg", "accent", 4.5, lightTokens],
-  ["success/success soft", "success", "success-soft", 4.5, lightTokens],
-  ["warning/warning soft", "warning", "warning-soft", 4.5, lightTokens],
-  ["danger/danger soft", "danger", "danger-soft", 4.5, lightTokens],
-  ["info/info soft", "info", "info-soft", 4.5, lightTokens],
-  ["strong border/surface", "border-strong", "surface", 3, lightTokens],
-  ["dark foreground/background", "fg", "bg", 4.5, darkTokens],
-  ["dark foreground/surface", "fg", "surface", 4.5, darkTokens],
-  ["dark muted/background", "fg-muted", "bg", 4.5, darkTokens],
-  ["dark muted/surface", "fg-muted", "surface", 4.5, darkTokens],
-  ["dark accent foreground/accent", "accent-fg", "accent", 4.5, darkTokens],
-  ["dark success/success soft", "success", "success-soft", 4.5, darkTokens],
-  ["dark warning/warning soft", "warning", "warning-soft", 4.5, darkTokens],
-  ["dark danger/danger soft", "danger", "danger-soft", 4.5, darkTokens],
-  ["dark info/info soft", "info", "info-soft", 4.5, darkTokens],
-  ["dark strong border/surface", "border-strong", "surface", 3, darkTokens],
-] as const;
+const bodies = { dark: ruleBody(":root"), light: ruleBody(':root[data-theme="light"]') };
 
-test("semantic foreground and strong-border token pairs meet contrast targets", () => {
-  for (const [name, foregroundName, backgroundName, minimum, tokens] of tokenPairs) {
-    const foreground = token(tokens, foregroundName);
-    const background = token(tokens, backgroundName);
-    assert.ok(contrastRatio(foreground, background) >= minimum, `${name} must reach ${minimum}:1 (got ${contrastRatio(foreground, background)}:1)`);
+test("styles.css declares every colour in the token file with the same value, in both themes", () => {
+  for (const theme of ["dark", "light"] as const) {
+    for (const [name, value] of Object.entries(tokenFile.themes[theme])) {
+      assert.equal(declared(bodies[theme], name).toUpperCase(), value.toUpperCase(), `${theme} --${name} must match katana-tokens.json`);
+    }
+  }
+});
+
+test("the thirty contrast pairs of the token file meet their minimums in both themes", () => {
+  assert.equal(tokenFile.contrast.length, 30);
+  for (const theme of ["dark", "light"] as const) {
+    const palette = tokenFile.themes[theme];
+    for (const pair of tokenFile.contrast) {
+      const ratio = contrastRatio(palette[pair.fg], palette[pair.bg]);
+      assert.ok(ratio >= pair.min, `${theme}: ${pair.fg} on ${pair.bg} is ${ratio}:1, below ${pair.min}:1`);
+    }
   }
 });

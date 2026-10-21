@@ -3,153 +3,200 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 
-@custom-variant dark (&:where(.dark, .dark *));
+/* Dark is the default and lives on :root. The light theme is its exact inversion, set by data-theme="light" on <html>.
+   The dark variant follows the same rule, so dark: classes apply whenever the page is not light. */
+@custom-variant dark (&:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *));
 
-@theme {
+/* Katana tokens. Source: docs/design/tokens/katana-tokens.json (the contrast test reads the same values). */
+:root {
+  color-scheme: dark;
+  --bg-base: #000000;
+  --bg-raised: #0E0E0E;
+  --bg-overlay: #161616;
+  --border-hairline: #262626;
+  --border-strong: #6B6B6B;
+  --fg-primary: #FFFFFF;
+  --fg-secondary: #C4C4C4;
+  --fg-muted: #949494;
+  --accent-red: #FF2E38;
+  --accent-red-hover: #FF5A63;
+  --accent-red-muted: #2A0B0F;
+  --white-accent: #FFFFFF;
+  --success: #3DDC84;
+  --warning: #FFB020;
+  --danger: #FF4D6A;
+  --info: #5AA9FF;
+  --scrim: rgb(0 0 0 / 0.6);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+  --dur-flip: 900ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-emphasis: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-linear: linear;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-base: #FFFFFF;
+  --bg-raised: #F4F4F4;
+  --bg-overlay: #FFFFFF;
+  --border-hairline: #E2E2E2;
+  --border-strong: #767676;
+  --fg-primary: #0A0A0A;
+  --fg-secondary: #3D3D3D;
+  --fg-muted: #5E5E5E;
+  --accent-red: #C8102E;
+  --accent-red-hover: #A50D25;
+  --accent-red-muted: #FBE3E6;
+  --white-accent: #0A0A0A;
+  --success: #14703A;
+  --warning: #8A5A00;
+  --danger: #B3133A;
+  --info: #0B5FB8;
+  --scrim: rgb(10 10 10 / 0.4);
+}
+
+/* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
+   (bg, surface, fg, accent and the rest) stay as aliases of the Katana roles, so screens not yet migrated keep working. */
+@theme static {
   --font-sans: "Inter Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
   /* Headings and big numbers use the UI sans. Fraunces is kept for the wordmark only. */
   --font-display: var(--font-sans);
   --font-wordmark: "Fraunces Variable", Georgia, serif;
   --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, monospace;
 
-  /* One neutral surface scale for light and dark. Light values here; the dark block below overrides each one. */
-  --color-bg: #f5f5f5;
-  --color-surface: #ffffff;
-  --color-surface-2: #efefef;
-  --color-border: #e2e2e2;
-  --color-border-strong: #8c8c8c;
-  --color-fg: #171717;
-  --color-fg-muted: #5c5c5c;
-  /* The one accent. It is used only for the primary action and the active navigation item. */
-  --color-accent: #8f6232;
-  --color-accent-fg: #ffffff;
-  --color-accent-soft: #f4ece1;
-  /* Text and border colour for the legacy brass name. Darker than the accent so small text passes 4.5:1 on the panels. */
-  --color-brass-text: #7a5529;
-  --color-success: #2f6b3f;
-  --color-success-soft: #e3f0e6;
-  --color-warning: #8a5a00;
-  --color-warning-soft: #fbefd2;
-  --color-danger: #a1362a;
-  --color-danger-soft: #f8e1dd;
-  --color-info: #2a5b87;
-  --color-info-soft: #e1ecf6;
-
-  /* Type scale. Body is 15px. Section headings are 18px, page titles 24px on phones and 28px from sm. */
-  --text-eyebrow: 0.75rem;
-  --text-eyebrow--line-height: 1rem;
-  --text-section: 1.125rem;
-  --text-section--line-height: 1.5rem;
-  --text-title: 1.5rem;
-  --text-title--line-height: 2rem;
-
-  /* Shape and elevation. Panels rely on their border; shadows only mark floating layers. */
-  --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 10px;
-  --radius-xl: 12px;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.04);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.14);
-}
-
-/* Legacy names kept while older screens migrate. Inline, so each element
-   resolves them against its own theme (the nested dark preview depends on it). */
-@theme inline {
+  --color-bg: var(--bg-base);
+  --color-surface: var(--bg-raised);
+  --color-surface-2: var(--bg-raised);
+  --color-border: var(--border-hairline);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg-primary);
+  --color-fg-muted: var(--fg-muted);
+  --color-accent: var(--accent-red);
+  --color-accent-fg: var(--bg-base);
+  --color-accent-soft: var(--accent-red-muted);
+  --color-brass-text: var(--accent-red);
+  --color-success: var(--success);
+  --color-success-soft: var(--bg-raised);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--bg-raised);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--bg-raised);
+  --color-info: var(--info);
+  --color-info-soft: var(--bg-raised);
   --color-paper: var(--color-bg);
   --color-panel: var(--color-surface);
   --color-line: var(--color-border);
   --color-muted: var(--color-fg-muted);
   --color-brass: var(--color-brass-text);
-}
 
-.dark {
-  --color-bg: #0f0f0f;
-  --color-surface: #171717;
-  --color-surface-2: #1f1f1f;
-  --color-border: #2e2e2e;
-  --color-border-strong: #7d7d7d;
-  --color-fg: #f2f2f2;
-  --color-fg-muted: #a8a8a8;
-  --color-accent: #d6a064;
-  --color-accent-fg: #1a1208;
-  --color-accent-soft: #2b2116;
-  --color-brass-text: #d6a064;
-  --color-success: #6fbf86;
-  --color-success-soft: #14261a;
-  --color-warning: #e0b04d;
-  --color-warning-soft: #2a2110;
-  --color-danger: #ef8a7c;
-  --color-danger-soft: #2d1814;
-  --color-info: #7fb2e0;
-  --color-info-soft: #14212d;
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.55);
+  --color-fg-secondary: var(--fg-secondary);
+  --color-overlay: var(--bg-overlay);
+  --color-hairline: var(--border-hairline);
+  --color-accent-hover: var(--accent-red-hover);
+  --color-accent-muted: var(--accent-red-muted);
+  --color-white-accent: var(--white-accent);
+  --color-scrim: var(--scrim);
+
+  /* Two-state shape: every radius is 2 px. Round is kept only for dots, avatars, radios, switch thumbs and the globe. */
+  --radius-sharp: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+
+  /* No shadows anywhere. Layers use a hairline or a strong edge. The names stay so older classes keep resolving. */
+  --shadow-sm: 0 0 #0000;
+  --shadow-md: 0 0 #0000;
+  --shadow-lg: 0 0 #0000;
+
+  /* Katana type scale, in px for the size and line height. Label is 11 px at the least. */
+  --text-eyebrow: 0.6875rem;
+  --text-eyebrow--line-height: 1rem;
+  --text-section: 1.375rem;
+  --text-section--line-height: 1.75rem;
+  --text-title: 1.75rem;
+  --text-title--line-height: 2.125rem;
+  --text-heading: 1rem;
+  --text-heading--line-height: 1.375rem;
+  --text-body: 0.9375rem;
+  --text-body--line-height: 1.375rem;
+  --text-small: 0.8125rem;
+  --text-small--line-height: 1.25rem;
+  --text-caption: 0.75rem;
+  --text-caption--line-height: 1rem;
+  --text-button: 0.875rem;
+  --text-button--line-height: 1.25rem;
+  --text-data-l: 1.75rem;
+  --text-data-l--line-height: 2rem;
+  --text-data-m: 0.8125rem;
+  --text-data-m--line-height: 1.25rem;
+  --text-data-s: 0.6875rem;
+  --text-data-s--line-height: 1rem;
 }
 
 @layer base {
-  html { color-scheme: light; }
-  html.dark { color-scheme: dark; }
   body {
     background: var(--color-bg);
     color: var(--color-fg);
     font-family: var(--font-sans);
-    font-size: 15px;
-    line-height: 1.6;
+    font-size: 0.9375rem;
+    line-height: 1.375rem;
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
-  /* One focus ring for every theme: 2px, 2px offset. */
-  :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+  /* One focus ring for every theme: 2px accent red with a 2px offset. A control on a red fill sets a white ring itself. */
+  :focus-visible { outline: 2px solid var(--accent-red); outline-offset: 2px; }
   .skip-link {
     position: absolute; left: 1rem; top: 1rem; z-index: 50; transform: translateY(-200%);
-    border-radius: 0.375rem; background: var(--color-fg); color: var(--color-bg); padding: 0.75rem 1rem; font-weight: 600;
+    border-radius: var(--radius-sharp); background: var(--color-fg); color: var(--color-bg); padding: 0.75rem 1rem; font-weight: 600;
   }
   .skip-link:focus { transform: none; }
   img, svg, video { max-width: 100%; height: auto; }
   /* Headings use the UI sans. The .font-display opt-in maps to the same sans, so no heading is serif. Size and weight come from the classes. */
-  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.01em; }
+  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
   h1 { text-wrap: balance; }
   h2, h3 { text-wrap: balance; }
-  ::selection { background: color-mix(in srgb, var(--color-accent) 26%, transparent); color: var(--color-fg); }
+  ::selection { background: color-mix(in srgb, var(--accent-red) 26%, transparent); color: var(--color-fg); }
   @media (max-width: 639px) {
     input, select, textarea, [role="combobox"] { font-size: 16px; }
   }
 }
 
 @layer components {
-  /* Quiet section label. It replaces the bold brass caps that every card used to carry. */
+  /* Label style: eyebrows, column headers and state words. Four words at most. */
   .eyebrow {
     font-size: var(--text-eyebrow);
     line-height: var(--text-eyebrow--line-height);
-    font-weight: 500;
+    font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--color-fg-muted);
   }
 
-  /* The one page title. Every screen's h1 uses this class (PageHeader does too): 24px on phones, 28px from the sm breakpoint. */
+  /* The one page title. Every screen's h1 uses this class (PageHeader does too): 28px on phones, 36px from 768px. */
   .page-title {
     font-size: var(--text-title);
     line-height: var(--text-title--line-height);
     font-weight: 600;
-    letter-spacing: -0.015em;
+    letter-spacing: -0.02em;
     color: var(--color-fg);
   }
-  @media (min-width: 40rem) {
-    .page-title { font-size: 1.75rem; line-height: 2.25rem; }
+  @media (min-width: 48rem) {
+    .page-title { font-size: 2.25rem; line-height: 2.5rem; }
   }
 
   /* The wordmark is the only place Fraunces is used. */
   .font-wordmark { font-family: var(--font-wordmark); letter-spacing: -0.02em; }
 
-  /* The card every screen uses: a hairline border on the surface and room inside. No shadow, so nested blocks do not stack. */
+  /* The card every screen uses: a raised surface with a hairline edge and room inside. No shadow. */
   .panel {
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-sharp);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
-    padding: 1.25rem;
+    padding: 1rem;
   }
   @media (min-width: 40rem) {
     .panel { padding: 1.5rem; }
@@ -172,8 +219,8 @@
   }
 }
 
-/* Motion. An entrance rises a few pixels and fades in, then rests on the element's own styles. Reduced motion below shortens these to
-   0.01ms, which still lands on the final state. */
+/* Motion. An entrance rises a few pixels and fades in, then rests on the element's own styles. Reduced motion below removes
+   the movement and lands on the final state. */
 @keyframes rise {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
@@ -213,31 +260,34 @@ details > summary:hover { color: var(--color-fg); }
 .orch-node { animation: orch-pop 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
 
-/* Reduced motion: every CSS transition and animation, including the ones in new components, is cut to 0.01ms. JS-driven
-   chart animation is turned off in the chart components, which read the same media query. */
+/* Reduced motion: movement stops, and every animation jumps to its final frame, so a spinner or a running dash rests as a
+   static mark. Colour and opacity fades stay at 120 ms, so hover and focus still change. The delay goes too, so a staggered
+   entrance cannot hold its element at opacity 0. */
 @media (prefers-reduced-motion: reduce) {
-  /* The delay goes too. A staggered entrance holds its element at opacity 0 until its delay ends, so a delay would hide content. */
-  *, *::before, *::after { animation-delay: 0ms !important; animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+  *, *::before, *::after {
+    animation-delay: 0ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 120ms !important;
+    transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke !important;
+  }
 }
 
-/* More contrast: stronger dividers, text, accent and focus colour. The light block is scoped to :root:not(.dark), so the
-   dark block below (later in the file) wins in dark mode. The pairs still meet the targets in styles.contrast.test.ts. */
+/* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the
+   targets in styles.contrast.test.ts for the base values. */
 @media (prefers-contrast: more) {
-  :root:not(.dark) {
-    --color-border: #7a7a7a;
-    --color-border-strong: #5e5e5e;
-    --color-fg: #050505;
-    --color-fg-muted: #474747;
-    --color-accent: #6b4a22;
-    --color-brass-text: #5e4220;
+  :root:not([data-theme="light"]) {
+    --border-hairline: #6B6B6B;
+    --border-strong: #B3B3B3;
+    --fg-primary: #FDFDFD;
+    --fg-muted: #D9D9D9;
+    --accent-red: #FF5A63;
   }
-  .dark {
-    --color-border: #6b6b6b;
-    --color-border-strong: #b3b3b3;
-    --color-fg: #fdfdfd;
-    --color-fg-muted: #d9d9d9;
-    --color-accent: #f0bf85;
-    --color-brass-text: #f0bf85;
-    --color-accent-fg: #1a1208;
+  :root[data-theme="light"] {
+    --border-hairline: #7A7A7A;
+    --border-strong: #5E5E5E;
+    --fg-primary: #050505;
+    --fg-muted: #474747;
+    --accent-red: #A50D25;
   }
 }

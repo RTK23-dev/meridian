@@ -1,25 +1,26 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 
 export type Theme = "light" | "dark" | "system";
-const ThemeContext = createContext<{ theme: Theme; setTheme: (theme: Theme) => void }>({ theme: "system", setTheme: () => undefined });
+const DEFAULT_THEME: Theme = "dark";
+const ThemeContext = createContext<{ theme: Theme; setTheme: (theme: Theme) => void }>({ theme: DEFAULT_THEME, setTheme: () => undefined });
 const STORAGE_KEY = "meridian-theme";
 
 function systemPrefersDark() { return window.matchMedia("(prefers-color-scheme: dark)").matches; }
 function applyTheme(theme: Theme) {
   const dark = theme === "dark" || (theme === "system" && systemPrefersDark());
-  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
   document.documentElement.style.colorScheme = dark ? "dark" : "light";
   document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')?.setAttribute("content", dark ? "dark light" : "light dark");
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<Theme>("system");
+  const [theme, setThemeState] = useState<Theme>(DEFAULT_THEME);
   const [ready, setReady] = useState(false);
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
       if (stored === "light" || stored === "dark" || stored === "system") setThemeState(stored);
-    } catch { /* Storage can be disabled; system preference remains the fallback. */ }
+    } catch { /* Storage can be disabled; the dark default remains. */ }
     setReady(true);
   }, []);
   useEffect(() => {
@@ -42,4 +43,5 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
 export function useTheme() { return useContext(ThemeContext); }
 
-export const themeBootstrap = `(()=>{try{const t=localStorage.getItem("${STORAGE_KEY}")||"system";const d=t==="dark"||(t==="system"&&matchMedia("(prefers-color-scheme: dark)").matches);document.documentElement.classList.toggle("dark",d);document.documentElement.style.colorScheme=d?"dark":"light"}catch{}})();`;
+/* Runs before paint. Dark unless the stored choice is light, or system with a light operating system. */
+export const themeBootstrap = `(()=>{try{let t="dark";try{t=localStorage.getItem("${STORAGE_KEY}")||"dark"}catch{}const d=t==="light"?false:t==="system"?matchMedia("(prefers-color-scheme: dark)").matches:true;document.documentElement.setAttribute("data-theme",d?"dark":"light");document.documentElement.style.colorScheme=d?"dark":"light"}catch{}})();`;
