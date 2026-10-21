@@ -255,19 +255,19 @@ The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL
 
 **The mark.** A see-through wireframe globe: three latitudes and four meridians, one every 45 degrees. A thin silhouette outlines it. The near lines are full strength and ease down to 16% on the far side. Around it runs the meridian, a red comet of light: a lit 3D tube with a hot white core at its head and a trail that fades to a faint full ring, so the circle always reads. Where the comet's plane cuts the globe, the grid lines light up red, most strongly near the head. A thin horizontal light streak passes through the head, and a bloom pass gives the red its glow.
 
-**The motion: one continuous turn.** The ring turns about a single axis, set halfway between its own normal and the camera. It starts edge-on, a vertical slice through the globe, and half a turn later it faces the camera as a flat round ring. A whole turn brings it back. Every pose between them is a clean tilted orbit, with no awkward angle. The turn's speed follows u - (surge / 4π) sin(4πu) with surge 0.72: it eases into the slice and the ring and sweeps fast between them, and it never stops. The comet's head runs round the ring twice per loop at a constant speed. The globe turns 90 degrees per loop, and the camera sways 7 degrees left and right once per loop. The loop is 4.8 s, and it joins without a seam.
+**The motion: a spinning meridian.** The red ring passes through both poles and spins steadily about the globe's vertical axis, one turn per 6 s loop. From the front it starts edge-on, a slice through the globe, and opens into the full circle as it turns. A faint copy of the whole ring stays visible. A comet of light runs round it twice per loop. Its trail is the path the head actually travelled over the last 1.1 s, so it streams behind the head. The globe and the camera hold still, so the meridian is the only thing that moves.
 
 **Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
 **Files.**
-- `meridian-logo-mark.png`: the hero still at t = 3.0 s, 1440 px.
-- `meridian-logo.gif`: 120 frames at 25 fps, 520 px.
+- `meridian-logo-mark.png`: the hero still at t = 1.3 s, 1440 px.
+- `meridian-logo.gif`: 150 frames at 25 fps, 480 px.
 - `meridian-logo.mp4`: the same frames at 600 px.
-- `frames/`: four reference stills at 600 px: the slice (t = 0), opening (1.2 s), the ring (2.4 s) and closing (3.6 s).
+- `frames/`: four reference stills at 600 px: the slice (t = 0), opening (0.75 s), the ring (1.5 s) and closing (2.25 s).
 
 **Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 
-**Checks.** All 120 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
+**Checks.** All 150 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
 
 ## h. Components with states
 
@@ -588,7 +588,7 @@ Notes for the import later. The Tailwind theme can map these with `@theme inline
 3. **Red as "now".** Approve the seven uses in principle 1. Is any other use wanted?
 4. **Danger hue.** The danger rose is 7 degrees from the accent red. Keep it (proposed, with an icon and a word always), or choose a more distant hue such as orange-red?
 5. **Mark and name.** Approve the wordmark "Meridian" in Archivo 600, sentence case, and the globe mark as drawn.
-6. **Motion pace.** Approve a 4.8 s continuous loop (surge 0.72, the head running twice round per loop, the globe turning 90 degrees and the camera swaying 7 degrees), or tune them.
+6. **Motion pace.** Approve a 6 s meridian turn, with the comet running twice round per loop and a 1.1 s trail, or tune them.
 7. **Constant motion.** The arc's head never stops, even in the holds. Approve, or should it stop during the holds?
 8. **Corner radius.** 2 px (proposed) or 0 px?
 9. **Fonts.** Replace Inter and Fraunces with Archivo, Instrument Sans and JetBrains Mono, all OFL? Approve self-hosting woff2 files in `public/fonts`, which adds no npm package.

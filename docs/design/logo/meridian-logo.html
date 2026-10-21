@@ -36,20 +36,19 @@
 "use strict";
 
 // ---- TUNE HERE. Times are in seconds, angles in degrees, lengths in units of the globe's radius. ----
-// One continuous motion. The meridian's ring turns about one tilted axis, so it passes from the edge-on slice to the face-on ring and
-// back without a stop and without an awkward in-between angle. It slows into those two poses and speeds through the rest.
+// A real meridian: a ring through the poles that spins steadily about the globe's vertical axis. From the front it starts edge-on, a
+// slice through the globe, and opens into the full circle. A comet of light runs round it, and its trail is the path the head has
+// actually travelled, so it streams behind the head instead of swinging with the ring.
 const CONFIG = {
-  loopSeconds: 4.8,             // One full turn of the ring, which is also the loop.
-  surge: 0.72,                  // 0 is an even turn; near 1 it lingers in the slice and the ring and sweeps fast between them.
-  headTurnsPerLoop: 2,          // The comet's head runs round the ring this many times per loop. Whole numbers keep the loop joining.
-  trailDeg: 330,                // The comet's trail. Its far end fades to a faint full ring, so the circle always reads.
-  spinDegPerLoop: 90,           // The globe turns this far per loop. A multiple of the meridian step keeps the loop joining.
-  cameraSwayDeg: 7,             // The camera drifts this far left and right once per loop.
+  loopSeconds: 6,               // One full turn of the meridian, which is also the loop.
+  headTurnsPerLoop: 2,          // The comet runs round the meridian this many times per loop. Whole numbers keep the loop joining.
+  trailSeconds: 1.1,           // How far back in time the trail reaches.
+  ringAlpha: 0.32,               // The meridian's full circle, drawn faintly so the ring always reads. 0 hides it.
   // The blade.
   ringRadius: 1.035,
-  tubeRadius: 0.034,            // Radius at the head.
-  tailRatio: 0.28,              // Radius at the far end of the trail, as a fraction of the head's.
-  arcSamples: 320,
+  tubeRadius: 0.042,            // Radius at the head.
+  tailRatio: 0.35,              // Radius at the far end of the trail, as a fraction of the head's.
+  arcSamples: 220,
   sides: 20,
   crossGlow: 0.075,             // Where the blade crosses the grid, the lines light up red over this band (radians).
   flare: 1.0,                   // The horizontal light streak through the head. 0 turns it off.
@@ -90,50 +89,34 @@ function rotateAbout(k, a, v) {
   const s = Math.sin(a);
   return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
-function yaw(deg, p) {
-  const c = Math.cos(deg * DEG);
-  const s = Math.sin(deg * DEG);
-  return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c];
-}
 
-// The ring starts edge-on (its plane contains the line of sight, a vertical slice) and turns about the axis halfway between its own
-// normal and the camera, so half a turn later it faces the camera: the flat round ring. A whole turn brings it back.
-const CAMERA_HOME = normv([0, CONFIG.cameraHeight, CONFIG.cameraDistance]);
-const AXIS = normv(add([1, 0, 0], CAMERA_HOME));
-
-/** The turn angle at time t: always moving forward, slowest at the slice (t = 0) and at the ring (half the loop). */
-function turnAt(t) {
-  const u = t / LOOP;
-  return TAU * (u - (CONFIG.surge / (2 * TAU)) * Math.sin(2 * TAU * u));
+/** The meridian's plane and the head's position at time t. The plane holds the poles and turns about the vertical axis. */
+function meridianAt(time) {
+  const u = time / LOOP;
+  const theta = TAU * u;
+  const e1 = [0, 1, 0];
+  const e2 = [Math.sin(theta), 0, Math.cos(theta)];
+  const normal = [Math.cos(theta), 0, -Math.sin(theta)];
+  const psi = TAU * CONFIG.headTurnsPerLoop * u + Math.PI / 2;
+  return { e1, e2, normal, head: add(scale(e1, Math.cos(psi)), scale(e2, Math.sin(psi))) };
 }
 
 /** Pure: everything that moves, at time t. The same t always gives the same result. */
 function frame(time) {
   const t = wrapTime(time);
-  const u = t / LOOP;
-  const turn = turnAt(t);
-  const normal = rotateAbout(AXIS, turn, [1, 0, 0]);
-  const e1 = rotateAbout(AXIS, turn, [0, 1, 0]);
-  const e2 = rotateAbout(AXIS, turn, [0, 0, 1]);
-  const head = 90 + 360 * CONFIG.headTurnsPerLoop * u;
+  const now = meridianAt(t);
   const points = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const k = i / CONFIG.arcSamples;
-    const psi = (head - CONFIG.trailDeg * (1 - k)) * DEG;
-    points.push({ k, radial: add(scale(e1, Math.cos(psi)), scale(e2, Math.sin(psi))) });
+    points.push({ k, radial: meridianAt(t - CONFIG.trailSeconds * (1 - k)).head });
   }
-  const eye = yaw(CONFIG.cameraSwayDeg * Math.sin(TAU * u), [0, CONFIG.cameraHeight, CONFIG.cameraDistance]);
-  const facing = Math.abs(dotv(normal, normv(eye))); // 0 edge-on, 1 face-on.
-  return {
-    t,
-    turnDeg: (turn / DEG) % 360,
-    facing,
-    spinDeg: CONFIG.spinDegPerLoop * u,
-    eye,
-    normal,
-    points,
-    headRadial: points[points.length - 1].radial,
-  };
+  const ring = [];
+  for (let i = 0; i <= RING_SEGMENTS; i++) {
+    const a = (TAU * i) / RING_SEGMENTS;
+    ring.push(add(scale(now.e1, Math.cos(a)), scale(now.e2, Math.sin(a))));
+  }
+  const eye = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
+  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 0, eye, normal: now.normal, points, ring, headRadial: now.head };
 }
 
 // ---- Geometry ----
@@ -162,10 +145,10 @@ function sphereData(latSegments, lonSegments) {
 }
 
 const SIDES = CONFIG.sides;
-const TUBE_INDEX = (() => {
+function tubeIndex(segments) {
   const index = [];
   const stride = SIDES + 1;
-  for (let i = 0; i < CONFIG.arcSamples; i++) {
+  for (let i = 0; i < segments; i++) {
     for (let j = 0; j < SIDES; j++) {
       const a = i * stride + j;
       const b = (i + 1) * stride + j;
@@ -173,22 +156,30 @@ const TUBE_INDEX = (() => {
     }
   }
   return new Uint32Array(index);
-})();
+}
+const TUBE_INDEX = tubeIndex(CONFIG.arcSamples);
+const RING_SEGMENTS = 160;
+const RING_INDEX = tubeIndex(RING_SEGMENTS);
 
-/** The comet as a tube whose radius tapers from the head to the end of its trail. */
-function tubeData(f) {
-  const out = new Float32Array((CONFIG.arcSamples + 1) * (SIDES + 1) * STRIDE);
+/** A tube along a path of unit directions, with a radius at each point. Each cross-section is perpendicular to the path. */
+function tubeAlong(path, radius) {
+  const n = path.length;
+  const out = new Float32Array(n * (SIDES + 1) * STRIDE);
   let o = 0;
-  for (const { k, radial } of f.points) {
-    const r = CONFIG.tubeRadius * (CONFIG.tailRatio + (1 - CONFIG.tailRatio) * Math.pow(k, 1.4));
+  for (let i = 0; i < n; i++) {
+    const radial = path[i];
+    const k = i / (n - 1);
+    const tangent = sub(path[Math.min(n - 1, i + 1)], path[Math.max(0, i - 1)]);
+    const side = normv(cross(radial, tangent));
+    const r = radius(k);
     for (let j = 0; j <= SIDES; j++) {
       const phi = (TAU * j) / SIDES;
       const cs = Math.cos(phi);
       const sn = Math.sin(phi);
       for (let q = 0; q < 3; q++) {
-        const n = cs * radial[q] + sn * f.normal[q];
-        out[o + q] = CONFIG.ringRadius * radial[q] + r * n;
-        out[o + 3 + q] = n;
+        const nq = cs * radial[q] + sn * side[q];
+        out[o + q] = CONFIG.ringRadius * radial[q] + r * nq;
+        out[o + 3 + q] = nq;
       }
       out[o + 6] = k;
       out[o + 7] = j / SIDES;
@@ -196,6 +187,15 @@ function tubeData(f) {
     }
   }
   return out;
+}
+/** The meridian's full circle, thin and even: every point is drawn as if at the head, then dimmed by its own pass. */
+function ringData(f) {
+  const out = tubeAlong(f.ring, () => CONFIG.tubeRadius * 0.32);
+  for (let o = 6; o < out.length; o += STRIDE) out[o] = 1;
+  return out;
+}
+function tubeData(f) {
+  return tubeAlong(f.points.map((p) => p.radial), (k) => CONFIG.tubeRadius * (CONFIG.tailRatio + (1 - CONFIG.tailRatio) * Math.pow(k, 1.4)));
 }
 
 // ---- Matrices (column-major) ----
@@ -302,7 +302,7 @@ void main() {
   float ndv = max(dot(N, V), 0.0);
   float ndl = max(dot(N, L), 0.0);
   // A comet: bright at the head, its trail fading to a faint full ring.
-  float along = 0.13 + 0.87 * pow(vK, 2.2);
+  float along = pow(vK, 1.8);
   vec3 col = uRed * along * (0.6 + 0.4 * ndl) * uHot;
   col += uCore * pow(ndv, 1.6) * pow(vK, 7.0) * uHot;
   col += vec3(pow(max(dot(N, normalize(L + V)), 0.0), 50.0) * 0.3 * vK);
@@ -421,6 +421,7 @@ function vertexArray(data, index, dynamic) {
 const SPHERE = sphereData(120, 160);
 const globeMesh = vertexArray(SPHERE.data, SPHERE.index, false);
 const tubeMesh = vertexArray(new Float32Array((CONFIG.arcSamples + 1) * (SIDES + 1) * STRIDE), TUBE_INDEX, true);
+const ringMesh = vertexArray(new Float32Array((RING_SEGMENTS + 1) * (SIDES + 1) * STRIDE), RING_INDEX, true);
 
 const quadVao = gl.createVertexArray();
 gl.bindVertexArray(quadVao);
@@ -539,6 +540,12 @@ function draw(f) {
   setVec3(tubeProgram, "uCamDir", camDir);
   setVec3(tubeProgram, "uRed", colours.red);
   setVec3(tubeProgram, "uCore", colours.core);
+  // The faint full meridian first, then the comet over it.
+  setFloat(tubeProgram, "uHot", CONFIG.ringAlpha);
+  gl.bindBuffer(gl.ARRAY_BUFFER, ringMesh.vbo);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, ringData(f));
+  gl.bindVertexArray(ringMesh.vao);
+  gl.drawElements(gl.TRIANGLES, ringMesh.count, gl.UNSIGNED_INT, 0);
   setFloat(tubeProgram, "uHot", 1.0);
   gl.bindBuffer(gl.ARRAY_BUFFER, tubeMesh.vbo);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, tubeData(f));
@@ -580,7 +587,7 @@ function render() {
   const f = frame(state.t);
   draw(f);
   scrub.value = String(f.t.toFixed(2));
-  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | facing ${(f.facing * 100).toFixed(0)}%`;
+  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | meridian facing ${(f.facing * 100).toFixed(0)}%`;
 }
 
 function setButton() {
