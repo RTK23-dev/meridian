@@ -39,3 +39,9 @@ Governing plan: `REPLAN_2026-10-20.md`.
 
 - An OpenRouter key in the environment, with a hard credit limit set on the OpenRouter side. That is the only way the live steps can run.
 - Open decisions in the Bible 20.2 list, and the storage, Veo and Hypit conflicts in `CLAUDE.md`.
+
+## Pushed head a2a0dc1 (2026-10-21)
+
+- Full suite on the pushed tree: 5716 tests, 5675 pass, 0 fail, 41 skipped (environment-gated), exit 0. Typecheck exit 0. Lint 0 errors.
+- Status page (private, version 2): https://claude.ai/artifact/1szjYSNUowxC2ozQkK7ygD
+- Still open, in order: (1) the owner's OpenRouter key in the environment, then recorded live calls with ledger and OpenRouter usage matched; (2) approval of the orchestrator role contract and migration (`PROPOSED_MIGRATION_ORCHESTRATOR_ROLE.md`); (3) the Claude role models and the Deepgram id out of the route table, after the cutover decision; (4) a plan store and Factory API route; (5) surgical re-render through the compose and render steps; (6) canvas fit-to-width so stale steps are on screen without scrolling.
