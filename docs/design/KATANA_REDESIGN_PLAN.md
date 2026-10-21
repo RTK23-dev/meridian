@@ -387,3 +387,79 @@ The times are guides, not deadlines. Each sync point is a gate: the lead merges 
 2. **PR #45 screens** (on a deleted base branch): restore them into the new places, or rebuild from this plan?
 3. **WebGL fallback:** where WebGL 2 is not available, is the still logo acceptable on login and the empty Home? (The loading mark does not need WebGL.)
 4. **Integration branch:** keep `run/factory-6h` as the branch the three agents merge into, or start a fresh `katana/main` from it?
+
+---
+
+## 14. Lead decisions and the wave plan (applied at the start of the build)
+
+This section supersedes the time table in 12.3, the file ownership in 12.1 where it differs, and the open questions in section 13. Each agent works from this section and from sections 1 to 11.
+
+### 14.1 Answers to the open questions (defaults applied)
+
+1. **Fonts:** approved. Archivo, Instrument Sans and JetBrains Mono are the one planned addition. Install with `--ignore-scripts`. Only Agent A changes `package.json` and the lock file, and only for these three packages. If the install cannot complete in the sandbox, keep the current fonts, keep the new stacks as fallbacks, and report it.
+2. **PR #45 screens:** rebuild from this plan. Do not restore them.
+3. **WebGL fallback:** where WebGL 2 is unavailable, the still mark is shown. The loading mark never needs WebGL.
+4. **Integration branch:** `run/factory-6h`. Agents never merge into it and never push. The lead merges each agent branch into it, runs the gates, and pushes.
+
+### 14.2 Routes
+
+- **Old URLs keep working.** No route is deleted. A route file may move to a new folder if its URL does not change.
+- **Place roots:** Home `/`, Create `/create`, Library `/library`, Insights `/insights`, Settings `/settings`.
+- **Tabs are links to routes.** A place's tabs navigate to existing URLs, so the URL carries the progress.
+- **Place mapping:** `src/lib/navigation/places.ts` maps any pathname to its place. A path that is not listed highlights Home.
+- **Canonical redirects** from old URLs to the new roots are a later task, not wave 1.
+- **`src/routeTree.gen.ts`:** agents do not hand-edit it. The lead regenerates it at each merge.
+
+### 14.3 File ownership (one owner per file)
+
+**Agent A, Foundation** (branch `katana/foundation`)
+- `package.json` and `package-lock.json`, for the three font packages only, wave 1.
+- `src/styles.css`.
+- `src/components/ui/**`, including `index.ts`, `theme.tsx` and `tokens.test.ts`.
+- `src/components/brand-mark.tsx` and `src/components/avatar.tsx`.
+- `src/routes/[_design].tsx` (the gallery).
+- Wave 2: `src/components/shell.tsx`, `src/components/workspace.tsx`, `src/components/command-palette.tsx`, `src/components/page-commands.tsx`, `src/routes/_app.tsx`, `src/lib/navigation/**`.
+
+**Agent B, Create and entry** (branch `katana/create`)
+- `src/lib/progress/**` (the draft store, the step URL helpers and the save hook), with tests.
+- `src/lib/create/**` (the Create step model), with tests.
+- `src/components/home/**`, `src/components/brand-overview/**`, `src/components/setup/**`, `src/components/gate.tsx`.
+- `src/components/content-factory/**`, `src/components/studio/**`, `src/components/factory/**`.
+- Routes: `src/routes/login.tsx`, `src/routes/_app/index.tsx`, `src/routes/_app/notifications.tsx`, `src/routes/_app/alerts.tsx`, `src/routes/_app/content-factory.tsx`, `src/routes/_app/orchestrator.tsx`, `src/routes/_app/brands/$brandId/index.tsx`, `src/routes/_app/brands/$brandId/studio.tsx`, `src/routes/_app/brands/$brandId/factory.tsx`, and everything under `src/routes/_app/create/**` (new).
+
+**Agent C, Places** (branch `katana/places`)
+- `src/components/library/**`, `src/components/publishing/**`.
+- `src/components/market/**`, `src/components/opportunities/**`, `src/components/learning/**`, `src/components/reviews/**`, `src/components/brain/**`, `src/components/research/**`.
+- `src/components/settings/**`, `src/components/accounts/**`, `src/components/ops/**`, `src/components/provider-settings-panel.tsx`.
+- Routes: `src/routes/_app/settings.tsx` (moves to `settings/index.tsx` with the same URL), `src/routes/_app/integrations.tsx`, `src/routes/_app/usage.tsx`, `src/routes/_app/invite.tsx`, `src/routes/_app/setup.tsx`, `src/routes/_app/jobs.tsx`, `src/routes/_app/audit.tsx`, `src/routes/_app/webhooks.tsx`, `src/routes/_app/exports.tsx`, and the brand routes `library`, `pages`, `products`, `market`, `opportunities`, `intelligence`, `learning`, `reviews`, `calibration`, `brain`, `accounts` under `src/routes/_app/brands/$brandId/`. Also the new `src/routes/_app/library/**` and `src/routes/_app/insights/**`.
+
+**Nobody owns, nobody edits:** `src/engine/**`, migrations, `src/lib/meridian/**` server functions, and `src/routeTree.gen.ts`. Any agent that needs a change in these asks the lead in at most three lines.
+
+Any file not listed above is outside every agent's scope. If an agent needs one, it asks the lead.
+
+### 14.4 Gates
+
+- **At each merge, the lead runs:** `npm run typecheck`, `npm run lint`, the targeted tests, and `npm run build`.
+- **At the end of each wave, the lead runs:** the full `npm test`.
+- **Each agent runs before its report:** `npm run typecheck`, `npm run lint` on its changed files, the tests for its new code, and `npm run build`.
+
+### 14.5 Commits and sharing
+
+- **Commits:** on the agent's own branch, at least every 30 minutes. Use a clear subject and body. End each commit with the trailer `Claude-Session: https://claude.ai/code/session_01P4TnUAZPb6z36R4Vykw3MS`. Do not put any model name in a commit message.
+- **Sharing work:** agents do not push. The lead merges. An agent that needs another agent's merged work asks the lead, then merges `run/factory-6h` into its own branch.
+- **Pull requests:** none are opened until the owner asks for them.
+
+### 14.6 Waves
+
+- **Wave 1 (now):**
+  - A: tokens for both themes (dark default), the font swap, every primitive restyled with its existing exports kept, the new primitives (StepBar, Tabs, Drawer built on Sheet, LoadingMark, Mark, SaveState), and the gallery.
+  - B: its pre-work (before screenshots, a content inventory, copy), `src/lib/progress/**` and `src/lib/create/**` with tests, and the Home attention model with tests.
+  - C: its pre-work, a content inventory, and `src/components/settings/connection-state.ts` (a pure model: status to label, tone and action) with tests.
+- **Wave 2 (after A merges wave 1):**
+  - Order: C's place roots (`library/index.tsx`, `insights/index.tsx`, `settings/index.tsx`) merge first, then A's shell and `places.ts`, then B's screens.
+  - A: the shell, the five-place rail, the brand switcher, the command palette, the phone bar, the account menu with the theme toggle, and the logo as the home link.
+  - B: login with its three steps, first run, Home, the Create landing, and the Brief, Plan and Review steps.
+  - C: the Library and Insights tabs, the Settings tabs and the System tab.
+- **Wave 3:** polish for every screen against section 11, in both themes, with screenshots of every place at 1280 and 390.
+
+Each agent ends its run at the end of each wave and reports. The lead starts the next wave by sending the agent a message, so it continues with its context.
