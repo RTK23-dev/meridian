@@ -251,11 +251,13 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 ## g. Logo motion spec
 
-The prototype is `docs/design/logo/meridian-logo.html`. It uses canvas 2D and its own projection (orthographic, no libraries, no network). Its timing and angles sit in one `CONFIG` object at the top of the script.
+The prototype is `docs/design/logo/meridian-logo.html`. It is one self-contained file: WebGL 2 with no libraries and no network. Its timing, camera, materials and glow sit in one `CONFIG` object at the top of the script.
 
-**What moves.** The globe turns under the line, one full turn per loop, so its grid keeps moving. The red meridian is the only thing that changes shape. It makes four moves in turn, each one ease-in-out, and its head never stops.
+**The mark.** A glossy black globe with a white engraved grid: three latitudes and four meridians, one every 45 degrees. The grid is cut into the surface, so it turns with the globe, and it fades toward the edge. One red blade sits on a great circle just outside the surface. The blade is a lit 3D tube: its centre is a hot white core, its tail fades into dark red, and the part behind the globe is hidden by depth. The globe has one key light from the upper left, a crisp highlight, a soft environment sheen and an edge light.
 
-**The four moves.** Each move lasts 0.90 s, and the loop is four moves: 3.60 s. The blade turns about the vertical axis and rolls about the horizontal axis.
+**Glow.** The scene is drawn with 4x multisampling. A bright pass keeps only the red and the hot core, so the white grid does not glow. Two blur rounds at half resolution, a tight one and a wide one, are added back over the scene. The glow strength is 1.1.
+
+**What moves.** The globe turns one full turn per loop under the light, and the blade does not spin. The blade makes four moves in turn, each one ease-in-out. Each move lasts 0.9 s, so the loop is 3.6 s.
 
 | Time (s) | Move | Turn (deg) | Roll (deg) | What the viewer sees |
 |---|---|---|---|---|
@@ -264,30 +266,32 @@ The prototype is `docs/design/logo/meridian-logo.html`. It uses canvas 2D and it
 | 1.80 to 2.70 | Roll back | 90 | 90 to 0 | The ring rolls back to face the viewer. |
 | 2.70 to 3.60 | Return to the chop | 90 to 0 | 0 | The ring swings back to the edge-on cut, ready to chop again. |
 
-**Head and tail.** The head turns once per loop, about 100 degrees per second on average. It is 2.6 times faster during the plunge, centred 0.12 s after t = 0. The arc is half a great circle when edge-on (180 degrees) and lengthens to 300 degrees when flat. It changes length only while the blade moves. The tail fades from 18% to full strength along the arc. Its width runs from 80% of the head's width at the tail to the full width at the head. The head is S/30 wide, the globe's lines are S/62 wide and the head dot has radius S/40, where S is the mark's size, so the mark scales as one.
+**Head and tail.** The head turns once per loop, about 100 degrees per second on average. It is 2.6 times faster during the plunge, centred 0.12 s after t = 0. The blade is 180 degrees long when edge-on and 300 degrees when flat, whether it faces the viewer or is tipped to the side, so the front stays in view. Its length changes only while it moves. The head radius is 0.038 of the globe's radius, and the tail is 40% of that.
 
-**Shine.** The blade has a soft glow (two passes, 2.6 and 1.7 times its width, at 10% strength) and a white core along the head half. The core is what reads as light moving along the line.
+**Camera.** A perspective view with a 24 degree field of view, 6.7 globe radii from the centre and 0.55 above the equator. The globe fills about three quarters of the frame.
 
-**Globe.** Three latitudes (45 degrees north, the equator, 45 degrees south) and four meridians (one every 45 degrees), as solid white lines, with the far side off. The viewer sees the globe from 14 degrees above its equator.
+**Frames.** Captured with headless Chromium (WebGL through SwiftShader) from the canvas. The 600 px frames came from a 682 px viewport. The hero still came from a 720 px canvas at device scale 2.
 
-**Timeline checks.** The loop length is the sum of the four moves, so it cannot drift. The loop closes to the same frame at t = 0 and t = 3.60 (maximum difference 0). Over 3600 sampled steps the arc moves at most 0.011 units per step. At the key moments the blade measures: at the chop, 0 wide and 1.28 tall; as the ring, 2.06 wide and 2.00 tall; at 45 degrees of roll (t = 1.35), 1.94 wide and 1.06 tall.
-
-**Frames.** Captured with Playwright and headless Chromium from the canvas element, in a 682 px viewport (the canvas is 600 px square):
+**Files.**
+- `docs/design/logo/meridian-logo-mark.png` is the hero still: the ring pose at t = 0.90, 1440 px square.
+- `docs/design/logo/meridian-logo.gif` is the full loop: 90 frames at 25 frames per second, 3.60 s, 600 px square. It repeats without a seam.
+- `docs/design/logo/meridian-logo.mp4` is the same frames as H.264.
+- `docs/design/logo/frames/` holds four reference stills at 600 px:
 
 | File | t (s) | What it shows |
 |---|---|---|
-| `docs/design/logo/frames/frame-00-t0.00-chop.png` | 0.00 | The edge-on cut |
-| `docs/design/logo/frames/frame-25-t0.30-plunge.png` | 0.30 | The head plunging down the front |
-| `docs/design/logo/frames/frame-50-t0.90-ring.png` | 0.90 | The flat ring facing the viewer |
-| `docs/design/logo/frames/frame-75-t1.35-sideways.png` | 1.35 | Tipping to the side view |
+| `frame-00-t0.00-chop.png` | 0.00 | The edge-on cut |
+| `frame-25-t0.30-plunge.png` | 0.30 | The head plunging down the front |
+| `frame-50-t0.90-ring.png` | 0.90 | The flat ring facing the viewer |
+| `frame-75-t1.35-sideways.png` | 1.35 | Tipping to the side view |
 
-**Files.** `docs/design/logo/meridian-logo.gif` is the full loop: 90 frames at 25 frames per second, 3.60 s, 600 px square, and it repeats without a seam. `docs/design/logo/meridian-logo.mp4` is the same frames as H.264.
+**Controls and hooks.** A Pause/Play button and a "freeze at t" slider in seconds (0 to 3.60). Open `?theme=light` for the light variant, and `?t=0.9` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides Pause. `window.meridianMark.frame(t)` is pure: it returns the move, the turn and roll, the spin, the blade's points and the head's direction. `window.meridianMark.setTime(seconds)` freezes the frame.
 
-**Controls and hooks.** A Pause/Play button and a "freeze at t" slider in seconds (0 to 3.60). Open `?theme=light` for the light variant, and `?t=0.9` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides Pause. `window.meridianMark.frame(t)` is pure: it returns the move, the turn and roll, the head and tail, and the projected arc. `window.meridianMark.setTime(seconds)` freezes the frame.
+**Tuning.** Change `CONFIG`: `segmentSeconds`, `spinDegPerLoop`, `turnDeg` and `rollDeg` (the four keys), `easeMove`, `chopAt`, `chopBoost`, `headStartDeg`, the blade's radius and tail, the arc lengths, the grid steps and width, the gloss, rim and glow strengths, the camera and the colours.
 
-**Tuning.** Change `CONFIG`: `segmentSeconds`, `spinDegPerLoop`, `turnDeg` and `rollDeg` (the four keys), `easeMove`, `chopAt`, `chopBoost`, `chopWidthSeconds`, `headStartDeg`, `tiltDeg`, the arc lengths, the grid (`latitudesDeg`, `meridianCircles`), the glow (`glowWidths`, `glowAlpha`), the stroke widths and the colours.
+**Checks run.** The loop closes to the same frame at t = 0 and t = 3.60 (maximum difference 0). Over 3600 sampled steps the blade moves at most 0.0104 units per step. The contact sheets show each key pose as intended. The page logs no console errors in headless Chromium.
 
-**Not re-checked after this change:** the light variant, and reduced motion with the Pause control hidden.
+**Not re-checked:** the light variant, reduced motion, and the Pause button in this version.
 
 ## h. Components with states
 
@@ -623,7 +627,7 @@ Notes for the import later. The Tailwind theme can map these with `@theme inline
 
 - Contrast: all thirty pairs computed by the repo's helper and by an independent formula, in both themes; they agree to two decimal places. Extra figures (red on white, hue distance) computed the same way.
 - Fonts: the three families were checked on the Google Fonts CSS API with the axis ranges used here. Each has an OFL licence text in the google/fonts repository. Instrument Sans's `tnum` feature was read from its GSUB table.
-- Logo: the prototype was loaded in headless Chromium with the Playwright path from the brief. Four frames were captured. After the timing change, the globe-and-blade motion was rebuilt (four moves, a turning globe, a shining blade); the loop closure and continuity were re-checked over 3600 steps. Reduced motion, the light variant and the Pause button were checked before the change and not after it.
+- Logo: the prototype was loaded in headless Chromium with the Playwright path from the brief. Four frames were captured. After the timing change, the logo was rebuilt in WebGL (a glossy globe, a lit 3D blade and bloom); the loop closure and continuity were re-checked over 3600 steps. Reduced motion, the light variant and the Pause button were checked before the change and not after it.
 - Favicon: 16 px and 32 px drawings rendered in Chromium at 1x and 2x, on black and on white.
 - Code facts: the migration counts and file names come from `src/`, read while the orchestrator files still had uncommitted edits (committed at `d3a5e57` since). A few counts in those folders may shift after the lead's review.
 - Not checked: the app was not run or screenshotted, so no screen was seen in Katana; no test was run, because no code changed; the benchmark products were not reviewed live; screen readers and phone hardware were not tested; the sonner colour variable names were not confirmed against the installed version.
