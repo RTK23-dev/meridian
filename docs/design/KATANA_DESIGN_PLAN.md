@@ -251,47 +251,23 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 ## g. Logo motion spec
 
-The prototype is `docs/design/logo/meridian-logo.html`. It is one self-contained file: WebGL 2 with no libraries and no network. Its timing, camera, materials and glow sit in one `CONFIG` object at the top of the script.
+The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL 2 file, with no libraries and no network. Every value sits in one `CONFIG` object at the top of the script.
 
-**The mark.** A see-through globe with no fill: a white engraved grid of three latitudes and four meridians, one every 45 degrees. The near side is drawn in full, and the far side shows through the globe at 20% strength. The lines run to a thin silhouette line that outlines the globe, so it reads as a sphere. One red blade sits on a great circle just outside the surface. It is a lit 3D tube, with a hot white core at its head and a tail that fades into dark red. Its part behind the globe shows faintly, as if seen through it. The globe has no highlight or glow spot.
+**The mark.** A see-through wireframe globe: three latitudes and four meridians, one every 45 degrees. A thin silhouette outlines it. The near lines are full strength and ease down to 16% on the far side. Around it runs the meridian, a red comet of light: a lit 3D tube with a hot white core at its head and a trail that fades to a faint full ring, so the circle always reads. Where the comet's plane cuts the globe, the grid lines light up red, most strongly near the head. A thin horizontal light streak passes through the head, and a bloom pass gives the red its glow.
 
-**Glow.** The scene is drawn with 4x multisampling. A bright pass keeps only the red and the hot core, so the white grid does not glow. Two blur rounds at half resolution, a tight one and a wide one, are added back over the scene. The glow strength is 1.1.
+**The motion: one continuous turn.** The ring turns about a single axis, set halfway between its own normal and the camera. It starts edge-on, a vertical slice through the globe, and half a turn later it faces the camera as a flat round ring. A whole turn brings it back. Every pose between them is a clean tilted orbit, with no awkward angle. The turn's speed follows u - (surge / 4π) sin(4πu) with surge 0.72: it eases into the slice and the ring and sweeps fast between them, and it never stops. The comet's head runs round the ring twice per loop at a constant speed. The globe turns 90 degrees per loop, and the camera sways 7 degrees left and right once per loop. The loop is 4.8 s, and it joins without a seam.
 
-**What moves.** The globe turns one full turn per loop under the light, and the blade does not spin. The blade makes four moves in turn, each one ease-in-out. Each move lasts 0.9 s, so the loop is 3.6 s.
-
-| Time (s) | Move | Turn (deg) | Roll (deg) | What the viewer sees |
-|---|---|---|---|---|
-| 0.00 to 0.90 | Chop and forward roll | 0 to 90 | 0 | The blade starts edge-on, a vertical cut down the front. The head plunges down the front first, then the blade swings forward into a flat ring that faces the viewer. |
-| 0.90 to 1.80 | Sideways roll | 90 | 0 to 90 | The ring tips over to the side and lies across the globe, the side view. |
-| 1.80 to 2.70 | Roll back | 90 | 90 to 0 | The ring rolls back to face the viewer. |
-| 2.70 to 3.60 | Return to the chop | 90 to 0 | 0 | The ring swings back to the edge-on cut, ready to chop again. |
-
-**Head and tail.** The head turns once per loop, about 100 degrees per second on average. It is 2.6 times faster during the plunge, centred 0.12 s after t = 0. The blade is 180 degrees long when edge-on and 300 degrees when flat, whether it faces the viewer or is tipped to the side, so the front stays in view. Its length changes only while it moves. The head radius is 0.038 of the globe's radius, and the tail is 40% of that.
-
-**Camera.** A perspective view with a 30 degree field of view, 5 globe radii from the centre and 1.7 above the equator, about 19 degrees up. From there the latitudes curve, which is what makes the globe read as a sphere. The globe fills about three quarters of the frame.
-
-**Frames.** Captured with headless Chromium (WebGL through SwiftShader) from the canvas. The 600 px frames came from a 682 px viewport. The hero still came from a 720 px canvas at device scale 2.
+**Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
 **Files.**
-- `docs/design/logo/meridian-logo-mark.png` is the hero still: the ring pose at t = 0.90, 1440 px square.
-- `docs/design/logo/meridian-logo.gif` is the full loop: 90 frames at 25 frames per second, 3.60 s, 600 px square. It repeats without a seam.
-- `docs/design/logo/meridian-logo.mp4` is the same frames as H.264.
-- `docs/design/logo/frames/` holds four reference stills at 600 px:
+- `meridian-logo-mark.png`: the hero still at t = 3.0 s, 1440 px.
+- `meridian-logo.gif`: 120 frames at 25 fps, 520 px.
+- `meridian-logo.mp4`: the same frames at 600 px.
+- `frames/`: four reference stills at 600 px: the slice (t = 0), opening (1.2 s), the ring (2.4 s) and closing (3.6 s).
 
-| File | t (s) | What it shows |
-|---|---|---|
-| `frame-00-t0.00-chop.png` | 0.00 | The edge-on cut |
-| `frame-25-t0.30-plunge.png` | 0.30 | The head plunging down the front |
-| `frame-50-t0.90-ring.png` | 0.90 | The flat ring facing the viewer |
-| `frame-75-t1.35-sideways.png` | 1.35 | Tipping to the side view |
+**Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 
-**Controls and hooks.** A Pause/Play button and a "freeze at t" slider in seconds (0 to 3.60). Open `?theme=light` for the light variant, and `?t=0.9` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides Pause. `window.meridianMark.frame(t)` is pure: it returns the move, the turn and roll, the spin, the blade's points and the head's direction. `window.meridianMark.setTime(seconds)` freezes the frame.
-
-**Tuning.** Change `CONFIG`: `segmentSeconds`, `spinDegPerLoop`, `turnDeg` and `rollDeg` (the four keys), `easeMove`, `chopAt`, `chopBoost`, `headStartDeg`, the blade's radius and tail, the arc lengths, the grid steps and width, the gloss, rim and glow strengths, the camera and the colours.
-
-**Checks run.** The loop closes to the same frame at t = 0 and t = 3.60 (maximum difference 0). Over 3600 sampled steps the blade moves at most 0.0104 units per step. The contact sheets show each key pose as intended. The page logs no console errors in headless Chromium.
-
-**Not re-checked:** the light variant, reduced motion, and the Pause button in this version.
+**Checks.** All 120 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
 
 ## h. Components with states
 
@@ -612,7 +588,7 @@ Notes for the import later. The Tailwind theme can map these with `@theme inline
 3. **Red as "now".** Approve the seven uses in principle 1. Is any other use wanted?
 4. **Danger hue.** The danger rose is 7 degrees from the accent red. Keep it (proposed, with an icon and a word always), or choose a more distant hue such as orange-red?
 5. **Mark and name.** Approve the wordmark "Meridian" in Archivo 600, sentence case, and the globe mark as drawn.
-6. **Motion pace.** Approve a 3.6 s loop of four 0.9 s ease-in-out moves, the globe turning once per loop, and a 14 degree view tilt, or tune them.
+6. **Motion pace.** Approve a 4.8 s continuous loop (surge 0.72, the head running twice round per loop, the globe turning 90 degrees and the camera swaying 7 degrees), or tune them.
 7. **Constant motion.** The arc's head never stops, even in the holds. Approve, or should it stop during the holds?
 8. **Corner radius.** 2 px (proposed) or 0 px?
 9. **Fonts.** Replace Inter and Fraunces with Archivo, Instrument Sans and JetBrains Mono, all OFL? Approve self-hosting woff2 files in `public/fonts`, which adds no npm package.

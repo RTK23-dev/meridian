@@ -24,11 +24,11 @@
 </head>
 <body>
 <main>
-  <canvas id="mark" role="img" aria-label="Meridian globe. A red meridian chops down a turning globe, rolls forward into a ring, tips to the side and rolls back."></canvas>
+  <canvas id="mark" role="img" aria-label="Meridian globe. A red meridian of light sweeps round a turning wireframe globe, slicing it edge-on and opening into a ring."></canvas>
   <div class="controls">
     <button id="toggle" type="button" aria-pressed="false">Pause</button>
     <label for="scrub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Freeze at t, in seconds</label>
-    <input id="scrub" type="range" min="0" max="4" step="0.01" value="0">
+    <input id="scrub" type="range" min="0" max="5" step="0.01" value="0">
     <output id="readout" for="scrub"></output>
   </div>
 </main>
@@ -36,130 +36,104 @@
 "use strict";
 
 // ---- TUNE HERE. Times are in seconds, angles in degrees, lengths in units of the globe's radius. ----
+// One continuous motion. The meridian's ring turns about one tilted axis, so it passes from the edge-on slice to the face-on ring and
+// back without a stop and without an awkward in-between angle. It slows into those two poses and speeds through the rest.
 const CONFIG = {
-  // The motion. The loop is four moves; the globe turns under the blade the whole time.
-  segmentSeconds: 0.9,          // Each move takes this long. The loop is four moves.
-  spinDegPerLoop: 360,          // The globe turns this far per loop. A whole turn keeps the loop joining.
-  turnDeg: [0, 90, 90, 90],     // Turn about the vertical axis at each key: 0 is edge-on (the chop), 90 is flat (the ring).
-  rollDeg: [0, 0, 90, 0],       // Roll about the horizontal axis at each key: 90 tips the ring to the side view.
-  easeMove: [0.65, 0, 0.35, 1], // cubic-bezier for every move.
-  chopAt: 0.12,                 // When the head plunges down the front, in seconds from t = 0.
-  chopBoost: 2.6,               // How much faster the head moves during the plunge. 1 means no change.
-  chopWidthSeconds: 0.12,       // How long the plunge lasts, either side of chopAt.
-  headStartDeg: 90,             // Where the head starts on the blade's circle at t = 0.
-  arcMinDeg: 180,               // Blade length when edge-on: exactly the front half, pole to pole.
-  arcMaxDeg: 300,               // Blade length when flat, facing the viewer or tipped to the side. It changes only while the blade moves.
+  loopSeconds: 4.8,             // One full turn of the ring, which is also the loop.
+  surge: 0.72,                  // 0 is an even turn; near 1 it lingers in the slice and the ring and sweeps fast between them.
+  headTurnsPerLoop: 2,          // The comet's head runs round the ring this many times per loop. Whole numbers keep the loop joining.
+  trailDeg: 330,                // The comet's trail. Its far end fades to a faint full ring, so the circle always reads.
+  spinDegPerLoop: 90,           // The globe turns this far per loop. A multiple of the meridian step keeps the loop joining.
+  cameraSwayDeg: 7,             // The camera drifts this far left and right once per loop.
   // The blade.
-  ringRadius: 1.035,            // The blade's centre line, just above the surface.
-  tubeRadius: 0.038,            // Radius at the head.
-  tailRatio: 0.4,               // Radius at the tail, as a fraction of the head's.
-  arcSamples: 260,
-  sides: 24,
-  bloomStrength: 1.1,           // How much glow is added on top of the scene.
-  bloomThreshold: 0.42,         // Only the red and the hot core glow; the white grid does not.
+  ringRadius: 1.035,
+  tubeRadius: 0.034,            // Radius at the head.
+  tailRatio: 0.28,              // Radius at the far end of the trail, as a fraction of the head's.
+  arcSamples: 320,
+  sides: 20,
+  crossGlow: 0.075,             // Where the blade crosses the grid, the lines light up red over this band (radians).
+  flare: 1.0,                   // The horizontal light streak through the head. 0 turns it off.
+  bloomStrength: 1.15,
+  bloomThreshold: 0.4,
   // The globe.
-  latitudeStepDeg: 45,          // Latitude lines every this many degrees (the equator is one of them).
-  meridianStepDeg: 45,          // Meridian lines every this many degrees. 45 gives four great circles.
-  gridHalfWidth: 0.0095,        // Half the grid line's width on the sphere, in radians.
-  backLineAlpha: 0.2,           // Grid lines on the far side, seen through the globe. 0 hides them.
-  limbFade: 0.15,               // Front lines fade over this band at the edge. Small, so the lines reach the outline.
-  rimAlpha: 0.6,                // Strength of the thin line that outlines the globe.
+  latitudeStepDeg: 45,
+  meridianStepDeg: 45,
+  gridHalfWidth: 0.0085,        // Half the grid line's width on the sphere, in radians.
+  backLineAlpha: 0.16,          // Far-side lines, seen through the globe.
+  rimAlpha: 0.55,               // The thin line that outlines the globe.
   // The camera.
   cameraDistance: 5.0,
-  cameraHeight: 1.7,            // Height above the equator. About 19 degrees up, so the latitudes curve.
+  cameraHeight: 1.7,            // About 19 degrees above the equator, so the latitudes curve.
   fovDeg: 30,
   colours: {
-    dark: { bg: [0, 0, 0], grid: [0.92, 0.92, 0.92], red: [1.0, 0.16, 0.2], core: [1.0, 0.86, 0.86] },
-    light: { bg: [1, 1, 1], grid: [0.06, 0.06, 0.07], red: [0.78, 0.06, 0.18], core: [1.0, 0.8, 0.82] },
+    dark: { bg: [0, 0, 0], grid: [0.93, 0.93, 0.93], red: [1.0, 0.13, 0.18], core: [1.0, 0.88, 0.88] },
+    light: { bg: [1, 1, 1], grid: [0.06, 0.06, 0.07], red: [0.8, 0.05, 0.16], core: [1.0, 0.82, 0.84] },
   },
 };
 
-// ---- Derived timing. Nothing here needs editing. ----
+// ---- Maths ----
 const DEG = Math.PI / 180;
-const MOVE = CONFIG.segmentSeconds;
-const LOOP = 4 * MOVE;
-const MOVE_NAMES = ["chop and forward roll", "sideways roll", "roll back", "return to the chop"];
+const TAU = 2 * Math.PI;
+const LOOP = CONFIG.loopSeconds;
 const LIGHT = [-0.55, 0.65, 0.5];
-
-function easeOf([x1, y1, x2, y2]) {
-  const point = (s, p1, p2) => 3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
-  return (x) => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 50; i++) {
-      const mid = (lo + hi) / 2;
-      if (point(mid, x1, x2) < x) lo = mid; else hi = mid;
-    }
-    return point((lo + hi) / 2, y1, y2);
-  };
-}
-const ease = easeOf(CONFIG.easeMove);
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const scale = (a, k) => [a[0] * k, a[1] * k, a[2] * k];
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const dotv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const normv = (a) => scale(a, 1 / Math.hypot(a[0], a[1], a[2]));
 const wrapTime = (t) => ((t % LOOP) + LOOP) % LOOP;
 
-function anglesAt(t) {
-  const x = t / MOVE;
-  const index = Math.floor(x) % 4;
-  const e = ease(x - Math.floor(x));
-  const next = (index + 1) % 4;
-  const lerp = (values) => values[index] + (values[next] - values[index]) * e;
-  return { turn: lerp(CONFIG.turnDeg), roll: lerp(CONFIG.rollDeg), move: MOVE_NAMES[index] };
+/** Rodrigues' rotation of v about the unit axis k by angle a. */
+function rotateAbout(k, a, v) {
+  const c = Math.cos(a);
+  const s = Math.sin(a);
+  return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
-
-// The head moves at one full turn per loop, faster for the plunge. The speed is integrated once, so the head is continuous.
-const SAMPLES = 4000;
-function speedAt(t) {
-  const gap = Math.abs(t - CONFIG.chopAt);
-  const distance = Math.min(gap, LOOP - gap);
-  return 1 + (CONFIG.chopBoost - 1) * Math.exp(-((distance / CONFIG.chopWidthSeconds) ** 2));
-}
-const CUMULATIVE = (() => {
-  const out = [0];
-  for (let i = 1; i <= SAMPLES; i++) {
-    const t0 = (LOOP * (i - 1)) / SAMPLES;
-    const t1 = (LOOP * i) / SAMPLES;
-    out.push(out[i - 1] + ((speedAt(t0) + speedAt(t1)) / 2) * (t1 - t0));
-  }
-  return out;
-})();
-function headAt(t) {
-  const x = (t / LOOP) * SAMPLES;
-  const i = Math.min(SAMPLES - 1, Math.floor(x));
-  const along = CUMULATIVE[i] + (CUMULATIVE[i + 1] - CUMULATIVE[i]) * (x - i);
-  return CONFIG.headStartDeg + (360 * along) / CUMULATIVE[SAMPLES];
-}
-
-function turnPoint(deg, p) {
+function yaw(deg, p) {
   const c = Math.cos(deg * DEG);
   const s = Math.sin(deg * DEG);
-  return [p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c];
-}
-function rollPoint(deg, p) {
-  const c = Math.cos(deg * DEG);
-  const s = Math.sin(deg * DEG);
-  return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c];
+  return [p[0] * c + p[2] * s, p[1], -p[0] * s + p[2] * c];
 }
 
-/** Pure: the blade and the globe at time t. The same t always gives the same result. */
+// The ring starts edge-on (its plane contains the line of sight, a vertical slice) and turns about the axis halfway between its own
+// normal and the camera, so half a turn later it faces the camera: the flat round ring. A whole turn brings it back.
+const CAMERA_HOME = normv([0, CONFIG.cameraHeight, CONFIG.cameraDistance]);
+const AXIS = normv(add([1, 0, 0], CAMERA_HOME));
+
+/** The turn angle at time t: always moving forward, slowest at the slice (t = 0) and at the ring (half the loop). */
+function turnAt(t) {
+  const u = t / LOOP;
+  return TAU * (u - (CONFIG.surge / (2 * TAU)) * Math.sin(2 * TAU * u));
+}
+
+/** Pure: everything that moves, at time t. The same t always gives the same result. */
 function frame(time) {
   const t = wrapTime(time);
-  const { turn, roll, move } = anglesAt(t);
-  const blade = (p) => rollPoint(roll, turnPoint(turn, p));
-  const u = blade([0, 1, 0]); // The poles' direction within the blade's plane.
-  const v = blade([0, 0, 1]); // The front of the globe within the blade's plane.
-  const normal = blade([1, 0, 0]);
-  const head = headAt(t);
-  // Longer as the blade lies flat, either facing the viewer or tipped to the side, so the flat shapes keep their front in view.
-  const flat = Math.max(Math.abs(normal[2]), Math.abs(Math.sin(roll * DEG)));
-  const length = CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * flat;
+  const u = t / LOOP;
+  const turn = turnAt(t);
+  const normal = rotateAbout(AXIS, turn, [1, 0, 0]);
+  const e1 = rotateAbout(AXIS, turn, [0, 1, 0]);
+  const e2 = rotateAbout(AXIS, turn, [0, 0, 1]);
+  const head = 90 + 360 * CONFIG.headTurnsPerLoop * u;
   const points = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const k = i / CONFIG.arcSamples;
-    const psi = (head - length + length * k) * DEG;
-    const c = Math.cos(psi);
-    const s = Math.sin(psi);
-    points.push({ k, radial: [0, 1, 2].map((j) => c * u[j] + s * v[j]) });
+    const psi = (head - CONFIG.trailDeg * (1 - k)) * DEG;
+    points.push({ k, radial: add(scale(e1, Math.cos(psi)), scale(e2, Math.sin(psi))) });
   }
-  return { t, move, turnDeg: turn, rollDeg: roll, spinDeg: CONFIG.spinDegPerLoop * (t / LOOP), normal, points, headRadial: points[points.length - 1].radial };
+  const eye = yaw(CONFIG.cameraSwayDeg * Math.sin(TAU * u), [0, CONFIG.cameraHeight, CONFIG.cameraDistance]);
+  const facing = Math.abs(dotv(normal, normv(eye))); // 0 edge-on, 1 face-on.
+  return {
+    t,
+    turnDeg: (turn / DEG) % 360,
+    facing,
+    spinDeg: CONFIG.spinDegPerLoop * u,
+    eye,
+    normal,
+    points,
+    headRadial: points[points.length - 1].radial,
+  };
 }
 
 // ---- Geometry ----
@@ -170,7 +144,7 @@ function sphereData(latSegments, lonSegments) {
   for (let i = 0; i <= latSegments; i++) {
     const phi = -Math.PI / 2 + (Math.PI * i) / latSegments;
     for (let j = 0; j <= lonSegments; j++) {
-      const a = (2 * Math.PI * j) / lonSegments;
+      const a = (TAU * j) / lonSegments;
       const p = [Math.cos(phi) * Math.cos(a), Math.sin(phi), Math.cos(phi) * Math.sin(a)];
       data.push(...p, ...p, 1, 0.5);
     }
@@ -187,12 +161,12 @@ function sphereData(latSegments, lonSegments) {
   return { data: new Float32Array(data), index: new Uint32Array(index) };
 }
 
-const TUBE_SIDES = CONFIG.sides;
+const SIDES = CONFIG.sides;
 const TUBE_INDEX = (() => {
   const index = [];
-  const stride = TUBE_SIDES + 1;
+  const stride = SIDES + 1;
   for (let i = 0; i < CONFIG.arcSamples; i++) {
-    for (let j = 0; j < TUBE_SIDES; j++) {
+    for (let j = 0; j < SIDES; j++) {
       const a = i * stride + j;
       const b = (i + 1) * stride + j;
       index.push(a, b, a + 1, a + 1, b, b + 1);
@@ -201,23 +175,23 @@ const TUBE_INDEX = (() => {
   return new Uint32Array(index);
 })();
 
-/** The blade as a tube with a tapered radius, built from the frame's points. Each ring is perpendicular to the blade's direction. */
+/** The comet as a tube whose radius tapers from the head to the end of its trail. */
 function tubeData(f) {
-  const out = new Float32Array((CONFIG.arcSamples + 1) * (TUBE_SIDES + 1) * STRIDE);
+  const out = new Float32Array((CONFIG.arcSamples + 1) * (SIDES + 1) * STRIDE);
   let o = 0;
   for (const { k, radial } of f.points) {
-    const r = CONFIG.tubeRadius * (CONFIG.tailRatio + (1 - CONFIG.tailRatio) * k);
-    for (let j = 0; j <= TUBE_SIDES; j++) {
-      const phi = (2 * Math.PI * j) / TUBE_SIDES;
+    const r = CONFIG.tubeRadius * (CONFIG.tailRatio + (1 - CONFIG.tailRatio) * Math.pow(k, 1.4));
+    for (let j = 0; j <= SIDES; j++) {
+      const phi = (TAU * j) / SIDES;
       const cs = Math.cos(phi);
       const sn = Math.sin(phi);
       for (let q = 0; q < 3; q++) {
-        const normalQ = cs * radial[q] + sn * f.normal[q];
-        out[o + q] = CONFIG.ringRadius * radial[q] + r * normalQ;
-        out[o + 3 + q] = normalQ;
+        const n = cs * radial[q] + sn * f.normal[q];
+        out[o + q] = CONFIG.ringRadius * radial[q] + r * n;
+        out[o + 3 + q] = n;
       }
       out[o + 6] = k;
-      out[o + 7] = j / TUBE_SIDES;
+      out[o + 7] = j / SIDES;
       o += STRIDE;
     }
   }
@@ -225,10 +199,6 @@ function tubeData(f) {
 }
 
 // ---- Matrices (column-major) ----
-const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
-const dotv = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-const normv = (a) => { const l = Math.hypot(a[0], a[1], a[2]); return [a[0] / l, a[1] / l, a[2] / l]; };
 function perspective(fovy, aspect, near, far) {
   const f = 1 / Math.tan(fovy / 2);
   const nf = 1 / (near - far);
@@ -245,6 +215,21 @@ function rotationY(deg) {
   const s = Math.sin(deg * DEG);
   return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]);
 }
+function transform(m, p) {
+  const x = m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12];
+  const y = m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13];
+  const w = m[3] * p[0] + m[7] * p[1] + m[11] * p[2] + m[15];
+  return [x / w, y / w];
+}
+function multiply(a, b) {
+  const o = new Float32Array(16);
+  for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+    let s = 0;
+    for (let k = 0; k < 4; k++) s += a[k * 4 + r] * b[c * 4 + k];
+    o[c * 4 + r] = s;
+  }
+  return o;
+}
 const IDENTITY = new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 
 // ---- Shaders (WebGL 2, no libraries) ----
@@ -252,7 +237,7 @@ const VERT = `#version 300 es
 layout(location = 0) in vec3 aPos; layout(location = 1) in vec3 aNrm; layout(location = 2) in float aK; layout(location = 3) in float aSide;
 uniform mat4 uModel; uniform mat4 uView; uniform mat4 uProj;
 uniform int uCap; uniform vec3 uCenter; uniform float uRadius;
-out vec3 vWorld; out vec3 vNormal; out vec3 vObj; out float vK; out float vSide;
+out vec3 vWorld; out vec3 vNormal; out vec3 vObj; out float vK;
 void main() {
   vec3 p = aPos;
   if (uCap == 1) p = uCenter + uRadius * aPos;
@@ -260,23 +245,23 @@ void main() {
   vWorld = w.xyz;
   vNormal = mat3(uModel) * aNrm;
   vObj = aPos;
-  vK = aK; vSide = aSide;
+  vK = aK;
   gl_Position = uProj * uView * w;
 }`;
 
 const GLOBE_FRAG = `#version 300 es
 precision highp float;
 in vec3 vWorld; in vec3 vNormal; in vec3 vObj;
-uniform vec3 uEye; uniform vec3 uGrid;
-uniform float uLatStep; uniform float uLonStep; uniform float uHalfWidth; uniform float uBackAlpha;
-uniform float uRimAlpha; uniform float uLimbFade;
+uniform vec3 uEye; uniform vec3 uGrid; uniform vec3 uRed;
+uniform float uLatStep; uniform float uLonStep; uniform float uHalfWidth; uniform float uBackAlpha; uniform float uRimAlpha;
+uniform vec3 uBladeN; uniform vec3 uHeadDir; uniform float uCrossGlow;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
   vec3 V = normalize(uEye - vWorld);
   float ndv = dot(N, V);
 
-  // The grid is engraved on the surface, in the globe's own coordinates, so it turns with the globe.
+  // The grid is engraved in the globe's own coordinates, so it turns with the globe.
   vec3 p = normalize(vObj);
   float lat = asin(clamp(p.y, -1.0, 1.0));
   float lon = atan(p.z, p.x);
@@ -286,40 +271,45 @@ void main() {
   float fLon = min(fwidth(dLon), 0.02);
   float lineLat = 1.0 - smoothstep(uHalfWidth - fLat, uHalfWidth + fLat, dLat);
   float lineLon = 1.0 - smoothstep(uHalfWidth - fLon, uHalfWidth + fLon, dLon);
-  float grid = max(lineLat, lineLon) * smoothstep(0.0, uLimbFade, abs(ndv));
+  float grid = max(lineLat, lineLon) * smoothstep(0.0, 0.12, abs(ndv));
 
-  // The near side is drawn in full; the far side shows through the globe at uBackAlpha. The globe has no fill.
-  float strength = ndv > 0.0 ? 1.0 : uBackAlpha;
-  // The silhouette: a thin line of constant width on the globe's edge, so the sphere reads as a sphere.
+  // Depth: full on the near side, easing down to the far side's strength through the edge.
+  float depth = mix(uBackAlpha, 1.0, smoothstep(-0.2, 0.25, ndv));
+
+  // Where the blade's plane cuts the surface, the lines light up red, most strongly near the comet's head.
+  vec3 w = normalize(vWorld);
+  float cut = exp(-pow(dot(w, uBladeN) / uCrossGlow, 2.0));
+  float near = exp(-pow(distance(w, uHeadDir) / 0.55, 2.0));
+  float lit = clamp(cut * (0.25 + 0.75 * near), 0.0, 1.0);
+  vec3 colour = mix(uGrid, uRed * 2.2, lit);
+
+  // The silhouette: a thin line of constant width on the globe's edge.
   float fw = max(fwidth(ndv), 1e-4);
   float edge = (1.0 - smoothstep(fw, fw * 2.5, abs(ndv))) * uRimAlpha;
-  outColor = vec4(uGrid, max(grid * strength, edge));
+  float alpha = max(grid * max(depth, lit), edge);
+  outColor = vec4(colour, clamp(alpha, 0.0, 1.0));
 }`;
 
 const TUBE_FRAG = `#version 300 es
 precision highp float;
-in vec3 vWorld; in vec3 vNormal; in float vK; in float vSide;
+in vec3 vWorld; in vec3 vNormal; in float vK;
 uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uRed; uniform vec3 uCore; uniform float uHot; uniform vec3 uCamDir;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
   vec3 V = normalize(uEye - vWorld);
   vec3 L = normalize(uLight);
-  vec3 H = normalize(L + V);
   float ndv = max(dot(N, V), 0.0);
   float ndl = max(dot(N, L), 0.0);
-  // The tube is brightest where it faces the camera, so it reads as a lit tube, and the hot core runs along the head.
-  float along = pow(vK, 0.8);
-  float intensity = mix(0.22, 1.0, along) * uHot;
-  float centre = pow(ndv, 1.6);
-  vec3 col = uRed * intensity * (0.55 + 0.45 * ndl);
-  col += uCore * centre * pow(vK, 3.0) * uHot * 0.9;
-  col += vec3(pow(max(dot(N, H), 0.0), 40.0) * 0.35 * vK);
-  // Behind the globe, as seen from the camera: the blade's part on the far side shows faintly.
+  // A comet: bright at the head, its trail fading to a faint full ring.
+  float along = 0.13 + 0.87 * pow(vK, 2.2);
+  vec3 col = uRed * along * (0.6 + 0.4 * ndl) * uHot;
+  col += uCore * pow(ndv, 1.6) * pow(vK, 7.0) * uHot;
+  col += vec3(pow(max(dot(N, normalize(L + V)), 0.0), 50.0) * 0.3 * vK);
+  // Behind the globe, as seen from the camera, it shows faintly through it.
   vec3 across = vWorld - dot(vWorld, uCamDir) * uCamDir;
-  float inside = smoothstep(1.03, 0.97, length(across));
-  float behind = step(dot(vWorld, uCamDir), 0.0);
-  col *= mix(1.0, 0.22, inside * behind);
+  float behind = smoothstep(1.03, 0.97, length(across)) * step(dot(vWorld, uCamDir), 0.0);
+  col *= mix(1.0, 0.25, behind);
   outColor = vec4(col, 1.0);
 }`;
 
@@ -349,13 +339,20 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 
+// The scene, its glow, and a thin horizontal streak of light through the comet's head.
 const COMPOSITE_FRAG = `#version 300 es
 precision highp float;
-in vec2 vUV; uniform sampler2D uScene; uniform sampler2D uBloom; uniform float uStrength; out vec4 o;
+in vec2 vUV; uniform sampler2D uScene; uniform sampler2D uBloom; uniform float uStrength;
+uniform vec2 uHead; uniform float uFlare; uniform vec3 uRed;
+out vec4 o;
 void main() {
   vec3 s = texture(uScene, vUV).rgb;
   vec3 b = texture(uBloom, vUV).rgb;
-  o = vec4(s + b * uStrength, 1.0);
+  vec2 d = vUV - uHead;
+  float streak = exp(-abs(d.y) * 520.0) * exp(-abs(d.x) * 6.5);
+  float halo = exp(-dot(d, d) * 1400.0);
+  vec3 flare = (mix(uRed, vec3(1.0), 0.3) * streak * 0.85 + vec3(1.0, 0.8, 0.8) * halo * 0.55) * uFlare;
+  o = vec4(s + b * uStrength + flare, 1.0);
 }`;
 
 // ---- Drawing and playback ----
@@ -410,37 +407,32 @@ function vertexArray(data, index, dynamic) {
   const vbo = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
   gl.bufferData(gl.ARRAY_BUFFER, data, dynamic ? gl.DYNAMIC_DRAW : gl.STATIC_DRAW);
-  const bytes = STRIDE * 4;
-  const attributes = [[0, 3, 0], [1, 3, 12], [2, 1, 24], [3, 1, 28]];
-  for (const [loc, size, offset] of attributes) {
+  for (const [loc, size, offset] of [[0, 3, 0], [1, 3, 12], [2, 1, 24], [3, 1, 28]]) {
     gl.enableVertexAttribArray(loc);
-    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, bytes, offset);
+    gl.vertexAttribPointer(loc, size, gl.FLOAT, false, STRIDE * 4, offset);
   }
-  if (index) {
-    const ibo = gl.createBuffer();
-    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
-    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index, gl.STATIC_DRAW);
-  }
+  const ibo = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ibo);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, index, gl.STATIC_DRAW);
   gl.bindVertexArray(null);
-  return { vao, vbo, count: index ? index.length : 0 };
+  return { vao, vbo, count: index.length };
 }
 
 const SPHERE = sphereData(120, 160);
 const globeMesh = vertexArray(SPHERE.data, SPHERE.index, false);
-const tubeMesh = vertexArray(new Float32Array((CONFIG.arcSamples + 1) * (TUBE_SIDES + 1) * STRIDE), TUBE_INDEX, true);
+const tubeMesh = vertexArray(new Float32Array((CONFIG.arcSamples + 1) * (SIDES + 1) * STRIDE), TUBE_INDEX, true);
 
-const quad = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, quad);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 const quadVao = gl.createVertexArray();
 gl.bindVertexArray(quadVao);
+gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
 gl.enableVertexAttribArray(0);
 gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
 gl.bindVertexArray(null);
 
-// Render targets: the scene is drawn with 4x multisampling, resolved, then bloomed at half resolution.
+// Render targets: the scene is drawn with multisampling, resolved, then bloomed at half resolution.
 let targets = null;
-function makeTexture(w, h) {
+function targetWithTexture(w, h) {
   const tex = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -448,10 +440,6 @@ function makeTexture(w, h) {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
-  return tex;
-}
-function targetWithTexture(w, h) {
-  const tex = makeTexture(w, h);
   const fbo = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
   gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
@@ -461,24 +449,15 @@ function allocate(w, h) {
   const samples = Math.min(4, gl.getParameter(gl.MAX_SAMPLES));
   const msaa = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
-  const colour = gl.createRenderbuffer();
-  gl.bindRenderbuffer(gl.RENDERBUFFER, colour);
-  gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.RGBA8, w, h);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, colour);
-  const depth = gl.createRenderbuffer();
-  gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
-  gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, gl.DEPTH_COMPONENT24, w, h);
-  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+  for (const [format, attachment] of [[gl.RGBA8, gl.COLOR_ATTACHMENT0], [gl.DEPTH_COMPONENT24, gl.DEPTH_ATTACHMENT]]) {
+    const rb = gl.createRenderbuffer();
+    gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, samples, format, w, h);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, attachment, gl.RENDERBUFFER, rb);
+  }
   const hw = Math.max(1, Math.floor(w / 2));
   const hh = Math.max(1, Math.floor(h / 2));
-  targets = {
-    w, h, hw, hh,
-    msaa,
-    scene: targetWithTexture(w, h),
-    bright: targetWithTexture(hw, hh),
-    blurA: targetWithTexture(hw, hh),
-    blurB: targetWithTexture(hw, hh),
-  };
+  targets = { w, h, hw, hh, msaa, scene: targetWithTexture(w, h), bright: targetWithTexture(hw, hh), blurA: targetWithTexture(hw, hh), blurB: targetWithTexture(hw, hh) };
 }
 
 function resize() {
@@ -489,70 +468,75 @@ function resize() {
   allocate(canvas.width, canvas.height);
 }
 
-function useProgram(p) {
-  gl.useProgram(p.program);
-}
-function setVec3(p, name, v) { gl.uniform3f(p.uniforms[name], v[0], v[1], v[2]); }
-function setFloat(p, name, v) { gl.uniform1f(p.uniforms[name], v); }
-function setMat(p, name, m) { gl.uniformMatrix4fv(p.uniforms[name], false, m); }
+const setVec3 = (p, name, v) => gl.uniform3f(p.uniforms[name], v[0], v[1], v[2]);
+const setFloat = (p, name, v) => gl.uniform1f(p.uniforms[name], v);
+const setMat = (p, name, m) => gl.uniformMatrix4fv(p.uniforms[name], false, m);
 
-function blurPass(source, destination, dirX, dirY, spread) {
-  gl.bindFramebuffer(gl.FRAMEBUFFER, destination.fbo);
-  gl.viewport(0, 0, destination.w, destination.h);
-  useProgram(blurProgram);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, source.tex);
-  gl.uniform1i(blurProgram.uniforms.uTex, 0);
-  gl.uniform2f(blurProgram.uniforms.uDir, (dirX * spread) / source.w, (dirY * spread) / source.h);
+function fullscreen(target, prog, textures) {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, target ? target.fbo : null);
+  gl.viewport(0, 0, target ? target.w : targets.w, target ? target.h : targets.h);
+  gl.useProgram(prog.program);
+  textures.forEach(([name, tex], unit) => {
+    gl.activeTexture(gl.TEXTURE0 + unit);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
+    gl.uniform1i(prog.uniforms[name], unit);
+  });
   gl.bindVertexArray(quadVao);
   gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+function blurPass(source, destination, dirX, dirY, spread) {
+  gl.useProgram(blurProgram.program);
+  gl.uniform2f(blurProgram.uniforms.uDir, (dirX * spread) / source.w, (dirY * spread) / source.h);
+  fullscreen(destination, blurProgram, [["uTex", source.tex]]);
 }
 
 function draw(f) {
   const { w, h } = targets;
-  const eye = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
+  const eye = f.eye;
+  const camDir = normv(eye);
   const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
   const proj = perspective(CONFIG.fovDeg * DEG, w / h, 0.1, 50);
-  const bg = colours.bg;
+  const headWorld = scale(f.headRadial, CONFIG.ringRadius);
 
-  // Pass 1: the scene, multisampled.
   gl.bindFramebuffer(gl.FRAMEBUFFER, targets.msaa);
   gl.viewport(0, 0, w, h);
-  gl.clearColor(bg[0], bg[1], bg[2], 1);
+  gl.clearColor(colours.bg[0], colours.bg[1], colours.bg[2], 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  // The globe is see-through: its lines blend over the background and do not block the blade behind them.
+
+  // The see-through globe: its lines blend over the background and never hide the blade.
   gl.disable(gl.DEPTH_TEST);
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-  // The globe turns; the camera stays still.
-  useProgram(globeProgram);
+  gl.useProgram(globeProgram.program);
   setMat(globeProgram, "uModel", rotationY(f.spinDeg));
   setMat(globeProgram, "uView", view);
   setMat(globeProgram, "uProj", proj);
   gl.uniform1i(globeProgram.uniforms.uCap, 0);
   setVec3(globeProgram, "uEye", eye);
   setVec3(globeProgram, "uGrid", colours.grid);
-  setFloat(globeProgram, "uBackAlpha", CONFIG.backLineAlpha);
-  setFloat(globeProgram, "uRimAlpha", CONFIG.rimAlpha);
-  setFloat(globeProgram, "uLimbFade", CONFIG.limbFade);
+  setVec3(globeProgram, "uRed", colours.red);
+  setVec3(globeProgram, "uBladeN", f.normal);
+  setVec3(globeProgram, "uHeadDir", f.headRadial);
+  setFloat(globeProgram, "uCrossGlow", CONFIG.crossGlow);
   setFloat(globeProgram, "uLatStep", CONFIG.latitudeStepDeg * DEG);
   setFloat(globeProgram, "uLonStep", CONFIG.meridianStepDeg * DEG);
   setFloat(globeProgram, "uHalfWidth", CONFIG.gridHalfWidth);
+  setFloat(globeProgram, "uBackAlpha", CONFIG.backLineAlpha);
+  setFloat(globeProgram, "uRimAlpha", CONFIG.rimAlpha);
   gl.bindVertexArray(globeMesh.vao);
   gl.drawElements(gl.TRIANGLES, globeMesh.count, gl.UNSIGNED_INT, 0);
   gl.disable(gl.BLEND);
-  gl.enable(gl.DEPTH_TEST);
 
-  // The blade, then its glowing head.
-  useProgram(tubeProgram);
+  // The comet and its head.
+  gl.enable(gl.DEPTH_TEST);
+  gl.useProgram(tubeProgram.program);
   setMat(tubeProgram, "uView", view);
   setMat(tubeProgram, "uProj", proj);
   setMat(tubeProgram, "uModel", IDENTITY);
   gl.uniform1i(tubeProgram.uniforms.uCap, 0);
   setVec3(tubeProgram, "uEye", eye);
   setVec3(tubeProgram, "uLight", LIGHT);
-  setVec3(tubeProgram, "uCamDir", normv(eye));
+  setVec3(tubeProgram, "uCamDir", camDir);
   setVec3(tubeProgram, "uRed", colours.red);
   setVec3(tubeProgram, "uCore", colours.core);
   setFloat(tubeProgram, "uHot", 1.0);
@@ -560,63 +544,49 @@ function draw(f) {
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, tubeData(f));
   gl.bindVertexArray(tubeMesh.vao);
   gl.drawElements(gl.TRIANGLES, tubeMesh.count, gl.UNSIGNED_INT, 0);
-
   gl.uniform1i(tubeProgram.uniforms.uCap, 1);
-  gl.uniform3f(tubeProgram.uniforms.uCenter, CONFIG.ringRadius * f.headRadial[0], CONFIG.ringRadius * f.headRadial[1], CONFIG.ringRadius * f.headRadial[2]);
+  setVec3(tubeProgram, "uCenter", headWorld);
   setFloat(tubeProgram, "uRadius", CONFIG.tubeRadius);
-  setFloat(tubeProgram, "uHot", 1.6);
+  setFloat(tubeProgram, "uHot", 1.5);
   gl.bindVertexArray(globeMesh.vao);
   gl.drawElements(gl.TRIANGLES, globeMesh.count, gl.UNSIGNED_INT, 0);
   gl.disable(gl.DEPTH_TEST);
 
-  // Pass 2: resolve the multisampled scene into a texture.
+  // Resolve, glow, composite.
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, targets.msaa);
   gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, targets.scene.fbo);
   gl.blitFramebuffer(0, 0, w, h, 0, 0, w, h, gl.COLOR_BUFFER_BIT, gl.NEAREST);
-
-  // Pass 3: the bright parts, then two blur rounds (a tight glow and a wide one).
-  gl.bindFramebuffer(gl.FRAMEBUFFER, targets.bright.fbo);
-  gl.viewport(0, 0, targets.hw, targets.hh);
-  useProgram(brightProgram);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, targets.scene.tex);
-  gl.uniform1i(brightProgram.uniforms.uTex, 0);
+  gl.useProgram(brightProgram.program);
   setFloat(brightProgram, "uThreshold", CONFIG.bloomThreshold);
-  gl.bindVertexArray(quadVao);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  fullscreen(targets.bright, brightProgram, [["uTex", targets.scene.tex]]);
   blurPass(targets.bright, targets.blurA, 1, 0, 1);
   blurPass(targets.blurA, targets.blurB, 0, 1, 1);
-  blurPass(targets.blurB, targets.blurA, 1, 0, 2.6);
-  blurPass(targets.blurA, targets.blurB, 0, 1, 2.6);
+  blurPass(targets.blurB, targets.blurA, 1, 0, 2.8);
+  blurPass(targets.blurA, targets.blurB, 0, 1, 2.8);
 
-  // Pass 4: the scene plus its glow, to the screen.
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.viewport(0, 0, w, h);
-  useProgram(compositeProgram);
-  gl.activeTexture(gl.TEXTURE0);
-  gl.bindTexture(gl.TEXTURE_2D, targets.scene.tex);
-  gl.uniform1i(compositeProgram.uniforms.uScene, 0);
-  gl.activeTexture(gl.TEXTURE1);
-  gl.bindTexture(gl.TEXTURE_2D, targets.blurB.tex);
-  gl.uniform1i(compositeProgram.uniforms.uBloom, 1);
+  // The streak follows the head; it dims when the head is behind the globe.
+  const ndc = transform(multiply(proj, view), headWorld);
+  const across = Math.hypot(...sub(headWorld, scale(camDir, dotv(headWorld, camDir))));
+  const hidden = dotv(headWorld, camDir) < 0 && across < 1 ? 0.2 : 1;
+  gl.useProgram(compositeProgram.program);
   setFloat(compositeProgram, "uStrength", CONFIG.bloomStrength);
-  gl.bindVertexArray(quadVao);
-  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+  gl.uniform2f(compositeProgram.uniforms.uHead, ndc[0] * 0.5 + 0.5, ndc[1] * 0.5 + 0.5);
+  setFloat(compositeProgram, "uFlare", theme === "dark" ? CONFIG.flare * hidden : 0);
+  setVec3(compositeProgram, "uRed", colours.red);
+  fullscreen(null, compositeProgram, [["uScene", targets.scene.tex], ["uBloom", targets.blurB.tex]]);
 }
 
 function render() {
   const f = frame(state.t);
   draw(f);
   scrub.value = String(f.t.toFixed(2));
-  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | ${f.move} | roll ${f.rollDeg.toFixed(0)} deg`;
+  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | facing ${(f.facing * 100).toFixed(0)}%`;
 }
 
 function setButton() {
-  const playing = state.playing;
-  toggle.textContent = playing ? "Pause" : "Play";
-  toggle.setAttribute("aria-pressed", String(playing));
+  toggle.textContent = state.playing ? "Pause" : "Play";
+  toggle.setAttribute("aria-pressed", String(state.playing));
 }
-
 function loop(now) {
   if (!state.playing) return;
   state.t = wrapTime(state.t + Math.min(now - state.last, 100) / 1000); // Capped, so a hidden tab does not jump.
@@ -624,7 +594,6 @@ function loop(now) {
   render();
   state.raf = requestAnimationFrame(loop);
 }
-
 function play() {
   if (state.playing || reduceQuery.matches) return;
   state.playing = true;
@@ -632,16 +601,16 @@ function play() {
   state.raf = requestAnimationFrame(loop);
   setButton();
 }
-
 function pause() {
   state.playing = false;
   cancelAnimationFrame(state.raf);
   setButton();
 }
 
-// ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws one still frame at t = 0. ----
+// ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws one still frame. ----
 const requested = Number(params.get("t"));
 if (params.has("t") && Number.isFinite(requested)) state.t = wrapTime(requested);
+else if (reduceQuery.matches) state.t = LOOP * 0.5;
 resize();
 render();
 if (!params.has("t") && !reduceQuery.matches) play();
