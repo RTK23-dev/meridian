@@ -41,3 +41,40 @@ export async function providerAccessToken(
     return { error: "The saved credential could not be checked. Nothing was sent." };
   }
 }
+
+/** The state of a provider's credential for one workspace. It never carries a token. */
+export type ProviderCredentialState = { state: "usable" | "unusable" | "not_configured"; reason: string };
+
+const NO_CREDENTIAL_REASON = "No access token is stored and none is configured. Nothing was sent.";
+const UNCHECKED_REASON = "The stored credential could not be checked. Nothing was sent.";
+
+/**
+ * The state of a provider's credential for one workspace, decided by the precedence providerAccessToken uses, with no token in
+ * the result. A sealed token that opens is usable, and one that does not is unusable, with no fallback to the saved key. With no
+ * sealed token, the saved key's state comes from resolveCredential. An opened token is dropped here. A thrown error is unusable
+ * with a fixed message, and nothing from the error is returned.
+ */
+export async function providerCredentialState(
+  sql: Sql,
+  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv },
+): Promise<ProviderCredentialState> {
+  try {
+    if (input.sealed.trim()) {
+      const opened = openAccessToken({ sealed: input.sealed, key: input.encryptionKey });
+      if ("error" in opened) return { state: "unusable", reason: opened.error };
+      return { state: "usable", reason: "The stored access token can be opened." };
+    }
+    const category = SAVED_KEY_CATEGORY[input.provider];
+    if (!category) return { state: "not_configured", reason: NO_CREDENTIAL_REASON };
+    const resolution = await resolveCredential(sql, input.organizationId, category, input.env ?? process.env);
+    if (resolution.status === "ready") {
+      return resolution.source === "workspace"
+        ? { state: "usable", reason: "The workspace's saved credential can be used." }
+        : { state: "usable", reason: "The deployment's shared credential can be used for this workspace." };
+    }
+    if (resolution.status === "unusable") return { state: "unusable", reason: resolution.reason };
+    return { state: "not_configured", reason: resolution.reason };
+  } catch {
+    return { state: "unusable", reason: UNCHECKED_REASON };
+  }
+}

@@ -4,21 +4,13 @@ import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
 import { probeTikTok, publishTikTokFlow } from "./tiktok.ts";
 import { connectionPhase, type ConnectionPhase } from "./phase.ts";
 import { DEPLOYMENT_ONLY_KEY_ENV } from "../credentials/contract.ts";
+import type { ProviderCredentialState } from "./access-token.ts";
 
 export const LIVE_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 export type LiveProvider = (typeof LIVE_PROVIDERS)[number];
 
 export function isLiveProvider(value: string): value is LiveProvider {
   return (LIVE_PROVIDERS as readonly string[]).includes(value);
-}
-
-/**
- * Whether a provider is configured. An environment token never configures a provider, so this is always false: a provider is
- * configured only by a token stored for the workspace, and callers decide that from the token they hold.
- */
-export function providerConfigured(provider: LiveProvider): boolean {
-  void provider;
-  return false;
 }
 
 /**
@@ -81,22 +73,48 @@ export async function probeLive(
     : { ok: false, accountId: "", accountName: "", permissions: [], error: library.error };
 }
 
+/**
+ * The phase of one probe. `configured` has no default: the caller reads whether the workspace has a credential, so no caller
+ * can assume one.
+ */
 export function phaseForProbe(input: {
   provider: LiveProvider;
   ok: boolean | null;
   error: string;
   disconnected: boolean;
   env?: NodeJS.ProcessEnv;
-  configured?: boolean;
+  configured: boolean;
 }): { phase: ConnectionPhase; detail: string } {
   return connectionPhase({
-    configured: input.configured ?? providerConfigured(input.provider),
+    configured: input.configured,
     disconnected: input.disconnected,
     probing: false,
     syncing: false,
     lastOk: input.ok,
     stale: false,
     lastError: input.error,
+  });
+}
+
+/**
+ * The phase of a stored connection. The workspace's credential decides whether there is a credential at all. An unusable
+ * credential is a failure with its reason, so an earlier success never shows HEALTHY. Otherwise the phase follows the recorded
+ * provider result, as it always has. DISCONNECTED comes first.
+ */
+export function phaseForStoredConnection(input: {
+  provider: LiveProvider;
+  credential: ProviderCredentialState;
+  lastSuccessAt: unknown;
+  lastError: string;
+  disconnected: boolean;
+}): { phase: ConnectionPhase; detail: string } {
+  const unusable = input.credential.state === "unusable";
+  return phaseForProbe({
+    provider: input.provider,
+    ok: unusable ? false : input.lastSuccessAt ? true : input.lastError ? false : null,
+    error: unusable ? input.credential.reason : input.lastError,
+    disconnected: input.disconnected,
+    configured: input.credential.state !== "not_configured",
   });
 }
 
