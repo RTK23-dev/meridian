@@ -13,6 +13,7 @@ import {
   planOrchestratorDraft,
   runOrchestratorPlan,
 } from "@/lib/meridian/orchestrator/actions";
+import { hasRole } from "@/lib/meridian/access";
 
 type PlanSummary = Awaited<ReturnType<typeof listOrchestratorPlans>>["plans"][number];
 type PlanDetail = Awaited<ReturnType<typeof getOrchestratorPlan>>;
@@ -68,6 +69,7 @@ function notConnected(reason: string): string {
  */
 export function OrchestratorPlans() {
   const workspace = useWorkspace();
+  const canAdmin = hasRole(workspace.data?.active?.role ?? "viewer", "admin");
   const brands = (workspace.data?.brands ?? []).map((brand) => ({ id: brand.id, name: brand.name }));
   const [chosenBrand, setChosenBrand] = useState("");
   const brandId = chosenBrand || brands[0]?.id || "";
@@ -160,6 +162,7 @@ export function OrchestratorPlans() {
         <h2 id="plans-heading" className="text-lg font-semibold">
           Your plans
         </h2>
+        {canAdmin ? null : <p id="plans-role" className="text-sm text-fg-muted">Only a workspace admin can plan, run or change a plan.</p>}
 
         {message ? (
           <p role="status" className="text-sm">
@@ -231,6 +234,7 @@ export function OrchestratorPlans() {
                           brandId={brandId}
                           planId={detail.plan.id}
                           step={step}
+                          canAdmin={canAdmin}
                           onSaved={async () => {
                             await refresh();
                             await open(detail.plan.id);
@@ -243,12 +247,12 @@ export function OrchestratorPlans() {
                 {detail.events.length > 0 ? <p className="text-xs text-fg-muted">The last run recorded {detail.events.length} events.</p> : null}
                 <div className="flex flex-wrap gap-2">
                   {detail.plan.status === "draft" || detail.plan.status === "refused" ? (
-                    <Button size="sm" onClick={() => plan(detail.plan.id)} disabled={busy}>
+                    <Button size="sm" onClick={() => plan(detail.plan.id)} disabled={busy || !canAdmin} aria-describedby={canAdmin ? undefined : "plans-role"}>
                       Plan with {detail.plan.orchestratorModel}
                     </Button>
                   ) : null}
                   {detail.plan.status === "ready" || detail.plan.status === "paused" || detail.plan.status === "incomplete" || detail.plan.status === "complete" ? (
-                    <Button size="sm" variant="secondary" onClick={() => run(detail.plan.id)} disabled={busy}>
+                    <Button size="sm" variant="secondary" onClick={() => run(detail.plan.id)} disabled={busy || !canAdmin} aria-describedby={canAdmin ? undefined : "plans-role"}>
                       Run the plan
                     </Button>
                   ) : null}
@@ -269,8 +273,9 @@ function StepEdit(props: {
   step: { id: string; kind: string; title: string; model: string | null; params: Record<string, string | number | boolean | null> };
   onSaved: () => Promise<void>;
   onMessage: (message: string) => void;
+  canAdmin: boolean;
 }) {
-  const { brandId, planId, step, onSaved, onMessage } = props;
+  const { brandId, planId, step, onSaved, onMessage, canAdmin } = props;
   const editable = EDITABLE_PARAM[step.kind];
   const current = editable ? step.params[editable.name] : undefined;
   const [value, setValue] = useState(current === undefined || current === null ? "" : String(current));
@@ -308,7 +313,7 @@ function StepEdit(props: {
         Model
         <input className="w-64 rounded-md border border-border-strong bg-surface px-2 py-1.5 font-mono" value={model} onChange={(event) => setModel(event.target.value)} />
       </label>
-      <Button size="sm" variant="secondary" onClick={() => void save()} disabled={saving}>
+      <Button size="sm" variant="secondary" onClick={() => void save()} disabled={saving || !canAdmin} aria-describedby={canAdmin ? undefined : "plans-role"}>
         Save step
       </Button>
     </div>

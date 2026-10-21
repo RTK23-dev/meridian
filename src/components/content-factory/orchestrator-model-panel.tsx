@@ -2,9 +2,11 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, CardDescription, CardHeader, CardTitle, Input, SelectInput, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { useWorkspace } from "@/components/workspace";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { getOrchestratorModelSetting, listOrchestratorTextModels, saveOrchestratorModelSetting } from "@/lib/meridian/orchestrator/actions";
+import { hasRole } from "@/lib/meridian/access";
 import { isOrchestratorModelId, type TextModelChoice } from "@/engine/orchestrator/settings";
 
 type TextModelsResult = { status: "ok"; models: TextModelChoice[] } | { status: "not_connected" | "failed"; reason: string };
@@ -20,6 +22,8 @@ const perMillion = (usdPerToken: number) => `$${(usdPerToken * 1_000_000).toFixe
  */
 export function OrchestratorModelPanel({ organizationId }: { organizationId: string }) {
   const { user, isPending } = useCurrentUserState();
+  const { data: workspace } = useWorkspace();
+  const canAdmin = hasRole(workspace?.active?.role ?? "viewer", "admin");
   const enabled = !isPending && !!user && !!organizationId;
   const stored = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["orchestrator-model", "stored", organizationId]),
@@ -47,6 +51,7 @@ export function OrchestratorModelPanel({ organizationId }: { organizationId: str
           stored={stored.data.orchestratorModel}
           catalog={models.data ?? null}
           catalogError={models.isError && !models.data ? models.error : null}
+          canAdmin={canAdmin}
         />
       ) : stored.isError ? null : (
         <p role="status" className="text-sm text-fg-muted">Loading the stored model.</p>
@@ -66,7 +71,7 @@ function catalogStatusLine(catalog: TextModelsResult | null, catalogError: unkno
   return "Live catalog: reading.";
 }
 
-function ModelForm({ organizationId, stored, catalog, catalogError }:{ organizationId: string; stored: string | null; catalog: TextModelsResult | null; catalogError: unknown }) {
+function ModelForm({ organizationId, stored, catalog, catalogError, canAdmin }:{ organizationId: string; stored: string | null; catalog: TextModelsResult | null; catalogError: unknown; canAdmin: boolean }) {
   const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [choice, setChoice] = useState(stored ?? "");
@@ -102,7 +107,7 @@ function ModelForm({ organizationId, stored, catalog, catalogError }:{ organizat
   const unchanged = typed === (stored ?? "");
 
   return (
-    <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (typed !== "") void save(typed); }}>
+    <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); if (canAdmin && typed !== "") void save(typed); }}>
       <p className="text-sm">
         {stored === null ? (
           <span className="text-fg-muted">No model is stored. A plan cannot be written until one is.</span>
@@ -142,12 +147,13 @@ function ModelForm({ organizationId, stored, catalog, catalogError }:{ organizat
           {typed !== "" && !isOrchestratorModelId(typed) ? <p className="text-sm text-danger">An OpenRouter id is vendor/model.</p> : null}
         </div>
       )}
+      {canAdmin ? null : <p id="model-role" className="text-sm text-fg-muted">Only a workspace admin can change the orchestrator model.</p>}
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" size="md" variant="secondary" loading={busy} disabled={busy || typed === "" || unchanged || (live === null && !isOrchestratorModelId(typed))}>
+        <Button type="submit" size="md" variant="secondary" loading={busy} disabled={busy || !canAdmin || typed === "" || unchanged || (live === null && !isOrchestratorModelId(typed))} aria-describedby={canAdmin ? undefined : "model-role"}>
           Save model
         </Button>
         {stored !== null ? (
-          <Button type="button" size="md" variant="ghost" disabled={busy} onClick={() => void save(null)}>Clear stored model</Button>
+          <Button type="button" size="md" variant="ghost" disabled={busy || !canAdmin} aria-describedby={canAdmin ? undefined : "model-role"} onClick={() => void save(null)}>Clear stored model</Button>
         ) : null}
       </div>
     </form>

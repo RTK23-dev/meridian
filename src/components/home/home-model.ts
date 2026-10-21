@@ -4,6 +4,8 @@
  */
 import { formatDistanceToNow } from "date-fns";
 import type { BrandSummary } from "@/lib/meridian/workspace/actions";
+import type { PlanStatus } from "../../engine/orchestrator/store.ts";
+import { stepPath } from "../../lib/progress/step-url.ts";
 
 export type OverviewMetrics = {
   failedJobs: number;
@@ -100,6 +102,43 @@ export function attentionItems(input: {
       detail: `${Math.round(brand.ratio * 100)}% of required brain fields are filled`,
       to: "/brands/$brandId/brain",
       brandId: brand.brandId,
+    });
+  }
+  return items;
+}
+
+export type NeedsYouItem = { id: string; title: string; reason: string; action: { label: string; to: string } };
+
+/** A stored plan as Home reads it: its id, its title and its status. */
+export type NeedsYouPlan = { id: string; title: string; status: PlanStatus };
+
+/** A brand account and its stored connection state. Only "not_connected" is listed. "unknown" is never shown as a finding. */
+export type NeedsYouAccount = { id: string; brandId: string; name: string; state: "connected" | "not_connected" | "unknown" };
+
+/**
+ * The Needs you list for Home, built only from stored data. A plan is listed when it is refused, paused at budget or
+ * incomplete. An account is listed when its stored state is not connected, and the item says what connecting it does.
+ */
+export function needsYouItems(input: { plans: NeedsYouPlan[]; accounts: NeedsYouAccount[] }): NeedsYouItem[] {
+  const items: NeedsYouItem[] = [];
+  for (const plan of input.plans) {
+    const name = plan.title.trim() || "Untitled plan";
+    const action = { label: "Open plan", to: stepPath(`/create/${encodeURIComponent(plan.id)}`, "plan") };
+    if (plan.status === "refused") {
+      items.push({ id: `plan:${plan.id}`, title: `${name} was refused`, reason: "The plan was refused. Read the reason, then edit the brief.", action });
+    } else if (plan.status === "paused") {
+      items.push({ id: `plan:${plan.id}`, title: `${name} paused at budget`, reason: "The run paused at its budget. Raise the budget to continue.", action });
+    } else if (plan.status === "incomplete") {
+      items.push({ id: `plan:${plan.id}`, title: `${name} is incomplete`, reason: "Some steps did not finish. Run the plan again to finish them.", action });
+    }
+  }
+  for (const account of input.accounts) {
+    if (account.state !== "not_connected") continue;
+    items.push({
+      id: `account:${account.id}`,
+      title: `${account.name} is not connected`,
+      reason: "Connect it to publish from this brand.",
+      action: { label: "Connect account", to: `/brands/${encodeURIComponent(account.brandId)}/accounts` },
     });
   }
   return items;
