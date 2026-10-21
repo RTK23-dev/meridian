@@ -24,60 +24,57 @@
 </head>
 <body>
 <main>
-  <canvas id="mark" role="img" aria-label="Meridian globe. A red meridian arc slices the globe, turns into a flat ring, and returns."></canvas>
+  <canvas id="mark" role="img" aria-label="Meridian globe. The globe turns while a red meridian chops down its front, rolls forward into a ring, tips to the side and rolls back."></canvas>
   <div class="controls">
     <button id="toggle" type="button" aria-pressed="false">Pause</button>
     <label for="scrub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Freeze at t, in seconds</label>
-    <input id="scrub" type="range" min="0" max="6" step="0.01" value="0">
+    <input id="scrub" type="range" min="0" max="4" step="0.01" value="0">
     <output id="readout" for="scrub"></output>
   </div>
 </main>
 <script>
 "use strict";
 
-// ---- TUNE HERE. Durations are in seconds. Angles are in degrees. The loop length is the sum of the four durations. ----
-// The motion has only two shapes: the edge-on slice, whose head sweeps down the front of the globe, and the flat round ring that circles
-// it. Between them the plane makes one fast ease-in-out turn about the vertical (polar) axis, so the arc never tilts off that axis.
+// ---- TUNE HERE. Times are in seconds. Angles are in degrees. ----
+// The loop is four moves. The globe turns under the line the whole time; the line itself only moves in the four moves below.
 const CONFIG = {
-  sliceHoldSeconds: 1.0,        // Edge-on: the arc cuts the globe in half and its head sweeps down the front. Half of this runs before t = 0.
-  openSeconds: 0.6,             // Fast ease-in-out turn from edge-on to the flat ring.
-  ringHoldSeconds: 1.2,         // The flat ring circles the globe.
-  closeSeconds: 0.6,            // Fast ease-in-out turn back to edge-on.
-  flipDeg: 90,                  // The turn, about the vertical axis: 90 takes the arc from edge-on to face-on.
-  easeFlip: [0.65, 0, 0.35, 1], // cubic-bezier for both turns: x1, y1, x2, y2.
-  tiltDeg: 14,                  // The globe is seen this far above its equator. At this tilt the ring is within 3% of round.
-  headTurnsPerLoop: 1,          // Whole turns of the head per loop. Keep it an integer, so the loop joins.
-  arcMinDeg: 180,               // Arc length while edge-on: exactly the front half, pole to pole.
-  arcMaxDeg: 300,               // Arc length as a flat ring. It lengthens only during a turn.
-  latitudesDeg: [-45, 0, 45],
+  segmentSeconds: 0.9,          // Each move takes this long. The loop is four moves.
+  spinDegPerLoop: 360,          // The globe turns this far per loop. A whole turn keeps the loop joining.
+  turnDeg: [0, 90, 90, 90],     // Turn about the vertical axis at each key: 0 is edge-on (the chop), 90 is flat (the ring).
+  rollDeg: [0, 0, 90, 0],       // Roll about the horizontal axis at each key: 90 tips the ring to the side view.
+  easeMove: [0.65, 0, 0.35, 1], // cubic-bezier for every move, so each one starts and ends softly.
+  chopAt: 0.12,                 // When the head plunges down the front, in seconds from t = 0.
+  chopBoost: 2.6,               // How much faster the head moves during the plunge. 1 means no change.
+  chopWidthSeconds: 0.12,       // How long the plunge lasts, either side of chopAt.
+  headStartDeg: 90,             // Where the head starts on the blade's circle at t = 0.
+  tiltDeg: 14,                  // The globe is seen this far above its equator.
+  arcMinDeg: 180,               // Arc length when the blade is edge-on: exactly the front half, pole to pole.
+  arcMaxDeg: 300,               // Arc length when the blade is a flat ring. It changes only while the blade moves.
+  latitudesDeg: [-45, 0, 45],   // Grid latitudes.
   meridianCircles: 4,           // Great circles through the poles: 4 means one every 45 degrees.
-  arcRadius: 1.02,              // The arc sits just above the surface (1 is the surface).
-  lineAlphaFront: 1,            // Grid lines on the near side. Solid: this is a mark, not a wireframe.
-  lineAlphaBack: 0,             // Far-side grid lines. Off, so the globe reads as one solid shape.
-  arcFarAlpha: 0.22,            // Far side of the arc, as a fraction of its near-side strength. 0 hides it.
-  arcSamples: 180,
-  gridStrokeDiv: 62,            // Grid line width = mark size / this. A bold mark, not a hairline.
-  armStrokeDiv: 30,             // Head width of the red arc = mark size / this.
+  arcRadius: 1.03,              // The blade sits just above the surface (1 is the surface).
+  arcFarAlpha: 0.22,            // Far side of the blade, as a fraction of its near-side strength. 0 hides it.
+  arcSamples: 200,
+  glowWidths: [2.6, 1.7],       // Glow passes under the blade, as multiples of its width, outermost first.
+  glowAlpha: 0.10,              // Strength of each glow pass.
+  gridStrokeDiv: 62,            // Grid line width = mark size / this.
+  armStrokeDiv: 30,             // Head width of the blade = mark size / this.
   armTailRatio: 0.8,            // The tail is this fraction of the head's width.
   headDotDiv: 40,               // Radius of the head dot = mark size / this.
   colours: {
-    dark: { bg: "#000000", line: "255,255,255", arc: "#ff2e38" },
-    light: { bg: "#ffffff", line: "10,10,10", arc: "#c8102e" },
+    dark: { bg: "#000000", line: "255,255,255", arc: "255,46,56", core: "255,255,255" },
+    light: { bg: "#ffffff", line: "10,10,10", arc: "200,16,46", core: "255,214,220" },
   },
 };
 
 // ---- Derived timing. Nothing here needs editing. ----
 const DEG = Math.PI / 180;
-const LOOP = CONFIG.sliceHoldSeconds + CONFIG.openSeconds + CONFIG.ringHoldSeconds + CONFIG.closeSeconds;
-const T = { a: CONFIG.sliceHoldSeconds / 2 };
-T.b = T.a + CONFIG.openSeconds;
-T.c = T.b + CONFIG.ringHoldSeconds;
-T.d = T.c + CONFIG.closeSeconds; // Equals LOOP - T.a, so the slice hold wraps around t = 0 without a gap.
-// At t = 0 the head sits where the front half of the slice ends, so the arc covers exactly the front half.
-const FRONT_END = 270 - CONFIG.tiltDeg;
+const MOVE = CONFIG.segmentSeconds;
+const LOOP = 4 * MOVE;
 const TILT = CONFIG.tiltDeg * DEG;
-const VIEW = [0, Math.sin(TILT), Math.cos(TILT)]; // Unit vector toward the viewer, in the globe's frame (y is the polar axis).
-const UP = [0, Math.cos(TILT), -Math.sin(TILT)];  // Screen up, in the same frame. Screen right is the globe's x axis.
+const VIEW = [0, Math.sin(TILT), Math.cos(TILT)]; // Unit vector toward the viewer. y is the polar axis.
+const UP = [0, Math.cos(TILT), -Math.sin(TILT)];  // Screen up. Screen right is the globe's x axis.
+const MOVE_NAMES = ["chop and forward roll", "sideways roll", "roll back", "return to the chop"];
 
 function easeOf([x1, y1, x2, y2]) {
   const point = (s, p1, p2) => 3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
@@ -91,51 +88,81 @@ function easeOf([x1, y1, x2, y2]) {
     return point((lo + hi) / 2, y1, y2);
   };
 }
-const ease = easeOf(CONFIG.easeFlip);
+const ease = easeOf(CONFIG.easeMove);
 
-// 0 = edge-on (the slice), 1 = the flat ring.
-function flipAt(t) {
-  if (t < T.a || t >= T.d) return 0;
-  if (t < T.b) return ease((t - T.a) / CONFIG.openSeconds);
-  if (t < T.c) return 1;
-  return 1 - ease((t - T.c) / CONFIG.closeSeconds);
-}
-function phaseAt(t) {
-  if (t < T.a || t >= T.d) return "slice";
-  if (t < T.b) return "opening";
-  if (t < T.c) return "ring";
-  return "closing";
-}
-function headAt(t) { return FRONT_END + 360 * CONFIG.headTurnsPerLoop * (t / LOOP); } // Unbounded degrees, so the head never stops.
-function lengthAt(flip) { return CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * flip; } // Changes only while the arc turns.
+const wrapTime = (t) => ((t % LOOP) + LOOP) % LOOP;
 
+// The blade's turn and roll at time t. Each move runs from one key to the next, so the last key meets the first at the loop's end.
+function anglesAt(t) {
+  const x = t / MOVE;
+  const index = Math.floor(x) % 4;
+  const e = ease(x - Math.floor(x));
+  const next = (index + 1) % 4;
+  const lerp = (values) => values[index] + (values[next] - values[index]) * e;
+  return { turn: lerp(CONFIG.turnDeg), roll: lerp(CONFIG.rollDeg), move: MOVE_NAMES[index] };
+}
+
+// The head moves at one full turn per loop, faster for the plunge. The speed profile is integrated once, so the head is continuous.
+const SAMPLES = 4000;
+function speedAt(t) {
+  const gap = Math.abs(t - CONFIG.chopAt);
+  const distance = Math.min(gap, LOOP - gap);
+  return 1 + (CONFIG.chopBoost - 1) * Math.exp(-((distance / CONFIG.chopWidthSeconds) ** 2));
+}
+const CUMULATIVE = (() => {
+  const out = [0];
+  for (let i = 1; i <= SAMPLES; i++) {
+    const t0 = (LOOP * (i - 1)) / SAMPLES;
+    const t1 = (LOOP * i) / SAMPLES;
+    out.push(out[i - 1] + ((speedAt(t0) + speedAt(t1)) / 2) * (t1 - t0));
+  }
+  return out;
+})();
+function headAt(t) {
+  const x = (t / LOOP) * SAMPLES;
+  const i = Math.min(SAMPLES - 1, Math.floor(x));
+  const along = CUMULATIVE[i] + (CUMULATIVE[i + 1] - CUMULATIVE[i]) * (x - i);
+  return CONFIG.headStartDeg + (360 * along) / CUMULATIVE[SAMPLES];
+}
+
+// Rotations. turn is about the vertical axis; roll is about the horizontal axis. Both are applied to the blade and to nothing else.
+function turnPoint(deg, p) {
+  const c = Math.cos(deg * DEG);
+  const s = Math.sin(deg * DEG);
+  return [p[0] * c - p[2] * s, p[1], p[0] * s + p[2] * c];
+}
+function rollPoint(deg, p) {
+  const c = Math.cos(deg * DEG);
+  const s = Math.sin(deg * DEG);
+  return [p[0], p[1] * c - p[2] * s, p[1] * s + p[2] * c];
+}
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-function project(p) { return { x: p[0], y: dot(p, UP), z: dot(p, VIEW) }; } // Orthographic: x right, y up, z toward the viewer.
+const project = (p) => ({ x: p[0], y: dot(p, UP), z: dot(p, VIEW) }); // Orthographic: x right, y up, z toward the viewer.
 const seen = (p) => p.z >= 0 || Math.hypot(p.x, p.y) >= 1; // The globe hides its far side, except just past the limb.
 
-/** Pure: the drawn state of the arc at time t. Calling it twice with the same t gives the same result. */
+/** Pure: the drawn state at time t. The same t always gives the same result. */
 function frame(time) {
-  const t = ((time % LOOP) + LOOP) % LOOP;
-  const flip = flipAt(t);
-  const theta = CONFIG.flipDeg * flip * DEG;
-  const st = Math.sin(theta);
-  const ct = Math.cos(theta);
-  // Two unit vectors in the arc's plane. The plane turns about e2, the polar axis, so the poles never move during a turn.
-  const e1 = [-st, 0, -ct];
-  const e2 = [0, 1, 0];
+  const t = wrapTime(time);
+  const { turn, roll, move } = anglesAt(t);
+  const blade = (p) => rollPoint(roll, turnPoint(turn, p));
+  const u = blade([0, 1, 0]); // The poles' direction within the blade's plane.
+  const v = blade([0, 0, 1]); // The front of the globe within the blade's plane.
+  const normal = blade([1, 0, 0]);
   const head = headAt(t);
-  const tail = head - lengthAt(flip);
+  const length = CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * Math.abs(normal[2]); // Longer as the blade turns flat.
+  const tail = head - length;
   const arc = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const psi = (tail + ((head - tail) * i) / CONFIG.arcSamples) * DEG;
     const c = Math.cos(psi);
     const s = Math.sin(psi);
-    arc.push(project([0, 1, 2].map((k) => CONFIG.arcRadius * (c * e1[k] + s * e2[k]))));
+    arc.push(project([0, 1, 2].map((k) => CONFIG.arcRadius * (c * u[k] + s * v[k]))));
   }
-  return { t, phase: phaseAt(t), flipDeg: CONFIG.flipDeg * flip, headDeg: head, tailDeg: tail, arc };
+  const spin = CONFIG.spinDegPerLoop * (t / LOOP);
+  return { t, move, turnDeg: turn, rollDeg: roll, headDeg: head, tailDeg: tail, spinDeg: spin, arc };
 }
 
-// Grid lines, drawn on the surface. Each is a list of 3D points.
+// Grid lines on the surface, as lists of 3D points. The globe turns them each frame.
 const GRID = (() => {
   const lines = [];
   const N = 120;
@@ -159,7 +186,6 @@ const toggle = document.getElementById("toggle");
 const scrub = document.getElementById("scrub");
 const readout = document.getElementById("readout");
 const reduceQuery = matchMedia("(prefers-reduced-motion: reduce)");
-const wrap = (t) => ((t % LOOP) + LOOP) % LOOP;
 const state = { t: 0, playing: false, last: 0, raf: 0, size: 0, dpr: 1 };
 scrub.max = String(LOOP);
 
@@ -181,39 +207,69 @@ function draw(f) {
   ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
   ctx.fillStyle = colours.bg;
   ctx.fillRect(0, 0, S, S);
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
 
-  const lineWidth = S / CONFIG.gridStrokeDiv;
-  ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = `rgba(${colours.line},${CONFIG.lineAlphaFront})`;
+  // The globe's rim, then its grid, turned by the spin. Only the near side of the grid is drawn.
+  const gridWidth = S / CONFIG.gridStrokeDiv;
+  ctx.lineWidth = gridWidth;
+  ctx.strokeStyle = `rgba(${colours.line},1)`;
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, 2 * Math.PI);
   ctx.stroke();
-
-  ctx.lineCap = "round";
-  ctx.lineJoin = "round";
+  const spin = f.spinDeg * DEG;
+  const turnGrid = (p) => [p[0] * Math.cos(spin) - p[2] * Math.sin(spin), p[1], p[0] * Math.sin(spin) + p[2] * Math.cos(spin)];
   for (const points of GRID) {
-    for (let i = 0; i < points.length - 1; i++) {
-      const a = project(points[i]);
-      const b = project(points[i + 1]);
-      ctx.strokeStyle = `rgba(${colours.line},${a.z + b.z >= 0 ? CONFIG.lineAlphaFront : CONFIG.lineAlphaBack})`;
+    const projected = points.map((p) => project(turnGrid(p)));
+    for (let i = 0; i < projected.length - 1; i++) {
+      const a = projected[i];
+      const b = projected[i + 1];
+      if (a.z + b.z < 0) continue;
+      ctx.beginPath();
+      ctx.moveTo(X(a), Y(a));
+      ctx.lineTo(X(b), Y(b));
+      ctx.strokeStyle = `rgba(${colours.line},1)`;
+      ctx.lineWidth = gridWidth;
+      ctx.stroke();
+    }
+  }
+
+  // The blade: a glow under it, then the red stroke, tapered from the tail to the head, then a white core along the head half.
+  const n = f.arc.length - 1;
+  const armWidth = S / CONFIG.armStrokeDiv;
+  const segmentWidth = (k) => armWidth * (CONFIG.armTailRatio + (1 - CONFIG.armTailRatio) * k);
+  ctx.strokeStyle = `rgb(${colours.arc})`;
+  for (const multiple of CONFIG.glowWidths) {
+    for (let i = 0; i < n; i++) {
+      const a = f.arc[i];
+      const b = f.arc[i + 1];
+      const k = (i + 1) / n;
+      ctx.globalAlpha = CONFIG.glowAlpha * k * (seen(a) && seen(b) ? 1 : CONFIG.arcFarAlpha);
+      ctx.lineWidth = segmentWidth(k) * multiple;
       ctx.beginPath();
       ctx.moveTo(X(a), Y(a));
       ctx.lineTo(X(b), Y(b));
       ctx.stroke();
     }
   }
-
-  // The meridian: thin and faint at the tail, full and thick at the head. Its far side is drawn at CONFIG.arcFarAlpha, so the
-  // whole orbit reads as one circle while the near side stays dominant.
-  const n = f.arc.length - 1;
-  ctx.strokeStyle = colours.arc;
-  ctx.lineCap = "round";
   for (let i = 0; i < n; i++) {
     const a = f.arc[i];
     const b = f.arc[i + 1];
     const k = (i + 1) / n;
     ctx.globalAlpha = (0.18 + 0.82 * Math.pow(k, 0.9)) * (seen(a) && seen(b) ? 1 : CONFIG.arcFarAlpha);
-    ctx.lineWidth = (S / CONFIG.armStrokeDiv) * (CONFIG.armTailRatio + (1 - CONFIG.armTailRatio) * k);
+    ctx.lineWidth = segmentWidth(k);
+    ctx.beginPath();
+    ctx.moveTo(X(a), Y(a));
+    ctx.lineTo(X(b), Y(b));
+    ctx.stroke();
+  }
+  ctx.strokeStyle = `rgb(${colours.core})`;
+  for (let i = Math.floor(n / 2); i < n; i++) {
+    const a = f.arc[i];
+    const b = f.arc[i + 1];
+    const k = (i + 1) / n;
+    ctx.globalAlpha = 0.6 * k * (seen(a) && seen(b) ? 1 : 0);
+    ctx.lineWidth = segmentWidth(k) * 0.28;
     ctx.beginPath();
     ctx.moveTo(X(a), Y(a));
     ctx.lineTo(X(b), Y(b));
@@ -222,7 +278,7 @@ function draw(f) {
   ctx.globalAlpha = 1;
   const head = f.arc[n];
   if (seen(head)) {
-    ctx.fillStyle = colours.arc;
+    ctx.fillStyle = `rgb(${colours.arc})`;
     ctx.beginPath();
     ctx.arc(X(head), Y(head), S / CONFIG.headDotDiv, 0, 2 * Math.PI);
     ctx.fill();
@@ -233,7 +289,7 @@ function render() {
   const f = frame(state.t);
   draw(f);
   scrub.value = String(f.t.toFixed(2));
-  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | ${f.phase} | plane turned ${f.flipDeg.toFixed(0)} deg`;
+  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | ${f.move} | roll ${f.rollDeg.toFixed(0)} deg`;
 }
 
 function setButton() {
@@ -244,7 +300,7 @@ function setButton() {
 
 function loop(now) {
   if (!state.playing) return;
-  state.t = wrap(state.t + Math.min(now - state.last, 100) / 1000); // Capped, so a hidden tab does not jump.
+  state.t = wrapTime(state.t + Math.min(now - state.last, 100) / 1000); // Capped, so a hidden tab does not jump.
   state.last = now;
   render();
   state.raf = requestAnimationFrame(loop);
@@ -266,7 +322,7 @@ function pause() {
 
 // ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws one still frame at t = 0. ----
 const requested = Number(params.get("t"));
-if (params.has("t") && Number.isFinite(requested)) state.t = wrap(requested);
+if (params.has("t") && Number.isFinite(requested)) state.t = wrapTime(requested);
 resize();
 render();
 if (!params.has("t") && !reduceQuery.matches) play();
@@ -287,7 +343,7 @@ reduceQuery.addEventListener("change", () => {
 window.meridianMark = {
   frame,
   loopSeconds: LOOP,
-  setTime(seconds) { pause(); state.t = wrap(Number(seconds)); render(); },
+  setTime(seconds) { pause(); state.t = wrapTime(Number(seconds)); render(); },
 };
 </script>
 </body>

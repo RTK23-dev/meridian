@@ -149,7 +149,7 @@ Rules:
 | dur-fast | 120 ms | Hover and focus colour, press feedback in colour only |
 | dur-base | 200 ms | Menus, tabs, toast entrance, a canvas step appearing, an edge drawing in |
 | dur-slow | 360 ms | Dialogs and the command palette opening |
-| dur-flip | 600 ms | One logo turn, ease-in-out (the loop is 3400 ms) |
+| dur-flip | 900 ms | One logo move, ease-in-out (the loop is four moves, 3600 ms) |
 
 **Easings.**
 
@@ -180,7 +180,7 @@ Rules:
 | Tab underline | Changes at once | Same |
 | Canvas zoom | Steps at once | Same |
 | Command palette results | Appear at once | Same |
-| Logo | 3.4 s loop | One still frame at t = 0 (the slice). Pause control hidden. The scrubber stays for manual review. |
+| Logo | 3.6 s loop | One still frame at t = 0 (the edge-on chop). Pause control hidden. The scrubber stays for manual review. |
 
 The current global rule in `src/styles.css` cuts every transition to 0.01 ms. Katana keeps colour fades under reduced motion and removes only movement.
 
@@ -253,40 +253,41 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 The prototype is `docs/design/logo/meridian-logo.html`. It uses canvas 2D and its own projection (orthographic, no libraries, no network). Its timing and angles sit in one `CONFIG` object at the top of the script.
 
-**The two shapes.** The motion has only two shapes. The first is the slice: the arc lies edge-on, so it projects as a vertical line, and its head sweeps down the front of the globe. The second is the ring: the arc lies flat and round, and its head circles the globe. Nothing else moves. Between the two, the arc makes one fast ease-in-out turn of 90 degrees about the vertical (polar) axis. The arc never tilts off that axis, so there is no in-between angle to look awkward.
+**What moves.** The globe turns under the line, one full turn per loop, so its grid keeps moving. The red meridian is the only thing that changes shape. It makes four moves in turn, each one ease-in-out, and its head never stops.
 
-**Geometry in words.** The arc is a great circle on the globe. The turn is about the polar axis, so both poles stay where they are. The viewer sees the globe from 14 degrees above its equator. At that tilt the ring projects as an ellipse about 0.97 times as tall as it is wide, so it reads as round. The head moves round the circle at a constant rate. The arc lengthens only during a turn (180 degrees edge-on, 300 degrees as a ring), so the line never stops.
+**The four moves.** Each move lasts 0.90 s, and the loop is four moves: 3.60 s. The blade turns about the vertical axis and rolls about the horizontal axis.
 
-**Timeline (loop length 3.40 s).** The loop length is the sum of the four durations in `CONFIG`, so it cannot drift.
-
-| Time (s) | Phase | Plane turn (degrees) | Arc length (degrees) | What the viewer sees |
+| Time (s) | Move | Turn (deg) | Roll (deg) | What the viewer sees |
 |---|---|---|---|---|
-| 0.00 to 0.50 | Slice, first half of the hold | 0 | 180 | The near half of the great circle, from top edge to bottom edge. The globe is cut in half, and the head sweeps down the front. |
-| 0.50 to 1.10 | Opening | 0 to 90, cubic-bezier(0.65, 0, 0.35, 1) | 180 to 300 | The vertical cut swings round the polar axis and opens into a round ring. |
-| 1.10 to 2.30 | Ring, hold | 90 | 300 | A flat ring circles the globe. The far side shows at 22% strength, so the full orbit reads. |
-| 2.30 to 2.90 | Closing | 90 to 0, same curve | 300 to 180 | The ring closes back into the slice. |
-| 2.90 to 3.40 | Slice, second half of the hold | 0 | 180 | Same as 0.00 to 0.50. The slice hold wraps round the loop without a gap. |
+| 0.00 to 0.90 | Chop and forward roll | 0 to 90 | 0 | The blade starts edge-on, a vertical cut down the front. The head plunges down the front first, then the blade swings forward into a flat ring that faces the viewer. |
+| 0.90 to 1.80 | Sideways roll | 90 | 0 to 90 | The ring tips over to the side and lies across the globe, the side view. |
+| 1.80 to 2.70 | Roll back | 90 | 90 to 0 | The ring rolls back to face the viewer. |
+| 2.70 to 3.60 | Return to the chop | 90 to 0 | 0 | The ring swings back to the edge-on cut, ready to chop again. |
 
-**Head and tail.** The head travels one full turn per loop: 105.9 degrees per second, constant, so it never pauses. The tail trails it by the arc length. Both return to their start values at t = 3.40, so the loop joins. The arc fades from a faint tail (18% alpha) to a full head. Its width runs from 80% of the head's width at the tail to the full width at the head. The head is S/30 wide, the globe's lines are S/62 wide, and the head dot has radius S/40, where S is the mark's size, so the whole mark scales together. A dot marks the head when the head is on the near side.
+**Head and tail.** The head turns once per loop, about 100 degrees per second on average. It is 2.6 times faster during the plunge, centred 0.12 s after t = 0. The arc is half a great circle when edge-on (180 degrees) and lengthens to 300 degrees when flat. It changes length only while the blade moves. The tail fades from 18% to full strength along the arc. Its width runs from 80% of the head's width at the tail to the full width at the head. The head is S/30 wide, the globe's lines are S/62 wide and the head dot has radius S/40, where S is the mark's size, so the mark scales as one.
 
-**Frames.** Captured with Playwright and headless Chromium from the canvas element, in a 682 px viewport (the canvas is 600 px square). Each frame is named for its time in the loop:
+**Shine.** The blade has a soft glow (two passes, 2.6 and 1.7 times its width, at 10% strength) and a white core along the head half. The core is what reads as light moving along the line.
 
-| File | t (s) | Plane turn | Phase |
-|---|---|---|---|
-| `docs/design/logo/frames/frame-00-t0.00-slice.png` | 0.00 | 0 degrees | Slice: the globe is cut in half |
-| `docs/design/logo/frames/frame-25-t0.80-opening.png` | 0.80 | 45 degrees | Opening: half-way to the ring |
-| `docs/design/logo/frames/frame-50-t1.70-ring.png` | 1.70 | 90 degrees | Ring: the flat orbit |
-| `docs/design/logo/frames/frame-75-t2.60-closing.png` | 2.60 | 45 degrees | Closing: half-way back to the slice |
+**Globe.** Three latitudes (45 degrees north, the equator, 45 degrees south) and four meridians (one every 45 degrees), as solid white lines, with the far side off. The viewer sees the globe from 14 degrees above its equator.
 
-**Controls and hooks.** A Pause/Play button, and a "freeze at t" slider in seconds (0 to 3.40). Open `?theme=light` for the light variant, and `?t=1.5` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides the Pause control. The script exposes `window.meridianMark.frame(t)` (pure: it returns the phase, the plane turn, the head and tail angles and the projected arc points) and `window.meridianMark.setTime(seconds)`.
+**Timeline checks.** The loop length is the sum of the four moves, so it cannot drift. The loop closes to the same frame at t = 0 and t = 3.60 (maximum difference 0). Over 3600 sampled steps the arc moves at most 0.011 units per step. At the key moments the blade measures: at the chop, 0 wide and 1.28 tall; as the ring, 2.06 wide and 2.00 tall; at 45 degrees of roll (t = 1.35), 1.94 wide and 1.06 tall.
 
-**Tuning.** Change the values in `CONFIG`: the four durations, `flipDeg`, `easeFlip`, `tiltDeg`, `headTurnsPerLoop`, `arcMinDeg`, `arcMaxDeg`, the grid (`latitudesDeg`, `meridianCircles`), the stroke widths (`gridStrokeDiv`, `armStrokeDiv`, `armTailRatio`, `headDotDiv`), the line alphas and the colours. Keep `headTurnsPerLoop` an integer, so the loop joins. The turn axis is fixed at the polar axis, so there is no hinge to tune.
+**Frames.** Captured with Playwright and headless Chromium from the canvas element, in a 682 px viewport (the canvas is 600 px square):
 
-**The chunky pass.** The grid is now three latitudes (at 45 degrees north and south, and the equator) and four meridians (one every 45 degrees). The lines are solid white, and the far-side grid is off, so the globe reads as one bold shape. The red arc is heavier than the grid at its head, so it is the first thing the eye follows.
+| File | t (s) | What it shows |
+|---|---|---|
+| `docs/design/logo/frames/frame-00-t0.00-chop.png` | 0.00 | The edge-on cut |
+| `docs/design/logo/frames/frame-25-t0.30-plunge.png` | 0.30 | The head plunging down the front |
+| `docs/design/logo/frames/frame-50-t0.90-ring.png` | 0.90 | The flat ring facing the viewer |
+| `docs/design/logo/frames/frame-75-t1.35-sideways.png` | 1.35 | Tipping to the side view |
 
-**Files.** `docs/design/logo/meridian-logo.gif` is the loop, 85 frames at 25 frames per second, 3.40 s, 600 px square, and it repeats without a seam. `docs/design/logo/meridian-logo.mp4` is the same frames as H.264, 600 px square, for places that prefer video. The four frames in `docs/design/logo/frames/` are the reference stills above.
+**Files.** `docs/design/logo/meridian-logo.gif` is the full loop: 90 frames at 25 frames per second, 3.60 s, 600 px square, and it repeats without a seam. `docs/design/logo/meridian-logo.mp4` is the same frames as H.264.
 
-**Checks run after the change.** The loop closes to the same frame at t = 0 and t = 3.40 (maximum difference 0). Over 3400 sampled steps the arc moves at most 0.012 units per step. The slice is a vertical line (maximum screen x = 0). Bounding boxes: slice 0 wide and 2.04 tall; ring 2.04 wide and 1.95 tall. All four frames rendered with no page errors. Not re-checked after this change: reduced motion, the light variant and the Pause button.
+**Controls and hooks.** A Pause/Play button and a "freeze at t" slider in seconds (0 to 3.60). Open `?theme=light` for the light variant, and `?t=0.9` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides Pause. `window.meridianMark.frame(t)` is pure: it returns the move, the turn and roll, the head and tail, and the projected arc. `window.meridianMark.setTime(seconds)` freezes the frame.
+
+**Tuning.** Change `CONFIG`: `segmentSeconds`, `spinDegPerLoop`, `turnDeg` and `rollDeg` (the four keys), `easeMove`, `chopAt`, `chopBoost`, `chopWidthSeconds`, `headStartDeg`, `tiltDeg`, the arc lengths, the grid (`latitudesDeg`, `meridianCircles`), the glow (`glowWidths`, `glowAlpha`), the stroke widths and the colours.
+
+**Not re-checked after this change:** the light variant, and reduced motion with the Pause control hidden.
 
 ## h. Components with states
 
@@ -474,7 +475,7 @@ The CSS block below is generated from `docs/design/tokens/katana-tokens.json`. T
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 360ms;
-  --dur-flip: 600ms;
+  --dur-flip: 900ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --ease-emphasis: cubic-bezier(0.65, 0, 0.35, 1);
@@ -607,7 +608,7 @@ Notes for the import later. The Tailwind theme can map these with `@theme inline
 3. **Red as "now".** Approve the seven uses in principle 1. Is any other use wanted?
 4. **Danger hue.** The danger rose is 7 degrees from the accent red. Keep it (proposed, with an icon and a word always), or choose a more distant hue such as orange-red?
 5. **Mark and name.** Approve the wordmark "Meridian" in Archivo 600, sentence case, and the globe mark as drawn.
-6. **Motion pace.** Approve a 3.4 s loop, 0.6 s ease-in-out turns, a head at about 106 degrees per second and a 14 degree view tilt, or tune them. The hinge is removed: the turn is about the polar axis only.
+6. **Motion pace.** Approve a 3.6 s loop of four 0.9 s ease-in-out moves, the globe turning once per loop, and a 14 degree view tilt, or tune them.
 7. **Constant motion.** The arc's head never stops, even in the holds. Approve, or should it stop during the holds?
 8. **Corner radius.** 2 px (proposed) or 0 px?
 9. **Fonts.** Replace Inter and Fraunces with Archivo, Instrument Sans and JetBrains Mono, all OFL? Approve self-hosting woff2 files in `public/fonts`, which adds no npm package.
@@ -622,7 +623,7 @@ Notes for the import later. The Tailwind theme can map these with `@theme inline
 
 - Contrast: all thirty pairs computed by the repo's helper and by an independent formula, in both themes; they agree to two decimal places. Extra figures (red on white, hue distance) computed the same way.
 - Fonts: the three families were checked on the Google Fonts CSS API with the axis ranges used here. Each has an OFL licence text in the google/fonts repository. Instrument Sans's `tnum` feature was read from its GSUB table.
-- Logo: the prototype was loaded in headless Chromium with the Playwright path from the brief. Four frames were captured. After the timing change, the loop join and continuity were checked over 3400 steps. Reduced motion, the light variant and the Pause button were checked before the change and not after it.
+- Logo: the prototype was loaded in headless Chromium with the Playwright path from the brief. Four frames were captured. After the timing change, the globe-and-blade motion was rebuilt (four moves, a turning globe, a shining blade); the loop closure and continuity were re-checked over 3600 steps. Reduced motion, the light variant and the Pause button were checked before the change and not after it.
 - Favicon: 16 px and 32 px drawings rendered in Chromium at 1x and 2x, on black and on white.
 - Code facts: the migration counts and file names come from `src/`, read while the orchestrator files still had uncommitted edits (committed at `d3a5e57` since). A few counts in those folders may shift after the lead's review.
 - Not checked: the app was not run or screenshotted, so no screen was seen in Katana; no test was run, because no code changed; the benchmark products were not reviewed live; screen readers and phone hardware were not tested; the sonner colour variable names were not confirmed against the installed version.
