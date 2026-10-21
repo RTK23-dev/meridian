@@ -11,7 +11,6 @@ function status(overrides: Partial<SystemStatus> = {}): SystemStatus {
     embeddings: { status: "NOT_CONNECTED", provider: "", detail: "No external embeddings API is connected." },
     localSemantic: { status: "AVAILABLE", provider: "local-minilm", model: "Xenova/all-MiniLM-L6-v2", kind: "SEMANTIC_EMBEDDING", detail: "" },
     publishing: { status: "NOT_CONNECTED", detail: "" },
-    providers: [],
     connections: [
       { provider: "meta", phase: "CONNECTED", detail: "ok", accountId: "123", accountName: "Acme", lastError: "", lastSuccessAt: "2026-03-01T10:00:00.000Z" },
       { provider: "tiktok", phase: "NOT_CONFIGURED", detail: "none", accountId: "", accountName: "", lastError: "", lastSuccessAt: null },

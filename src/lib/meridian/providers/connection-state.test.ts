@@ -225,7 +225,7 @@ test("the statuses and states carry no key value, even when every source holds o
 }));
 
 test("the connection code filters every provider_secrets and provider_connections statement by organization_id", () => {
-  const files = ["../system.ts", "../performance/actions.ts", "./connect.ts", "./access-token.ts"];
+  const files = ["../system.ts", "../system-status.ts", "../performance/actions.ts", "./connect.ts", "./access-token.ts"];
   let statements = 0;
   for (const file of files) {
     const source = readFileSync(fileURLToPath(new URL(file, import.meta.url)), "utf8");
