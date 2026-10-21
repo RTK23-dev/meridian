@@ -243,7 +243,7 @@ Restyle the existing primitives in `src/components/ui/`. Do not fork them. Each 
 
 | Primitive | Katana treatment |
 |---|---|
-| Button (`button.tsx`) | Four variants only:<br>• **primary:** filled red, at most one per screen.<br>• **secondary:** a 1 px ink border.<br>• **quiet:** text only.<br>• **danger:** red text and border.<br>Height is 36 px on desktop and 44 px on coarse pointers. |
+| Button (`button.tsx`) | Four variants only:<br>• **primary:** filled red, at most one per screen.<br>• **secondary:** a 1 px ink border.<br>• **quiet:** text only.<br>• **danger:** red text and border.<br>Height is 40 px on desktop and 44 px on coarse pointers, as the design plan states. The primary is the design plan's Accent state: a red fill with the bg-base label. |
 | Field, input, select (`field.tsx`, `controls.tsx`) | A 1 px strong border on the raised surface, with the label above at 13 px. Focus is a 2 px red ring. Errors are written below the field. |
 | Card (`card.tsx`) | The raised surface with a 1 px hairline, and no shadow. A selected card gets a 2 px red left edge. |
 | Table (`data-table.tsx`) | The header in label style, rows divided by hairlines, ids and costs in mono. A selected row gets the red edge. |
@@ -415,8 +415,9 @@ This section supersedes the time table in 12.3, the file ownership in 12.1 where
 **Agent A, Foundation** (branch `katana/foundation`)
 - `package.json` and `package-lock.json`, for the three font packages only, wave 1.
 - `src/styles.css`.
-- `src/components/ui/**`, including `index.ts`, `theme.tsx` and `tokens.test.ts`.
-- `src/components/brand-mark.tsx` and `src/components/avatar.tsx`.
+- `src/components/ui/**`, including `index.ts`, `theme.tsx`, `tokens.test.ts` and `avatar.tsx`.
+- `src/styles.contrast.test.ts`, which must read `docs/design/tokens/katana-tokens.json` (design plan M1 and M2).
+- `src/components/brand-mark.tsx`.
 - `src/routes/[_design].tsx` (the gallery).
 - Wave 2: `src/components/shell.tsx`, `src/components/workspace.tsx`, `src/components/command-palette.tsx`, `src/components/page-commands.tsx`, `src/routes/_app.tsx`, `src/lib/navigation/**`.
 
@@ -463,3 +464,12 @@ Any file not listed above is outside every agent's scope. If an agent needs one,
 - **Wave 3:** polish for every screen against section 11, in both themes, with screenshots of every place at 1280 and 390.
 
 Each agent ends its run at the end of each wave and reports. The lead starts the next wave by sending the agent a message, so it continues with its context.
+
+### 14.7 Decisions made during wave 1
+
+- **Primary buttons are red.** The owner made red the main accent, so the design plan's white primary (section h, migration M2) is superseded for buttons. White-accent stays for switches, checkboxes and progress fills.
+- **Button height is 40 px on desktop and 44 px on touch,** as the design plan's table states. This corrects 36 px in section 8.
+- **`src/styles.contrast.test.ts` belongs to Foundation.** Design plan M1 and M2 assign it. It reads the 30 token pairs from the JSON file, and checks that `styles.css` defines each token with the same value in both themes.
+- **The avatar is `src/components/ui/avatar.tsx`,** inside `ui/**`. The earlier path in 14.3 was wrong.
+- **Open server bug, not fixed.** `providerConfigured()` in `src/lib/meridian/providers/live.ts` always returns false. `src/lib/meridian/system.ts` calls `phaseForProbe` without `configured` (around lines 63 and 90). So `connectionPhase` reports every stored connection as NOT_CONFIGURED, with the detail "No credentials are configured." Provider logic is off-limits to build agents, and the owner decides the fix. The Settings screens show the server's phase and detail as they are.
+- **Branches.** The worktrees for all three agents were created from an older commit. The branches `katana/foundation`, `katana/create` and `katana/places` are now based on `e155713`, which carries this plan.
