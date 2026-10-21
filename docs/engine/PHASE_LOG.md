@@ -614,3 +614,12 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - `planWithRole` (orchestrator/planner.ts): the chosen model writes the plan through the client, is checked against the live catalog, and gives no plan with reasons on every failure path. Tests use stand-in answers labelled as such in the fixtures README.
 - Plan store (orchestrator/store.ts) and runner (orchestrator/run.ts) run on the migrated database (PGlite in the suite). Every read and write is scoped to the organization; another organization gets not-found. Spend accumulates across runs; cached outputs persist, so an edited plan re-runs only what the edit touched.
 - Tests: 259 across the orchestrator and Claude folders; the store (6) and the runner (8) run against the migrated database.
+
+## 2026-10-21 Planning service, live catalog reader, plans on the page
+
+- `service.ts` plans a stored draft: a request row, then a reservation that holds the call and its retry before the Claude client runs, with the chosen model's live price. A plan whose budget cannot cover the hold is refused before any call.
+- `live-catalog.ts` reads the orchestrator's catalog through the gateway. Without a connected key it returns not_connected and calls nothing.
+- `src/lib/meridian/orchestrator/actions.ts` exposes list, read, create draft, plan, run and edit as server functions. Each checks the brand and role, and returns the stored outcome.
+- `/orchestrator` has a plans section: a draft form, the plan list, and for a stored plan its canvas with the whole plan drawn and a per-step editor. The canvas fits its width, down to half size at the least.
+- Gates: suite on the tree before the last UI-only commit, 5750 tests, 5709 pass, 0 fail, 41 skipped (environment-gated); lint 0 errors; typecheck and build exit 0. The browser check covers the recorded example, not a stored plan (the dev database has no brand).
+- Production step handlers are still empty, so every step reports not_connected. The output shape of each step kind is a contract change for the lead to approve.
