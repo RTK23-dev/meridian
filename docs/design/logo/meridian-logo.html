@@ -36,7 +36,7 @@
 "use strict";
 
 // ---- TUNE HERE. Times are in seconds, angles in degrees, lengths in units of the globe's radius. ----
-// A real meridian: a ring through the poles that spins steadily about the globe's vertical axis. From the front it starts edge-on, a
+// The globe spins about its own axis and carries its meridian with it: the red line is one of the globe's meridian lines. From the front it starts edge-on, a
 // slice through the globe, and opens into the full circle. A comet of light runs round it, and its trail is the path the head has
 // actually travelled, so it streams behind the head instead of swinging with the ring.
 const CONFIG = {
@@ -90,7 +90,10 @@ function rotateAbout(k, a, v) {
   return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
 
-/** The meridian's plane and the head's position at time t. The plane holds the poles and turns about the vertical axis. */
+/**
+ * The meridian's plane and the head's position at time t. The meridian is one of the globe's own meridian lines (longitude 90 in the
+ * globe's coordinates): the globe spins about its axis and carries the meridian with it, so e2 is the globe's spin applied to its z axis.
+ */
 function meridianAt(time) {
   const u = time / LOOP;
   const theta = TAU * u;
@@ -116,7 +119,7 @@ function frame(time) {
     ring.push(add(scale(now.e1, Math.cos(a)), scale(now.e2, Math.sin(a))));
   }
   const eye = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
-  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 0, eye, normal: now.normal, points, ring, headRadial: now.head };
+  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, normal: now.normal, points, ring, headRadial: now.head };
 }
 
 // ---- Geometry ----
