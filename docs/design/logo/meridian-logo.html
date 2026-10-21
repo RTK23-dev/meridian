@@ -40,9 +40,10 @@
 // slice through the globe, and opens into the full circle. A comet of light runs round it, and its trail is the path the head has
 // actually travelled, so it streams behind the head instead of swinging with the ring.
 const CONFIG = {
-  loopSeconds: 6,               // One full turn of the meridian, which is also the loop.
-  headTurnsPerLoop: 3,          // The comet runs round the meridian this many times per loop, at one steady speed.
-  trailDeg: 140,                // The comet's trail. It never changes length.
+  loopSeconds: 12,              // One full turn of the globe, which is also the loop.
+  headTurnsPerLoop: 5,          // The comet runs round the meridian this many times per loop, at one steady speed.
+  sideLaps: 3,                  // How many laps the comet makes in the side view, tracing the globe's outline.
+  trailDeg: 170,                // The comet's trail. It never changes length.
   ringAlpha: 0.32,               // The meridian's full circle, drawn faintly so the ring always reads. 0 hides it.
   // The blade.
   ringRadius: 1.035,
@@ -64,7 +65,7 @@ const CONFIG = {
   // The side view: as the comet passes the bottom of the meridian, the camera swings round to face the meridian side-on, so it lies on
   // the globe's outline and the comet traces the edge like a loading ring. One lap later, as the comet passes the bottom again, the
   // camera swings on round to the front. The camera turns one way only, so the loop closes without a seam.
-  swingSeconds: 0.5,            // How long each swing takes, centred on the comet passing the bottom.
+  swingSeconds: 1.2,            // How long each swing takes, centred on the comet passing the bottom.
   viewEase: [0.65, 0, 0.35, 1], // cubic-bezier for both swings.
   cameraDistance: 5.0,
   cameraHeight: 1.7,            // About 19 degrees above the equator, so the latitudes curve.
@@ -103,30 +104,40 @@ function easeOf([x1, y1, x2, y2]) {
 }
 const viewEase = easeOf(CONFIG.viewEase);
 
-// When the swings happen. The side view lasts one lap of the comet, and the swing in is placed so both swings turn the camera the same
-// distance (the camera goes 0 -> side -> 360 degrees round), with the comet at the bottom of the meridian at the middle of each swing.
+// When the swings happen. The side view lasts sideLaps laps of the comet. The swing in is placed so both swings turn the camera the
+// same distance (the camera goes 0 -> side -> 360 degrees round), with the comet at the bottom of the meridian in the middle of each
+// swing. The side view may run across the end of the loop, so the timing below is measured from the start of the swing in.
 const LAP = LOOP / CONFIG.headTurnsPerLoop;
-const SWING_IN = (((540 - 360 / CONFIG.headTurnsPerLoop) / 2) / 360) * LOOP;
-const SWING_OUT = SWING_IN + LAP;
+const SIDE_SECONDS = CONFIG.sideLaps * LAP;
+const SIDE_SPAN_DEG = (360 * SIDE_SECONDS) / LOOP; // How far the globe turns during the side view.
+const SWING_IN_DEG = (540 - SIDE_SPAN_DEG) / 2;    // The globe's turn at the middle of the swing in.
+const SWING_IN = (((SWING_IN_DEG / 360) * LOOP) % LOOP + LOOP) % LOOP;
+const HALF_SWING = CONFIG.swingSeconds / 2;
 const HEAD_PHASE = Math.PI - TAU * CONFIG.headTurnsPerLoop * (SWING_IN / LOOP);
+
+/** Seconds since the swing in started, wrapped to the loop. */
+function sinceSwingIn(t) {
+  return (((t - (SWING_IN - HALF_SWING)) % LOOP) + LOOP) % LOOP;
+}
 
 /** How far the camera is toward the side view at time t: 0 in front, 1 side-on, eased through each swing. */
 function viewWeightAt(t) {
-  const h = CONFIG.swingSeconds / 2;
-  if (t < SWING_IN - h) return 0;
-  if (t < SWING_IN + h) return viewEase((t - SWING_IN + h) / CONFIG.swingSeconds);
-  if (t < SWING_OUT - h) return 1;
-  if (t < SWING_OUT + h) return 1 - viewEase((t - SWING_OUT + h) / CONFIG.swingSeconds);
+  const d = sinceSwingIn(t);
+  const m = CONFIG.swingSeconds;
+  if (d < m) return viewEase(d / m);
+  if (d < SIDE_SECONDS) return 1;
+  if (d < SIDE_SECONDS + m) return 1 - viewEase((d - SIDE_SECONDS) / m);
   return 0;
 }
 
-/** The camera's azimuth at time t, in radians: front (0) before the side view, following the meridian side-on, then front (a full
- * turn on) after it. */
+/** The camera's azimuth at time t, in radians: front before the side view, following the meridian side-on, front again (a full turn
+ * on) after it. Measured from the swing in, so it stays continuous across the loop's end. */
 function azimuthAt(t) {
-  const side = TAU * (t / LOOP) - Math.PI / 2;
-  const base = t < (SWING_IN + SWING_OUT) / 2 ? 0 : TAU;
+  const d = sinceSwingIn(t);
+  const side = SWING_IN_DEG - 90 + (360 * (d - HALF_SWING)) / LOOP;
+  const base = d < SIDE_SECONDS ? 0 : 360;
   const w = viewWeightAt(t);
-  return (1 - w) * base + w * side;
+  return ((1 - w) * base + w * side) * DEG;
 }
 
 function rotateAbout(k, a, v) {

@@ -255,21 +255,21 @@ The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL
 
 **The mark.** A see-through wireframe globe: three latitudes and four meridians, one every 45 degrees. A thin silhouette outlines it. The near lines are full strength and ease down to 16% on the far side. Around it runs the meridian, a red comet of light: a lit 3D tube with a hot white core at its head and a trail that fades to a faint full ring, so the circle always reads. Where the comet's plane cuts the globe, the grid lines light up red, most strongly near the head. A thin horizontal light streak passes through the head, and a bloom pass gives the red its glow.
 
-**The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 6 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it three times per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns.
+**The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 12 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it five times per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns.
 
-**The side view.** The comet runs at one steady speed, three laps per loop, with a trail of fixed length; nothing in it ever resets. As the comet passes the bottom of the meridian, the camera swings round to face the meridian side-on, so it lies on the globe's outline. The bottom pole stays put on screen, so the comet carries on from the same point and traces the edge like a loading ring. One lap later, as it passes the bottom again, the camera swings on round to the front. Each swing takes 0.5 s on cubic-bezier(0.65, 0, 0.35, 1), centred on the bottom pass. The camera turns one way only, from the front to the side and on round to the front again, so the loop closes without a seam. The swings are placed so both turn the camera the same distance (120 degrees), and the camera blends its angles, not its position, so it never flips.
+**The side view.** The loop is 12 s: one turn of the globe. The comet runs at one steady speed, five laps per loop (2.4 s a lap), with a trail of fixed length; nothing in it resets. As the comet passes the bottom of the meridian, the camera eases round to face the meridian side-on, so it lies on the globe's outline. The bottom pole stays put on screen, so the comet carries on from the same point. It traces the outline like a loading ring for three laps (7.2 s), with the camera following the meridian as the globe turns. Then, as it passes the bottom again, the camera eases back to the front. Each swing turns the camera 72 degrees over 1.2 s on cubic-bezier(0.65, 0, 0.35, 1), centred on the bottom pass. The camera turns one way only, and its timing is measured from the swing in, so the loop closes without a seam even though the side view runs across the loop's end.
 
 **Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
 **Files.**
-- `meridian-logo-mark.png`: the hero still at t = 4.5 s, in the side view, 1440 px.
-- `meridian-logo.gif`: 150 frames at 25 fps, 480 px.
+- `meridian-logo-mark.png`: the hero still at t = 8.0 s, in the side view, 1440 px.
+- `meridian-logo.gif`: 300 frames at 25 fps, 420 px.
 - `meridian-logo.mp4`: the same frames at 600 px.
-- `frames/`: four reference stills at 600 px: the front view (t = 0), the bottom pass as the view swings (3.5 s), the side view (4.5 s) and the bottom pass as it swings back (5.5 s).
+- `frames/`: four reference stills at 600 px: the front view (3.0 s), the swing in at the bottom pass (5.4 s), the side view (8.0 s) and the swing back at the bottom pass (0.6 s).
 
 **Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 
-**Checks.** All 150 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
+**Checks.** All 300 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
 
 ## h. Components with states
 
