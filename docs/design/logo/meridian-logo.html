@@ -61,11 +61,13 @@ const CONFIG = {
   latitudeStepDeg: 45,          // Latitude lines every this many degrees (the equator is one of them).
   meridianStepDeg: 45,          // Meridian lines every this many degrees. 45 gives four great circles.
   gridHalfWidth: 0.0095,        // Half the grid line's width on the sphere, in radians.
-  backLineAlpha: 0.3,           // Grid lines on the far side, seen through the globe. 0 hides them.
+  backLineAlpha: 0.2,           // Grid lines on the far side, seen through the globe. 0 hides them.
+  limbFade: 0.15,               // Front lines fade over this band at the edge. Small, so the lines reach the outline.
+  rimAlpha: 0.6,                // Strength of the thin line that outlines the globe.
   // The camera.
-  cameraDistance: 6.7,
-  cameraHeight: 0.55,
-  fovDeg: 24,
+  cameraDistance: 5.0,
+  cameraHeight: 1.7,            // Height above the equator. About 19 degrees up, so the latitudes curve.
+  fovDeg: 30,
   colours: {
     dark: { bg: [0, 0, 0], grid: [0.92, 0.92, 0.92], red: [1.0, 0.16, 0.2], core: [1.0, 0.86, 0.86] },
     light: { bg: [1, 1, 1], grid: [0.06, 0.06, 0.07], red: [0.78, 0.06, 0.18], core: [1.0, 0.8, 0.82] },
@@ -267,6 +269,7 @@ precision highp float;
 in vec3 vWorld; in vec3 vNormal; in vec3 vObj;
 uniform vec3 uEye; uniform vec3 uGrid;
 uniform float uLatStep; uniform float uLonStep; uniform float uHalfWidth; uniform float uBackAlpha;
+uniform float uRimAlpha; uniform float uLimbFade;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
@@ -283,17 +286,20 @@ void main() {
   float fLon = min(fwidth(dLon), 0.02);
   float lineLat = 1.0 - smoothstep(uHalfWidth - fLat, uHalfWidth + fLat, dLat);
   float lineLon = 1.0 - smoothstep(uHalfWidth - fLon, uHalfWidth + fLon, dLon);
-  float grid = max(lineLat, lineLon) * smoothstep(0.0, 0.5, abs(ndv));
+  float grid = max(lineLat, lineLon) * smoothstep(0.0, uLimbFade, abs(ndv));
 
   // The near side is drawn in full; the far side shows through the globe at uBackAlpha. The globe has no fill.
   float strength = ndv > 0.0 ? 1.0 : uBackAlpha;
-  outColor = vec4(uGrid, grid * strength);
+  // The silhouette: a thin line of constant width on the globe's edge, so the sphere reads as a sphere.
+  float fw = max(fwidth(ndv), 1e-4);
+  float edge = (1.0 - smoothstep(fw, fw * 2.5, abs(ndv))) * uRimAlpha;
+  outColor = vec4(uGrid, max(grid * strength, edge));
 }`;
 
 const TUBE_FRAG = `#version 300 es
 precision highp float;
 in vec3 vWorld; in vec3 vNormal; in float vK; in float vSide;
-uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uRed; uniform vec3 uCore; uniform float uHot;
+uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uRed; uniform vec3 uCore; uniform float uHot; uniform vec3 uCamDir;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
@@ -309,8 +315,10 @@ void main() {
   vec3 col = uRed * intensity * (0.55 + 0.45 * ndl);
   col += uCore * centre * pow(vK, 3.0) * uHot * 0.9;
   col += vec3(pow(max(dot(N, H), 0.0), 40.0) * 0.35 * vK);
-  float inside = smoothstep(1.03, 0.97, length(vWorld.xy));
-  float behind = step(vWorld.z, 0.0);
+  // Behind the globe, as seen from the camera: the blade's part on the far side shows faintly.
+  vec3 across = vWorld - dot(vWorld, uCamDir) * uCamDir;
+  float inside = smoothstep(1.03, 0.97, length(across));
+  float behind = step(dot(vWorld, uCamDir), 0.0);
   col *= mix(1.0, 0.22, inside * behind);
   outColor = vec4(col, 1.0);
 }`;
@@ -526,6 +534,8 @@ function draw(f) {
   setVec3(globeProgram, "uEye", eye);
   setVec3(globeProgram, "uGrid", colours.grid);
   setFloat(globeProgram, "uBackAlpha", CONFIG.backLineAlpha);
+  setFloat(globeProgram, "uRimAlpha", CONFIG.rimAlpha);
+  setFloat(globeProgram, "uLimbFade", CONFIG.limbFade);
   setFloat(globeProgram, "uLatStep", CONFIG.latitudeStepDeg * DEG);
   setFloat(globeProgram, "uLonStep", CONFIG.meridianStepDeg * DEG);
   setFloat(globeProgram, "uHalfWidth", CONFIG.gridHalfWidth);
@@ -542,6 +552,7 @@ function draw(f) {
   gl.uniform1i(tubeProgram.uniforms.uCap, 0);
   setVec3(tubeProgram, "uEye", eye);
   setVec3(tubeProgram, "uLight", LIGHT);
+  setVec3(tubeProgram, "uCamDir", normv(eye));
   setVec3(tubeProgram, "uRed", colours.red);
   setVec3(tubeProgram, "uCore", colours.core);
   setFloat(tubeProgram, "uHot", 1.0);

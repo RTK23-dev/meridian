@@ -253,7 +253,7 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 The prototype is `docs/design/logo/meridian-logo.html`. It is one self-contained file: WebGL 2 with no libraries and no network. Its timing, camera, materials and glow sit in one `CONFIG` object at the top of the script.
 
-**The mark.** A see-through globe: no fill, only a white engraved grid of three latitudes and four meridians, one every 45 degrees. The near side is drawn in full, and the far side shows through the globe at 30% strength. The grid fades toward the edge. One red blade sits on a great circle just outside the surface. It is a lit 3D tube, with a hot white core at its head and a tail that fades into dark red. Its part behind the globe shows faintly, as if seen through it. The globe has no highlight or glow spot.
+**The mark.** A see-through globe with no fill: a white engraved grid of three latitudes and four meridians, one every 45 degrees. The near side is drawn in full, and the far side shows through the globe at 20% strength. The lines run to a thin silhouette line that outlines the globe, so it reads as a sphere. One red blade sits on a great circle just outside the surface. It is a lit 3D tube, with a hot white core at its head and a tail that fades into dark red. Its part behind the globe shows faintly, as if seen through it. The globe has no highlight or glow spot.
 
 **Glow.** The scene is drawn with 4x multisampling. A bright pass keeps only the red and the hot core, so the white grid does not glow. Two blur rounds at half resolution, a tight one and a wide one, are added back over the scene. The glow strength is 1.1.
 
@@ -268,7 +268,7 @@ The prototype is `docs/design/logo/meridian-logo.html`. It is one self-contained
 
 **Head and tail.** The head turns once per loop, about 100 degrees per second on average. It is 2.6 times faster during the plunge, centred 0.12 s after t = 0. The blade is 180 degrees long when edge-on and 300 degrees when flat, whether it faces the viewer or is tipped to the side, so the front stays in view. Its length changes only while it moves. The head radius is 0.038 of the globe's radius, and the tail is 40% of that.
 
-**Camera.** A perspective view with a 24 degree field of view, 6.7 globe radii from the centre and 0.55 above the equator. The globe fills about three quarters of the frame.
+**Camera.** A perspective view with a 30 degree field of view, 5 globe radii from the centre and 1.7 above the equator, about 19 degrees up. From there the latitudes curve, which is what makes the globe read as a sphere. The globe fills about three quarters of the frame.
 
 **Frames.** Captured with headless Chromium (WebGL through SwiftShader) from the canvas. The 600 px frames came from a 682 px viewport. The hero still came from a 720 px canvas at device scale 2.
 
