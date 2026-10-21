@@ -36,18 +36,19 @@
 "use strict";
 
 // ---- TUNE HERE. Durations are in seconds. Angles are in degrees. The loop length is the sum of the four durations. ----
+// The motion has only two shapes: the edge-on slice, whose head sweeps down the front of the globe, and the flat round ring that circles
+// it. Between them the plane makes one fast ease-in-out turn about the vertical (polar) axis, so the arc never tilts off that axis.
 const CONFIG = {
-  sliceHoldSeconds: 1.5,        // Edge-on: the arc cuts the globe in half. Half of this runs before t = 0, half before the loop ends.
-  openSeconds: 1.5,             // The arc's plane turns from edge-on to a flat ring.
-  ringHoldSeconds: 1.5,         // The flat ring circles the globe.
-  closeSeconds: 1.5,            // The plane turns back to edge-on.
-  flipDeg: 90,                  // How far the plane turns. 90 takes it from edge-on to face-on.
-  easeFlip: [0.65, 0, 0.35, 1], // cubic-bezier for both flips: x1, y1, x2, y2.
-  hingeDeg: 20,                 // Tilt of the axis the plane turns about. 0 is a pure spin about the polar axis.
-  tiltDeg: 14,                  // The globe is seen this far above its equator.
+  sliceHoldSeconds: 1.0,        // Edge-on: the arc cuts the globe in half and its head sweeps down the front. Half of this runs before t = 0.
+  openSeconds: 0.6,             // Fast ease-in-out turn from edge-on to the flat ring.
+  ringHoldSeconds: 1.2,         // The flat ring circles the globe.
+  closeSeconds: 0.6,            // Fast ease-in-out turn back to edge-on.
+  flipDeg: 90,                  // The turn, about the vertical axis: 90 takes the arc from edge-on to face-on.
+  easeFlip: [0.65, 0, 0.35, 1], // cubic-bezier for both turns: x1, y1, x2, y2.
+  tiltDeg: 14,                  // The globe is seen this far above its equator. At this tilt the ring is within 3% of round.
   headTurnsPerLoop: 1,          // Whole turns of the head per loop. Keep it an integer, so the loop joins.
-  arcMinDeg: 180,               // Arc length at the slice. 180 is exactly the front half, from pole to pole.
-  arcMaxDeg: 300,               // Arc length at the ring.
+  arcMinDeg: 180,               // Arc length while edge-on: exactly the front half, pole to pole.
+  arcMaxDeg: 300,               // Arc length as a flat ring. It lengthens only during a turn.
   latitudesDeg: [-60, -30, 0, 30, 60],
   meridianCircles: 6,           // Great circles through the poles: 6 means one every 30 degrees.
   arcRadius: 1.02,              // The arc sits just above the surface (1 is the surface).
@@ -69,7 +70,7 @@ T.b = T.a + CONFIG.openSeconds;
 T.c = T.b + CONFIG.ringHoldSeconds;
 T.d = T.c + CONFIG.closeSeconds; // Equals LOOP - T.a, so the slice hold wraps around t = 0 without a gap.
 // At t = 0 the head sits where the front half of the slice ends, so the arc covers exactly the front half.
-const FRONT_END = 270 - (CONFIG.hingeDeg + CONFIG.tiltDeg);
+const FRONT_END = 270 - CONFIG.tiltDeg;
 const TILT = CONFIG.tiltDeg * DEG;
 const VIEW = [0, Math.sin(TILT), Math.cos(TILT)]; // Unit vector toward the viewer, in the globe's frame (y is the polar axis).
 const UP = [0, Math.cos(TILT), -Math.sin(TILT)];  // Screen up, in the same frame. Screen right is the globe's x axis.
@@ -102,7 +103,7 @@ function phaseAt(t) {
   return "closing";
 }
 function headAt(t) { return FRONT_END + 360 * CONFIG.headTurnsPerLoop * (t / LOOP); } // Unbounded degrees, so the head never stops.
-function lengthAt(t) { return CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * (1 - Math.cos((2 * Math.PI * t) / LOOP)) / 2; }
+function lengthAt(flip) { return CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * flip; } // Changes only while the arc turns.
 
 const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 function project(p) { return { x: p[0], y: dot(p, UP), z: dot(p, VIEW) }; } // Orthographic: x right, y up, z toward the viewer.
@@ -113,16 +114,13 @@ function frame(time) {
   const t = ((time % LOOP) + LOOP) % LOOP;
   const flip = flipAt(t);
   const theta = CONFIG.flipDeg * flip * DEG;
-  const hinge = CONFIG.hingeDeg * DEG;
-  const sb = Math.sin(hinge);
-  const cb = Math.cos(hinge);
   const st = Math.sin(theta);
   const ct = Math.cos(theta);
-  // Two unit vectors in the arc's plane. e2 is the hinge, which stays put while the plane turns about it.
-  const e1 = [-st, ct * sb, -ct * cb];
-  const e2 = [0, cb, sb];
+  // Two unit vectors in the arc's plane. The plane turns about e2, the polar axis, so the poles never move during a turn.
+  const e1 = [-st, 0, -ct];
+  const e2 = [0, 1, 0];
   const head = headAt(t);
-  const tail = head - lengthAt(t);
+  const tail = head - lengthAt(flip);
   const arc = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const psi = (tail + ((head - tail) * i) / CONFIG.arcSamples) * DEG;
@@ -180,7 +178,9 @@ function draw(f) {
   ctx.fillStyle = colours.bg;
   ctx.fillRect(0, 0, S, S);
 
-  ctx.lineWidth = 1;
+  // The globe's lines are thick enough to read at small sizes; the width scales with the mark.
+  const lineWidth = S / 300;
+  ctx.lineWidth = lineWidth;
   ctx.strokeStyle = `rgba(${colours.line},0.35)`;
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, 2 * Math.PI);
@@ -208,7 +208,7 @@ function draw(f) {
     const b = f.arc[i + 1];
     const k = (i + 1) / n;
     ctx.globalAlpha = (0.18 + 0.82 * Math.pow(k, 0.9)) * (seen(a) && seen(b) ? 1 : CONFIG.arcFarAlpha);
-    ctx.lineWidth = 0.8 + 2.2 * k;
+    ctx.lineWidth = (S / 160) * (0.5 + 0.5 * k); // Thick at the head, half as thick at the tail.
     ctx.beginPath();
     ctx.moveTo(X(a), Y(a));
     ctx.lineTo(X(b), Y(b));
@@ -219,7 +219,7 @@ function draw(f) {
   if (seen(head)) {
     ctx.fillStyle = colours.arc;
     ctx.beginPath();
-    ctx.arc(X(head), Y(head), 3.2, 0, 2 * Math.PI);
+    ctx.arc(X(head), Y(head), S / 120, 0, 2 * Math.PI);
     ctx.fill();
   }
 }
