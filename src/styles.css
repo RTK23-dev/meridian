@@ -1,5 +1,7 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/fraunces";
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -61,11 +63,12 @@
 /* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
    (bg, surface, fg, accent and the rest) stay as aliases of the Katana roles, so screens not yet migrated keep working. */
 @theme static {
-  --font-sans: "Inter Variable", "Source Sans 3", ui-sans-serif, system-ui, sans-serif;
-  /* Headings and big numbers use the UI sans. Fraunces is kept for the wordmark only. */
-  --font-display: var(--font-sans);
-  --font-wordmark: "Fraunces Variable", Georgia, serif;
-  --font-mono: ui-monospace, "JetBrains Mono", SFMono-Regular, monospace;
+  /* Katana faces: Archivo for headings and the wordmark, Instrument Sans for text, JetBrains Mono for numbers, ids and costs. */
+  --font-text: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-text);
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-wordmark: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --color-bg: var(--bg-base);
   --color-surface: var(--bg-raised);
@@ -154,7 +157,7 @@
   }
   .skip-link:focus { transform: none; }
   img, svg, video { max-width: 100%; height: auto; }
-  /* Headings use the UI sans. The .font-display opt-in maps to the same sans, so no heading is serif. Size and weight come from the classes. */
+  /* Headings use the display face (Archivo). The .font-display opt-in maps to the same face. Size and weight come from the classes. */
   h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
   h1 { text-wrap: balance; }
@@ -188,7 +191,7 @@
     .page-title { font-size: 2.25rem; line-height: 2.5rem; }
   }
 
-  /* The wordmark is the only place Fraunces is used. */
+  /* The wordmark sets in the display face, Archivo 600, in sentence case. */
   .font-wordmark { font-family: var(--font-wordmark); letter-spacing: -0.02em; }
 
   /* The card every screen uses: a raised surface with a hairline edge and room inside. No shadow. */
