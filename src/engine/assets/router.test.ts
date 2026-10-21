@@ -503,8 +503,9 @@ describe("scoring", () => {
 describe("image routes", () => {
   it("stores the decoded image through the media store and records the bill from usage.cost", async () => {
     const answer = { created: 1748372400, data: [{ b64_json: base64(pngBytes()), media_type: "image/png" }], usage: { cost: 0.04 } };
+    // The fallback path: a table that names the model (the table names none by default; the live catalog chooses, Bible 10.5).
     const h = await harness({
-      table: routes.table,
+      table: routesWith("image.keyframe", [{ provider: "openrouter", model: "bytedance-seed/seedream-4.5", priceKey: "seedream_4_5", verified: false }], routes.table),
       script: { "POST /api/v1/images": json(200, answer) },
     });
     const spec = assetSpec({ modelClass: "image.keyframe", durationMs: 1000 });

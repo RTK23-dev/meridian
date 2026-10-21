@@ -3,9 +3,8 @@ import { describe, it } from "node:test";
 import { modelChoiceSchema } from "../contracts/assets.ts";
 import { decisionSchema } from "../contracts/plan.ts";
 import type { ModelCatalogEntry } from "../contracts/catalog.ts";
-import { routes } from "../config/routes.ts";
-import { catalogEstimateUsd, fallbackModelsFor, needOf, resolveModelChoice } from "./model-choice.ts";
-import { assetSpec, gatewayFor, routesWith, scripted } from "./test/recorded.ts";
+import { catalogEstimateUsd, needOf, resolveModelChoice } from "./model-choice.ts";
+import { assetSpec } from "./test/recorded.ts";
 
 const READ_AT = "2026-10-16T09:00:00.000Z";
 const AT = "2026-10-16T09:05:00.000Z";
@@ -66,12 +65,12 @@ describe("resolveModelChoice", () => {
     assert.equal(result.modelChoice?.modelId, "google/veo-3.1");
   });
 
-  it("makes no choice with no candidates: modelChoice stays null and the route table applies", () => {
+  it("makes no choice with no candidates: modelChoice stays null and the call is left out", () => {
     const result = resolveModelChoice({ ...base, eligible: [], pick: { modelId: "kwaivgi/kling-v3.0-std", reason: "best" }, failure: null });
     valid(result);
     assert.equal(result.modelChoice, null, "a route-table model that is not an eligible candidate is never written as a choice");
     assert.match(result.decision.reason, /no eligible candidate/);
-    assert.match(result.decision.reason, /route table applies/);
+    assert.match(result.decision.reason, /the call is left out/);
   });
 
   it("bounds the director's reason to the contract's 500 characters", () => {
@@ -97,17 +96,4 @@ describe("catalogEstimateUsd and needOf", () => {
     assert.equal(needOf(assetSpec({ modelClass: "image.keyframe" })).resolution, null);
   });
 
-  it("lists the route table's OpenRouter models for a class in priority order", () => {
-    const gateway = gatewayFor(scripted({}).transport, {
-      routes: routesWith(
-        "video.budget",
-        [
-          { provider: "openrouter", model: null, priceKey: "seedance_2_0_mini", verified: false },
-          { provider: "openrouter", model: "google/veo-3.1-lite", priceKey: "veo_3_1_lite", verified: false },
-        ],
-        routes.table,
-      ),
-    });
-    assert.deepEqual(fallbackModelsFor(gateway, "video.budget"), ["google/veo-3.1-lite"], "a target with no model is not a fallback");
-  });
 });

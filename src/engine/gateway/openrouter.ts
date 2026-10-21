@@ -139,6 +139,8 @@ export async function structuredChat<T>(gateway: Gateway, input: StructuredChatI
 export type VideoSubmitInput = {
   organizationId: string | null;
   capability: Capability;
+  /** A model the caller chose from the live catalog. Without it the capability's route table model is used (none is named now). */
+  model?: string;
   prompt: string;
   durationSeconds: number;
   aspectRatio: string;
@@ -162,7 +164,7 @@ const videoJobSchema = z.object({
  * is Bible 20.3 item 2, checked in E2.
  */
 export async function submitVideo(gateway: Gateway, input: VideoSubmitInput): Promise<{ jobId: string; model: string }> {
-  const route = openRouterRoute(gateway, input.capability);
+  const route = input.model === undefined ? openRouterRoute(gateway, input.capability) : gateway.chosen(input.capability, input.model);
   const result = await gateway.call({
     provider: PROVIDER,
     organizationId: input.organizationId,

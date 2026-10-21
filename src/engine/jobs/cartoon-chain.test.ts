@@ -48,6 +48,8 @@ import { shotSummaryOf } from "./handlers/plan.ts";
 import { createProduceShotHandler, routerGenerator } from "./handlers/produce-shot.ts";
 import { advance, type OrchestratorState } from "./orchestrator.ts";
 import { fakeMedia, fakeObjects, fixture, gatewayWith, json, MP4_BYTES, probeOf, raw, recordedTransport, scorerFrom, type Reply } from "./test/harness.ts";
+import { routes } from "../config/routes.ts";
+import { routesWith } from "../assets/test/recorded.ts";
 import type { EngineEvent, EnginePayload, QueuedJob, StageContext, StageRunResult } from "./types.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 
@@ -57,10 +59,17 @@ const REQUEST_ID = FIXTURE_IDS.request;
 const RESERVATION = fixtureId("res_", 960);
 const NOW = "2026-10-14T10:00:00.000Z";
 const CHAIN_SHOT = cartoonChainShotFixture.shotId;
-/** The routed models, read from the route table (never typed here): the keyframe and the clip, each its first target. */
-const ROUTED = gatewayWith(recordedTransport({}).transport);
-const KEYFRAME_MODEL = ROUTED.routes("image.keyframe")[0]?.model ?? "";
-const CLIP_MODEL = ROUTED.routes("video.budget")[0]?.model ?? "";
+/**
+ * The chain's models. The route table names none (the live catalog chooses, Bible 10.5), so this test's table names the keyframe and
+ * the clip the way the fallback path reads them. The ids are the recorded listing's.
+ */
+const KEYFRAME_MODEL = "bytedance-seed/seedream-4.5";
+const CLIP_MODEL = "google/veo-3.1-lite";
+const CHAIN_ROUTES = routesWith(
+  "video.budget",
+  [{ provider: "openrouter", model: CLIP_MODEL, priceKey: "veo_3_1_lite", verified: false }],
+  routesWith("image.keyframe", [{ provider: "openrouter", model: KEYFRAME_MODEL, priceKey: "seedream_4_5", verified: false }], routes.table),
+);
 const CLIP_JOB = "job-cartoon-clip-1";
 const LINK_HOST = "https://media.example.test/engine/link";
 /** The recorded keyframe answer (the image adapter's own fixture, a valid PNG above its size floor). */
@@ -292,7 +301,7 @@ test("a cartoon_generated shot goes plan, produce (keyframe, then the clip from 
   const stored = await startCartoonRequest();
   const media = memoryMediaStore();
   const transport = transportFor();
-  const gateway = gatewayWith(transport.transport);
+  const gateway = gatewayWith(transport.transport, CHAIN_ROUTES);
   const objects = fakeObjects();
   const linked: string[] = [];
   const orchestrator = driver();
@@ -414,7 +423,7 @@ test("a refused clip stops the chain at the clip: the hold names it, the keyfram
   const stored = await startCartoonRequest();
   const media = memoryMediaStore();
   const transport = transportFor({ clipPoll: [json(200, CLIP_POLICY_FAILED)] });
-  const gateway = gatewayWith(transport.transport);
+  const gateway = gatewayWith(transport.transport, CHAIN_ROUTES);
   const objects = fakeObjects();
   const orchestrator = driver();
   orchestrator.apply({ type: "start", organizationId: ORG, requestId: REQUEST_ID, priority: "normal", cachedDna: true, variantCount: 0, requestArtifactId: stored.requestArtifactId });
@@ -447,7 +456,7 @@ test("a stop-motion chain whose frame model is not routed makes no call, and the
   await startCartoonRequest();
   const media = memoryMediaStore();
   const transport = transportFor();
-  const gateway = gatewayWith(transport.transport);
+  const gateway = gatewayWith(transport.transport, CHAIN_ROUTES);
   const stopMotion: ShotSpec = {
     shotId: fixtureId("shot_", 962),
     beatId: "b1",

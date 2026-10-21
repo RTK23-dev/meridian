@@ -123,6 +123,23 @@ export class Gateway {
     return { capability, provider: this.provider(first.provider), model: first.model, priceKey: first.priceKey, verified: first.verified };
   }
 
+  /**
+   * The route of a capability with a model the caller chose from the live catalog (Bible 10.5). The table names no model for
+   * these capabilities, so the choice has to be passed in. The id's shape is checked here; whether the id is in the catalog is
+   * the caller's check (the orchestrator's validation, or the model chooser's). A chosen route has no price key: its cost is
+   * estimated from the catalog entry it was chosen from.
+   */
+  chosen(capability: Capability, modelId: string): ResolvedRoute {
+    const route = this.table[capability];
+    if (!route) throw new EngineError("config", `no route for capability ${capability}`);
+    const first = route.targets[0];
+    if (!first) throw new EngineError("config", `capability ${capability} has no provider target`);
+    if (!/^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i.test(modelId)) {
+      throw new EngineError("config", `capability ${capability}: the chosen model id is not a vendor/model id; no call is made`);
+    }
+    return { capability, provider: this.provider(first.provider), model: modelId, priceKey: null, verified: false };
+  }
+
   private async lookup(spec: ProviderSpec, organizationId: string | null, refresh: boolean): Promise<CredentialLookup | null> {
     if (spec.auth.kind === "none" || spec.credentialId === null) return null;
     if (refresh) {

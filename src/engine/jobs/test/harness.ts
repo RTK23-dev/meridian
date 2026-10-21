@@ -5,6 +5,7 @@
 
 import { readFileSync } from "node:fs";
 import { createGateway, type Gateway } from "../../gateway/gateway.ts";
+import type { RouteTable } from "../../config/routes.ts";
 import type { CredentialLookup, CredentialSource, HttpRequest, HttpResponse, HttpTransport } from "../../gateway/types.ts";
 import type { MediaFunctions, ProbeResult } from "../../media/interface.ts";
 import type { MediaStorePort } from "../artifact-store.ts";
@@ -54,8 +55,12 @@ export function keySource(keys: Record<string, string>): CredentialSource {
   };
 }
 
-export function gatewayWith(transport: HttpTransport): Gateway {
-  return createGateway({ transport, credentials: keySource({ openrouter: "sk-or-test", pexels: "pexels-test" }) });
+export function gatewayWith(transport: HttpTransport, routeTable?: RouteTable): Gateway {
+  return createGateway({
+    transport,
+    credentials: keySource({ openrouter: "sk-or-test", pexels: "pexels-test" }),
+    ...(routeTable === undefined ? {} : { routes: routeTable }),
+  });
 }
 
 /** A valid mp4 header (ftyp at byte 4). The bytes are a stand-in: the probe that reads them is a fake with a recorded shape. */

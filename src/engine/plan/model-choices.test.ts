@@ -125,19 +125,19 @@ describe("chooseModels", () => {
       [`${SHOT_1}:shot`]: ["alibaba/wan-2.6", "orchestrator"],
       // c2's pick is not a candidate: the first eligible route-table target of image.keyframe (Seedream 4.5).
       [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
-      // c3 has no pick: the first eligible route-table target of video.budget (Veo 3.1 Lite).
-      [`${SHOT_2}:clip`]: ["google/veo-3.1-lite", "fallback"],
+      // c3 has no pick: the first eligible catalog candidate for the clip (Kling, the first of its two).
+      [`${SHOT_2}:clip`]: ["kwaivgi/kling-v3.0-std", "fallback"],
     });
     const choices = result.choices.choices;
     assert.match(choices[1]?.modelChoice.reason ?? "", /not one of this call's eligible candidates/);
     assert.ok(!choices.some((entry) => /Ignore the candidates/.test(entry.modelChoice.reason)), "a refused pick's text is not kept as a reason");
 
-    // One decision per call, each naming its shot; the 12 s shot keeps the route table.
+    // One decision per call, each naming its shot; the 12 s shot has no candidate, so no model is chosen for it.
     assert.equal(result.decisions.length, 4);
     for (const decision of result.decisions) assert.ok(decisionSchema.safeParse(decision).success);
     assert.equal(result.decisions[0]?.by, "director");
     assert.match(result.decisions[3]?.reason ?? "", new RegExp(`^${SHOT_3} shot: no catalog candidate fits this call`));
-    assert.equal(result.decisions[3]?.chose, "route table for video.cinematic");
+    assert.equal(result.decisions[3]?.chose, "no model for video.cinematic");
 
     // The call is on the ledger, as a model_chooser call, billed at the answer's usage.cost.
     const rows = await ledger.listEntries(RESERVATION_ID);
@@ -155,7 +155,7 @@ describe("chooseModels", () => {
     assert.deepEqual(byCall(result.choices), {
       [`${SHOT_1}:shot`]: ["kwaivgi/kling-v3.0-std", "fallback"],
       [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
-      [`${SHOT_2}:clip`]: ["google/veo-3.1-lite", "fallback"],
+      [`${SHOT_2}:clip`]: ["kwaivgi/kling-v3.0-std", "fallback"],
     });
     assert.match(result.choices.choices[0]?.modelChoice.reason ?? "", /model_chooser call failed/);
   });
@@ -175,7 +175,7 @@ describe("chooseModels", () => {
     assert.equal(result.roleCalled, false);
     assert.deepEqual(result.choices?.choices, []);
     assert.equal(result.decisions.length, 4);
-    assert.ok(result.decisions.every((decision) => decision.chose.startsWith("route table for")));
+    assert.ok(result.decisions.every((decision) => decision.chose.startsWith("no model for")));
   });
 
   it("makes no role call and no artifact when the catalog is not connected, and says why", async () => {

@@ -17,7 +17,8 @@ Governing plan: `REPLAN_2026-10-20.md`.
 - Attempted: remove the fixed media fallback ids from `routes.ts` (Kling, Veo lite, Seedream 4.5, ElevenLabs v4, Gemini TTS). Reverted: 35 tests assert those fallbacks through adapters, so the change needs the adapters to take the live choice explicitly. That is the next block, not a one-line edit.
 - 2026-10-20 23:5xZ. Pushed `bf7854e` (planner, recorded example, `/orchestrator`). Full suite on that tree: 5711 tests, 5670 pass, 0 fail, 41 skipped, exit 0. Lint exit 0 (0 errors, 4 pre-existing warnings). Typecheck exit 0.
 - Status page published (private, no wake subscription registered): https://claude.ai/artifact/1szjYSNUowxC2ozQkK7ygD
-- Still fixed: the three Claude role models (`llm.direction`, `llm.analysis`, `llm.check`) and the Deepgram `nova-3` model in the stt route. The Claude roles are the production LLM path; changing them needs the owner's cutover decision.
+- 2026-10-21. Removed the fixed media model ids from `routes.ts`: Kling (`video.cinematic`), Veo 3.1 Lite (`video.budget`), Seedream 4.5 (`image.keyframe`), ElevenLabs v4 and Gemini TTS (`tts`). What makes this safe: `gateway.chosen(capability, modelId)` routes a live-catalog choice; the video profile loader reads every model the live listing names instead of the table's; the chooser's fallback is the first eligible catalog candidate instead of the table's model; a chooser with no candidate leaves the call out (`no model for <class>`). Tests moved to explicit live ids or to a test table that names them. Affected set: 282 of 282 pass. Full suite: see the next entry.
+- Still fixed: the three Claude role models (`llm.direction`, `llm.analysis`, `llm.check`) and the Deepgram `nova-3` model in the stt route. The Claude roles are the production LLM path; changing them needs the owner's cutover decision (where the user's orchestrator choice is stored).
 
 ## Current state
 
@@ -25,7 +26,7 @@ Governing plan: `REPLAN_2026-10-20.md`.
 |---|---|
 | Orchestrator core (plan, validate, surgical edits, executor, layout, replay) | Built and tested with fixtures |
 | Live catalog | Recorded 2026-10-20; the runtime reads it through the gateway |
-| Fixed model ids in the legacy pipeline (`routes.ts`, `prices.ts`) | Still present; the orchestrator does not use them |
+| Fixed model ids in the legacy pipeline (`routes.ts`) | Media ids removed; the three Claude roles and the Deepgram model id remain |
 | Canvas on a screen | Component built; not mounted |
 | Live runs | Not run: no key in the environment |
 | Browser check | Not done |

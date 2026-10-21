@@ -60,14 +60,15 @@ export const routes = {
     // Bible 10.3, in priority order. The first price key matches prices.routeFor, so the estimate and the call agree.
     "video.cinematic": {
       targets: [
-        openrouter("kwaivgi/kling-v3.0-std", "kling_v3_standard"),
+        openrouter(null, "kling_v3_standard"),
         openrouter(null, "veo_3_1_fast"),
         openrouter(null, "seedance_2_5"),
       ],
+      note: "Model ids come from the live catalog (Bible 10.5), not from this table.",
     },
     "video.budget": {
-      targets: [openrouter(null, "seedance_2_0_mini"), openrouter(null, "wan_3_0"), openrouter("google/veo-3.1-lite", "veo_3_1_lite")],
-      note: "The OpenRouter id of Seedance 2.0 Mini is not checked yet.",
+      targets: [openrouter(null, "seedance_2_0_mini"), openrouter(null, "wan_3_0"), openrouter(null, "veo_3_1_lite")],
+      note: "Model ids come from the live catalog (Bible 10.5), not from this table.",
     },
     "video.i2v_pinned": {
       targets: [openrouter(null, "i2v_pinned_model")],
@@ -75,7 +76,7 @@ export const routes = {
     },
     avatar: { targets: [openrouter(null, "heygen_avatar_iv")], note: "HeyGen Avatar IV via OpenRouter: to verify, Bible 20.3 item 3." },
     "image.keyframe": {
-      targets: [openrouter(null, "seedream_5_flash"), openrouter("bytedance-seed/seedream-4.5", "seedream_4_5")],
+      targets: [openrouter(null, "seedream_5_flash"), openrouter(null, "seedream_4_5")],
       note: "The OpenRouter id of Seedream 5.0 Flash is not checked yet; Seedream 4.5's id is from OpenRouter's image docs.",
     },
     "image.edit": {
@@ -87,7 +88,8 @@ export const routes = {
     // (assets/providers/openrouterSpeech.ts). The Gemini target is priced per output token, which no call can know before it is made,
     // so the router refuses to estimate it and it is not used until the owner sets a basis for that estimate.
     tts: {
-      targets: [openrouter("elevenlabs/eleven-v4", "eleven_v4"), openrouter("google/gemini-3.8-flash-tts", "gemini_3_8_flash_tts")],
+      targets: [openrouter(null, "eleven_v4"), openrouter(null, "gemini_3_8_flash_tts")],
+      note: "Model ids come from the live catalog (Bible 10.5), not from this table.",
     },
     lipsync: { targets: [], note: "The lip-sync vendor is chosen in E2." },
 

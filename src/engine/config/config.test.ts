@@ -51,13 +51,13 @@ test("the contract set is at version 9 (the ledger's providerRef, Bible section 
   assert.equal(CONTRACTS_VERSION, "engine-contracts@9");
 });
 
-test("the speech targets are the OpenRouter ids of the owner's decision (2026-10-17), unverified, and each has a price key", () => {
+test("the speech targets name no model (the live catalog chooses one, Bible 10.5), and each keeps its price key", () => {
   const speech = routes.table.tts.targets;
   assert.deepEqual(
     speech.map((target) => [target.provider, target.model, target.priceKey, target.verified]),
     [
-      ["openrouter", "elevenlabs/eleven-v4", "eleven_v4", false],
-      ["openrouter", "google/gemini-3.8-flash-tts", "gemini_3_8_flash_tts", false],
+      ["openrouter", null, "eleven_v4", false],
+      ["openrouter", null, "gemini_3_8_flash_tts", false],
     ],
   );
   assert.equal(priceFor("eleven_v4").usd, 40);

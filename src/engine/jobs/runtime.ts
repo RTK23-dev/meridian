@@ -319,7 +319,6 @@ export function shotGeneratorOf(composition: EngineComposition, shot: ShotPorts)
         input.spec.modelChoice !== null
           ? null
           : noEligibleVideoModel({
-              gateway: composition.gateway,
               modelClass: input.spec.modelClass,
               profiles,
               gaps: loader?.gapsFor(input.organizationId) ?? [],

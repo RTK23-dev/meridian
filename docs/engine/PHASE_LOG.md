@@ -590,3 +590,11 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - Added a recorded example run (`example.ts`, events in `fixtures/example-events.ts`, checked against a fresh run by test) and the screen `/orchestrator` that replays it. It calls no provider; its costs are estimates.
 - Tried removing the fixed media fallback ids from `routes.ts`. Reverted: 35 tests assert those fallbacks through the adapters. Next block: adapters take the live choice explicitly, then the ids go.
 - Still fixed, owner decision needed: the three Claude role models in `routes.ts` (production LLM path) and the Deepgram `nova-3` id.
+
+## 2026-10-21 Fixed media model ids removed from the route table
+
+- `src/engine/config/routes.ts`: Kling, Veo 3.1 Lite, Seedream 4.5, ElevenLabs v4 and Gemini TTS are no longer named. The live catalog chooses these (Bible 10.5).
+- `gateway.chosen(capability, modelId)` routes a live-catalog choice. `submitVideo` takes an optional `model`.
+- The video profile loader reads every model the live listing names. The chooser falls back to the first eligible catalog candidate, and leaves a call out when it has none. Where the chooser writes its label, "route table" became "catalog candidate".
+- Tests moved to explicit live ids, or to a test table that names them. Affected set 282 of 282.
+- Still in the route table, needing the owner's cutover decision: the three Claude role models and the Deepgram `nova-3` id.

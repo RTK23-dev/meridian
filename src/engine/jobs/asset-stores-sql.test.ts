@@ -149,7 +149,7 @@ test("a budget step for a reservation runs under its lock, and a paid call throu
     },
   };
   const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
-  const route = gateway.route("video.cinematic");
+  const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");
   const outcome = await paidCall(
     { ledger: counting, reservationId: RESERVATION, stage: "produce_shot", route, estimateUsd: 0.63, idempotencyKey: `${CACHE_KEY}-locked`, at: NOW },
     async () => ({ value: "uri", actualUsd: 0.6125 }),
@@ -166,7 +166,7 @@ test("a call that exceeds the reservation in cap mode is refused under the lock,
   const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
   let ran = false;
   const outcome = await paidCall(
-    { ledger, reservationId: RESERVATION, stage: "produce_shot", route: gateway.route("video.cinematic"), estimateUsd: 5, idempotencyKey: `${CACHE_KEY}-too-big`, at: NOW },
+    { ledger, reservationId: RESERVATION, stage: "produce_shot", route: gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std"), estimateUsd: 5, idempotencyKey: `${CACHE_KEY}-too-big`, at: NOW },
     async () => {
       ran = true;
       return { value: "never", actualUsd: 5 };

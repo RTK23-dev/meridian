@@ -19,8 +19,7 @@ function imageAnswer(bytes: Uint8Array, mediaType: string, cost: number | undefi
 function setup(replies: Parameters<typeof scripted>[0], media: MediaStore = memoryMediaStore()) {
   const script = scripted(replies);
   const gateway = gatewayFor(script.transport);
-  const route = gateway.routes("image.keyframe")[0];
-  if (!route) throw new Error("no image route");
+  const route = gateway.chosen("image.keyframe", "bytedance-seed/seedream-4.5");
   const adapter = openRouterImageAdapter({ gateway, organizationId: "org_1", workspaceId: "org_1", route, media });
   return { adapter, script, media };
 }
@@ -49,9 +48,12 @@ describe("OpenRouter image", () => {
     assert.equal(sent.seed, spec.seed);
   });
 
-  it("prices one image from the table", () => {
+  it("a chosen model has no table price, so the adapter refuses to estimate it (the router prices it from the catalog)", () => {
     const { adapter } = setup({});
-    assert.equal(adapter.price(assetSpec({ modelClass: "image.keyframe" })).estimateUsd, 0.04);
+    assert.throws(
+      () => adapter.price(assetSpec({ modelClass: "image.keyframe" })),
+      (error: unknown) => error instanceof Error && (error as { kind?: unknown }).kind === "unknown_price",
+    );
   });
 
   it("sends exactly the request fields of the documented image shape, and each reference element is type plus image_url.url only", async () => {

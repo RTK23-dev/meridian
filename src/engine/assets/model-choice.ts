@@ -16,7 +16,6 @@ import { MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../co
 import type { ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { Decision } from "../contracts/plan.ts";
 import type { ModelNeed } from "../gateway/catalog-fit.ts";
-import type { Gateway } from "../gateway/gateway.ts";
 import { isVideoClass, VIDEO_RESOLUTION } from "./providers/openrouterVideo.ts";
 
 const MICRO_PER_USD = 10_000;
@@ -74,14 +73,6 @@ export function catalogCallUsd(entry: ModelCatalogEntry, durationMs: number): nu
   }
 }
 
-/** The route table's OpenRouter models for a class, in priority order (config/routes.ts). The fallback is the first eligible one. */
-export function fallbackModelsFor(gateway: Gateway, modelClass: AssetSpec["modelClass"]): string[] {
-  return gateway
-    .routes(modelClass)
-    .filter((route) => route.provider.id === "openrouter")
-    .map((route) => route.model);
-}
-
 /** The director's answer for one call. Untrusted model output: it is checked, never acted on as an instruction. */
 export type DirectorPick = { modelId: string; reason: string };
 
@@ -93,7 +84,7 @@ export type ResolveInput = {
   pick: DirectorPick | null;
   /** Why there is no usable pick, when the role failed, was refused, or left the call out. */
   failure: string | null;
-  /** The route table's models for the class, in priority order (fallbackModelsFor). */
+  /** The fallback models, in priority order. The chooser passes the call's eligible catalog candidates, ranked. */
   fallbackModels: readonly string[];
   catalogReadAt: string;
   /** The decision time (ISO). */
@@ -150,14 +141,14 @@ export function resolveModelChoice(input: ResolveInput): ResolvedChoice {
       modelChoice: null,
       decision: {
         at: input.at,
-        chose: `route table for ${input.modelClass}`,
+        chose: `no model for ${input.modelClass}`,
         alternatives: [],
-        reason: `${refusal}; no route-table target of ${input.modelClass} is among the ${shown} (${readNote}), so no model is chosen and the route table applies`,
+        reason: `${refusal}; no eligible candidate for ${input.modelClass} is among the ${shown} (${readNote}), so no model is chosen and the call is left out`,
         by: "scorer",
       },
     };
   }
-  const reason = `${refusal}; the first eligible route-table target of ${input.modelClass} is used`;
+  const reason = `${refusal}; the first eligible catalog candidate for ${input.modelClass} is used`;
   return {
     modelChoice: { provider: "openrouter", modelId: fallback, source: "fallback", reason: bounded(reason), catalogReadAt: input.catalogReadAt },
     decision: { at: input.at, chose: `openrouter:${fallback}`, alternatives: [], reason: `${reason} (${shown}, ${readNote})`, by: "scorer" },

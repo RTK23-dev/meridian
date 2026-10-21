@@ -22,8 +22,17 @@ describe("gateway routing", () => {
     // stt is routed to Deepgram (owner decision 2026-10-16): its first target has a model, so it resolves to deepgram's nova-3.
     assert.equal(gateway.route("stt").provider.id, "deepgram");
     assert.equal(gateway.route("stt").model, "nova-3");
-    // The fallbacks with a model are still listed for the asset router.
-    assert.deepEqual(gateway.routes("video.budget").map((route) => route.model), ["google/veo-3.1-lite"]);
+    // The table names no model for video.budget any more: the live catalog chooses one (Bible 10.5). Nothing is listed as a fallback.
+    assert.deepEqual(gateway.routes("video.budget").map((route) => route.model), []);
+  });
+
+  it("a chosen model keeps the table's provider, carries the chosen id, and has no table price", () => {
+    const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
+    const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");
+    assert.equal(route.provider.id, "openrouter");
+    assert.equal(route.model, "kwaivgi/kling-v3.0-std");
+    assert.equal(route.priceKey, null, "the cost is estimated from the catalog entry the model was chosen from");
+    assert.throws(() => gateway.chosen("video.cinematic", "not a model id"), (error: unknown) => error instanceof EngineError && error.kind === "config");
   });
 
   it("switches a capability to another provider through the route table alone", async () => {

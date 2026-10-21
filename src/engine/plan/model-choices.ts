@@ -23,7 +23,7 @@ import type { CatalogRead, ModelCatalogSource } from "../gateway/catalog.ts";
 import { eligibleCandidates, rankCandidates, rejectionOf } from "../gateway/catalog-fit.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { MODEL_CHOOSER_MAX_CALLS, MODEL_CHOOSER_MAX_CANDIDATES, modelChooser, type ChooserCall, type ModelChooserAnswer } from "../claude/roles/model_chooser.ts";
-import { catalogCallUsd, fallbackModelsFor, needFor, resolveModelChoice, type DirectorPick } from "../assets/model-choice.ts";
+import { catalogCallUsd, needFor, resolveModelChoice, type DirectorPick } from "../assets/model-choice.ts";
 import { callPriceKey, GENERATE_CALL_OUTPUT, type ChosenCallPrice } from "../budget/estimate.ts";
 
 /** The output name of a plain generate shot's one call (lead decision, contract v8). The budget estimate keys calls by it too. */
@@ -131,7 +131,7 @@ export async function chooseModels(input: ChooseModelsInput): Promise<ModelChoic
       decisions: [
         {
           at,
-          chose: "route table for every call",
+          chose: "no model for any call",
           alternatives: [],
           reason: `no model is chosen from the catalog: ${read.reason}`,
           by: "scorer",
@@ -209,7 +209,7 @@ export async function chooseModels(input: ChooseModelsInput): Promise<ModelChoic
       eligible,
       pick,
       failure: pick === null ? why : null,
-      fallbackModels: fallbackModelsFor(input.deps.gateway, call.modelClass),
+      fallbackModels: eligible.map((entry) => entry.id),
       catalogReadAt: catalog.readAt,
       at,
     });

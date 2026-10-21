@@ -95,6 +95,7 @@ describe("OpenRouter video", () => {
     const submitted = await submitVideo(gateway, {
       organizationId: "org_1",
       capability: "video.cinematic",
+      model: "kwaivgi/kling-v3.0-std",
       prompt: "Slow dolly-in on a ceramic mug, morning light",
       durationSeconds: 5,
       aspectRatio: "9:16",
@@ -157,7 +158,8 @@ describe("route check", () => {
     const checked = await verifyRoutes(gateway, CAPABILITIES);
     const byModel = Object.fromEntries(checked.map((item) => [item.model, item.listed]));
     assert.equal(byModel["anthropic/claude-haiku-5.5"], true);
-    assert.equal(byModel["google/veo-3.1-lite"], true);
+    // No table route names the budget video model any more: the live catalog chooses it (Bible 10.5).
+    assert.equal(checked.some((item) => item.model === "google/veo-3.1-lite"), false);
     assert.equal(byModel["anthropic/claude-opus-5.5"], false);
     assert.equal(checked.some((item) => item.model === "hyperframes"), false);
   });

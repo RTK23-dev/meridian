@@ -19,8 +19,7 @@ function profiles(): Map<string, VideoProfile> {
 function klingAdapter(options: { keys?: Record<string, string>; transport?: Parameters<typeof gatewayFor>[0] } = {}) {
   const script = scripted({});
   const gateway = gatewayFor(options.transport ?? script.transport, options.keys ? { keys: options.keys } : {});
-  const route = gateway.routes("video.cinematic")[0];
-  if (!route) throw new Error("no kling route");
+  const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");
   return { gateway, route, profile: profiles().get(KLING) ?? null, requests: script.requests };
 }
 
@@ -139,8 +138,7 @@ describe("OpenRouter video submit", () => {
   it("is not connected without a verified profile, and sends nothing", async () => {
     const script = scripted({});
     const gateway = gatewayFor(script.transport);
-    const route = gateway.routes("video.cinematic")[0];
-    if (!route) throw new Error("no route");
+    const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");
     const adapter = openRouterVideoAdapter({ gateway, organizationId: "org_1", route, profile: null });
     assert.equal((await adapter.connection("org_1")).connected, false);
     assert.equal(adapter.capabilities.maxSeconds, 0);
@@ -150,8 +148,7 @@ describe("OpenRouter video submit", () => {
   it("is not connected when the OpenRouter key is absent, and sends nothing", async () => {
     const script = scripted({});
     const gateway = createGateway({ transport: script.transport, credentials: staticKeys({}) });
-    const route = gateway.routes("video.cinematic")[0];
-    if (!route) throw new Error("no route");
+    const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");
     const adapter = openRouterVideoAdapter({ gateway, organizationId: "org_1", route, profile: profiles().get(KLING) ?? null });
     const connection = await adapter.connection("org_1");
     assert.equal(connection.connected, false);
@@ -203,16 +200,14 @@ describe("OpenRouter video poll", () => {
 });
 
 describe("OpenRouter video price", () => {
-  it("prices per second from the table, and refuses a model with no known price", () => {
+  it("prices per second from the table; a chosen model has no table price, so the adapter refuses to estimate it", () => {
     const { gateway, route, profile } = klingAdapter();
-    const adapter = openRouterVideoAdapter({ gateway, organizationId: "org_1", route, profile });
-    assert.equal(adapter.price(assetSpec({ durationMs: 5000 })).estimateUsd, 0.63);
-    const pinned = openRouterVideoAdapter({
-      gateway,
-      organizationId: "org_1",
-      route: { ...route, priceKey: "i2v_pinned_model" },
-      profile,
-    });
+    const tabled = openRouterVideoAdapter({ gateway, organizationId: "org_1", route: { ...route, priceKey: "kling_v3_standard" }, profile });
+    assert.equal(tabled.price(assetSpec({ durationMs: 5000 })).estimateUsd, 0.63);
+    // The router prices a chosen model from its catalog entry (router.ts, Bible 10.5 step 5). The adapter alone must not guess.
+    const chosen = openRouterVideoAdapter({ gateway, organizationId: "org_1", route, profile });
+    assert.throws(() => chosen.price(assetSpec()), (error: unknown) => error instanceof EngineError && error.kind === "unknown_price");
+    const pinned = openRouterVideoAdapter({ gateway, organizationId: "org_1", route: { ...route, priceKey: "i2v_pinned_model" }, profile });
     assert.throws(() => pinned.price(assetSpec()), (error: unknown) => error instanceof EngineError && error.kind === "unknown_price");
   });
 });
