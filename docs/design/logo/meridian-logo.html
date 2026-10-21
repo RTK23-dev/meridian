@@ -1,0 +1,289 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark light">
+<title>Meridian globe mark: motion prototype</title>
+<script>document.documentElement.dataset.theme = new URLSearchParams(location.search).get("theme") === "light" ? "light" : "dark";</script>
+<style>
+  :root { color-scheme: dark; }
+  html[data-theme="light"] { color-scheme: light; }
+  html, body { margin: 0; min-height: 100%; background: #000; color: #fff; }
+  html[data-theme="light"], html[data-theme="light"] body { background: #fff; color: #0a0a0a; }
+  body { font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { min-height: 100vh; display: grid; place-content: center; justify-items: center; gap: 14px; padding: 16px; box-sizing: border-box; }
+  canvas { display: block; width: min(88vmin, 720px); aspect-ratio: 1 / 1; }
+  .controls { display: flex; align-items: center; gap: 12px; width: min(88vmin, 720px); }
+  button { min-height: 44px; min-width: 96px; padding: 0 14px; border: 1px solid #6b6b6b; border-radius: 2px; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 2px solid #ff2e38; outline-offset: 2px; }
+  input[type="range"] { flex: 1; min-height: 44px; accent-color: #ff2e38; }
+  output { min-width: 26ch; font-variant-numeric: tabular-nums; color: #949494; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <canvas id="mark" role="img" aria-label="Meridian globe. A red meridian arc slices the globe, turns into a flat ring, and returns."></canvas>
+  <div class="controls">
+    <button id="toggle" type="button" aria-pressed="false">Pause</button>
+    <label for="scrub" style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">Freeze at t, in seconds</label>
+    <input id="scrub" type="range" min="0" max="6" step="0.01" value="0">
+    <output id="readout" for="scrub"></output>
+  </div>
+</main>
+<script>
+"use strict";
+
+// ---- TUNE HERE. Durations are in seconds. Angles are in degrees. The loop length is the sum of the four durations. ----
+const CONFIG = {
+  sliceHoldSeconds: 1.5,        // Edge-on: the arc cuts the globe in half. Half of this runs before t = 0, half before the loop ends.
+  openSeconds: 1.5,             // The arc's plane turns from edge-on to a flat ring.
+  ringHoldSeconds: 1.5,         // The flat ring circles the globe.
+  closeSeconds: 1.5,            // The plane turns back to edge-on.
+  flipDeg: 90,                  // How far the plane turns. 90 takes it from edge-on to face-on.
+  easeFlip: [0.65, 0, 0.35, 1], // cubic-bezier for both flips: x1, y1, x2, y2.
+  hingeDeg: 20,                 // Tilt of the axis the plane turns about. 0 is a pure spin about the polar axis.
+  tiltDeg: 14,                  // The globe is seen this far above its equator.
+  headTurnsPerLoop: 1,          // Whole turns of the head per loop. Keep it an integer, so the loop joins.
+  arcMinDeg: 180,               // Arc length at the slice. 180 is exactly the front half, from pole to pole.
+  arcMaxDeg: 300,               // Arc length at the ring.
+  latitudesDeg: [-60, -30, 0, 30, 60],
+  meridianCircles: 6,           // Great circles through the poles: 6 means one every 30 degrees.
+  arcRadius: 1.02,              // The arc sits just above the surface (1 is the surface).
+  lineAlphaFront: 0.28,         // Grid lines on the near side.
+  lineAlphaBack: 0.10,          // Grid lines on the far side, seen faintly through the globe.
+  arcFarAlpha: 0.22,            // Far side of the arc, as a fraction of its near-side strength. 0 hides it.
+  arcSamples: 180,
+  colours: {
+    dark: { bg: "#000000", line: "255,255,255", arc: "#ff2e38" },
+    light: { bg: "#ffffff", line: "10,10,10", arc: "#c8102e" },
+  },
+};
+
+// ---- Derived timing. Nothing here needs editing. ----
+const DEG = Math.PI / 180;
+const LOOP = CONFIG.sliceHoldSeconds + CONFIG.openSeconds + CONFIG.ringHoldSeconds + CONFIG.closeSeconds;
+const T = { a: CONFIG.sliceHoldSeconds / 2 };
+T.b = T.a + CONFIG.openSeconds;
+T.c = T.b + CONFIG.ringHoldSeconds;
+T.d = T.c + CONFIG.closeSeconds; // Equals LOOP - T.a, so the slice hold wraps around t = 0 without a gap.
+// At t = 0 the head sits where the front half of the slice ends, so the arc covers exactly the front half.
+const FRONT_END = 270 - (CONFIG.hingeDeg + CONFIG.tiltDeg);
+const TILT = CONFIG.tiltDeg * DEG;
+const VIEW = [0, Math.sin(TILT), Math.cos(TILT)]; // Unit vector toward the viewer, in the globe's frame (y is the polar axis).
+const UP = [0, Math.cos(TILT), -Math.sin(TILT)];  // Screen up, in the same frame. Screen right is the globe's x axis.
+
+function easeOf([x1, y1, x2, y2]) {
+  const point = (s, p1, p2) => 3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
+  return (x) => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      if (point(mid, x1, x2) < x) lo = mid; else hi = mid;
+    }
+    return point((lo + hi) / 2, y1, y2);
+  };
+}
+const ease = easeOf(CONFIG.easeFlip);
+
+// 0 = edge-on (the slice), 1 = the flat ring.
+function flipAt(t) {
+  if (t < T.a || t >= T.d) return 0;
+  if (t < T.b) return ease((t - T.a) / CONFIG.openSeconds);
+  if (t < T.c) return 1;
+  return 1 - ease((t - T.c) / CONFIG.closeSeconds);
+}
+function phaseAt(t) {
+  if (t < T.a || t >= T.d) return "slice";
+  if (t < T.b) return "opening";
+  if (t < T.c) return "ring";
+  return "closing";
+}
+function headAt(t) { return FRONT_END + 360 * CONFIG.headTurnsPerLoop * (t / LOOP); } // Unbounded degrees, so the head never stops.
+function lengthAt(t) { return CONFIG.arcMinDeg + (CONFIG.arcMaxDeg - CONFIG.arcMinDeg) * (1 - Math.cos((2 * Math.PI * t) / LOOP)) / 2; }
+
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+function project(p) { return { x: p[0], y: dot(p, UP), z: dot(p, VIEW) }; } // Orthographic: x right, y up, z toward the viewer.
+const seen = (p) => p.z >= 0 || Math.hypot(p.x, p.y) >= 1; // The globe hides its far side, except just past the limb.
+
+/** Pure: the drawn state of the arc at time t. Calling it twice with the same t gives the same result. */
+function frame(time) {
+  const t = ((time % LOOP) + LOOP) % LOOP;
+  const flip = flipAt(t);
+  const theta = CONFIG.flipDeg * flip * DEG;
+  const hinge = CONFIG.hingeDeg * DEG;
+  const sb = Math.sin(hinge);
+  const cb = Math.cos(hinge);
+  const st = Math.sin(theta);
+  const ct = Math.cos(theta);
+  // Two unit vectors in the arc's plane. e2 is the hinge, which stays put while the plane turns about it.
+  const e1 = [-st, ct * sb, -ct * cb];
+  const e2 = [0, cb, sb];
+  const head = headAt(t);
+  const tail = head - lengthAt(t);
+  const arc = [];
+  for (let i = 0; i <= CONFIG.arcSamples; i++) {
+    const psi = (tail + ((head - tail) * i) / CONFIG.arcSamples) * DEG;
+    const c = Math.cos(psi);
+    const s = Math.sin(psi);
+    arc.push(project([0, 1, 2].map((k) => CONFIG.arcRadius * (c * e1[k] + s * e2[k]))));
+  }
+  return { t, phase: phaseAt(t), flipDeg: CONFIG.flipDeg * flip, headDeg: head, tailDeg: tail, arc };
+}
+
+// Grid lines, drawn on the surface. Each is a list of 3D points.
+const GRID = (() => {
+  const lines = [];
+  const N = 120;
+  for (const latitude of CONFIG.latitudesDeg) {
+    const phi = latitude * DEG;
+    lines.push(Array.from({ length: N + 1 }, (_, i) => { const a = (2 * Math.PI * i) / N; return [Math.cos(phi) * Math.cos(a), Math.sin(phi), Math.cos(phi) * Math.sin(a)]; }));
+  }
+  for (let m = 0; m < CONFIG.meridianCircles; m++) {
+    const lambda = (Math.PI * m) / CONFIG.meridianCircles;
+    lines.push(Array.from({ length: N + 1 }, (_, i) => { const a = (2 * Math.PI * i) / N; return [Math.sin(a) * Math.cos(lambda), Math.cos(a), -Math.sin(a) * Math.sin(lambda)]; }));
+  }
+  return lines;
+})();
+
+// ---- Drawing and playback ----
+const params = new URLSearchParams(location.search);
+const theme = params.get("theme") === "light" ? "light" : "dark";
+const colours = CONFIG.colours[theme];
+const canvas = document.getElementById("mark");
+const toggle = document.getElementById("toggle");
+const scrub = document.getElementById("scrub");
+const readout = document.getElementById("readout");
+const reduceQuery = matchMedia("(prefers-reduced-motion: reduce)");
+const wrap = (t) => ((t % LOOP) + LOOP) % LOOP;
+const state = { t: 0, playing: false, last: 0, raf: 0, size: 0, dpr: 1 };
+scrub.max = String(LOOP);
+
+function resize() {
+  state.dpr = Math.min(window.devicePixelRatio || 1, 2);
+  state.size = canvas.clientWidth;
+  canvas.width = Math.round(state.size * state.dpr);
+  canvas.height = canvas.width;
+}
+
+function draw(f) {
+  const ctx = canvas.getContext("2d");
+  const S = state.size;
+  const R = S * 0.36;
+  const cx = S / 2;
+  const cy = S / 2;
+  const X = (p) => cx + R * p.x;
+  const Y = (p) => cy - R * p.y;
+  ctx.setTransform(state.dpr, 0, 0, state.dpr, 0, 0);
+  ctx.fillStyle = colours.bg;
+  ctx.fillRect(0, 0, S, S);
+
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = `rgba(${colours.line},0.35)`;
+  ctx.beginPath();
+  ctx.arc(cx, cy, R, 0, 2 * Math.PI);
+  ctx.stroke();
+
+  for (const points of GRID) {
+    for (let i = 0; i < points.length - 1; i++) {
+      const a = project(points[i]);
+      const b = project(points[i + 1]);
+      ctx.strokeStyle = `rgba(${colours.line},${a.z + b.z >= 0 ? CONFIG.lineAlphaFront : CONFIG.lineAlphaBack})`;
+      ctx.beginPath();
+      ctx.moveTo(X(a), Y(a));
+      ctx.lineTo(X(b), Y(b));
+      ctx.stroke();
+    }
+  }
+
+  // The meridian: thin and faint at the tail, full and thick at the head. Its far side is drawn at CONFIG.arcFarAlpha, so the
+  // whole orbit reads as one circle while the near side stays dominant.
+  const n = f.arc.length - 1;
+  ctx.strokeStyle = colours.arc;
+  ctx.lineCap = "round";
+  for (let i = 0; i < n; i++) {
+    const a = f.arc[i];
+    const b = f.arc[i + 1];
+    const k = (i + 1) / n;
+    ctx.globalAlpha = (0.18 + 0.82 * Math.pow(k, 0.9)) * (seen(a) && seen(b) ? 1 : CONFIG.arcFarAlpha);
+    ctx.lineWidth = 0.8 + 2.2 * k;
+    ctx.beginPath();
+    ctx.moveTo(X(a), Y(a));
+    ctx.lineTo(X(b), Y(b));
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  const head = f.arc[n];
+  if (seen(head)) {
+    ctx.fillStyle = colours.arc;
+    ctx.beginPath();
+    ctx.arc(X(head), Y(head), 3.2, 0, 2 * Math.PI);
+    ctx.fill();
+  }
+}
+
+function render() {
+  const f = frame(state.t);
+  draw(f);
+  scrub.value = String(f.t.toFixed(2));
+  readout.textContent = `t ${f.t.toFixed(2)} s of ${LOOP.toFixed(2)} | ${f.phase} | plane turned ${f.flipDeg.toFixed(0)} deg`;
+}
+
+function setButton() {
+  const playing = state.playing;
+  toggle.textContent = playing ? "Pause" : "Play";
+  toggle.setAttribute("aria-pressed", String(playing));
+}
+
+function loop(now) {
+  if (!state.playing) return;
+  state.t = wrap(state.t + Math.min(now - state.last, 100) / 1000); // Capped, so a hidden tab does not jump.
+  state.last = now;
+  render();
+  state.raf = requestAnimationFrame(loop);
+}
+
+function play() {
+  if (state.playing || reduceQuery.matches) return;
+  state.playing = true;
+  state.last = performance.now();
+  state.raf = requestAnimationFrame(loop);
+  setButton();
+}
+
+function pause() {
+  state.playing = false;
+  cancelAnimationFrame(state.raf);
+  setButton();
+}
+
+// ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws one still frame at t = 0. ----
+const requested = Number(params.get("t"));
+if (params.has("t") && Number.isFinite(requested)) state.t = wrap(requested);
+resize();
+render();
+if (!params.has("t") && !reduceQuery.matches) play();
+setButton();
+if (reduceQuery.matches) toggle.hidden = true;
+
+toggle.addEventListener("click", () => (state.playing ? pause() : play()));
+scrub.addEventListener("input", () => { pause(); state.t = Number(scrub.value); render(); });
+addEventListener("resize", () => { resize(); render(); });
+addEventListener("keydown", (event) => {
+  if (event.code === "Space" && event.target === document.body) { event.preventDefault(); state.playing ? pause() : play(); }
+});
+reduceQuery.addEventListener("change", () => {
+  if (reduceQuery.matches) { pause(); toggle.hidden = true; } else { toggle.hidden = false; }
+});
+
+// Hook for review and automated capture: window.meridianMark.setTime(seconds) freezes the frame at that time.
+window.meridianMark = {
+  frame,
+  loopSeconds: LOOP,
+  setTime(seconds) { pause(); state.t = wrap(Number(seconds)); render(); },
+};
+</script>
+</body>
+</html>
