@@ -255,7 +255,9 @@ The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL
 
 **The mark.** A see-through wireframe globe: three latitudes and four meridians, one every 45 degrees. A thin silhouette outlines it. The near lines are full strength and ease down to 16% on the far side. Around it runs the meridian, a red comet of light: a lit 3D tube with a hot white core at its head and a trail that fades to a faint full ring, so the circle always reads. Where the comet's plane cuts the globe, the grid lines light up red, most strongly near the head. A thin horizontal light streak passes through the head, and a bloom pass gives the red its glow.
 
-**The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 6 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it twice per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns. The camera holds still.
+**The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 6 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it twice per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns.
+
+**The view move.** Once per loop the camera swings 71 degrees up and over, about the horizontal axis, and lands on the globe's axis. Its up direction turns with it, so the globe tips sideways and the spinning meridian is seen side-on, sweeping round the pole like a clock hand. It holds for 1.3 s, then swings back. Each swing takes 0.75 s on cubic-bezier(0.8, 0, 0.2, 1): fast through the middle, soft at both ends. The globe, its spin and the comet do not change; only the viewpoint moves. The swing starts at 1.6 s.
 
 **Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
@@ -263,7 +265,7 @@ The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL
 - `meridian-logo-mark.png`: the hero still at t = 1.3 s, 1440 px.
 - `meridian-logo.gif`: 150 frames at 25 fps, 480 px.
 - `meridian-logo.mp4`: the same frames at 600 px.
-- `frames/`: four reference stills at 600 px: the slice (t = 0), opening (0.75 s), the ring (1.5 s) and closing (2.25 s).
+- `frames/`: four reference stills at 600 px: the front view (t = 0), mid-swing (1.98 s), the side view (3.0 s) and the swing back (4.02 s).
 
 **Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 

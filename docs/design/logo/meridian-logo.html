@@ -61,6 +61,12 @@ const CONFIG = {
   backLineAlpha: 0.16,          // Far-side lines, seen through the globe.
   rimAlpha: 0.55,               // The thin line that outlines the globe.
   // The camera.
+  // The view move: once per loop the camera swings round to the side and back. Only the viewpoint changes.
+  viewTurnDeg: 71,              // How far the camera swings up and over. 71 lands it on the globe's axis (it starts 19 degrees up).
+  viewOutAt: 1.6,               // When the swing out starts, in seconds.
+  viewHoldSeconds: 1.3,         // How long the side view holds.
+  viewMoveSeconds: 0.75,        // How long each swing takes.
+  viewEase: [0.8, 0, 0.2, 1],   // cubic-bezier for both swings: fast in the middle, soft at both ends.
   cameraDistance: 5.0,
   cameraHeight: 1.7,            // About 19 degrees above the equator, so the latitudes curve.
   fovDeg: 30,
@@ -84,6 +90,38 @@ const normv = (a) => scale(a, 1 / Math.hypot(a[0], a[1], a[2]));
 const wrapTime = (t) => ((t % LOOP) + LOOP) % LOOP;
 
 /** Rodrigues' rotation of v about the unit axis k by angle a. */
+function easeOf([x1, y1, x2, y2]) {
+  const point = (s, p1, p2) => 3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
+  return (x) => {
+    let lo = 0;
+    let hi = 1;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      if (point(mid, x1, x2) < x) lo = mid; else hi = mid;
+    }
+    return point((lo + hi) / 2, y1, y2);
+  };
+}
+const viewEase = easeOf(CONFIG.viewEase);
+
+/** The camera's swing round the globe at time t, in degrees: 0, an eased swing out, a hold, an eased swing back, 0. */
+function viewTurnAt(t) {
+  const out = CONFIG.viewOutAt;
+  const back = out + CONFIG.viewMoveSeconds + CONFIG.viewHoldSeconds;
+  const m = CONFIG.viewMoveSeconds;
+  if (t < out) return 0;
+  if (t < out + m) return CONFIG.viewTurnDeg * viewEase((t - out) / m);
+  if (t < back) return CONFIG.viewTurnDeg;
+  if (t < back + m) return CONFIG.viewTurnDeg * (1 - viewEase((t - back) / m));
+  return 0;
+}
+/** Swings a camera vector up and over about the horizontal axis. Applied to the eye and to its up direction, it turns the view sideways. */
+function swing(deg, p) {
+  const c = Math.cos(deg * DEG);
+  const s = Math.sin(deg * DEG);
+  return [p[0], p[1] * c + p[2] * s, -p[1] * s + p[2] * c];
+}
+
 function rotateAbout(k, a, v) {
   const c = Math.cos(a);
   const s = Math.sin(a);
@@ -125,8 +163,10 @@ function frame(time) {
     const a = (TAU * i) / RING_SEGMENTS;
     ring.push(add(scale(now.e1, Math.cos(a)), scale(now.e2, Math.sin(a))));
   }
-  const eye = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
-  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, normal: now.normal, points, ring, headRadial: now.head };
+  const view = viewTurnAt(t);
+  const eye = swing(view, [0, CONFIG.cameraHeight, CONFIG.cameraDistance]);
+  const up = swing(view, [0, 1, 0]);
+  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, up, normal: now.normal, points, ring, headRadial: now.head };
 }
 
 // ---- Geometry ----
@@ -505,7 +545,7 @@ function draw(f) {
   const { w, h } = targets;
   const eye = f.eye;
   const camDir = normv(eye);
-  const view = lookAt(eye, [0, 0, 0], [0, 1, 0]);
+  const view = lookAt(eye, [0, 0, 0], f.up);
   const proj = perspective(CONFIG.fovDeg * DEG, w / h, 0.1, 50);
   const headWorld = scale(f.headRadial, CONFIG.ringRadius);
 
