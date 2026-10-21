@@ -3,10 +3,10 @@
 
 import type { NodeKind, OrchestratorPlan } from "./contracts.ts";
 
-export const NODE_WIDTH = 220;
-export const NODE_HEIGHT = 96;
-export const COLUMN_GAP = 84;
-export const ROW_GAP = 32;
+export const NODE_WIDTH = 232;
+export const NODE_HEIGHT = 132;
+export const COLUMN_GAP = 96;
+export const ROW_GAP = 28;
 export const CANVAS_PAD = 40;
 
 export type PlacedNode = { id: string; kind: NodeKind; title: string; x: number; y: number; column: number };

@@ -3,36 +3,20 @@ import type { NodeEvent, NodeState, OrchestratorPlan } from "@/engine/orchestrat
 import { NODE_HEIGHT, NODE_WIDTH, layoutPlan } from "@/engine/orchestrator/layout";
 import { replayAt } from "@/engine/orchestrator/replay";
 import { topologicalOrder } from "@/engine/orchestrator/validate";
+import { cn } from "@/lib/cn";
+import { CanvasToolbar, NodeCard, Port, StateLegend } from "./orchestrator-canvas-parts";
+import { ACCENT, KIND_STYLE, STATE_STYLE, costText, edgeAccent, fitScale, nextZoom, replayStatus } from "./orchestrator-presentation";
 
-/** The step's state in words. "NOT CONNECTED" is shown as it is: a step with no handler did not run and has no output. */
-const STATE_LABEL: Record<NodeState, string> = {
-  planned: "Planned",
-  running: "Running",
-  done: "Done",
-  cache_hit: "Reused",
-  skipped: "Skipped",
-  failed: "Failed",
-  not_connected: "NOT CONNECTED",
-  paused: "Paused at budget",
-};
-
-const STATE_DOT: Record<NodeState, string> = {
-  planned: "ring-2 ring-info",
-  running: "bg-info motion-safe:animate-pulse",
-  done: "bg-success",
-  cache_hit: "bg-success",
-  skipped: "bg-border-strong",
-  failed: "bg-danger",
-  not_connected: "bg-warning",
-  paused: "bg-warning",
-};
-
-const usd = (value: number) => `$${value.toFixed(4)}`;
+/** Room above the plan for the floating toolbar, so the toolbar never covers a step. */
+const TOOLBAR_CLEARANCE = "pt-14";
 
 /**
  * The orchestrator's plan drawn as a flow. It starts as a plain canvas. `shown` is how many events of the run have arrived: each step
- * pops in at its first event, and the line into it draws itself. `stale` marks the steps an edit would run again: they are drawn with a
- * dashed border and labelled, whatever state their last run had. Pure drawing from the plan and the events; nothing here calls a model.
+ * pops in at its first event, and the line into it draws itself. `stale` marks the steps an edit would run again: they are drawn dashed
+ * and labelled, whatever state their last run had. Pure drawing from the plan and the events; nothing here calls a model.
+ *
+ * The canvas fits its width by default. The toolbar zooms it in steps, and "fit to width" returns to the fitted scale. Every step is a
+ * focusable card, in reading order, named by its kind, title and state.
  */
 export function OrchestratorCanvas({
   plan,
@@ -57,9 +41,11 @@ export function OrchestratorCanvas({
 
   const replay = useMemo(() => replayAt(events, shown), [events, shown]);
 
-  // The canvas fits the width it is given: a wide plan is scaled down to half its size at the least, and scrolls beyond that.
+  // The width the canvas may use is measured again whenever a plan appears, so a canvas that mounts empty still fits once it has a plan.
+  const hasPlan = drawn !== null;
   const frame = useRef<HTMLDivElement>(null);
   const [available, setAvailable] = useState(0);
+  const [zoom, setZoom] = useState<number | null>(null);
   useEffect(() => {
     const element = frame.current;
     if (element === null) return;
@@ -68,87 +54,87 @@ export function OrchestratorCanvas({
     const observer = new ResizeObserver(() => setAvailable(element.clientWidth));
     observer.observe(element);
     return () => observer.disconnect();
-  }, []);
-  const scale = drawn !== null && available > 0 ? Math.min(1, Math.max(0.5, available / drawn.width)) : 1;
+  }, [hasPlan]);
 
   if (plan === null || drawn === null) {
     return (
-      <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-sm text-fg-muted" role="status">
+      <div className="rounded-xl border border-dashed border-border bg-surface p-6 text-sm text-fg-muted" role="status">
         No plan yet. The orchestrator draws its steps here as it plans them.
       </div>
     );
   }
 
+  const fitted = fitScale(available, drawn.width);
+  const scale = zoom ?? fitted;
   const visible = new Set(plan.nodes.filter((node) => showAll || replay.has(node.id)).map((node) => node.id));
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
+  const kindOf = new Map(drawn.nodes.map((placed) => [placed.id, placed.kind]));
+  const feeds = new Set(plan.nodes.flatMap((node) => node.dependsOn));
+  // Reading order: column by column, top to bottom, which is the order a person reads the flow in.
+  const reading = [...drawn.nodes].sort((a, b) => a.column - b.column || a.y - b.y);
 
   return (
-    <div ref={frame} className="overflow-auto rounded-lg border border-border bg-surface" role="region" aria-label="Orchestrator plan" style={{ height: drawn.height * scale + 2 }}>
-      <div className="relative origin-top-left" style={{ width: drawn.width, height: drawn.height, transform: scale < 1 ? `scale(${scale})` : undefined }}>
-        <svg className="absolute inset-0 text-border-strong" width={drawn.width} height={drawn.height} aria-hidden="true">
-          {drawn.edges
-            .filter((edge) => visible.has(edge.to))
-            .map((edge) => (
-              <path
-                key={`${edge.from}->${edge.to}`}
-                d={edge.d}
-                pathLength={1}
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={2}
-                className="orch-edge"
-              />
-            ))}
-        </svg>
-
-        {drawn.nodes
-          .filter((placed) => visible.has(placed.id) || stale?.has(placed.id))
-          .map((placed) => {
-            const step = replay.get(placed.id);
-            const node = byId.get(placed.id);
-            const isStale = stale?.has(placed.id) ?? false;
-            if (!node || (!step && !isStale && !showAll)) return null;
-            const state: NodeState = step?.state ?? "planned";
-            return (
-              <article
-                key={placed.id}
-                className={`orch-node absolute flex flex-col gap-1 rounded-lg bg-surface p-3 shadow-sm ${isStale ? "border-2 border-dashed border-warning" : "border border-border-strong"}`}
-                style={{ left: placed.x, top: placed.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                data-state={state}
-                data-stale={isStale ? "true" : undefined}
-              >
-                <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${isStale ? "ring-2 ring-warning" : STATE_DOT[state]}`} aria-hidden="true" />
-                  <span className="truncate text-sm font-medium">{node.title}</span>
-                </div>
-                <div className="truncate text-xs text-fg-muted">{node.model ? node.model.id : `${node.kind}, no model call`}</div>
-                <div className="mt-auto flex items-center justify-between text-xs">
-                  <span>{isStale ? "To re-run" : STATE_LABEL[state]}</span>
-                  <span className="text-fg-muted">
-                    {step?.costUsd !== null && step?.costUsd !== undefined
-                      ? usd(step.costUsd)
-                      : node.estimateUsd !== null
-                        ? `est. ${usd(node.estimateUsd)}`
-                        : ""}
-                  </span>
-                </div>
-                {step?.reason && !isStale ? (
-                  <div className="truncate text-xs text-fg-muted" title={step.reason}>
-                    {step.reason}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
+    <section aria-label="Orchestrator plan" className="relative overflow-hidden rounded-xl border border-border bg-surface">
+      <div className="absolute left-3 top-3 z-10">
+        <CanvasToolbar
+          scale={scale}
+          fitted={zoom === null}
+          status={replayStatus(shown, events.length, showAll)}
+          onZoom={(direction) => setZoom(nextZoom(scale, direction))}
+          onFit={() => setZoom(null)}
+        />
       </div>
 
-      <ol className="sr-only">
-        {plan.nodes.map((node) => (
-          <li key={node.id}>
-            {node.title}: {stale?.has(node.id) ? "to re-run" : visible.has(node.id) ? STATE_LABEL[replay.get(node.id)?.state ?? "planned"] : "not drawn yet"}
-          </li>
-        ))}
-      </ol>
-    </div>
+      <div ref={frame} className={cn("max-h-[70vh] overflow-auto bg-[radial-gradient(var(--color-border)_1px,transparent_1px)] [background-size:20px_20px]", TOOLBAR_CLEARANCE)}>
+        <div className="relative" style={{ width: drawn.width * scale, height: drawn.height * scale }}>
+          <div className="absolute left-0 top-0 origin-top-left" style={{ width: drawn.width, height: drawn.height, transform: `scale(${scale})` }}>
+            <svg className="absolute left-0 top-0" width={drawn.width} height={drawn.height} aria-hidden="true">
+              {drawn.edges
+                .filter((edge) => visible.has(edge.to))
+                .map((edge) => {
+                  const from = kindOf.get(edge.from);
+                  return (
+                    <path
+                      key={`${edge.from}->${edge.to}`}
+                      d={edge.d}
+                      pathLength={1}
+                      fill="none"
+                      strokeWidth={2}
+                      strokeLinecap="round"
+                      className={cn("orch-edge", ACCENT[from ? edgeAccent(from) : "muted"].stroke)}
+                    />
+                  );
+                })}
+            </svg>
+
+            {reading.map((placed) => {
+              const node = byId.get(placed.id);
+              const isStale = stale?.has(placed.id) ?? false;
+              if (!node || !(visible.has(node.id) || isStale)) return null;
+              const step = replay.get(node.id);
+              const state: NodeState = step?.state ?? "planned";
+              const reason = !isStale && STATE_STYLE[state].showsReason ? (step?.reason ?? null) : null;
+              return (
+                <div key={node.id} className="orch-node absolute" style={{ left: placed.x, top: placed.y, width: NODE_WIDTH, height: NODE_HEIGHT }}>
+                  <NodeCard
+                    kind={node.kind}
+                    title={node.title}
+                    model={node.model?.id ?? null}
+                    state={state}
+                    stale={isStale}
+                    cost={costText(step?.costUsd, node.estimateUsd)}
+                    reason={reason}
+                  />
+                  {node.dependsOn.length > 0 ? <Port side="in" accent="muted" /> : null}
+                  {feeds.has(node.id) ? <Port side="out" accent={KIND_STYLE[node.kind].accent} /> : null}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <StateLegend />
+    </section>
   );
 }

@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
 import type { NodeEvent, OrchestratorPlan } from "@/engine/orchestrator/contracts";
 import { OrchestratorCanvas } from "./orchestrator-canvas";
+import { OrchestratorComposer } from "./orchestrator-composer";
+import { describePlanOutcome } from "./orchestrator-presentation";
 import { useWorkspace } from "@/components/workspace";
 import {
-  createOrchestratorDraft,
   editOrchestratorStep,
   getBrandOrchestratorModel,
   getOrchestratorPlan,
@@ -61,8 +62,9 @@ function notConnected(reason: string): string {
 }
 
 /**
- * The orchestrator's plans for one brand: the drafts, the plans the chosen model wrote, and their runs. Every action goes through a server
- * function that checks the caller's role. Without a connected OpenRouter key, planning and running say NOT CONNECTED and call nothing.
+ * The orchestrator's starting screen and its plans for one brand: the composer first, then the drafts, the plans the chosen model wrote,
+ * and their runs. Every action goes through a server function that checks the caller's role. Without a connected OpenRouter key, planning
+ * and running say NOT CONNECTED and call nothing.
  */
 export function OrchestratorPlans() {
   const workspace = useWorkspace();
@@ -76,12 +78,6 @@ export function OrchestratorPlans() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const [title, setTitle] = useState("");
-  const [goal, setGoal] = useState("");
-  const [format, setFormat] = useState("");
-  const [userInputs, setUserInputs] = useState("");
-  const [brandSummary, setBrandSummary] = useState("");
-  const [budget, setBudget] = useState("2");
   // The model every new plan uses: the one stored in the Content Factory panel. Null means none is stored yet.
   const [storedModel, setStoredModel] = useState<string | null>(null);
 
@@ -120,27 +116,20 @@ export function OrchestratorPlans() {
     }
   }
 
-  const create = () =>
-    act(async () => {
-      const created = await createOrchestratorDraft({
-        data: { brandId, title, goal, format, userInputs, brandSummary, budgetUsd: Number(budget) },
-      });
-      setMessage(`Saved the draft "${created.plan.title}". It has not been planned yet.`);
-      setTitle("");
-      setGoal("");
-      setFormat("");
-      setUserInputs("");
+  /** A saved draft: the list reloads and the draft opens. The composer shows what planning said. */
+  const draftSaved = async (planId: string) => {
+    try {
       await refresh();
-      await open(created.plan.id);
-    });
+      await open(planId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The plan could not be read.");
+    }
+  };
 
   const plan = (planId: string) =>
     act(async () => {
       const outcome = await planOrchestratorDraft({ data: { brandId, planId } });
-      if (outcome.status === "not_connected" || outcome.status === "failed") setMessage(notConnected(outcome.reason));
-      else if (outcome.status === "refused") setMessage(`The plan was refused: ${outcome.reasons.join("; ")}`);
-      else if (outcome.status === "not_planned") setMessage(outcome.reasons.join("; "));
-      else setMessage("The plan is ready. Review its steps, then run it.");
+      setMessage(describePlanOutcome(outcome).text);
       await refresh();
       await open(planId);
     });
@@ -157,61 +146,58 @@ export function OrchestratorPlans() {
     });
 
   return (
-    <section aria-labelledby="plans-heading" className="flex flex-col gap-4 rounded-lg border border-border bg-surface p-4">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 id="plans-heading" className="text-base font-semibold">
+    <div className="flex flex-col gap-5">
+      <OrchestratorComposer
+        brands={brands}
+        brandId={brandId}
+        onBrandChange={setChosenBrand}
+        storedModel={storedModel}
+        showPreview={plans.length === 0}
+        onChanged={draftSaved}
+      />
+
+      <section aria-labelledby="plans-heading" className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 sm:p-6">
+        <h2 id="plans-heading" className="text-lg font-semibold">
           Your plans
         </h2>
-        {brands.length > 1 ? (
-          <label className="flex flex-col gap-1 text-sm" htmlFor="plan-brand">
-            <span>Brand</span>
-            <select id="plan-brand" className="rounded border border-border bg-surface px-2 py-1" value={brandId} onChange={(event) => setChosenBrand(event.target.value)}>
-              {brands.map((brand) => (
-                <option key={brand.id} value={brand.id}>
-                  {brand.name}
-                </option>
-              ))}
-            </select>
-          </label>
+
+        {message ? (
+          <p role="status" className="text-sm">
+            {message}
+          </p>
         ) : null}
-      </div>
 
-      {message ? (
-        <p role="status" className="text-sm">
-          {message}
-        </p>
-      ) : null}
-
-      {brands.length === 0 ? (
-        <p className="text-sm text-fg-muted">Create a brand first. Its plans are kept for the brand's workspace.</p>
-      ) : (
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            {plans.length === 0 ? <p className="text-sm text-fg-muted">No plans yet. Save a draft to start one.</p> : null}
-            <ul className="flex flex-col gap-2">
-              {plans.map((summary) => (
-                <li key={summary.id}>
-                  <button
-                    type="button"
-                    className={`w-full rounded border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-accent" : "border-border"}`}
-                    onClick={() => act(() => open(summary.id))}
-                    aria-current={selectedId === summary.id ? "true" : undefined}
-                  >
-                    <span className="font-medium">{summary.title}</span>
-                    <span className="block text-xs text-fg-muted">
-                      {STATUS_WORDS[summary.status] ?? summary.status} · budget ${summary.budgetUsd.toFixed(2)}
-                      {summary.estimateUsd === null ? "" : ` · estimate $${summary.estimateUsd.toFixed(4)}`}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
+        {brands.length === 0 ? (
+          <p className="text-sm text-fg-muted">Create a brand first. Its plans are kept for the brand's workspace.</p>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              {plans.length === 0 ? <p className="text-sm text-fg-muted">No plans yet. Plan a run above and it appears here.</p> : null}
+              <ul className="flex flex-col gap-2">
+                {plans.map((summary) => (
+                  <li key={summary.id}>
+                    <button
+                      type="button"
+                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}
+                      onClick={() => act(() => open(summary.id))}
+                      aria-current={selectedId === summary.id ? "true" : undefined}
+                    >
+                      <span className="font-medium">{summary.title}</span>
+                      <span className="block text-xs text-fg-muted">
+                        {STATUS_WORDS[summary.status] ?? summary.status} · budget ${summary.budgetUsd.toFixed(2)}
+                        {summary.estimateUsd === null ? "" : ` · estimate $${summary.estimateUsd.toFixed(4)}`}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
             {detail ? (
-              <div className="flex flex-col gap-2 rounded border border-border p-3">
+              <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-4">
                 <p className="text-sm font-medium">{detail.plan.title}</p>
                 <p className="text-xs text-fg-muted">
-                  {STATUS_WORDS[detail.plan.status] ?? detail.plan.status} · orchestrated by {detail.plan.orchestratorModel}
+                  {STATUS_WORDS[detail.plan.status] ?? detail.plan.status} · orchestrated by <span className="font-mono">{detail.plan.orchestratorModel}</span>
                 </p>
                 {detail.plan.reasons.length > 0 ? (
                   <ul role="alert" className="list-disc pl-5 text-sm">
@@ -226,7 +212,7 @@ export function OrchestratorPlans() {
                       <li key={step.id}>
                         <span className="font-medium">{step.title}</span>
                         <span className="text-fg-muted"> · {step.model ?? "no model call"}</span>
-                        {step.estimateUsd === null ? null : <span className="text-fg-muted"> · ${step.estimateUsd.toFixed(4)}</span>}
+                        {step.estimateUsd === null ? null : <span className="text-fg-muted tabular-nums"> · ${step.estimateUsd.toFixed(4)}</span>}
                       </li>
                     ))}
                   </ol>
@@ -237,14 +223,24 @@ export function OrchestratorPlans() {
                 {detail.plan.steps.some((step) => EDITABLE_PARAM[step.kind] !== undefined || step.model !== null) && detail.plan.status !== "running" ? (
                   <div className="flex flex-col gap-2 text-sm">
                     <p className="font-medium">Change a step</p>
-                    {detail.plan.steps.filter((step) => step.model !== null).map((step) => (
-                      <StepEdit key={step.id} brandId={brandId} planId={detail.plan.id} step={step} onSaved={async () => { await refresh(); await open(detail.plan.id); }} onMessage={setMessage} />
-                    ))}
+                    {detail.plan.steps
+                      .filter((step) => step.model !== null)
+                      .map((step) => (
+                        <StepEdit
+                          key={step.id}
+                          brandId={brandId}
+                          planId={detail.plan.id}
+                          step={step}
+                          onSaved={async () => {
+                            await refresh();
+                            await open(detail.plan.id);
+                          }}
+                          onMessage={setMessage}
+                        />
+                      ))}
                   </div>
                 ) : null}
-                {detail.events.length > 0 ? (
-                  <p className="text-xs text-fg-muted">The last run recorded {detail.events.length} events.</p>
-                ) : null}
+                {detail.events.length > 0 ? <p className="text-xs text-fg-muted">The last run recorded {detail.events.length} events.</p> : null}
                 <div className="flex flex-wrap gap-2">
                   {detail.plan.status === "draft" || detail.plan.status === "refused" ? (
                     <Button size="sm" onClick={() => plan(detail.plan.id)} disabled={busy}>
@@ -260,58 +256,9 @@ export function OrchestratorPlans() {
               </div>
             ) : null}
           </div>
-
-          <form
-            className="flex flex-col gap-2"
-            aria-label="New draft"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void create();
-            }}
-          >
-            <h3 className="text-sm font-semibold">New draft</h3>
-            <label className="flex flex-col gap-1 text-sm" htmlFor="plan-title">
-              Title
-              <input id="plan-title" required maxLength={120} className="rounded border border-border bg-surface px-2 py-1" value={title} onChange={(event) => setTitle(event.target.value)} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm" htmlFor="plan-goal">
-              What the video should do
-              <input id="plan-goal" required maxLength={2000} className="rounded border border-border bg-surface px-2 py-1" value={goal} onChange={(event) => setGoal(event.target.value)} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm" htmlFor="plan-format">
-              Format to rebuild or make
-              <textarea id="plan-format" required maxLength={4000} rows={3} className="rounded border border-border bg-surface px-2 py-1" value={format} onChange={(event) => setFormat(event.target.value)} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm" htmlFor="plan-inputs">
-              Your inputs
-              <textarea id="plan-inputs" maxLength={4000} rows={2} className="rounded border border-border bg-surface px-2 py-1" value={userInputs} onChange={(event) => setUserInputs(event.target.value)} />
-            </label>
-            <label className="flex flex-col gap-1 text-sm" htmlFor="plan-brand-summary">
-              About the brand
-              <textarea id="plan-brand-summary" maxLength={2000} rows={2} className="rounded border border-border bg-surface px-2 py-1" value={brandSummary} onChange={(event) => setBrandSummary(event.target.value)} />
-            </label>
-            <div className="flex flex-wrap gap-3">
-              <label className="flex flex-col gap-1 text-sm" htmlFor="plan-budget">
-                Budget (USD)
-                <input id="plan-budget" type="number" min={0.01} max={1000} step="0.01" className="w-28 rounded border border-border bg-surface px-2 py-1" value={budget} onChange={(event) => setBudget(event.target.value)} />
-              </label>
-            </div>
-            <p className="text-sm" id="plan-model-stored">
-              {storedModel === null ? (
-                <span className="text-fg-muted">
-                  No orchestrating model is stored for this workspace. Choose one in the <a className="underline" href="/content-factory">Content Factory</a> panel first.
-                </span>
-              ) : (
-                <>Orchestrating model: <code className="font-mono text-sm">{storedModel}</code>, stored in the Content Factory panel. It is checked against the live catalog when the plan is written.</>
-              )}
-            </p>
-            <Button type="submit" size="md" disabled={busy || !title || !goal || !format || storedModel === null}>
-              Save draft
-            </Button>
-          </form>
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+    </div>
   );
 }
 
@@ -354,12 +301,12 @@ function StepEdit(props: {
       {editable ? (
         <label className="flex flex-col gap-1 text-xs">
           {editable.label}
-          <input className="w-24 rounded border border-border bg-surface px-2 py-1" type="number" min={1} value={value} onChange={(event) => setValue(event.target.value)} />
+          <input className="w-24 rounded-md border border-border-strong bg-surface px-2 py-1.5" type="number" min={1} value={value} onChange={(event) => setValue(event.target.value)} />
         </label>
       ) : null}
       <label className="flex flex-col gap-1 text-xs">
         Model
-        <input className="w-64 rounded border border-border bg-surface px-2 py-1" value={model} onChange={(event) => setModel(event.target.value)} />
+        <input className="w-64 rounded-md border border-border-strong bg-surface px-2 py-1.5 font-mono" value={model} onChange={(event) => setModel(event.target.value)} />
       </label>
       <Button size="sm" variant="secondary" onClick={() => void save()} disabled={saving}>
         Save step
