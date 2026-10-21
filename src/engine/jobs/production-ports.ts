@@ -261,8 +261,8 @@ export const CHAIN_MODEL_CLASSES = ["image.keyframe", "image.edit", "video.cinem
 export function chainProvidersOf(gateway: Gateway): string[] {
   const providers: string[] = [];
   for (const modelClass of CHAIN_MODEL_CLASSES) {
-    for (const route of gateway.routes(modelClass)) {
-      if (!providers.includes(route.provider.id)) providers.push(route.provider.id);
+    for (const provider of gateway.providersOf(modelClass)) {
+      if (!providers.includes(provider)) providers.push(provider);
     }
   }
   return providers;

@@ -108,6 +108,13 @@ export class Gateway {
       }));
   }
 
+  /** The providers of a capability's targets, whether or not a target names a model: the live catalog names the model, the provider stays. */
+  providersOf(capability: Capability): string[] {
+    const route = this.table[capability];
+    if (!route) throw new EngineError("config", `no route for capability ${capability}`);
+    return [...new Set(route.targets.map((target) => target.provider))];
+  }
+
   /**
    * The route of a capability: its first target. A first target with no model refuses the capability rather than falling
    * back silently, because the estimate was priced on that first target (prices.routeFor).

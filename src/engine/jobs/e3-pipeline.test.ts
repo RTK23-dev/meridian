@@ -24,6 +24,8 @@ import { createProduceShotHandler, routerGenerator } from "./handlers/produce-sh
 import { createCheckTakeHandler } from "./handlers/check-take.ts";
 import { registerEngineHandlers } from "./handlers/register.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { routes } from "../config/routes.ts";
+import { routesWith } from "../assets/test/recorded.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { EngineRuntime } from "./types.ts";
 import { fakeMedia, fakeObjects, fixture, gatewayWith, json, MP4_BYTES, MP4_STOCK_BYTES, probeOf, raw, recordedTransport, runQueued, scorerFrom } from "./test/harness.ts";
@@ -234,7 +236,9 @@ test("one request from plan through estimate, produce and check: a stock shot an
   });
 
   const { profiles, transport, requests } = providers();
-  const gateway = gatewayWith(transport);
+  // The table names no model for video.cinematic (the live catalog chooses). This pipeline test names the model it was written against.
+  const table = routesWith("video.cinematic", [{ provider: "openrouter", model: "kwaivgi/kling-v3.0-std", priceKey: "kling_v3_standard", verified: false }], routes.table);
+  const gateway = gatewayWith(transport, table);
   const objects = fakeObjects();
   const media = fakeMedia({ probe: (bytes) => probeOf({ durationMs: bytes.byteLength === MP4_STOCK_BYTES.byteLength ? 8000 : 5000 }) });
   const runtime = runtimeFor({ gateway, profiles, objects, media });

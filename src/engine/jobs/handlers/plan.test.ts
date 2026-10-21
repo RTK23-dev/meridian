@@ -253,7 +253,7 @@ function recordedCatalog(): ModelCatalogSource & { reads: number } {
 
 /**
  * A model_chooser answer: c1 picks the one candidate, c2 picks an id that is no candidate, and the rest get no pick. The route table's
- * video.budget fallback (Veo 3.1 Lite, 4 to 8 s) fits no 1.5 s clip, so those calls get no choice and keep the route table.
+ * video.budget fallback (Veo 3.1 Lite, 4 to 8 s) fits no 1.5 s clip, so those calls take the first eligible catalog candidate.
  */
 const chooserAnswer = json(200, {
   id: "gen-plan-chooser",
@@ -299,11 +299,14 @@ test("with a catalog, a passing plan is followed by one model_chooser call, and 
   const plan = (await readArtifact(db.sql, { organizationId: WS, artifactId: result.output.artifacts.plan ?? "" })).envelope.body as ScenePlan;
   const calls = plannedCallsOf(plan);
   const firstClip = calls.find((call) => call.modelClass === "video.budget");
-  assert.deepEqual(
-    body.choices.map((entry) => [entry.shotId, entry.output, entry.modelChoice.modelId, entry.modelChoice.source]),
-    [[firstClip?.shotId, "shot", "vendor/short-clip", "orchestrator"]],
-    "only the valid pick is a choice; the refused pick and the missing picks have no eligible fallback, so they keep the route table",
-  );
+  // The valid pick is kept. A refused or missing pick takes the first eligible catalog candidate (model-choice.ts), labelled a fallback.
+  const chosen = body.choices.find((entry) => entry.shotId === firstClip?.shotId && entry.output === "shot");
+  assert.equal(chosen?.modelChoice.modelId, "vendor/short-clip");
+  assert.equal(chosen?.modelChoice.source, "orchestrator");
+  for (const entry of body.choices) {
+    if (entry === chosen) continue;
+    assert.equal(entry.modelChoice.source, "fallback", `${entry.shotId} ${entry.output}: a refused or missing pick takes the first eligible catalog candidate`);
+  }
   assert.equal(body.catalogReadAt, CATALOG_READ_AT);
   assert.ok(calls.length > 0, "the fixture plan has paid calls");
   for (const call of calls) {
