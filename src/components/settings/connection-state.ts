@@ -32,10 +32,8 @@ const NO_REASON = "No reason was recorded.";
 const NO_STATE = "No connection state was reported for this provider.";
 const NO_SUCCESS = "No successful request is recorded yet.";
 const UNREADABLE_SUCCESS = "Last successful request: time not readable.";
-const NOT_CONFIGURED = "No credentials are configured. No request was sent.";
 const DISCONNECTED = "Disconnected in Meridian. No further requests are sent until someone reconnects.";
 const STALE = "The last successful request is stale.";
-const CREDENTIALS_UNTESTED = "Credentials are present, but no successful request is recorded. This is not connected.";
 
 const TEST: ConnectionAction = { label: "Test connection", to: null };
 
@@ -72,10 +70,9 @@ export function connectionState(row: ConnectionRow | null | undefined): Connecti
   }
   if (status === "DISCONNECTED") return notConnected(detail ?? DISCONNECTED, { label: "Reconnect", to: null });
   if (status === "DEGRADED") return notConnected(detail ?? STALE, TEST);
-  if (status === "SUPPORTED") return notConnected(detail ?? CREDENTIALS_UNTESTED, TEST);
+  if (status === "SUPPORTED") return notConnected(detail ?? NO_SUCCESS, TEST);
   if (status === "NOT_CONFIGURED" || status === "NOT_CONNECTED") {
-    const reason = detail ?? (status === "NOT_CONFIGURED" ? NOT_CONFIGURED : CONNECTION_MESSAGES.notConnected);
-    return notConnected(reason, isOAuthProvider(provider) ? { label: "Connect", to: CONNECT_ROUTE } : TEST);
+    return notConnected(detail ?? CONNECTION_MESSAGES.notConnected, isOAuthProvider(provider) ? { label: "Connect", to: CONNECT_ROUTE } : TEST);
   }
   return notConnected(detail ?? NO_STATE, TEST);
 }

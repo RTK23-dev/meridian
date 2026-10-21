@@ -117,11 +117,17 @@ test("an unknown status keeps the server's sentence as the reason, or says no st
 
 test("a not-connected row keeps the server's sentence, and names the default when there is none", () => {
   assert.equal(connectionState(row({ status: "NOT_CONFIGURED", detail: "Server sentence." })).reason, "Server sentence.");
-  assert.equal(connectionState(row({ status: "NOT_CONFIGURED", detail: "" })).reason, "No credentials are configured. No request was sent.");
+  assert.equal(connectionState(row({ status: "NOT_CONFIGURED", detail: "" })).reason, "Not connected. Connect it in Settings or Integrations.");
   assert.equal(connectionState(row({ status: "NOT_CONNECTED", detail: "" })).reason, "Not connected. Connect it in Settings or Integrations.");
   assert.equal(connectionState(row({ status: "DISCONNECTED", detail: "" })).reason, "Disconnected in Meridian. No further requests are sent until someone reconnects.");
   assert.equal(connectionState(row({ status: "DEGRADED", detail: "" })).reason, "The last successful request is stale.");
-  assert.equal(connectionState(row({ status: "SUPPORTED", detail: "" })).reason, "Credentials are present, but no successful request is recorded. This is not connected.");
+  assert.equal(connectionState(row({ status: "SUPPORTED", detail: "" })).reason, "No successful request is recorded yet.");
+});
+
+test("without a server sentence, the model adds no claim about credentials", () => {
+  for (const status of ALL_STATUSES) {
+    assert.doesNotMatch(connectionState(row({ status, detail: "" })).reason ?? "", /credential/i, `status "${status}"`);
+  }
 });
 
 test("a checking row says what is running, and has no reason when the server says nothing", () => {
