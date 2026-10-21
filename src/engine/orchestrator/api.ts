@@ -9,6 +9,7 @@ import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import type { Handlers } from "./execute.ts";
+import { textChoices, type TextModelChoice } from "./settings.ts";
 
 export type CatalogState =
   | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string }
@@ -16,6 +17,15 @@ export type CatalogState =
 
 /** Production handlers for the plan's step kinds. None is connected yet: a step with no handler reports not_connected. */
 export const PRODUCTION_STEP_HANDLERS: Handlers = {};
+
+export type TextModelsState = { status: "ok"; models: TextModelChoice[] } | { status: "not_connected" | "failed"; reason: string };
+
+/** The text models the orchestrator may plan with, read from the live catalog. Without a connected key the read is not_connected. */
+export async function textModelsFor(sql: Sql, input: { organizationId: string; now: () => string }): Promise<TextModelsState> {
+  const catalog = await catalogFor(sql, input.organizationId, input.now);
+  if (catalog.status !== "ok") return catalog;
+  return { status: "ok", models: textChoices(catalog.catalog) };
+}
 
 async function catalogFor(sql: Sql, organizationId: string, now: () => string): Promise<CatalogState> {
   const { productionComposition } = await import("../jobs/runtime.ts");

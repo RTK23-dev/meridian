@@ -11,6 +11,7 @@ import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentFactorySession, getContentFactorySession, listContentFactorySessions, readContentFactoryRun } from "@/lib/meridian/content-factory/actions";
 import { MAX_TITLE_CHARS, type SessionSummary } from "@/lib/meridian/content-factory/model";
 import { ChatPanel } from "./chat-panel";
+import { OrchestratorModelPanel } from "./orchestrator-model-panel";
 import { RunPanel } from "./run-panel";
 import { SettingsPanel } from "./settings-panel";
 
@@ -59,6 +60,7 @@ export function ContentFactoryScreen() {
   return (
     <div className="space-y-6">
       {header}
+      <OrchestratorModelPanel organizationId={organizationId} />
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"

@@ -6,6 +6,7 @@ import { useWorkspace } from "@/components/workspace";
 import {
   createOrchestratorDraft,
   editOrchestratorStep,
+  getBrandOrchestratorModel,
   getOrchestratorPlan,
   listOrchestratorPlans,
   planOrchestratorDraft,
@@ -81,7 +82,8 @@ export function OrchestratorPlans() {
   const [userInputs, setUserInputs] = useState("");
   const [brandSummary, setBrandSummary] = useState("");
   const [budget, setBudget] = useState("2");
-  const [model, setModel] = useState("anthropic/claude-haiku-5.5");
+  // The model every new plan uses: the one stored in the Content Factory panel. Null means none is stored yet.
+  const [storedModel, setStoredModel] = useState<string | null>(null);
 
   async function refresh(id = brandId) {
     if (!id) return;
@@ -99,6 +101,9 @@ export function OrchestratorPlans() {
     setSelectedId(null);
     setDetail(null);
     refresh().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "The plans could not be read."));
+    getBrandOrchestratorModel({ data: { brandId } })
+      .then((stored) => setStoredModel(stored.orchestratorModel))
+      .catch(() => setStoredModel(null));
     // A brand change reads that brand's plans.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandId]);
@@ -118,7 +123,7 @@ export function OrchestratorPlans() {
   const create = () =>
     act(async () => {
       const created = await createOrchestratorDraft({
-        data: { brandId, title, goal, format, userInputs, brandSummary, budgetUsd: Number(budget), orchestratorModelId: model },
+        data: { brandId, title, goal, format, userInputs, brandSummary, budgetUsd: Number(budget) },
       });
       setMessage(`Saved the draft "${created.plan.title}". It has not been planned yet.`);
       setTitle("");
@@ -290,13 +295,17 @@ export function OrchestratorPlans() {
                 Budget (USD)
                 <input id="plan-budget" type="number" min={0.01} max={1000} step="0.01" className="w-28 rounded border border-border bg-surface px-2 py-1" value={budget} onChange={(event) => setBudget(event.target.value)} />
               </label>
-              <label className="flex flex-col gap-1 text-sm" htmlFor="plan-model">
-                Orchestrating model (OpenRouter id)
-                <input id="plan-model" required className="w-72 rounded border border-border bg-surface px-2 py-1" value={model} onChange={(event) => setModel(event.target.value)} />
-              </label>
             </div>
-            <p className="text-xs text-fg-muted">The model is checked against the live catalog when the plan is written, not here.</p>
-            <Button type="submit" size="md" disabled={busy || !title || !goal || !format || !model}>
+            <p className="text-sm" id="plan-model-stored">
+              {storedModel === null ? (
+                <span className="text-fg-muted">
+                  No orchestrating model is stored for this workspace. Choose one in the <a className="underline" href="/content-factory">Content Factory</a> panel first.
+                </span>
+              ) : (
+                <>Orchestrating model: <code className="font-mono text-sm">{storedModel}</code>, stored in the Content Factory panel. It is checked against the live catalog when the plan is written.</>
+              )}
+            </p>
+            <Button type="submit" size="md" disabled={busy || !title || !goal || !format || storedModel === null}>
               Save draft
             </Button>
           </form>

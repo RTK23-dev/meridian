@@ -623,3 +623,12 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - `/orchestrator` has a plans section: a draft form, the plan list, and for a stored plan its canvas with the whole plan drawn and a per-step editor. The canvas fits its width, down to half size at the least.
 - Gates: suite on the tree before the last UI-only commit, 5750 tests, 5709 pass, 0 fail, 41 skipped (environment-gated); lint 0 errors; typecheck and build exit 0. The browser check covers the recorded example, not a stored plan (the dev database has no brand).
 - Production step handlers are still empty, so every step reports not_connected. The output shape of each step kind is a contract change for the lead to approve.
+
+## 2026-10-21 Orchestrator model stored in the Content Factory panel
+
+- Migration `0109_orchestrator_settings.sql` (additive): one stored orchestrator model per workspace, as an OpenRouter id. Nothing else in the schema changes.
+- Engine: `src/engine/orchestrator/settings.ts` (id shape, the catalog's text models with both prices, store functions). Tests in `settings.test.ts`.
+- Web layer: four server functions in `src/lib/meridian/orchestrator/actions.ts`; the workspace functions are admin only, as the Content Factory screen is. `createOrchestratorDraft` takes the stored model when none is given.
+- UI: `src/components/content-factory/orchestrator-model-panel.tsx` on the Content Factory screen; the plans form no longer carries a fixed default model id.
+- Gates: suite 5758 tests (5717 pass, 0 fail, 41 environment-gated skips); typecheck, lint (0 errors) and build exit 0.
+- Not browser-checked: the local dev database has no workspace for the dev user (the user row is missing, so creating one fails on a foreign key).

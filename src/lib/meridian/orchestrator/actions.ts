@@ -7,9 +7,11 @@ import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { editPlanStepFor, planDraftFor, runPlanFor } from "@/engine/orchestrator/api";
+import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
+import { editPlanStepFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
+import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
 
@@ -105,8 +107,9 @@ export const getOrchestratorPlan = createServerFn({ method: "POST" })
 export const createOrchestratorDraft = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const model = text(body.orchestratorModelId, 200, "Orchestrating model", true);
-    if (!MODEL_ID.test(model)) throw new Error("The orchestrating model must be an OpenRouter id, vendor/model.");
+    // Empty means the model stored in the Content Factory panel is used.
+    const model = text(body.orchestratorModelId, 200, "Orchestrating model");
+    if (model !== "" && !isOrchestratorModelId(model)) throw new Error("The orchestrating model must be an OpenRouter id, vendor/model.");
     return {
       brandId: text(body.brandId, 80, "Brand", true),
       title: text(body.title, 120, "Title", true),
@@ -115,12 +118,14 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       userInputs: text(body.userInputs, 4000, "Your inputs"),
       brandSummary: text(body.brandSummary, 2000, "Brand summary"),
       budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
-      orchestratorModelId: model,
+      orchestratorModelId: model === "" ? null : model,
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "member");
+    const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
+    if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
     const brief = {
       goal: data.goal,
       format: data.format,
@@ -133,7 +138,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       organizationId,
       title: data.title,
       brief,
-      orchestratorModel: data.orchestratorModelId,
+      orchestratorModel: model,
       budgetUsd: data.budgetUsd,
     });
     return { plan: summaryOf(stored) };
@@ -210,4 +215,64 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
     if (outcome.status === "refused") return { status: "refused", reasons: outcome.reasons };
     const after = await getPlan(sql, organizationId, data.planId);
     return { status: "edited", plan: after ? summaryOf(after) : null };
+  });
+
+/** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
+export const getOrchestratorModelSetting = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ organizationId: text(objectInput(input).organizationId, 80, "Workspace", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireWorkspaceAdmin(sql, context.userId, data.organizationId);
+    return { orchestratorModel: await getOrchestratorModel(sql, data.organizationId) };
+  });
+
+/** The stored model of the brand's workspace, for the plans section. A viewer may read it: it is not a secret. */
+export const getBrandOrchestratorModel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    return { orchestratorModel: await getOrchestratorModel(sql, organizationId) };
+  });
+
+/** The text models the orchestrator can plan with, from the live catalog. Not connected means nothing is listed, and nothing is guessed. */
+export const listOrchestratorTextModels = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ organizationId: text(objectInput(input).organizationId, 80, "Workspace", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireWorkspaceAdmin(sql, context.userId, data.organizationId);
+    return textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+  });
+
+/**
+ * Stores the workspace's orchestrator model, or clears it with null. When the catalog is connected, the model must be one of its text
+ * models with prices, and the answer says so. When it is not connected, the id is stored as typed (its shape is checked) and the answer
+ * says it is not checked yet: the plan checks it against the catalog when the plan is written.
+ */
+export const saveOrchestratorModelSetting = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const raw = body.orchestratorModelId;
+    const modelId = raw === undefined || raw === null || raw === "" ? null : text(raw, 200, "Orchestrating model", true);
+    if (modelId !== null && !isOrchestratorModelId(modelId)) throw new Error("The orchestrating model must be an OpenRouter id, vendor/model.");
+    return { organizationId: text(body.organizationId, 80, "Workspace", true), orchestratorModelId: modelId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireWorkspaceAdmin(sql, context.userId, data.organizationId);
+    let checkedAgainstCatalog = false;
+    if (data.orchestratorModelId !== null) {
+      const read = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+      if (read.status === "ok") {
+        if (!read.models.some((model) => model.id === data.orchestratorModelId)) {
+          throw new Error(`${data.orchestratorModelId} is not a text model with prices in the live catalog. Nothing was saved.`);
+        }
+        checkedAgainstCatalog = true;
+      }
+    }
+    await setOrchestratorModel(sql, { organizationId: data.organizationId, modelId: data.orchestratorModelId, actorId: context.userId });
+    return { orchestratorModel: data.orchestratorModelId, checkedAgainstCatalog };
   });

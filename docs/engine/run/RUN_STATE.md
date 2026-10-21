@@ -55,3 +55,14 @@ Governing plan: `REPLAN_2026-10-20.md`.
 - Browser check on the dev server: the recorded example fits the 1280px viewport at the half-size minimum and scrolls the rest; text is small at that scale. No console errors; no horizontal page overflow at 390px. Not checked: the stored-plan view. The dev database has no brand, so the plans section shows "Create a brand first".
 - Still open: production step handlers are empty (`PRODUCTION_STEP_HANDLERS = {}`), so every step reports not_connected. Filling them needs the output shape of each step kind (a contract change, lead approval) and a decision on how the Claude roles take the orchestrator's chosen model. The three Claude role models and the Deepgram id remain fixed in `routes.ts` until that cutover.
 - Still open: plan events are polled, not streamed; the model field is typed and validated at plan time, not picked from the live text list; surgical re-render through compose and render is not built.
+
+## Block: orchestrator model stored in the Content Factory panel (2026-10-21)
+
+- The workspace's orchestrator model is stored (`migrations/0109_orchestrator_settings.sql`, one row per workspace). Every plan that names no model uses it. The plan's own record still names the model that wrote it.
+- The Content Factory screen has an "Orchestrator model" panel (admin only, like the screen). When the live catalog is connected, it lists the text models with prices; the save is refused for anything else. When it is not connected, the id is saved as typed, shape-checked, and the panel says it is not checked yet. The plan checks it when the plan is written.
+- The hard-coded default model id in the plans form is gone. `/orchestrator` shows the stored model, or says none is stored and disables planning.
+- Server functions: `getOrchestratorModelSetting`, `saveOrchestratorModelSetting`, `listOrchestratorTextModels` (admin, workspace), `getBrandOrchestratorModel` (viewer, brand). `createOrchestratorDraft` takes no model and uses the stored one.
+- Tests: `src/engine/orchestrator/settings.test.ts` (8 pass: id shape, text models with both prices, store isolation between workspaces, replace, clear, refusal keeps the stored model).
+- Gates: full suite 5758 tests, 5717 pass, 0 fail, 41 skipped (environment-gated); script tests 160 pass; exit 0. Typecheck exit 0. Lint 0 errors, 4 pre-existing warnings. `npm run build` exit 0.
+- Not browser-checked. The local dev database has no workspace for the dev user, and creating one fails on a foreign key (the user row is missing). I did not seed auth tables to get around it.
+- Live catalog: not read. No `OPENROUTER_API_KEY` is set in this environment. A key pasted into the chat is not used: it is now in the transcript, so it should be rotated, and the new key added as an environment secret named `OPENROUTER_API_KEY`.
