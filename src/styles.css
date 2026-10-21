@@ -64,10 +64,11 @@
    (bg, surface, fg, accent and the rest) stay as aliases of the Katana roles, so screens not yet migrated keep working. */
 @theme static {
   /* Katana faces: Archivo for headings and the wordmark, Instrument Sans for text, JetBrains Mono for numbers, ids and costs. */
-  --font-text: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  /* The first name in each stack is the family the fontsource package declares; the rest are the section c fallbacks. */
+  --font-text: "Instrument Sans Variable", "Instrument Sans", "Segoe UI", system-ui, sans-serif;
   --font-sans: var(--font-text);
-  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --font-wordmark: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-display: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-wordmark: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --color-bg: var(--bg-base);
@@ -95,6 +96,7 @@
   --color-muted: var(--color-fg-muted);
   --color-brass: var(--color-brass-text);
 
+  --color-raised: var(--bg-raised);
   --color-fg-secondary: var(--fg-secondary);
   --color-overlay: var(--bg-overlay);
   --color-hairline: var(--border-hairline);
@@ -263,6 +265,43 @@ details > summary:hover { color: var(--color-fg); }
 .orch-node { animation: orch-pop 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
 
+/* The globe mark. Its meridians turn about the vertical axis (scaleX follows the cosine of the angle), and the red meridian
+   carries a short comet. The still globe sets the same angles inline, so it rests where the loading mark would be. */
+.globe-ink { fill: none; stroke: currentColor; }
+.globe-red { fill: none; stroke: var(--accent-red); }
+.globe-meridian { transform-box: fill-box; transform-origin: center; }
+.globe-turn { animation: globe-turn 2400ms linear infinite; }
+.globe-comet { stroke-linecap: round; stroke-dasharray: 14 124.23; animation: globe-comet 1200ms linear infinite; }
+@keyframes globe-turn {
+  0% { transform: scaleX(1); }
+  12.5% { transform: scaleX(0.7071); }
+  25% { transform: scaleX(0); }
+  37.5% { transform: scaleX(-0.7071); }
+  50% { transform: scaleX(-1); }
+  62.5% { transform: scaleX(-0.7071); }
+  75% { transform: scaleX(0); }
+  87.5% { transform: scaleX(0.7071); }
+  100% { transform: scaleX(1); }
+}
+@keyframes globe-comet {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: -138.23; }
+}
+
+/* Toasts sit on the overlay surface with a hairline and a 2px status bar on the left. The sonner defaults for colour and
+   shadow are replaced, so no toast casts a shadow and none is filled with a status colour. */
+[data-sonner-toast] {
+  border-radius: var(--radius-sharp) !important;
+  border: 1px solid var(--border-strong) !important;
+  background: var(--bg-overlay) !important;
+  color: var(--fg-primary) !important;
+  box-shadow: none !important;
+}
+[data-sonner-toast][data-type="success"] { border-left: 2px solid var(--success) !important; }
+[data-sonner-toast][data-type="warning"] { border-left: 2px solid var(--warning) !important; }
+[data-sonner-toast][data-type="error"] { border-left: 2px solid var(--danger) !important; }
+[data-sonner-toast][data-type="info"] { border-left: 2px solid var(--info) !important; }
+
 /* Reduced motion: movement stops, and every animation jumps to its final frame, so a spinner or a running dash rests as a
    static mark. Colour and opacity fades stay at 120 ms, so hover and focus still change. The delay goes too, so a staggered
    entrance cannot hold its element at opacity 0. */
@@ -274,6 +313,7 @@ details > summary:hover { color: var(--color-fg); }
     transition-duration: 120ms !important;
     transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke !important;
   }
+  .globe-turn, .globe-comet { animation: none !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the

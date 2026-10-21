@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { assetRoute } from "@/components/studio/asset-url.ts";
-import { cn } from "@/lib/cn";
+import { cn } from "@/components/ui/cn";
 
 /**
  * A brand's logo from the asset route, or a neutral box with the brand's initial when no logo is stored. A logo that fails to
@@ -19,12 +19,12 @@ export function BrandMark({ name, logoAssetId, className }: { name: string; logo
         loading="lazy"
         decoding="async"
         onError={() => setFailedId(logoAssetId)}
-        className={cn("size-11 shrink-0 rounded-lg border border-border bg-surface object-contain p-1", className)}
+        className={cn("size-11 shrink-0 rounded-sharp border border-hairline bg-raised object-contain p-1", className)}
       />
     );
   }
   return (
-    <span aria-hidden="true" className={cn("grid size-11 shrink-0 place-items-center rounded-lg border border-border bg-surface-2 text-lg font-semibold text-fg-muted", className)}>
+    <span aria-hidden="true" className={cn("grid size-11 shrink-0 place-items-center rounded-sharp border border-hairline bg-raised text-heading font-semibold text-fg-muted", className)}>
       {initial}
     </span>
   );
