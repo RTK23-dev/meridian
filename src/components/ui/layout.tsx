@@ -1,20 +1,20 @@
 import { ChevronRight } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { cn } from "./cn";
 import { Badge } from "./badge";
 import { sparklineSummary } from "./sparkline-summary.ts";
 
 export interface BreadcrumbItem { label: string; to?: string }
 export function PageHeader({ title, description, breadcrumbs = [], actions, secondaryActions, className }: { title: string; description?: ReactNode; breadcrumbs?: BreadcrumbItem[]; actions?: ReactNode; secondaryActions?: ReactNode; className?: string }) {
-  return <header className={cn("mb-8 space-y-4", className)}>
-    {breadcrumbs.length ? <nav aria-label="Breadcrumb"><ol className="flex flex-wrap items-center gap-1 text-sm text-fg-muted">{breadcrumbs.map((item, index) => <li key={`${item.label}-${index}`} className="flex items-center gap-1">{index ? <ChevronRight aria-hidden="true" className="size-3" /> : null}{item.to ? <Link to={item.to} className="underline-offset-4 hover:text-fg hover:underline">{item.label}</Link> : <span aria-current="page">{item.label}</span>}</li>)}</ol></nav> : null}
-    <div className="flex flex-wrap items-end justify-between gap-4"><div className="min-w-0 space-y-2"><h1 className="page-title">{title}</h1>{description ? <p className="max-w-2xl text-fg-muted">{description}</p> : null}</div><div className="flex items-center gap-2">{secondaryActions}{actions}</div></div>
+  return <header className={cn("mb-8 space-y-4 border-b border-hairline pb-6", className)}>
+    {breadcrumbs.length ? <nav aria-label="Breadcrumb"><ol className="flex flex-wrap items-center gap-1 text-small text-fg-muted">{breadcrumbs.map((item, index) => <li key={`${item.label}-${index}`} className="flex items-center gap-1">{index ? <ChevronRight aria-hidden="true" className="size-3 text-border-strong" /> : null}{item.to ? <Link to={item.to} className="underline-offset-4 hover:text-fg hover:underline">{item.label}</Link> : <span aria-current="page">{item.label}</span>}</li>)}</ol></nav> : null}
+    <div className="flex flex-wrap items-end justify-between gap-4"><div className="min-w-0 space-y-2"><h1 className="page-title">{title}</h1>{description ? <p className="max-w-2xl text-body text-fg-muted">{description}</p> : null}</div><div className="flex items-center gap-2">{secondaryActions}{actions}</div></div>
   </header>;
 }
 
 export function Stat({ label, value, delta, description, className }: { label: string; value: ReactNode; delta?: string; description?: string; className?: string }) {
-  return <div className={cn("min-w-0", className)}><div className="text-sm text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="text-3xl text-fg tabular-nums">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-xs text-fg-muted">{description}</p> : null}</div>;
+  return <div className={cn("min-w-0", className)}><div className="text-small text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="font-mono text-data-l font-medium text-fg tabular-nums">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-caption text-fg-muted">{description}</p> : null}</div>;
 }
 
 export function KpiCard(props: Parameters<typeof Stat>[0] & { icon?: ReactNode; sparkline?: number[] }) {
@@ -31,5 +31,5 @@ export function Stepper({ steps, orientation = "horizontal", className }: { step
 }
 
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
-  return <kbd className={cn("inline-flex min-h-6 items-center rounded border border-border-strong bg-surface-2 px-1.5 font-mono text-xs text-fg", className)}>{children}</kbd>;
+  return <kbd className={cn("inline-flex min-h-6 items-center rounded-sharp border border-border-strong bg-raised px-1.5 font-mono text-data-s text-fg", className)}>{children}</kbd>;
 }

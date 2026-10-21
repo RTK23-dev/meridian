@@ -1,74 +1,97 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { contrastRatio } from "../../lib/meridian/a11y/contrast.ts";
 
 const css = readFileSync(new URL("../../styles.css", import.meta.url), "utf8");
 
-function tokens(body: string): Record<string, string> {
+/** The body of a top-level rule. Its selector starts a line and its closing brace sits at column 0. */
+function ruleBody(selector: string): string {
+  const start = css.indexOf(`\n${selector} {`);
+  assert.notEqual(start, -1, `styles.css has no top-level ${selector} rule`);
+  const open = css.indexOf("{", start);
+  return css.slice(open + 1, css.indexOf("\n}", open));
+}
+
+/** Every custom property declared in a rule body, mapped to its value. */
+function declarations(body: string): Record<string, string> {
   const values: Record<string, string> = {};
-  for (const match of body.matchAll(/(--color-[a-z0-9-]+):\s*(#[0-9a-fA-F]{6});/g)) values[match[1]] = match[2];
+  for (const match of body.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) values[match[1]] = match[2].trim();
   return values;
 }
 
-function block(pattern: RegExp, label: string): string {
-  const match = css.match(pattern);
-  assert.ok(match, `styles.css has no ${label} block`);
-  return match[1];
+/** The colour tokens of a theme: the custom properties with a literal hex or rgb value. */
+function colours(body: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(declarations(body)).filter(([, value]) => /^(#[0-9a-fA-F]{6}|rgb\()/.test(value)));
 }
 
-const light = tokens(block(/@theme \{([\s\S]*?)\n\}/, "@theme"));
-const dark = tokens(block(/\n\.dark \{([\s\S]*?)\n\}/, ".dark"));
+const dark = colours(ruleBody(":root"));
+const light = colours(ruleBody(':root[data-theme="light"]'));
+const aliases = declarations(ruleBody("@theme static"));
 
-// Text pairs need 4.5:1 (WCAG AA). Pairs in `ui` are boundaries and icons that need 3:1.
-const text: Array<[string, string]> = [
-  ["fg", "bg"], ["fg", "surface"], ["fg", "surface-2"],
-  ["fg-muted", "bg"], ["fg-muted", "surface"], ["fg-muted", "surface-2"],
-  ["fg", "accent-soft"], ["fg-muted", "accent-soft"],
-  ["accent", "bg"], ["accent", "surface"], ["accent-fg", "accent"],
-  ["success", "surface"], ["success", "success-soft"],
-  ["warning", "surface"], ["warning", "warning-soft"],
-  ["danger", "surface"], ["danger", "danger-soft"],
-  ["info", "surface"], ["info", "info-soft"],
-  ["bg", "fg"],
-];
-const ui: Array<[string, string]> = [
-  ["border-strong", "surface"], ["border-strong", "bg"], ["accent", "surface-2"],
-];
-
-function check(theme: Record<string, string>, name: string) {
-  for (const [foreground, background] of text) {
-    const fg = theme[`--color-${foreground}`];
-    const bg = theme[`--color-${background}`];
-    assert.ok(fg && bg, `${name} is missing --color-${foreground} or --color-${background}`);
-    assert.ok(contrastRatio(fg, bg) >= 4.5, `${name}: ${foreground} ${fg} on ${background} ${bg} is ${contrastRatio(fg, bg)}:1, below 4.5:1`);
-  }
-  for (const [foreground, background] of ui) {
-    const fg = theme[`--color-${foreground}`];
-    const bg = theme[`--color-${background}`];
-    assert.ok(contrastRatio(fg, bg) >= 3, `${name}: ${foreground} ${fg} on ${background} ${bg} is ${contrastRatio(fg, bg)}:1, below 3:1`);
-  }
+function sourceFiles(directory: string): string[] {
+  return readdirSync(directory).flatMap((name) => {
+    const path = `${directory}/${name}`;
+    if (statSync(path).isDirectory()) return sourceFiles(path);
+    return /\.tsx?$/.test(name) && !/\.test\.tsx?$/.test(name) ? [path] : [];
+  });
 }
 
-test("light and dark palettes meet WCAG contrast for text and UI boundaries", () => {
-  check(light, "light");
-  check({ ...light, ...dark }, "dark");
+test("both themes define the same colour tokens, so no token falls back to the other theme", () => {
+  assert.ok(Object.keys(dark).length >= 16, "the dark theme defines the Katana colour roles");
+  assert.deepEqual(Object.keys(light).sort(), Object.keys(dark).sort());
 });
 
-test("dark theme overrides every semantic color, so no token silently keeps its light value", () => {
-  const semantic = Object.keys(light).filter((name) => !/^--color-(ink|paper|panel|line|muted|brass)$/.test(name));
-  const missing = semantic.filter((name) => !(name in dark));
-  assert.deepEqual(missing, [], `dark theme does not override: ${missing.join(", ")}`);
+test("dark is the default on :root, and light applies only under data-theme", () => {
+  assert.equal(dark["--bg-base"], "#000000");
+  assert.equal(light["--bg-base"], "#FFFFFF");
+  assert.doesNotMatch(css, /\.dark\s*\{/, "the .dark class is retired; themes switch on data-theme");
+  assert.match(css, /@custom-variant dark \(&:where\(:root:not\(\[data-theme="light"\]\)/);
 });
 
-test("legacy aliases resolve inline so each theme gets its own value", () => {
-  // `brass` is used for small text, so it points at the darker text token rather than the accent.
-  assert.match(css, /@theme inline \{[\s\S]*?--color-brass: var\(--color-brass-text\);[\s\S]*?\}/);
-  assert.match(css, /@theme inline \{[\s\S]*?--color-muted: var\(--color-fg-muted\);/);
+test("the accent red reaches 4.5:1 on the room in both themes: 5.70 on black and 5.88 on white", () => {
+  assert.equal(dark["--accent-red"], "#FF2E38");
+  assert.equal(light["--accent-red"], "#C8102E");
+  const onDark = contrastRatio(dark["--accent-red"], dark["--bg-base"]);
+  const onLight = contrastRatio(light["--accent-red"], light["--bg-base"]);
+  assert.equal(onDark, 5.7);
+  assert.equal(onLight, 5.88);
+  assert.ok(onDark >= 4.5 && onLight >= 4.5);
 });
 
-test("serif display font is limited to page titles and explicit opt-ins, not every heading", () => {
-  const baseRule = css.match(/h1, \.font-display \{/);
-  assert.ok(baseRule, "the base serif rule should target h1 and .font-display only");
+test("legacy names stay defined as aliases of the Katana roles, so older screens keep their meaning", () => {
+  assert.equal(aliases["--color-bg"], "var(--bg-base)");
+  assert.equal(aliases["--color-surface"], "var(--bg-raised)");
+  assert.equal(aliases["--color-surface-2"], "var(--bg-raised)");
+  assert.equal(aliases["--color-border"], "var(--border-hairline)");
+  assert.equal(aliases["--color-fg"], "var(--fg-primary)");
+  assert.equal(aliases["--color-accent"], "var(--accent-red)");
+  assert.equal(aliases["--color-accent-fg"], "var(--bg-base)");
+  assert.equal(aliases["--color-accent-soft"], "var(--accent-red-muted)");
+  assert.equal(aliases["--color-danger-soft"], "var(--bg-raised)");
+});
+
+test("every var(--color-*) written in the app is defined in styles.css", () => {
+  const used = new Set<string>();
+  for (const file of sourceFiles(fileURLToPath(new URL("../../", import.meta.url)))) {
+    for (const match of readFileSync(file, "utf8").matchAll(/var\(--color-([a-z0-9-]+)\)/g)) used.add(match[1]);
+  }
+  const missing = [...used].filter((name) => !(`--color-${name}` in aliases));
+  assert.deepEqual(missing, [], `styles.css does not define: ${missing.join(", ")}`);
+});
+
+test("no shadow token casts a shadow", () => {
+  for (const name of ["--shadow-sm", "--shadow-md", "--shadow-lg"]) assert.equal(aliases[name], "0 0 #0000", `${name} must not cast a shadow`);
+});
+
+test("reduced motion removes movement and keeps colour fades", () => {
+  const block = css.match(/@media \(prefers-reduced-motion: reduce\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+  assert.match(block, /animation-duration: 0\.01ms !important/);
+  assert.match(block, /transition-property: color, background-color/);
+});
+
+test("the display face is limited to page titles and explicit opt-ins, not every heading", () => {
+  assert.match(css, /h1, \.font-display \{/);
   assert.doesNotMatch(css, /h1, h2, h3/);
 });
