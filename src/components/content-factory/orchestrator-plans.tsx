@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui";
+import type { NodeEvent, OrchestratorPlan } from "@/engine/orchestrator/contracts";
+import { OrchestratorCanvas } from "./orchestrator-canvas";
 import { useWorkspace } from "@/components/workspace";
 import {
   createOrchestratorDraft,
+  editOrchestratorStep,
   getOrchestratorPlan,
   listOrchestratorPlans,
   planOrchestratorDraft,
@@ -21,6 +24,34 @@ const STATUS_WORDS: Record<string, string> = {
   paused: "Paused at budget",
   incomplete: "Incomplete",
   complete: "Complete",
+};
+
+/** The steps of a stored plan as the canvas draws them. The summary carries every field a plan step has, so this is the same plan. */
+function canvasPlanOf(detail: PlanDetail): OrchestratorPlan {
+  return {
+    version: "orchestrator-plan@1",
+    orchestrator: { provider: "openrouter", id: detail.plan.orchestratorModel },
+    budgetUsd: detail.plan.budgetUsd,
+    nodes: detail.plan.steps.map((step) => ({
+      id: step.id,
+      kind: step.kind,
+      title: step.title,
+      why: step.why,
+      dependsOn: step.dependsOn,
+      model: step.model === null ? null : { provider: "openrouter" as const, id: step.model },
+      params: step.params,
+      estimateUsd: step.estimateUsd,
+    })),
+  };
+}
+
+/** The parameter a paid step's price is set by, and the field the edit action takes for it. */
+const EDITABLE_PARAM: Record<string, { name: string; field: "seconds" | "characters" | "maxTokens"; label: string }> = {
+  video: { name: "seconds", field: "seconds", label: "Seconds" },
+  avatar: { name: "seconds", field: "seconds", label: "Seconds" },
+  voice: { name: "characters", field: "characters", label: "Characters" },
+  analysis: { name: "max_tokens", field: "maxTokens", label: "Output tokens" },
+  script: { name: "max_tokens", field: "maxTokens", label: "Output tokens" },
 };
 
 /** A catalog that cannot be read is said plainly. It is never shown as a plan that was made. */
@@ -195,6 +226,17 @@ export function OrchestratorPlans() {
                     ))}
                   </ol>
                 ) : null}
+                {detail.plan.steps.length > 0 ? (
+                  <OrchestratorCanvas plan={canvasPlanOf(detail)} events={detail.events as NodeEvent[]} shown={detail.events.length} showAll />
+                ) : null}
+                {detail.plan.steps.some((step) => EDITABLE_PARAM[step.kind] !== undefined || step.model !== null) && detail.plan.status !== "running" ? (
+                  <div className="flex flex-col gap-2 text-sm">
+                    <p className="font-medium">Change a step</p>
+                    {detail.plan.steps.filter((step) => step.model !== null).map((step) => (
+                      <StepEdit key={step.id} brandId={brandId} planId={detail.plan.id} step={step} onSaved={async () => { await refresh(); await open(detail.plan.id); }} onMessage={setMessage} />
+                    ))}
+                  </div>
+                ) : null}
                 {detail.events.length > 0 ? (
                   <p className="text-xs text-fg-muted">The last run recorded {detail.events.length} events.</p>
                 ) : null}
@@ -261,5 +303,58 @@ export function OrchestratorPlans() {
         </div>
       )}
     </section>
+  );
+}
+
+/** One paid step's edit: its parameter and its model. The engine re-prices the plan; a refused edit changes nothing and says why. */
+function StepEdit(props: {
+  brandId: string;
+  planId: string;
+  step: { id: string; kind: string; title: string; model: string | null; params: Record<string, string | number | boolean | null> };
+  onSaved: () => Promise<void>;
+  onMessage: (message: string) => void;
+}) {
+  const { brandId, planId, step, onSaved, onMessage } = props;
+  const editable = EDITABLE_PARAM[step.kind];
+  const current = editable ? step.params[editable.name] : undefined;
+  const [value, setValue] = useState(current === undefined || current === null ? "" : String(current));
+  const [model, setModel] = useState(step.model ?? "");
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body: Record<string, unknown> = { brandId, planId, nodeId: step.id };
+      if (editable && value !== "") body[editable.field] = Number(value);
+      if (model !== (step.model ?? "")) body.modelId = model;
+      const outcome = await editOrchestratorStep({ data: body as never });
+      if (outcome.status === "refused") onMessage(`The edit would not run: ${outcome.reasons.join("; ")}`);
+      else if (outcome.status === "not_connected" || outcome.status === "failed") onMessage(notConnected(outcome.reason));
+      else {
+        onMessage("The step is saved and the plan is priced again.");
+        await onSaved();
+      }
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "The edit did not work.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-end gap-2">
+      <span className="w-48 truncate">{step.title}</span>
+      {editable ? (
+        <label className="flex flex-col gap-1 text-xs">
+          {editable.label}
+          <input className="w-24 rounded border border-border bg-surface px-2 py-1" type="number" min={1} value={value} onChange={(event) => setValue(event.target.value)} />
+        </label>
+      ) : null}
+      <label className="flex flex-col gap-1 text-xs">
+        Model
+        <input className="w-64 rounded border border-border bg-surface px-2 py-1" value={model} onChange={(event) => setModel(event.target.value)} />
+      </label>
+      <Button size="sm" variant="secondary" onClick={() => void save()} disabled={saving}>
+        Save step
+      </Button>
+    </div>
   );
 }

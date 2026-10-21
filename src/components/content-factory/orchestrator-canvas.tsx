@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { NodeEvent, NodeState, OrchestratorPlan } from "@/engine/orchestrator/contracts";
 import { NODE_HEIGHT, NODE_WIDTH, layoutPlan } from "@/engine/orchestrator/layout";
 import { replayAt } from "@/engine/orchestrator/replay";
@@ -57,6 +57,20 @@ export function OrchestratorCanvas({
 
   const replay = useMemo(() => replayAt(events, shown), [events, shown]);
 
+  // The canvas fits the width it is given: a wide plan is scaled down to half its size at the least, and scrolls beyond that.
+  const frame = useRef<HTMLDivElement>(null);
+  const [available, setAvailable] = useState(0);
+  useEffect(() => {
+    const element = frame.current;
+    if (element === null) return;
+    setAvailable(element.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => setAvailable(element.clientWidth));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const scale = drawn !== null && available > 0 ? Math.min(1, Math.max(0.5, available / drawn.width)) : 1;
+
   if (plan === null || drawn === null) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-surface p-6 text-sm text-fg-muted" role="status">
@@ -69,8 +83,8 @@ export function OrchestratorCanvas({
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
 
   return (
-    <div className="overflow-auto rounded-lg border border-border bg-surface" role="region" aria-label="Orchestrator plan">
-      <div className="relative" style={{ width: drawn.width, height: drawn.height }}>
+    <div ref={frame} className="overflow-auto rounded-lg border border-border bg-surface" role="region" aria-label="Orchestrator plan" style={{ height: drawn.height * scale + 2 }}>
+      <div className="relative origin-top-left" style={{ width: drawn.width, height: drawn.height, transform: scale < 1 ? `scale(${scale})` : undefined }}>
         <svg className="absolute inset-0 text-border-strong" width={drawn.width} height={drawn.height} aria-hidden="true">
           {drawn.edges
             .filter((edge) => visible.has(edge.to))
