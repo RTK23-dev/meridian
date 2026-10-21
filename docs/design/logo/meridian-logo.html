@@ -41,8 +41,8 @@
 // actually travelled, so it streams behind the head instead of swinging with the ring.
 const CONFIG = {
   loopSeconds: 6,               // One full turn of the meridian, which is also the loop.
-  headTurnsOutside: 2,          // Turns the comet makes per loop outside the loading move. Whole numbers keep the loop joining.
-  trailDeg: 110,                // The comet's trail in the front view.
+  headTurnsPerLoop: 3,          // The comet runs round the meridian this many times per loop, at one steady speed.
+  trailDeg: 140,                // The comet's trail. It never changes length.
   ringAlpha: 0.32,               // The meridian's full circle, drawn faintly so the ring always reads. 0 hides it.
   // The blade.
   ringRadius: 1.035,
@@ -61,12 +61,11 @@ const CONFIG = {
   backLineAlpha: 0.16,          // Far-side lines, seen through the globe.
   rimAlpha: 0.55,               // The thin line that outlines the globe.
   // The camera.
-  // The loading move: once per loop the camera eases round to face the meridian side-on. The meridian then lies on the globe's
-  // outline, and the comet fills it from the top, all the way round, like a loading ring. Then the camera eases back to the front.
-  viewOutAt: 1.6,               // When the swing to the side starts, in seconds.
-  viewMoveSeconds: 0.8,         // How long each swing takes.
-  loadSeconds: 1.2,             // How long the loading ring takes to fill, while the camera holds the side view.
-  viewEase: [0.8, 0, 0.2, 1],   // cubic-bezier for both swings: fast in the middle, soft at both ends.
+  // The side view: as the comet passes the bottom of the meridian, the camera swings round to face the meridian side-on, so it lies on
+  // the globe's outline and the comet traces the edge like a loading ring. One lap later, as the comet passes the bottom again, the
+  // camera swings on round to the front. The camera turns one way only, so the loop closes without a seam.
+  swingSeconds: 0.5,            // How long each swing takes, centred on the comet passing the bottom.
+  viewEase: [0.65, 0, 0.35, 1], // cubic-bezier for both swings.
   cameraDistance: 5.0,
   cameraHeight: 1.7,            // About 19 degrees above the equator, so the latitudes curve.
   fovDeg: 30,
@@ -104,37 +103,30 @@ function easeOf([x1, y1, x2, y2]) {
 }
 const viewEase = easeOf(CONFIG.viewEase);
 
-const LOAD_START = CONFIG.viewOutAt + CONFIG.viewMoveSeconds;
-const LOAD_END = LOAD_START + CONFIG.loadSeconds;
+// When the swings happen. The side view lasts one lap of the comet, and the swing in is placed so both swings turn the camera the same
+// distance (the camera goes 0 -> side -> 360 degrees round), with the comet at the bottom of the meridian at the middle of each swing.
+const LAP = LOOP / CONFIG.headTurnsPerLoop;
+const SWING_IN = (((540 - 360 / CONFIG.headTurnsPerLoop) / 2) / 360) * LOOP;
+const SWING_OUT = SWING_IN + LAP;
+const HEAD_PHASE = Math.PI - TAU * CONFIG.headTurnsPerLoop * (SWING_IN / LOOP);
 
-/** How far the camera is toward the side view at time t: 0 in front, 1 side-on, eased in between. */
+/** How far the camera is toward the side view at time t: 0 in front, 1 side-on, eased through each swing. */
 function viewWeightAt(t) {
-  const m = CONFIG.viewMoveSeconds;
-  if (t < CONFIG.viewOutAt) return 0;
-  if (t < LOAD_START) return viewEase((t - CONFIG.viewOutAt) / m);
-  if (t < LOAD_END) return 1;
-  if (t < LOAD_END + m) return 1 - viewEase((t - LOAD_END) / m);
+  const h = CONFIG.swingSeconds / 2;
+  if (t < SWING_IN - h) return 0;
+  if (t < SWING_IN + h) return viewEase((t - SWING_IN + h) / CONFIG.swingSeconds);
+  if (t < SWING_OUT - h) return 1;
+  if (t < SWING_OUT + h) return 1 - viewEase((t - SWING_OUT + h) / CONFIG.swingSeconds);
   return 0;
 }
 
-// The comet's speed: steady outside the loading move, plus a smooth sin-squared surge across it, sized so it makes exactly one turn
-// while loading and a whole number of turns over the rest of the loop. Its angle is zero (the top of the meridian) as loading starts.
-const SPEED_BASE = CONFIG.headTurnsOutside / (LOOP - CONFIG.loadSeconds);
-const SPEED_SURGE = (2 * (1 - SPEED_BASE * CONFIG.loadSeconds)) / CONFIG.loadSeconds;
-function turnsAt(t) {
-  const d = (((t - LOAD_START) % LOOP) + LOOP) % LOOP;
-  const H = CONFIG.loadSeconds;
-  const surge = d < H ? d / 2 - (H / (4 * Math.PI)) * Math.sin((TAU * d) / H) : H / 2;
-  return SPEED_BASE * d + SPEED_SURGE * surge;
-}
-
-/** The trail at time t, in radians, and how evenly lit it is (1 for the solid loading ring). */
-function trailAt(t) {
-  const normal = CONFIG.trailDeg * DEG;
+/** The camera's azimuth at time t, in radians: front (0) before the side view, following the meridian side-on, then front (a full
+ * turn on) after it. */
+function azimuthAt(t) {
+  const side = TAU * (t / LOOP) - Math.PI / 2;
+  const base = t < (SWING_IN + SWING_OUT) / 2 ? 0 : TAU;
   const w = viewWeightAt(t);
-  if (t >= LOAD_START && t < LOAD_END) return { length: TAU * turnsAt(t), solid: 1 };
-  if (t >= LOAD_END && t < LOAD_END + CONFIG.viewMoveSeconds) return { length: normal + (TAU - normal) * w, solid: w };
-  return { length: normal * (1 - w), solid: 0 };
+  return (1 - w) * base + w * side;
 }
 
 function rotateAbout(k, a, v) {
@@ -143,9 +135,9 @@ function rotateAbout(k, a, v) {
   return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
 
-/** How far round the meridian the comet's head is at time t, in radians. Zero is the top of the meridian. */
+/** How far round the meridian the comet's head is at time t, in radians: one steady speed. Pi is the bottom of the meridian. */
 function headAngle(time) {
-  return TAU * turnsAt(time);
+  return TAU * CONFIG.headTurnsPerLoop * (time / LOOP) + HEAD_PHASE;
 }
 
 /**
@@ -167,12 +159,11 @@ function frame(time) {
   const t = wrapTime(time);
   const now = meridianAt(t);
   const head = headAngle(t);
-  const trail = trailAt(t);
   const points = [];
   for (let i = 0; i <= CONFIG.arcSamples; i++) {
     const k = i / CONFIG.arcSamples;
     // The trail lies on the meridian as it is now: the head's earlier positions along the line, not its path through space.
-    const psi = head - trail.length * (1 - k);
+    const psi = head - CONFIG.trailDeg * DEG * (1 - k);
     points.push({ k, radial: add(scale(now.e1, Math.cos(psi)), scale(now.e2, Math.sin(psi))) });
   }
   const ring = [];
@@ -185,11 +176,11 @@ function frame(time) {
   const distance = Math.hypot(...front);
   // Blend the angles, not the vectors, so the swing never flips: the side view's azimuth follows the globe's turn.
   const w = viewWeightAt(t);
-  const azimuth = w * (TAU * (t / LOOP) - Math.PI / 2);
+  const azimuth = azimuthAt(t);
   const elevation = (1 - w) * Math.atan2(CONFIG.cameraHeight, CONFIG.cameraDistance);
   const eye = scale([Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.cos(azimuth)], distance);
   const up = [0, 1, 0];
-  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, up, solid: trail.solid, normal: now.normal, points, ring, headRadial: now.head };
+  return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, up, normal: now.normal, points, ring, headRadial: now.head };
 }
 
 // ---- Geometry ----
@@ -366,7 +357,7 @@ void main() {
 const TUBE_FRAG = `#version 300 es
 precision highp float;
 in vec3 vWorld; in vec3 vNormal; in float vK;
-uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uRed; uniform vec3 uCore; uniform float uHot; uniform vec3 uCamDir; uniform float uSolid;
+uniform vec3 uEye; uniform vec3 uLight; uniform vec3 uRed; uniform vec3 uCore; uniform float uHot; uniform vec3 uCamDir;
 out vec4 outColor;
 void main() {
   vec3 N = normalize(vNormal);
@@ -375,7 +366,7 @@ void main() {
   float ndv = max(dot(N, V), 0.0);
   float ndl = max(dot(N, L), 0.0);
   // A comet: bright at the head, its trail fading to a faint full ring.
-  float along = mix(pow(vK, 1.8), 0.55 + 0.45 * vK, uSolid);
+  float along = pow(vK, 1.8);
   vec3 col = uRed * along * (0.6 + 0.4 * ndl) * uHot;
   col += uCore * pow(ndv, 1.6) * pow(vK, 7.0) * uHot;
   col += vec3(pow(max(dot(N, normalize(L + V)), 0.0), 50.0) * 0.3 * vK);
@@ -614,13 +605,11 @@ function draw(f) {
   setVec3(tubeProgram, "uRed", colours.red);
   setVec3(tubeProgram, "uCore", colours.core);
   // The faint full meridian first, then the comet over it.
-  setFloat(tubeProgram, "uSolid", 0);
   setFloat(tubeProgram, "uHot", CONFIG.ringAlpha);
   gl.bindBuffer(gl.ARRAY_BUFFER, ringMesh.vbo);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, ringData(f));
   gl.bindVertexArray(ringMesh.vao);
   gl.drawElements(gl.TRIANGLES, ringMesh.count, gl.UNSIGNED_INT, 0);
-  setFloat(tubeProgram, "uSolid", f.solid);
   setFloat(tubeProgram, "uHot", 1.0);
   gl.bindBuffer(gl.ARRAY_BUFFER, tubeMesh.vbo);
   gl.bufferSubData(gl.ARRAY_BUFFER, 0, tubeData(f));
