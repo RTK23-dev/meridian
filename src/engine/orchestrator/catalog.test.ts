@@ -11,6 +11,7 @@ const row = (overrides: Record<string, unknown> = {}) => ({
   kind: "text",
   input_modalities: ["text"],
   output_modalities: ["text"],
+  pricing: { promptUsdPerToken: null, completionUsdPerToken: null, imageUsd: null, usdPerSecond1080p: null },
   ...overrides,
 });
 

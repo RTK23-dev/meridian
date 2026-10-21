@@ -598,3 +598,10 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - The video profile loader reads every model the live listing names. The chooser falls back to the first eligible catalog candidate, and leaves a call out when it has none. Where the chooser writes its label, "route table" became "catalog candidate".
 - Tests moved to explicit live ids, or to a test table that names them. Affected set 282 of 282.
 - Still in the route table, needing the owner's cutover decision: the three Claude role models and the Deepgram `nova-3` id.
+
+## 2026-10-21 Live pricing for plans, offline plan editor, role proposal
+
+- The orchestrator's catalog snapshot carries prices. `validatePlan` prices each paid step from its model and returns the checked plan; a plan's own cost figure is overwritten, so a model cannot understate its cost.
+- `stale.ts` holds the edit and stale-set logic with no Node-only imports; `browser-safety.test.ts` fails if a browser module imports one.
+- `/orchestrator` has an offline editor: change one paid step, see the new cost, the steps to re-run, or the refusal reasons. Labels sit beside their controls, so option text is not part of a label's name.
+- Proposed, not applied: the orchestrator's Claude role (`PROPOSED_MIGRATION_ORCHESTRATOR_ROLE.md`). It needs a contract entry and a migration to extend the role check constraints.

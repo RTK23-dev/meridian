@@ -102,5 +102,5 @@ export async function planWithModel(opts: {
 
   const checked = validatePlan(parsed.data, opts.catalog);
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
-  return { ok: true, plan: parsed.data, order: checked.order };
+  return { ok: true, plan: checked.plan, order: checked.order };
 }

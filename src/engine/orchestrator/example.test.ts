@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { loadCatalog } from "./catalog.ts";
+import { orchestratorPlanSchema } from "./contracts.ts";
 import { examplePlanRaw } from "./fixtures/example-plan.ts";
 import { exampleEvents } from "./fixtures/example-events.ts";
 import { examplePlan, recordedExampleRun } from "./example.ts";
@@ -9,9 +10,11 @@ import { validatePlan } from "./validate.ts";
 
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
 
-test("the TypeScript example plan is the same content as the JSON fixture", () => {
-  const json = JSON.parse(readFileSync(new URL("./fixtures/sample-plan.json", import.meta.url), "utf8"));
-  assert.deepEqual(examplePlanRaw, json);
+test("the TypeScript example plan is the JSON fixture after the engine prices it", () => {
+  const raw = orchestratorPlanSchema.parse(JSON.parse(readFileSync(new URL("./fixtures/sample-plan.json", import.meta.url), "utf8")));
+  const checked = validatePlan(raw, catalog);
+  assert.equal(checked.ok, true);
+  if (checked.ok) assert.deepEqual(examplePlanRaw, checked.plan);
 });
 
 test("the example plan validates against the recorded live catalog", () => {

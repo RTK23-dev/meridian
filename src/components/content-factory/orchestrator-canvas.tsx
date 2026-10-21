@@ -31,10 +31,23 @@ const usd = (value: number) => `$${value.toFixed(4)}`;
 
 /**
  * The orchestrator's plan drawn as a flow. It starts as a plain canvas. `shown` is how many events of the run have arrived: each step
- * pops in at its first event, and the line into it draws itself. A step that makes no model call says so. Pure drawing from the plan
- * and the events: nothing here calls a model or a provider.
+ * pops in at its first event, and the line into it draws itself. `stale` marks the steps an edit would run again: they are drawn with a
+ * dashed border and labelled, whatever state their last run had. Pure drawing from the plan and the events; nothing here calls a model.
  */
-export function OrchestratorCanvas({ plan, events, shown }: { plan: OrchestratorPlan | null; events: NodeEvent[]; shown: number }) {
+export function OrchestratorCanvas({
+  plan,
+  events,
+  shown,
+  stale,
+  showAll = false,
+}: {
+  plan: OrchestratorPlan | null;
+  events: NodeEvent[];
+  shown: number;
+  stale?: ReadonlySet<string>;
+  /** Draw every step and line, whether or not the replay has reached it: used while a plan is being edited. */
+  showAll?: boolean;
+}) {
   const drawn = useMemo(() => {
     if (plan === null) return null;
     const order = topologicalOrder(plan.nodes);
@@ -52,7 +65,7 @@ export function OrchestratorCanvas({ plan, events, shown }: { plan: Orchestrator
     );
   }
 
-  const visible = new Set(replay.keys());
+  const visible = new Set(plan.nodes.filter((node) => showAll || replay.has(node.id)).map((node) => node.id));
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
 
   return (
@@ -75,32 +88,41 @@ export function OrchestratorCanvas({ plan, events, shown }: { plan: Orchestrator
         </svg>
 
         {drawn.nodes
-          .filter((placed) => visible.has(placed.id))
+          .filter((placed) => visible.has(placed.id) || stale?.has(placed.id))
           .map((placed) => {
             const step = replay.get(placed.id);
             const node = byId.get(placed.id);
-            if (!step || !node) return null;
+            const isStale = stale?.has(placed.id) ?? false;
+            if (!node || (!step && !isStale && !showAll)) return null;
+            const state: NodeState = step?.state ?? "planned";
             return (
               <article
                 key={placed.id}
-                className="orch-node absolute flex flex-col gap-1 rounded-lg border border-border-strong bg-surface p-3 shadow-sm"
+                className={`orch-node absolute flex flex-col gap-1 rounded-lg bg-surface p-3 shadow-sm ${isStale ? "border-2 border-dashed border-warning" : "border border-border-strong"}`}
                 style={{ left: placed.x, top: placed.y, width: NODE_WIDTH, height: NODE_HEIGHT }}
-                data-state={step.state}
+                data-state={state}
+                data-stale={isStale ? "true" : undefined}
               >
                 <div className="flex items-center gap-2">
-                  <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${STATE_DOT[step.state]}`} aria-hidden="true" />
+                  <span className={`inline-block h-2.5 w-2.5 shrink-0 rounded-full ${isStale ? "ring-2 ring-warning" : STATE_DOT[state]}`} aria-hidden="true" />
                   <span className="truncate text-sm font-medium">{node.title}</span>
                 </div>
-                <div className="truncate text-xs text-fg-muted">
-                  {node.model ? node.model.id : `${node.kind}, no model call`}
-                </div>
+                <div className="truncate text-xs text-fg-muted">{node.model ? node.model.id : `${node.kind}, no model call`}</div>
                 <div className="mt-auto flex items-center justify-between text-xs">
-                  <span>{STATE_LABEL[step.state]}</span>
+                  <span>{isStale ? "To re-run" : STATE_LABEL[state]}</span>
                   <span className="text-fg-muted">
-                    {step.costUsd !== null ? usd(step.costUsd) : node.estimateUsd !== null && step.state === "planned" ? `est. ${usd(node.estimateUsd)}` : ""}
+                    {step?.costUsd !== null && step?.costUsd !== undefined
+                      ? usd(step.costUsd)
+                      : node.estimateUsd !== null
+                        ? `est. ${usd(node.estimateUsd)}`
+                        : ""}
                   </span>
                 </div>
-                {step.reason ? <div className="truncate text-xs text-fg-muted" title={step.reason}>{step.reason}</div> : null}
+                {step?.reason && !isStale ? (
+                  <div className="truncate text-xs text-fg-muted" title={step.reason}>
+                    {step.reason}
+                  </div>
+                ) : null}
               </article>
             );
           })}
@@ -109,7 +131,7 @@ export function OrchestratorCanvas({ plan, events, shown }: { plan: Orchestrator
       <ol className="sr-only">
         {plan.nodes.map((node) => (
           <li key={node.id}>
-            {node.title}: {visible.has(node.id) ? STATE_LABEL[replay.get(node.id)?.state ?? "planned"] : "not drawn yet"}
+            {node.title}: {stale?.has(node.id) ? "to re-run" : visible.has(node.id) ? STATE_LABEL[replay.get(node.id)?.state ?? "planned"] : "not drawn yet"}
           </li>
         ))}
       </ol>

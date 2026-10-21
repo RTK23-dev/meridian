@@ -11,12 +11,22 @@ export const CATALOG_KINDS = ["text", "image", "speech", "video"] as const;
 export const catalogKindSchema = z.enum(CATALOG_KINDS);
 export type CatalogKind = z.infer<typeof catalogKindSchema>;
 
+/** The prices the engine prices a call from: USD per unit, or null when the listing does not state that unit. */
+export const catalogPricingSchema = z.object({
+  promptUsdPerToken: z.number().nonnegative().nullable(),
+  completionUsdPerToken: z.number().nonnegative().nullable(),
+  imageUsd: z.number().nonnegative().nullable(),
+  usdPerSecond1080p: z.number().nonnegative().nullable(),
+});
+export type CatalogPricing = z.infer<typeof catalogPricingSchema>;
+
 export const catalogEntrySchema = z.object({
   id: z.string().regex(/^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i),
   name: z.string().min(1).max(200),
   kind: catalogKindSchema,
   input_modalities: z.array(z.string()).nullable(),
   output_modalities: z.array(z.string()).nullable(),
+  pricing: catalogPricingSchema,
 });
 export type CatalogEntry = z.infer<typeof catalogEntrySchema>;
 

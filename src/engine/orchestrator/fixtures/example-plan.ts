@@ -1,5 +1,5 @@
-// The authored example plan (the same content as fixtures/sample-plan.json), as a module the screen can import. A test keeps the two
-// equal. Hand-written, not model output.
+// The example plan with the engine's prices in place (validate.ts priceStep), as a module the screen can import. The content is the
+// sample-plan.json fixture after validatePlan; a test recomputes it and fails if this differs. Hand-written orchestrator output, not a model's.
 
 export const examplePlanRaw: unknown = {
   "version": "orchestrator-plan@1",
@@ -48,7 +48,7 @@ export const examplePlanRaw: unknown = {
       "params": {
         "task": "format_structure"
       },
-      "estimateUsd": 0.02
+      "estimateUsd": 0.0015999999999999999
     },
     {
       "id": "script",
@@ -66,7 +66,7 @@ export const examplePlanRaw: unknown = {
       "params": {
         "seconds": 15
       },
-      "estimateUsd": 0.1
+      "estimateUsd": 0.064
     },
     {
       "id": "hero_still",
@@ -78,13 +78,13 @@ export const examplePlanRaw: unknown = {
       ],
       "model": {
         "provider": "openrouter",
-        "id": "black-forest-labs/flux.2-pro"
+        "id": "bytedance-seed/seedream-5-0-pro"
       },
       "params": {
         "aspect": "9:16",
         "hero_line": "script.hook"
       },
-      "estimateUsd": 0.06
+      "estimateUsd": 0.003
     },
     {
       "id": "voice",
@@ -99,9 +99,10 @@ export const examplePlanRaw: unknown = {
         "id": "elevenlabs/eleven-multilingual-v2"
       },
       "params": {
-        "text_from": "script.lines"
+        "text_from": "script.lines",
+        "characters": 600
       },
-      "estimateUsd": 0.05
+      "estimateUsd": 0.016
     },
     {
       "id": "shot_1",
@@ -120,7 +121,7 @@ export const examplePlanRaw: unknown = {
         "aspect": "9:16",
         "resolution": "1080p"
       },
-      "estimateUsd": 0.9
+      "estimateUsd": 1
     },
     {
       "id": "edit",

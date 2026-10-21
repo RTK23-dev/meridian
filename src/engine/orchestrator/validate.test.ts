@@ -67,18 +67,18 @@ test("a paid step with no model is refused: nothing is guessed in its place", ()
   if (!result.ok) assert.match(result.reasons.join("\n"), /needs a live video model, and none was chosen/);
 });
 
-test("a paid step with no cost estimate does not run", () => {
-  const plan = planWith((p) => (step(p, "shot_1").estimateUsd = null));
+test("a paid step with no usable seconds does not run: the engine has no price basis for it", () => {
+  const plan = planWith((p) => (step(p, "shot_1").params.seconds = 5000));
   const result = validatePlan(plan, catalog);
   assert.equal(result.ok, false);
-  if (!result.ok) assert.match(result.reasons.join("\n"), /shot_1: no cost estimate/);
+  if (!result.ok) assert.match(result.reasons.join("\n"), /step shot_1: params\.seconds must be a number from 0 to 60/);
 });
 
 test("a plan whose estimate is over budget is refused, with both totals", () => {
   const plan = planWith((p) => (p.budgetUsd = 0.5));
   const result = validatePlan(plan, catalog);
   assert.equal(result.ok, false);
-  if (!result.ok) assert.match(result.reasons.join("\n"), /estimated cost \$1\.1300 exceeds the budget \$0\.5000/);
+  if (!result.ok) assert.match(result.reasons.join("\n"), /estimated cost \$1\.0846 exceeds the budget \$0\.5000/);
 });
 
 test("a cycle is refused and no order is given", () => {
@@ -108,4 +108,33 @@ test("duplicate step ids are refused", () => {
   const result = validatePlan(plan, catalog);
   assert.equal(result.ok, false);
   if (!result.ok) assert.match(result.reasons.join("\n"), /duplicate id/);
+});
+
+test("the engine's price replaces the plan's own estimate, so a model cannot understate its cost", () => {
+  const plan = planWith((p) => (step(p, "shot_1").estimateUsd = 0.001));
+  const result = validatePlan(plan, catalog);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.plan.nodes.find((node) => node.id === "shot_1")?.estimateUsd, 1);
+});
+
+test("a step whose model has no price in the listing does not run", () => {
+  const plan = planWith((p) => (step(p, "hero_still").model = { provider: "openrouter", id: "black-forest-labs/flux.2-pro" }));
+  const result = validatePlan(plan, catalog);
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.match(result.reasons.join("\n"), /step hero_still: black-forest-labs\/flux\.2-pro has no per-image price in the listing/);
+});
+
+test("the voice step is priced per character from the speech model's prompt price", () => {
+  const result = validatePlan(planWith(() => {}), catalog);
+  if (!result.ok) throw new Error("the sample plan must validate");
+  const usd = result.plan.nodes.find((node) => node.id === "voice")?.estimateUsd;
+  assert.ok(usd !== null && usd !== undefined && Math.abs(usd - 0.016) < 1e-12, `voice priced ${usd}`);
+});
+
+test("a step whose model is priced per token needs its token counts, and defaults them when absent", () => {
+  const result = validatePlan(planWith(() => {}), catalog);
+  if (!result.ok) throw new Error("the sample plan must validate");
+  const usd = result.plan.nodes.find((node) => node.id === "script")?.estimateUsd ?? 0;
+  // 6000 input tokens at Opus 5.5's prompt price, and 2000 output tokens at its completion price (validate.ts defaults).
+  assert.ok(Math.abs(usd - (6000 * 0.000004 + 2000 * 0.00002)) < 1e-12, `script priced ${usd}`);
 });
