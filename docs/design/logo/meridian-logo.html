@@ -49,13 +49,17 @@ const CONFIG = {
   headTurnsPerLoop: 1,          // Whole turns of the head per loop. Keep it an integer, so the loop joins.
   arcMinDeg: 180,               // Arc length while edge-on: exactly the front half, pole to pole.
   arcMaxDeg: 300,               // Arc length as a flat ring. It lengthens only during a turn.
-  latitudesDeg: [-60, -30, 0, 30, 60],
-  meridianCircles: 6,           // Great circles through the poles: 6 means one every 30 degrees.
+  latitudesDeg: [-45, 0, 45],
+  meridianCircles: 4,           // Great circles through the poles: 4 means one every 45 degrees.
   arcRadius: 1.02,              // The arc sits just above the surface (1 is the surface).
-  lineAlphaFront: 0.28,         // Grid lines on the near side.
-  lineAlphaBack: 0.10,          // Grid lines on the far side, seen faintly through the globe.
+  lineAlphaFront: 1,            // Grid lines on the near side. Solid: this is a mark, not a wireframe.
+  lineAlphaBack: 0,             // Far-side grid lines. Off, so the globe reads as one solid shape.
   arcFarAlpha: 0.22,            // Far side of the arc, as a fraction of its near-side strength. 0 hides it.
   arcSamples: 180,
+  gridStrokeDiv: 62,            // Grid line width = mark size / this. A bold mark, not a hairline.
+  armStrokeDiv: 30,             // Head width of the red arc = mark size / this.
+  armTailRatio: 0.8,            // The tail is this fraction of the head's width.
+  headDotDiv: 40,               // Radius of the head dot = mark size / this.
   colours: {
     dark: { bg: "#000000", line: "255,255,255", arc: "#ff2e38" },
     light: { bg: "#ffffff", line: "10,10,10", arc: "#c8102e" },
@@ -178,14 +182,15 @@ function draw(f) {
   ctx.fillStyle = colours.bg;
   ctx.fillRect(0, 0, S, S);
 
-  // The globe's lines are thick enough to read at small sizes; the width scales with the mark.
-  const lineWidth = S / 300;
+  const lineWidth = S / CONFIG.gridStrokeDiv;
   ctx.lineWidth = lineWidth;
-  ctx.strokeStyle = `rgba(${colours.line},0.35)`;
+  ctx.strokeStyle = `rgba(${colours.line},${CONFIG.lineAlphaFront})`;
   ctx.beginPath();
   ctx.arc(cx, cy, R, 0, 2 * Math.PI);
   ctx.stroke();
 
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
   for (const points of GRID) {
     for (let i = 0; i < points.length - 1; i++) {
       const a = project(points[i]);
@@ -208,7 +213,7 @@ function draw(f) {
     const b = f.arc[i + 1];
     const k = (i + 1) / n;
     ctx.globalAlpha = (0.18 + 0.82 * Math.pow(k, 0.9)) * (seen(a) && seen(b) ? 1 : CONFIG.arcFarAlpha);
-    ctx.lineWidth = (S / 160) * (0.5 + 0.5 * k); // Thick at the head, half as thick at the tail.
+    ctx.lineWidth = (S / CONFIG.armStrokeDiv) * (CONFIG.armTailRatio + (1 - CONFIG.armTailRatio) * k);
     ctx.beginPath();
     ctx.moveTo(X(a), Y(a));
     ctx.lineTo(X(b), Y(b));
@@ -219,7 +224,7 @@ function draw(f) {
   if (seen(head)) {
     ctx.fillStyle = colours.arc;
     ctx.beginPath();
-    ctx.arc(X(head), Y(head), S / 120, 0, 2 * Math.PI);
+    ctx.arc(X(head), Y(head), S / CONFIG.headDotDiv, 0, 2 * Math.PI);
     ctx.fill();
   }
 }

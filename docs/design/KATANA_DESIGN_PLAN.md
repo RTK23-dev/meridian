@@ -267,9 +267,9 @@ The prototype is `docs/design/logo/meridian-logo.html`. It uses canvas 2D and it
 | 2.30 to 2.90 | Closing | 90 to 0, same curve | 300 to 180 | The ring closes back into the slice. |
 | 2.90 to 3.40 | Slice, second half of the hold | 0 | 180 | Same as 0.00 to 0.50. The slice hold wraps round the loop without a gap. |
 
-**Head and tail.** The head travels one full turn per loop: 105.9 degrees per second, constant, so it never pauses. The tail trails it by the arc length. Both return to their start values at t = 3.40, so the loop joins. The arc fades from a faint tail (18% alpha) to a full head. Its width runs from half the head's width at the tail to the full width at the head. The head is S/160 px wide, and the globe's lines are S/300 px wide, where S is the mark's size. A dot marks the head when the head is on the near side.
+**Head and tail.** The head travels one full turn per loop: 105.9 degrees per second, constant, so it never pauses. The tail trails it by the arc length. Both return to their start values at t = 3.40, so the loop joins. The arc fades from a faint tail (18% alpha) to a full head. Its width runs from 80% of the head's width at the tail to the full width at the head. The head is S/30 wide, the globe's lines are S/62 wide, and the head dot has radius S/40, where S is the mark's size, so the whole mark scales together. A dot marks the head when the head is on the near side.
 
-**Frames.** Captured with Playwright and headless Chromium from the canvas element, in an 800 px viewport (the canvas is 704 px square). Each frame is named for its time in the loop:
+**Frames.** Captured with Playwright and headless Chromium from the canvas element, in a 682 px viewport (the canvas is 600 px square). Each frame is named for its time in the loop:
 
 | File | t (s) | Plane turn | Phase |
 |---|---|---|---|
@@ -280,7 +280,11 @@ The prototype is `docs/design/logo/meridian-logo.html`. It uses canvas 2D and it
 
 **Controls and hooks.** A Pause/Play button, and a "freeze at t" slider in seconds (0 to 3.40). Open `?theme=light` for the light variant, and `?t=1.5` to freeze at a time. Reduced motion draws one still frame at t = 0 and hides the Pause control. The script exposes `window.meridianMark.frame(t)` (pure: it returns the phase, the plane turn, the head and tail angles and the projected arc points) and `window.meridianMark.setTime(seconds)`.
 
-**Tuning.** Change the values in `CONFIG`: the four durations, `flipDeg`, `easeFlip`, `tiltDeg`, `headTurnsPerLoop`, `arcMinDeg`, `arcMaxDeg`, the line alphas and the colours. Keep `headTurnsPerLoop` an integer, so the loop joins. The turn axis is fixed at the polar axis, so there is no hinge to tune.
+**Tuning.** Change the values in `CONFIG`: the four durations, `flipDeg`, `easeFlip`, `tiltDeg`, `headTurnsPerLoop`, `arcMinDeg`, `arcMaxDeg`, the grid (`latitudesDeg`, `meridianCircles`), the stroke widths (`gridStrokeDiv`, `armStrokeDiv`, `armTailRatio`, `headDotDiv`), the line alphas and the colours. Keep `headTurnsPerLoop` an integer, so the loop joins. The turn axis is fixed at the polar axis, so there is no hinge to tune.
+
+**The chunky pass.** The grid is now three latitudes (at 45 degrees north and south, and the equator) and four meridians (one every 45 degrees). The lines are solid white, and the far-side grid is off, so the globe reads as one bold shape. The red arc is heavier than the grid at its head, so it is the first thing the eye follows.
+
+**Files.** `docs/design/logo/meridian-logo.gif` is the loop, 85 frames at 25 frames per second, 3.40 s, 600 px square, and it repeats without a seam. `docs/design/logo/meridian-logo.mp4` is the same frames as H.264, 600 px square, for places that prefer video. The four frames in `docs/design/logo/frames/` are the reference stills above.
 
 **Checks run after the change.** The loop closes to the same frame at t = 0 and t = 3.40 (maximum difference 0). Over 3400 sampled steps the arc moves at most 0.012 units per step. The slice is a vertical line (maximum screen x = 0). Bounding boxes: slice 0 wide and 2.04 tall; ring 2.04 wide and 1.95 tall. All four frames rendered with no page errors. Not re-checked after this change: reduced motion, the light variant and the Pause button.
 
