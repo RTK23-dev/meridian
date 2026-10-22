@@ -547,6 +547,19 @@ export type ReviseOutcome =
  * Reopens a session after its current video is delivered or has failed. The current request id is kept. The next start uses
  * the next revision, so it does not reuse that request. A video that is still running is left alone.
  */
+/**
+ * A revision with a direction for the whole video (D9). The session reopens as a draft (reviseSession), and the direction is posted as its next
+ * instruction, so the brief of the new video carries it. The whole video is planned again, as a revision is; only the plan decides which shots
+ * change. A refused revision changes nothing, and the direction is not posted.
+ */
+export async function reviseWithDirection(sql: Sql, userId: string, input: { sessionId: string; direction: string }): Promise<ReviseOutcome> {
+  const revised = await reviseSession(sql, userId, { sessionId: input.sessionId });
+  if (revised.status !== "draft") return revised;
+  const direction = input.direction.trim();
+  if (direction !== "") await postMessage(sql, userId, { sessionId: input.sessionId, text: direction, beatRole: null });
+  return revised;
+}
+
 export async function reviseSession(sql: Sql, userId: string, input: { sessionId: string }): Promise<ReviseOutcome> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {

@@ -64,6 +64,14 @@ export function modelIdOf(value: unknown): string | null {
   return id;
 }
 
+/** A revision of a session with a direction for the whole video. The direction may be empty: then the revision is made as it always was. */
+export function reviseDirectionInput(input: unknown): { sessionId: string; direction: string } {
+  const body = fields(input);
+  const direction = typeof body.direction === "string" ? body.direction : "";
+  if (direction.length > MAX_MESSAGE_CHARS) throw new Error(`Keep a direction to ${MAX_MESSAGE_CHARS} characters.`);
+  return { sessionId: idOf(body.sessionId, "session"), direction };
+}
+
 /** One shot of a session's video, for a read of its take, its model options or a quote of its remake. */
 export function shotRefInput(input: unknown): { sessionId: string; shotId: string; modelId: string | null } {
   const body = fields(input);

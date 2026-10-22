@@ -3,7 +3,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
-import { reviseContentFactorySession, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
 import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import type { RunView } from "@/lib/meridian/content-factory/service";
 import { FlowBoard } from "./run-board";
@@ -111,12 +111,18 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
 
 function ReviseControl({ sessionId, onStarted }: { sessionId: string; onStarted: () => void }) {
   const [busy, setBusy] = useState(false);
+  const [direction, setDirection] = useState("");
   const revise = async () => {
     setBusy(true);
     try {
-      const outcome = await reviseContentFactorySession({ data: { sessionId } });
-      if (outcome.status === "draft") toast.success("The session is open for a revision. The earlier video stays stored.");
-      else toast.error(outcome.reason);
+      // A direction for the whole video is posted as the revision's next instruction, so the new brief carries it (D9).
+      const outcome = direction.trim() === "" ? await reviseContentFactorySession({ data: { sessionId } }) : await reviseContentFactoryWithDirection({ data: { sessionId, direction } });
+      if (outcome.status === "draft") {
+        toast.success("The session is open for a revision. The earlier video stays stored.");
+        setDirection("");
+      } else {
+        toast.error(outcome.reason);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The revision was not opened.");
     } finally {
@@ -125,9 +131,26 @@ function ReviseControl({ sessionId, onStarted }: { sessionId: string; onStarted:
     }
   };
   return (
-    <div className="mt-4 flex flex-wrap items-center gap-3">
-      <Button size="md" variant="secondary" loading={busy} disabled={busy} onClick={() => void revise()}>Revise this video</Button>
-      <p className="text-sm text-fg-muted">Adds your next instruction, then makes another video. This one is kept.</p>
+    <div className="mt-4 space-y-3">
+      <div className="space-y-1.5">
+        <label htmlFor="cf-revise-direction" className="block text-sm font-semibold">Direction for the whole video (optional)</label>
+        <textarea
+          id="cf-revise-direction"
+          rows={2}
+          maxLength={MAX_MESSAGE_CHARS}
+          value={direction}
+          disabled={busy}
+          onChange={(event) => setDirection(event.target.value)}
+          placeholder="For example: make the hook punchier and shorter"
+          className="w-full rounded-md border border-border bg-surface p-2 text-sm disabled:opacity-60"
+        />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button size="md" variant="secondary" loading={busy} disabled={busy} onClick={() => void revise()}>
+          {direction.trim() === "" ? "Revise this video" : "Revise with this direction"}
+        </Button>
+        <p className="text-sm text-fg-muted">Adds your next instruction, then makes another video. The video is planned again, and it reserves its own estimate up to the session&apos;s budget. This one is kept.</p>
+      </div>
     </div>
   );
 }

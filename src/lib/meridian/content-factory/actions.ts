@@ -7,6 +7,7 @@ import {
   messageInput,
   remakeShotInput,
   clipInput,
+  reviseDirectionInput,
   shotDecisionInput,
   shotRefInput,
   sessionInput,
@@ -15,7 +16,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -64,6 +65,11 @@ export const startContentFactoryRun = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => startRun(await getSql(), context.userId, data));
+
+export const reviseContentFactoryWithDirection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => reviseDirectionInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => reviseWithDirection(await getSql(), context.userId, data));
 
 export const reviseContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
