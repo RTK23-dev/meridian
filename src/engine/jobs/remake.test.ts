@@ -278,3 +278,54 @@ test("the prompt is unchanged without directions, and carries them in a labelled
   assert.match(prompt, /Reviewer's direction for this take/);
   assert.ok(prompt.includes(`- ${DIRECTION}`));
 });
+
+/** A video whose one shot is still being made: the plan and its estimate have passed, and the produce job is queued (no take yet). */
+function pendingFlow(): Flow {
+  const flow = new Flow().apply({
+    type: "start",
+    organizationId: ORG,
+    requestId: REQ,
+    priority: "normal",
+    cachedDna: false,
+    variantCount: 0,
+    requestArtifactId: REQUEST_ART,
+  });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: { validated: fixtureId("art_", 41) } });
+  flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
+  flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
+  flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A })], artifacts: { plan: fixtureId("art_", 44) } });
+  flow.succeed({ stage: "estimate_reserve", subjectId: REQ, gate: gate("budget", true), budgetReservationId: RES, artifacts: { budget: fixtureId("art_", 45) } });
+  return flow;
+}
+
+test("a shot still being made is changed in place: its epoch moves and its direction is kept, the video's revision does not move, and its old take stops counting", () => {
+  const flow = pendingFlow();
+  assert.equal(flow.current.status, "running");
+  assert.equal(flow.current.shots[SHOT_A]?.status, "pending");
+  const oldTake = fixtureId("take_", 63);
+
+  flow.apply(remakeEvent({ budgetReservationId: RES }));
+  const after = flow.current;
+  assert.equal(after.status, "running", "the video is still being made");
+  assert.equal(after.revision ?? 0, 0, "no revision moves before delivery");
+  assert.equal(after.shots[SHOT_A]?.epoch, 1, "the shot starts a new epoch");
+  assert.equal(after.shots[SHOT_A]?.status, "pending");
+  assert.deepEqual(after.shots[SHOT_A]?.directives, [DIRECTION]);
+
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: oldTake, artifacts: { [`take:${oldTake}`]: fixtureId("art_", 82) } });
+  assert.equal(flow.current.takes[oldTake]?.stale, true, "the in-flight take of the old epoch is kept on record and never counted");
+  assert.equal(flow.current.shots[SHOT_A]?.status, "pending", "the shot is still waiting for a take of its new epoch");
+});
+
+test("a change to a shot already accepted, while the video is made, is refused; and a change must draw on the video's own reservation", () => {
+  const accepted = editedFlow();
+  assert.throws(
+    () => advance(accepted.current, remakeEvent({ budgetReservationId: RES })),
+    (error: unknown) => error instanceof EngineError && error.kind === "conflict" && /still being made/.test(error.message),
+  );
+  const pending = pendingFlow();
+  assert.throws(
+    () => advance(pending.current, remakeEvent({ budgetReservationId: RES_REMAKE })),
+    (error: unknown) => error instanceof EngineError && error.kind === "conflict" && /own reservation/.test(error.message),
+  );
+});

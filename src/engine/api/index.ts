@@ -43,7 +43,7 @@ import type { GoldMetrics } from "../review/gold.ts";
 import { takeReviewItemSchema } from "../review/inbox.ts";
 import { routes } from "../config/routes.ts";
 import { budgets } from "../config/budgets.ts";
-import { reserve } from "../budget/reserve.ts";
+import { committedFor, reserve } from "../budget/reserve.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
 import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
 import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
@@ -367,6 +367,7 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   const checked = await remakeContextOf(sql, input, ports);
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const { context } = checked;
+  if (context.state.status === "running") return remakeWhileMaking(sql, input, context, directive);
 
   // A reviewer's clip (D12) is the shot's new source. Its store uri is named before the plan is written, so the plan and the take agree.
   const clipped = input.clip ? clipPlanOf(input.clip, input, context) : null;
@@ -468,6 +469,68 @@ async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: Sho
     summary: shotSummaryOf(shot),
     chosenPrices,
   };
+}
+
+/**
+ * A change to a shot still being made (D10): its direction and its model, on the video's own reservation. The new call is authorized against
+ * that reservation when it is made, so a change that does not fit pauses the video for budget rather than overrunning it. Its source changes
+ * wait for delivery, when the video's shots are final.
+ */
+async function remakeWhileMaking(sql: Sql, input: RemakeInput, context: RemakeContext, directive: string | null): Promise<RemakeResult> {
+  if (input.replacement || input.clip) {
+    return { status: "refused", reasons: ["A shot's visual type and source change once the video is delivered. While it is being made, its direction and model change."] };
+  }
+  const reservationId = context.state.budgetReservationId;
+  if (!reservationId) return { status: "refused", reasons: ["the video has no budget reservation yet, so the shot cannot be changed until it has one"] };
+  let modelChoice: ModelChoice | null;
+  try {
+    modelChoice = (await pickedRemake(sql, context, null, input.modelId ?? null)).modelChoice;
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+  const changes = (context.state.shots[input.shotId]?.remakes ?? 0) + 1;
+  try {
+    const outcome = await applyEngineEvent(sql, {
+      organizationId: input.organizationId,
+      requestId: input.requestId,
+      event: { type: "remake", shotId: input.shotId, directive, budgetReservationId: reservationId, at: input.now, modelChoice },
+      dedupeKey: `change|${input.requestId}|${input.shotId}|${changes}`,
+    });
+    const current = outcome.applied ? null : await readEngineRequest(sql, input.organizationId, input.requestId);
+    return { status: "queued", revision: current?.state.revision ?? context.state.revision ?? 0, reservationId: current?.state.budgetReservationId ?? reservationId };
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+}
+
+/** A quote of a change to a shot still being made: its estimate, and whether the video's reservation has room for it (D10). Read only. */
+async function quoteWhileMaking(sql: Sql, input: Omit<RemakeInput, "directive">, context: RemakeContext): Promise<RemakeQuote> {
+  if (input.replacement || input.clip) {
+    return { status: "refused", reasons: ["A shot's visual type and source change once the video is delivered. While it is being made, its direction and model change."] };
+  }
+  const reservationId = context.state.budgetReservationId;
+  if (!reservationId) return { status: "refused", reasons: ["the video has no budget reservation yet, so the shot cannot be changed until it has one"] };
+  try {
+    const picked = await pickedRemake(sql, context, null, input.modelId ?? null);
+    const estimate = estimatePlan({ ...picked.plan, shots: [picked.shot] }, picked.chosenPrices ?? new Map());
+    const { reservedUsd, committedUsd } = await withWorkspaceLedger(sql, input.organizationId, async (store) => ({
+      reservedUsd: (await store.getReservation(reservationId))?.reservedUsd ?? 0,
+      committedUsd: await committedFor(store, reservationId),
+    }));
+    const projected = sumUsd([committedUsd, estimate.estimateUsd]);
+    const reasons = projected > reservedUsd ? [`the change would take the video's reservation to $${projected.toFixed(4)}, above its $${reservedUsd.toFixed(4)}`] : [];
+    return {
+      status: "quoted",
+      revision: context.state.revision ?? 0,
+      estimateUsd: estimate.estimateUsd,
+      reservedUsd: estimate.estimateUsd,
+      redoAllowanceUsd: estimate.redoAllowanceUsd,
+      fits: reasons.length === 0,
+      reasons,
+    };
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
 }
 
 /** A remake's pricing inputs: the plan and shot it reserves, its chosen prices, and the reviewer's model when one is picked (D11). */
@@ -674,6 +737,7 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
   const checked = await remakeContextOf(sql, input, ports);
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const { context } = checked;
+  if (context.state.status === "running") return quoteWhileMaking(sql, input, context);
   try {
     const clipped = input.clip ? clipPlanOf(input.clip, input, context) : null;
     if (typeof clipped === "string") return { status: "refused", reasons: [clipped] };
