@@ -131,7 +131,8 @@ describe("E1 acceptance dry run", () => {
     const result = await runNode(["--dry-run", "--with-database"]);
     assert.equal(result.code, 1, result.stderr);
     const report = parseReport(result);
-    assert.match(report.backend, /^postgres \(pglite/);
+    // The test helper's database: PGlite, or the PostgreSQL named by MERIDIAN_PG_TEST_URL. Either is a Postgres-flavoured backend.
+    assert.match(report.backend, /^postgres \((pglite|postgres)/);
     assert.equal(report.pass, false);
     assert.equal(report.masters[0].ledger[0].actualUsd, null);
     assert.match(report.masters[0].artifactIds.renderedVideo, /^art_/);
