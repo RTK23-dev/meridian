@@ -44,6 +44,9 @@ import { budgets } from "../config/budgets.ts";
 import { reserve } from "../budget/reserve.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
 import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
+import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
+import { shotSummaryOf } from "../jobs/handlers/plan.ts";
+import type { ShotSummary } from "../jobs/types.ts";
 import { sumUsd } from "../contracts/money.ts";
 import { ENGINE_MEDIA_LINK_TTL_SECONDS, type MediaLinkSigner } from "../jobs/media-link.ts";
 import { modelChoicesSchema } from "../contracts/model-choices.ts";
@@ -264,7 +267,12 @@ export type RemakeInput = {
   directive: string | null;
   /** When the reviewer asked, as an ISO time. The event carries it, so replaying the event gives the same state. */
   now: string;
+  /** Replaces the shot's visual type and source (D7). Absent: the shot is made again as it was. */
+  replacement?: ShotReplacement | null;
 };
+
+/** A shot's new visual type and source, for a remake that changes what the shot is (D7). The shot keeps its beat, its timing and its layer. */
+export type ShotReplacement = { visualType: VisualType; source: ShotSource };
 
 /** What a remake reads to price itself: the workspace's monthly budget, and the model catalog that prices the chosen models (Bible 10.5). */
 export type RemakePorts = {
@@ -276,6 +284,8 @@ export type RemakeResult = { status: "queued"; revision: number; reservationId: 
 
 /** What the checks before a remake read: the video's record, the shot, the month's budget and the revision the remake would make. */
 type RemakeContext = {
+  organizationId: string;
+  planId: string;
   state: OrchestratorState;
   plan: ScenePlan;
   request: ProductionRequest;
@@ -310,7 +320,7 @@ async function remakeContextOf(sql: Sql, input: { organizationId: string; reques
   if (month.status !== "known") return { ok: false, reasons: [month.reason] };
   return {
     ok: true,
-    context: { state, plan, request, shot, month, catalog: resolved.catalog, revision: (state.revision ?? 0) + 1 },
+    context: { organizationId: input.organizationId, planId, state, plan, request, shot, month, catalog: resolved.catalog, revision: (state.revision ?? 0) + 1 },
   };
 }
 
@@ -332,14 +342,18 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   const { context } = checked;
 
   const reservationId = newId("res_");
+  let replaced: ReplacedPlan | null = null;
   try {
-    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
+    replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
+    const chosenPrices = replaced !== null ? replaced.chosenPrices : await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
+    const reservedPlan = replaced !== null ? replaced.plan : context.plan;
+    const reservedShot = replaced !== null ? replaced.shot : context.shot;
     const reserved = await withWorkspaceLedger(sql, input.organizationId, (store) =>
       reserve(store, {
         requestId: input.requestId,
         workspaceId: input.organizationId,
         mode: budgets.productionMode,
-        plan: { ...context.plan, shots: [context.shot] },
+        plan: { ...reservedPlan, shots: [reservedShot] },
         requestBudgetUsd: context.request.constraints.budgetUsd,
         workspaceMonthBudgetUsd: context.month.usd,
         now: input.now,
@@ -355,10 +369,20 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   }
 
   try {
+    // A replacement's plan is written before the event that names it, so the event carries the artifact it applies.
+    const planArtifactId = replaced === null ? null : (await writeReplacedPlan(sql, input, context, replaced.plan)).artifactId;
     const outcome = await applyEngineEvent(sql, {
       organizationId: input.organizationId,
       requestId: input.requestId,
-      event: { type: "remake", shotId: input.shotId, directive, budgetReservationId: reservationId, at: input.now },
+      event: {
+        type: "remake",
+        shotId: input.shotId,
+        directive,
+        budgetReservationId: reservationId,
+        at: input.now,
+        planArtifactId,
+        replacement: replaced?.summary ?? null,
+      },
       dedupeKey: `remake|${input.requestId}|${input.shotId}|${context.revision}`,
     });
     if (outcome.applied) return { status: "queued", revision: context.revision, reservationId };
@@ -372,9 +396,53 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   }
 }
 
+/** A remake's plan with one shot replaced (D7): the new shot, the plan holding it, its estimate, and the summary the orchestrator takes. */
+type ReplacedPlan = { plan: ScenePlan; shot: ScenePlan["shots"][number]; summary: ShotSummary; chosenPrices: ChosenCallPrices | undefined };
+
 /**
- * What a remake of one shot would reserve, and whether the reservation would fit (the same checks reserve() makes). Read only: nothing is
- * reserved, queued or called. `fits` false means the remake would be refused, and `reasons` says why.
+ * The plan with its shot replaced. The shot keeps its id, beat, timing and layer; its visual type and source are the replacement's. Its
+ * estimate is priced the way reserve() prices it. Throws when the replacement is not a valid shot or is not one a take makes.
+ */
+async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: ShotReplacement): Promise<ReplacedPlan> {
+  const original = context.plan.shots.find((candidate) => candidate.shotId === context.shot.shotId);
+  if (original === undefined) throw new EngineError("invalid_input", "that shot is not in the plan of this video", { stage: "produce_shot" });
+  const shot = shotSpecSchema.parse({
+    ...original,
+    visualType: replacement.visualType,
+    source: shotSourceSchema.parse(replacement.source),
+    downgradeTo: original.downgradeTo === replacement.visualType ? undefined : original.downgradeTo,
+  });
+  // Only a shot that a take makes can be replaced: the produce path is the one that makes it. Refused before anything is written.
+  if (shot.source.kind !== "generate" && shot.source.kind !== "stock" && shot.source.kind !== "chain") {
+    throw new EngineError("invalid_input", "a replacement must be a shot that a take makes (generate, stock or chain)", { stage: "produce_shot" });
+  }
+  const draft = scenePlanSchema.parse({ ...context.plan, shots: context.plan.shots.map((candidate) => (candidate.shotId === shot.shotId ? shot : candidate)) });
+  const chosenPrices = await chosenPricesFor({ sql, organizationId: context.organizationId, state: context.state, plan: draft, catalog: context.catalog });
+  const estimate = estimatePlan(draft, chosenPrices ?? new Map());
+  return {
+    plan: scenePlanSchema.parse({ ...draft, estimatedUsd: estimate.shotsUsd }),
+    shot,
+    summary: shotSummaryOf(shot),
+    chosenPrices,
+  };
+}
+
+/** The plan of a replacement, stored as the request's scene plan. Its parent is the plan it replaces, so the record keeps the history. */
+function writeReplacedPlan(sql: Sql, input: RemakeInput, context: RemakeContext, plan: ScenePlan) {
+  return writeArtifact(sql, {
+    organizationId: input.organizationId,
+    requestId: input.requestId,
+    stage: "plan",
+    type: "scene_plan",
+    body: plan,
+    parentIds: [context.planId],
+    createdAt: input.now,
+  });
+}
+
+/**
+ * What a remake would reserve, and whether the reservation would fit (the same checks reserve() makes). Read only: nothing is reserved,
+ * queued or called. `fits` false means the remake would be refused, and `reasons` says why.
  */
 export type RemakeQuote =
   | { status: "quoted"; revision: number; estimateUsd: number; reservedUsd: number; redoAllowanceUsd: number; fits: boolean; reasons: string[] }
@@ -385,8 +453,14 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const { context } = checked;
   try {
-    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
-    const estimate = estimatePlan({ ...context.plan, shots: [context.shot] }, chosenPrices ?? new Map());
+    const replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
+    const estimate =
+      replaced !== null
+        ? estimatePlan({ ...replaced.plan, shots: [replaced.shot] }, replaced.chosenPrices ?? new Map())
+        : estimatePlan(
+            { ...context.plan, shots: [context.shot] },
+            (await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog })) ?? new Map(),
+          );
     const reasons: string[] = [];
     if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
       reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);

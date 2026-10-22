@@ -1334,6 +1334,19 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
   shot.remade = true;
   shot.remakes = (shot.remakes ?? 0) + 1;
   shot.directives = directive === null ? [...directives] : [...directives, directive];
+  // A replacement (D7) changes what the shot is: its visual type, its source and what the produce job reads from its summary. Only a shot
+  // that a take makes can be a replacement, so the produce path stays the one that runs.
+  if (event.replacement) {
+    const next = event.replacement;
+    if (next.shotId !== shot.shotId) conflict(`the replacement is for ${next.shotId}, not ${shot.shotId}`, "produce_shot");
+    if (!needsProduce(next.sourceKind)) conflict("a replacement must be a shot that a take makes (generate, stock or chain)", "produce_shot");
+    shot.visualType = next.visualType;
+    shot.downgradeTo = next.downgradeTo;
+    shot.sourceKind = next.sourceKind;
+    shot.modelClass = next.modelClass;
+    shot.takesWanted = next.takesWanted;
+  }
+  if (event.planArtifactId) state.artifacts.plan = event.planArtifactId;
 
   state.nodes.edit = { status: "idle", redos: 0, hints: [] };
   state.nodes.deliver = { status: "idle", redos: 0, hints: [] };
@@ -1343,7 +1356,7 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
       at: event.at,
       chose: `remake ${shot.shotId} as revision ${state.revision}`,
       alternatives: [],
-      reason: directive ?? "A reviewer asked for another take of this shot.",
+      reason: directive ?? (event.replacement ? `A reviewer changed this shot to ${event.replacement.visualType}.` : "A reviewer asked for another take of this shot."),
       by: "human",
     },
   });

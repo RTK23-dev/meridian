@@ -159,7 +159,17 @@ export type EngineEvent =
    * replaying the event gives the same state. `budgetReservationId` is the reservation the caller made for this remake: the request's
    * own reservation was released at delivery.
    */
-  | { type: "remake"; shotId: string; directive: string | null; budgetReservationId: string; at: string };
+  | {
+      type: "remake";
+      shotId: string;
+      directive: string | null;
+      budgetReservationId: string;
+      at: string;
+      /** The plan artifact written with the shot replaced (D7), or null when the plan is kept. */
+      planArtifactId?: string | null;
+      /** The shot's new summary when the remake replaces the shot's visual type or source (D7). Null keeps the shot as it was. */
+      replacement?: ShotSummary | null;
+    };
 
 export type StageContext = {
   sql: Sql;

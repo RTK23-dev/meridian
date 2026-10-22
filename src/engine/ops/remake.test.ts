@@ -11,7 +11,8 @@ import { engineDeliveredMaster, engineRequestFeed, engineRequestStatus, remakeEn
 import { writeArtifact } from "../jobs/artifact-store.ts";
 import { cleanRender } from "../review/test/render.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { answerStage, chainWorld, drain, gateResult, startChainRequest } from "./test/chain.ts";
+import { chainWorld, drain, startChainRequest } from "./test/chain.ts";
+import { answerRemadeChain } from "./test/remade.ts";
 
 const ORG = "org_remake";
 const BRAND = "brand_remake";
@@ -58,46 +59,7 @@ describe("a remade shot of a delivered video, on the engine", () => {
     assert.equal(queuedShot?.remakes, 1);
     assert.match(queuedShot?.remakeRefusal ?? "", /still being made/, "another remake waits until this revision is delivered");
 
-    const takeId = newId("take_");
-    const takeArtifact = (
-      await writeArtifact(sql, {
-        organizationId: ORG,
-        requestId,
-        stage: "produce_shot",
-        type: "take",
-        body: { ...ids.value(fx.take1Fixture), takeId, shotId: shot, attempt: 2 },
-        createdAt: NOW,
-      })
-    ).artifactId;
-    await answerStage(sql, {
-      organizationId: ORG,
-      requestId,
-      stage: "produce_shot",
-      subjectId: shot,
-      output: { stage: "produce_shot", subjectId: shot, shotId: shot, epoch: 1, takeId, artifacts: { [`take:${takeId}`]: takeArtifact } },
-    });
-
-    const verdict = { takeId, pass: true, confidence: 0.9, checks: [{ rule: "slop.clean", pass: true }], action: "accept" as const };
-    const verdictArtifact = (await writeArtifact(sql, { organizationId: ORG, requestId, stage: "check_take", type: "take_verdict", body: verdict, createdAt: NOW })).artifactId;
-    await answerStage(sql, {
-      organizationId: ORG,
-      requestId,
-      stage: "check_take",
-      subjectId: takeId,
-      output: { stage: "check_take", subjectId: takeId, shotId: shot, takeId, gate: gateResult("take", requestId, true), verdict, artifacts: { [`verdict:${takeId}`]: verdictArtifact } },
-    });
-
-    const edlId = newId("edl_");
-    const edlArtifact = (
-      await writeArtifact(sql, { organizationId: ORG, requestId, stage: "edit", type: "edl", body: { ...ids.value(cleanRender().edl), edlId }, createdAt: NOW })
-    ).artifactId;
-    await answerStage(sql, {
-      organizationId: ORG,
-      requestId,
-      stage: "edit",
-      subjectId: requestId,
-      output: { stage: "edit", subjectId: requestId, gate: gateResult("edit", requestId, true), edlId, artifacts: { [`edl:${edlId}`]: edlArtifact } },
-    });
+    const { takeId, edlId } = await answerRemadeChain(sql, { organizationId: ORG, requestId, shot, ids: ids!, now: NOW });
 
     await drain(sql, world.runtime, ORG);
     assert.equal((await engineRequestStatus(sql, ORG, requestId))?.status, "delivered", "the revision is delivered again");
