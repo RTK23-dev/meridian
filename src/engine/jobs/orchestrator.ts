@@ -1324,7 +1324,7 @@ function applyRemakeWhileMaking(state: OrchestratorState, event: Extract<EngineE
   const shot = state.shots[event.shotId];
   if (!shot) conflict(`shot ${event.shotId} is not in this video`, "produce_shot");
   if (event.budgetReservationId !== state.budgetReservationId) {
-    conflict("a change while the video is made draws on the video\'s own reservation, so the reservation must be that one", "produce_shot");
+    conflict("a change while the video is made draws on the video's own reservation, so the reservation must be that one", "produce_shot");
   }
   const directive = remakeDirectiveOf(event.directive);
   const directives = shot.directives ?? [];
