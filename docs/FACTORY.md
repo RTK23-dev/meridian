@@ -233,7 +233,7 @@ launch summary and is never sent.
   each refusal is recorded as a failed receipt, before the publisher is called:
   - no stored Meta token: **not connected**, with the reason;
   - no targeting country on the run: refused with **no targeting country**;
-  - no Facebook Page id or destination link: refused, because a Factory run carries neither yet. Without them the ad creative cannot be
+  - no Facebook Page id or destination link on the run: refused. Both are set in the run builder. Without them the ad creative cannot be
     created after the campaign and ad set, which would leave paused objects behind.
   Only when all three pass does the Meta publisher run. Its ad set carries the run's countries as `targeting.geo_locations.countries`
   (`providers/meta.ts`). Nothing in the Factory sets an ad or a campaign to ACTIVE.
