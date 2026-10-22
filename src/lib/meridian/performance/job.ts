@@ -6,6 +6,7 @@ import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
 import { loadProviderInsights } from "./fetch.ts";
 import { ingestPerformanceRows } from "./sync.ts";
 import { loadTenantProviderToken, validatePerformanceOwnership } from "./ownership.ts";
+import { savedAdAccountId } from "../providers/ad-account.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
 
@@ -62,7 +63,7 @@ export async function runPerformanceSync(
   }
   const accountPlatform = provider === "google" ? "google_ads" : provider === "tiktok" ? "tiktok_ads" : null;
   const accountId = accountPlatform
-    ? await connectedAccountId(sql, job.organization_id, job.brand_id, accountPlatform)
+    ? await savedAdAccountId(sql, job.organization_id, job.brand_id, accountPlatform)
     : "";
   const developer = provider === "google" ? resolveDeploymentOnlyKey("google_ads_developer") : null;
   if (provider === "google" && developer?.status !== "ready") {
@@ -153,18 +154,6 @@ export async function runPerformanceSync(
     on conflict (organization_id, idempotency_key) do nothing
   `;
   return `stored:${ingested.stored.length};correlation:${record.correlationId}`;
-}
-
-/** The brand's saved ad account. Google is `google_ads` and TikTok is `tiktok_ads`. A creator profile is not an advertiser id. */
-async function connectedAccountId(sql: Sql, organizationId: string, brandId: string, platform: string): Promise<string> {
-  const rows = await sql<{ external_account_id: string | null }>`
-    select external_account_id from platform_accounts
-    where organization_id = ${organizationId} and brand_id = ${brandId} and platform = ${platform}
-      and account_type = 'ad_account'
-      and external_account_id is not null and external_account_id <> ''
-    limit 1
-  `;
-  return rows[0]?.external_account_id?.trim() ?? "";
 }
 
 async function markNotConnected(sql: Sql, organizationId: string, provider: string, detail: string): Promise<void> {

@@ -65,6 +65,8 @@ import {
 import { engineMediaLinkSigner, engineObjectStore } from "../../lib/meridian/storage/engine-media-link.ts";
 import { engineAssetMediaFor } from "../../lib/meridian/storage/engine-asset-media.ts";
 import { engineMediaFunctionsBaseUrl, engineMediaFunctionsMode } from "../../lib/meridian/storage/engine-media-functions.ts";
+import { engineLicensedProviders } from "../../lib/meridian/storage/engine-licences.ts";
+import { licensedProvidersOf, licensedUrisOf } from "./licensed-uris.ts";
 import type { MediaLinkSigner } from "./media-link.ts";
 import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
@@ -574,6 +576,11 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       roleDeps: (scope) => rolesFor(composition)(scope),
     },
     assetRouter: (scope) => routerFor(composition, shotPorts, new Map<string, VideoProfile>())({ sql, ...scope }),
+    // The rights check reads the licence record of each take and voice track (review 2026-10-22 production licence port). The deployment's
+    // list names the providers whose outputs are licensed; unset, only reviewer clips pass and the check fails closed.
+    preRender: {
+      licensedUris: async (scope) => licensedUrisOf(sql, { organizationId: scope.organizationId, requestId: scope.requestId, licensedProviders: licensedProvidersOf(engineLicensedProviders()) }),
+    },
     voice: productionVoicePortsFor({
       sql,
       objects,

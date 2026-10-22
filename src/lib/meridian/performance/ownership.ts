@@ -1,4 +1,5 @@
 import type { Sql } from "../learning/store.ts";
+import { expiredReason } from "../providers/access-token.ts";
 import { openSecret } from "../oauth/flow.server.ts";
 
 export type PerformanceOwnershipInput = {
@@ -54,8 +55,8 @@ export async function loadTenantProviderToken(
   encryptionKey: string,
 ): Promise<{ status: "connected"; accessToken: string } | { status: "NOT_CONNECTED"; error: string }> {
   const label = PROVIDER_LABEL[provider];
-  const credentials = await sql<{ sealed_token: string }>`
-    select sealed_token from provider_secrets
+  const credentials = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+    select sealed_token, sealed_refresh, expires_at from provider_secrets
     where organization_id = ${organizationId} and provider = ${provider} limit 1
   `;
   const sealed = credentials[0]?.sealed_token ?? "";
@@ -66,6 +67,12 @@ export async function loadTenantProviderToken(
     if (typeof opened !== "string" || !opened.trim()) {
       return { status: "NOT_CONNECTED", error: typeof opened === "string" ? `The tenant ${label} credential is empty. No observations were stored.` : `${opened.error} No observations were stored.` };
     }
+    // A token past its stated expiry is not requested (review 2026-10-22, item 6). Nothing renews it on use, so the reason says what to do.
+    const expired = expiredReason({
+      expiresAt: credentials[0]?.expires_at ? new Date(credentials[0].expires_at).toISOString() : null,
+      hasRefresh: (credentials[0]?.sealed_refresh ?? "").trim() !== "",
+    });
+    if (expired) return { status: "NOT_CONNECTED", error: `${expired} No observations were stored.` };
     return { status: "connected", accessToken: opened };
   } catch {
     return { status: "NOT_CONNECTED", error: `The tenant ${label} credential could not be opened. No observations were stored.` };

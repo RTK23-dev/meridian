@@ -34,16 +34,24 @@ function readRequest(input: unknown): { provider: LiveProvider; organizationId: 
 
 async function saveProbe(organizationId: string, provider: LiveProvider, userId: string) {
   const sql = await requireOrg(userId, organizationId, "admin");
-  const secrets = await sql<{ sealed_token: string }>`
-    select sealed_token from provider_secrets
+  const secrets = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+    select sealed_token, sealed_refresh, expires_at from provider_secrets
     where organization_id = ${organizationId} and provider = ${provider}
     limit 1
   `;
   const sealed = secrets[0]?.sealed_token ?? "";
   // The sealed OAuth token wins. With none, the workspace's saved key is used, and only through the resolver. No environment
-  // token is read, so an environment variable never makes a provider connected.
+  // token is read, so an environment variable never makes a provider connected. The stored expiry is read the same way the status reads it.
   const { providerAccessToken, providerCredentialState } = await import("./access-token.ts");
-  const credentialInput = { organizationId, provider, sealed, encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "", env: process.env };
+  const credentialInput = {
+    organizationId,
+    provider,
+    sealed,
+    encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
+    env: process.env,
+    expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,
+    hasRefresh: (secrets[0]?.sealed_refresh ?? "").trim() !== "",
+  };
   const access = await providerAccessToken(sql, credentialInput);
   // A credential that is there but cannot be used is a failed probe, and its reason is kept: a sealed token that does not open, or a saved
   // key the resolver refuses (expired, unreadable). A credential that is missing is not a failure; the probe below reports it as not configured.

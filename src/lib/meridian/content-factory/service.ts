@@ -426,20 +426,48 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   const id = randomUUID();
   // The draft check and the reference check run again here, under the session's lock, in the same transaction that records the file. A
   // session started after the checks above takes no file, and two reference uploads cannot both pass the check.
-  return withTransaction<UploadOutcome>(sql, async (tx) => {
-    await lockDraft(tx, row);
-    if (input.purpose === "reference_video" && (await hasReferenceVideo(tx, row))) {
-      return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
-    }
-    await tx`
-      insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content)
-      values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'file', ${input.purpose}, ${safeFileName(input.fileName)}, ${storageObjectId}, ${key},
-        ${file.mediaType}, ${file.bytes}, ${file.sha256}, ${file.content})
-    `;
-    await touch(tx, row);
-    await audit(tx, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.file_stored", objectId: row.id, metadata: { attachmentId: id, mediaType: file.mediaType } });
-    return { status: "stored", attachmentId: id, mediaType: file.mediaType, bytes: file.bytes };
-  });
+  let outcome: UploadOutcome;
+  try {
+    outcome = await withTransaction<UploadOutcome>(sql, async (tx) => {
+      const refusal = await draftRefusalOf(tx, row);
+      if (refusal) return { status: "refused", reason: refusal };
+      if (input.purpose === "reference_video" && (await hasReferenceVideo(tx, row))) {
+        return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
+      }
+      await tx`
+        insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content)
+        values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'file', ${input.purpose}, ${safeFileName(input.fileName)}, ${storageObjectId}, ${key},
+          ${file.mediaType}, ${file.bytes}, ${file.sha256}, ${file.content})
+      `;
+      await touch(tx, row);
+      await audit(tx, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.file_stored", objectId: row.id, metadata: { attachmentId: id, mediaType: file.mediaType } });
+      return { status: "stored", attachmentId: id, mediaType: file.mediaType, bytes: file.bytes };
+    });
+  } catch {
+    outcome = { status: "refused", reason: "The file was not recorded. Nothing was added to the session." };
+  }
+  // The bytes are already in the store. A file that was not recorded is removed again, so no object is left that no session refers to.
+  if (outcome.status !== "stored") await discardUnrecorded(store, row, key);
+  return outcome;
+}
+
+/** The reason the session can no longer take a file, or null while it is a draft. The session row is locked until the transaction ends. */
+async function draftRefusalOf(tx: Sql, row: SessionRow): Promise<string | null> {
+  const [locked] = await tx<{ status: string }>`
+    select status from content_factory_sessions where id = ${row.id} and organization_id = ${row.organization_id} for update
+  `;
+  if (!locked) return SESSION_REFUSAL;
+  return locked.status === "draft" ? null : STARTED_REFUSAL;
+}
+
+/** Removes a stored object that no attachment records. Best effort: a failed removal leaves the object in the brand's folder, unreferenced. */
+async function discardUnrecorded(store: ContentFactoryFileStore, row: SessionRow, key: string): Promise<void> {
+  if (!store.discard || row.brand_id === null) return;
+  try {
+    await store.discard({ organizationId: row.organization_id, brandId: row.brand_id, key });
+  } catch {
+    // The object stays where it was stored. No session records it, and a later upload of the same file writes the same key.
+  }
 }
 
 // --- Sources ---------------------------------------------------------------------------------------------------------------

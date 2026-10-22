@@ -65,7 +65,7 @@ export async function publishTikTokPaused(
 ): Promise<{ status: "stored"; externalId: string; reused: boolean } | { status: "failed"; externalId: null; error: string }> {
   if (input.existingCampaignId?.trim()) return { status: "stored", externalId: input.existingCampaignId, reused: true };
   if (!credentials.advertiserId?.trim()) {
-    return { status: "failed", externalId: null, error: "TikTok publishing needs TIKTOK_ADVERTISER_ID. Nothing was sent." };
+    return { status: "failed", externalId: null, error: "TikTok publishing needs the brand's saved ad account. Nothing was sent." };
   }
   if (input.dailyBudget <= 0) {
     return { status: "failed", externalId: null, error: "TikTok campaign needs a daily budget. Nothing was sent." };

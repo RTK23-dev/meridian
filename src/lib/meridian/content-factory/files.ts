@@ -270,6 +270,12 @@ export type ContentFactoryFileStore = {
   ready(organizationId: string): Promise<FileStoreReadiness>;
   /** Stores the bytes. Returns the storage_objects row id when the storage layer records one. */
   put(input: { organizationId: string; brandId: string; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ storageObjectId: string | null }>;
+  /**
+   * Removes an object that no attachment records: an upload whose file was stored but not recorded, because the session started or the
+   * write failed. An object an attachment still records is never removed. Returns true when the object was removed. Optional: a store
+   * without it keeps the object, and nothing in a session refers to it.
+   */
+  discard?(input: { organizationId: string; brandId: string; key: string }): Promise<boolean>;
 };
 
 /**
@@ -297,6 +303,21 @@ export function driveFileStore(sql: Sql): ContentFactoryFileStore {
         limit 1
       `;
       return { storageObjectId: rows[0]?.id ?? null };
+    },
+    async discard(input) {
+      // Only an object no attachment records is removed. The record is kept, archived, so the metadata says what became of the object.
+      const rows = await sql<{ id: string; provider_file_id: string | null }>`
+        select id, provider_file_id from storage_objects
+        where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and name = ${input.key}
+          and not exists (select 1 from content_factory_attachments where storage_object_id = storage_objects.id)
+        limit 1
+      `;
+      const row = rows[0];
+      if (!row?.provider_file_id) return false;
+      const { googleDriveClient } = await import("../storage/drive.ts");
+      await googleDriveClient.delete(row.provider_file_id, input.organizationId);
+      await sql`update storage_objects set lifecycle = 'archived', updated_at = now() where id = ${row.id}`;
+      return true;
     },
   };
 }

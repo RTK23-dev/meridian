@@ -17,18 +17,44 @@ export type AccessTokenResolution =
   | { token: string; source: "sealed" | "workspace" | "deployment_shared_default" }
   | { error: string };
 
+/** The expiry a stored access token carries, and whether a refresh token is stored beside it. */
+export type StoredTokenExpiry = {
+  /** When the access token expires (ISO), or null when the provider stated none. */
+  expiresAt?: string | null;
+  /** Whether a refresh token is stored. A refresh is a manual step on the Connections screen; nothing renews a token on use. */
+  hasRefresh?: boolean;
+  /** The time the token is checked (ISO). Defaults to now. */
+  now?: string;
+};
+
+/**
+ * The reason a stored access token cannot be used because its stated expiry has passed, or null when it can. An expiry that does not
+ * parse counts as passed, so an unreadable expiry fails closed. The reason says whether a refresh or a new connection is the way on.
+ */
+export function expiredReason(input: StoredTokenExpiry): string | null {
+  if (!input.expiresAt) return null;
+  const nowMs = Date.parse(input.now ?? new Date().toISOString());
+  if (Date.parse(input.expiresAt) > nowMs) return null;
+  return input.hasRefresh === true
+    ? "The access token has expired. Refresh it on the Connections screen, or connect again. Nothing was sent."
+    : "The access token has expired and no refresh token is stored. Connect the provider again. Nothing was sent.";
+}
+
 /**
  * The token a provider request uses for one workspace. A sealed OAuth token from `provider_secrets` wins, and a sealed row that
- * cannot be opened is an error with no fallback. With no sealed token, the workspace's saved key is used. The deployment's own
- * key is used only when its shared-default variable is set, which is the resolver's rule. Environment tokens are not read.
+ * cannot be opened is an error with no fallback. A sealed token past its stated expiry is an error too. With no sealed token, the
+ * workspace's saved key is used. The deployment's own key is used only when its shared-default variable is set, which is the
+ * resolver's rule. Environment tokens are not read.
  */
 export async function providerAccessToken(
   sql: Sql,
-  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv },
+  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv } & StoredTokenExpiry,
 ): Promise<AccessTokenResolution> {
   if (input.sealed.trim()) {
     const opened = openAccessToken({ sealed: input.sealed, key: input.encryptionKey });
     if ("error" in opened) return opened;
+    const expired = expiredReason(input);
+    if (expired) return { error: expired };
     return { token: opened.token, source: "sealed" };
   }
   const category = SAVED_KEY_CATEGORY[input.provider];
@@ -49,17 +75,18 @@ const NO_CREDENTIAL_REASON = "No access token is stored and none is configured. 
 const UNCHECKED_REASON = "The stored credential could not be checked. Nothing was sent.";
 
 /**
- * The state of a provider's credential for one workspace, decided by the precedence providerAccessToken uses, with no token in
- * the result. A sealed token that opens is usable, and one that does not is unusable, with no fallback to the saved key. With no
- * sealed token, the saved key's state comes from resolveCredential. An opened token is dropped here. A thrown error is unusable
- * with a fixed message, and nothing from the error is returned.
- */
-/**
  * The providers whose performance is read per tenant: their metric sync checks the ownership of each account with the workspace's own OAuth
  * token (performance/ownership.ts). A saved key is not enough for them, so the status must say so too (review 2026-10-22, item 5).
  */
 export const OAUTH_METRIC_PROVIDERS: readonly string[] = ["meta", "tiktok", "google"];
 
+/**
+ * The state of a provider's credential for one workspace, decided by the precedence providerAccessToken uses, with no token in
+ * the result. A sealed token that opens is usable, and one that does not is unusable, with no fallback to the saved key. A sealed
+ * token past its stated expiry is unusable too (review 2026-10-22, item 6). With no sealed token, the saved key's state comes from
+ * resolveCredential. An opened token is dropped here. A thrown error is unusable with a fixed message, and nothing from the error is
+ * returned.
+ */
 export async function providerCredentialState(
   sql: Sql,
   input: {
@@ -69,13 +96,7 @@ export async function providerCredentialState(
     encryptionKey: string;
     env?: CredentialEnv;
     requireOAuth?: boolean;
-    /** When the stored access token expires (ISO), or null when the provider stated none. */
-    expiresAt?: string | null;
-    /** Whether a refresh token is stored, so an expired access token can be renewed. */
-    hasRefresh?: boolean;
-    /** The time the state is read (ISO). Defaults to now. */
-    now?: string;
-  },
+  } & StoredTokenExpiry,
 ): Promise<ProviderCredentialState> {
   try {
     if (input.requireOAuth === true && !input.sealed.trim()) {
@@ -84,10 +105,8 @@ export async function providerCredentialState(
     if (input.sealed.trim()) {
       const opened = openAccessToken({ sealed: input.sealed, key: input.encryptionKey });
       if ("error" in opened) return { state: "unusable", reason: opened.error };
-      // An access token past its stated expiry is not usable. With a refresh token it is renewed on use; without one, the workspace must connect again.
-      if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(input.now ?? new Date().toISOString()) && input.hasRefresh !== true) {
-        return { state: "unusable", reason: "The access token has expired and no refresh token is stored. Connect the provider again. Nothing was sent." };
-      }
+      const expired = expiredReason(input);
+      if (expired) return { state: "unusable", reason: expired };
       return { state: "usable", reason: "The stored access token can be opened." };
     }
     const category = SAVED_KEY_CATEGORY[input.provider];

@@ -5,11 +5,13 @@
 // - reference: text the user supplied, or a brand from the organization's Meridian record. No model call, no spend.
 // - analysis and script: a text model the plan chose, called through the gateway on the run's budget. The call is authorized before it is
 //   made (paid.ts), its bill is recorded on the ledger, and the answer is stored as the step's body.
-// - visual and voice: the asset is made through the run's asset router, on the run's own reservation, when a router is connected. Without
-//   one, the step is not connected.
+// - visual, voice and video: the asset is made through the run's asset router, on the run's own reservation, when a router is connected.
+//   Without one, the step is not connected. The router waits for a video's job to finish within the call (produce polls it), so a long
+//   video holds its worker job for its whole length; a job the router left queued is not picked up later, because no poller is built
+//   for queued jobs. A video step names its model class in params.model_class, which the planner prompt does not ask for yet.
 //
-// Not connected, and so reported as not_connected by the executor because they have no handler: video, avatar (their adapters are not
-// wired into a plan step yet), and edit, compose, render (the engine's edit and render pipeline is not wired to a plan).
+// Not connected, and so reported as not_connected by the executor because they have no handler: avatar (a presenter's voice and image
+// are not inputs a plan step carries yet), and edit, compose, render (the engine's edit and render pipeline is not wired to a plan).
 //
 // Untrusted: the material a step reads (the user's text, a brand, an earlier step's answer) is data. It is passed in the user message as
 // JSON under a field the system prompt names as data, and an answer is parsed with its schema before it is stored. It is never executed.
@@ -212,6 +214,7 @@ function seedOf(hex: string): number {
  * carried as the orchestrator's choice (contract v7).
  */
 function assetSpecOf(deps: ProductionDeps, node: PlanNode, key: string, modelClass: AssetSpec["modelClass"], prompt: string, durationMs: number): AssetSpec {
+  // Its refs stay empty: a step names no reference asset in the plan path yet (see the header of this file).
   // A ULID's first character is 0 to 7 (its timestamp), so the id leads with 0 and takes 25 characters of the hash.
   const hex = contentHash({ plan: deps.planId, step: key }).replace(/^.*?:/, "").toUpperCase();
   const choice = node.model === null ? null : modelChoiceOf(deps, node);
@@ -251,18 +254,46 @@ function speechDurationMs(text: string): number {
  * A visual or voice step: one asset from the run's asset router. The router is the production path, so the budget, the cache and the bill are
  * the ones a shot uses. The step's output is the asset's uri, and its cost is what the router billed (zero on a cache hit).
  */
-function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler {
+type AssetKind = "visual" | "voice" | "video";
+
+/** The video model classes a video step may name in params.model_class. A step that names none is refused: the class is never guessed. */
+const VIDEO_CLASSES: readonly string[] = ["video.cinematic", "video.budget", "video.i2v_pinned"];
+
+/** A video step's length in milliseconds. validatePlan has already bounded params.seconds to the plan's limits. */
+function videoDurationMs(node: PlanNode): number {
+  const seconds = node.params.seconds;
+  if (typeof seconds !== "number") throw new CallRefusedError(`the ${node.kind} step names no seconds, so nothing is made`);
+  return Math.max(1, Math.round(seconds * 1000));
+}
+
+/**
+ * The spec a router-made step asks for. The model class decides which adapters may take the call, so a video step names it in
+ * params.model_class; the planner prompt does not ask for one yet, so until it does a video step is refused rather than guessed.
+ */
+function assetSpecFor(deps: ProductionDeps, node: PlanNode, key: string, kind: AssetKind, upstream: Map<string, string | null>): AssetSpec {
+  switch (kind) {
+    case "visual":
+      return assetSpecOf(deps, node, key, "image.keyframe", requireText(node, "prompt"), 1000);
+    case "voice": {
+      const text = materialOf(node, upstream).map((item) => item.content).join("\n");
+      return assetSpecOf(deps, node, key, "tts", text, speechDurationMs(text));
+    }
+    case "video": {
+      const modelClass = requireText(node, "model_class");
+      if (!VIDEO_CLASSES.includes(modelClass)) {
+        throw new CallRefusedError(`the video step names model class ${modelClass.slice(0, 40)}, which is not a video class, so nothing is made`);
+      }
+      return assetSpecOf(deps, node, key, modelClass as AssetSpec["modelClass"], requireText(node, "prompt"), videoDurationMs(node));
+    }
+  }
+}
+
+function assetStep(deps: ProductionDeps, kind: AssetKind): NodeHandler {
   return async ({ node, key, upstream }): Promise<NodeOutput> => {
     const router = deps.router;
     if (router === undefined) throw new NotConnectedError("no asset router is connected for this run");
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
-    const spec =
-      kind === "visual"
-        ? assetSpecOf(deps, node, key, "image.keyframe", requireText(node, "prompt"), 1000)
-        : (() => {
-            const text = materialOf(node, upstream).map((item) => item.content).join("\n");
-            return assetSpecOf(deps, node, key, "tts", text, speechDurationMs(text));
-          })();
+    const spec = assetSpecFor(deps, node, key, kind, upstream);
     const input: ProduceInput = {
       spec,
       workspaceId: deps.organizationId,
@@ -307,6 +338,6 @@ export function productionHandlers(deps: ProductionDeps): Handlers {
     reference: referenceHandler(deps),
     analysis: textStep(deps, analysisSpec),
     script: textStep(deps, scriptSpec),
-    ...(deps.router === undefined ? {} : { visual: assetStep(deps, "visual"), voice: assetStep(deps, "voice") }),
+    ...(deps.router === undefined ? {} : { visual: assetStep(deps, "visual"), voice: assetStep(deps, "voice"), video: assetStep(deps, "video") }),
   };
 }

@@ -148,6 +148,8 @@ export async function publishPausedStages(input: {
   scheduleStart?: string;
   imageIds?: string[];
   videoId?: string;
+  /** The brand's saved TikTok ad account (Connected accounts). Required for a TikTok publish; the environment is not read. */
+  tiktokAdvertiserId?: string;
   headlines?: string[];
   descriptions?: string[];
   cpcBidCents?: number;
@@ -195,7 +197,7 @@ export async function publishPausedStages(input: {
   }
   if (input.provider === "tiktok") {
     const published = await publishTikTokFlow(
-      { accessToken: token, advertiserId: env.TIKTOK_ADVERTISER_ID },
+      { accessToken: token, advertiserId: input.tiktokAdvertiserId },
       {
         name: input.name,
         dailyBudget: input.dailyBudgetCents / 100,

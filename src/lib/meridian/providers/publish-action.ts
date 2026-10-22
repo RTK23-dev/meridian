@@ -51,6 +51,7 @@ export async function publishPausedForBrand(
   const { publishPausedStages } = await import("./live.ts");
   const { stageWrites } = await import("./stages.ts");
   const { providerAccessToken } = await import("./access-token.ts");
+  const { savedAdAccountId } = await import("./ad-account.ts");
   const operation = startOperation({
     provider: input.provider,
     operation: "publishing.paused",
@@ -58,18 +59,20 @@ export async function publishPausedForBrand(
     brandId: input.brandId,
   });
   const env = input.env ?? process.env;
-  const secrets = await sql<{ sealed_token: string }>`
-    select sealed_token from provider_secrets
+  const secrets = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+    select sealed_token, sealed_refresh, expires_at from provider_secrets
     where organization_id = ${input.organizationId} and provider = ${input.provider}
     limit 1
   `;
-  // The sealed OAuth token, or the workspace's saved key through the resolver. Environment tokens are not read.
+  // The sealed OAuth token, or the workspace's saved key through the resolver. Environment tokens are not read. A sealed token past its expiry is refused.
   const opened = await providerAccessToken(sql, {
     organizationId: input.organizationId,
     provider: input.provider,
     sealed: secrets[0]?.sealed_token ?? "",
     encryptionKey: env.TOKEN_ENCRYPTION_KEY ?? "",
     env,
+    expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,
+    hasRefresh: (secrets[0]?.sealed_refresh ?? "").trim() !== "",
   });
   if ("error" in opened) {
     const record = operation.finish(false, 0, opened.error);
@@ -79,6 +82,13 @@ export async function publishPausedForBrand(
       detail: opened.error,
       stages: notConnected ? [{ objectType: "video", status: "NOT_CONNECTED", externalId: null, detail: opened.error }] : [],
     };
+  }
+  // TikTok publishes to the brand's saved ad account on Connected accounts, the account the performance sync reads. No environment id is used.
+  const tiktokAdvertiserId = input.provider === "tiktok" ? await savedAdAccountId(sql, input.organizationId, input.brandId, "tiktok_ads") : "";
+  if (input.provider === "tiktok" && !tiktokAdvertiserId) {
+    const reason = "No TikTok advertiser id is saved for this brand. Add it on Connected accounts. Nothing was sent.";
+    const record = operation.finish(false, 0, reason);
+    return { correlationId: String(record.correlationId), detail: reason, stages: [] };
   }
   const disconnected = await sql<{ disconnected_at: string | null }>`
     select disconnected_at from provider_connections
@@ -159,6 +169,7 @@ export async function publishPausedForBrand(
     scheduleStart: input.scheduleStart,
     imageIds: input.imageIds,
     videoId: input.provider === "meta" ? confirmedVideo?.externalId : input.videoId,
+    tiktokAdvertiserId,
     headlines: input.headlines,
     descriptions: input.descriptions,
     cpcBidCents: input.cpcBidCents,
