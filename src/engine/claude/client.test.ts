@@ -260,7 +260,7 @@ describe("runRole: budget, keys and connection", () => {
     assert.equal(requests.length, 0);
   });
 
-  it("holds the estimate and keeps the key when the provider returns no answer, and a new attempt is a new call", async () => {
+  it("holds the estimate and keeps the key when the provider returns no answer; a new attempt reuses the key and is a duplicate, never a second paid call (review 2026-10-22, item 1)", async () => {
     const ledger = await ledgerWith(1);
     const { gateway, requests } = gatewayFor([json(503, { error: { code: 503 } }), json(200, fixture("openrouter-segmenter-ok"))]);
     await assert.rejects(runRole(deps(gateway, ledger), segmenter, request(segmenterInput())), (error: unknown) => {
@@ -273,9 +273,9 @@ describe("runRole: budget, keys and connection", () => {
     assert.equal(held?.actualUsd, undefined, "the call is still held, not reconciled");
 
     const outcome = await runRole(deps(gateway, ledger), segmenter, request(segmenterInput(), { attempt: 2 }));
-    assert.equal(outcome.status, "done");
-    assert.equal(requests.length, 2);
-    assert.notEqual(outcome.calls[0]?.idempotencyKey, held?.idempotencyKey);
+    assert.equal(outcome.status, "duplicate", "the call was authorized, so the retry is not made again");
+    assert.equal(requests.length, 1, "no second request reaches the provider");
+    assert.equal(outcome.calls.length, 0, "the retry made no call");
   });
 
   it("leaves a call with no provider bill held and unsettled, with no actual cost and a null role-call cost (contract v6: an estimate is never an actual)", async () => {

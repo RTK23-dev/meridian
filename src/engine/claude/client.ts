@@ -131,9 +131,10 @@ function parseInput<Input>(schema: ZodType<Input>, role: string, input: unknown,
 }
 
 /**
- * The idempotency key of one call: the hash of (role, prompt version, model, input). The first attempt of a job uses exactly
- * that. A later infrastructure attempt adds its number, and the single quality retry adds the key of the call it retries, so
- * every call of a job has its own key and a repeated call of the same input has the same one.
+ * The idempotency key of one call: the hash of (request, role, prompt version, model, input). A later infrastructure attempt of the job uses
+ * the same key, so a call that OpenRouter billed before a timeout is never paid again: the ledger returns the first authorization, and the
+ * client reports a duplicate and does not call (review 2026-10-22, item 1). The single quality retry adds the key of the call it retries,
+ * because it is a second call on purpose.
  */
 function callKey<Input, Answer>(ctx: CallContext<Input, Answer>, retryOf: string | undefined): string {
   return contentHash({
@@ -143,7 +144,6 @@ function callKey<Input, Answer>(ctx: CallContext<Input, Answer>, retryOf: string
     promptVersion: ctx.promptVersion,
     model: ctx.route.model,
     input: ctx.input,
-    ...(ctx.attempt > 1 ? { attempt: ctx.attempt } : {}),
     ...(retryOf === undefined ? {} : { retryOf }),
   });
 }

@@ -76,7 +76,7 @@ function countParam(node: PlanNode, name: string, fallback: number, max: number)
 }
 
 /** The engine's cost for one paid step, from its model's live price. The reason says what is missing when there is no price basis. */
-export function priceStep(node: PlanNode, entry: CatalogEntry): Priced {
+export function priceStep(node: PlanNode, entry: CatalogEntry, options: ValidateOptions = {}): Priced {
   const price = entry.pricing;
   switch (node.kind) {
     case "video":
@@ -94,8 +94,9 @@ export function priceStep(node: PlanNode, entry: CatalogEntry): Priced {
     }
     case "analysis":
     case "script": {
-      const input = countParam(node, "input_tokens", PRICING_LIMITS.defaultInputTokens, PRICING_LIMITS.maxInputTokens);
-      if (typeof input !== "number") return input;
+      const claimed = countParam(node, "input_tokens", PRICING_LIMITS.defaultInputTokens, PRICING_LIMITS.maxInputTokens);
+      if (typeof claimed !== "number") return claimed;
+      const input = Math.min(PRICING_LIMITS.maxInputTokens, Math.max(claimed, options.textInputTokens ?? 0));
       const output = countParam(node, "max_tokens", PRICING_LIMITS.defaultOutputTokens, PRICING_LIMITS.maxOutputTokens);
       if (typeof output !== "number") return output;
       if (price.promptUsdPerToken === null || price.completionUsdPerToken === null) {
@@ -118,7 +119,23 @@ export function priceStep(node: PlanNode, entry: CatalogEntry): Priced {
 }
 
 /** Validate a parsed plan against the live catalog, price it, and return it with the engine's costs in place. */
-export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, CatalogEntry>): ValidationResult {
+/** The input tokens a text step is bounded to on the server: the brief's size, plus the instructions the step adds (review 2026-10-22, item 3). */
+const TEXT_STEP_OVERHEAD_TOKENS = 1000;
+
+export function textInputTokensOf(brief: unknown): number {
+  const characters = JSON.stringify(brief ?? null).length;
+  return Math.min(PRICING_LIMITS.maxInputTokens, Math.ceil(characters / 3) + TEXT_STEP_OVERHEAD_TOKENS);
+}
+
+export type ValidateOptions = {
+  /**
+   * The server's bound on a text step's input tokens (textInputTokensOf the stored brief). A plan's own figure may raise the bound, never lower
+   * it, so a model cannot understate what its text steps cost.
+   */
+  textInputTokens?: number;
+};
+
+export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, CatalogEntry>, options: ValidateOptions = {}): ValidationResult {
   const reasons: string[] = [];
 
   const orchestrator = catalog.get(plan.orchestrator.id);
@@ -162,7 +179,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
       reasons.push(`step ${node.id}: ${node.model.id} is a ${entry.kind} model, and a ${node.kind} step needs a ${expected} model`);
       continue;
     }
-    const priced = priceStep(node, entry);
+    const priced = priceStep(node, entry, options);
     if ("reason" in priced) {
       reasons.push(priced.reason);
       continue;

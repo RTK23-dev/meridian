@@ -9,7 +9,7 @@
 
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import { orchestratorPlanSchema, type ModelRef, type OrchestratorPlan } from "./contracts.ts";
-import { validatePlan, KIND_CATALOG } from "./validate.ts";
+import { textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { RoleAnswerError } from "../claude/errors.ts";
 import { orchestratorPlan, ORCHESTRATOR_MAX_CANDIDATES_PER_KIND, type OrchestratorPlanInput } from "../claude/roles/orchestrator_plan.ts";
@@ -103,7 +103,7 @@ export async function planWithModel(opts: {
     return { ok: false, reasons: ["the plan does not match the schema", ...paths] };
   }
 
-  const checked = validatePlan(parsed.data, opts.catalog);
+  const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }
@@ -171,7 +171,7 @@ export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRe
   if (outcome.status === "refused") return { ok: false, reasons: [`the orchestrating model's call was refused: ${outcome.reason}`] };
   if (outcome.status === "duplicate") return { ok: false, reasons: ["this plan call already has a stored answer that is not read here, so it is not asked again"] };
 
-  const checked = validatePlan(outcome.value, opts.catalog);
+  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }
