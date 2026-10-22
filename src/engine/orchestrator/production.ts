@@ -5,9 +5,11 @@
 // - reference: text the user supplied, or a brand from the organization's Meridian record. No model call, no spend.
 // - analysis and script: a text model the plan chose, called through the gateway on the run's budget. The call is authorized before it is
 //   made (paid.ts), its bill is recorded on the ledger, and the answer is stored as the step's body.
+// - visual and voice: the asset is made through the run's asset router, on the run's own reservation, when a router is connected. Without
+//   one, the step is not connected.
 //
-// Not connected, and so reported as not_connected by the executor because they have no handler: visual, voice, video, avatar (their
-// adapters are not wired into a plan step yet), and edit, compose, render (the engine's edit and render pipeline is not wired to a plan).
+// Not connected, and so reported as not_connected by the executor because they have no handler: video, avatar (their adapters are not
+// wired into a plan step yet), and edit, compose, render (the engine's edit and render pipeline is not wired to a plan).
 //
 // Untrusted: the material a step reads (the user's text, a brand, an earlier step's answer) is data. It is passed in the user message as
 // JSON under a field the system prompt names as data, and an answer is parsed with its schema before it is stored. It is never executed.
