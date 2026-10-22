@@ -23,12 +23,12 @@ how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and 
 | M1.1 | partly done | `b0bf80b` | `factory/loop.test.ts` runs one intent-both run from produce to learn. It does not cover discover, grade or pick (their suites do), nor the organic measured leg, which needs a connected channel. |
 | M1.2 | blocked | — | The live paid request sends no creative to any platform, Meta included, so a TikTok or Google route would create half-built ads. See D14 and D15. |
 | M1.3 | done, except D12 | `953d7da` | Higgsfield status and cancel use the documented path, not verified live. The webhook receiver is rate limited (300 a minute per client). Proxy headers are off by default. The artifact host allowlist is open by default (D12). |
-| M1.4 | partly done | — | Typecheck exit 0, lint 0 errors, build exit 0. The full src suite is not run; it needs your approval because of its token cost. |
+| M1.4 | done | `9485ff7` | Typecheck exit 0, lint 0 errors, build exit 0. The full src suite ran: 6,054 tests, 6,012 passing, 41 skipped for environment reasons, 1 failing. The failure was the `.env.example` contract, fixed in `9485ff7` and re-run alone (9 of 9). The scripts suite: 160 of 160. |
 | M2.0 | not built | — | The recorder needs the provider adapters and the key names confirmed. I did not guess the names. |
 | M3 | blocked | — | Needs the M2 live runs. |
 | M4.1 | blocked on D1 | — | |
 | M4.2, M4.3 | blocked on D5 | — | M4.3 also needs M4.2. |
-| M4.4 | blocked on design approval | — | |
+| M4.4 | design written; awaiting D16 to D18 | — | `docs/engine/PLAN_TO_REQUEST_BRIDGE.md`. Recommends Option 1, the engine accepting a plan run's outputs. That needs an engine contract change (D17). |
 | M4.5 | blocked on D2 | — | |
 | M4.6 | blocked on D3 | — | |
 | M5.1 | blocked on D7 | — | |
@@ -227,6 +227,9 @@ The owner answers these. An agent reports the blocked task and does not choose a
 | D13 | Review item 7: whether embedding and email provider status should come from stored credentials, as the other providers' status does, or keep reading deployment variables. The code is unchanged. | Review item 7; M0.2's brain mapping (its `automated` to `semi` rule) |
 | D14 | Which ad platform a run's paid intent uses. Proposed: Facebook and Instagram go to Meta, TikTok to TikTok, and YouTube to Google. The Factory's paid path is Meta only today, whatever the run's platforms. | M1.2 |
 | D15 | Creative attachment for paid ads. The Factory's live paid request sends no media to any platform, Meta included. TikTok needs a video asset id, and Google needs an image or video. Approve the scope of uploading each approved creative to the ad platforms before any route to TikTok or Google is built. | M1.2, and the Meta paid path's creative |
+| D16 | Which way the plan-to-request bridge goes (M4.4): Option 1, the engine accepts a plan run's outputs; Option 2, the orchestrator compiles its own EDL; or Option 3, production runs through the brief request. Recommended: Option 1. | M4.4 steps 1 to 4 |
+| D17 | The engine contract change that Option 1 needs: a version bump, a Bible section 4 note, and the lead's approval. | M4.4 step 3 |
+| D18 | The style kit for a plan run: named by the plan, or the brand's default page kit. | M4.4 step 4 |
 
 ## Out of scope for now
 

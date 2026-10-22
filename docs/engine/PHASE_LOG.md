@@ -769,3 +769,18 @@ Not done, with the reason:
 - **D12, the artifact host allowlist:** the default is open. With `MERIDIAN_ARTIFACT_HOST_ALLOWLIST` unset, any public host passes. Changing the default is an owner decision.
 
 Verified without a live call: the Higgsfield path was checked against Higgsfield's documentation as read on 2026-10-22. The change is not confirmed by a live status poll, because no key is available to agents.
+
+## 2026-10-22: the full src suite, the environment contract fix, and the plan-to-request design
+
+The owner approved the full src suite (M1.4). It ran once on the tree at `277a6b6`: 6,054 tests, 6,012 passing, 41 skipped for environment
+reasons, and 1 failing. The failure was the environment contract (`config/env-example.test.ts`): five `MERIDIAN_SMOKE_*` variables that
+the Content Factory browser flow (Phase 4) and the button audit read were not listed in `.env.example`. They are listed in `9485ff7`. That
+test passes 9 of 9 on its own. The full suite was not run again after that one-file change.
+
+The scripts suite: 160 of 160. Lint on the tree: 0 errors. Typecheck: exit 0. Build: exit 0.
+
+The plan's M4.4 design is written: [PLAN_TO_REQUEST_BRIDGE.md](PLAN_TO_REQUEST_BRIDGE.md). It recommends that the engine accept a plan run's
+outputs. That needs an engine contract change, and nothing is built until the owner chooses (D16 to D18 in the plan).
+
+Phase 0's verification (task 23) is complete on this basis: the full suite ran, typecheck, lint and build pass, and the one failure is fixed
+and re-run.
