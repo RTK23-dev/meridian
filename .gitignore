@@ -21,3 +21,6 @@ coverage
 
 # Agent worktrees (isolated checkouts created by the engine swarm)
 .claude/worktrees/
+
+# Screenshots written by the browser flow scripts (scripts/content-factory-flow.mjs)
+test-results/
