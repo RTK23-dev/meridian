@@ -48,8 +48,8 @@ import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } fr
 import { shotSummaryOf } from "../jobs/handlers/plan.ts";
 import { shotChangeFor, type ShotDecision } from "../review/shot-decision.ts";
 import { modelChoiceSchema as modelChoiceContract, type ModelChoice } from "../contracts/assets.ts";
-import { needFor, catalogCallUsd, type ModelNeed } from "../assets/model-choice.ts";
-import { eligibleCandidates, rejectionOf } from "../gateway/catalog-fit.ts";
+import { needFor, catalogCallUsd } from "../assets/model-choice.ts";
+import { eligibleCandidates, rejectionOf, type ModelNeed } from "../gateway/catalog-fit.ts";
 import { chosenCallPricesOf, SINGLE_CALL_OUTPUT } from "../plan/model-choices.ts";
 import type { ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ShotSummary } from "../jobs/types.ts";
