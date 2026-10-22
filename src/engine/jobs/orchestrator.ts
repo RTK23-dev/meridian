@@ -1289,9 +1289,6 @@ export function remakeRefusalOf(state: OrchestratorState, shotId: string): strin
       ? "A shot cannot be remade: this request was rejected."
       : "A shot is remade after its video is delivered. This video is still being made.";
   }
-  if (state.variantCount > 0) {
-    return "This video has variants, and a new take would make them stale. Remaking a shot of a video with variants is not built yet.";
-  }
   const shot = state.shots[shotId];
   if (!shot) return "That shot is not in this video.";
   if (shot.status !== "accepted") return "That shot has no accepted take to replace.";
@@ -1379,6 +1376,16 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
   state.budgetReservationId = event.budgetReservationId;
   const master = state.masterEdlId === null ? undefined : state.branches[state.masterEdlId];
   if (master !== undefined && master.status === "passed") master.status = "superseded";
+  // The variants of the superseded master are stale (Bible 6.13). They are kept on record, and the variant stage is run again on the new master.
+  // A video is delivered only once its variants have settled, so no variant job is still in flight when a remake starts, and their keys can be
+  // named again by the rebuild.
+  for (const branch of Object.values(state.branches)) {
+    if (branch.variantOf !== null && branch.status !== "superseded") branch.status = "superseded";
+  }
+  if (state.variantCount > 0) {
+    state.variantRuns = {};
+    state.nodes.variants = { status: "idle", redos: 0, hints: [] };
+  }
 
   shot.epoch += 1;
   shot.round = 0;

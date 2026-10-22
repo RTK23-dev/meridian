@@ -214,12 +214,6 @@ test("a shot that is not accepted, a shot of another video, and a component shot
   assert.match(remakeRefusalOf(component, SHOT_C) ?? "", /component or asset shot/);
 });
 
-test("a video with variants refuses a remake, because its variants would be stale", () => {
-  const withVariants = structuredClone(deliveredFlow().current);
-  withVariants.variantCount = 1;
-  assert.match(remakeRefusalOf(withVariants, SHOT_A) ?? "", /variants/);
-  assert.throws(() => advance(withVariants, remakeEvent()), (error: unknown) => error instanceof EngineError && error.kind === "conflict");
-});
 
 test("a second remake of a shot whose new take is still pending is refused", () => {
   const flow = deliveredFlow();
@@ -328,4 +322,33 @@ test("a change to a shot already accepted, while the video is made, is refused; 
     () => advance(pending.current, remakeEvent({ budgetReservationId: RES_REMAKE })),
     (error: unknown) => error instanceof EngineError && error.kind === "conflict" && /own reservation/.test(error.message),
   );
+});
+
+/** A delivered video with one variant: the variant stage has settled, so the video was delivered after it. */
+function deliveredWithVariantFlow(): Flow {
+  const flow = new Flow().apply({ type: "start", organizationId: ORG, requestId: REQ, priority: "normal", cachedDna: false, variantCount: 1, requestArtifactId: REQUEST_ART });
+  flow.succeed({ stage: "intake", subjectId: REQ, gate: gate("request", true), budgetReservationId: RES, budgetPause: null, artifacts: { validated: fixtureId("art_", 41) } });
+  flow.succeed({ stage: "analyze_reference", subjectId: REQ, gate: gate("dna", true), artifacts: { dna: fixtureId("art_", 42) } });
+  flow.succeed({ stage: "voice", subjectId: REQ, gate: gate("voice", true), artifacts: { voice: fixtureId("art_", 43) } });
+  flow.succeed({ stage: "plan", subjectId: REQ, gate: gate("plan", true), shots: [shot({ shotId: SHOT_A })], artifacts: { plan: fixtureId("art_", 44) } });
+  flow.succeed({ stage: "estimate_reserve", subjectId: REQ, gate: gate("budget", true), budgetReservationId: RES, artifacts: { budget: fixtureId("art_", 45) } });
+  flow.succeed({ stage: "produce_shot", epoch: 0, subjectId: SHOT_A, shotId: SHOT_A, takeId: TAKE_1, artifacts: { [`take:${TAKE_1}`]: fixtureId("art_", 81) } });
+  flow.succeed({ stage: "check_take", subjectId: TAKE_1, shotId: SHOT_A, takeId: TAKE_1, gate: gate("take", true), verdict: verdict(TAKE_1, true), artifacts: {} });
+  flow.succeed({ stage: "edit", subjectId: REQ, gate: gate("edit", true), edlId: EDL_1, artifacts: { [`edl:${EDL_1}`]: fixtureId("art_", 111) } });
+  passChain(flow, EDL_1, 0);
+  flow.succeed({ stage: "variants", subjectId: REQ, phase: "request", variants: [], work: [], artifacts: {} });
+  flow.succeed({ stage: "deliver", subjectId: REQ, manifestId: VID_1, artifacts: { manifest: fixtureId("art_", 122) } });
+  return flow;
+}
+
+test("a remake of a delivered video with variants is allowed; the variants are superseded and the variant stage waits for the new master", () => {
+  const flow = deliveredWithVariantFlow();
+  assert.equal(flow.current.status, "delivered");
+  assert.equal(flow.current.variantCount, 1);
+  assert.equal(remakeRefusalOf(flow.current, SHOT_A), null, "a video with variants can be remade");
+
+  flow.apply(remakeEvent());
+  assert.equal(flow.current.status, "running", "the revision is being made again");
+  assert.equal(flow.current.nodes.variants.status, "idle", "the variant stage is run again on the new master");
+  assert.deepEqual(flow.current.variantRuns ?? {}, {});
 });
