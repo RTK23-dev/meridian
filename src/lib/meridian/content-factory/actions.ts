@@ -14,7 +14,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, shotDecision, shotDecisionQuote, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -73,6 +73,11 @@ export const remakeContentFactoryShot = createServerFn({ method: "POST" })
   .validator((input: unknown) => remakeShotInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => remakeShot(await getSql(), context.userId, data));
+
+export const getContentFactoryShotModels = createServerFn({ method: "POST" })
+  .validator((input: unknown) => shotRefInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => shotModelChoices(await getSql(), context.userId, { sessionId: data.sessionId, shotId: data.shotId }));
 
 export const decideContentFactoryShot = createServerFn({ method: "POST" })
   .validator((input: unknown) => shotDecisionInput(input))

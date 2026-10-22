@@ -7,10 +7,13 @@ import { newId } from "../../contracts/index.ts";
 import { cleanRender } from "../../review/test/render.ts";
 import type { Sql } from "../../../lib/meridian/learning/store.ts";
 import { answerStage, gateResult, type RequestIds } from "./chain.ts";
+import { readEngineRequest } from "../../jobs/orchestrator-sql.ts";
 
 /** Answers the remade take of `shot` in epoch 1 (take, verdict, edit) for a request whose ids are `ids`. Returns the take and the edit it cut. */
 export async function answerRemadeChain(sql: Sql, input: { organizationId: string; requestId: string; shot: string; ids: RequestIds; now: string }): Promise<{ takeId: string; edlId: string }> {
   const { organizationId, requestId, shot, ids, now } = input;
+  // The take belongs to the shot's current epoch: each remake starts a new one, so the answer reads it from the state.
+  const epoch = (await readEngineRequest(sql, organizationId, requestId))?.state.shots[shot]?.epoch ?? 0;
   const takeId = newId("take_");
   const takeArtifact = (
     await writeArtifact(sql, {
@@ -27,7 +30,7 @@ export async function answerRemadeChain(sql: Sql, input: { organizationId: strin
     requestId,
     stage: "produce_shot",
     subjectId: shot,
-    output: { stage: "produce_shot", subjectId: shot, shotId: shot, epoch: 1, takeId, artifacts: { [`take:${takeId}`]: takeArtifact } },
+    output: { stage: "produce_shot", subjectId: shot, shotId: shot, epoch, takeId, artifacts: { [`take:${takeId}`]: takeArtifact } },
   });
 
   const verdict = { takeId, pass: true, confidence: 0.9, checks: [{ rule: "slop.clean", pass: true }], action: "accept" as const };

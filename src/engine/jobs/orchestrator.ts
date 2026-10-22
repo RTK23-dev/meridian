@@ -5,7 +5,7 @@
 // Scheduling is state-driven: after an event is applied, every node whose inputs are ready and that is not yet queued is
 // queued. A paused request queues nothing until it is resumed. Results that arrive while paused are still recorded.
 
-import { EngineError, type Decision, type GateId, type GateResult, type ModelClass, type TakeVerdict } from "../contracts/index.ts";
+import { EngineError, type Decision, type GateId, type GateResult, type ModelChoice, type ModelClass, type TakeVerdict } from "../contracts/index.ts";
 import { thresholds } from "../config/thresholds.ts";
 import { decideGate, type GateVerdict, type GoldMetrics } from "../review/gold.ts";
 import { gateReviewItem, takeReviewItem } from "../review/inbox.ts";
@@ -47,6 +47,8 @@ export type BranchStage = "compose" | "pre_render_gate" | "render" | "post_rende
 type NodeState = { status: "idle" | "queued" | "passed"; redos: number; hints: string[] };
 
 export type ShotState = ShotSummary & {
+  /** The reviewer's model for this shot's remake (D11). Null or absent: the orchestrator's choice applies. */
+  reviewerChoice?: ModelChoice | null;
   status: "pending" | "accepted" | "replanning" | "escalated";
   /** Produce rounds, starting at 0. A redo starts a new round (qualityAttempt, Bible 5.3). */
   round: number;
@@ -1347,6 +1349,8 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
     shot.takesWanted = next.takesWanted;
   }
   if (event.planArtifactId) state.artifacts.plan = event.planArtifactId;
+  // A remake without a model names none, so the orchestrator's choice applies to it again (D11).
+  shot.reviewerChoice = event.modelChoice ?? null;
 
   state.nodes.edit = { status: "idle", redos: 0, hints: [] };
   state.nodes.deliver = { status: "idle", redos: 0, hints: [] };
@@ -1523,6 +1527,7 @@ function schedule(state: OrchestratorState): QueuedJob[] {
             round: shot.round,
             epoch: shot.epoch,
             directives: shot.directives ?? [],
+            modelChoice: shot.reviewerChoice ?? null,
           },
           // The request's model choices (Bible 10.5, contract v8), when the plan stage wrote them. A request without them has no slot,
           // and its produce jobs keep the route table.

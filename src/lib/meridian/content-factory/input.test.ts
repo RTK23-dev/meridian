@@ -11,8 +11,10 @@ const SESSION = "cf_session_1";
 const SHOT = "shot_01M4T7V8BR00000000000AFP71";
 
 test("a remake names a session, a shot of its video and an optional direction; no direction reads as none", () => {
-  assert.deepEqual(remakeShotInput({ sessionId: SESSION, shotId: SHOT, directive: "close up" }), { sessionId: SESSION, shotId: SHOT, directive: "close up" });
-  assert.deepEqual(remakeShotInput({ sessionId: SESSION, shotId: SHOT }), { sessionId: SESSION, shotId: SHOT, directive: null });
+  assert.deepEqual(remakeShotInput({ sessionId: SESSION, shotId: SHOT, directive: "close up" }), { sessionId: SESSION, shotId: SHOT, directive: "close up", modelId: null });
+  assert.deepEqual(remakeShotInput({ sessionId: SESSION, shotId: SHOT }), { sessionId: SESSION, shotId: SHOT, directive: null, modelId: null });
+  assert.deepEqual(remakeShotInput({ sessionId: SESSION, shotId: SHOT, modelId: " seedance-2.0-mini " }).modelId, "seedance-2.0-mini", "a picked model is kept by its id");
+  assert.throws(() => remakeShotInput({ sessionId: SESSION, shotId: SHOT, modelId: 7 }), /Choose a model/);
 });
 
 test("the id named must be a shot id", () => {

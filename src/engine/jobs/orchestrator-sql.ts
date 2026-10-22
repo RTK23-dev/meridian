@@ -151,6 +151,7 @@ function describeEvent(event: EngineEvent): { kind: string; stage: string; subje
           at: event.at,
           planArtifactId: event.planArtifactId ?? null,
           replacement: event.replacement ?? null,
+          modelChoice: event.modelChoice ?? null,
         },
       };
   }

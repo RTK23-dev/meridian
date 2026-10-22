@@ -24,3 +24,15 @@ test("the remake button waits for the quote, and is off when the quote is refuse
   assert.equal(quoteAllowsRemake({ state: "ready", quote: { status: "quoted", fits: false, reservedUsd: 9, reasons: ["over"] } }), false);
   assert.equal(quoteAllowsRemake({ state: "ready", quote: { status: "refused", reasons: ["no"] } }), false);
 });
+
+import { changeOf } from "./shot-presentation.ts";
+
+test("keeping a shot makes no decision, and every other change needs what it names", () => {
+  assert.deepEqual(changeOf("keep", "", ""), { ok: true, decision: null });
+  assert.deepEqual(changeOf("edit_prompt", "  ", ""), { ok: false, reason: "Write the new prompt for this shot." });
+  assert.deepEqual(changeOf("edit_prompt", " A kitchen at noon ", ""), { ok: true, decision: { action: "edit_prompt", prompt: "A kitchen at noon" } });
+  assert.deepEqual(changeOf("stock_footage", "", ""), { ok: false, reason: "Write the search for the stock footage." });
+  assert.deepEqual(changeOf("stock_footage", "", " kitchen "), { ok: true, decision: { action: "change_visual_type", visualType: "stock_footage", query: "kitchen" } });
+  assert.deepEqual(changeOf("cinematic", "", ""), { ok: true, decision: { action: "change_visual_type", visualType: "cinematic" } });
+  assert.deepEqual(changeOf("cinematic", "Dawn", ""), { ok: true, decision: { action: "change_visual_type", visualType: "cinematic", prompt: "Dawn" } });
+});

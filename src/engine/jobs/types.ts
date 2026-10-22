@@ -2,7 +2,7 @@
 // the payload a queued job carries, and the runtime a worker is given (Video Engine Bible 5.1 to 5.3, 15.2).
 
 import { z } from "zod";
-import type { Decision, ProviderAdapter, ProviderPoll, ModelClass, TakeVerdict, VisualType, GateResult } from "../contracts/index.ts";
+import type { Decision, ProviderAdapter, ProviderPoll, ModelClass, ModelChoice, TakeVerdict, VisualType, GateResult } from "../contracts/index.ts";
 import { EngineError, idSchema } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { ENGINE_STAGES, type EngineMaintenanceJob, type EngineStage } from "./registry.ts";
@@ -169,6 +169,8 @@ export type EngineEvent =
       planArtifactId?: string | null;
       /** The shot's new summary when the remake replaces the shot's visual type or source (D7). Null keeps the shot as it was. */
       replacement?: ShotSummary | null;
+      /** The reviewer's model for this shot's remake (D11), priced and checked against the live catalog. Null: the orchestrator's choice. */
+      modelChoice?: ModelChoice | null;
     };
 
 export type StageContext = {

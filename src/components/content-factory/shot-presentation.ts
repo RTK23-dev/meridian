@@ -27,3 +27,32 @@ export function quoteAllowsRemake(state: QuoteState): boolean {
   if (state.state === "unavailable") return true;
   return state.quote.status === "quoted" && state.quote.fits;
 }
+
+/** What the reviewer chose to do to a shot: keep it (a plain remake), edit its prompt, or change its visual type. */
+export type ChangeMode = "keep" | "edit_prompt" | "cinematic" | "stock_footage";
+
+export const CHANGE_MODE_LABELS: Record<ChangeMode, string> = {
+  keep: "Make it again, as it is",
+  edit_prompt: "Edit its prompt",
+  cinematic: "Change it to a cinematic shot",
+  stock_footage: "Change it to stock footage",
+};
+
+/** The decision a change form makes, or the reason it cannot yet: a prompt is required to edit, and a query to use stock footage. */
+export type ChangeOutcome = { ok: true; decision: ShotDecisionView | null } | { ok: false; reason: string };
+
+/** The decision in the shape the engine takes (review/shot-decision.ts). Only the fields this form writes. */
+export type ShotDecisionView = { action: "edit_prompt"; prompt: string } | { action: "change_visual_type"; visualType: "cinematic" | "stock_footage"; prompt?: string; query?: string };
+
+export function changeOf(mode: ChangeMode, text: string, query: string): ChangeOutcome {
+  const prompt = text.trim();
+  if (mode === "keep") return { ok: true, decision: null };
+  if (mode === "edit_prompt") {
+    return prompt === "" ? { ok: false, reason: "Write the new prompt for this shot." } : { ok: true, decision: { action: "edit_prompt", prompt } };
+  }
+  if (mode === "stock_footage") {
+    const search = query.trim();
+    return search === "" ? { ok: false, reason: "Write the search for the stock footage." } : { ok: true, decision: { action: "change_visual_type", visualType: "stock_footage", query: search } };
+  }
+  return { ok: true, decision: { action: "change_visual_type", visualType: "cinematic", ...(prompt === "" ? {} : { prompt }) } };
+}

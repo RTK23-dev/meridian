@@ -8,7 +8,8 @@ import { modelClassSchema, type ModelClass } from "./plan.ts";
 import { positiveMsSchema } from "./primitives.ts";
 
 /** The sources of a model choice (Bible 10.5 step 2): the orchestrator's pick, or the route table's first eligible fallback. */
-export const MODEL_CHOICE_SOURCES = ["orchestrator", "fallback"] as const;
+/** Who chose the model: the orchestrator, the fallback list, or the reviewer for one remake (D11, the reviewer's pick is priced like any other). */
+export const MODEL_CHOICE_SOURCES = ["orchestrator", "fallback", "reviewer"] as const;
 export const modelChoiceSourceSchema = z.enum(MODEL_CHOICE_SOURCES);
 export type ModelChoiceSource = z.infer<typeof modelChoiceSourceSchema>;
 

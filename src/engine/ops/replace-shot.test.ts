@@ -12,12 +12,21 @@ import { scenePlanSchema } from "../contracts/plan.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { chainWorld, drain, startChainRequest } from "./test/chain.ts";
 import { answerRemadeChain } from "./test/remade.ts";
-import { decideEngineShot } from "../api/index.ts";
+import { decideEngineShot, shotModelOptions, quoteEngineShotRemake } from "../api/index.ts";
+import { modelCatalogEntryFixture } from "../contracts/fixtures/chain.ts";
+import { readEngineRequest as readState } from "../jobs/orchestrator-sql.ts";
 
 const ORG = "org_replace_shot";
 const BRAND = "brand_replace_shot";
 const NOW = "2026-10-22T10:00:00.000Z";
 const PORTS: RemakePorts = { monthBudget: { monthBudget: async () => ({ status: "known", usd: 1000 }) } };
+const READ_AT = "2026-10-13T09:00:04.000Z";
+const CATALOG_PORTS: RemakePorts = {
+  ...PORTS,
+  catalog: {
+    read: async () => ({ status: "read", catalog: { readAt: READ_AT, entries: [modelCatalogEntryFixture], dropped: [], failed: [], videoListing: null } }),
+  } as unknown as RemakePorts["catalog"],
+};
 
 function fail(): never {
   throw new Error("the chain world holds no ids for this request");
@@ -96,6 +105,42 @@ describe("a remake that replaces a shot's visual type and source, on a delivered
     const after = await readEngineRequest(db.sql, ORG, requestId);
     assert.equal(after?.state.artifacts.plan, before?.state.artifacts.plan, "no plan was written for the refused replacement");
     assert.equal(after?.state.revision, before?.state.revision);
+  });
+
+  test("a reviewer picks a model for a generated shot: only eligible catalog models are offered, the pick is priced and carried into the remake, and a model outside the catalog is refused", async () => {
+    const replacement: ShotReplacement = {
+      visualType: "cinematic",
+      source: { kind: "generate", modelClass: "video.budget", prompt: "The product turning slowly on a counter", refs: [], takes: 1 },
+    };
+    const first = await remakeEngineShot(db.sql, { organizationId: ORG, requestId, shotId: shot, directive: null, now: NOW, replacement }, PORTS);
+    assert.equal(first.status, "queued", first.status === "refused" ? first.reasons.join("; ") : "");
+    await answerRemadeChain(db.sql, { organizationId: ORG, requestId, shot, ids: world.requests.get(requestId)?.ids ?? fail(), now: NOW });
+    await drain(db.sql, world.runtime, ORG);
+    assert.equal((await engineRequestStatus(db.sql, ORG, requestId))?.status, "delivered");
+
+    const options = await shotModelOptions(db.sql, { organizationId: ORG, requestId, shotId: shot, now: NOW }, CATALOG_PORTS);
+    assert.equal(options.status, "ok", options.status === "refused" ? options.reasons.join("; ") : "");
+    if (options.status !== "ok") return;
+    assert.equal(options.takenAt, READ_AT);
+    assert.deepEqual(options.options.map((option) => option.modelId), ["seedance-2.0-mini"]);
+    assert.ok((options.options[0]?.usdPerCall ?? 0) > 0, "the listing states a price for one call");
+
+    const quote = await quoteEngineShotRemake(db.sql, { organizationId: ORG, requestId, shotId: shot, now: NOW, modelId: "seedance-2.0-mini" }, CATALOG_PORTS);
+    assert.equal(quote.status, "quoted", quote.status === "refused" ? quote.reasons.join("; ") : "");
+    if (quote.status === "quoted") assert.ok(quote.estimateUsd > 0, "the picked model is priced");
+
+    const refused = await remakeEngineShot(db.sql, { organizationId: ORG, requestId, shotId: shot, directive: null, now: NOW, modelId: "nobody/unlisted" }, CATALOG_PORTS);
+    assert.equal(refused.status, "refused");
+    if (refused.status === "refused") assert.match(refused.reasons.join(" "), /not in the live catalog/);
+
+    const picked = await remakeEngineShot(db.sql, { organizationId: ORG, requestId, shotId: shot, directive: null, now: NOW, modelId: "seedance-2.0-mini" }, CATALOG_PORTS);
+    assert.equal(picked.status, "queued", picked.status === "refused" ? picked.reasons.join("; ") : "");
+    const state = await readState(db.sql, ORG, requestId);
+    assert.equal(state?.state.shots[shot]?.reviewerChoice?.modelId, "seedance-2.0-mini", "the orchestrator carries the reviewer's pick to the take");
+    assert.equal(state?.state.shots[shot]?.reviewerChoice?.source, "reviewer");
+    await answerRemadeChain(db.sql, { organizationId: ORG, requestId, shot, ids: world.requests.get(requestId)?.ids ?? fail(), now: NOW });
+    await drain(db.sql, world.runtime, ORG);
+    assert.equal((await engineRequestStatus(db.sql, ORG, requestId))?.status, "delivered");
   });
 
   test("a reviewer's edit of a generated shot's prompt is a remake of that shot, with the new prompt in the plan", async () => {

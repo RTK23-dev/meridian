@@ -47,11 +47,15 @@ import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
 import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
 import { shotSummaryOf } from "../jobs/handlers/plan.ts";
 import { shotChangeFor, type ShotDecision } from "../review/shot-decision.ts";
+import { modelChoiceSchema as modelChoiceContract, type ModelChoice } from "../contracts/assets.ts";
+import { needFor, catalogCallUsd, type ModelNeed } from "../assets/model-choice.ts";
+import { eligibleCandidates, rejectionOf } from "../gateway/catalog-fit.ts";
+import { chosenCallPricesOf, SINGLE_CALL_OUTPUT } from "../plan/model-choices.ts";
+import type { ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ShotSummary } from "../jobs/types.ts";
 import { sumUsd } from "../contracts/money.ts";
 import { ENGINE_MEDIA_LINK_TTL_SECONDS, type MediaLinkSigner } from "../jobs/media-link.ts";
 import { modelChoicesSchema } from "../contracts/model-choices.ts";
-import { chosenCallPricesOf } from "../plan/model-choices.ts";
 import { remakeRefusalOf, type OrchestratorState } from "../jobs/orchestrator.ts";
 import { remakeDirectiveOf } from "../jobs/remake.ts";
 
@@ -270,6 +274,8 @@ export type RemakeInput = {
   now: string;
   /** Replaces the shot's visual type and source (D7). Absent: the shot is made again as it was. */
   replacement?: ShotReplacement | null;
+  /** The reviewer's model for this shot's remake, by its catalog id (D11). Absent: the orchestrator's choice. Generated shots only. */
+  modelId?: string | null;
 };
 
 /** A shot's new visual type and source, for a remake that changes what the shot is (D7). The shot keeps its beat, its timing and its layer. */
@@ -286,6 +292,7 @@ export type RemakeResult = { status: "queued"; revision: number; reservationId: 
 /** What the checks before a remake read: the video's record, the shot, the month's budget and the revision the remake would make. */
 type RemakeContext = {
   organizationId: string;
+  requestId: string;
   planId: string;
   state: OrchestratorState;
   plan: ScenePlan;
@@ -321,7 +328,7 @@ async function remakeContextOf(sql: Sql, input: { organizationId: string; reques
   if (month.status !== "known") return { ok: false, reasons: [month.reason] };
   return {
     ok: true,
-    context: { organizationId: input.organizationId, planId, state, plan, request, shot, month, catalog: resolved.catalog, revision: (state.revision ?? 0) + 1 },
+    context: { organizationId: input.organizationId, requestId: input.requestId, planId, state, plan, request, shot, month, catalog: resolved.catalog, revision: (state.revision ?? 0) + 1 },
   };
 }
 
@@ -344,11 +351,14 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
 
   const reservationId = newId("res_");
   let replaced: ReplacedPlan | null = null;
+  let modelChoice: ModelChoice | null = null;
   try {
     replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
-    const chosenPrices = replaced !== null ? replaced.chosenPrices : await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
-    const reservedPlan = replaced !== null ? replaced.plan : context.plan;
-    const reservedShot = replaced !== null ? replaced.shot : context.shot;
+    const picked = await pickedRemake(sql, context, replaced, input.modelId ?? null);
+    modelChoice = picked.modelChoice;
+    const chosenPrices = picked.chosenPrices;
+    const reservedPlan = picked.plan;
+    const reservedShot = picked.shot;
     const reserved = await withWorkspaceLedger(sql, input.organizationId, (store) =>
       reserve(store, {
         requestId: input.requestId,
@@ -383,6 +393,7 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
         at: input.now,
         planArtifactId,
         replacement: replaced?.summary ?? null,
+        modelChoice,
       },
       dedupeKey: `remake|${input.requestId}|${input.shotId}|${context.revision}`,
     });
@@ -428,6 +439,90 @@ async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: Sho
   };
 }
 
+/** A remake's pricing inputs: the plan and shot it reserves, its chosen prices, and the reviewer's model when one is picked (D11). */
+type PickedRemake = { plan: ScenePlan; shot: ScenePlan["shots"][number]; chosenPrices: ChosenCallPrices | undefined; modelChoice: ModelChoice | null };
+
+async function pickedRemake(sql: Sql, context: RemakeContext, replaced: ReplacedPlan | null, modelId: string | null): Promise<PickedRemake> {
+  const plan = replaced?.plan ?? context.plan;
+  const shot = replaced?.shot ?? context.shot;
+  if (modelId === null) {
+    const chosenPrices = replaced !== null ? replaced.chosenPrices : await chosenPricesFor({ sql, organizationId: context.organizationId, state: context.state, plan, catalog: context.catalog });
+    return { plan, shot, chosenPrices, modelChoice: null };
+  }
+  const picked = await reviewerChoiceFor(context, plan, shot, modelId);
+  return { plan, shot, chosenPrices: picked.prices, modelChoice: picked.modelChoice };
+}
+
+/**
+ * The reviewer's pick of a model for one generated shot (D11). The model must be in the live catalog and eligible for the shot's need, as
+ * the orchestrator's candidates are. It is priced the way the orchestrator's choices are, so the reserve and the take use one price.
+ */
+async function reviewerChoiceFor(context: RemakeContext, plan: ScenePlan, shot: ScenePlan["shots"][number], modelId: string): Promise<{ modelChoice: ModelChoice; prices: ChosenCallPrices }> {
+  if (shot.source.kind !== "generate") throw new EngineError("invalid_input", "only a generated shot has a model to choose", { stage: "produce_shot" });
+  if (context.catalog === undefined) throw new EngineError("config", "this runtime has no model catalog, so no model can be chosen", { stage: "produce_shot" });
+  const read = await context.catalog.read(context.organizationId);
+  if (read.status !== "read") throw new EngineError("config", `the model catalog is not connected: ${read.reason}`, { stage: "produce_shot" });
+  const entry = read.catalog.entries.find((candidate) => candidate.id === modelId);
+  if (entry === undefined) throw new EngineError("invalid_input", `${modelId} is not in the live catalog`, { stage: "produce_shot" });
+  const rejection = rejectionOf(modelNeedOf(shot), entry);
+  if (rejection !== null) throw new EngineError("invalid_input", `${modelId} cannot make this shot: ${rejection.detail}`, { stage: "produce_shot" });
+  const modelChoice = modelChoiceContract.parse({ provider: "openrouter", modelId, source: "reviewer", reason: "chosen by the reviewer for this remake", catalogReadAt: read.catalog.readAt });
+  const choices = modelChoicesSchema.parse({
+    schema: "meridian.model_choices/v1",
+    requestId: context.requestId,
+    catalogReadAt: read.catalog.readAt,
+    choices: [{ shotId: shot.shotId, output: SINGLE_CALL_OUTPUT, modelClass: shot.source.modelClass, modelChoice }],
+  });
+  return { modelChoice, prices: chosenCallPricesOf({ plan, choices, catalog: read }).prices };
+}
+
+/** The need a generated shot states, for the catalog's eligibility rules (assets/model-choice.ts needFor). */
+function modelNeedOf(shot: ScenePlan["shots"][number]): ModelNeed {
+  if (shot.source.kind !== "generate") throw new EngineError("invalid_input", "only a generated shot has a model to choose", { stage: "produce_shot" });
+  return needFor({
+    modelClass: shot.source.modelClass,
+    durationMs: shot.endMs - shot.startMs,
+    firstFrame: shot.source.firstFrame !== undefined,
+    lastFrame: shot.source.lastFrame !== undefined,
+    refCount: shot.source.refs.length,
+  });
+}
+
+export type ShotModelOptions =
+  | { status: "ok"; takenAt: string; options: Array<{ modelId: string; usdPerCall: number | null }> }
+  | { status: "refused"; reasons: string[] };
+
+/**
+ * The models a reviewer may pick for one generated shot: the live catalog's candidates that are eligible for the shot (D11), with the price of
+ * one call where the listing states one. Read only.
+ */
+export async function shotModelOptions(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; now: string }, ports?: RemakePorts): Promise<ShotModelOptions> {
+  const checked = await remakeContextOf(sql, input, ports);
+  if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const { context } = checked;
+  if (context.shot.source.kind !== "generate") return { status: "refused", reasons: ["only a generated shot has a model to choose"] };
+  if (context.catalog === undefined) return { status: "refused", reasons: ["this runtime has no model catalog, so no model can be chosen"] };
+  const read = await context.catalog.read(input.organizationId);
+  if (read.status !== "read") return { status: "refused", reasons: [`the model catalog is not connected: ${read.reason}`] };
+  const need = modelNeedOf(context.shot);
+  const durationMs = context.shot.endMs - context.shot.startMs;
+  const options = eligibleCandidates(need, read.catalog.entries).eligible.map((entry) => ({
+    modelId: entry.id,
+    usdPerCall: priceOfCall(entry, durationMs),
+  }));
+  options.sort((a, b) => (a.usdPerCall ?? Number.MAX_SAFE_INTEGER) - (b.usdPerCall ?? Number.MAX_SAFE_INTEGER) || a.modelId.localeCompare(b.modelId));
+  return { status: "ok", takenAt: read.catalog.readAt, options };
+}
+
+/** One call's price in USD where the listing states it (a per-token price is not known before the call), otherwise null. */
+function priceOfCall(entry: ModelCatalogEntry, durationMs: number): number | null {
+  try {
+    return catalogCallUsd(entry, durationMs);
+  } catch {
+    return null;
+  }
+}
+
 /** The plan of a replacement, stored as the request's scene plan. Its parent is the plan it replaces, so the record keeps the history. */
 function writeReplacedPlan(sql: Sql, input: RemakeInput, context: RemakeContext, plan: ScenePlan) {
   return writeArtifact(sql, {
@@ -455,13 +550,8 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
   const { context } = checked;
   try {
     const replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
-    const estimate =
-      replaced !== null
-        ? estimatePlan({ ...replaced.plan, shots: [replaced.shot] }, replaced.chosenPrices ?? new Map())
-        : estimatePlan(
-            { ...context.plan, shots: [context.shot] },
-            (await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog })) ?? new Map(),
-          );
+    const picked = await pickedRemake(sql, context, replaced, input.modelId ?? null);
+    const estimate = estimatePlan({ ...picked.plan, shots: [picked.shot] }, picked.chosenPrices ?? new Map());
     const reasons: string[] = [];
     if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
       reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);
@@ -484,7 +574,7 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
 }
 
 /** A reviewer's change to one shot, as the decision it is (review/shot-decision.ts). */
-export type DecideInput = { organizationId: string; requestId: string; shotId: string; decision: ShotDecision; now: string };
+export type DecideInput = { organizationId: string; requestId: string; shotId: string; decision: ShotDecision; now: string; modelId?: string | null };
 
 /**
  * Applies a reviewer's change to one shot (the review inbox's edit_prompt and change_visual_type, Bible 12.5): the change is a replacement
@@ -495,7 +585,7 @@ export async function decideEngineShot(sql: Sql, input: DecideInput, ports?: Rem
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const change = shotChangeFor(checked.context.shot, input.decision);
   if (!change.ok) return { status: "refused", reasons: [change.reason] };
-  return remakeEngineShot(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, directive: null, now: input.now, replacement: change.change }, ports);
+  return remakeEngineShot(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, directive: null, now: input.now, replacement: change.change, modelId: input.modelId ?? null }, ports);
 }
 
 /** What a reviewer's change would reserve, before it is confirmed. Read only, as quoteEngineShotRemake. */
@@ -504,7 +594,7 @@ export async function quoteEngineDecision(sql: Sql, input: DecideInput, ports?: 
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const change = shotChangeFor(checked.context.shot, input.decision);
   if (!change.ok) return { status: "refused", reasons: [change.reason] };
-  return quoteEngineShotRemake(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, now: input.now, replacement: change.change }, ports);
+  return quoteEngineShotRemake(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, now: input.now, replacement: change.change, modelId: input.modelId ?? null }, ports);
 }
 
 /** The take a shot shows: its accepted take, or else its newest take made in the current plan epoch. Null when the shot has none. */

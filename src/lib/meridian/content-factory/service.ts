@@ -28,6 +28,8 @@ import {
   type EngineReadinessPorts,
   type RemakePorts,
   type RemakeQuote,
+  type ShotModelOptions,
+  shotModelOptions,
   type ShotTakeLink,
 } from "../../../engine/api/index.ts";
 import type { MediaLinkSigner } from "../../../engine/jobs/media-link.ts";
@@ -581,14 +583,14 @@ export type RemakeOutcome = { status: "queued"; revision: number } | { status: "
  * and its review run on the same video, and the video is delivered again as its next revision. A refusal says why, and nothing is
  * reserved for it.
  */
-export async function remakeShot(sql: Sql, userId: string, input: { sessionId: string; shotId: string; directive: string | null }, ports?: RemakePorts): Promise<RemakeOutcome> {
+export async function remakeShot(sql: Sql, userId: string, input: { sessionId: string; shotId: string; directive: string | null; modelId: string | null }, ports?: RemakePorts): Promise<RemakeOutcome> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
   }
   const outcome = await remakeEngineShot(
     sql,
-    { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, directive: input.directive, now: new Date().toISOString() },
+    { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, directive: input.directive, modelId: input.modelId, now: new Date().toISOString() },
     ports,
   );
   if (outcome.status === "refused") return outcome;
@@ -615,25 +617,34 @@ export async function shotTakeOf(sql: Sql, userId: string, input: { sessionId: s
   return shotTakeLink(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId }, mediaLinks);
 }
 
-/** What remaking one shot would reserve, before the reviewer confirms it (Bible 5.5). Read only: nothing is reserved, queued or called. */
-export async function shotRemakeQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string }, ports?: RemakePorts): Promise<RemakeQuote> {
+/** The models a reviewer may pick for one generated shot of the session's video (D11). Read only. */
+export async function shotModelChoices(sql: Sql, userId: string, input: { sessionId: string; shotId: string }, ports?: RemakePorts): Promise<ShotModelOptions> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
   }
-  return quoteEngineShotRemake(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, now: new Date().toISOString() }, ports);
+  return shotModelOptions(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, now: new Date().toISOString() }, ports);
+}
+
+/** What remaking one shot would reserve, before the reviewer confirms it (Bible 5.5). Read only: nothing is reserved, queued or called. */
+export async function shotRemakeQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; modelId: string | null }, ports?: RemakePorts): Promise<RemakeQuote> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
+  }
+  return quoteEngineShotRemake(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, modelId: input.modelId, now: new Date().toISOString() }, ports);
 }
 
 /**
  * A reviewer's change to one shot of the session's video (edit_prompt or change_visual_type, Bible 12.5). It is a remake of that shot with
  * the change (D7 and D8), and the same rules apply: an admin of the session's workspace only, and only once the video exists.
  */
-export async function shotDecision(sql: Sql, userId: string, input: { sessionId: string; shotId: string; decision: ShotDecision }, ports?: RemakePorts): Promise<RemakeOutcome> {
+export async function shotDecision(sql: Sql, userId: string, input: { sessionId: string; shotId: string; decision: ShotDecision; modelId: string | null }, ports?: RemakePorts): Promise<RemakeOutcome> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
   }
-  const outcome = await decideEngineShot(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, decision: input.decision, now: new Date().toISOString() }, ports);
+  const outcome = await decideEngineShot(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, decision: input.decision, modelId: input.modelId, now: new Date().toISOString() }, ports);
   if (outcome.status === "refused") return outcome;
   await audit(sql, {
     organizationId: row.organization_id,
@@ -647,12 +658,12 @@ export async function shotDecision(sql: Sql, userId: string, input: { sessionId:
 }
 
 /** What a reviewer's change to one shot would reserve, before it is confirmed. Read only. */
-export async function shotDecisionQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; decision: ShotDecision }, ports?: RemakePorts): Promise<RemakeQuote> {
+export async function shotDecisionQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; decision: ShotDecision; modelId: string | null }, ports?: RemakePorts): Promise<RemakeQuote> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
   }
-  return quoteEngineDecision(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, decision: input.decision, now: new Date().toISOString() }, ports);
+  return quoteEngineDecision(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, decision: input.decision, modelId: input.modelId, now: new Date().toISOString() }, ports);
 }
 
 export type RunView =
