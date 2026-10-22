@@ -344,6 +344,13 @@ function ConnectForm({
   const selected = PLATFORMS.find((item) => item.id === platform) ?? PLATFORMS[0];
   const [confirming, setConfirming] = useState(false);
   const canSave = name.trim().length > 0 && accountId.trim().length > 0;
+  const saveReason = pending
+    ? "Connecting the account. Wait for it to finish."
+    : !name.trim()
+      ? "Enter an account name to connect."
+      : !accountId.trim()
+        ? "Enter the account ID to connect."
+        : "";
   return (
     <form className="space-y-4 rounded-xl border border-border bg-surface p-4" noValidate onSubmit={onSubmit}>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Platform">
@@ -391,7 +398,8 @@ function ConnectForm({
         </Field>
       )}
       <UnsavedChangesBar dirty={dirty} subject="account connection" confirming={confirming} onConfirmingChange={setConfirming} onDiscard={onDiscard} />
-      <Button type="submit" disabled={pending || !canSave}>{pending ? "Connecting…" : "Connect"}</Button>
+      {!canSave || pending ? <DisabledReason id="accounts-connect-reason">{saveReason}</DisabledReason> : null}
+      <Button type="submit" disabled={pending || !canSave} aria-describedby={!canSave || pending ? "accounts-connect-reason" : undefined}>{pending ? "Connecting…" : "Connect"}</Button>
     </form>
   );
 }

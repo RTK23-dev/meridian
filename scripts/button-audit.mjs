@@ -220,7 +220,8 @@ async function auditScreen(page, label, url, tab, dialogs) {
   }
 }
 
-const browser = await chromium.launch({ headless: true });
+// MERIDIAN_SMOKE_CHROMIUM names an installed Chromium when Playwright's own download is not present (as in content-factory-flow.mjs).
+const browser = await chromium.launch({ headless: true, executablePath: process.env.MERIDIAN_SMOKE_CHROMIUM || undefined });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await context.newPage();
 page.setDefaultTimeout(30000);
