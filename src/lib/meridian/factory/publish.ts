@@ -21,6 +21,7 @@ import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import type { RunSettings } from "./run-settings.ts";
 import type { TrialRequest } from "../distribution/trial.ts";
 import { trialDefaultForRunPage } from "../pages/store.ts";
+import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
 
 /** The organic channel each platform a run names publishes through. A platform with no organic channel is reported, not skipped. */
 export const ORGANIC_CHANNEL_BY_PLATFORM: Readonly<Record<string, string>> = {
@@ -150,7 +151,7 @@ async function publishOrganic(
   }
 }
 
-type PaidRoute = { engine: PublishEngine; accessToken: string | null } | { notConnected: string } | { refused: string };
+type PaidRoute = { engine: PublishEngine; accessToken: string | null; adAccountId: string } | { notConnected: string } | { refused: string };
 
 /** The reason a live paid publish is refused when the run names no targeting country. It is the reason the run view shows. */
 export const NO_TARGETING_COUNTRY_REASON = "A live paid publish was refused: no targeting country. Name at least one targeting country on the run. Nothing was sent.";
@@ -164,13 +165,16 @@ export const NO_PAGE_OR_LINK_REASON =
  * then at least one targeting country, then a Page and a link. A failed check is refused before the publisher is called, so no campaign
  * or ad set is created that the later steps cannot finish.
  */
-export function liveRouteFor(input: { accessToken: string | null; countries: readonly string[]; pageId: string; link: string }): PaidRoute {
+export function liveRouteFor(input: { accessToken: string | null; adAccountId: string; countries: readonly string[]; pageId: string; link: string }): PaidRoute {
   if (!input.accessToken) {
     return { notConnected: "No Meta ads account is connected for this workspace. Connect it in Settings. Nothing was sent." };
   }
+  if (!input.adAccountId.trim()) {
+    return { notConnected: "No Meta ad account is saved for this brand. Add it on Connected accounts. Nothing was sent." };
+  }
   if (input.countries.length === 0) return { refused: NO_TARGETING_COUNTRY_REASON };
   if (!input.pageId.trim() || !input.link.trim()) return { refused: NO_PAGE_OR_LINK_REASON };
-  return { engine: metaPublishEngine(), accessToken: input.accessToken };
+  return { engine: metaPublishEngine(), accessToken: input.accessToken, adAccountId: input.adAccountId };
 }
 
 /**
@@ -178,10 +182,11 @@ export function liveRouteFor(input: { accessToken: string | null; countries: rea
  * Outside it, the route is the live one (liveRouteFor).
  */
 export async function paidRouteFor(sql: Sql, scope: Scope, input: { countries: readonly string[]; pageId: string; link: string }): Promise<PaidRoute> {
-  if (isTestingRuntimeNow()) return { engine: publishEngineById("test"), accessToken: null };
+  if (isTestingRuntimeNow()) return { engine: publishEngineById("test"), accessToken: null, adAccountId: "" };
   const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", process.env.TOKEN_ENCRYPTION_KEY ?? "");
   return liveRouteFor({
     accessToken: credential.status === "connected" ? credential.accessToken : null,
+    adAccountId: await savedAdAccountId(sql, scope.organizationId, scope.brandId, AD_ACCOUNT_PLATFORM.meta),
     countries: input.countries,
     pageId: input.pageId,
     link: input.link,
@@ -282,6 +287,7 @@ async function publishPaid(
       link: input.link,
       message: "",
       accessToken: route.accessToken ?? undefined,
+      adAccountId: route.adAccountId,
     });
   } catch (error) {
     const reason = `The paid publisher did not return. Nothing is reported as paused. ${errorText(error)}`;

@@ -91,20 +91,20 @@ test("brand defaults save only settings that pass the server's checks, and a nic
 });
 
 test("a live paid publish is refused with 'no targeting country' before any request when the run names none", () => {
-  const route = liveRouteFor({ accessToken: "fixture-token", countries: [], pageId: "page-1", link: "https://example.com/a" });
+  const route = liveRouteFor({ accessToken: "fixture-token", adAccountId: "act_1", countries: [], pageId: "page-1", link: "https://example.com/a" });
   assert.equal("refused" in route, true);
   if ("refused" in route) assert.equal(route.refused, NO_TARGETING_COUNTRY_REASON);
   assert.match(NO_TARGETING_COUNTRY_REASON, /no targeting country/);
 });
 
 test("a live paid publish with no stored Meta token is not connected, and with no Page or link it is refused before any request", () => {
-  assert.equal("notConnected" in liveRouteFor({ accessToken: null, countries: ["US"], pageId: "", link: "" }), true);
+  assert.equal("notConnected" in liveRouteFor({ accessToken: null, adAccountId: "act_1", countries: ["US"], pageId: "", link: "" }), true);
 
-  const noPage = liveRouteFor({ accessToken: "fixture-token", countries: ["US"], pageId: "", link: "" });
+  const noPage = liveRouteFor({ accessToken: "fixture-token", adAccountId: "act_1", countries: ["US"], pageId: "", link: "" });
   assert.equal("refused" in noPage, true);
   if ("refused" in noPage) assert.equal(noPage.refused, NO_PAGE_OR_LINK_REASON);
 
-  const ready = liveRouteFor({ accessToken: "fixture-token", countries: ["US"], pageId: "page-1", link: "https://example.com/a" });
+  const ready = liveRouteFor({ accessToken: "fixture-token", adAccountId: "act_1", countries: ["US"], pageId: "page-1", link: "https://example.com/a" });
   assert.equal("engine" in ready, true);
   if ("engine" in ready) assert.equal(ready.engine.id, "meta");
 });
@@ -135,7 +135,7 @@ test("the countries of a paid run reach the ad set's targeting in the Meta reque
     link: "https://example.com/landing",
     message: "Hello",
     accessToken: "fixture-token",
-    env: { META_AD_ACCOUNT_ID: "act_1234" },
+    adAccountId: "act_1234",
     transport,
   });
   assert.equal(result.ok, true, result.error);
@@ -144,4 +144,9 @@ test("the countries of a paid run reach the ad set's targeting in the Meta reque
   const body = JSON.parse(String(adSet.body)) as { targeting: { geo_locations: { countries: string[] } }; status: string };
   assert.deepEqual(body.targeting.geo_locations.countries, ["US", "CA"]);
   assert.equal(body.status, "PAUSED");
+});
+
+test("the live paid route is refused, before any call, when no Meta ad account is saved for the brand", () => {
+  const route = liveRouteFor({ accessToken: "fixture-token", adAccountId: "", countries: ["US"], pageId: "page-1", link: "https://example.com/a" });
+  assert.ok("notConnected" in route && route.notConnected.includes("Connected accounts"), JSON.stringify(route));
 });

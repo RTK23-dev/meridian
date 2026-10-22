@@ -70,7 +70,7 @@ test("a paused meta campaign reuses a stored id and does not create another camp
     message: "Soap",
     existingCampaignId: "camp-1",
     accessToken: "token",
-    env: { META_AD_ACCOUNT_ID: "act_1" },
+    adAccountId: "act_1",
     transport,
   });
   assert.equal(published.externalId, "camp-1");
@@ -88,7 +88,8 @@ test("google publish stores nothing when the budget response has no resource", a
     link: "",
     message: "",
     accessToken: "oauth",
-    env: { GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT: "deployment", GOOGLE_ADS_CUSTOMER_ID: "123" },
+    adAccountId: "123",
+    env: { GOOGLE_ADS_DEVELOPER_TOKEN: "dev", GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT: "deployment" },
     transport: scripted([{ status: 200, body: JSON.stringify({ results: [{}] }) }]),
   });
   assert.equal(published.externalId, null);

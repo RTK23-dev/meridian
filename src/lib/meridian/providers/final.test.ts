@@ -377,7 +377,7 @@ test("tiktok paused publish creates a disabled campaign and does not invent a la
     scheduleStart: "2026-01-02 00:00:00",
     imageIds: ["img-1"],
     accessToken: "token",
-    tiktokAdvertiserId: "adv",
+    adAccountId: "adv",
     transport: async (request) => {
       if (request.url.includes("/campaign/create/")) campaignBody = String(request.body ?? "");
       if (request.url.includes("/campaign/create/")) return { status: 200, body: JSON.stringify({ code: 0, data: { campaign_id: "c1" } }), headers: {} };

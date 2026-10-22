@@ -51,7 +51,7 @@ export async function publishPausedForBrand(
   const { publishPausedStages } = await import("./live.ts");
   const { stageWrites } = await import("./stages.ts");
   const { providerAccessToken } = await import("./access-token.ts");
-  const { savedAdAccountId } = await import("./ad-account.ts");
+  const { AD_ACCOUNT_LABEL, AD_ACCOUNT_PLATFORM, savedAdAccountId } = await import("./ad-account.ts");
   const operation = startOperation({
     provider: input.provider,
     operation: "publishing.paused",
@@ -83,10 +83,10 @@ export async function publishPausedForBrand(
       stages: notConnected ? [{ objectType: "video", status: "NOT_CONNECTED", externalId: null, detail: opened.error }] : [],
     };
   }
-  // TikTok publishes to the brand's saved ad account on Connected accounts, the account the performance sync reads. No environment id is used.
-  const tiktokAdvertiserId = input.provider === "tiktok" ? await savedAdAccountId(sql, input.organizationId, input.brandId, "tiktok_ads") : "";
-  if (input.provider === "tiktok" && !tiktokAdvertiserId) {
-    const reason = "No TikTok advertiser id is saved for this brand. Add it on Connected accounts. Nothing was sent.";
+  // Every publish goes to the brand's saved ad account on Connected accounts, the account the performance sync reads. No environment id is used.
+  const adAccountId = await savedAdAccountId(sql, input.organizationId, input.brandId, AD_ACCOUNT_PLATFORM[input.provider]);
+  if (!adAccountId) {
+    const reason = `No ${AD_ACCOUNT_LABEL[input.provider]} ad account is saved for this brand. Add it on Connected accounts. Nothing was sent.`;
     const record = operation.finish(false, 0, reason);
     return { correlationId: String(record.correlationId), detail: reason, stages: [] };
   }
@@ -135,7 +135,7 @@ export async function publishPausedForBrand(
       actorId: input.actorId,
       name: input.name,
       accessToken: opened.token,
-      adAccountId: env.META_AD_ACCOUNT_ID ?? "",
+      adAccountId,
       existingVideoId: existing.video,
       transport: recording,
       correlationId: operation.correlationId,
@@ -169,7 +169,7 @@ export async function publishPausedForBrand(
     scheduleStart: input.scheduleStart,
     imageIds: input.imageIds,
     videoId: input.provider === "meta" ? confirmedVideo?.externalId : input.videoId,
-    tiktokAdvertiserId,
+    adAccountId,
     headlines: input.headlines,
     descriptions: input.descriptions,
     cpcBidCents: input.cpcBidCents,

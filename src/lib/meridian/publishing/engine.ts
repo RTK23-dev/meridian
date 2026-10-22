@@ -16,6 +16,8 @@ export type PublishPausedRequest = {
   videoId?: string;
   imageIds?: string[];
   accessToken?: string;
+  /** The brand's saved Meta ad account (Connected accounts). A publish needs it. */
+  adAccountId?: string;
   env?: NodeJS.ProcessEnv;
   transport?: Transport;
 };
@@ -60,6 +62,7 @@ export function metaPublishEngine(): PublishEngine {
           videoId: request.videoId,
           imageIds: request.imageIds,
           accessToken: request.accessToken,
+          adAccountId: request.adAccountId,
           env: request.env,
           transport: request.transport,
         });

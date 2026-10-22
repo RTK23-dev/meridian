@@ -33,7 +33,7 @@ export async function probeLive(
     return { ok: false, accountId: "", accountName: "", permissions: [], error: "No credentials are configured." };
   }
   if (provider === "meta") {
-    const result = await probeMeta({ accessToken: token, adAccountId: env.META_AD_ACCOUNT_ID }, transport);
+    const result = await probeMeta({ accessToken: token }, transport);
     return result.ok
       ? { ok: true, accountId: result.accountId, accountName: result.accountName, permissions: result.permissions, error: "" }
       : { ok: false, accountId: "", accountName: "", permissions: [], error: result.error };
@@ -52,7 +52,6 @@ export async function probeLive(
         // The developer token identifies the deployment's Google Ads API client. It is not an account token, and it is the one
         // deployment token the probe still reads from the environment.
         developerToken: googleDeveloperToken(env),
-        customerId: env.GOOGLE_ADS_CUSTOMER_ID,
       },
       transport,
     );
@@ -148,8 +147,11 @@ export async function publishPausedStages(input: {
   scheduleStart?: string;
   imageIds?: string[];
   videoId?: string;
-  /** The brand's saved TikTok ad account (Connected accounts). Required for a TikTok publish; the environment is not read. */
-  tiktokAdvertiserId?: string;
+  /**
+   * The brand's saved ad account for this provider (Connected accounts): the Meta ad account, the Google Ads customer or the TikTok
+   * advertiser. A publish needs it. The deployment's environment is not read for it.
+   */
+  adAccountId?: string;
   headlines?: string[];
   descriptions?: string[];
   cpcBidCents?: number;
@@ -174,9 +176,9 @@ export async function publishPausedStages(input: {
   }
   if (input.provider === "meta") {
     const published = await publishMetaPaused(
-      { accessToken: token, adAccountId: env.META_AD_ACCOUNT_ID },
+      { accessToken: token, adAccountId: input.adAccountId },
       {
-        adAccountId: env.META_AD_ACCOUNT_ID ?? "",
+        adAccountId: input.adAccountId ?? "",
         name: input.name,
         dailyBudgetCents: input.dailyBudgetCents,
         countries: input.countries,
@@ -197,7 +199,7 @@ export async function publishPausedStages(input: {
   }
   if (input.provider === "tiktok") {
     const published = await publishTikTokFlow(
-      { accessToken: token, advertiserId: input.tiktokAdvertiserId },
+      { accessToken: token, advertiserId: input.adAccountId },
       {
         name: input.name,
         dailyBudget: input.dailyBudgetCents / 100,
@@ -222,7 +224,7 @@ export async function publishPausedStages(input: {
     {
       accessToken: token,
       developerToken: googleDeveloperToken(env),
-      customerId: env.GOOGLE_ADS_CUSTOMER_ID,
+      customerId: input.adAccountId,
     },
     {
       name: input.name,
@@ -253,6 +255,8 @@ export async function publishPausedCampaign(input: {
   message: string;
   existingCampaignId?: string;
   accessToken?: string;
+  /** The brand's saved ad account for this provider (Connected accounts). A publish needs it. */
+  adAccountId?: string;
   env?: NodeJS.ProcessEnv;
   transport?: Transport;
 }): Promise<{ externalId: string | null; reused: boolean; error: string }> {

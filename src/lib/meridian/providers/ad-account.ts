@@ -15,3 +15,9 @@ export async function savedAdAccountId(sql: Sql, organizationId: string, brandId
   `;
   return rows[0]?.external_account_id?.trim() ?? "";
 }
+
+/** The platform each publishing provider's saved ad account is stored under on Connected accounts. */
+export const AD_ACCOUNT_PLATFORM = { meta: "meta_ads", google: "google_ads", tiktok: "tiktok_ads" } as const;
+
+/** The name a person sees for each provider's ad account, in the messages that say it is missing. */
+export const AD_ACCOUNT_LABEL = { meta: "Meta", google: "Google Ads", tiktok: "TikTok" } as const;

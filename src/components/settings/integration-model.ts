@@ -63,7 +63,7 @@ const ACCOUNT_GROUP: Record<keyof typeof ACCOUNT_LABEL, IntegrationGroup> = {
 const OAUTH_PROVIDERS = new Set<keyof typeof ACCOUNT_LABEL>(["meta", "tiktok", "google"]);
 
 const ACCOUNT_MISSING: Record<keyof typeof ACCOUNT_LABEL, string> = {
-  meta: "Connect with Meta OAuth, or set META_ACCESS_TOKEN on the server. META_AD_ACCOUNT_ID is needed to publish.",
+  meta: "Connect with Meta OAuth. Choose the brand's ad account on Connected accounts; it is needed to publish.",
   tiktok: "Connect with TikTok OAuth. Choose the brand's ad account on Connected accounts; it is needed to publish.",
   google: "Connect with Google OAuth. The Google Ads developer token is used only when GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT=deployment.",
   ad_library: "Set META_AD_LIBRARY_TOKEN on the server. No ads are collected until a request succeeds.",
