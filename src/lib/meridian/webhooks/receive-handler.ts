@@ -1,6 +1,14 @@
 import type { Sql } from "../learning/store.ts";
 import { activeWebhookOrganizations, recordWebhookDelivery } from "./receive-store.ts";
+import { clientKey, createRateLimit, RATE_LIMIT_MESSAGE } from "../security/limits.ts";
 import { verifyDeliverySignature } from "./verify.ts";
+
+/**
+ * Deliveries one client may send in a minute. The client is the request's address when MERIDIAN_TRUST_PROXY_HEADERS is set. Without it,
+ * every delivery shares one bucket, so a flood of unsigned requests can use up the bucket for real deliveries too. Those are retried by
+ * the sender. The limit is high because a sender may burst after an outage.
+ */
+export const webhookLimit = createRateLimit(300, 60_000);
 
 export interface WebhookReceiveDeps {
   /**
@@ -12,6 +20,8 @@ export interface WebhookReceiveDeps {
   nowMs: number;
   /** How long the whole body may take to arrive. Defaults to WEBHOOK_BODY_DEADLINE_MS. Tests shorten it. */
   bodyDeadlineMs?: number;
+  /** The per-client limit. Defaults to webhookLimit. Tests pass their own. */
+  limiter?: { allow: (key: string, now: number) => boolean };
 }
 
 /**
@@ -93,13 +103,15 @@ export async function readBoundedBody(request: Request, deadlineMs: number): Pro
  * workspace it belongs to. The 409 is returned only after the signature checks pass, so an unsigned caller cannot tell
  * how an account is connected. An account with no active connection stays 401.
  *
- * The order is fixed. The media type is checked first (415). The body is read within the cap and the deadline (413, 408).
- * The v2 signature over the routing headers and the raw bytes, the timestamp and the JSON are checked (401) before any
- * database access. Only then
- * is the account resolved. The event and its job are recorded in one transaction: 202 "recorded" for a new event, and 200
- * "already received" for a repeat, whose job is still ensured.
+ * The order is fixed. The rate limit is checked first (429), before anything is read. The media type is checked next (415). The body is
+ * read within the cap and the deadline (413, 408). The v2 signature over the routing headers and the raw bytes, the timestamp and the
+ * JSON are checked (401) before any database access. Only then is the account resolved. The event and its job are recorded in one
+ * transaction: 202 "recorded" for a new event, and 200 "already received" for a repeat, whose job is still ensured.
  */
 export async function handleWebhookReceive(request: Request, deps: WebhookReceiveDeps): Promise<Response> {
+  if (!(deps.limiter ?? webhookLimit).allow(clientKey(request), deps.nowMs)) {
+    return refusal(RATE_LIMIT_MESSAGE, 429);
+  }
   if (!isJsonContentType(request.headers.get("content-type"))) {
     return refusal("Webhook payloads must be application/json.", 415);
   }

@@ -469,3 +469,27 @@ test("a signature in the old form, over the timestamp and body only, is refused 
   assert.equal(await response.text(), "The webhook signature does not match.");
   assert.equal(opened(), 0);
 });
+
+test("a client over the delivery limit is refused with 429 before anything is read or stored", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const seen: Array<{ key: string; now: number }> = [];
+  const limiter = {
+    allow(key: string, now: number) {
+      seen.push({ key, now });
+      return false;
+    },
+  };
+  const request = delivery({});
+  const response = await handleWebhookReceive(request, { ...depsFor(db), limiter });
+  assert.equal(response.status, 429);
+  assert.equal(request.bodyUsed, false, "the body was never read");
+  assert.equal(db.opens, 0);
+  assert.deepEqual(db.events, []);
+  assert.deepEqual(seen, [{ key: "untrusted-client", now: NOW }], "the limit is keyed by the client and the time");
+});
+
+test("a client under the delivery limit is handled as before", async () => {
+  const db = fakeWebhookDb(ONE_ORG);
+  const response = await handleWebhookReceive(delivery({}), { ...depsFor(db), limiter: { allow: () => true } });
+  assert.equal(response.status, 202);
+});
