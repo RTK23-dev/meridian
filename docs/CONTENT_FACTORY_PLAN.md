@@ -1,220 +1,221 @@
-# Content Factory plan
+# Content Factory: execution plan
 
-Date: 2026-10-22. Status: proposal for the owner's review. Nothing in this plan is built, and this file is not committed.
+Last checked 2026-10-22. This is the plan of record for the Content Factory. Product direction is in [NORTH_STAR.md](NORTH_STAR.md), and
+how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and NORTH_STAR disagree, NORTH_STAR wins.
 
-Basis: [NORTH_STAR.md](NORTH_STAR.md) (sections 1 to 8), [FACTORY.md](FACTORY.md), [ROADMAP.md](ROADMAP.md),
-[engine/CONTENT_FACTORY_STATE_2026-10-18.md](engine/CONTENT_FACTORY_STATE_2026-10-18.md), and a code check on 2026-10-22 for every
-claim in section 3 and section 4. No tests were run for this plan.
+## How to use this plan
 
-## 1. The target
+- Take the lowest-numbered unfinished task in the lowest unfinished milestone.
+- Name the task ID (for example `M1.2`) and the loop step (NORTH_STAR section 1) in every PR.
+- Tick a task only when its acceptance test passes. A live task is ticked only when its run is recorded in
+  [PHASE_LOG.md](engine/PHASE_LOG.md), with the artifact ids, the state and the cost.
+- Agents hold no live keys. A live task is a runbook for the owner, and the agent never asks for a key.
+- Stop at a decision marked in section 6. Do not pick an option for the owner.
+- Paths are short. A path with no `src/` prefix is under `src/lib/meridian/`, except `engine/` (`src/engine/`), `routes/` and `components/` (`src/routes/` and `src/components/`). `docs/`, `scripts/` and `migrations/` are from the repo root.
 
-```
-Gather → Grade → Pick → Plan → Produce → Gate → Approve → Publish → Measure → Learn
-   ↑                                                                         │
-   └─────────────────────── patterns pick the next round ────────────────────┘
-```
+## The loop and where each step stands
 
-Binding owner decisions (NORTH_STAR section 2):
+The loop is Gather, Grade, Pick, Plan, Produce, Gate, Approve, Publish, Measure, Learn. Every step is built on recorded fixtures. None has
+a recorded live run.
 
-- Agents hold no live keys. "Not connected" is a correct state, not a bug.
-- Postgres is the system of record, Google Drive holds artifacts, S3 is retired.
-- Ads and organic posts are both first-class, and the loop learns from both.
-- Every source feeds one evidence store. The JEV grading engine is a core path.
-- Providers are options. The person chooses, or the capability matrix does.
-- Choice everywhere: automation mode, decision engine, intent, format, platform, provider.
-- A live path is not done until a live run is recorded with its ids, costs and output.
-
-Working rules for every PR (NORTH_STAR section 6): name the loop step and the work-queue item; add no module that nothing calls; unknown
-is `null`; keep one decision path; keep tenancy and role checks on every server function.
-
-## 2. Two names, one loop
-
-"Content Factory" names two things in the code and the docs:
-
-- **The Factory loop.** The run builder and run view at `/brands/:id/factory`. This is the product NORTH_STAR describes. This plan
-  means this when it says "the Factory".
-- **The brief page.** `/content-factory`. A chat-style session that makes one video from a brief through the video engine. It is a
-  producer inside the loop, not a second product. The Factory's `engine` video provider calls it through `factory/produce-engine.ts`.
-
-Proposal (decision D8): keep both, and call the page "the brief page" in the docs and the UI copy.
-
-## 3. Where the loop stands
-
-"Built" means built and tested on recorded fixtures. "Live" means a live run has been recorded. Live is empty for every step.
-
-| Step | Built | Live | Gap |
-| --- | --- | --- | --- |
-| Gather | Each run's sources record a state: `ok`, `not_connected` or `failed`. Crawler, social scraper, registry adapters, Meta Ad Library collector, Apify Instagram volume, Cyclone scout. A missing key is `not_connected`, and the run goes on. | No source has a live call on record. | Apify key and plan price (D4). Uploads (G6). |
-| Grade | Observed signal and five JEV questions, stored side by side. Caps and the kill switch are checked before each engine call. | No engine call on record. | Every probability routes to review until a brand is calibrated (100 measured outcomes per question). |
-| Pick | `factory/pick.ts` uses Thompson (`factory/thompson.ts`, wired). Brain filters, per-surface weights, picks stored with their grade fingerprint. | None. | Nothing to weight with until outcomes are measured (G2). |
-| Plan | One-attribute variants against a control. Hooks and CTAs come only from the brand's brain. | Not applicable. | A variant with no brain line gives no variant. This is intended. |
-| Produce | Image, carousel and video through the router. Budget reserved before each call. Held-budget panel. `engine` video provider. | No provider call on record. The engine render is not connected: the HyperFrames price is unset. | No provider lookup for held budget (G9). Two video paths (G7). |
-| Gate | Rule gates, JEV `creative_qa` and `visual_qa`, licence and AI-label records. | No judgment on record. | `ENGINE_LICENSED_PROVIDERS` is the owner's (D2). |
-| Approve | Stop points by mode (`manual`, `semi`, `full`), approvals, the kill switch, Start again. A `full` run with no cap stops. | Not applicable. | Studio does not read these settings (G4). |
-| Publish, organic | Facebook, Instagram, YouTube and TikTok through `distribution/service.ts`. Media links signed for 15 minutes. | None. | TikTok apps are unaudited: posts stay private and receipts unconfirmed. Instagram graduation is not observable. |
-| Publish, paid | Meta paused campaigns. Destination (Page id and link) and targeting countries come from the run's settings. | None. | The Factory's paid path is Meta only (G3). |
-| Measure | Organic reads for all four channels through `fetchMetrics`. Paid insights. Creative linkage (wired, `measurement/pull.ts`). Unknown is `null`. | None verified. | Every read is unverified against live data (G2). |
-| Learn | Patterns per surface. Cross-surface proposals. JEV predictions stored beside outcomes. Calibration report. | None. | No measured outcomes exist, so nothing learns and nothing calibrates (G2). |
-
-## 4. Corrections to our own docs
-
-The check found these. M0 fixes them.
-
-1. NORTH_STAR section 3 says Thompson and creative linkage are "not wired yet". Both have callers: `factory/pick.ts`, and
-   `factory/actions.ts` with `measurement/pull.ts`.
-2. FACTORY.md (Publish) says a Factory run carries no Facebook Page id and no destination link. The run settings and the run builder
-   carry both, and `factory/publish.ts` reads them. What is still missing is a live paid publish, which needs the owner's run.
-3. NORTH_STAR section 8, item 9, says organic channels return null from `fetchMetrics`. All four organic channels implement it
-   (`distribution/facebook.ts`, `instagram.ts`, `tiktok.ts`, `youtube.ts`). Their reads are unverified live.
-4. NORTH_STAR section 8, item 2, requires that Factory and Studio both read the run settings. Only `brands/$brandId/factory.tsx` does.
-   Studio still takes `autonomy` (`schemas/studio-generation.ts`), and the brain keeps `automationLevel` (`schemas/brain.ts`).
-5. NORTH_STAR section 8, item 1, is partly done. No S3 client code remains in `src`. The S3 mentions left are comments that record the
-   retirement, and the Video Engine Bible, which CLAUDE.md lists as a known conflict. Remove the comments that only describe S3 and
-   leave the Bible to the owner's decision.
-
-## 5. Gaps, ranked by what they block
-
-Each gap names the step it blocks and whether the owner has to act.
-
-**G1. No live run of any step (blocks everything).** Owner runs. The agent builds a recorder: for each live step, a script that reads
-the owner's key from the owner's environment, makes one call, and writes the artifact id, the state and the cost to a log that
-PHASE_LOG can cite. No key enters the repo. Owner: yes.
-
-**G2. Measurement is the first link fixtures cannot prove.** Organic reads on four channels, paid insights and the outcome counts are
-unverified against live data. Without them, Learn has no input and calibration never starts. Fix: check each read against the provider's
-documented response, record one live pull per channel, and check that the Calibration screen counts the outcomes. Owner: yes.
-
-**G3. The Factory's paid path is Meta only.** The publishing engine has paid paths for TikTok and Google (`providers/live.ts`), and
-NORTH_STAR names all three. Fix: route the Factory's paid path through the same destination and refusal rules for TikTok and Google,
-with fixtures. Saved ad accounts are already in place (Phase 1, `b5288ae`). Owner: only for the live run.
-
-**G4. Studio is not on the run settings.** North Star item 2 is not met for Studio. Fix: map Studio `autonomy` and the brain's
-`automationLevel` through the table in FACTORY.md, read the run settings in Studio, and keep the old fields readable until every stored
-value is migrated. Owner: no. The mapping is already decided.
-
-**G5. No test drives a whole run.** NORTH_STAR section 7 asks for the loop to run in `TestingRuntime` on both publish paths and both
-measurement paths, and names `scripts/product-loop.mjs` as the place to prove it. I did not find a test that drives one Factory run
-through all ten steps. The item tests cover pieces of it. Fix: one test that runs one brand's run through every step with
-`intent: both`, and asserts one organic receipt, one paused-ad receipt, both metric paths and one pattern per surface. Owner: no.
-
-**G6. Uploads.** FACTORY.md says Gather records uploads as `not_connected`. ROADMAP says research-ad uploads are counted. The brief page's
-files are not Gather sources at all. Decision D7: should uploads feed Gather? Recommendation: yes, as a source with its own state, so a
-swipe file counts. Owner: decision.
-
-**G7. Two video paths.** The provider path (Hypit, Gemini Omni, Higgsfield, ManualCloud) and the engine path (`engine`). The orchestrator's
-plan runs also queue video steps. Recommendation: keep the choice (NORTH_STAR decision 6), let `auto` pick a provider through the matrix,
-and keep `engine` as a named choice. The engine is the only path that makes its own edit and render. Owner: decision D6.
-
-**G8. Engine media depth is blocked.**
-- The HyperFrames price per minute is unset, so the engine render is not connected (ROADMAP).
-- No window renderer exists, so a remake re-renders the whole video. Splice execution is not built.
-- The edit, compose and render steps of a plan are not connected, because the plan path carries no EDL and no voice timings. This needs
-  a plan-to-request bridge, which is a design call.
-- The licence port waits on D2.
-- The Veo preview model shuts down today. No Veo provider exists in this repository (handoff phase 0, D1).
-
-Owner: D1, D3 and D5. The bridge needs a design decision.
-
-**G9. Held budget waits for an admin.** No provider lookup is registered in `SUBMISSION_LOOKUPS`. Every held reservation therefore waits for
-an admin, and caps stay blocked until one does. Fix: register each lookup a provider documents (ROADMAP lists which providers have none).
-Where none exists, keep the admin path and say so in the panel. Owner: no.
-
-**G10. Live cost truth.** Caps count only priced spend. A provider that reports no cost is refused (images) or not counted. Video
-estimates are held, not spent. Perception tokens have no price, and the price table has one model with an entry. Before the first live
-spend, each provider used must either report its bill or have a dated price entry from its pricing page. Owner: confirm each reading, or
-give a price.
-
-**G11. Security follow-ups before live use.** The Higgsfield status path is derived from mocks and must be confirmed against its
-documentation. The provider artifact host allowlist is open. The webhook edge needs a rate limit and a body cap. Deployments behind a proxy
-must set `MERIDIAN_TRUST_PROXY_HEADERS`. The agent can do the code parts. The deployment settings are the owner's (D12).
-
-**G12. Verification debt.**
-- The full `src` suite has not run since 2026-10-21 (the owner's instruction). It must run at the release gate.
-- The button audit (`npm run ui:button-audit`) has not run on the Factory changes.
-- The Studio publish dialog and the B2 tier counts have no screenshots.
-- The brief page's revision and the hot swap have not been checked in a browser.
-- Review items 1 to 6, 8, 10 and 11 have no new tests (`REVIEW_2026-10-22.md`).
-
-**G13. Discovery volume and cost.** The Apify plan price is unknown, so the discovery cost is `null`. The weekly volume cap is an initial
-value. Owner: D4.
-
-## 6. Owner decisions
-
-| ID | Decision | Unblocks |
+| Step | Code | Missing before the step is done |
 | --- | --- | --- |
-| D1 | Veo replacement. The model shuts down on 22 October 2026, which is today. The engine Bible requires the move before E1. | Handoff phase 0, E1 |
-| D2 | `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. Empty licenses none. | Licence port, engine video in Gate |
-| D3 | HyperFrames price per minute, and the render fallback (Shotstack or none). | Engine render, remake |
-| D4 | Apify key and plan price. | Instagram discovery volume |
-| D5 | Window renderer for a splice remake: HyperFrames, Shotstack, or keep the full re-render. | Remake cost and time |
-| D6 | The default video producer for `auto`: the matrix's provider, or the engine. | G7 |
-| D7 | Should uploads feed Gather. | G6 |
-| D8 | The name of the brief page. | Docs and UI copy |
+| Gather | `factory/gather.ts`, `factory/sources.ts`, `factory/instagram-volume.ts`, `research/worker.ts` (Ad Library) | Live calls for each source. The Apify key and plan price (D4). Uploads are not a source yet (D7). |
+| Grade | `factory/grade.ts`, `decisions/gate.ts` | A live engine grade on record. Every probability routes to review until the brand is calibrated, and that is correct. |
+| Pick | `factory/pick.ts`, `factory/thompson.ts` (wired) | Measured outcomes to weight with (M3). |
+| Plan | `factory/plan.ts` | Nothing on fixtures. A variant with no brain line gives no variant, by design. |
+| Produce | `factory/produce.ts`, `produce-image.ts`, `produce-video.ts`, `produce-engine.ts`, `produce-carousel.ts`, `security/held-reservations.ts` | Live provider calls. Held-budget lookups (M5.3). The engine render price (D3). The choice of default video path (D6). |
+| Gate | `factory/gates.ts`, JEV `creative_qa`, `jobs/licensed-uris.ts` (engine) | `ENGINE_LICENSED_PROVIDERS` (D2). A live judgment on record. |
+| Approve | `factory/stage-decision.ts`, `factory/actions.ts` | Studio does not read the run settings (M0.2). |
+| Publish, organic | `distribution/service.ts`, `distribution/youtube.ts`, `facebook.ts`, `instagram.ts`, `tiktok.ts`, `storage/media-link.ts` | Live receipts. The TikTok audit (D10). Instagram graduation is not observable. |
+| Publish, paid | `factory/publish.ts`, `publishing/engine.ts`, `providers/live.ts`, `providers/ad-account.ts` | The Factory's paid path is Meta only (M1.2). A live paid publish (D10). |
+| Measure | `measurement/pull.ts`, `measurement/creative-linkage.ts`, `performance/` | Every live read is unverified (M3). |
+| Learn | `factory/learn.ts`, `learning/calibration-report.ts`, `learning/calibration-gate.ts` | Outcomes. Calibration needs 100 measured outcomes per question per brand (M3.4). |
+
+The brief page at `/content-factory` makes one video through the engine. It is a producer inside Produce, reached through the `engine`
+provider. The engine's own edit, compose and render steps are not connected (M4.4).
+
+## Milestones
+
+### M0. Make the record true (no keys)
+
+- **M0.1. Correct the stale claims.** NORTH_STAR section 3 says Thompson and creative linkage are "not wired". Both have callers
+  (`factory/pick.ts`; `factory/actions.ts` and `measurement/pull.ts`). NORTH_STAR section 8, item 9, says organic channels return null
+  from `fetchMetrics`. All four implement it. FACTORY.md's Publish section says a run carries no Facebook Page id and no destination link.
+  The run settings and the run builder carry both, and `factory/publish.ts` reads them. Files: `docs/NORTH_STAR.md`, `docs/FACTORY.md`.
+  *Accept:* every claim in those files matches the code, and the diff is reviewed.
+
+- **M0.2. Studio reads the run settings (NORTH_STAR section 8, item 2).** Map Studio's `autonomy` and the brain's `automationLevel` to
+  `automation` with the table in FACTORY.md. Read the run settings in Studio. Keep the old fields readable until every stored value is
+  migrated. Files: `schemas/studio-generation.ts`, `creative/plan.ts`, `studio/session.server.ts`,
+  `routes/_app/brands/$brandId/studio.tsx`, `components/studio/plan-dialog.tsx`, `components/studio/generate-step.tsx`,
+  `schemas/brain.ts`, `brand/brain-store.ts`, `factory/run-settings.ts`.
+  *Accept:* a Studio test changes `automation` and the stages change, as `factory/stage-flow.test.ts` does for the Factory. A test reads a
+  stored old value. The brain's `automated` to `semi` mapping is a code decision the owner can change (D13).
+
+- **M0.3. Button audit on the Factory screens.** Run `npm run ui:button-audit` against the dev server (`scripts/button-audit.mjs`). Fix
+  any control that does nothing, or state why it cannot act.
+  *Accept:* the audit's result is recorded in PHASE_LOG.
+
+### M1. Prove the whole loop on fixtures (no keys)
+
+- **M1.1. One run through all ten steps.** A new test, `factory/loop.test.ts`, runs one brand's run through every step with
+  `intent: both`, on `runtime-mode.ts` with the test providers (`providers/media.ts`, `publishing/engine.ts`).
+  *Accept:* one organic receipt and one paused-ad receipt per creative. Both metric paths write rows with a creative id and a surface.
+  Learning writes one pattern per surface, and the next run's Pick reads them. The run reaches `succeeded` only at learn, with a measured
+  outcome, as FACTORY.md's "When a run finishes" says.
+  Optional: extend `scripts/product-loop.mjs` for the Factory run page, as NORTH_STAR section 7 asks.
+
+- **M1.2. TikTok and Google on the Factory's paid path.** The Factory's paid route is Meta only (`factory/publish.ts`). Add the TikTok and
+  Google routes through `providers/live.ts`, with the saved ad account (`providers/ad-account.ts`).
+  *Accept:* fixture tests for each platform. Each refuses in the same order as Meta: no stored token, no targeting country, no
+  destination. Nothing is set to ACTIVE.
+
+- **M1.3. Security follow-ups (code parts).**
+  - The Higgsfield status path (`production/providers/higgsfield.ts`) was derived from mocks. Confirm it against Higgsfield's documentation.
+    If the documentation cannot be read, leave the path and mark it unverified in the file.
+  - Limit the webhook edge (`routes/api/webhooks/receive.ts`): a rate limit and a body cap. Keep the existing signature checks.
+  - The trusted-proxy setting is read in `security/limits.ts`. Its default must stay off.
+  - Add an allowlist for the hosts that provider output URLs are fetched from.
+  *Accept:* a test for each item. AGENTS.md rule 3 applies: no change to scoring, JEV, auth or provider logic beyond what this item names.
+
+- **M1.4. Gate.** Run the full src suite once, with the owner's approval because of its token cost. Run typecheck, lint and build.
+  *Accept:* all green, and the results are recorded in PHASE_LOG.
+
+### M2. First live loop, one provider per step (owner runs; no keys in the repo)
+
+- **M2.0. Live recorder.** A script, `scripts/live-run.mjs` (new), makes one call for a named step. It reads the key from the owner's
+  environment and writes the artifact id, the state and the cost to a log that PHASE_LOG can cite. With no key it reports `not_connected`
+  and calls nothing.
+  *Accept:* with no key, every step reports `not_connected`, and no step reports success.
+
+- **M2.1. Gather.** The Meta Ad Library (`research/worker.ts`) and YouTube, then SerpAPI, through `factory/gather.ts`.
+  *Accept:* each source has a recorded row, and a source with no key shows `not_connected`.
+
+- **M2.2. Grade.** One JEV engine on a few ads (`factory/grade.ts`, `decisions/gate.ts`).
+  *Accept:* the stored grade names its engine, model and question versions, and an uncalibrated threshold routes the ad to review.
+
+- **M2.3. Produce.** One image provider (`production/image-providers.ts`) and one video provider (`produce-video.ts`, with a provider from
+  `production/providers/`). Each records its bill: either the provider's reported cost or a dated price entry (`factory/price-table.ts`).
+  Then the engine path (`produce-engine.ts`), if D3 is set.
+  *Accept:* a creative in Library and Reviews, and a row in `factory_costs` with its basis.
+
+- **M2.4. Gate.** JEV `creative_qa` on the creatives from M2.3.
+  *Accept:* a judgment is recorded, and the gate reads it.
+
+- **M2.5. Publish, organic.** YouTube first. Confirm the upload visibility default, which ROADMAP lists as "public". Then Facebook Page.
+  Instagram and TikTok follow once their tokens and the media host are set (`MEDIA_LINK_SECRET`, a public `APP_URL`, and
+  `TIKTOK_VERIFIED_MEDIA_DOMAINS` for TikTok).
+  *Accept:* a receipt with the platform's id. A TikTok private post is recorded as unconfirmed.
+
+- **M2.6. Publish, paid.** A paused Meta campaign to a test ad account (`factory/publish.ts`, `providers/meta.ts`). Needs D10.
+  *Accept:* the campaign, ad set, creative and ad exist, all paused, each recorded in `provider_objects`.
+
+- **M2.7. Measure.** One organic pull per channel, and one paid pull (`measurement/pull.ts`).
+  *Accept:* each metric row has a creative id and a surface. An unknown value is `null`.
+
+### M3. Close the measurement loop (owner runs; agent corrects the shapes)
+
+- **M3.1. Organic reads.** Check each channel's `fetchMetrics` (`distribution/facebook.ts`, `instagram.ts`, `tiktok.ts`, `youtube.ts`)
+  against the provider's documented response. Fix the shape errors that M2.7 finds.
+  *Accept:* each channel has one recorded live pull that matches its documentation.
+
+- **M3.2. Paid insights.** Check the reads in `performance/` against Meta's documented insight fields.
+  *Accept:* one recorded live pull.
+
+- **M3.3. Learn from real rows.** `factory/learn.ts` recomputes the patterns per surface. `learning/calibration-report.ts` shows the
+  outcome count for each brand.
+  *Accept:* the Calibration screen shows real counts. A pattern from a real win is visible at the next run's Pick (`pick-surfaces.test.ts`
+  covers the logic).
+
+- **M3.4. Thresholds stay as they are.** `learning/calibration-gate.ts` keeps every threshold uncalibrated until a brand has 100 outcomes
+  for a question. Do not lower that number. Review the constants at that point (D11).
+
+### M4. Engine media depth
+
+- **M4.1. Veo replacement (handoff phase 0; D1).** The engine's Veo preview model shuts down on 22 October 2026. The Video Engine Bible
+  requires the move before E1. No Veo provider exists in this repository.
+  *Accept:* a current model is chosen and wired through the gateway (`engine/gateway/`).
+
+- **M4.2. Window renderer (D5).** `engine/render/splice-run.ts` reports `not_connected` today, because no window renderer exists.
+  Build the window render on `engine/render/hyperframesCloud.ts` or `shotstack.ts`, whichever D5 names.
+  *Accept:* the executor renders one window and joins it with the splice (`engine/render/splice.ts`).
+
+- **M4.3. Remake through the splice.** `engine/jobs/remake.ts` still re-renders the whole video.
+  *Accept:* a remake renders only the changed window in a test, and the cost is recorded. Then one live remake, recorded.
+
+- **M4.4. Plan-to-request bridge (design decision first).** The orchestrator's edit, compose and render steps are not connected, because the
+  plan path carries no EDL and no voice timings. Write the design for the bridge in `engine/orchestrator/production.ts` and get the
+  owner's approval before any code.
+  *Accept:* the design is approved. Then each step is connected with fixtures.
+
+- **M4.5. Licence port (D2).** `engine/jobs/licensed-uris.ts` reads `ENGINE_LICENSED_PROVIDERS`, which has no default.
+  *Accept:* a take from an unlicensed provider is refused at the pre-render gate, with its reason.
+
+- **M4.6. HyperFrames render (D3).** `engine/render/hyperframesCloud.ts` stays fail-closed until the price per minute is set.
+  *Accept:* the price is in config, with its source and date, and one live render is recorded.
+
+### M5. Operate at volume
+
+- **M5.1. Uploads as a Gather source (D7).** Decide whether uploads feed Gather. Then make `factory/gather.ts` count them as a source with
+  its own state, and align FACTORY.md and ROADMAP, which currently disagree.
+  *Accept:* a run with uploads shows the upload source with a count, and with none shows `not_connected`.
+
+- **M5.2. Priced ledger for every provider used.** Each provider either reports its bill, or has a dated entry in `factory/price-table.ts`
+  read from its pricing page. Caps count only priced spend.
+  *Accept:* `price-table.test.ts` covers each provider in use. A provider with neither is refused before its call.
+
+- **M5.3. Held-budget lookups.** `security/held-reservations.ts` holds `SUBMISSION_LOOKUPS`. Register each lookup that a provider
+  documents. Where none exists, the admin path stays, and the panel says so.
+  *Accept:* a held reservation releases only when the provider's lookup confirms it holds no job.
+
+- **M5.4. Instagram discovery volume (D4).** Set the Apify key and the plan price in `sources/apify/config.ts`. Until the price is known,
+  the discovery cost is `null`.
+  *Accept:* one recorded run within the weekly cap.
+
+- **M5.5. Sleep mode.** `factory/sleep-actions.ts`. A full night inside its caps, with its report.
+  *Accept:* the night finishes inside the caps, and the report matches the ledger.
+
+- **M5.6. Shopify attribution.** `routes/api/webhooks/shopify.ts`, with a connected shop.
+  *Accept:* one recorded order is attributed to its creative.
+
+**Definition of done for the plan.** One brand's loop runs unattended for a week in `full` mode, inside its caps. Every step has a live
+row. The Calibration screen reports numbers from measured outcomes. Learning changes what Pick chooses.
+
+## Decisions that block tasks
+
+The owner answers these. An agent reports the blocked task and does not choose an option.
+
+| ID | Decision | Blocks |
+| --- | --- | --- |
+| D1 | Veo replacement. The model shuts down on 22 October 2026, which is today. | M4.1 |
+| D2 | `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. An empty value licenses none. | M4.5, engine video at Gate |
+| D3 | The HyperFrames price per minute, and the render fallback (Shotstack, or none). | M4.6, M2.3 (engine path) |
+| D4 | The Apify key and plan price. | M5.4 |
+| D5 | The window renderer for a splice remake: HyperFrames, Shotstack, or keep the full re-render. | M4.2 |
+| D6 | The default video path for `auto`: the matrix's provider, or the engine. | M2.3, Produce's default |
+| D7 | Whether uploads feed Gather. | M5.1 |
+| D8 | The name of the brief page. Proposed: keep "Content Factory" for the loop and call the page "the brief page". | Docs and UI copy |
 | D9 | Planner prompt v2 (`orchestrator_plan@2`), and whether the new `queued` node state falls under the contract rule. | Orchestrator plans |
-| D10 | Per brand: which Facebook Page and which ad account, and the TikTok audit status. | Live publish |
-| D11 | Calibration constants. Already accepted (NORTH_STAR section 9). Review them at the first 100 measured outcomes. | Calibration |
-| D12 | Deployment security settings: `MERIDIAN_TRUST_PROXY_HEADERS`, the host allowlist, the webhook limits. | G11 |
+| D10 | Per brand: the Facebook Page, the ad account, and the TikTok audit status. | M2.5, M2.6 |
+| D11 | Calibration constants. Already accepted (NORTH_STAR section 9). Review them at 100 measured outcomes. | M3.4 |
+| D12 | Deployment settings: `MERIDIAN_TRUST_PROXY_HEADERS`, the host allowlist, the webhook limits. | M1.3 (the deployment part) |
+| D13 | Review item 7: whether embedding and email provider status should come from stored credentials, as the other providers' status does, or keep reading deployment variables. The code is unchanged. | Review item 7; M0.2's brain mapping (its `automated` to `semi` rule) |
 
-## 7. Milestones
+## Out of scope for now
 
-Each milestone names the North Star items it advances and its exit criteria. Live steps are the owner's to run.
+- Engine phases E2 to E6, except the items named in M4.
+- New sources beyond the registered adapters.
+- Scoring, JEV and auth logic, unless a task names them.
 
-**M0. Make the record true (agent, no keys).**
-- Correct the four doc claims in section 4 (NORTH_STAR section 3 and item 9, FACTORY.md Publish, the S3 comments).
-- Studio reads the run settings (G4). Item 2's acceptance is then met for both surfaces, proven by tests.
-- Run the button audit on the Factory screens (G12).
-- Exit: NORTH_STAR's status notes match the code, and item 2's test passes for Studio and the Factory.
+## Verification at each gate
 
-**M1. Prove the whole loop on fixtures (agent, no keys).**
-- The whole-run test (G5).
-- TikTok and Google on the Factory's paid path, with fixtures (G3).
-- The code parts of G11.
-- The full `src` suite, run once at this milestone. The owner confirms the run, because of its token cost.
-- Exit: one `TestingRuntime` run goes through all ten steps with `intent: both`, with receipts and patterns asserted; the full suite is green.
+- Each task: its fixture tests, plus typecheck and lint on the files it changed.
+- Each milestone exit: typecheck, lint and build.
+- M1.4 and each release: the full src suite, once, with the owner's approval.
+- Each live task: a row in PHASE_LOG.
 
-**M2. First live loop, one provider per step (owner runs; agent builds the recorder and the runbook; G1, G9, G10, G13).** In this order:
-1. Gather: Ad Library and YouTube, then SerpAPI.
-2. Grade: one engine (JEV) on a few ads. The stored grade must route to review.
-3. Produce: one image provider and one video provider, each with a recorded bill. Then the engine path, if D3 is set.
-4. Gate: JEV creative QA on those creatives.
-5. Publish, organic: YouTube first (confirm the upload visibility default), then Facebook Page. Instagram and TikTok follow once the tokens and the media host are set.
-6. Publish, paid: a paused Meta campaign to a test ad account.
-7. Measure: one organic pull per channel, and one paid pull.
-- Exit: every step has a recorded row (ids, cost, state) in PHASE_LOG. No step is marked live without one.
+## Keeping this plan current
 
-**M3. Close the measurement loop (owner runs; agent fixes the shapes; G2).** Scheduled pulls are verified. Creative linkage counts per surface. The Calibration screen shows the outcome count per brand. Patterns are recomputed from real rows and feed the next Pick.
-- Exit: a brand with real outcomes shows its counts, and a pattern from a real win is visible at the next run's Pick. Thresholds stay uncalibrated until 100 outcomes per question. There is no shortcut.
-
-**M4. Engine media depth (G7, G8).** Decisions D1, D3, D5 and D6. The plan-to-request bridge for edit, compose and render. The window renderer and splice execution. The licence port (D2). Remake mid-run and variants after a remake, wired end to end.
-- Exit: one shot's remake renders only the changed window, recorded live, with its cost.
-
-**M5. Operate at volume (G6, G10, G13).** Uploads as a Gather source (D7). A priced ledger entry for every provider used (G10). Held-budget lookups (G9). A full sleep night inside the caps, with its report. Shopify attribution live.
-- Exit: a sleep night finishes inside its caps, and the ledger matches each provider's bill within a tolerance the owner sets.
-
-**Definition of done for the whole plan.** One brand's loop runs unattended for a week in `full` mode inside its caps. Every step has a
-live row. The Calibration screen reports numbers from measured outcomes. Learning changes what Pick chooses.
-
-## 8. Sequencing
-
-- M0 and M1 need no keys. Agents can do them now.
-- M2 is paced by the owner: each live step needs keys. The agent prepares the runbook first.
-- M3 needs M2's publish and measure steps, and a few weeks of outcomes. Calendar time is the constraint here, not code.
-- M4 needs D1 (today), D3 and D5.
-- Calibration comes last by design. It needs 100 measured outcomes per question per brand.
-
-## 9. Risks
-
-- **Live APIs differ from fixtures.** Each live step may fail on its first call. The Higgsfield path is already suspect. Run one step at a
-  time, and record every failure.
-- **A small brand may never reach the calibration floor.** Its grades then stay in review, and the review load is the cost. The owner sets
-  the volume per brand, and the Calibration screen shows the progress.
-- **Spend can run ahead of the estimate.** Some providers bill later. Close G10 before any live spend.
-- **The Veo model shuts down today.** Decision D1.
-- **TikTok posts stay private until the app is audited.** Treat their receipts as unconfirmed.
-
-## 10. Rules for executing this plan
-
-- One PR per work-queue item, each naming its loop step.
-- Agents write fixture tests for their own changes. The full suite runs at M1 and at each release gate.
-- Typecheck, lint and build run at each milestone exit.
-- No live key enters the repo or a log. The owner keeps keys in Settings or on the deployment.
+When a task ships, tick it and link its commit. When a decision is answered, remove it from the table and note the answer under the task it
+unblocks. When a test or a live run changes what is known, update the status table in section 2.

@@ -65,17 +65,11 @@ Oct 11, 2026 · @Victor
 
 ## Status on 2026-10-22
 
-The build plan's phases were coded in one pass, on recorded fixtures. The full record is in [PHASE_LOG.md](PHASE_LOG.md), the 2026-10-22 entry.
-
-- **Saved ad accounts.** Publish uses the brand's saved account for Meta Ads, Google Ads and TikTok Ads, and sends nothing without one.
-- **Video and avatar steps** are queued at the provider and settled by a durable poll (`engine.asset_poll`, every 60 s per workspace). Planner prompt v2 asks for `model_class` on video steps.
-- **Splice.** ffmpeg cuts and joins spans to one format. The window renderer is not built, so a remake still renders the whole video.
-- **Content Factory.** A revision runs under the request's row lock (review item 9), with a race test and a browser flow.
-- **Design.** The AttentionOS tokens are applied across the interface.
-- **Checks on this pass.** Typecheck and build exit 0; lint 0 errors (4 warnings that predate this work); the scripts suite 160 of 160; the targeted src suites pass (18 files, 177 tests; 15 files, 126 tests, two files in both). The full src suite was not run, at the owner's instruction.
-- **Not connected.** Edit, compose and render plan steps (no EDL or voice timings in the plan path), and a remake through the splice.
-- **Deadline.** The Veo preview model shuts down on 22 October 2026, which is today. The Veo move (handoff phase 0) is not in this repository, and PR #39 closed unmerged. The Bible requires it before E1.
-- **Live runs** are the owner's. Agents hold no live keys.
+- **Start here:** [CONTENT_FACTORY_PLAN.md](../CONTENT_FACTORY_PLAN.md), the execution plan. It has milestones M0 to M5. Each task names its files and its acceptance test.
+- **Done on fixtures:** phases 0 to 6 of the 2026-10-22 build plan, with the commit table in [PHASE_LOG.md](PHASE_LOG.md). This includes the saved ad accounts, the video and avatar poll, the splice function and the revision race test.
+- **Not done:** edit, compose and render plan steps; a remake through the splice; the Veo replacement. The Veo preview model shuts down on 22 October 2026, which is today.
+- **Verified on 2026-10-22:** typecheck, lint (0 errors), build, the scripts suite (160 of 160) and the targeted src suites (177 and 126 tests). The full src suite has not run since 2026-10-21.
+- **Live runs** belong to the owner. Agents hold no live keys.
 
 ## Status on 2026-10-17
 
