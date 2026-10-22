@@ -277,10 +277,9 @@ describe("Content Factory sessions", () => {
       },
       put: store.put,
     };
-    await assert.rejects(
-      uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: intro.messageId, fileName: "notes.png", purpose: "material", base64: PNG }, { files: starting }),
-      { message: STARTED_REFUSAL },
-    );
+    // The session started in the gap, so the upload is refused as an outcome. This store has no discard, so nothing is removed here; the Drive store does.
+    const refused = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: intro.messageId, fileName: "notes.png", purpose: "material", base64: PNG }, { files: starting });
+    assert.deepEqual(refused, { status: "refused", reason: STARTED_REFUSAL });
     const detail = await getSession(db.sql, ADMIN, { sessionId: session.id });
     assert.equal(detail.status, "started");
     const files = detail.messages.flatMap((item) => item.attachments).flatMap((item) => (item.kind === "file" ? [item.fileName] : []));

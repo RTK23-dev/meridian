@@ -16,6 +16,7 @@ import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
   engineRequestFeed,
+  engineRequestStatus,
   productionReadinessPorts,
   decideEngineShot,
   quoteEngineDecision,
@@ -607,11 +608,12 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
   // The request row is locked for the check and the change together. A remake of the same request takes the same lock when it is applied
   // (orchestrator-sql.ts), so the two cannot both see the video as delivered and both change it (review 2026-10-22, item 9).
   const outcome = await withTransaction<ReviseOutcome>(sql, async (tx) => {
-    const locked = await tx<{ status: string }>`
-      select status from engine_requests where id = ${row.engine_request_id} and organization_id = ${row.organization_id} for update
+    await tx`
+      select id from engine_requests where id = ${priorRequestId} and organization_id = ${row.organization_id} for update
     `;
-    const status = locked[0]?.status ?? null;
-    if (status !== "delivered" && status !== "failed") {
+    // The same reading the status page uses, taken under the lock: a rejected request is failed, and a delivered one needs its manifest.
+    const current = await engineRequestStatus(tx, row.organization_id, priorRequestId);
+    if (!current || (current.status !== "delivered" && current.status !== "failed")) {
       return { status: "refused", reason: "A revision waits until this video is delivered or has failed. Nothing was changed." };
     }
     const updated = await tx<{ id: string }>`
