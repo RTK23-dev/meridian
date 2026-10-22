@@ -1,4 +1,4 @@
-// The bill reads of held calls are tracked in engine_bill_reads and bounded (budget/reconcile-holds.ts, migration 0110). A held call is read
+// The bill reads of held calls are tracked in engine_bill_reads and bounded (budget/reconcile-holds.ts, migration 0111). A held call is read
 // at most MAX_BILL_READS times, each wait follows BILL_READ_BACKOFF_MS, a call with no providerRef is never read, and a settled call is
 // never read again. The clock is injected, the database is the test database, and every bill is a recorded fixture: no live API is called.
 
@@ -176,7 +176,7 @@ async function cutOffRead(organizationId: string, entryId: string, attempts: num
   `;
 }
 
-describe("bill reads of held calls are tracked and bounded (budget/reconcile-holds.ts, migration 0110)", () => {
+describe("bill reads of held calls are tracked and bounded (budget/reconcile-holds.ts, migration 0111)", () => {
   it("the schedule and the limits are the contract's: five reads, waits of 15 minutes, 1 hour, 4 hours and 12 hours", () => {
     assert.deepEqual([...BILL_READ_BACKOFF_MS], [15 * MINUTE_MS, HOUR_MS, 4 * HOUR_MS, 12 * HOUR_MS]);
     assert.equal(MAX_BILL_READS, 5);

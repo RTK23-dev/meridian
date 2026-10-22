@@ -630,7 +630,7 @@ Every stage is a job row on Meridian's existing queue. New job types are registe
 
 ### 5.4 Database tables (new)
 
-`engine_requests`, `engine_artifacts`, `engine_jobs` (or the existing jobs table with engine types), `engine_gate_results`, `engine_decisions`, `engine_ledger` (or extended usage tables), `engine_manifests`, `engine_review_items`, `engine_kits` (style, persona, character, product), `engine_cache_index`. Every table carries `workspaceId` and is covered by tenancy checks. Migration 0110 adds two extended usage tables: `engine_call_telemetry`, which records what each paid call's provider request measured (tokens, latency, generation id, and the cost the response reported; the ledger stays the money record), and `engine_bill_reads`, which bounds how often a held call's bill is read (at most five reads, spaced out: section 14.1, step 4).
+`engine_requests`, `engine_artifacts`, `engine_jobs` (or the existing jobs table with engine types), `engine_gate_results`, `engine_decisions`, `engine_ledger` (or extended usage tables), `engine_manifests`, `engine_review_items`, `engine_kits` (style, persona, character, product), `engine_cache_index`. Every table carries `workspaceId` and is covered by tenancy checks. Migration 0111 adds two extended usage tables: `engine_call_telemetry`, which records what each paid call's provider request measured (tokens, latency, generation id, and the cost the response reported; the ledger stays the money record), and `engine_bill_reads`, which bounds how often a held call's bill is read (at most five reads, spaced out: section 14.1, step 4).
 
 ### 5.5 Remakes: hot-swapping one shot of a delivered video (owner request, 2026-10-18)
 

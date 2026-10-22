@@ -1,4 +1,4 @@
-// Per-call telemetry (migration 0110, Bible 14.1): what each paid call's provider request measured. The ledger stays the money
+// Per-call telemetry (migration 0111, Bible 14.1): what each paid call's provider request measured. The ledger stays the money
 // record. This module reads only what the gateway saw: the wall clock around the provider request, the generation id and token counts
 // the response gave, and the cost the response reported as usage.cost. Nothing is estimated, and no unknown value is written as zero.
 //
