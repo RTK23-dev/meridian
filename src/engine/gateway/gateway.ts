@@ -10,6 +10,7 @@ import { routes as defaultRoutes, type Capability, type RouteTable } from "../co
 import type { PriceKey } from "../config/prices.ts";
 import { DEFAULT_PROVIDERS, isProviderId, type ProviderId, type ProviderRegistry } from "./providers.ts";
 import type { Credential, CredentialLookup, CredentialSource, HttpMethod, HttpRequest, HttpResponse, HttpTransport, ProviderSpec } from "./types.ts";
+import { elapsedMs, markSent, newSample, type RequestSample } from "./telemetry.ts";
 
 export type GatewayOptions = {
   transport: HttpTransport;
@@ -17,6 +18,8 @@ export type GatewayOptions = {
   /** Per-deployment changes to a provider, for example the media functions' base URL. */
   providers?: Partial<Record<ProviderId, Partial<Omit<ProviderSpec, "id">>>>;
   routes?: RouteTable;
+  /** The clock a provider request is timed with, in milliseconds (telemetry.ts). The wall clock when not given. */
+  now?: () => number;
 };
 
 export type ResolvedRoute = {
@@ -40,7 +43,11 @@ export type GatewayCall = {
   signal?: AbortSignal;
 };
 
-export type GatewayResult = { status: "not_connected"; reason: string } | { status: "ok"; response: HttpResponse };
+/**
+ * The answer of a call. `sample` is the request the gateway sent (telemetry.ts): present for every request that reached the transport,
+ * and completed by the caller with what the response reported. A refusal sends nothing and has no sample.
+ */
+export type GatewayResult = { status: "not_connected"; reason: string } | { status: "ok"; response: HttpResponse; sample?: RequestSample };
 
 function withoutHeader(headers: Record<string, string>, name: string): Record<string, string> {
   const lower = name.toLowerCase();
@@ -72,10 +79,12 @@ export class Gateway {
   private readonly credentials: CredentialSource;
   private readonly registry: ProviderRegistry;
   private readonly table: RouteTable;
+  private readonly now: () => number;
 
   constructor(options: GatewayOptions) {
     this.transport = options.transport;
     this.credentials = options.credentials;
+    this.now = options.now ?? (() => Date.now());
     this.table = options.routes ?? defaultRoutes.table;
     const registry = { ...DEFAULT_PROVIDERS };
     for (const [id, change] of Object.entries(options.providers ?? {})) {
@@ -156,8 +165,29 @@ export class Gateway {
     return this.credentials.get(spec.credentialId, organizationId);
   }
 
+  /** One transport request, timed. The sample is marked sent first, so a request that throws is still counted (telemetry.ts). */
+  private async timedTransport(sample: RequestSample, request: HttpRequest): Promise<HttpResponse> {
+    markSent(sample);
+    const started = this.readClock();
+    try {
+      return await this.transport(request);
+    } finally {
+      sample.latencyMs = elapsedMs(started, this.readClock());
+    }
+  }
+
+  /** The injected clock. A clock that throws gives an unusable time (a null latency), and never fails the call. */
+  private readClock(): number {
+    try {
+      return this.now();
+    } catch {
+      return Number.NaN;
+    }
+  }
+
   private async send(spec: ProviderSpec, organizationId: string | null, request: HttpRequest): Promise<GatewayResult> {
     if (spec.baseUrl === null) return { status: "not_connected", reason: `${spec.id} has no base URL set on this deployment` };
+    const sample = newSample(spec.id, organizationId);
     const authenticated = onHost(spec.baseUrl, request.url);
     const attempt = async (refresh: boolean): Promise<GatewayResult> => {
       let headers = authenticated ? { ...spec.defaultHeaders, ...request.headers } : { ...request.headers };
@@ -175,7 +205,7 @@ export class Gateway {
           }
         }
       }
-      return { status: "ok", response: await this.transport({ ...request, url, headers }) };
+      return { status: "ok", response: await this.timedTransport(sample, { ...request, url, headers }), sample };
     };
     const first = await attempt(false);
     // An OAuth access token can expire between the lookup and the call. Refresh once, then report what the provider said.

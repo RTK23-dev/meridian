@@ -1,5 +1,16 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## Call telemetry (migration 0110; branch `telemetry-capture-agent`, 2026-10-22)
+
+- `call-telemetry-sql.ts` (new): the telemetry store for a budget transaction. It writes one `engine_call_telemetry` row under a savepoint,
+  so a refused row leaves the settlement in place. A row for another workspace is refused. The rules of the row are in
+  `gateway/telemetry.ts` (see `gateway/STATUS.md`).
+- `sql-ledger-store.ts`: `withReservationLedger` passes its store with the telemetry method, so the row is written in the settlement's
+  transaction. The ledger's own writes are unchanged. `withWorkspaceLedger` does not offer it (no provider call runs there).
+- Tests (PGlite, real migrations): `call-telemetry-sql.test.ts` (3): the settlement and its row together; a refused row leaves the bill
+  and later calls still record; a row for another workspace is refused.
+- Not changed: the runtime's wiring (no clock is injected into the production gateway), the Claude client and the assets adapters.
+
 ## Held-call reconciliation and the speech and provider-ref changes (contract v9, owner decisions 2026-10-17)
 
 - **The maintenance job `engine.reconcile_holds`** (`registry.ts` `ENGINE_MAINTENANCE_JOBS`, `dispatch.ts` `runMaintenanceJob`). It is not a

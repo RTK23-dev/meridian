@@ -11,6 +11,7 @@ import type { ProviderPoll } from "../contracts/assets.ts";
 import type { Capability } from "../config/routes.ts";
 import { httpError, jsonBody } from "./errors.ts";
 import type { Gateway, ResolvedRoute } from "./gateway.ts";
+import { noteAnswer } from "./telemetry.ts";
 
 const PROVIDER = "openrouter";
 
@@ -117,6 +118,10 @@ export async function structuredChat<T>(gateway: Gateway, input: StructuredChatI
     completionTokens: body.usage?.completion_tokens ?? null,
     costUsd: cost(body.usage?.cost),
   };
+  // Recorded before the answer is checked: a billed answer that fails its schema keeps what it reported (telemetry.ts).
+  if (result.sample !== undefined) {
+    noteAnswer(result.sample, { generationId: body.id ?? null, promptTokens: usage.promptTokens, completionTokens: usage.completionTokens, costUsd: usage.costUsd });
+  }
 
   const content = body.choices[0]?.message.content ?? null;
   if (content === null || content.trim() === "") {
@@ -189,6 +194,9 @@ export async function submitVideo(gateway: Gateway, input: VideoSubmitInput): Pr
   if (result.response.status < 200 || result.response.status >= 300) throw httpError(PROVIDER, result.response, input.stage);
   const job = videoJobSchema.safeParse(jsonBody(PROVIDER, result.response, input.stage));
   if (!job.success) throw new EngineError("provider", "OpenRouter answered the video submit with an unexpected shape", { stage: input.stage });
+  if (result.sample !== undefined) {
+    noteAnswer(result.sample, { generationId: job.data.generation_id ?? null, promptTokens: null, completionTokens: null, costUsd: cost(job.data.usage?.cost) });
+  }
   return { jobId: job.data.id, model: route.model };
 }
 
