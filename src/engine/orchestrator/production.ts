@@ -58,6 +58,8 @@ export type TextCall<T> = {
 export type ProductionDeps = {
   organizationId: string;
   planId: string;
+  /** The engine request the run's asset router is made for: the router's jobs and assets belong to it. */
+  requestId: string;
   /** The run's reservation: every paid call is authorized against it. */
   reservationId: string;
   ledger: LockableLedger;
