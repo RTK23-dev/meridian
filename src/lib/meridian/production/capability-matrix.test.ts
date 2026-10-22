@@ -84,7 +84,7 @@ test("a deprecated model is rejected with its lifecycle state", () => {
     region_constraints: ["global"],
     pricing_basis: "per_job",
     availability_state: "DEPRECATED",
-    announced_shutdown_at: "2026-10-22T00:00:00Z",
+    announced_shutdown_at: "2027-06-30T00:00:00Z",
     replacement_model_id: "gemini-omni-1.1-flash",
     last_verified_at: "2026-10-09",
     source_url: "https://example.test/deprecations",
