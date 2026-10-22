@@ -198,7 +198,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           {group.items.map((item) => {
             const Icon = NAV_ICONS[item.id] ?? House;
             const current = isCurrentPath(path, item.to);
-            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`relative mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ${current ? "bg-accent-soft font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[3px] before:rounded-full before:bg-accent" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
+            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`relative mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ${current ? "bg-accent-soft font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:rounded-full before:bg-accent" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
               <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
               <span className={iconOnly ? "sr-only" : "flex-1"}>{item.label}</span>
               {item.badge ? <span className="rounded-full bg-fg px-2 py-0.5 text-[10px] font-bold text-bg">{item.badge}<span className="sr-only"> open</span></span> : null}
@@ -215,7 +215,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
     </div>;
   };
 
-  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[5rem_1fr]" : "lg:grid lg:grid-cols-[16rem_1fr]"}`}>
+  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[5rem_1fr]" : "lg:grid lg:grid-cols-[15rem_1fr]"}`}>
     <aside className="hidden border-r border-border lg:block">{sidebar()}</aside>
     <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     <div className="flex min-h-screen min-w-0 flex-col">
@@ -229,7 +229,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
             {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg">{pageTitle}</span></> : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {active ? <span className="hidden text-xs uppercase tracking-wide text-fg-muted xl:inline">{active.role}</span> : null}
+            {active ? <span className="hidden text-xs text-fg-muted xl:inline">{active.role}</span> : null}
             <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2 pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
             <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />

@@ -601,6 +601,8 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
     return { status: "refused", reason: "This session has no video to revise." };
   }
   const kept = [...priorIds(row.prior_request_ids), row.engine_request_id];
+  // Narrowed to a string by the check above. A value read inside the transaction below would lose that narrowing.
+  const priorRequestId = row.engine_request_id;
   const revision = (Number(row.revision) || 0) + 1;
   // The request row is locked for the check and the change together. A remake of the same request takes the same lock when it is applied
   // (orchestrator-sql.ts), so the two cannot both see the video as delivered and both change it (review 2026-10-22, item 9).
@@ -620,7 +622,7 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
       returning id
     `;
     if (!updated[0]) return { status: "refused", reason: "This session changed before the revision was saved. Nothing was changed." };
-    return { status: "draft", revision, priorRequestId: row.engine_request_id };
+    return { status: "draft", revision, priorRequestId };
   });
   if (outcome.status !== "draft") return outcome;
   await audit(sql, {

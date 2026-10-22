@@ -14,7 +14,7 @@ export function PageHeader({ title, description, breadcrumbs = [], actions, seco
 }
 
 export function Stat({ label, value, delta, description, className }: { label: string; value: ReactNode; delta?: string; description?: string; className?: string }) {
-  return <div className={cn("min-w-0", className)}><div className="text-small text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="font-mono text-data-l font-medium text-fg tabular-nums">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-caption text-fg-muted">{description}</p> : null}</div>;
+  return <div className={cn("min-w-0", className)}><div className="text-small text-fg-muted">{label}</div><div className="mt-1 flex flex-wrap items-baseline gap-2"><strong className="font-sans text-data-l font-medium text-fg tabular-nums">{value}</strong>{delta ? <Badge variant="neutral">{delta}</Badge> : null}</div>{description ? <p className="mt-1 text-caption text-fg-muted">{description}</p> : null}</div>;
 }
 
 export function KpiCard(props: Parameters<typeof Stat>[0] & { icon?: ReactNode; sparkline?: number[] }) {

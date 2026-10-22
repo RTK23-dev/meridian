@@ -48,7 +48,7 @@ export async function licensedUrisOf(
       if (take.success && isLicensedProvider(take.data.provider, input.licensedProviders)) uris.add(take.data.uri);
     } else {
       const track = voiceTrackSchema.safeParse(body);
-      if (track.success && isLicensedProvider(track.data.provider, input.licensedProviders)) uris.add(track.data.uri);
+      if (track.success && isLicensedProvider(track.data.provider, input.licensedProviders)) uris.add(track.data.audioUri);
     }
   }
   return uris;

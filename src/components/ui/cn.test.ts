@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { cn } from "./cn.ts";
 
-test("a Katana font size is kept next to a text colour", () => {
+test("a type-scale size is kept next to a text colour", () => {
   assert.equal(cn("text-small text-fg-muted"), "text-small text-fg-muted");
   assert.equal(cn("text-section font-semibold text-fg"), "text-section font-semibold text-fg");
 });

@@ -8,7 +8,7 @@ const focus = "focus-visible:outline-2 focus-visible:outline-offset-2";
 const quiet = `border-transparent bg-transparent text-fg-secondary hover:bg-raised hover:text-fg active:bg-overlay focus-visible:outline-accent disabled:text-fg-muted ${focus}`;
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sharp border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
   {
     variants: {
       variant: {

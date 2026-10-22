@@ -78,6 +78,8 @@ export type Bootstrap = {
     failedJobs: number;
     livePublications: number;
     lastPerformanceSync: string | null;
+    /** The workspace's queued, retrying and running jobs, and the dead ones of the last day, by type and status. The team panel reads them. */
+    jobs: Array<{ type: string; status: string; count: number }>;
   } | null;
 };
 
@@ -219,6 +221,12 @@ export const bootstrap = createServerFn({ method: "GET" })
       limit 20
     `;
     const audit = await loadAudit(sql, activeOrg.id, null, 12);
+    const teamJobRows = await sql<{ job_type: string; status: string; count: unknown }>`
+      select job_type, status, count(*) as count from jobs
+      where organization_id = ${activeOrg.id}
+        and (status in ('queued', 'retry', 'running') or (status = 'dead' and updated_at > now() - interval '1 day'))
+      group by job_type, status
+    `;
     const overviewRows = await sql<{ failed_jobs: unknown; live_publications: unknown; last_performance_sync: unknown }>`
       select
         (select count(*) from jobs where organization_id = ${activeOrg.id} and status = 'dead') as failed_jobs,
@@ -249,6 +257,7 @@ export const bootstrap = createServerFn({ method: "GET" })
         failedJobs: asCount(overviewRows[0].failed_jobs),
         livePublications: asCount(overviewRows[0].live_publications),
         lastPerformanceSync: overviewRows[0].last_performance_sync ? asText(overviewRows[0].last_performance_sync) : null,
+        jobs: teamJobRows.map((row) => ({ type: row.job_type, status: row.status, count: asCount(row.count) })),
       } : null,
     };
   });

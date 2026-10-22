@@ -11,7 +11,7 @@ import { FieldMessages, useFieldIds } from "./field";
 type DescribedControl = { label?: string; hint?: string; error?: string; id?: string };
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClass = "block text-small font-semibold text-fg-secondary";
-const controlClass = `w-full min-h-10 rounded-sharp border border-border-strong bg-bg px-3 py-2 text-body text-fg placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-fg disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
+const controlClass = `w-full min-h-10 rounded-sm border border-border-strong bg-overlay px-3 py-2 text-body text-fg placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-muted disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement>, DescribedControl {}
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ label, hint, error, id, className, type, step, onWheel, ...props }, ref) {

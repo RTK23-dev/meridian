@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { contrastRatio } from "./lib/meridian/a11y/contrast.ts";
 
 const stylesheet = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-const tokenFile = JSON.parse(readFileSync(new URL("../docs/design/tokens/katana-tokens.json", import.meta.url), "utf8")) as {
+const tokenFile = JSON.parse(readFileSync(new URL("../docs/design/tokens/attentionos-tokens.json", import.meta.url), "utf8")) as {
   themes: Record<"dark" | "light", Record<string, string>>;
   contrast: Array<{ fg: string; bg: string; min: number }>;
 };
@@ -28,13 +28,13 @@ const bodies = { dark: ruleBody(":root"), light: ruleBody(':root[data-theme="lig
 test("styles.css declares every colour in the token file with the same value, in both themes", () => {
   for (const theme of ["dark", "light"] as const) {
     for (const [name, value] of Object.entries(tokenFile.themes[theme])) {
-      assert.equal(declared(bodies[theme], name).toUpperCase(), value.toUpperCase(), `${theme} --${name} must match katana-tokens.json`);
+      assert.equal(declared(bodies[theme], name).toUpperCase(), value.toUpperCase(), `${theme} --${name} must match attentionos-tokens.json`);
     }
   }
 });
 
-test("the thirty contrast pairs of the token file meet their minimums in both themes", () => {
-  assert.equal(tokenFile.contrast.length, 30);
+test("the contrast pairs of the token file meet their minimums in both themes", () => {
+  assert.equal(tokenFile.contrast.length, 28);
   for (const theme of ["dark", "light"] as const) {
     const palette = tokenFile.themes[theme];
     for (const pair of tokenFile.contrast) {

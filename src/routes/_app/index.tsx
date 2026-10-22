@@ -6,6 +6,8 @@ import { useDecisionEnginesQuery, useIntegrationsQuery, useMachinesQuery, usePro
 import { hasRole } from "@/lib/meridian/access";
 import { providerLabel } from "@/lib/copy";
 import { KpiRow } from "@/components/home/kpi-row";
+import { TeamPanel } from "@/components/home/team-panel";
+import { teamStates } from "@/components/home/team-model";
 import { AttentionList } from "@/components/home/attention-list";
 import { SetupCallout } from "@/components/setup/setup-callout";
 import { guideFacts } from "@/lib/setup/facts";
@@ -54,6 +56,8 @@ function Home() {
     thinBrands: data.brands.filter(isThinBrand).map((brand) => ({ brandId: brand.id, brandName: brand.name, ratio: brand.completeness })),
   });
   const kpis = homeKpis({ brandCount: data.brands.length, reviews, overview: data.overviewMetrics });
+  // The team reads the workspace's own job counts. Its art director also waits on the open reviews, which stay unknown until every brand loads.
+  const team = teamStates({ jobs: data.overviewMetrics?.jobs ?? null, openReviews: reviews.status === "ready" ? reviews.total : null });
 
   // Every count is null until its data has loaded, so the setup steps say "could not be checked" rather than "to do".
   const setupSteps = buildGuide(guideFacts({
@@ -71,6 +75,7 @@ function Home() {
         actions={canCreate ? <Button asChild variant="secondary"><Link to="/brands/new"><Plus aria-hidden="true" className="mr-2 size-4" />New brand</Link></Button> : undefined}
       />
       <KpiRow kpis={kpis} />
+      <TeamPanel agents={team} />
       <AttentionList
         items={items}
         reviews={reviews}

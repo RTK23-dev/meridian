@@ -1,7 +1,7 @@
-@import "@fontsource-variable/archivo";
-@import "@fontsource-variable/instrument-sans";
-@import "@fontsource/jetbrains-mono/400.css";
-@import "@fontsource/jetbrains-mono/500.css";
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/sora";
+@import "@fontsource/geist-mono/400.css";
+@import "@fontsource/geist-mono/500.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -9,79 +9,84 @@
    The dark variant follows the same rule, so dark: classes apply whenever the page is not light. */
 @custom-variant dark (&:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *));
 
-/* Katana tokens. Source: docs/design/tokens/katana-tokens.json (the contrast test reads the same values). */
+/* AttentionOS tokens (design/DESIGN.md, sections 2, 5 and 6). Source: docs/design/tokens/attentionos-tokens.json; the contrast test reads
+   the same values. Dark is the default. The accent is a fill (buttons, the attention signal); accent-text is the same violet for text. */
 :root {
   color-scheme: dark;
-  --bg-base: #000000;
-  --bg-raised: #0E0E0E;
-  --bg-overlay: #161616;
-  --border-hairline: #262626;
-  --border-strong: #6B6B6B;
-  --fg-primary: #FFFFFF;
-  --fg-secondary: #C4C4C4;
-  --fg-muted: #949494;
-  --accent-red: #FF2E38;
-  --accent-red-hover: #FF5A63;
-  --accent-red-muted: #2A0B0F;
+  --bg-base: #08070B;
+  --bg-raised: #111016;
+  --bg-overlay: #19161F;
+  --border-hairline: #2C2637;
+  --border-strong: #6B6280;
+  --fg-primary: #F6F3FC;
+  --fg-secondary: #B9B3C7;
+  --fg-muted: #8E879D;
+  --accent: #7838E8;
+  --accent-hover: #8847EF;
+  --accent-text: #AD78FF;
+  --accent-muted: #241734;
+  --on-accent: #FFFFFF;
   --white-accent: #FFFFFF;
-  --success: #3DDC84;
-  --warning: #FFB020;
-  --danger: #FF4D6A;
-  --info: #5AA9FF;
+  --success: #58D6A0;
+  --warning: #F2C46D;
+  --danger: #FF8A9B;
+  --info: #83B9FF;
   --scrim: rgb(0 0 0 / 0.6);
   --dur-fast: 120ms;
   --dur-base: 200ms;
-  --dur-slow: 360ms;
+  --dur-slow: 320ms;
   --dur-flip: 900ms;
-  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-emphasis: cubic-bezier(0.65, 0, 0.35, 1);
+  --ease-signal: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-linear: linear;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg-base: #FFFFFF;
-  --bg-raised: #F4F4F4;
+  --bg-base: #FAF9FC;
+  --bg-raised: #F3F0F8;
   --bg-overlay: #FFFFFF;
-  --border-hairline: #E2E2E2;
-  --border-strong: #767676;
-  --fg-primary: #0A0A0A;
-  --fg-secondary: #3D3D3D;
-  --fg-muted: #5E5E5E;
-  --accent-red: #C8102E;
-  --accent-red-hover: #A50D25;
-  --accent-red-muted: #FBE3E6;
-  --white-accent: #0A0A0A;
-  --success: #14703A;
+  --border-hairline: #E5E0EC;
+  --border-strong: #7A7086;
+  --fg-primary: #111016;
+  --fg-secondary: #635C70;
+  --fg-muted: #6E6779;
+  --accent: #6A2BDB;
+  --accent-hover: #5A1FC2;
+  --accent-text: #5A1FC2;
+  --accent-muted: #EFE8FD;
+  --on-accent: #FFFFFF;
+  --white-accent: #111016;
+  --success: #1F7A5A;
   --warning: #8A5A00;
-  --danger: #B3133A;
+  --danger: #C2362B;
   --info: #0B5FB8;
-  --scrim: rgb(10 10 10 / 0.4);
+  --scrim: rgb(17 16 22 / 0.4);
 }
 
 /* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
-   (bg, surface, fg, accent and the rest) stay as aliases of the Katana roles, so screens not yet migrated keep working. */
+   (bg, surface, fg, accent and the rest) stay as aliases of the AttentionOS roles, so screens not yet migrated keep working. */
 @theme static {
-  /* Katana faces: Archivo for headings and the wordmark, Instrument Sans for text, JetBrains Mono for numbers, ids and costs. */
-  /* The first name in each stack is the family the fontsource package declares; the rest are the section c fallbacks. */
-  --font-text: "Instrument Sans Variable", "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  /* AttentionOS faces: Sora for page titles and the wordmark, Inter for everything else, Geist Mono for logs, ids and costs. */
+  /* The first name in each stack is the family the fontsource package declares; the rest are the fallbacks. */
+  --font-text: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-sans: var(--font-text);
-  --font-display: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --font-wordmark: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --font-display: "Sora Variable", "Sora", "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-wordmark: "Sora Variable", "Sora", "Inter Variable", "Inter", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --color-bg: var(--bg-base);
   --color-surface: var(--bg-raised);
-  --color-surface-2: var(--bg-raised);
+  --color-surface-2: var(--bg-overlay);
   --color-border: var(--border-hairline);
   --color-border-strong: var(--border-strong);
   --color-fg: var(--fg-primary);
   --color-fg-muted: var(--fg-muted);
-  --color-accent: var(--accent-red);
-  --color-accent-fg: var(--bg-base);
-  --color-accent-soft: var(--accent-red-muted);
-  --color-brass-text: var(--accent-red);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--on-accent);
+  --color-accent-soft: var(--accent-muted);
+  --color-brass-text: var(--accent-text);
   --color-success: var(--success);
   --color-success-soft: var(--bg-raised);
   --color-warning: var(--warning);
@@ -100,25 +105,27 @@
   --color-fg-secondary: var(--fg-secondary);
   --color-overlay: var(--bg-overlay);
   --color-hairline: var(--border-hairline);
-  --color-accent-hover: var(--accent-red-hover);
-  --color-accent-muted: var(--accent-red-muted);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
+  --color-accent-text: var(--accent-text);
+  --color-on-accent: var(--on-accent);
   --color-white-accent: var(--white-accent);
   --color-scrim: var(--scrim);
 
-  /* Two-state shape: every radius is 2 px. Round is kept only for dots, avatars, radios, switch thumbs and the globe. */
-  --radius-sharp: 2px;
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 2px;
+  /* The AttentionOS radius scale: 6 for inputs and badges, 10 for buttons and rows, 16 for cards and panels, 24 for dialogs. */
+  --radius-sharp: 6px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
 
   /* No shadows anywhere. Layers use a hairline or a strong edge. The names stay so older classes keep resolving. */
   --shadow-sm: 0 0 #0000;
   --shadow-md: 0 0 #0000;
   --shadow-lg: 0 0 #0000;
 
-  /* Katana type scale, in px for the size and line height. Label is 11 px at the least. */
-  --text-eyebrow: 0.6875rem;
+  /* The type scale, in px for the size and line height. The smallest label is 12 px. */
+  --text-eyebrow: 0.75rem;
   --text-eyebrow--line-height: 1rem;
   --text-section: 1.375rem;
   --text-section--line-height: 1.75rem;
@@ -127,7 +134,7 @@
   --text-heading: 1rem;
   --text-heading--line-height: 1.375rem;
   --text-body: 0.9375rem;
-  --text-body--line-height: 1.375rem;
+  --text-body--line-height: 1.5rem;
   --text-small: 0.8125rem;
   --text-small--line-height: 1.25rem;
   --text-caption: 0.75rem;
@@ -148,36 +155,34 @@
     color: var(--color-fg);
     font-family: var(--font-sans);
     font-size: 0.9375rem;
-    line-height: 1.375rem;
+    line-height: 1.5rem;
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
-  /* One focus ring for every theme: 2px accent red with a 2px offset. A control on a red fill sets a white ring itself. */
-  :focus-visible { outline: 2px solid var(--accent-red); outline-offset: 2px; }
+  /* One focus ring for every theme: 2px violet with a 2px offset. A control on a violet fill sets a white ring itself. */
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .skip-link {
     position: absolute; left: 1rem; top: 1rem; z-index: 50; transform: translateY(-200%);
     border-radius: var(--radius-sharp); background: var(--color-fg); color: var(--color-bg); padding: 0.75rem 1rem; font-weight: 600;
   }
   .skip-link:focus { transform: none; }
   img, svg, video { max-width: 100%; height: auto; }
-  /* Headings use the display face (Archivo). The .font-display opt-in maps to the same face. Size and weight come from the classes. */
+  /* Headings use the display face (Sora). The .font-display opt-in maps to the same face. Size and weight come from the classes. */
   h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
   h1 { text-wrap: balance; }
   h2, h3 { text-wrap: balance; }
-  ::selection { background: color-mix(in srgb, var(--accent-red) 26%, transparent); color: var(--color-fg); }
+  ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); color: var(--color-fg); }
   @media (max-width: 639px) {
     input, select, textarea, [role="combobox"] { font-size: 16px; }
   }
 }
 
 @layer components {
-  /* Label style: eyebrows, column headers and state words. Four words at most. */
+  /* Label style: group headings, column headers and state words. Sentence case, never all caps (DESIGN.md 3.2). */
   .eyebrow {
     font-size: var(--text-eyebrow);
     line-height: var(--text-eyebrow--line-height);
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
+    font-weight: 500;
     color: var(--color-fg-muted);
   }
 
@@ -185,7 +190,7 @@
   .page-title {
     font-size: var(--text-title);
     line-height: var(--text-title--line-height);
-    font-weight: 600;
+    font-weight: 500;
     letter-spacing: -0.02em;
     color: var(--color-fg);
   }
@@ -193,12 +198,12 @@
     .page-title { font-size: 2.25rem; line-height: 2.5rem; }
   }
 
-  /* The wordmark sets in the display face, Archivo 600, in sentence case. */
+  /* The wordmark sets in the display face, Sora 600, in sentence case. */
   .font-wordmark { font-family: var(--font-wordmark); letter-spacing: -0.02em; }
 
-  /* The card every screen uses: a raised surface with a hairline edge and room inside. No shadow. */
+  /* The card every screen uses: a raised surface with a hairline edge, a 16 px radius and room inside. No shadow. */
   .panel {
-    border-radius: var(--radius-sharp);
+    border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
     padding: 1rem;
@@ -265,10 +270,20 @@ details > summary:hover { color: var(--color-fg); }
 .orch-node { animation: orch-pop 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
 
+/* The attention signal (DESIGN.md section 1): a 2 px violet edge marks where something needs the person, and a working agent's ring
+   pulses. Only these two move. The reduced-motion rule below stops the pulse, so the signal stays a steady line. */
+@keyframes signal-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.attention-signal { box-shadow: inset 2px 0 0 var(--accent); }
+.signal-ring { box-shadow: 0 0 0 2px var(--accent); }
+.signal-working { animation: signal-pulse 2400ms ease-in-out infinite; }
+
 /* The globe mark. Its meridians turn about the vertical axis (scaleX follows the cosine of the angle), and the red meridian
    carries a short comet. The still globe sets the same angles inline, so it rests where the loading mark would be. */
 .globe-ink { fill: none; stroke: currentColor; }
-.globe-red { fill: none; stroke: var(--accent-red); }
+.globe-red { fill: none; stroke: var(--accent); }
 .globe-meridian { transform-box: fill-box; transform-origin: center; }
 .globe-turn { animation: globe-turn 2400ms linear infinite; }
 .globe-comet { stroke-linecap: round; stroke-dasharray: 14 124.23; animation: globe-comet 1200ms linear infinite; }
@@ -313,24 +328,25 @@ details > summary:hover { color: var(--color-fg); }
     transition-duration: 120ms !important;
     transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke !important;
   }
-  .globe-turn, .globe-comet { animation: none !important; }
+  .globe-turn, .globe-comet, .signal-working { animation: none !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the
    targets in styles.contrast.test.ts for the base values. */
 @media (prefers-contrast: more) {
   :root:not([data-theme="light"]) {
-    --border-hairline: #6B6B6B;
-    --border-strong: #B3B3B3;
+    --border-hairline: #6B6280;
+    --border-strong: #B9B3C7;
     --fg-primary: #FDFDFD;
-    --fg-muted: #D9D9D9;
-    --accent-red: #FF5A63;
+    --fg-muted: #D6D0E2;
+    --accent-text: #C9A8FF;
   }
   :root[data-theme="light"] {
-    --border-hairline: #7A7A7A;
-    --border-strong: #5E5E5E;
+    --border-hairline: #7A7086;
+    --border-strong: #4B4357;
     --fg-primary: #050505;
     --fg-muted: #474747;
-    --accent-red: #A50D25;
+    --accent: #5A1FC2;
+    --accent-text: #4A1699;
   }
 }

@@ -4,7 +4,7 @@ import { cn } from "./cn";
 type CardProps = HTMLAttributes<HTMLElement> & { elevation?: "flat" | "raised" | "floating" };
 export const Card = forwardRef<HTMLElement, CardProps>(function Card({ elevation = "raised", className, ...props }, ref) {
   const surfaces = { flat: "border border-hairline bg-raised", raised: "border border-hairline bg-raised", floating: "border border-border-strong bg-overlay" };
-  return <section {...props} ref={ref} className={cn("rounded-sharp p-4 sm:p-6", surfaces[elevation], className)} />;
+  return <section {...props} ref={ref} className={cn("rounded-lg p-4 sm:p-6", surfaces[elevation], className)} />;
 });
 
 export const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(function CardHeader({ className, ...props }, ref) { return <div {...props} ref={ref} className={cn("mb-4 space-y-1", className)} />; });

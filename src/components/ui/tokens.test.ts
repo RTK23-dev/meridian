@@ -39,36 +39,39 @@ function sourceFiles(directory: string): string[] {
 }
 
 test("both themes define the same colour tokens, so no token falls back to the other theme", () => {
-  assert.ok(Object.keys(dark).length >= 16, "the dark theme defines the Katana colour roles");
+  assert.ok(Object.keys(dark).length >= 16, "the dark theme defines the AttentionOS colour roles");
   assert.deepEqual(Object.keys(light).sort(), Object.keys(dark).sort());
 });
 
 test("dark is the default on :root, and light applies only under data-theme", () => {
-  assert.equal(dark["--bg-base"], "#000000");
-  assert.equal(light["--bg-base"], "#FFFFFF");
+  assert.equal(dark["--bg-base"], "#08070B");
+  assert.equal(light["--bg-base"], "#FAF9FC");
   assert.doesNotMatch(css, /\.dark\s*\{/, "the .dark class is retired; themes switch on data-theme");
   assert.match(css, /@custom-variant dark \(&:where\(:root:not\(\[data-theme="light"\]\)/);
 });
 
-test("the accent red reaches 4.5:1 on the room in both themes: 5.70 on black and 5.88 on white", () => {
-  assert.equal(dark["--accent-red"], "#FF2E38");
-  assert.equal(light["--accent-red"], "#C8102E");
-  const onDark = contrastRatio(dark["--accent-red"], dark["--bg-base"]);
-  const onLight = contrastRatio(light["--accent-red"], light["--bg-base"]);
-  assert.equal(onDark, 5.7);
-  assert.equal(onLight, 5.88);
+test("violet text reaches 4.5:1 on the room in both themes, and white on the violet fill reaches 4.5:1", () => {
+  assert.equal(dark["--accent-text"], "#AD78FF");
+  assert.equal(light["--accent-text"], "#5A1FC2");
+  const onDark = contrastRatio(dark["--accent-text"], dark["--bg-base"]);
+  const onLight = contrastRatio(light["--accent-text"], light["--bg-base"]);
+  assert.equal(onDark, 6.61);
+  assert.equal(onLight, 8.31);
+  assert.equal(contrastRatio(dark["--on-accent"], dark["--accent"]), 5.95);
+  assert.equal(contrastRatio(light["--on-accent"], light["--accent"]), 7.04);
   assert.ok(onDark >= 4.5 && onLight >= 4.5);
 });
 
-test("legacy names stay defined as aliases of the Katana roles, so older screens keep their meaning", () => {
+test("legacy names stay defined as aliases of the AttentionOS roles, so older screens keep their meaning", () => {
   assert.equal(aliases["--color-bg"], "var(--bg-base)");
   assert.equal(aliases["--color-surface"], "var(--bg-raised)");
-  assert.equal(aliases["--color-surface-2"], "var(--bg-raised)");
+  assert.equal(aliases["--color-surface-2"], "var(--bg-overlay)");
   assert.equal(aliases["--color-border"], "var(--border-hairline)");
   assert.equal(aliases["--color-fg"], "var(--fg-primary)");
-  assert.equal(aliases["--color-accent"], "var(--accent-red)");
-  assert.equal(aliases["--color-accent-fg"], "var(--bg-base)");
-  assert.equal(aliases["--color-accent-soft"], "var(--accent-red-muted)");
+  assert.equal(aliases["--color-accent"], "var(--accent)");
+  assert.equal(aliases["--color-accent-fg"], "var(--on-accent)");
+  assert.equal(aliases["--color-accent-soft"], "var(--accent-muted)");
+  assert.equal(aliases["--color-brass-text"], "var(--accent-text)");
   assert.equal(aliases["--color-danger-soft"], "var(--bg-raised)");
 });
 
