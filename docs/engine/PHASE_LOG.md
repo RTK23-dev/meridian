@@ -702,3 +702,64 @@ first run of the suites, the typecheck and the lint must come before a merge or 
   - review item 7 (environment-based provider status in `system-status.ts`): waits for the owner; code unchanged.
 - Tests added with this pass (not run): `production.test.ts` (video class, length, not connected without a router), `licensed-uris.test.ts`,
   and the expiry assertions in `oauth-metrics.test.ts`.
+
+## 2026-10-22: Phases 0 to 6 in one pass, with the checks run
+
+The owner asked for every phase of the plan in one pass. The phase gates were not stopped at. Each phase below is code on recorded
+fixtures. None is complete under Bible section 19 until its acceptance run is recorded on real APIs; that run is the owner's, because
+agents hold no live keys.
+
+| Phase | Commit | What landed | Not done |
+| --- | --- | --- | --- |
+| 0 Verify main | `7465974`, `317a396` | The revision regression fixed (the status check runs under the request's row lock). The upload refusal test asserts the refused outcome. The E1 dry-run test accepts the PostgreSQL backend label. | None |
+| 1 Saved ad accounts, licence list | `b5288ae` | Publish reads the brand's saved ad account for Meta Ads, Google Ads and TikTok Ads (`platform_accounts`). With none saved it refuses and sends nothing. `ENGINE_LICENSED_PROVIDERS` is read through `storage/engine-licences.ts`, with no default. `.env.example` drops the three deployment account ids. | The licence value is the owner's |
+| 2 Video and avatar polling, planner v2 | `6bd4383` | Migration `0113_orchestrator_asset_jobs.sql`. A video or avatar step is submitted and queued (state `queued`, its estimate held for the run). `engine.asset_poll` runs every 60 s per workspace (`scripts/scheduler-entry.ts`) and re-polls after 30 s. The router's poll deadline is `settings.pollTimeoutMs`. Output is stored under the step's cache key, so the next run reuses it. `orchestrator_plan@2` asks for `params.model_class` on video steps. Avatar steps take their image and voice from upstream steps; a presenter without them is refused. | Live provider runs. Planner v2 awaits the owner's acceptance |
+| 3 Splice and re-render | `17e77be` | `functions/ffmpeg/splice.ts`: each span is cut and encoded to 1080x1920 at 30 fps, H.264 and AAC, then joined by stream copy. The `/splice` route, `src/engine/media/splice.ts` (in process or over HTTP) and `src/engine/render/splice-run.ts` are in place. | The window renderer is not built, so `runSplice` reports not_connected and a remake still renders the whole video. The remake is not wired to `runSplice` |
+| 4 Content Factory flows, review item 9 | `a5bdd7a` | `revision-race.test.ts`. `scripts/content-factory-flow.mjs` (`npm run e2e:content-factory`). | None in code |
+| 5 Design rollout | `9609bcd` | AttentionOS tokens. Uppercase and tracking labels removed from 15 files (21 lines). Overlay radii and the light-theme overlay shadow. Phone width checked. | Monospace stays on ids, logs, raw output and model ids. A full numeric-table sweep is a follow-up |
+| 6 Release readiness | this commit | This entry, the review record for items 7 and 9, and the handoff status. | None |
+
+Checks run in this pass:
+
+- `npm run typecheck`: exit 0.
+- `npm run lint`: 0 errors, 4 warnings (`react-refresh/only-export-components` in `market/intelligence-whitespace.tsx`, `page-commands.tsx` and
+  `studio/direction-step.tsx`). The warnings predate this pass.
+- `npm run build`: exit 0. The database step was skipped because `DATABASE_URL` is unset.
+- Scripts suite (`node --test "scripts/**/*.test.mjs"`): 160 of 160.
+- Targeted src suites for the files this pass touched: 18 files, 177 of 177. ffmpeg is present, so the splice tests ran for real and none
+  skipped.
+- Suites for the review items (the Claude client, the gateway and its transport, the orchestrator's service, validation, run budget and run,
+  licensed URIs, Content Factory files, the access token, OAuth metrics, system status and readiness): 15 files, 126 of 126.
+- The first full `npm test` run stopped after the scripts suite (159 of 160, the E1 label failure fixed in `317a396`), so its src portion did not run.
+- Not run: the full src suite (about 5,700 tests), at the owner's instruction. The last full run on record, from 2026-10-21 and before this
+  pass, is 5,758 tests with 5,717 passing and 41 environment-gated skips.
+- Not re-run here: the race test and the orchestrator database tests on PostgreSQL 16 (run in Phase 4, `a5bdd7a`), and the browser flow
+  (6 of 6 in Phase 4). No code those touch changed in this pass, but the Phase 5 styling came after the flow run.
+
+Blocked, and the decision each needs:
+
+1. **Remake through the splice.** The window renderer is not built. Decision: HyperFrames as the window renderer, or Shotstack, the only
+   fallback the owner named. The Bible's Remotion Lambda option is dropped (owner, 2026-10-14).
+2. **Edit, compose and render plan steps.** They are not connected, because the plan path carries no EDL and no voice timings. Decision:
+   a plan-to-request bridge, which is a design call and not only the owner's.
+3. **The Veo move (handoff phase 0).** The Veo preview model in production shuts down on 22 October 2026, which is today. No Veo provider
+   exists in this repository, and PR #39 closed unmerged. The Bible requires this before E1. Decision: which model replaces it.
+
+Owner decisions still open:
+
+- Review item 7: whether embedding and email provider status (`system-status.ts`) should come from stored credentials, as the other providers'
+  status does, or keep reading deployment variables. The code is unchanged until the owner answers.
+- `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. Empty means none are licensed, which fails closed.
+- Planner prompt `orchestrator_plan@2`: accept the `params.model_class` change.
+- Speech-to-text vendor for task 9 (Deepgram is the working choice; the vendor is the owner's).
+- The `queued` node state was added to `src/engine/orchestrator/contracts.ts`. The contract rule (version bump, a Bible section 4 note and lead
+  approval) covers `src/engine/contracts/`. If the owner counts this file too, it needs the same steps.
+- The team view: the monogram panel that shipped, or the robot room first described.
+
+Live runs the owner performs, per phase, to meet Bible section 19:
+
+- Phase 1: a paused-campaign publish to a saved account on each of Meta Ads, Google Ads and TikTok Ads.
+- Phase 2: one video step and one avatar step through OpenRouter, polled to done by `engine.asset_poll`, with artifact ids and costs recorded.
+- Phase 3: a real splice measured for length and frame size, with the output attached.
+- Phase 4: `npm run e2e:content-factory` against a deployment with a test account.
+- Phase 5: a visual sign-off of the restyled screens.

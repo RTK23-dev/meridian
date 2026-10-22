@@ -63,6 +63,20 @@ Oct 11, 2026 · @Victor
 
 **Cyclone** ([RTK23-dev/cyclone-fleet](https://github.com/RTK23-dev/cyclone-fleet)), the Android phone agent, works through MCP `observe` / `act` and a Skill Compiler; its physical Pixel 8 acceptance is still marked **unverified**.
 
+## Status on 2026-10-22
+
+The build plan's phases were coded in one pass, on recorded fixtures. The full record is in [PHASE_LOG.md](PHASE_LOG.md), the 2026-10-22 entry.
+
+- **Saved ad accounts.** Publish uses the brand's saved account for Meta Ads, Google Ads and TikTok Ads, and sends nothing without one.
+- **Video and avatar steps** are queued at the provider and settled by a durable poll (`engine.asset_poll`, every 60 s per workspace). Planner prompt v2 asks for `model_class` on video steps.
+- **Splice.** ffmpeg cuts and joins spans to one format. The window renderer is not built, so a remake still renders the whole video.
+- **Content Factory.** A revision runs under the request's row lock (review item 9), with a race test and a browser flow.
+- **Design.** The AttentionOS tokens are applied across the interface.
+- **Checks on this pass.** Typecheck and build exit 0; lint 0 errors (4 warnings that predate this work); the scripts suite 160 of 160; the targeted src suites pass (18 files, 177 tests; 15 files, 126 tests, two files in both). The full src suite was not run, at the owner's instruction.
+- **Not connected.** Edit, compose and render plan steps (no EDL or voice timings in the plan path), and a remake through the splice.
+- **Deadline.** The Veo preview model shuts down on 22 October 2026, which is today. The Veo move (handoff phase 0) is not in this repository, and PR #39 closed unmerged. The Bible requires it before E1.
+- **Live runs** are the owner's. Agents hold no live keys.
+
 ## Status on 2026-10-17
 
 The engine and the Content Factory page are code complete on recorded fixtures, and the owner's live runs are the gate for each phase.
