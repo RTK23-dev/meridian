@@ -19,6 +19,8 @@ import type { ChatMessage } from "../gateway/openrouter.ts";
 import { paidCall, type LockableLedger } from "../gateway/paid.ts";
 import type { PlanNode } from "./contracts.ts";
 import { CallRefusedError, NotConnectedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
+import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
+import type { AssetRouter, ProduceInput } from "../assets/router.ts";
 
 export const ANALYSIS_MAX_TOKENS = 1200;
 export const SCRIPT_MAX_TOKENS = 2000;
@@ -68,6 +70,13 @@ export type ProductionDeps = {
   structured: <T>(route: ResolvedRoute, call: TextCall<T>) => Promise<{ value: T; actualUsd: number | null }>;
   /** A brand of the organization, or null when it is not the organization's or is deleted. */
   brand: (brandId: string) => Promise<BrandFacts | null>;
+  /**
+   * The asset router of this run (runtime.ts assetRouter, on the run's own reservation). Absent: the visual and voice steps are not connected.
+   * The router authorizes, caches and bills each asset; the step keeps the asset's uri as its body.
+   */
+  router?: Pick<AssetRouter, "produce">;
+  /** The time the orchestrating catalog was read (ISO). The model choice of an asset step carries it. */
+  catalogReadAt: string;
 };
 
 type TextStepSpec<T> = {
@@ -188,10 +197,112 @@ function textStep<T>(deps: ProductionDeps, spec: TextStepSpec<T>): NodeHandler {
 }
 
 /** The handlers for the steps connected to the live providers. A kind not listed here reports not_connected. */
+/** The seed of an asset is a number from its own key, so the same step always asks for the same asset (and the cache can answer it). */
+function seedOf(hex: string): number {
+  return Number.parseInt(hex.slice(0, 8), 16);
+}
+
+/**
+ * The asset a visual or voice step asks the router for (contract asset_spec/v1, 9:16). The ids are derived from the step's key, not drawn at
+ * random, so the same step names the same spec and the cache answers a repeat without a second paid call. The model is the one the plan chose,
+ * carried as the orchestrator's choice (contract v7).
+ */
+function assetSpecOf(deps: ProductionDeps, node: PlanNode, key: string, modelClass: AssetSpec["modelClass"], prompt: string, durationMs: number): AssetSpec {
+  // A ULID's first character is 0 to 7 (its timestamp), so the id leads with 0 and takes 25 characters of the hash.
+  const hex = contentHash({ plan: deps.planId, step: key }).replace(/^.*?:/, "").toUpperCase();
+  const choice = node.model === null ? null : modelChoiceOf(deps, node);
+  return assetSpecSchema.parse({
+    schema: assetSpecSchema.shape.schema.value,
+    specId: `asp_0${hex.slice(0, 25)}`,
+    shotId: `shot_0${hex.slice(0, 25)}`,
+    modelClass,
+    prompt,
+    refs: [],
+    durationMs,
+    aspect: "9:16",
+    width: 1080,
+    height: 1920,
+    seed: seedOf(hex),
+    takes: 1,
+    modelChoice: choice,
+  });
+}
+
+function modelChoiceOf(deps: ProductionDeps, node: PlanNode): ModelChoice {
+  return {
+    provider: "openrouter",
+    modelId: node.model?.id ?? "",
+    source: "orchestrator",
+    reason: node.why.slice(0, MODEL_CHOICE_REASON_MAX),
+    catalogReadAt: deps.catalogReadAt,
+  };
+}
+
+/** Speech runs at about fifteen characters a second; the spec's duration is that estimate, never less than a second. */
+function speechDurationMs(text: string): number {
+  return Math.min(600_000, Math.max(1000, Math.ceil(text.length / 15) * 1000));
+}
+
+/**
+ * A visual or voice step: one asset from the run's asset router. The router is the production path, so the budget, the cache and the bill are
+ * the ones a shot uses. The step's output is the asset's uri, and its cost is what the router billed (zero on a cache hit).
+ */
+function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler {
+  return async ({ node, key, upstream }): Promise<NodeOutput> => {
+    const router = deps.router;
+    if (router === undefined) throw new NotConnectedError("no asset router is connected for this run");
+    if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
+    const spec =
+      kind === "visual"
+        ? assetSpecOf(deps, node, key, "image.keyframe", requireText(node, "prompt"), 1000)
+        : (() => {
+            const text = materialOf(node, upstream).map((item) => item.content).join("\n");
+            return assetSpecOf(deps, node, key, "tts", text, speechDurationMs(text));
+          })();
+    const input: ProduceInput = {
+      spec,
+      workspaceId: deps.organizationId,
+      requestId: deps.requestId,
+      reservationId: deps.reservationId,
+      stage: `orchestrator_${kind}`,
+      voiceId: kind === "voice" ? requireText(node, "voice") : null,
+      voiceProvider: null,
+    };
+    const report = await router.produce(input);
+    const outcome = report.outcome;
+    switch (outcome.status) {
+      case "done":
+        return { outputHash: contentHash({ uri: outcome.asset.uri, cacheKey: outcome.asset.cacheKey }), costUsd: outcome.asset.costUsd, body: outcome.asset.uri };
+      case "not_connected":
+        throw new NotConnectedError(outcome.reasons.join("; ") || `no ${kind} provider is connected`);
+      case "refused":
+        throw new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`);
+      case "duplicate":
+        throw new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`);
+      case "queued":
+        throw new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`);
+      case "failed":
+        throw new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300));
+      case "unavailable":
+        throw new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300));
+      default:
+        throw new Error(`the ${kind} asset's outcome is not known yet, so the step does not count it: ${(outcome as { status: string }).status}`.slice(0, 300));
+    }
+  };
+}
+
+/** A parameter the step must name as text, or a refusal that says which one is missing. */
+function requireText(node: PlanNode, name: string): string {
+  const value = textParam(node.params, name);
+  if (value === null) throw new CallRefusedError(`the ${node.kind} step names no ${name}, so nothing is made`);
+  return value;
+}
+
 export function productionHandlers(deps: ProductionDeps): Handlers {
   return {
     reference: referenceHandler(deps),
     analysis: textStep(deps, analysisSpec),
     script: textStep(deps, scriptSpec),
+    ...(deps.router === undefined ? {} : { visual: assetStep(deps, "visual"), voice: assetStep(deps, "voice") }),
   };
 }

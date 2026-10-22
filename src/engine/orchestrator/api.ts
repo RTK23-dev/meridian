@@ -74,7 +74,8 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
   const catalog = await catalogFor(sql, input.organizationId, input.now);
   if (catalog.status !== "ok") return catalog;
   const { productionComposition } = await import("../jobs/runtime.ts");
-  const gateway = productionComposition(sql).gateway;
+  const composition = productionComposition(sql);
+  const gateway = composition.gateway;
   return runStoredPlan(sql, {
     organizationId: input.organizationId,
     planId: input.planId,
@@ -106,6 +107,9 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
             return { value: result.value, actualUsd: result.usage.costUsd };
           },
           brand: (brandId) => readBrandFacts(sql, input.organizationId, brandId),
+          // The run's own asset router: a visual or voice step is made on the run's reservation, like a shot is.
+          router: composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId }),
+          catalogReadAt: catalog.takenAt,
         }),
     },
   });

@@ -6,7 +6,7 @@ import { newId } from "../contracts/ids.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import type { PlanNode } from "./contracts.ts";
-import { NotConnectedError, type NodeHandler } from "./execute.ts";
+import { CallRefusedError, NotConnectedError, type NodeHandler } from "./execute.ts";
 import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps } from "./production.ts";
 
 const ORG = "org_production_a";
@@ -50,6 +50,7 @@ function depsWith(ledger: LedgerStore, extra: Partial<ProductionDeps> = {}): Pro
       throw new Error("no answer recorded for this test");
     },
     brand: async () => null,
+    catalogReadAt: "2026-10-13T09:00:04.000Z",
     ...extra,
   };
 }
@@ -195,3 +196,71 @@ describe("production handlers: analysis and script (paid text calls)", () => {
     }
   });
 });
+
+/** A router that answers every produce with the outcome it is given, and keeps what it was asked. */
+function routerAnswering(outcome: unknown, asked: unknown[] = []): NonNullable<ProductionDeps["router"]> {
+  return {
+    produce: async (input: unknown) => {
+      asked.push(input);
+      return { outcome, decisions: [], alerts: [], attempts: [] } as never;
+    },
+  } as unknown as NonNullable<ProductionDeps["router"]>;
+}
+
+const DONE_ASSET = { status: "done", asset: { providerId: "openrouter:image", modelClass: "image.keyframe", uri: "engine/org/req/visual/asset.png", cacheKey: "k", costUsd: 0.02, cacheHit: false, savedUsd: 0, ledgerEntryId: null, generationId: null, mediaType: "image/png", submits: 1 } };
+
+describe("production handlers: visual and voice (the run's asset router, D13)", () => {
+  test("a visual step asks the router for one 9:16 image on the plan's model, and keeps its uri as the body", async () => {
+    const asked: Array<{ spec: { modelChoice: { source: string; modelId: string }; modelClass: string; shotId: string; specId: string } }> = [];
+    const handlers = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) }));
+    const handler = handlers.visual as NodeHandler;
+    assert.ok(handler, "a visual handler exists when the run has a router");
+    const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl of fruit" }, estimateUsd: 0.02 });
+    const out = await handler({ node: visual, key: "k-img", upstream: NO_UPSTREAM });
+    assert.equal(out.body, "engine/org/req/visual/asset.png");
+    assert.equal(out.costUsd, 0.02, "the router's bill is the step's cost");
+    assert.equal(asked[0]?.spec.modelClass, "image.keyframe");
+    assert.equal(asked[0]?.spec.modelChoice.source, "orchestrator");
+    assert.equal(asked[0]?.spec.modelChoice.modelId, "openai/image-model");
+    assert.match(asked[0]?.spec.shotId ?? "", /^shot_0[0-9A-F]{25}$/, "the derived id is a valid shot id"); 
+  });
+
+  test("a voice step speaks the script it reads, with the plan's voice, and its spec is speech", async () => {
+    const asked: Array<{ spec: { modelClass: string; prompt: string; durationMs: number }; voiceId: string | null }> = [];
+    const handlers = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ ...DONE_ASSET, asset: { ...DONE_ASSET.asset, uri: "engine/org/req/voice/a.mp3", costUsd: 0.01 } }, asked) }));
+    const voice = node({ id: "vo", kind: "voice", dependsOn: ["scr"], model: { provider: "openrouter", id: "elevenlabs/voice-model" }, params: { voice: "warm-narrator" }, estimateUsd: 0.01 });
+    const out = await (handlers.voice as NodeHandler)({ node: voice, key: "k-vo", upstream: new Map([["scr", "Hook line\nSecond line"]]) });
+    assert.equal(out.body, "engine/org/req/voice/a.mp3");
+    assert.equal(asked[0]?.spec.modelClass, "tts");
+    assert.equal(asked[0]?.spec.prompt, "Hook line\nSecond line");
+    assert.equal(asked[0]?.voiceId, "warm-narrator");
+    assert.ok((asked[0]?.spec.durationMs ?? 0) >= 1000);
+  });
+
+  test("the same step names the same spec, so the cache can answer a repeat", async () => {
+    const asked: Array<{ spec: { specId: string; seed: number } }> = [];
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).visual as NodeHandler;
+    const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.02 });
+    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM });
+    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM });
+    assert.equal(asked[0]?.spec.specId, asked[1]?.spec.specId);
+    assert.equal(asked[0]?.spec.seed, asked[1]?.spec.seed);
+  });
+
+  test("the router's refusals stop the step as the budget and the connection stop it: nothing is held for a refusal, and not_connected holds nothing", async () => {
+    const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.02 });
+    const notConnected = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "not_connected", reasons: ["no image provider"] }) })).visual as NodeHandler;
+    await assert.rejects(notConnected({ node: visual, key: "k", upstream: NO_UPSTREAM }), NotConnectedError);
+    const refused = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "refused", reasons: ["the reservation is full"] }) })).visual as NodeHandler;
+    await assert.rejects(refused({ node: visual, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    const duplicate = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "duplicate", providerId: "p", ledgerEntryId: "e" }) })).visual as NodeHandler;
+    await assert.rejects(duplicate({ node: visual, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+  });
+
+  test("without a router the visual and voice steps have no handler, so the executor reports them not_connected", () => {
+    const handlers = productionHandlers(depsWith(memoryLedgerStore()));
+    assert.equal(handlers.visual, undefined);
+    assert.equal(handlers.voice, undefined);
+  });
+});
+

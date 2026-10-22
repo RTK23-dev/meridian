@@ -148,6 +148,12 @@ export type ShotPorts = {
 export type EngineComposition = {
   sql: Sql;
   gateway: Gateway;
+  /**
+   * The asset router of one orchestrator run (production: the same router the production stages use, on the run's own reservation). The
+   * orchestrator's visual and voice steps make their asset through it (orchestrator/production.ts). Absent without shot ports: those steps
+   * then report not_connected.
+   */
+  assetRouter?: (scope: { organizationId: string; requestId: string; reservationId: string }) => AsyncAssetRouter;
   /** The workspace's monthly budget (Bible 14.1 step 2). Production: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)). */
   workspaceBudget: WorkspaceBudgetSource;
   /** The clock as an ISO time (ledger entries, artifacts). Defaults to the wall clock. */
@@ -567,6 +573,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       loadKits: kitPorts(sql).loadKits,
       roleDeps: (scope) => rolesFor(composition)(scope),
     },
+    assetRouter: (scope) => routerFor(composition, shotPorts, new Map<string, VideoProfile>())({ sql, ...scope }),
     voice: productionVoicePortsFor({
       sql,
       objects,
