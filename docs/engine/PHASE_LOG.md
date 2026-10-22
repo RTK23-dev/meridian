@@ -801,3 +801,24 @@ and re-run.
   The live recorder that makes one call per step is not built.
 
 Checks: typecheck exit 0; lint on the new files clean.
+
+## 2026-10-22: price check against vendor pages (M5.2), and the Veo status (D1)
+
+Checked on 2026-10-22, against the vendor pages named. Nothing in `src/engine/config/prices.ts` was changed: that file belongs to
+eng-contracts, and the changes need a decision (D20 in the plan).
+
+- **Deepgram, Nova-3 pre-recorded, monolingual: $0.0043 a minute.** Confirmed on deepgram.com/pricing. The page also lists Multilingual at
+  $0.0052 a minute, and bills multichannel audio for each channel's duration. The table cites the figure as third-party and unverified, so
+  its source should be updated.
+- **Gemini 3.8 Flash TTS: $9 a million output tokens through 2026-12-31, then $18 from 2027-01-01.** Confirmed on ai.google.dev. The table
+  holds $9 with no date, so a 2027 budget would be half the real cost.
+- **Veo 3.1 Fast, $0.10 a second: not confirmed.** Google's Gemini pricing page gives no Veo price. OpenRouter's model page gave no price
+  or status in the text I could read.
+- **Veo 3.1 Preview shut down.** Google's video documentation says the Veo 3.1 Preview models in the Gemini API were shut down on
+  2026-10-22, and names Gemini Omni Flash and the GA Veo models as replacements. Whether OpenRouter's `veo_3_1_fast` and `veo_3_1_lite` are
+  still served is not known from these pages. Check OpenRouter's `/api/v1/videos/models` before choosing the replacement (D1).
+- **Gemini Omni Flash:** Google lists an effective price of about $0.10 a second of 720p video. Google's page does not say whether audio is
+  included.
+- **Gemini 2.5 Flash Image:** shut down on 2026-10-02 per Google. Nothing in `src` calls it.
+
+The M5.2 status in the plan is updated, and D1 carries this evidence. D20 asks the owner to approve the price-table update.

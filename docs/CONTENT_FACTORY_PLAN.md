@@ -34,7 +34,7 @@ how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and 
 | M4.5 | blocked on D2 | — | |
 | M4.6 | blocked on D3 | — | |
 | M5.1 | blocked on D7 | — | |
-| M5.2 | blocked on the owner's list | — | `factory/price-table.ts` holds one priced entry, for OpenAI decision tokens. Every other provider reports its bill or is unpriced. Entries need each provider's pricing page, read on a stated date. The list of providers the owner pays for decides which pages to read. |
+| M5.2 | partly checked; decisions open | — | Two price tables exist. `factory/price-table.ts` holds one entry (OpenAI decision tokens). The engine's `engine/config/prices.ts` holds 26 priced entries and 9 null ones, and a null price refuses the call. On 2026-10-22 I read the vendor pages for three of them. **Deepgram Nova-3 monolingual, $0.0043 a minute:** confirmed, and Multilingual is $0.0052. **Gemini 3.8 Flash TTS, $9 a million output tokens:** confirmed through 2026-12-31, then **$18 from 2027-01-01**, which the table does not show. **Veo 3.1 Fast, $0.10 a second:** not confirmed, because neither Google's pricing page nor OpenRouter's listing states a price. See D1 and D20. |
 | M5.3 | no change | — | ROADMAP records no documented lookup for the providers that lack one. |
 | M5.4 | blocked on D4 | — | |
 | M5.5, M5.6 | blocked on live runs | — | |
@@ -214,7 +214,7 @@ The owner answers these. An agent reports the blocked task and does not choose a
 
 | ID | Decision | Blocks |
 | --- | --- | --- |
-| D1 | Veo replacement. The model shuts down on 22 October 2026, which is today. | M4.1 |
+| D1 | Veo replacement. Google's Veo documentation says the Veo 3.1 Preview models in the Gemini API were shut down on 22 October 2026, which is today, and recommends Gemini Omni Flash or a GA Veo model. The engine routes `video.cinematic` and `video.budget` to `veo_3_1_fast` and `veo_3_1_lite` through OpenRouter. Its listing shows no status or price on the page I could read, so whether OpenRouter's Veo is still served is unknown. Gemini Omni Flash's listed effective price is about $0.10 a second of 720p video, which Google's page does not say includes audio. Check OpenRouter's `/api/v1/videos/models` before choosing. | M4.1 |
 | D2 | `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. An empty value licenses none. | M4.5, engine video at Gate |
 | D3 | The HyperFrames price per minute, and the render fallback (Shotstack, or none). | M4.6, M2.3 (engine path) |
 | D4 | The Apify key and plan price. | M5.4 |
@@ -233,6 +233,7 @@ The owner answers these. An agent reports the blocked task and does not choose a
 | D17 | The engine contract change that Option 1 needs: a version bump, a Bible section 4 note, and the lead's approval. | M4.4 step 3 |
 | D18 | The style kit for a plan run: named by the plan, or the brand's default page kit. | M4.4 step 4 |
 | D19 | Which Meta action counts as a conversion. Today the first action whose type contains "conversion" is used, so the count depends on Meta's order. Proposed: a named action type per brand (for example `purchase`), and null when the account reports none of it. | M3.2, M3.4, and every paid conversion count |
+| D20 | Update `src/engine/config/prices.ts` with dated sources. The config belongs to eng-contracts, so I did not change it. Three changes need a decision: the Gemini 3.8 Flash TTS rate doubles on 2027-01-01 and needs a dated schedule; the Deepgram entry should cite the vendor page read on 2026-10-22; the Veo entry is unconfirmed until D1 is answered. | M5.2, the speech and video budgets |
 
 ## Out of scope for now
 
