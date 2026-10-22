@@ -32,9 +32,24 @@ without waiting for the next command. Each item is committed to `main` with its 
 | review items 1 to 4 (paid retry, plan hold, text bound, plan release) | done | review items 1 to 4 commit |
 | review item 5 (status vs metric jobs) | done for the status and the metric schedule | review item 5 commit |
 | review item 6 (token expiry) | status side done; the job-side checks are NOT done | review item 6 commit |
-| remaining: orchestrator handlers for visual, voice, video, avatar, edit, compose, render | open | |
+| orchestrator steps: visual and voice through the run's asset router (D13) | done, fixtures | visual and voice commit |
+| orchestrator steps: video and avatar (queued jobs; the orchestrator does not poll them yet) | open | |
+| orchestrator steps: edit, compose and render (the engine's edit and render pipeline is not wired to a plan) | open | |
 | remaining: re-render wiring to HyperFrames | open (needs a window render) | |
 | remaining: review items 7 to 11 | open (7 owner decision; 8 latent; 9 needs concurrency; 10 no caller; 11 small copy) | |
 | remaining: production licence port (rights) | open: an owner decision on which sources are licensed | |
 
 Known limits: every item is verified on recorded fixtures only. No live provider was called. The page has not been checked in a browser.
+
+Final state of this run: 254 tests in the API, ops, state-machine, editor and orchestrator suites pass, plus the Content Factory, provider and
+performance suites (run with NODE_ENV=development, as `npm test` does). Lint is clean on every file changed in this run. Typecheck was not
+run, as the owner asked for this run; the new TypeScript is unverified by the compiler.
+
+Not finished, and why:
+- Video and avatar steps: they are queued jobs; the orchestrator has no poller for them. Needs the poller and a persisted running state.
+- Edit, compose and render steps: the plan-based orchestrator is not wired to the engine's edit and render stages. Needs that wiring and a live render.
+- Surgical re-render (REPLAN item 5) and the splice execution (item 7): need a window render and a media trim/join that the repository does not have.
+- Production licence port (the rights gate): an owner decision on which sources are licensed. Without it the pre-render gate cannot evaluate rights for any video.
+- Job-side token expiry checks (review item 6): the status refuses an expired token; the jobs that read the token do not yet.
+- Review items 7 to 11: 7 is an owner decision (environment-based provider status); 8 is latent; 9 needs concurrent calls to reproduce; 10 has no caller; 11 is small copy.
+- Live runs (OpenRouter, Deepgram, Drive, HyperFrames, Shotstack): no keys in this environment.
