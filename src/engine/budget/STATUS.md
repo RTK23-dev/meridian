@@ -1,5 +1,50 @@
 # STATUS
 
+## Bill reads of held calls are tracked and bounded (contract v9, migration 0110)
+
+Fixes the strain: `reconcileHolds` used to read every held call's bill on every run, forever, and rows with no providerRef filled the
+100-row batch so that newer calls were never read. Branch `bill-reads-holds` (see the report); `feature/bill-reads` was not touched.
+
+- **Tracking.** `engine_bill_reads` (migration 0110, unchanged) holds one row per held call that has been read or given up. The
+  ledger row is never changed by it. A settled call's row is deleted (by the read that settled it, or by the next run if another path
+  settled it).
+- **Limits (`reconcile-holds.ts`, beside `HOLD_SETTLE_AFTER_MS` and `HOLD_BATCH_LIMIT`).** `BILL_READ_BACKOFF_MS` = [15 min, 60 min,
+  4 h, 12 h]; `MAX_BILL_READS` = 5; `BILL_READ_LEASE_MS` = 10 min; `NO_PROVIDER_REF_REASON` = "no provider reference". They are
+  constants, not config: the lead can move them to `config/thresholds.ts` if wanted.
+- **Run order.** (1) Untrack calls settled by another path. (2) Reset a given-up no-ref row whose call has since gained a ref (it never
+  made a read, so it starts at zero). (3) Give up unsettled no-ref calls, at most 100 per run, with the reason. (4) Select the due calls:
+  with a providerRef, unsettled, older than 5 minutes, and either untracked or not given up with `next_read_at <= now`; oldest first, at
+  most 100. (5) Read each: claim, then read.
+- **Claim before the read.** One statement inserts or updates the call's tracking row. It counts the read (`attempts + 1`), sets
+  `next_read_at` to now + lease, and succeeds only while the call is unsettled, not given up, and due. So two overlapping runs (the
+  scheduler enqueues one job per workspace every 900 s, with no lock) cannot both read a call, and a call settled after selection is not
+  read. The claim that takes the fifth read sets `given_up` at once: a run that dies during that read leaves the call given up, so no
+  sixth read is possible. A read cut off earlier is read again when its lease ends, and it counts.
+- **Outcome.** A missing reader, a thrown reader, an unavailable bill, or a refused settlement is a failed read, with its reason. No
+  reader sends no request. The Nth failure sets `next_read_at = now + BILL_READ_BACKOFF_MS[N-1]`; the fifth sets `given_up` and clears
+  `next_read_at`. A billed read settles through `withReservationLedger` and `reconcileCall` (the money path is unchanged), then deletes
+  the tracking row. `last_reason` is clipped to 500 characters, the table's limit.
+- **Result.** The signature and the existing fields are unchanged. Two changes in meaning, for the lead to confirm:
+  - `needsOperator` now reports all unsettled no-ref calls: `count` is the total, `ids` the oldest 100. Before, it counted the no-ref rows
+    in that run's batch. The runtime's `operator=` figure therefore stays meaningful each run, not only on the first.
+  - `givenUp` is new (a `HoldGroup`, so `count` and `ids`): the no-ref calls given up in this run, and the calls whose fifth read failed
+    in this run. Those calls are also in `stillOpen` or `needsOperator`. `runtime.ts` does not print it (that file belongs to another
+    agent).
+- **Decisions to confirm.** (a) A settlement the ledger refuses counts as a failed read, so it is bounded too. (b) A no-ref call that gains
+  a ref is read, once it is due, although it was given up. (c) The claim takes a lease, so it is a small extra write per read.
+- **Tests.** `reconcile-holds-reads.test.ts` (17): five reads at most, with the clock moved past each wait; no read before `next_read_at`
+  and the waits follow the schedule; 120 given-up calls and 120 no-ref calls do not stop a newer call (given up in batches of 100); a
+  settled read settles through the ledger and deletes its row, and the call is never read again; a throwing reader counts as a failed
+  read and the run goes on; success after two failures leaves no attempt count; no-ref calls are given up once, with no request; no
+  reader counts as a failed read; a late ref is read once; a call settled elsewhere is untracked; an overlapping run does not read a
+  claimed call; a 2,000-character reason is clipped; the claim of the fifth read gives the call up before the provider is asked; a crash
+  after the fourth read gives up at the last read, and that read is the fifth; a read cut off earlier is read again and counts; a claimed
+  read is held until its lease ends. The existing `reconcile-holds.test.ts` (8) passes unchanged, and so does
+  `jobs/maintenance.test.ts` (3), which runs the job.
+- **Not verified live.** No live provider call was made; the tests use recorded fixtures on the in-process test database. The owner's
+  live check: hold one call with its bill withheld, run the job five times on the real database, and confirm the row ends `given_up` with
+  five attempts and no further provider request.
+
 **Chosen call prices (Bible 10.5 step 5, 2026-10-17).** `estimatePlan(plan, chosen?)` and `extendReservation({ chosenPrices })` price a
 call whose model the orchestrator chose at its catalog estimate (`ChosenCallPrice`, keyed `callPriceKey(shotId, output)`), with the
 chosen model as the line's `provider`. A chosen price that is not positive throws `unknown_price`; no chosen price means the price table.
