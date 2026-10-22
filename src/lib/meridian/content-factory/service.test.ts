@@ -233,7 +233,39 @@ describe("Content Factory sessions", () => {
     assert.equal(detail.messages[0]?.attachments[0]?.kind, "source");
   });
 
+  test("a session started while a file is being checked takes no file: the draft check runs again under the session's lock", async () => {
+    const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Start during upload" });
+    const intro = await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Same pacing as this reel, for our blender.", beatRole: null });
+    const store = memoryStore();
+    await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: intro.messageId, fileName: "reel.mp4", purpose: "reference_video", base64: MP4 }, { files: store });
+    await attachSource(db.sql, ADMIN, { sessionId: session.id, messageId: intro.messageId, brandId: BRAND, page: "page", recordId: "page_cf_1" });
+    await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Your smoothie is lying to you.", beatRole: "hook" });
+    await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Send BLEND for the link.", beatRole: "cta" });
+    await saveSettings(db.sql, ADMIN, { sessionId: session.id, budgetUsd: 4, maxSeconds: 30, language: "en", priority: "normal", keepGenes: ["pacing"] });
+
+    // The store is asked whether it is connected after the draft check and before the file is recorded. The run starts in that gap.
+    const starting: ContentFactoryFileStore = {
+      ready: async () => {
+        const started = await startRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts() });
+        assert.equal(started.status, "started");
+        return { status: "ready" };
+      },
+      put: store.put,
+    };
+    await assert.rejects(
+      uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: intro.messageId, fileName: "notes.png", purpose: "material", base64: PNG }, { files: starting }),
+      { message: STARTED_REFUSAL },
+    );
+    const detail = await getSession(db.sql, ADMIN, { sessionId: session.id });
+    assert.equal(detail.status, "started");
+    const files = detail.messages.flatMap((item) => item.attachments).flatMap((item) => (item.kind === "file" ? [item.fileName] : []));
+    assert.deepEqual(files, ["reel.mp4"], "the started session keeps the files it had before the start, and no more");
+  });
+
   test("a session with no reference video is refused at the start with the schema's reason, and nothing is started", async () => {
+    // Counted before and after: an earlier test in this workspace starts a request of its own.
+    const countRequests = async () => (await db.sql<{ n: number }>`select count(*)::int as n from engine_requests where organization_id = ${WS}`)[0]?.n ?? 0;
+    const requestsBefore = await countRequests();
     const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "No reference" });
     await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "A reel for our blender, with the pacing of a saved reel.", beatRole: null });
     const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: memoryStore() });
@@ -249,8 +281,7 @@ describe("Content Factory sessions", () => {
     const stored = await getSession(db.sql, ADMIN, { sessionId: session.id });
     assert.equal(stored.status, "draft");
     assert.ok(stored.lastRefusal.includes(problemWords("format.referenceVideo")), "the refusal is kept on the session");
-    const requests = await db.sql<{ n: number }>`select count(*)::int as n from engine_requests where organization_id = ${WS}`;
-    assert.equal(requests[0]?.n, 0);
+    assert.equal(await countRequests(), requestsBefore, "no engine request was created by this refused start");
   });
 
   test("a complete session starts one engine request, unless the engine is not connected; then it takes no more changes", async () => {

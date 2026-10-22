@@ -32,11 +32,12 @@ export function connectionPhase(input: {
   }
   if (input.probing) return { phase: "CONNECTING", detail: "A connection request is in progress." };
   if (input.syncing) return { phase: "SYNCING", detail: "A sync is in progress." };
+  // The most recent probe decides. A recorded error means the latest probe failed, even when an earlier probe succeeded.
+  if (input.lastError) return { phase: "FAILED", detail: input.lastError };
   if (input.lastOk === true && input.stale) {
     return { phase: "DEGRADED", detail: "The last successful request is stale." };
   }
   if (input.lastOk === true) return { phase: "HEALTHY", detail: "The last provider request succeeded." };
-  if (input.lastError) return { phase: "FAILED", detail: input.lastError };
   return {
     phase: "NOT_CONFIGURED",
     detail: "Credentials are present, but no successful provider request has been recorded. This is not connected.",

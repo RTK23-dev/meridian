@@ -26,6 +26,9 @@ export type StoredPlan = {
 
 export type StoredEvent = NodeEvent & { seq: number; at: string };
 
+/** A step output as stored: its hash, its charged cost, and its body (null when the step has no text). */
+export type StoredStepOutput = { outputHash: string; costUsd: number | null; body: string | null };
+
 type Row = Record<string, unknown>;
 
 function planOf(row: Row): StoredPlan {
@@ -91,6 +94,30 @@ export async function setPlanStatus(sql: Sql, organizationId: string, id: string
   return getPlan(sql, organizationId, id);
 }
 
+/**
+ * Claim a draft or a refused plan for planning. One conditional update, so two requests cannot both call the model: true only when this
+ * call took the plan. False when the plan is not the organization's or is not in a state that can be planned.
+ */
+export async function claimForPlanning(sql: Sql, organizationId: string, planId: string): Promise<boolean> {
+  const rows = (await sql`
+    update orchestrator_plans set status = 'planning', updated_at = now()
+    where id = ${planId} and organization_id = ${organizationId} and status in ('draft', 'refused')
+    returning id
+  `) as Row[];
+  return rows.length > 0;
+}
+
+/**
+ * Give a claimed plan back its previous status, but only while it is still planning: an outcome the call already stored is kept.
+ * Used when planning throws, so the plan is never left in planning with nothing running.
+ */
+export async function releasePlanning(sql: Sql, organizationId: string, planId: string, to: PlanStatus): Promise<void> {
+  await sql`
+    update orchestrator_plans set status = ${to}, updated_at = now()
+    where id = ${planId} and organization_id = ${organizationId} and status = 'planning'
+  `;
+}
+
 export async function getPlan(sql: Sql, organizationId: string, id: string): Promise<StoredPlan | null> {
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
@@ -145,11 +172,14 @@ export async function listPlanEvents(sql: Sql, organizationId: string, planId: s
   }));
 }
 
-/** Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's. */
+/**
+ * Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's, or when
+ * it is running: an edit never clears a run in progress, and nothing is written.
+ */
 export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan): Promise<StoredPlan | null> {
   const rows = (await sql`
     update orchestrator_plans set plan = ${JSON.stringify(plan)}::jsonb, status = 'ready', updated_at = now()
-    where id = ${id} and organization_id = ${organizationId}
+    where id = ${id} and organization_id = ${organizationId} and status <> 'running'
     returning id
   `) as Row[];
   if (rows.length === 0) return null;
@@ -157,34 +187,43 @@ export async function updatePlanJson(sql: Sql, organizationId: string, id: strin
 }
 
 /** The stored step outputs of a plan, by cache key. Empty when the plan is not the organization's. */
-export async function listStepOutputs(sql: Sql, organizationId: string, planId: string): Promise<Map<string, { outputHash: string; costUsd: number | null }>> {
-  const out = new Map<string, { outputHash: string; costUsd: number | null }>();
+export async function listStepOutputs(sql: Sql, organizationId: string, planId: string): Promise<Map<string, StoredStepOutput>> {
+  const out = new Map<string, StoredStepOutput>();
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return out;
-  const rows = (await sql`select cache_key, output_hash, cost_usd from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
+  const rows = (await sql`select cache_key, output_hash, cost_usd, body from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
   for (const row of rows) {
     out.set(String(row.cache_key), {
       outputHash: String(row.output_hash),
       costUsd: row.cost_usd === null || row.cost_usd === undefined ? null : Number(row.cost_usd),
+      body: row.body === null || row.body === undefined ? null : String(row.body),
     });
   }
   return out;
 }
 
-/** Store one step output under its cache key. Returns false when the plan is not the organization's. */
-export async function putStepOutput(
-  sql: Sql,
-  organizationId: string,
-  planId: string,
-  cacheKey: string,
-  output: { outputHash: string; costUsd: number | null },
-): Promise<boolean> {
+/** Store one step output under its cache key, with its body. Returns false when the plan is not the organization's. */
+export async function putStepOutput(sql: Sql, organizationId: string, planId: string, cacheKey: string, output: StoredStepOutput): Promise<boolean> {
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return false;
   await sql`
-    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd)
-    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd})
+    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd, body)
+    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd}, ${output.body})
     on conflict (plan_id, cache_key) do nothing
   `;
   return true;
+}
+
+/**
+ * What the plan's failed paid steps held. A paid step whose call threw keeps its estimate held (execute.ts), and the hold is recorded on
+ * its failed event. Summed here, so a later run counts money that was held but produced no stored output. Zero when the plan is not the
+ * organization's.
+ */
+export async function failedHoldsUsd(sql: Sql, organizationId: string, planId: string): Promise<number> {
+  const owned = await getPlan(sql, organizationId, planId);
+  if (owned === null) return 0;
+  const rows = (await sql`
+    select coalesce(sum(cost_usd), 0) as total from orchestrator_plan_events where plan_id = ${planId} and state = 'failed'
+  `) as Row[];
+  return Number(rows[0]?.total ?? 0);
 }

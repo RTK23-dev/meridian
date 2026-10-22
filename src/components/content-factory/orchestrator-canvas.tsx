@@ -5,7 +5,7 @@ import { replayAt } from "@/engine/orchestrator/replay";
 import { topologicalOrder } from "@/engine/orchestrator/validate";
 import { cn } from "@/lib/cn";
 import { CanvasToolbar, NodeCard, Port, StateLegend } from "./orchestrator-canvas-parts";
-import { ACCENT, KIND_STYLE, STATE_STYLE, costText, edgeAccent, fitScale, nextZoom, replayStatus } from "./orchestrator-presentation";
+import { ACCENT, KIND_STYLE, STATE_STYLE, costText, edgeAccent, fitScale, nextZoom, replayStatus, undrawnReason } from "./orchestrator-presentation";
 
 /** Room above the plan for the floating toolbar, so the toolbar never covers a step. */
 const TOOLBAR_CLEARANCE = "pt-14";
@@ -56,10 +56,18 @@ export function OrchestratorCanvas({
     return () => observer.disconnect();
   }, [hasPlan]);
 
-  if (plan === null || drawn === null) {
+  if (plan === null) {
     return (
       <div className="rounded-xl border border-dashed border-border bg-surface p-6 text-sm text-fg-muted" role="status">
         No plan yet. The orchestrator draws its steps here as it plans them.
+      </div>
+    );
+  }
+  // A plan that has steps but no order cannot be drawn. That is an error about the plan, not an empty canvas.
+  if (drawn === null) {
+    return (
+      <div className="rounded-xl border border-danger bg-danger-soft p-6 text-sm text-danger" role="alert">
+        The plan cannot be drawn. {undrawnReason(plan.nodes)}
       </div>
     );
   }

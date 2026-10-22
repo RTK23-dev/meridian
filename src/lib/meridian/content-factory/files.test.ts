@@ -32,6 +32,36 @@ test("a binary type is read from its bytes, and text is not a binary type", () =
   assert.equal(sniffBinaryMediaType(EXE), null, "a Windows program is not a binary type the session takes");
 });
 
+/** The first box of an ISO base media file: its size, "ftyp", and its major brand at bytes 8 to 12. */
+function isoHeader(brand: string): Uint8Array {
+  return new Uint8Array([0, 0, 0, 0x18, ...encode("ftyp"), ...encode(brand), 0, 0, 0, 0]);
+}
+
+test("an ISO base media file is a video only when its major brand is a video brand", () => {
+  for (const brand of ["isom", "iso2", "iso4", "iso5", "iso6", "mp41", "mp42", "avc1", "M4V ", "M4VH"]) {
+    assert.equal(sniffBinaryMediaType(isoHeader(brand)), "video/mp4", `${brand} is MP4`);
+  }
+  assert.equal(sniffBinaryMediaType(isoHeader("qt  ")), "video/quicktime");
+  assert.equal(sniffBinaryMediaType(isoHeader("heic")), null, "a HEIC photo is not a video");
+  assert.equal(sniffBinaryMediaType(isoHeader("avif")), null, "an AVIF photo is not a video");
+  assert.equal(sniffBinaryMediaType(isoHeader("M4A ")), null, "an M4A audio file is not a video");
+});
+
+test("a HEIC, AVIF or M4A file is refused as the reference video and named by its type, whatever its name says", () => {
+  for (const [brand, label] of [["heic", "heic"], ["avif", "avif"], ["M4A ", "M4A"]] as const) {
+    const reference = checkFile(isoHeader(brand), "reference_video", "clip.mp4");
+    assert.equal(reference.ok, false, `${label} is refused as the reference`);
+    assert.equal(reference.ok ? "" : reference.reason, `This file is not a video (its type is ${label}).`);
+    assert.equal(checkFile(isoHeader(brand), "material", "photo.heic").ok, false, `${label} is refused as material too`);
+  }
+  const mp4 = checkFile(isoHeader("isom"), "reference_video", "clip.mp4");
+  assert.ok(mp4.ok, "an MP4 header is accepted as the reference");
+  assert.equal(mp4.ok ? mp4.file.mediaType : "", "video/mp4");
+  const mov = checkFile(MOV, "reference_video", "clip.mov");
+  assert.ok(mov.ok, "a QuickTime header is accepted as the reference");
+  assert.equal(mov.ok ? mov.file.mediaType : "", "video/quicktime");
+});
+
 test("an image header gives width and height, and a header that does not is not a size", () => {
   const png = new Uint8Array(24);
   png.set(PNG);

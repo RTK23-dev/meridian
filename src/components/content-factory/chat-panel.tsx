@@ -290,7 +290,7 @@ function SourcePicker({ sessionId, brands, defaultBrandId, onPick }: { sessionId
         {brands.length === 0 ? (
           <p className="text-sm text-fg-muted">This workspace has no brands yet, so there are no records to attach.</p>
         ) : (
-          <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); void search(); }}>
+          <form className="mt-4 space-y-3" onSubmit={(event) => { event.preventDefault(); event.stopPropagation(); void search(); }}>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <label htmlFor="cf-source-brand" className="block text-sm font-semibold">Brand</label>

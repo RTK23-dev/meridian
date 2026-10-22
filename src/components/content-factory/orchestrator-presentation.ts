@@ -148,6 +148,19 @@ export type PlanOutcome = { status: string; reason?: string; reasons?: string[] 
 
 export type Notice = { tone: "success" | "warning" | "danger"; text: string };
 
+/**
+ * Why a plan cannot be drawn: a step reads a step that is not in the plan, or the steps depend on each other in a loop. Pure. The engine's
+ * topological order is null in exactly these two cases, so one of them is always the reason.
+ */
+export function undrawnReason(nodes: ReadonlyArray<{ id: string; dependsOn: readonly string[] }>): string {
+  const ids = new Set(nodes.map((node) => node.id));
+  for (const node of nodes) {
+    const missing = node.dependsOn.find((dep) => !ids.has(dep));
+    if (missing !== undefined) return `step ${node.id} reads step ${missing}, which is not in the plan.`;
+  }
+  return "the steps depend on each other in a loop, so there is no order to draw them in.";
+}
+
 /** The text as one sentence: a full stop is added unless the text already ends one. */
 function sentence(text: string): string {
   return /[.!?]$/.test(text) ? text : `${text}.`;
@@ -167,8 +180,9 @@ export function describePlanOutcome(outcome: PlanOutcome): Notice {
       return { tone: "warning", text: `The plan was not written: ${because} The draft is kept in your plans.` };
     case "not_connected":
       return { tone: "warning", text: `NOT CONNECTED. ${reason} The draft is kept in your plans.` };
+    // A failed status is a read that failed, not a connection that is missing: the catalog was not read, so nothing was planned.
     case "failed":
-      return { tone: "danger", text: `The planning call failed: ${reason} The draft is kept in your plans.` };
+      return { tone: "danger", text: `The catalog could not be read: ${reason} The draft is kept in your plans.` };
     default:
       return { tone: "danger", text: "The plan outcome was not recognised. Nothing was planned." };
   }

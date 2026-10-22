@@ -44,7 +44,12 @@ describe("Content Factory decision feed", () => {
     assert.deepEqual(run.cards.map((item) => item.id), [...CARD_IDS]);
     assert.equal(run.active, false, "a delivered run is not polled");
     assert.equal(run.headline, "The engine delivered the video.");
-    for (const item of run.cards) assert.equal(item.status, "done", `${item.id}: ${item.statusText}`);
+    // The chain's plan has no catalog, so the plan writes no model_choices artifact, and that card is not done.
+    for (const item of run.cards) {
+      if (item.id === "model_choices") continue;
+      assert.equal(item.status, "done", `${item.id}: ${item.statusText}`);
+    }
+    assert.equal(card(run.cards, "model_choices").status, "not_started");
     assert.match(card(run.cards, "reference_analysis").statusText, /reused its stored analysis/);
   });
 
@@ -148,6 +153,38 @@ describe("Content Factory decision feed", () => {
     assert.equal(run.active, true);
     assert.equal(card(run.cards, "render").status, "running");
     assert.equal(card(run.cards, "delivery").status, "not_started");
+  });
+
+  test("a brief's script card is done only when write_script has passed; a request with its own script is done at intake", () => {
+    const brief = structuredClone(recorded);
+    brief.artifacts = brief.artifacts.map((artifact) => (artifact.type === "production_request" ? { ...artifact, brief: "A 30 second reel for the blender", beats: [] } : artifact));
+    brief.nodes = { ...brief.nodes, write_script: "idle" };
+    const waiting = card(feedCards(brief).cards, "script");
+    assert.equal(waiting.status, "not_started", waiting.statusText);
+    assert.equal(waiting.statusText, "Not started yet.");
+    assert.ok(waiting.inputs.includes("Brief: A 30 second reel for the blender"));
+
+    brief.jobs = { ...brief.jobs, write_script: { queued: 0, running: 1, retry: 0, succeeded: 0, dead: 0 } };
+    assert.equal(card(feedCards(brief).cards, "script").status, "running", "the write_script job is the script card's work");
+
+    brief.jobs = { ...brief.jobs, write_script: { queued: 0, running: 0, retry: 0, succeeded: 1, dead: 0 } };
+    brief.nodes = { ...brief.nodes, write_script: "passed" };
+    assert.equal(card(feedCards(brief).cards, "script").status, "done");
+
+    const own = structuredClone(recorded);
+    own.nodes = { ...own.nodes, write_script: "idle" };
+    assert.equal(card(feedCards(own).cards, "script").status, "done", "a request with its own script does not wait for write_script");
+  });
+
+  test("the model choices card is done when the request's model_choices artifact exists, not when only a plan does", () => {
+    const planOnly = structuredClone(recorded);
+    planOnly.artifacts = planOnly.artifacts.filter((artifact) => !(artifact.type === "other" && artifact.artifactType === "model_choices"));
+    assert.ok(planOnly.artifacts.some((artifact) => artifact.type === "scene_plan"), "the run has a plan");
+    assert.equal(card(feedCards(planOnly).cards, "model_choices").status, "not_started");
+
+    const chosen = structuredClone(planOnly);
+    chosen.artifacts.push({ type: "other", artifactId: "art_model_choices", createdAt: "2026-10-16T10:00:00.000Z", artifactType: "model_choices", stage: "plan" });
+    assert.equal(card(feedCards(chosen).cards, "model_choices").status, "done");
   });
 
   test("the board lists the delivered video's shots in time order, each accepted, on revision 0 with nothing remade", () => {

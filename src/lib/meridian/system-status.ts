@@ -9,6 +9,17 @@ import { isLiveProvider, phaseForProbe, phaseForStoredConnection, type LiveProvi
 
 const CONNECTION_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 
+/**
+ * The kind of a failed read, for the status: a database or system error's code, or its class name. Never its message, which can carry
+ * text from the database.
+ */
+function errorKind(error: unknown): string {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (typeof code === "string" && /^[A-Za-z0-9_]{1,40}$/.test(code)) return code;
+  const name = error instanceof Error ? error.name : "";
+  return /^[A-Za-z0-9_]{1,40}$/.test(name) ? name : "unknown error";
+}
+
 function ageMs(value: unknown, now: number): number | null {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
   if (!Number.isFinite(time)) return null;
@@ -27,6 +38,7 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
   let worker: "running" | "stopped" = "stopped";
   let scheduler: "running" | "stopped" = "stopped";
   let database: "up" | "down" = "down";
+  let databaseError = "unavailable";
   try {
     const sql = await input.loadSql();
     await sql`select 1 as ok`;
@@ -40,10 +52,14 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
       if (beat.name === "worker" && fresh) worker = "running";
       if (beat.name === "scheduler" && fresh) scheduler = "running";
     }
-  } catch {
+  } catch (error) {
     database = "down";
+    databaseError = errorKind(error);
   }
   let connections: { provider: LiveProvider; phase: string; detail: string; accountId: string; accountName: string; lastError: string; lastSuccessAt: string | null }[] = [];
+  // The kind of the failed read of the stored connections, or null. A failed read leaves the credential state unknown.
+  let unreadable: string | null = null;
+  if (database === "down" && input.organizationId) unreadable = databaseError;
   if (database === "up" && input.organizationId) {
     try {
       const sql = await input.loadSql();
@@ -93,13 +109,26 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
           };
         });
       }
-    } catch {
+    } catch (error) {
       connections = [];
+      unreadable = errorKind(error);
     }
   }
   if (connections.length === 0) {
-    // No workspace is in scope, or the database could not be read. No credential is in scope, so none is configured.
+    // No workspace is in scope: no credential is in scope, so none is configured. A read that failed is not a missing credential: the
+    // state is unknown, and the connection reports the failure with the kind of error, never its message.
     connections = (["meta", "tiktok", "google", "ad_library"] as const).filter(isLiveProvider).map((provider) => {
+      if (unreadable !== null) {
+        return {
+          provider,
+          phase: "FAILED",
+          detail: `The credential state could not be read (${unreadable}). Nothing was sent, and whether a credential is configured is unknown.`,
+          accountId: "",
+          accountName: "",
+          lastError: "",
+          lastSuccessAt: null,
+        };
+      }
       const phase = phaseForProbe({ provider, ok: null, error: "", disconnected: false, configured: false });
       return { provider, phase: phase.phase, detail: phase.detail, accountId: "", accountName: "", lastError: "", lastSuccessAt: null };
     });

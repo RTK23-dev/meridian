@@ -14,6 +14,9 @@ export const CLAUDE_RATES_VERSION = "claude_rates@1";
 
 const TOKENS_PER_MILLION = 1_000_000;
 
+/** The ledger's money unit: USD with four decimals (contracts/money.ts, usdSchema). */
+const LEDGER_UNITS_PER_USD = 10_000;
+
 export type TokenRate = { inputUsdPerMillion: number; outputUsdPerMillion: number };
 
 export const claudeRates: Readonly<Record<string, TokenRate>> = prices.tokenRates;
@@ -37,7 +40,8 @@ export function estimateClaudeUsd(model: string, tokens: TokenCount): number {
 
 /**
  * The estimate of one call at a live price, for a model the rate table does not name (the user's orchestrator model, read from the
- * catalog at run time). It rounds up to the micro-dollar, so a reservation is never short of the price. Refuses a negative or missing price.
+ * catalog at run time). It rounds up to the ledger's four decimals (usdSchema), so a reservation is never short of the price and is
+ * never refused for a fifth or sixth decimal. Refuses a negative or missing price.
  */
 export function estimateFromPriceUsd(price: { promptUsdPerToken: number; completionUsdPerToken: number }, tokens: TokenCount): number {
   const values = [price.promptUsdPerToken, price.completionUsdPerToken];
@@ -45,5 +49,5 @@ export function estimateFromPriceUsd(price: { promptUsdPerToken: number; complet
     throw new EngineError("unknown_price", "the live price of this model is not usable, so the estimate refuses to guess");
   }
   const usd = tokens.input * price.promptUsdPerToken + tokens.output * price.completionUsdPerToken;
-  return Math.ceil(usd * 1_000_000) / 1_000_000;
+  return Math.ceil(usd * LEDGER_UNITS_PER_USD) / LEDGER_UNITS_PER_USD;
 }

@@ -66,3 +66,9 @@ Governing plan: `REPLAN_2026-10-20.md`.
 - Gates: full suite 5758 tests, 5717 pass, 0 fail, 41 skipped (environment-gated); script tests 160 pass; exit 0. Typecheck exit 0. Lint 0 errors, 4 pre-existing warnings. `npm run build` exit 0.
 - Not browser-checked. The local dev database has no workspace for the dev user, and creating one fails on a foreign key (the user row is missing). I did not seed auth tables to get around it.
 - Live catalog: not read. No `OPENROUTER_API_KEY` is set in this environment. A key pasted into the chat is not used: it is now in the transcript, so it should be rotated, and the new key added as an environment secret named `OPENROUTER_API_KEY`.
+
+## 2026-10-22, production handlers and run budget
+
+- Done: step bodies (migration 0110), run reservation (`run-budget.ts`), text production handlers (`production.ts`: reference, analysis, script), failed-hold accounting. Decisions D1 to D5 in `DECISIONS_2026-10-22.md`.
+- Still open: handlers for visual, voice, video, avatar, edit, compose and render; re-render wiring; every live run (no key in this environment); the Content Factory standalone page phases.
+- The earlier note that production handlers are empty is superseded for reference, analysis and script.

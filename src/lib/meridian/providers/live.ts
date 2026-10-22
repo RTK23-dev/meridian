@@ -39,15 +39,8 @@ export async function probeLive(
       : { ok: false, accountId: "", accountName: "", permissions: [], error: result.error };
   }
   if (provider === "tiktok") {
-    const result = await probeTikTok(
-      {
-        accessToken: token,
-        appId: env.TIKTOK_APP_ID,
-        appSecret: env.TIKTOK_APP_SECRET,
-        advertiserId: env.TIKTOK_ADVERTISER_ID,
-      },
-      transport,
-    );
+    // The account is the token's own advertiser, found by the probe. The deployment's advertiser id is not passed in.
+    const result = await probeTikTok({ accessToken: token, appId: env.TIKTOK_APP_ID, appSecret: env.TIKTOK_APP_SECRET }, transport);
     return result.ok
       ? { ok: true, accountId: result.accountId, accountName: result.accountName, permissions: result.permissions, error: "" }
       : { ok: false, accountId: "", accountName: "", permissions: [], error: result.error };
@@ -111,7 +104,8 @@ export function phaseForStoredConnection(input: {
   const unusable = input.credential.state === "unusable";
   return phaseForProbe({
     provider: input.provider,
-    ok: unusable ? false : input.lastSuccessAt ? true : input.lastError ? false : null,
+    // The most recent probe decides: a recorded error is a failure, even when an earlier probe succeeded (the success stays on record).
+    ok: (unusable || input.lastError) ? false : input.lastSuccessAt ? true : null,
     error: unusable ? input.credential.reason : input.lastError,
     disconnected: input.disconnected,
     configured: input.credential.state !== "not_configured",

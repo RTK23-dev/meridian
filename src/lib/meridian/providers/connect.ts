@@ -42,15 +42,13 @@ async function saveProbe(organizationId: string, provider: LiveProvider, userId:
   const sealed = secrets[0]?.sealed_token ?? "";
   // The sealed OAuth token wins. With none, the workspace's saved key is used, and only through the resolver. No environment
   // token is read, so an environment variable never makes a provider connected.
-  const { providerAccessToken } = await import("./access-token.ts");
-  const access = await providerAccessToken(sql, {
-    organizationId,
-    provider,
-    sealed,
-    encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
-    env: process.env,
-  });
-  if ("error" in access && sealed.trim()) {
+  const { providerAccessToken, providerCredentialState } = await import("./access-token.ts");
+  const credentialInput = { organizationId, provider, sealed, encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "", env: process.env };
+  const access = await providerAccessToken(sql, credentialInput);
+  // A credential that is there but cannot be used is a failed probe, and its reason is kept: a sealed token that does not open, or a saved
+  // key the resolver refuses (expired, unreadable). A credential that is missing is not a failure; the probe below reports it as not configured.
+  const unusable = "error" in access && (sealed.trim() !== "" || (await providerCredentialState(sql, credentialInput)).state === "unusable");
+  if ("error" in access && unusable) {
     await sql`
       insert into provider_connections (id, organization_id, provider, status, last_error, disconnected_at)
       values (${id()}, ${organizationId}, ${provider}, 'FAILED', ${access.error}, null)

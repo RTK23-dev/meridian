@@ -138,3 +138,22 @@ test("a step whose model is priced per token needs its token counts, and default
   // 6000 input tokens at Opus 5.5's prompt price, and 2000 output tokens at its completion price (validate.ts defaults).
   assert.ok(Math.abs(usd - (6000 * 0.000004 + 2000 * 0.00002)) < 1e-12, `script priced ${usd}`);
 });
+
+test("an alias model id is not pinned: a step on one is refused with that reason, and so is an orchestrator on one", () => {
+  let aliasedStep = "";
+  const aliased = planWith((p) => {
+    const node = p.nodes.find((candidate: { model: unknown }) => candidate.model !== null);
+    aliasedStep = node.id;
+    node.model.id = `~${node.model.id}`;
+  });
+  const stepResult = validatePlan(aliased, catalog);
+  assert.equal(stepResult.ok, false);
+  if (!stepResult.ok) assert.ok(stepResult.reasons.includes(`step ${aliasedStep}: the model id is an alias, not a pinned id`), stepResult.reasons.join("\n"));
+
+  const latest = planWith((p) => (p.orchestrator = { provider: "openrouter", id: "anthropic/claude-haiku-latest" }));
+  const orchestratorResult = validatePlan(latest, catalog);
+  assert.equal(orchestratorResult.ok, false);
+  if (!orchestratorResult.ok) {
+    assert.ok(orchestratorResult.reasons.includes("orchestrator anthropic/claude-haiku-latest: the model id is an alias, not a pinned id"), orchestratorResult.reasons.join("\n"));
+  }
+});

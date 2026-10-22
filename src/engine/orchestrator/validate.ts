@@ -32,6 +32,20 @@ export const PRICING_LIMITS = {
 
 export type ValidationResult = { ok: true; order: string[]; plan: OrchestratorPlan } | { ok: false; reasons: string[] };
 
+/** A model id that is an alias (a ~ id, or one with "latest" in it) is not pinned: the same id can mean a different model next week. */
+export function isAliasModelId(id: string): boolean {
+  return id.startsWith("~") || id.toLowerCase().includes("latest");
+}
+
+/**
+ * The reason a plan is refused when its own budget is above the budget the user set, or null when it is not. The model writes the plan's
+ * budget, so the user's budget is the limit, and a plan that asks for more is never run.
+ */
+export function planBudgetReason(planUsd: number, setUsd: number): string | null {
+  if (planUsd <= setUsd) return null;
+  return `the plan's budget $${planUsd.toFixed(4)} is above the budget you set, $${setUsd.toFixed(4)}`;
+}
+
 /** The steps in an order where every step comes after the steps it depends on. Null when the graph has a cycle. */
 export function topologicalOrder(nodes: PlanNode[]): string[] | null {
   const pending = new Map(nodes.map((node) => [node.id, new Set(node.dependsOn)]));
@@ -108,6 +122,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   const reasons: string[] = [];
 
   const orchestrator = catalog.get(plan.orchestrator.id);
+  if (isAliasModelId(plan.orchestrator.id)) reasons.push(`orchestrator ${plan.orchestrator.id}: the model id is an alias, not a pinned id`);
   if (!orchestrator) reasons.push(`orchestrator ${plan.orchestrator.id} is not in the live catalog`);
   else if (orchestrator.kind !== "text") reasons.push(`orchestrator ${plan.orchestrator.id} is a ${orchestrator.kind} model, not a text model`);
 
@@ -132,6 +147,10 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
 
     if (node.model === null) {
       reasons.push(`step ${node.id}: a ${node.kind} step needs a live ${expected} model, and none was chosen`);
+      continue;
+    }
+    if (isAliasModelId(node.model.id)) {
+      reasons.push(`step ${node.id}: the model id is an alias, not a pinned id`);
       continue;
     }
     const entry = catalog.get(node.model.id);

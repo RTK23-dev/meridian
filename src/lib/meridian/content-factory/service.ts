@@ -25,7 +25,7 @@ import {
   type RemakePorts,
 } from "../../../engine/api/index.ts";
 import { hasRole, isRole } from "../access.ts";
-import type { Sql } from "../learning/store.ts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
 import { extractPdf } from "../ingestion/pdf.ts";
 import { characterCount, checkFile, decodeUpload, driveFileStore, imageDimensions, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
@@ -173,8 +173,27 @@ async function requireBrandInWorkspace(sql: Sql, organizationId: string, brandId
   if (!rows[0]) throw new Error(BRAND_REFUSAL);
 }
 
-function requireDraft(row: SessionRow): void {
+function requireDraft(row: { status: string }): void {
   if (row.status !== "draft") throw new Error(STARTED_REFUSAL);
+}
+
+/**
+ * Locks the session row until the transaction ends, then refuses unless the session is still a draft. A write that must not land on a
+ * started session runs after this in the same transaction: a start that is waiting on the lock cannot commit before the write.
+ */
+async function lockDraft(tx: Sql, row: SessionRow): Promise<void> {
+  const [locked] = await tx<{ status: string }>`
+    select status from content_factory_sessions where id = ${row.id} and organization_id = ${row.organization_id} for update
+  `;
+  if (!locked) throw new Error(SESSION_REFUSAL);
+  requireDraft(locked);
+}
+
+async function hasReferenceVideo(sql: Sql, row: SessionRow): Promise<boolean> {
+  const existing = await sql<{ id: string }>`
+    select id from content_factory_attachments where session_id = ${row.id} and organization_id = ${row.organization_id} and purpose = 'reference_video' limit 1
+  `;
+  return existing[0] !== undefined;
 }
 
 async function requireMessage(sql: Sql, row: SessionRow, messageId: string): Promise<void> {
@@ -293,11 +312,14 @@ export async function postMessage(sql: Sql, userId: string, input: { sessionId: 
   requireDraft(row);
   if (input.beatRole !== null && input.text.trim() === "") throw new Error("A script line needs text.");
   const id = randomUUID();
-  await sql`
-    insert into content_factory_messages (id, organization_id, session_id, author_id, text, beat_role)
-    values (${id}, ${row.organization_id}, ${row.id}, ${userId}, ${input.text}, ${input.beatRole})
-  `;
-  await touch(sql, row);
+  await withTransaction(sql, async (tx) => {
+    await lockDraft(tx, row);
+    await tx`
+      insert into content_factory_messages (id, organization_id, session_id, author_id, text, beat_role)
+      values (${id}, ${row.organization_id}, ${row.id}, ${userId}, ${input.text}, ${input.beatRole})
+    `;
+    await touch(tx, row);
+  });
   return { messageId: id };
 }
 
@@ -361,11 +383,9 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   if (!decoded.ok) return { status: "refused", reason: decoded.reason };
   const checked = checkFile(decoded.bytes, input.purpose, input.fileName);
   if (!checked.ok) return { status: "refused", reason: checked.reason };
-  if (input.purpose === "reference_video") {
-    const existing = await sql<{ id: string }>`
-      select id from content_factory_attachments where session_id = ${row.id} and organization_id = ${row.organization_id} and purpose = 'reference_video' limit 1
-    `;
-    if (existing[0]) return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
+  // Refused before anything is sent. The same check runs again under the session's lock, in the transaction that records the file.
+  if (input.purpose === "reference_video" && (await hasReferenceVideo(sql, row))) {
+    return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
   }
   if (row.brand_id === null) {
     return { status: "not_connected", reason: "Choose a brand for this session first. Meridian keeps files in the brand's Google Drive folder." };
@@ -393,14 +413,22 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
     return { status: "refused", reason: `The file was not stored: ${error instanceof Error ? error.message : "the store refused it."}` };
   }
   const id = randomUUID();
-  await sql`
-    insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content)
-    values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'file', ${input.purpose}, ${safeFileName(input.fileName)}, ${storageObjectId}, ${key},
-      ${file.mediaType}, ${file.bytes}, ${file.sha256}, ${file.content})
-  `;
-  await touch(sql, row);
-  await audit(sql, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.file_stored", objectId: row.id, metadata: { attachmentId: id, mediaType: file.mediaType } });
-  return { status: "stored", attachmentId: id, mediaType: file.mediaType, bytes: file.bytes };
+  // The draft check and the reference check run again here, under the session's lock, in the same transaction that records the file. A
+  // session started after the checks above takes no file, and two reference uploads cannot both pass the check.
+  return withTransaction<UploadOutcome>(sql, async (tx) => {
+    await lockDraft(tx, row);
+    if (input.purpose === "reference_video" && (await hasReferenceVideo(tx, row))) {
+      return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
+    }
+    await tx`
+      insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_object_id, storage_key, media_type, byte_size, sha256, content)
+      values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'file', ${input.purpose}, ${safeFileName(input.fileName)}, ${storageObjectId}, ${key},
+        ${file.mediaType}, ${file.bytes}, ${file.sha256}, ${file.content})
+    `;
+    await touch(tx, row);
+    await audit(tx, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.file_stored", objectId: row.id, metadata: { attachmentId: id, mediaType: file.mediaType } });
+    return { status: "stored", attachmentId: id, mediaType: file.mediaType, bytes: file.bytes };
+  });
 }
 
 // --- Sources ---------------------------------------------------------------------------------------------------------------
@@ -423,11 +451,14 @@ export async function attachSource(
   const record = await readSourceRecord(sql, { organizationId: row.organization_id, brandId: input.brandId }, input.page, input.recordId);
   if (!record) throw new Error("That record is not on the page any more, so it was not attached.");
   const id = randomUUID();
-  await sql`
-    insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
-    values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'source', ${record.page}, ${input.brandId}, ${record.recordId}, ${record.snapshot})
-  `;
-  await touch(sql, row);
+  await withTransaction(sql, async (tx) => {
+    await lockDraft(tx, row);
+    await tx`
+      insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
+      values (${id}, ${row.organization_id}, ${row.id}, ${input.messageId}, 'source', ${record.page}, ${input.brandId}, ${record.recordId}, ${record.snapshot})
+    `;
+    await touch(tx, row);
+  });
   return { attachmentId: id, snapshot: record.snapshot };
 }
 
