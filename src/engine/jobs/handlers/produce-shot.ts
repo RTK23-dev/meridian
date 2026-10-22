@@ -51,7 +51,7 @@ import { FFMPEG_LIMITS } from "../../../../functions/ffmpeg/limits.ts";
 import { thresholds } from "../../config/thresholds.ts";
 import { mediaKey, readJobInputs, writeArtifact, type MediaStorePort, type StoredArtifact } from "../artifact-store.ts";
 import { modelChoicesSchema } from "../../contracts/model-choices.ts";
-import type { ModelChoice } from "../../contracts/assets.ts";
+import { modelChoiceSchema, type ModelChoice } from "../../contracts/assets.ts";
 import { SINGLE_CALL_OUTPUT } from "../../plan/model-choices.ts";
 import { directivesOf, promptWithDirectives } from "../remake.ts";
 import { stableId, seedFor } from "../stable-id.ts";
@@ -488,7 +488,23 @@ async function planShotOf(ctx: StageContext): Promise<{ shot: ShotSpec; planArti
   const shotId = shotIdOf(ctx);
   const shot = plan.data.shots.find((candidate) => candidate.shotId === shotId);
   if (!shot) throw new EngineError("invalid_input", `the scene plan has no shot ${shotId}`, { stage: ctx.stage });
-  return { shot, planArtifactId: planned.envelope.artifactId, choices: shotChoicesOf(inputs, shot) };
+  return { shot, planArtifactId: planned.envelope.artifactId, choices: withReviewerChoice(shotChoicesOf(inputs, shot), shot, ctx.payload.details) };
+}
+
+/**
+ * The reviewer's model for a generated shot's remake (D11) replaces the orchestrator's choice for that call. It is carried in the job's
+ * details, so the take is made by the model the reviewer picked, and the ledger prices it the same way (the reserve priced that pick).
+ */
+function withReviewerChoice(choices: ShotChoices, shot: ShotSpec, details: Record<string, unknown>): ShotChoices {
+  if (details.modelChoice === undefined || details.modelChoice === null) return choices;
+  if (shot.source.kind !== "generate") {
+    throw new EngineError("invalid_input", `${shot.shotId} is a ${shot.source.kind} shot, which has no model to choose`, { stage: "produce_shot" });
+  }
+  const parsed = modelChoiceSchema.safeParse(details.modelChoice);
+  if (!parsed.success || parsed.data.source !== "reviewer") {
+    throw new EngineError("invalid_input", "the reviewer's model choice does not parse", { stage: "produce_shot" });
+  }
+  return new Map([...choices, [SINGLE_CALL_OUTPUT, parsed.data]]);
 }
 
 /** The model choices of one shot's calls, by output name. Empty when the job has no model_choices input. */

@@ -3,6 +3,7 @@
  * workspace named in a session's request body is never a way to reach another workspace (service.ts reads the workspace from the session).
  */
 import { MAX_BASE64_CHARS } from "./model.ts";
+import { shotDecisionSchema, type ShotDecision } from "../../../engine/review/shot-decision.ts";
 import {
   isFilePurpose,
   isKeepableGene,
@@ -53,8 +54,36 @@ export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
 
+/** The reviewer's model for a shot's remake, by its catalog id. Empty: the orchestrator's choice. A name that is not an id is refused. */
+export function modelIdOf(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string") throw new Error("Choose a model from the list.");
+  const id = value.trim();
+  if (id === "") return null;
+  if (id.length > 200) throw new Error("Choose a model from the list.");
+  return id;
+}
+
+/** One shot of a session's video, for a read of its take, its model options or a quote of its remake. */
+export function shotRefInput(input: unknown): { sessionId: string; shotId: string; modelId: string | null } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  return { sessionId: idOf(body.sessionId, "session"), shotId, modelId: modelIdOf(body.modelId) };
+}
+
+/** A reviewer's change to one shot: the session, the shot and the decision, checked by the engine's schema before anything is read. */
+export function shotDecisionInput(input: unknown): { sessionId: string; shotId: string; decision: ShotDecision; modelId: string | null } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  const parsed = shotDecisionSchema.safeParse(body.decision);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "The change to this shot is not valid.");
+  return { sessionId: idOf(body.sessionId, "session"), shotId, decision: parsed.data, modelId: modelIdOf(body.modelId) };
+}
+
 /** A remake of one shot: the session, the shot of its video, and the reviewer's direction. The engine trims and checks the direction. */
-export function remakeShotInput(input: unknown): { sessionId: string; shotId: string; directive: string | null } {
+export function remakeShotInput(input: unknown): { sessionId: string; shotId: string; directive: string | null; modelId: string | null } {
   const body = fields(input);
   const shotId = idOf(body.shotId, "shot");
   if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
@@ -62,7 +91,7 @@ export function remakeShotInput(input: unknown): { sessionId: string; shotId: st
   if (directive !== null && directive.length > REMAKE_DIRECTION_MAX_CHARS) {
     throw new Error(`Keep a direction to ${REMAKE_DIRECTION_MAX_CHARS} characters.`);
   }
-  return { sessionId: idOf(body.sessionId, "session"), shotId, directive };
+  return { sessionId: idOf(body.sessionId, "session"), shotId, directive, modelId: modelIdOf(body.modelId) };
 }
 
 export function createSessionInput(input: unknown): { organizationId: string; brandId: string | null; title: string } {

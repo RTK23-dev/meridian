@@ -120,3 +120,30 @@ Nothing has run against a live provider. Every live step needs the owner's keys 
   here; the owner should decide whether to change `tsconfig.json`.
 - **An earlier note is wrong.** The 2026-10-17 checkpoint says PDF text is not read. The code reads it (`content-factory/service.ts`), and the
   launchpad is right.
+
+## 7. Update 2026-10-22: the take on the board and the remake's cost before it is confirmed
+
+Section 4, items 1 and 9, are done on fixtures. Nothing here calls a live provider.
+
+- **See the shots (item 1).** Selecting a shot with a take shows that take in the shot panel. The engine (`shotTakeLink`, `src/engine/api/index.ts`)
+  takes the shot's accepted take, or else its newest take of the current plan epoch, and gives the media signer the take's own stored `uri`. The
+  link is 15 minutes (`ENGINE_MEDIA_LINK_TTL_SECONDS`) and the board reads it again after 10. Each state is shown in words: no take yet, the take
+  not stored yet, the media signer not connected (no `MEDIA_LINK_SECRET` or public origin), or a take whose record does not match its contract,
+  which is refused and never linked. Nothing is logged or stored.
+- **The cost before confirm (item 9).** The panel quotes the remake before the reviewer presses the button (`quoteEngineShotRemake`). It runs the
+  same checks as the remake (the shot, the month's budget, the chosen models' prices, the request budget and the workspace month, as `reserve()`
+  makes them) and writes nothing. The quote says what is held (an estimate at list prices, released when unspent) or why the remake would be
+  refused, and the button stays off for a refused or unfitting quote and while the quote loads. A quote that cannot be read leaves the button
+  on: the engine checks again when the reviewer confirms.
+- **Refactor.** `remakeEngineShot` now takes its checks from `remakeContextOf`, shared with the quote. The directive is checked first; the
+  reserve-and-apply path and its refusals are unchanged. `src/engine/ops/remake.test.ts` passes unchanged.
+- **Tests.** `src/engine/api/shot-take.test.ts` (which take a shot shows), `src/engine/ops/shot-preview.test.ts` (the signer is given the take's stored
+  uri; a missing signer is reported; a shot with no take is not signed; a quote changes no revision and is the same twice; an unknown shot is refused),
+  `src/components/content-factory/shot-presentation.test.ts` (the quote's words and the button rule), and a service test for the gate (a member is
+  refused, a session with no video has no take, nothing is signed, the quote is refused). 82 tests across the Content Factory folder, the engine
+  API and the remake tests pass. Lint is clean on the changed files. Typecheck was not run, as instructed.
+- **Still open on the page (section 4, items 2 to 8).** 2, the review inbox's `change_visual_type` and `edit_prompt` have no event or screen (the
+  direction field is the same path as `edit_prompt`, but the inbox does not reach it). 3, a reviewer's own clip for one shot. 4, a different model
+  for one shot's remake: the plan's chosen model is read in `chosenPricesFor`, and changing it needs the model-choice artifact and the produce
+  stage to take the new choice. 5, remake mid-run. 6, a direction for the whole video. 7, splice render (blocked on the caption layer). 8, variants
+  after a remake. The page has not been looked at in a browser: no screenshot was taken.

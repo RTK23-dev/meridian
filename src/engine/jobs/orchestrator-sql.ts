@@ -145,7 +145,14 @@ function describeEvent(event: EngineEvent): { kind: string; stage: string; subje
         kind: "remake",
         stage: "produce_shot",
         subjectId: event.shotId,
-        body: { directive: event.directive, budgetReservationId: event.budgetReservationId, at: event.at },
+        body: {
+          directive: event.directive,
+          budgetReservationId: event.budgetReservationId,
+          at: event.at,
+          planArtifactId: event.planArtifactId ?? null,
+          replacement: event.replacement ?? null,
+          modelChoice: event.modelChoice ?? null,
+        },
       };
   }
 }

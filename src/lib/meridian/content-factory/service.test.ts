@@ -20,6 +20,8 @@ import {
   postMessage,
   readRun,
   remakeShot,
+  shotRemakeQuote,
+  shotTakeOf,
   reviseSession,
   saveSettings,
   searchSources,
@@ -133,6 +135,29 @@ describe("Content Factory sessions", () => {
     await assert.rejects(remakeShot(db.sql, MEMBER, { sessionId: created.id, shotId: shot, directive: null }), { message: ADMIN_REFUSAL });
     await assert.rejects(remakeShot(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot, directive: null }), { message: SESSION_REFUSAL });
     assert.deepEqual(await remakeShot(db.sql, ADMIN, { sessionId: created.id, shotId: shot, directive: "close up" }), {
+      status: "refused",
+      reasons: ["This session has no video yet. Make the video first."],
+    });
+  });
+
+  test("a shot's take and its remake quote are read only by an admin of the session's workspace; with no video there is no take, nothing is signed and the quote is refused", async () => {
+    const shot = "shot_01M4T7V8BR00000000000AFP71";
+    const created = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Take" });
+    await assert.rejects(shotTakeOf(db.sql, MEMBER, { sessionId: created.id, shotId: shot }), { message: ADMIN_REFUSAL });
+    await assert.rejects(shotRemakeQuote(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot }), { message: SESSION_REFUSAL });
+    const signed: string[] = [];
+    const signer = {
+      sign: async (_organizationId: string, key: string) => {
+        signed.push(key);
+        return { status: "ok" as const, url: "https://media.example.test/take.mp4" };
+      },
+    };
+    assert.deepEqual(await shotTakeOf(db.sql, ADMIN, { sessionId: created.id, shotId: shot }, signer), {
+      status: "not_ready",
+      reason: "This session has no video yet.",
+    });
+    assert.deepEqual(signed, [], "nothing is signed for a session with no video");
+    assert.deepEqual(await shotRemakeQuote(db.sql, ADMIN, { sessionId: created.id, shotId: shot }), {
       status: "refused",
       reasons: ["This session has no video yet. Make the video first."],
     });
