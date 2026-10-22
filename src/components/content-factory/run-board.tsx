@@ -5,16 +5,19 @@ import {
   decideContentFactoryShot,
   getContentFactoryShotModels,
   getContentFactoryShotTake,
+  quoteContentFactoryShotClip,
   quoteContentFactoryShotDecision,
   quoteContentFactoryShotRemake,
   remakeContentFactoryShot,
+  replaceContentFactoryShotWithClip,
 } from "@/lib/meridian/content-factory/actions";
+import { fileBase64 } from "./file-base64.ts";
 import { costLabel, type BoardShot, type CardStatus, type FeedCard, type RunFeed } from "@/lib/meridian/content-factory/feed";
 import { REMAKE_DIRECTION_MAX_CHARS } from "@/lib/meridian/content-factory/model";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { STATUS_LABELS } from "./status";
-import { CHANGE_MODE_LABELS, changeOf, quoteAllowsRemake, quoteSentence, type ChangeMode, type QuoteState } from "./shot-presentation";
+import { CHANGE_MODE_LABELS, changeOf, quoteAllowsRemake, quoteSentence, type ChangeMode, type QuoteState, type QuoteView } from "./shot-presentation";
 
 /** A take's link lasts 15 minutes (ENGINE_MEDIA_LINK_TTL_SECONDS). The board reads it again after 10, so a link on screen is never one that has expired. */
 const SHOT_LINK_STALE_MS = 10 * 60 * 1000;
@@ -143,6 +146,9 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
   const [changeText, setChangeText] = useState("");
   const [changeQuery, setChangeQuery] = useState("");
   const [modelId, setModelId] = useState("");
+  const [clip, setClip] = useState<{ name: string; base64: string } | null>(null);
+  const [clipQuote, setClipQuote] = useState<QuoteView | null>(null);
+  const [clipReasons, setClipReasons] = useState<string[]>([]);
   const blocked = shot.remakeRefusal !== null;
   const { user } = useCurrentUserState();
   const userId = user?.id ?? null;
@@ -169,6 +175,41 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
     enabled: !!userId && !blocked && change.ok,
   });
   const quoteState: QuoteState = quote.data ? { state: "ready", quote: quote.data } : quote.isError ? { state: "unavailable" } : { state: "loading" };
+
+  // A reviewer's own clip (D12): the file is read here and probed by the engine when it is picked, so the cost is shown before it is used.
+  const pickClip = async (file: File) => {
+    setClipReasons([]);
+    setClipQuote(null);
+    try {
+      const base64 = await fileBase64(file);
+      setClip({ name: file.name, base64 });
+      const outcome = await quoteContentFactoryShotClip({ data: { sessionId, shotId: shot.shotId, base64 } });
+      setClipQuote(outcome);
+    } catch (error) {
+      setClip(null);
+      setClipReasons([error instanceof Error ? error.message : "The clip could not be read."]);
+    }
+  };
+  const sendClip = async () => {
+    if (clip === null) return;
+    setBusy(true);
+    setClipReasons([]);
+    try {
+      const outcome = await replaceContentFactoryShotWithClip({ data: { sessionId, shotId: shot.shotId, base64: clip.base64 } });
+      if (outcome.status === "queued") {
+        toast.success(`${shot.label} uses your clip. The video is on revision ${outcome.revision}.`);
+        setClip(null);
+        setClipQuote(null);
+      } else {
+        setClipReasons(outcome.reasons);
+      }
+    } catch (error) {
+      setClipReasons([error instanceof Error ? error.message : "The clip was not used."]);
+    } finally {
+      setBusy(false);
+      onChanged();
+    }
+  };
   const pickable = models.data?.status === "ok" && mode !== "stock_footage" && models.data.options.length > 0;
 
   const submit = async () => {
@@ -306,6 +347,30 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
         ) : null}
       </div>
       {!blocked && !change.ok ? <p className="mt-3 text-sm text-fg-muted">{change.reason}</p> : null}
+      <div className="mt-4 space-y-2 border-t border-border pt-4">
+        <label htmlFor="cf-shot-clip" className="block text-sm font-semibold">Use your own clip for this shot</label>
+        <input
+          id="cf-shot-clip"
+          type="file"
+          accept="video/mp4"
+          disabled={blocked || busy}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void pickClip(file);
+          }}
+          className="block text-sm"
+        />
+        <p className="text-xs text-fg-muted">An H.264 MP4 at the take size, as long as the shot or longer. No model is called for it.</p>
+        {clip !== null && clipQuote !== null ? <p className="text-sm">{clip.name}: {quoteSentence(clipQuote)}</p> : null}
+        {clipReasons.length > 0 ? (
+          <ul role="status" className="list-disc space-y-1 pl-5 text-sm">{clipReasons.map((reason) => <li key={reason}>{reason}</li>)}</ul>
+        ) : null}
+        {clip !== null ? (
+          <Button size="md" loading={busy} disabled={busy || blocked || clipQuote === null || clipQuote.status !== "quoted" || !clipQuote.fits} onClick={() => void sendClip()}>
+            Use this clip
+          </Button>
+        ) : null}
+      </div>
       {!blocked && change.ok && quoteState.state === "ready" ? (
         <p id="cf-remake-quote" className="mt-4 text-sm">{quoteSentence(quoteState.quote)}</p>
       ) : null}

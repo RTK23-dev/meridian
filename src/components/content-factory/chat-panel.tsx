@@ -1,3 +1,4 @@
+import { fileBase64 } from "./file-base64.ts";
 import { useRef, useState, type DragEvent } from "react";
 import { FileText, Film, Image as ImageIcon, Link2, Paperclip, PlugZap, Search, X } from "lucide-react";
 import {
@@ -43,18 +44,6 @@ type FilesState = { status: "ready" } | { status: "not_connected"; reason: strin
 const ROLE_LABELS: Record<ScriptRole, string> = { hook: "Hook", setup: "Setup", item: "Item", proof: "Proof", twist: "Twist", payoff: "Payoff", cta: "Call to action" };
 /** The file input's accept list. The server checks the bytes again; this only narrows the picker. */
 const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp,text/plain,text/markdown,text/csv,application/json,application/pdf,.txt,.md,.markdown,.csv,.json,.pdf";
-
-function fileBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error(`${file.name} could not be read.`));
-    reader.onload = () => {
-      const result = typeof reader.result === "string" ? reader.result : "";
-      resolve(result.slice(result.indexOf(",") + 1));
-    };
-    reader.readAsDataURL(file);
-  });
-}
 
 function timeLabel(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });

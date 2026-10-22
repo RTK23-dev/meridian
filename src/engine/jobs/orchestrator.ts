@@ -1341,7 +1341,10 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
   if (event.replacement) {
     const next = event.replacement;
     if (next.shotId !== shot.shotId) conflict(`the replacement is for ${next.shotId}, not ${shot.shotId}`, "produce_shot");
-    if (!needsProduce(next.sourceKind)) conflict("a replacement must be a shot that a take makes (generate, stock or chain)", "produce_shot");
+    const suppliedClip = next.sourceKind === "asset" && event.reviewerTake !== undefined && event.reviewerTake !== null;
+    if (!needsProduce(next.sourceKind) && !suppliedClip) {
+      conflict("a replacement must be a shot that a take makes (generate, stock or chain), or the reviewer's own clip", "produce_shot");
+    }
     shot.visualType = next.visualType;
     shot.downgradeTo = next.downgradeTo;
     shot.sourceKind = next.sourceKind;
@@ -1349,6 +1352,23 @@ function applyRemake(state: OrchestratorState, event: Extract<EngineEvent, { typ
     shot.takesWanted = next.takesWanted;
   }
   if (event.planArtifactId) state.artifacts.plan = event.planArtifactId;
+  if (event.reviewerTake && event.replacement?.sourceKind === "asset") {
+    // The reviewer's clip is the shot's take: it is accepted now, and no produce job is queued for the shot (D12).
+    const clip = event.reviewerTake;
+    state.takes[clip.takeId] = {
+      takeId: clip.takeId,
+      shotId: shot.shotId,
+      round: 0,
+      epoch: shot.epoch,
+      stale: false,
+      checkQueued: false,
+      verdict: { verdict: clip.verdict, pass: true, confidence: 1, failing: [], criticEscalates: false, verdictArtifactId: clip.verdictArtifactId },
+    };
+    state.artifacts[`take:${clip.takeId}`] = clip.artifactId;
+    state.artifacts[`verdict:${clip.takeId}`] = clip.verdictArtifactId;
+    shot.acceptedTakeId = clip.takeId;
+    shot.status = "accepted";
+  }
   // A remake without a model names none, so the orchestrator's choice applies to it again (D11).
   shot.reviewerChoice = event.modelChoice ?? null;
 

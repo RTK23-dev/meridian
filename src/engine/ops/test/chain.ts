@@ -12,6 +12,7 @@
 // prefixed ULID in a document with a fresh one for that request. The same original always gives the same fresh id within a request, so
 // the references between documents still hold.
 
+import { reviewerClipUris } from "../../jobs/reviewer-clips.ts";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -270,7 +271,8 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
     preRender: {
       renderBudget: async () => ({ remainingUsd: 10, renderEstimateUsd: 0.05 }),
       // The music variant swaps in the fixture track, which is licensed like the master's music (the same track the E5 scenarios use).
-      licensedUris: async () => new Set([...mediaUrisOf(render.edl), MUSIC.uri]),
+      // A reviewer\'s own clip is licensed by the reviewer\'s attestation (D12): its take is read from the request.
+      licensedUris: async (scope) => new Set([...mediaUrisOf(render.edl), MUSIC.uri, ...(await reviewerClipUris(sql, scope.organizationId, scope.requestId))]),
       productImageUris: async () => [fx.BLENDER_FRONT_URI],
       disclosures: async () => ({ aiGeneratedPeople: true }),
     },

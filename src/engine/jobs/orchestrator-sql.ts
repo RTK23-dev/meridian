@@ -152,6 +152,7 @@ function describeEvent(event: EngineEvent): { kind: string; stage: string; subje
           planArtifactId: event.planArtifactId ?? null,
           replacement: event.replacement ?? null,
           modelChoice: event.modelChoice ?? null,
+          reviewerTake: event.reviewerTake ?? null,
         },
       };
   }

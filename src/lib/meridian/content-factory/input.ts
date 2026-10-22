@@ -72,6 +72,17 @@ export function shotRefInput(input: unknown): { sessionId: string; shotId: strin
   return { sessionId: idOf(body.sessionId, "session"), shotId, modelId: modelIdOf(body.modelId) };
 }
 
+/** A reviewer's own clip for one shot: the session, the shot, and the file as base64, within the upload limit. Decoding is the service's job. */
+export function clipInput(input: unknown): { sessionId: string; shotId: string; base64: string } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  if (typeof body.base64 !== "string" || body.base64.length === 0) throw new Error("Choose a clip to use for this shot.");
+  if (body.base64.length > MAX_BASE64_CHARS) throw new Error("The clip is larger than the upload limit.");
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(body.base64)) throw new Error("The clip could not be read.");
+  return { sessionId: idOf(body.sessionId, "session"), shotId, base64: body.base64 };
+}
+
 /** A reviewer's change to one shot: the session, the shot and the decision, checked by the engine's schema before anything is read. */
 export function shotDecisionInput(input: unknown): { sessionId: string; shotId: string; decision: ShotDecision; modelId: string | null } {
   const body = fields(input);

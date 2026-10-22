@@ -494,15 +494,17 @@ test("a kit whose captions are not the karaoke component fails the style check",
   assert.ok(failingChecks(build).some((line) => line.startsWith("style_kit_drawable")));
 });
 
-test("an asset shot is refused, because the editor cannot check that an existing asset covers its clip", () => {
+test("an asset shot takes its clip as its take: without the take the shot has no source, and with it the source check passes (D12)", () => {
   const input = synthInput({
     beats: [{ beatId: "b1", durationMs: 1000 }],
     shots: [{ n: 1, beatId: "b1", visualType: "stock_footage", layer: "base", kind: "stock" }],
   });
   const plan = { ...input.plan, shots: input.plan.shots.map((shot) => ({ ...shot, source: { kind: "asset" as const, assetUri: "store://a.mp4" } })) };
-  const build = buildEdl({ ...input, plan });
-  assert.equal(build.pass, false);
-  assert.ok(failingChecks(build).some((line) => line.startsWith("shot_sources_available")));
+  const withoutTake = buildEdl({ ...input, plan, takes: [] });
+  assert.equal(withoutTake.pass, false);
+  assert.ok(failingChecks(withoutTake).some((line) => line.startsWith("shot_sources_available")));
+  const withTake = buildEdl({ ...input, plan });
+  assert.ok(!failingChecks(withTake).some((line) => line.startsWith("shot_sources_available")), "the clip is the shot's take, so the source is available");
 });
 
 test("the synthetic shot and take ids are valid prefixed ids, so failing shot names pass the gate's schema", () => {

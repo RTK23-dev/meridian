@@ -1,6 +1,6 @@
 // The input checks of a shot remake (input.ts). A remake names a session, a shot of its video and an optional direction. The workspace is
 // never taken from the request: the service reads it from the session.
-import { shotDecisionInput } from "./input.ts";
+import { clipInput, shotDecisionInput } from "./input.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REMAKE_DIRECTIVE_MAX_CHARS } from "../../../engine/jobs/remake.ts";
@@ -41,4 +41,12 @@ test("a shot decision is checked before it is read: an action the engine does no
   assert.equal(ok.decision.action, "edit_prompt");
   assert.throws(() => shotDecisionInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", decision: { action: "delete_video" } }));
   assert.throws(() => shotDecisionInput({ sessionId: "session_abc123", shotId: "take_1", decision: { action: "edit_prompt", prompt: "x" } }), /Choose a shot/);
+});
+
+test("a clip is checked before it is read: a shot of this video, a file within the upload limit, and base64 only", () => {
+  const ok = clipInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", base64: "AAAA" });
+  assert.equal(ok.base64, "AAAA");
+  assert.throws(() => clipInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", base64: "" }), /Choose a clip/);
+  assert.throws(() => clipInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", base64: "not base64!" }), /could not be read/);
+  assert.throws(() => clipInput({ sessionId: "session_abc123", shotId: "take_1", base64: "AAAA" }), /Choose a shot/);
 });

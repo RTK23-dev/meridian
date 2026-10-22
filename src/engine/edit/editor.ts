@@ -103,8 +103,12 @@ type Preconditions = {
  * A shot whose pixels are a take (Bible 6.6): a generated shot, a stock clip, or a chain of calls (contract v5), whose take is its
  * last call's video. Each such shot has exactly one chosen take, and a missing one fails the edit with the shot's id (fail closed).
  */
+/**
+ * Whether a shot takes media: a generated, stock, chain or asset shot has a take. An asset shot's take is the clip the reviewer supplied
+ * (D12), stored like any take, so the editor reads it the same way.
+ */
 export function takesMedia(shot: ShotSpec): boolean {
-  return shot.source.kind === "generate" || shot.source.kind === "stock" || shot.source.kind === "chain";
+  return shot.source.kind === "generate" || shot.source.kind === "stock" || shot.source.kind === "chain" || shot.source.kind === "asset";
 }
 
 /** Inputs that must hold before anything is placed. A failing one is a check with a detail, and no EDL is built. */
@@ -164,22 +168,10 @@ function preconditions(input: EditInput): Preconditions {
   add("every_beat_has_shot", uncovered.length === 0, uncovered.length === 0 ? undefined : `beats with no shot: ${uncovered.join(", ")}`);
 
   const sourceless: string[] = [];
-  const sourceProblems: string[] = [];
   for (const shot of plan.shots) {
-    if (shot.source.kind === "asset") {
-      sourceProblems.push(shot.shotId);
-    } else if (takesMedia(shot) && !takes.has(shot.shotId)) {
-      sourceless.push(shot.shotId);
-    }
+    if (takesMedia(shot) && !takes.has(shot.shotId)) sourceless.push(shot.shotId);
   }
-  const sourceFailing = [...sourceless, ...sourceProblems];
-  const sourceDetail =
-    sourceless.length > 0
-      ? `no chosen take for ${sourceless.join(", ")}`
-      : sourceProblems.length > 0
-        ? "an existing asset has no duration in the inputs, so the editor cannot check it covers its clip"
-        : undefined;
-  add("shot_sources_available", sourceFailing.length === 0, sourceDetail, sourceFailing);
+  add("shot_sources_available", sourceless.length === 0, sourceless.length === 0 ? undefined : `no chosen take for ${sourceless.join(", ")}`, sourceless);
 
   const captionRanges = groupWords(captionBreaks(words, beats), {
     min: grammar.captions.wordsPerCaption[0],
