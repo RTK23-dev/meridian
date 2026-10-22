@@ -822,3 +822,18 @@ eng-contracts, and the changes need a decision (D20 in the plan).
 - **Gemini 2.5 Flash Image:** shut down on 2026-10-02 per Google. Nothing in `src` calls it.
 
 The M5.2 status in the plan is updated, and D1 carries this evidence. D20 asks the owner to approve the price-table update.
+
+## 2026-10-22: authorization sweep, and the engine downloader's host check
+
+**Authorization sweep (AGENTS.md rule 2).** I checked the server functions for a tenancy or role guard. Method: every exported server function
+whose name looks like a mutation (95) or a read (15), plus each service function they call. A guard is a named check such as
+`requireWorkspaceAdmin`, `requireBrandAccess`, `requireBrandAdmin`, `requireBrand`, `sessionAccess`, `workspaceRole` or `requestAccess`, or an
+inline membership and role lookup. Result: every mutation and read I could trace has one. The Content Factory service's mutations and reads all
+pass through `sessionAccess`, which joins the session to the caller's membership and requires the admin role. This is a text sweep with the helpers
+read by hand, not a formal proof. It covers the functions I could match, and a helper I did not read could still hide a gap.
+
+**Engine downloader: the key is safe, the host is not checked.** `engine/gateway/download.ts` fetches any https URL a provider returns. The gateway
+attaches credentials only when the URL is on the provider's own host (`onHost`, `gateway.ts`), so a returned CDN or signed URL gets no key. The
+gap is that the URL is not checked against public addresses, and the connection is not pinned. The Factory's artifact downloader does both
+(`production/artifact-finalizer.ts`). The fix is to share that download with the engine through a neutral module. The change is an eng-pipeline
+change, so it is recorded in the plan (M1.3) and not made here.
