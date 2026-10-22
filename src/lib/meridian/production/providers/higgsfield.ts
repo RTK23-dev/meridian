@@ -4,7 +4,7 @@
  * Async video generation via Higgsfield AI platform:
  * - Uses Bearer-less Key auth header (Authorization: Key <api_key>)
  * - Posts to requests endpoint and retains request_id, status_url, and cancel_url as records
- * - Polls and cancels /v1/requests/<request_id>/{status,cancel} on HIGGSFIELD_ORIGIN only. The key is never sent to a URL
+ * - Polls and cancels /requests/<request_id>/{status,cancel} on HIGGSFIELD_ORIGIN only. The key is never sent to a URL
  *   the provider returned or a stored URL names, so a returned status_url or cancel_url cannot redirect the key elsewhere.
  * - Redirects on authenticated calls are refused, not followed
  * - Never invents job IDs
@@ -61,7 +61,7 @@ export function higgsfieldRequestUrl(requestId: string, action: "status" | "canc
   if (typeof requestId !== "string" || !REQUEST_ID_PATTERN.test(requestId)) {
     throw new HiggsfieldRequestError("The Higgsfield request id is not a valid opaque id. No request was sent.", { code: "INVALID_JOB_ID" });
   }
-  return `${HIGGSFIELD_ORIGIN}/v1/requests/${requestId}/${action}`;
+  return `${HIGGSFIELD_ORIGIN}/requests/${requestId}/${action}`;
 }
 
 export type HiggsfieldModelDefinition = {

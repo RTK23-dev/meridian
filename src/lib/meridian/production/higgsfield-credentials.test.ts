@@ -24,7 +24,7 @@ function recorder() {
   const requests: Headers[] = [];
   const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
     requests.push(new Headers(init?.headers));
-    return new Response(JSON.stringify({ request_id: "hf-acceptance-1", status_url: "https://api.higgsfield.ai/v1/requests/hf-acceptance-1/status", status: "queued" }), { status: 200 });
+    return new Response(JSON.stringify({ request_id: "hf-acceptance-1", status_url: "https://api.higgsfield.ai/requests/hf-acceptance-1/status", status: "queued" }), { status: 200 });
   }) as unknown as typeof fetch;
   return { requests, fetchImpl };
 }

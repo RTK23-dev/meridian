@@ -290,13 +290,13 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Gemini Omni/Higgsfield/Hyp
         JSON.stringify({
           request_id: "hf-req-999",
           status: "queued",
-          status_url: "https://api.higgsfield.ai/v1/requests/hf-req-999/status",
-          cancel_url: "https://api.higgsfield.ai/v1/requests/hf-req-999/cancel",
+          status_url: "https://api.higgsfield.ai/requests/hf-req-999/status",
+          cancel_url: "https://api.higgsfield.ai/requests/hf-req-999/cancel",
         }),
         { status: 200 },
       );
     }
-    if (String(url) === "https://api.higgsfield.ai/v1/requests/hf-req-999/status") {
+    if (String(url) === "https://api.higgsfield.ai/requests/hf-req-999/status") {
       return new Response(
         JSON.stringify({
           status: "completed",
@@ -312,8 +312,8 @@ test("E2E Path 2: CreativeSpec -> ProductionRouter -> Gemini Omni/Higgsfield/Hyp
   const hfJob = await hfProvider.submitJob(spec);
   assert.equal(hfJob.status, "QUEUED");
   assert.equal(hfJob.requestId, "hf-req-999");
-  assert.equal(hfJob.statusUrl, "https://api.higgsfield.ai/v1/requests/hf-req-999/status");
-  assert.equal(hfJob.cancelUrl, "https://api.higgsfield.ai/v1/requests/hf-req-999/cancel");
+  assert.equal(hfJob.statusUrl, "https://api.higgsfield.ai/requests/hf-req-999/status");
+  assert.equal(hfJob.cancelUrl, "https://api.higgsfield.ai/requests/hf-req-999/cancel");
 
   const polledHf = await hfProvider.checkJobStatus(hfJob.jobId, hfJob.metadata);
   assert.equal(polledHf.status, "RENDERED");

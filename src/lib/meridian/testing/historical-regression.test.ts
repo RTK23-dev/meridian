@@ -357,8 +357,8 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
       return new Response(
         JSON.stringify({
           request_id: "req_999",
-          status_url: "https://api.higgsfield.ai/v1/requests/req_999/status",
-          cancel_url: "https://api.higgsfield.ai/v1/requests/req_999/cancel",
+          status_url: "https://api.higgsfield.ai/requests/req_999/status",
+          cancel_url: "https://api.higgsfield.ai/requests/req_999/cancel",
           status: "queued",
         }),
         { status: 200 },
@@ -391,8 +391,8 @@ test("13. Regression: Higgsfield uses Authorization: Key and status_url contract
     });
     assert.equal(job.jobId, "req_999");
     assert.ok(capturedAuth.startsWith("Key "));
-    assert.equal(job.metadata?.statusUrl, "https://api.higgsfield.ai/v1/requests/req_999/status");
-    assert.equal(job.metadata?.cancelUrl, "https://api.higgsfield.ai/v1/requests/req_999/cancel");
+    assert.equal(job.metadata?.statusUrl, "https://api.higgsfield.ai/requests/req_999/status");
+    assert.equal(job.metadata?.cancelUrl, "https://api.higgsfield.ai/requests/req_999/cancel");
 
     const status = await hf.checkJobStatus(job.jobId, job.metadata);
     assert.equal(status.status, "RENDERED");

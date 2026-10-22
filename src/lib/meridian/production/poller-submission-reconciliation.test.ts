@@ -28,7 +28,7 @@ for (const { name, sql } of backends) {
           attempt_count, modality, error_code, error_message
         ) values (
           ${jobId}, ${tenant.organizationId}, ${tenant.brandId}, 'higgsfield', ${options.providerJobId}, ${options.providerJobId},
-          ${options.providerJobId ? `https://api.higgsfield.ai/v1/requests/${options.providerJobId}/status` : null}, null,
+          ${options.providerJobId ? `https://api.higgsfield.ai/requests/${options.providerJobId}/status` : null}, null,
           'SUBMISSION_UNKNOWN', 'BALANCED', 250, '{}', now() - (${options.hoursOld} * interval '1 hour'), now(), now(), null,
           0, 'video', 'PROVIDER_SUBMISSION_OUTCOME_UNKNOWN', 'Provider submission outcome is unknown.'
         )

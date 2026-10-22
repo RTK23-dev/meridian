@@ -57,8 +57,8 @@ function hostOf(url: string): string {
 }
 
 test("higgsfieldRequestUrl: only an opaque request id reaches a URL, and it is built on the fixed origin", () => {
-  assert.equal(higgsfieldRequestUrl("req_999", "status"), `${HIGGSFIELD_ORIGIN}/v1/requests/req_999/status`);
-  assert.equal(higgsfieldRequestUrl("hf-req-1", "cancel"), `${HIGGSFIELD_ORIGIN}/v1/requests/hf-req-1/cancel`);
+  assert.equal(higgsfieldRequestUrl("req_999", "status"), `${HIGGSFIELD_ORIGIN}/requests/req_999/status`);
+  assert.equal(higgsfieldRequestUrl("hf-req-1", "cancel"), `${HIGGSFIELD_ORIGIN}/requests/hf-req-1/cancel`);
   for (const bad of ["", "https://attacker.example/steal", "a/b", "../status", "a.b", "req:1", "x".repeat(129)]) {
     assert.throws(
       () => higgsfieldRequestUrl(bad, "status"),
@@ -70,7 +70,7 @@ test("higgsfieldRequestUrl: only an opaque request id reaches a URL, and it is b
 
 test("a status check whose stored URL is on another origin never sends the key there", async () => {
   const { calls, fetchImpl } = recordingFetch((url) => {
-    if (url.endsWith("/v1/requests/req-evil-1/status")) return json({ status: "completed", video: { url: "https://cdn.higgsfield.ai/out.mp4" } });
+    if (url.endsWith("/requests/req-evil-1/status")) return json({ status: "completed", video: { url: "https://cdn.higgsfield.ai/out.mp4" } });
     // Submission: the provider answers with URLs on an attacker's origin.
     return json({ request_id: "req-evil-1", status_url: `${ATTACKER}/steal`, cancel_url: `${ATTACKER}/cancel`, status: "queued" });
   });
@@ -85,7 +85,7 @@ test("a status check whose stored URL is on another origin never sends the key t
   const toAttacker = calls.filter((call) => hostOf(call.url) === ATTACKER);
   assert.equal(toAttacker.length, 0, "no request is made to the provider-named origin");
   assert.equal(calls.filter((call) => call.authorization !== null && hostOf(call.url) !== HIGGSFIELD_ORIGIN).length, 0, "the key is sent to no other origin");
-  assert.equal(calls.at(-1)?.url, `${HIGGSFIELD_ORIGIN}/v1/requests/req-evil-1/status`, "the poll is built from the request id");
+  assert.equal(calls.at(-1)?.url, `${HIGGSFIELD_ORIGIN}/requests/req-evil-1/status`, "the poll is built from the request id");
   assert.equal(calls.at(-1)?.authorization, `Key ${KEY}`);
 });
 
@@ -107,7 +107,7 @@ test("a cancel whose stored cancel URL is on another origin never sends the key 
   await provider.cancelJob("req-evil-2", { organizationId: ORG, cancelUrl: `${ATTACKER}/cancel` });
 
   assert.equal(calls.length, 1);
-  assert.equal(calls[0]!.url, `${HIGGSFIELD_ORIGIN}/v1/requests/req-evil-2/cancel`);
+  assert.equal(calls[0]!.url, `${HIGGSFIELD_ORIGIN}/requests/req-evil-2/cancel`);
   assert.equal(calls[0]!.authorization, `Key ${KEY}`);
   assert.equal(calls.filter((call) => hostOf(call.url) === ATTACKER).length, 0);
 });
@@ -214,7 +214,7 @@ test("a network failure has no status, so the poller treats it as transient", as
 });
 
 test("a submission whose request id is not opaque is not tracked, since it could not be polled safely", async () => {
-  const { fetchImpl } = recordingFetch(() => json({ request_id: "https://attacker.example/x", status_url: `${HIGGSFIELD_ORIGIN}/v1/requests/x/status`, status: "queued" }));
+  const { fetchImpl } = recordingFetch(() => json({ request_id: "https://attacker.example/x", status_url: `${HIGGSFIELD_ORIGIN}/requests/x/status`, status: "queued" }));
   const provider = new HiggsfieldProvider({ fetchImpl, lookup: ready });
 
   const job = await provider.submitJob(spec);

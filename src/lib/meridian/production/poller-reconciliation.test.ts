@@ -98,7 +98,7 @@ for (const { name, sql } of backends) {
         status, cost_mode, estimated_cost_cents, input, created_at, submitted_at, updated_at, creative_plan_id, attempt_count
       ) values (
         ${jobId}, ${tenant.organizationId}, ${tenant.brandId}, 'higgsfield', ${requestId}, ${requestId},
-        ${`https://api.higgsfield.ai/v1/requests/${requestId}/status`}, ${`https://api.higgsfield.ai/v1/requests/${requestId}/cancel`},
+        ${`https://api.higgsfield.ai/requests/${requestId}/status`}, ${`https://api.higgsfield.ai/requests/${requestId}/cancel`},
         'RUNNING', 'BALANCED', 250, '{}', now() - (${options.hoursOld ?? 0} * interval '1 hour'), now(), now(), null, ${options.attemptCount ?? 0}
       )
     `;
