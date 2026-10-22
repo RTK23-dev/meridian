@@ -350,28 +350,10 @@ details > summary:hover { color: var(--color-fg); }
 .signal-ring { box-shadow: 0 0 0 2px var(--accent); }
 .signal-working { animation: signal-pulse 2400ms ease-in-out infinite; }
 
-/* The globe mark. Its meridians turn about the vertical axis (scaleX follows the cosine of the angle), and the red meridian
-   carries a short comet. The still globe sets the same angles inline, so it rests where the loading mark would be. */
+/* The globe mark, drawn in globe.tsx from globe-motion.ts: its grid takes the text colour, and its arc and head take the accent. */
 .globe-ink { fill: none; stroke: currentColor; }
 .globe-red { fill: none; stroke: var(--accent); }
-.globe-meridian { transform-box: fill-box; transform-origin: center; }
-.globe-turn { animation: globe-turn 2400ms linear infinite; }
-.globe-comet { stroke-linecap: round; stroke-dasharray: 14 124.23; animation: globe-comet 1200ms linear infinite; }
-@keyframes globe-turn {
-  0% { transform: scaleX(1); }
-  12.5% { transform: scaleX(0.7071); }
-  25% { transform: scaleX(0); }
-  37.5% { transform: scaleX(-0.7071); }
-  50% { transform: scaleX(-1); }
-  62.5% { transform: scaleX(-0.7071); }
-  75% { transform: scaleX(0); }
-  87.5% { transform: scaleX(0.7071); }
-  100% { transform: scaleX(1); }
-}
-@keyframes globe-comet {
-  from { stroke-dashoffset: 0; }
-  to { stroke-dashoffset: -138.23; }
-}
+.globe-head { fill: var(--accent); }
 
 /* Overlays (DESIGN.md 5). Dark mode shows depth through the surface lightness, so no shadow. Light mode lifts a dialog, menu or popover with a
    soft shadow, because a white surface on a near-white page needs one. */
@@ -404,7 +386,7 @@ details > summary:hover { color: var(--color-fg); }
     transition-duration: 120ms !important;
     transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke !important;
   }
-  .globe-turn, .globe-comet, .signal-working { animation: none !important; }
+  .signal-working { animation: none !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the

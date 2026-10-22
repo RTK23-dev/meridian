@@ -1,24 +1,45 @@
-import { cn } from "./cn";
+import { useEffect, useState } from "react";
+import { LINE_ALPHA, RING_ALPHA, markFrame, type LinePaths } from "./globe-motion";
 
-/** Meridians at these angles when still. Each one turns through a full cycle, so the still globe is one frame of that cycle. */
-const MERIDIANS = [10, 40, 70, 100];
-const RED = 1;
-const TURN_MS = 2400;
+/** The still mark is the slice: the red meridian edge-on, at t = 0 (section g). */
+const STILL_TIME = 0;
 
-/** The meridian globe: an outline, three latitudes and four meridians. The red meridian carries a comet while animated. */
+/** A line drawn in its two halves: the near half at one strength, the half behind the globe at another. */
+function Line({ paths, className, width, near, far }: { paths: LinePaths; className: string; width: number; near: number; far: number }) {
+  return <>
+    {paths.near ? <path d={paths.near} className={className} strokeWidth={width} strokeOpacity={near} /> : null}
+    {paths.far ? <path d={paths.far} className={className} strokeWidth={width} strokeOpacity={far} /> : null}
+  </>;
+}
+
+/**
+ * The meridian globe, drawn from one frame of globe-motion.ts. Still, it shows the slice (t = 0). Animated, it runs the 12 s loop at one
+ * steady speed, from one clock shared by every mark on the page, and it holds the slice when the page asks for reduced motion.
+ */
 export function GlobeSvg({ size, animated = false }: { size: number; animated?: boolean }) {
-  const weight = size <= 16 ? 2 : size <= 24 ? 1.5 : 1.1;
+  const [time, setTime] = useState(STILL_TIME);
+
+  useEffect(() => {
+    if (!animated || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    let frame = 0;
+    const tick = () => {
+      setTime(performance.now() / 1000);
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [animated]);
+
+  const { latitudes, meridians, ring, comet, head, widths } = markFrame(animated ? time : STILL_TIME, size);
   return <svg viewBox="0 0 48 48" width={size} height={size} aria-hidden="true" focusable="false" className="shrink-0">
-    <circle cx="24" cy="24" r="22" className="globe-ink" strokeWidth={weight * 1.3} />
-    <ellipse cx="24" cy="13" rx="19.05" ry="4.76" className="globe-ink" strokeWidth={weight} />
-    <ellipse cx="24" cy="24" rx="22" ry="5.5" className="globe-ink" strokeWidth={weight} />
-    <ellipse cx="24" cy="35" rx="19.05" ry="4.76" className="globe-ink" strokeWidth={weight} />
-    {MERIDIANS.map((degrees, index) => {
-      const red = index === RED;
-      return <g key={degrees} className={cn("globe-meridian", animated && "globe-turn")} style={{ transform: `scaleX(${Math.cos((degrees * Math.PI) / 180).toFixed(4)})`, animationDelay: `${(-(degrees / 360) * TURN_MS).toFixed(1)}ms` }}>
-        <circle cx="24" cy="24" r="22" className={red ? "globe-red" : "globe-ink"} strokeWidth={weight} />
-        {red && animated ? <circle cx="24" cy="24" r="22" className="globe-red globe-comet" strokeWidth={weight * 2} /> : null}
-      </g>;
-    })}
+    <circle cx="24" cy="24" r="22" className="globe-ink" strokeWidth={widths.rim} strokeOpacity={LINE_ALPHA.rim} />
+    {[...latitudes, ...meridians].map((paths, index) => (
+      <Line key={index} paths={paths} className="globe-ink" width={widths.hairline} near={LINE_ALPHA.near} far={LINE_ALPHA.far} />
+    ))}
+    <Line paths={ring} className="globe-red" width={widths.tail} near={RING_ALPHA} far={LINE_ALPHA.far} />
+    {comet.map((segment, index) => (
+      <path key={index} d={segment.d} className="globe-red" strokeWidth={segment.width} strokeOpacity={segment.opacity} />
+    ))}
+    <circle cx={head.x} cy={head.y} r={head.r} className="globe-head" opacity={head.opacity} />
   </svg>;
 }

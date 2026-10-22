@@ -149,7 +149,7 @@ Rules:
 | dur-fast | 120 ms | Hover and focus colour, press feedback in colour only |
 | dur-base | 200 ms | Menus, tabs, toast entrance, a canvas step appearing, an edge drawing in |
 | dur-slow | 360 ms | Dialogs and the command palette opening |
-| dur-flip | 900 ms | One logo move, ease-in-out (the loop is four moves, 3600 ms) |
+| dur-flip | 900 ms | Not used. The logo turns in one steady 12 s loop, with no move to ease (section g). |
 
 **Easings.**
 
@@ -157,10 +157,10 @@ Rules:
 |---|---|---|
 | ease-standard | cubic-bezier(0.2, 0, 0, 1) | Entrances and state changes |
 | ease-exit | cubic-bezier(0.4, 0, 1, 1) | Exits |
-| ease-emphasis | cubic-bezier(0.65, 0, 0.35, 1) | Logo flips only |
-| ease-linear | linear | Logo head travel, running dash, spinner |
+| ease-emphasis | cubic-bezier(0.65, 0, 0.35, 1) | Not used. The logo does not ease (section g). |
+| ease-linear | linear | The logo's turn and comet run (section g), running dash, spinner |
 
-**What animates.** Opacity for layers, 120 to 200 ms. A translate of up to 8 px for entering layers (toast, menu). `stroke-dashoffset` for an edge drawing in (200 ms) and for the running dash (linear, 800 ms per cycle). Spinner rotation (linear, 800 ms). The logo.
+**What animates.** Opacity for layers, 120 to 200 ms. A translate of up to 8 px for entering layers (toast, menu). `stroke-dashoffset` for an edge drawing in (200 ms) and for the running dash (linear, 800 ms per cycle). Spinner rotation (linear, 800 ms). The logo: its globe turns and its comet runs, both linear over a 12 s loop (section g).
 
 **What never animates.** Layout properties (width, height, top, left, margin, padding). `box-shadow`, `filter` and `backdrop-filter`. Scale, so no pop-in. Bounce or spring easing. Parallax and scroll-linked effects. Autoplaying video. Skeleton shimmer. Any loop except the logo and the running state. Page transitions longer than a 120 ms fade.
 
@@ -251,25 +251,27 @@ The favicon is a black square with a 2 px corner, so it reads on light and dark 
 
 ## g. Logo motion spec
 
-The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL 2 file, with no libraries and no network. Every value sits in one `CONFIG` object at the top of the script.
+The prototype is `docs/design/logo/meridian-logo.html`: one self-contained WebGL 2 file, with no libraries and no network. Every value sits in one `CONFIG` object at the top of the script. The in-app mark (`src/components/ui/globe.tsx`) draws the same motion from `src/components/ui/globe-motion.ts`, and `globe-motion.test.ts` tests it.
 
 **The mark.** A see-through wireframe globe: three latitudes and four meridians, one every 45 degrees. A thin silhouette outlines it. The near lines are full strength and ease down to 16% on the far side. Around it runs the meridian, a red comet of light: a lit 3D tube with a hot white core at its head and a trail that fades to a faint full ring, so the circle always reads. Where the comet's plane cuts the globe, the grid lines light up red, most strongly near the head. A thin horizontal light streak passes through the head, and a bloom pass gives the red its glow.
 
-**The motion: the globe spins and carries its meridian.** The globe turns about its own polar axis, one turn per 12 s loop. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. A faint copy of the whole meridian stays visible. A comet of light runs along it five times per loop. Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s, so the whole comet stays on the line as the globe turns.
+**The motion: one steady turn.** The globe turns about its own polar axis, one turn per 12 s loop, at one steady speed. The red meridian is one of its own meridian lines, so it turns with it. From the front it starts edge-on, a slice through the globe, and opens into the full circle as the globe turns. It closes edge-on on the far side at 6 s and opens again at 9 s. A faint copy of the whole meridian stays visible. A comet of light runs along it five times per loop, at one steady speed (2.4 s a lap). Its trail lies on the meridian itself, along the stretch the head covered over the last 1.1 s (165 degrees), so the whole comet stays on the line as the globe turns. Nothing eases, stops or reverses: every value is linear in time, and the loop closes on its first frame.
 
-**The side view.** The loop is 12 s: one turn of the globe. The comet runs at one steady speed, five laps per loop (2.4 s a lap), with a trail of fixed length; nothing in it resets. As the comet passes the bottom of the meridian, the camera eases round to face the meridian side-on, so it lies on the globe's outline. The bottom pole stays put on screen, so the comet carries on from the same point. It traces the outline like a loading ring for three laps (7.2 s), with the camera following the meridian as the globe turns. Then, as it passes the bottom again, the camera eases back to the front. Each swing turns the camera 72 degrees over 1.2 s on cubic-bezier(0.65, 0, 0.35, 1), centred on the bottom pass. The camera turns one way only, and its timing is measured from the swing in, so the loop closes without a seam even though the side view runs across the loop's end.
+**No side view.** An earlier version swung the camera side-on as the comet passed the bottom of the meridian: eased swings of 72 degrees over 1.2 s, with the comet tracing the globe's outline for three laps. The eased swings made the comet's speed on screen rise and fall, so the motion read as stop-start, which the owner reported. The swings are removed and the camera does not move. Whether a steady side view comes back is the owner's decision.
 
-**Camera.** A perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
+**Camera.** It does not move. It is a perspective view with a 30 degree field of view, 5 globe radii away and about 19 degrees above the equator, so the latitudes curve.
 
 **Files.**
-- `meridian-logo-mark.png`: the hero still at t = 8.0 s, in the side view, 1440 px.
+- `meridian-logo-mark.png`: the hero still at t = 3.0 s, the full ring, 1440 px.
 - `meridian-logo.gif`: 300 frames at 25 fps, 420 px.
 - `meridian-logo.mp4`: the same frames at 600 px.
-- `frames/`: four reference stills at 600 px: the front view (3.0 s), the swing in at the bottom pass (5.4 s), the side view (8.0 s) and the swing back at the bottom pass (0.6 s).
+- `frames/`: four reference stills at 600 px: the slice (0.0 s), the full ring (3.0 s), the slice on the far side (6.0 s) and the full ring again (9.0 s).
 
-**Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the ring pose as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
+**Controls and hooks.** Pause/Play, and a "freeze at t" slider. Open `?theme=light` for the light variant (no streak), and `?t=2.4` to freeze at a time. Reduced motion draws the slice (t = 0) as a still. `window.meridianMark.frame(t)` is pure, and `window.meridianMark.setTime(s)` freezes the frame.
 
-**Checks.** All 300 frames rendered in headless Chromium (software WebGL) with no console errors. Eight moments across the loop were reviewed in a contact sheet. Not checked: the light variant, reduced motion and Pause, and how it looks on a hardware GPU.
+**Checks.** Unit tests in `src/components/ui/globe-motion.test.ts` cover the steady rate, the loop closure, the five laps, the edge-on start, the full ring, the 165-degree trail and the stroke widths, and check that no line loses a segment. In headless Chromium the in-app mark moves on every frame, holds still under reduced motion, matches the t = 0 frame and logs no errors. All 300 prototype frames were rendered from its review hook (software WebGL) with no console errors. Not checked: the light variant, Pause in the prototype, and how either looks on a hardware GPU.
+
+**Open for the owner.** Section f and this section disagree in three places. The code takes the geometry from this section and the grid opacity from section f. (1) Section f asks for five latitudes and six meridians, 30 degrees apart; this section has three and four, 45 degrees apart. (2) Section f gives the grid 28% on the near side and 10% on the far side; the prototype uses full strength near and 16% far. (3) Section f gives a 35% outline; the prototype's rim is 55%. Which values hold is the owner's decision.
 
 ## h. Components with states
 

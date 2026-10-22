@@ -42,8 +42,7 @@
 const CONFIG = {
   loopSeconds: 12,              // One full turn of the globe, which is also the loop.
   headTurnsPerLoop: 5,          // The comet runs round the meridian this many times per loop, at one steady speed.
-  sideLaps: 3,                  // How many laps the comet makes in the side view, tracing the globe's outline.
-  trailDeg: 170,                // The comet's trail. It never changes length.
+  trailDeg: 165,                // The comet's trail: the 1.1 s the head covered (section g). It never changes length.
   ringAlpha: 0.32,               // The meridian's full circle, drawn faintly so the ring always reads. 0 hides it.
   // The blade.
   ringRadius: 1.035,
@@ -61,12 +60,7 @@ const CONFIG = {
   gridHalfWidth: 0.0085,        // Half the grid line's width on the sphere, in radians.
   backLineAlpha: 0.16,          // Far-side lines, seen through the globe.
   rimAlpha: 0.55,               // The thin line that outlines the globe.
-  // The camera.
-  // The side view: as the comet passes the bottom of the meridian, the camera swings round to face the meridian side-on, so it lies on
-  // the globe's outline and the comet traces the edge like a loading ring. One lap later, as the comet passes the bottom again, the
-  // camera swings on round to the front. The camera turns one way only, so the loop closes without a seam.
-  swingSeconds: 1.2,            // How long each swing takes, centred on the comet passing the bottom.
-  viewEase: [0.65, 0, 0.35, 1], // cubic-bezier for both swings.
+  // The camera. It never moves: the globe's turn and the comet's run are the only motion, both at one steady speed.
   cameraDistance: 5.0,
   cameraHeight: 1.7,            // About 19 degrees above the equator, so the latitudes curve.
   fovDeg: 30,
@@ -90,65 +84,15 @@ const normv = (a) => scale(a, 1 / Math.hypot(a[0], a[1], a[2]));
 const wrapTime = (t) => ((t % LOOP) + LOOP) % LOOP;
 
 /** Rodrigues' rotation of v about the unit axis k by angle a. */
-function easeOf([x1, y1, x2, y2]) {
-  const point = (s, p1, p2) => 3 * (1 - s) * (1 - s) * s * p1 + 3 * (1 - s) * s * s * p2 + s * s * s;
-  return (x) => {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 50; i++) {
-      const mid = (lo + hi) / 2;
-      if (point(mid, x1, x2) < x) lo = mid; else hi = mid;
-    }
-    return point((lo + hi) / 2, y1, y2);
-  };
-}
-const viewEase = easeOf(CONFIG.viewEase);
-
-// When the swings happen. The side view lasts sideLaps laps of the comet. The swing in is placed so both swings turn the camera the
-// same distance (the camera goes 0 -> side -> 360 degrees round), with the comet at the bottom of the meridian in the middle of each
-// swing. The side view may run across the end of the loop, so the timing below is measured from the start of the swing in.
-const LAP = LOOP / CONFIG.headTurnsPerLoop;
-const SIDE_SECONDS = CONFIG.sideLaps * LAP;
-const SIDE_SPAN_DEG = (360 * SIDE_SECONDS) / LOOP; // How far the globe turns during the side view.
-const SWING_IN_DEG = (540 - SIDE_SPAN_DEG) / 2;    // The globe's turn at the middle of the swing in.
-const SWING_IN = (((SWING_IN_DEG / 360) * LOOP) % LOOP + LOOP) % LOOP;
-const HALF_SWING = CONFIG.swingSeconds / 2;
-const HEAD_PHASE = Math.PI - TAU * CONFIG.headTurnsPerLoop * (SWING_IN / LOOP);
-
-/** Seconds since the swing in started, wrapped to the loop. */
-function sinceSwingIn(t) {
-  return (((t - (SWING_IN - HALF_SWING)) % LOOP) + LOOP) % LOOP;
-}
-
-/** How far the camera is toward the side view at time t: 0 in front, 1 side-on, eased through each swing. */
-function viewWeightAt(t) {
-  const d = sinceSwingIn(t);
-  const m = CONFIG.swingSeconds;
-  if (d < m) return viewEase(d / m);
-  if (d < SIDE_SECONDS) return 1;
-  if (d < SIDE_SECONDS + m) return 1 - viewEase((d - SIDE_SECONDS) / m);
-  return 0;
-}
-
-/** The camera's azimuth at time t, in radians: front before the side view, following the meridian side-on, front again (a full turn
- * on) after it. Measured from the swing in, so it stays continuous across the loop's end. */
-function azimuthAt(t) {
-  const d = sinceSwingIn(t);
-  const side = SWING_IN_DEG - 90 + (360 * (d - HALF_SWING)) / LOOP;
-  const base = d < SIDE_SECONDS ? 0 : 360;
-  const w = viewWeightAt(t);
-  return ((1 - w) * base + w * side) * DEG;
-}
-
 function rotateAbout(k, a, v) {
   const c = Math.cos(a);
   const s = Math.sin(a);
   return add(add(scale(v, c), scale(cross(k, v), s)), scale(k, dotv(k, v) * (1 - c)));
 }
 
-/** How far round the meridian the comet's head is at time t, in radians: one steady speed. Pi is the bottom of the meridian. */
+/** How far round the meridian the comet's head is at time t, in radians: one steady speed. It starts at pi, the bottom of the meridian. */
 function headAngle(time) {
-  return TAU * CONFIG.headTurnsPerLoop * (time / LOOP) + HEAD_PHASE;
+  return Math.PI + TAU * CONFIG.headTurnsPerLoop * (time / LOOP);
 }
 
 /**
@@ -182,14 +126,7 @@ function frame(time) {
     const a = (TAU * i) / RING_SEGMENTS;
     ring.push(add(scale(now.e1, Math.cos(a)), scale(now.e2, Math.sin(a))));
   }
-  // Side-on, the camera looks straight down the meridian's normal, so the meridian lies on the globe's outline.
-  const front = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
-  const distance = Math.hypot(...front);
-  // Blend the angles, not the vectors, so the swing never flips: the side view's azimuth follows the globe's turn.
-  const w = viewWeightAt(t);
-  const azimuth = azimuthAt(t);
-  const elevation = (1 - w) * Math.atan2(CONFIG.cameraHeight, CONFIG.cameraDistance);
-  const eye = scale([Math.cos(elevation) * Math.sin(azimuth), Math.sin(elevation), Math.cos(elevation) * Math.cos(azimuth)], distance);
+  const eye = [0, CONFIG.cameraHeight, CONFIG.cameraDistance];
   const up = [0, 1, 0];
   return { t, facing: Math.abs(dotv(now.normal, normv(eye))), spinDeg: 360 * (t / LOOP), eye, up, normal: now.normal, points, ring, headRadial: now.head };
 }
@@ -689,10 +626,10 @@ function pause() {
   setButton();
 }
 
-// ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws one still frame. ----
+// ---- Start-up: ?theme=light, ?t=<seconds> freezes at a time for review. Reduced motion draws the slice, at t = 0. ----
 const requested = Number(params.get("t"));
 if (params.has("t") && Number.isFinite(requested)) state.t = wrapTime(requested);
-else if (reduceQuery.matches) state.t = LOOP * 0.5;
+else if (reduceQuery.matches) state.t = 0;
 resize();
 render();
 if (!params.has("t") && !reduceQuery.matches) play();
