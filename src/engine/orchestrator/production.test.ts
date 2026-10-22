@@ -258,10 +258,30 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
     await assert.rejects(duplicate({ node: visual, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
   });
 
-  test("without a router the visual and voice steps have no handler, so the executor reports them not_connected", () => {
+  test("a video step names its video class: none, or a class that is not a video class, is refused before the router is asked", async () => {
+    const asked: unknown[] = [];
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).video as NodeHandler;
+    const video = node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 4 }, estimateUsd: 0.4 });
+    await assert.rejects(handler({ node: video, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    const wrong = { ...video, params: { ...video.params, model_class: "image.keyframe" } };
+    await assert.rejects(handler({ node: wrong, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    assert.equal(asked.length, 0, "nothing reaches the router when the class is missing or wrong");
+  });
+
+  test("a video step asks the router for its named class and its length in milliseconds", async () => {
+    const asked: Array<{ spec: { modelClass: string; durationMs: number } }> = [];
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).video as NodeHandler;
+    const video = node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 4, model_class: "video.budget" }, estimateUsd: 0.4 });
+    await handler({ node: video, key: "k", upstream: NO_UPSTREAM });
+    assert.equal(asked[0]?.spec.modelClass, "video.budget");
+    assert.equal(asked[0]?.spec.durationMs, 4000);
+  });
+
+  test("without a router the visual, voice and video steps have no handler, so the executor reports them not_connected", () => {
     const handlers = productionHandlers(depsWith(memoryLedgerStore()));
     assert.equal(handlers.visual, undefined);
     assert.equal(handlers.voice, undefined);
+    assert.equal(handlers.video, undefined);
   });
 });
 

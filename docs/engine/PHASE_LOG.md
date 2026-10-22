@@ -675,3 +675,30 @@ fixed and the open items and the decision each open item needs: [REVIEW_2026-10-
 - Tests: 82 passing across `src/lib/meridian/content-factory`, `src/engine/api` (index and shot-take), `src/engine/ops` (remake and shot-preview)
   and the presentation rules. Lint clean on the changed files. No typecheck, no full suite, no browser check.
 - Not done: items 2 to 8 of section 4 of `CONTENT_FACTORY_STATE_2026-10-18.md`; the page has not been checked on a screen.
+
+## 2026-10-22: the final pass on the review and the open items (fixtures only; no tests, lint or typecheck run)
+
+This pass was written without running any test, lint or typecheck, at the owner's instruction. Every change below is untested. The
+first run of the suites, the typecheck and the lint must come before a merge or a release.
+
+- Review items closed on fixtures (see `docs/engine/REVIEW_2026-10-22.md`, section "Status after the final pass"):
+  - item 6: a stored OAuth token past its stated expiry is refused by the publish, connect-probe and metric paths, and the status agrees.
+  - item 8: a credentialed provider with no credential id is not connected; nothing is sent without its key (`gateway.ts`).
+  - item 9: a revision checks and changes the request's status under the same row lock a remake takes (`service.ts` `reviseSession`).
+  - item 10: `planWithModel` refuses a plan whose orchestrator id differs from the call's model.
+  - item 11: the start path maps a racing start and keeps the start when only the audit line fails; a failed run's later cards read "Not reached";
+    the brief copy names the script-lines alternative; a file stored but not recorded is removed from Drive (`files.ts` `discard`, archived
+    record); the TikTok publish reads the brand's saved ad account (`providers/ad-account.ts`), not `TIKTOK_ADVERTISER_ID`.
+- Production licence port: `engine/jobs/licensed-uris.ts` reads the licence of each take and voice track. A take is licensed when its provider
+  is `reviewer` or is named in `ENGINE_LICENSED_PROVIDERS` (no default). Wired into `productionComposition` as `preRender.licensedUris`.
+  Before this, production runs had no rights port, so the rights check was not evaluated at all.
+- Orchestrator video step: made through the run's asset router, like visual and voice. It needs `params.model_class`, a video class; the
+  planner prompt does not ask for one, so a video step is refused until the prompt is changed (a prompt version, an owner call).
+- Not built, and why:
+  - avatar step: a presenter's voice and image are not inputs a plan step carries. Not connected.
+  - edit, compose, render steps: the plan path has no edit inputs or EDL. Not connected.
+  - video and avatar polling: the router polls a job within its call; a job the router leaves queued has no poller.
+  - splice execution and surgical re-render: no window render and no media trim/join in the repository. Blocked.
+  - review item 7 (environment-based provider status in `system-status.ts`): waits for the owner; code unchanged.
+- Tests added with this pass (not run): `production.test.ts` (video class, length, not connected without a router), `licensed-uris.test.ts`,
+  and the expiry assertions in `oauth-metrics.test.ts`.
