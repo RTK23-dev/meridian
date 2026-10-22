@@ -632,3 +632,21 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 - UI: `src/components/content-factory/orchestrator-model-panel.tsx` on the Content Factory screen; the plans form no longer carries a fixed default model id.
 - Gates: suite 5758 tests (5717 pass, 0 fail, 41 environment-gated skips); typecheck, lint (0 errors) and build exit 0.
 - Not browser-checked: the local dev database has no workspace for the dev user (the user row is missing, so creating one fails on a foreign key).
+
+## 2026-10-22 Code review of the merged work, and the fixes
+
+Five read-only reviews ran in parallel (orchestrator logic and canvas, orchestrator server and migrations, Content Factory page, engine
+money and gateway, provider connection state). The lead verified each finding by reading the code before a fix. Full record, with the
+fixed and the open items and the decision each open item needs: [REVIEW_2026-10-22.md](REVIEW_2026-10-22.md).
+
+- Fixes merged: `bfaa6e7` (redirects refused; live estimates rounded up to four decimals), `83beebc` (orchestrator admin gate; run budget
+  capped at the user's budget; conditional claims; `finally` on runs; cost validation; alias ids refused; error states), `75e9ecd`
+  (Content Factory draft guard, Script and Model choices cards, ISO file check, search submit, connection phase, TikTok account, read
+  failure), `6776252` (a plan's spend totals every stored output; a paid output records its charged cost).
+- The plans section is on the Content Factory screen, under the orchestrator model panel.
+- Checks: `src` unit tests and lint on the final commit. Typecheck, the scripts tests and the link check were not run, as the review request
+  asked; they must be run before a release.
+- Open, with a decision each: a timed-out Claude call is paid again on retry (the retry takes a new key); the orchestrator plan's input
+  estimate is a fixed 8000 tokens; a step's price uses the input tokens the model wrote; a plan's reservation release; a status that the
+  metric jobs refuse; token expiry is not stored; environment-based provider status (waits for the owner); a revision racing a remake.
+
