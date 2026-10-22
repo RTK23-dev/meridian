@@ -1,5 +1,45 @@
 # Gateway status
 
+## Call telemetry (migration 0110; branch `telemetry-capture-agent`, 2026-10-22)
+
+What each paid call's provider request measured goes to `engine_call_telemetry`, one row per ledger entry. The ledger stays the money
+record: no entry is written or settled differently.
+
+- `telemetry.ts`: the row's values and their rules. Null means not reported; no zero is invented. The bill is `usage.cost` rounded UP to
+  four decimals by the rule of `budget/reconcile.ts` (`billUsdUp`), copied as `usdUpToFour`. `telemetry.test.ts` settles through the
+  real ledger to check the two agree.
+- How a value is measured: `paidCall` opens a probe around its run (AsyncLocalStorage). The gateway makes one sample for each request it
+  sends and marks it before the transport is called, so a request that threw still has one. Its latency is the injected clock around
+  the transport call (`GatewayOptions.now`, the wall clock when not given). `structuredChat` and `submitVideo` complete the sample from
+  the body: the generation id, the token counts and `usage.cost`. An answer that fails its schema keeps what it reported.
+- Rules: a call that never reached the transport (not connected, refused) writes no row. A call with no organization writes no row. The
+  row takes the ledger entry's workspace. Two requests in one paid call, or a request to another provider, null every measured value
+  (the identity is still written).
+- Same transaction: the settled call's row is written in the reconcile step, which runs in the budget transaction (`withLock`). The
+  Postgres store's telemetry write is `jobs/call-telemetry-sql.ts`, under a savepoint, so a failed insert leaves the bill in place. A
+  call whose run threw has no settlement; its row is written in a separate budget step, and the caller still gets the call's own error.
+- A failed write logs one fixed message (`TELEMETRY_NOT_RECORDED`): no error text, no key, no prompt.
+- Nothing else is stored: no prompt, no response body, no headers, no key, no raw error text. No request, retry or credential lookup is
+  added: the test counts transport requests and credential lookups with and without telemetry.
+- Tests: `telemetry.test.ts` (rounding parity, rows, the probe, the fixed log), `paid-telemetry.test.ts` (a chat call through
+  `paidCall` on the recorded fixtures: usage, no usage, a failed call, a billed answer that fails its schema, not connected, no
+  organization, the request count, a throwing insert, a throwing clock, and the stored values). `jobs/call-telemetry-sql.test.ts` runs
+  the Postgres path on PGlite.
+
+Not covered, and why:
+
+- Video poll costs. `pollVideo` runs outside `paidCall`, and the settlement of a video's bill is in `assets/` (another agent's area). A
+  submit row carries `usage.cost` only when the submit response reports one. Report this to the lead before relying on video cost rows.
+- Production clock. `productionComposition` builds the gateway without a `now`, so production uses the wall clock. The runtime's
+  injected `now` is not threaded through.
+- The model that answered. A fallback by OpenRouter is not stored. The row names the routed model, as the ledger entry does.
+- The Claude client (`claude/client.ts`) is unchanged. Its role calls get rows because they settle through `paidCall` on the scoped ledger.
+
+Owner must run live (agents hold no keys; nothing here calls a provider): with `OPENROUTER_SHARED_DEFAULT=deployment` and
+`OPENROUTER_API_KEY` set, run one `runRole` or one `structuredChat` on `llm.check` through `paidCall` on the Postgres ledger
+(`scopedLedgerStore`). Then check `select ledger_entry_id, generation_id, prompt_tokens, completion_tokens, latency_ms, response_cost_usd
+from engine_call_telemetry` against the ledger entry's `actual_usd` and the OpenRouter activity page.
+
 ## Generation bill (contract v9, owner decision 2026-10-17)
 
 - `generation.ts`: `openRouterGenerationBill(gateway, { organizationId, generationId })` reads `GET /generation?id=<generation id>` through

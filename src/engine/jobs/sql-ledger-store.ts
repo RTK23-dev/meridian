@@ -6,8 +6,10 @@
 
 import { EngineError, providerRefSchema, roundUsd, type BudgetReservation, type LedgerSettlement } from "../contracts/index.ts";
 import type { AppendResult, LedgerRow, LedgerStore, MonthTotals } from "../budget/store.ts";
+import type { CallTelemetryStore } from "../gateway/telemetry.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { transaction } from "./orchestrator-sql.ts";
+import { callTelemetryInTransaction } from "./call-telemetry-sql.ts";
 
 type ReservationRow = {
   id: string;
@@ -228,14 +230,22 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
   };
 }
 
-/** Runs one budget call under a lock on its reservation: authorize, settle and release. */
-export async function withReservationLedger<T>(sql: Sql, organizationId: string, reservationId: string, fn: (store: LedgerStore) => Promise<T>): Promise<T> {
+/**
+ * Runs one budget call under a lock on its reservation: authorize, settle and release. The store it gives also keeps a call's telemetry
+ * row in this transaction (call-telemetry-sql.ts), so the row and the settlement are kept or lost together.
+ */
+export async function withReservationLedger<T>(
+  sql: Sql,
+  organizationId: string,
+  reservationId: string,
+  fn: (store: LedgerStore & CallTelemetryStore) => Promise<T>,
+): Promise<T> {
   return transaction(sql, async (tx) => {
     const locked = await tx<{ id: string }>`
       select id from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} for update
     `;
     if (!locked[0]) throw new EngineError("not_found", `reservation ${reservationId} does not exist`);
-    return fn(sqlLedgerStore(tx, organizationId));
+    return fn(Object.assign(sqlLedgerStore(tx, organizationId), callTelemetryInTransaction(tx, organizationId)));
   });
 }
 
