@@ -15,7 +15,13 @@ without waiting for the next command. Each item is committed to `main` with its 
 - **D10 Mid-run remake.** A shot that is still being made can be remade: its in-flight take becomes stale (a new epoch), and the in-flight call
   is not cancelled. Its cost stays on the ledger under the reservation that paid for it, and the stale take is never counted.
 
-(Further decisions are appended below as they are made.)
+- **D9 Whole-video direction is a revision.** (Decided in the run; see item 6.)
+- **D11 A reviewer picks a model.** The pick is checked against the live catalog for the shot's own need, priced like the orchestrator's choices,
+  and carried to the take's produce job as source `reviewer`. Only generated shots have a model to choose.
+- **D12 A reviewer's clip is the shot's take.** It is probed, stored, accepted with the reviewer's acceptance as its verdict, and licensed by the
+  reviewer's attestation. The editor reads it as it reads any take.
+- **D13 Visual and voice steps use the run's asset router.** The router authorizes, caches and bills each asset on the run's own reservation; a
+  step's output is the stored asset's uri. Video, avatar, edit, compose and render stay not connected.
 
 ## Status (updated as the run goes)
 
