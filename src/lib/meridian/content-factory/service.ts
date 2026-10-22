@@ -18,12 +18,17 @@ import {
   engineRequestFeed,
   engineRequestStatus,
   productionReadinessPorts,
+  quoteEngineShotRemake,
   remakeEngineShot,
+  shotTakeLink,
   startEngineRequest,
   type EngineReadiness,
   type EngineReadinessPorts,
   type RemakePorts,
+  type RemakeQuote,
+  type ShotTakeLink,
 } from "../../../engine/api/index.ts";
+import type { MediaLinkSigner } from "../../../engine/jobs/media-link.ts";
 import { hasRole, isRole } from "../access.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
@@ -593,6 +598,27 @@ export async function remakeShot(sql: Sql, userId: string, input: { sessionId: s
     metadata: { requestId: row.engine_request_id, shotId: input.shotId, revision: String(outcome.revision) },
   });
   return { status: "queued", revision: outcome.revision };
+}
+
+/**
+ * The take a shot shows, as a short-lived link for the session's admin (Bible 5.5). Only an admin of the session's workspace can; a session
+ * with no video has no take. Nothing is written. The link is signed for the request's organization only, and the signer is loaded here so
+ * the storage client is not loaded for the tests that do not need it.
+ */
+export async function shotTakeOf(sql: Sql, userId: string, input: { sessionId: string; shotId: string }, signer?: MediaLinkSigner): Promise<ShotTakeLink> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) return { status: "not_ready", reason: "This session has no video yet." };
+  const mediaLinks = signer ?? (await import("../storage/engine-media-link.ts")).engineMediaLinkSigner();
+  return shotTakeLink(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId }, mediaLinks);
+}
+
+/** What remaking one shot would reserve, before the reviewer confirms it (Bible 5.5). Read only: nothing is reserved, queued or called. */
+export async function shotRemakeQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string }, ports?: RemakePorts): Promise<RemakeQuote> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
+  }
+  return quoteEngineShotRemake(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, now: new Date().toISOString() }, ports);
 }
 
 export type RunView =

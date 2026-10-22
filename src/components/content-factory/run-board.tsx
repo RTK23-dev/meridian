@@ -1,9 +1,16 @@
 import { Fragment, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Badge, Button, toast } from "@/components/ui";
-import { remakeContentFactoryShot } from "@/lib/meridian/content-factory/actions";
+import { getContentFactoryShotTake, quoteContentFactoryShotRemake, remakeContentFactoryShot } from "@/lib/meridian/content-factory/actions";
 import { costLabel, type BoardShot, type CardStatus, type FeedCard, type RunFeed } from "@/lib/meridian/content-factory/feed";
 import { REMAKE_DIRECTION_MAX_CHARS } from "@/lib/meridian/content-factory/model";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { userScopedQueryKey } from "@/lib/query/keys";
 import { STATUS_LABELS } from "./status";
+import { quoteAllowsRemake, quoteSentence, type QuoteState } from "./shot-presentation";
+
+/** A take's link lasts 15 minutes (ENGINE_MEDIA_LINK_TTL_SECONDS). The board reads it again after 10, so a link on screen is never one that has expired. */
+const SHOT_LINK_STALE_MS = 10 * 60 * 1000;
 
 /** The colour of a step's node. Running steps pulse (motion-safe, so reduced motion stops it). */
 const NODE_DOT: Record<CardStatus, string> = {
@@ -122,6 +129,20 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
   const [busy, setBusy] = useState(false);
   const [reasons, setReasons] = useState<string[]>([]);
   const blocked = shot.remakeRefusal !== null;
+  const { user } = useCurrentUserState();
+  const userId = user?.id ?? null;
+  const take = useQuery({
+    queryKey: userScopedQueryKey(userId, ["content-factory-shot-take", sessionId, shot.shotId]),
+    queryFn: () => getContentFactoryShotTake({ data: { sessionId, shotId: shot.shotId } }),
+    enabled: !!userId && shot.takes > 0,
+    staleTime: SHOT_LINK_STALE_MS,
+  });
+  const quote = useQuery({
+    queryKey: userScopedQueryKey(userId, ["content-factory-shot-quote", sessionId, shot.shotId, shot.remakes]),
+    queryFn: () => quoteContentFactoryShotRemake({ data: { sessionId, shotId: shot.shotId } }),
+    enabled: !!userId && !blocked,
+  });
+  const quoteState: QuoteState = quote.data ? { state: "ready", quote: quote.data } : quote.isError ? { state: "unavailable" } : { state: "loading" };
   const remake = async () => {
     setBusy(true);
     setReasons([]);
@@ -157,6 +178,28 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
             : `The last check failed on ${shot.lastVerdict.failing.length > 0 ? shot.lastVerdict.failing.map(ruleName).join(", ") : "a check the engine did not name"}.`}
         </p>
       ) : null}
+      {shot.takes > 0 ? (
+        <div className="mt-3">
+          <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">The take</h4>
+          {take.data?.status === "ready" ? (
+            <video
+              src={take.data.url}
+              controls
+              preload="metadata"
+              playsInline
+              aria-label={`The take of ${shot.label}`}
+              onError={() => void take.refetch()}
+              className="mt-2 max-h-80 w-full rounded-md bg-black"
+            />
+          ) : take.data ? (
+            <p className="mt-1 text-sm text-fg-muted">{take.data.reason}</p>
+          ) : take.isError ? (
+            <p className="mt-1 text-sm text-fg-muted">The take could not be loaded.</p>
+          ) : (
+            <p className="mt-1 text-sm text-fg-muted">Loading the take.</p>
+          )}
+        </div>
+      ) : null}
       {shot.directives.length > 0 ? (
         <div className="mt-3">
           <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Earlier directions</h4>
@@ -182,8 +225,17 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
           Say what to change. The rest of the video is kept: its voice, its captions, its other shots and its plan. {direction.length} of {REMAKE_DIRECTION_MAX_CHARS} characters.
         </p>
       </div>
+      {!blocked && quoteState.state === "ready" ? (
+        <p id="cf-remake-quote" className="mt-4 text-sm">{quoteSentence(quoteState.quote)}</p>
+      ) : null}
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-remake-reason" : undefined} onClick={() => void remake()}>
+        <Button
+          size="md"
+          loading={busy}
+          disabled={busy || blocked || !quoteAllowsRemake(quoteState)}
+          aria-describedby={blocked ? "cf-remake-reason" : !blocked && quoteState.state === "ready" ? "cf-remake-quote" : undefined}
+          onClick={() => void remake()}
+        >
           Remake this shot
         </Button>
         {blocked ? <p id="cf-remake-reason" className="text-sm text-fg-muted">{shot.remakeRefusal}</p> : null}

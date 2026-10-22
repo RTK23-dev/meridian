@@ -662,3 +662,16 @@ fixed and the open items and the decision each open item needs: [REVIEW_2026-10-
 - Not done: production handlers for `visual`, `voice`, `video`, `avatar`, `edit`, `compose`, `render` (reported not_connected); re-render wiring to HyperFrames; live runs (no key in this environment).
 - Decisions made on the owner's behalf: `docs/engine/run/DECISIONS_2026-10-22.md` (D1 to D5).
 - Tests: `node --test src/engine/orchestrator/*.test.ts`, 139 passing. Lint clean on the changed files. No typecheck, no full src suite (per the owner's instruction).
+
+## 2026-10-22: the take on the board, and the remake's cost before confirm (Content Factory state, section 4, items 1 and 9)
+
+- `shotTakeLink` and `takeOfShot` (engine API): a shot's take as a 15-minute link, signed for the request's organization over the take's stored uri.
+  Refused for a take whose record does not match its contract. Read only.
+- `quoteEngineShotRemake` (engine API): the remake's estimate, reserved amount and whether it fits, with the same checks as the remake. Read only.
+  `remakeEngineShot` now shares its checks with the quote (`remakeContextOf`); its behaviour is unchanged apart from checking the direction first.
+- Service and server functions: `shotTakeOf`, `shotRemakeQuote`, `getContentFactoryShotTake`, `quoteContentFactoryShotRemake`. Admin of the session's
+  workspace only, as every change in Content Factory.
+- Board: the shot panel shows the take and the quote; the button waits for the quote. `shot-presentation.ts` holds the wording and the rule.
+- Tests: 82 passing across `src/lib/meridian/content-factory`, `src/engine/api` (index and shot-take), `src/engine/ops` (remake and shot-preview)
+  and the presentation rules. Lint clean on the changed files. No typecheck, no full suite, no browser check.
+- Not done: items 2 to 8 of section 4 of `CONTENT_FACTORY_STATE_2026-10-18.md`; the page has not been checked on a screen.

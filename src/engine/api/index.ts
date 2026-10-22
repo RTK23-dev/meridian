@@ -43,7 +43,9 @@ import { routes } from "../config/routes.ts";
 import { budgets } from "../config/budgets.ts";
 import { reserve } from "../budget/reserve.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
-import type { ChosenCallPrices } from "../budget/estimate.ts";
+import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
+import { sumUsd } from "../contracts/money.ts";
+import { ENGINE_MEDIA_LINK_TTL_SECONDS, type MediaLinkSigner } from "../jobs/media-link.ts";
 import { modelChoicesSchema } from "../contracts/model-choices.ts";
 import { chosenCallPricesOf } from "../plan/model-choices.ts";
 import { remakeRefusalOf, type OrchestratorState } from "../jobs/orchestrator.ts";
@@ -272,6 +274,46 @@ export type RemakePorts = {
 
 export type RemakeResult = { status: "queued"; revision: number; reservationId: string } | { status: "refused"; reasons: string[] };
 
+/** What the checks before a remake read: the video's record, the shot, the month's budget and the revision the remake would make. */
+type RemakeContext = {
+  state: OrchestratorState;
+  plan: ScenePlan;
+  request: ProductionRequest;
+  shot: ScenePlan["shots"][number];
+  month: { usd: number };
+  catalog: ModelCatalogSource | undefined;
+  revision: number;
+};
+
+/**
+ * The checks every remake passes before it reserves anything (Bible 5.5). Read only: nothing is written. A refusal names its reasons.
+ */
+async function remakeContextOf(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; now: string }, ports?: RemakePorts): Promise<{ ok: true; context: RemakeContext } | { ok: false; reasons: string[] }> {
+  const read = await readEngineRequest(sql, input.organizationId, input.requestId);
+  if (!read) throw new EngineError("not_found", `request ${input.requestId} is not in this workspace`);
+  const state = read.state;
+  const refusal = remakeRefusalOf(state, input.shotId);
+  if (refusal !== null) return { ok: false, reasons: [refusal] };
+
+  const planId = state.artifacts.plan;
+  const requestId = state.artifacts.request;
+  if (planId === undefined || requestId === undefined) {
+    return { ok: false, reasons: ["this video has no plan or request record to price a remake from"] };
+  }
+  const plan = scenePlanSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: planId })).envelope.body);
+  const request = productionRequestSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: requestId })).envelope.body);
+  const shot = plan.shots.find((candidate) => candidate.shotId === input.shotId);
+  if (shot === undefined) return { ok: false, reasons: ["That shot is not in the plan of this video."] };
+  const resolved = ports ?? (await productionRemakePorts(sql));
+
+  const month = await resolved.monthBudget.monthBudget({ organizationId: input.organizationId, requestId: input.requestId, now: input.now });
+  if (month.status !== "known") return { ok: false, reasons: [month.reason] };
+  return {
+    ok: true,
+    context: { state, plan, request, shot, month, catalog: resolved.catalog, revision: (state.revision ?? 0) + 1 },
+  };
+}
+
 /**
  * Makes one accepted shot of a delivered video again (Bible 5.5). The remake reserves its own estimate first: the shot's take, the edit
  * that follows, the render and the review, with the fixed per-master lines. The event is applied only with that reservation held. When
@@ -279,44 +321,27 @@ export type RemakeResult = { status: "queued"; revision: number; reservationId: 
  * for a remake that did not happen. A refusal names its reasons and changes nothing.
  */
 export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: RemakePorts): Promise<RemakeResult> {
-  const read = await readEngineRequest(sql, input.organizationId, input.requestId);
-  if (!read) throw new EngineError("not_found", `request ${input.requestId} is not in this workspace`);
-  const state = read.state;
-  const refusal = remakeRefusalOf(state, input.shotId);
-  if (refusal !== null) return { status: "refused", reasons: [refusal] };
   let directive: string | null;
   try {
     directive = remakeDirectiveOf(input.directive);
   } catch (error) {
     return { status: "refused", reasons: [messageOf(error)] };
   }
-
-  const planId = state.artifacts.plan;
-  const requestId = state.artifacts.request;
-  if (planId === undefined || requestId === undefined) {
-    return { status: "refused", reasons: ["this video has no plan or request record to price a remake from"] };
-  }
-  const plan = scenePlanSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: planId })).envelope.body);
-  const request = productionRequestSchema.parse((await readArtifact(sql, { organizationId: input.organizationId, artifactId: requestId })).envelope.body);
-  const shot = plan.shots.find((candidate) => candidate.shotId === input.shotId);
-  if (shot === undefined) return { status: "refused", reasons: ["That shot is not in the plan of this video."] };
-  const resolved = ports ?? (await productionRemakePorts(sql));
-
-  const month = await resolved.monthBudget.monthBudget({ organizationId: input.organizationId, requestId: input.requestId, now: input.now });
-  if (month.status !== "known") return { status: "refused", reasons: [month.reason] };
+  const checked = await remakeContextOf(sql, input, ports);
+  if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const { context } = checked;
 
   const reservationId = newId("res_");
-  const revision = (state.revision ?? 0) + 1;
   try {
-    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state, plan, catalog: resolved.catalog });
+    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
     const reserved = await withWorkspaceLedger(sql, input.organizationId, (store) =>
       reserve(store, {
         requestId: input.requestId,
         workspaceId: input.organizationId,
         mode: budgets.productionMode,
-        plan: { ...plan, shots: [shot] },
-        requestBudgetUsd: request.constraints.budgetUsd,
-        workspaceMonthBudgetUsd: month.usd,
+        plan: { ...context.plan, shots: [context.shot] },
+        requestBudgetUsd: context.request.constraints.budgetUsd,
+        workspaceMonthBudgetUsd: context.month.usd,
         now: input.now,
         reservationId,
         ...(chosenPrices === undefined ? {} : { chosenPrices }),
@@ -334,17 +359,85 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
       organizationId: input.organizationId,
       requestId: input.requestId,
       event: { type: "remake", shotId: input.shotId, directive, budgetReservationId: reservationId, at: input.now },
-      dedupeKey: `remake|${input.requestId}|${input.shotId}|${revision}`,
+      dedupeKey: `remake|${input.requestId}|${input.shotId}|${context.revision}`,
     });
-    if (outcome.applied) return { status: "queued", revision, reservationId };
+    if (outcome.applied) return { status: "queued", revision: context.revision, reservationId };
     // Another click made this revision first. Its reservation is the one in force, and this one is not used.
     await releaseRemakeReservation(sql, input.organizationId, reservationId);
     const current = await readEngineRequest(sql, input.organizationId, input.requestId);
-    return { status: "queued", revision: current?.state.revision ?? revision, reservationId: current?.state.budgetReservationId ?? reservationId };
+    return { status: "queued", revision: current?.state.revision ?? context.revision, reservationId: current?.state.budgetReservationId ?? reservationId };
   } catch (error) {
     await releaseRemakeReservation(sql, input.organizationId, reservationId);
     return { status: "refused", reasons: [messageOf(error)] };
   }
+}
+
+/**
+ * What a remake of one shot would reserve, and whether the reservation would fit (the same checks reserve() makes). Read only: nothing is
+ * reserved, queued or called. `fits` false means the remake would be refused, and `reasons` says why.
+ */
+export type RemakeQuote =
+  | { status: "quoted"; revision: number; estimateUsd: number; reservedUsd: number; redoAllowanceUsd: number; fits: boolean; reasons: string[] }
+  | { status: "refused"; reasons: string[] };
+
+export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "directive">, ports?: RemakePorts): Promise<RemakeQuote> {
+  const checked = await remakeContextOf(sql, input, ports);
+  if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const { context } = checked;
+  try {
+    const chosenPrices = await chosenPricesFor({ sql, organizationId: input.organizationId, state: context.state, plan: context.plan, catalog: context.catalog });
+    const estimate = estimatePlan({ ...context.plan, shots: [context.shot] }, chosenPrices ?? new Map());
+    const reasons: string[] = [];
+    if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
+      reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);
+    }
+    const totals = await withWorkspaceLedger(sql, input.organizationId, (store) => store.sumForMonth(input.organizationId, input.now.slice(0, 7)));
+    const monthUsd = sumUsd([totals.reservedUsd, estimate.reservedUsd]);
+    if (monthUsd > context.month.usd) reasons.push(`the remake would take the workspace month over its $${context.month.usd.toFixed(4)} budget`);
+    return {
+      status: "quoted",
+      revision: context.revision,
+      estimateUsd: estimate.estimateUsd,
+      reservedUsd: estimate.reservedUsd,
+      redoAllowanceUsd: estimate.redoAllowanceUsd,
+      fits: reasons.length === 0,
+      reasons,
+    };
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+}
+
+/** The take a shot shows: its accepted take, or else its newest take made in the current plan epoch. Null when the shot has none. */
+export function takeOfShot(state: OrchestratorState, shotId: string): string | null {
+  const shot = state.shots[shotId];
+  if (shot === undefined) return null;
+  if (shot.acceptedTakeId !== null) return shot.acceptedTakeId;
+  const current = Object.values(state.takes).filter((take) => take.shotId === shotId && take.epoch === shot.epoch && !take.stale);
+  return current.at(-1)?.takeId ?? null;
+}
+
+export type ShotTakeLink =
+  | { status: "ready"; url: string; takeId: string; ttlSeconds: number }
+  | { status: "not_ready"; reason: string }
+  | { status: "not_connected" | "refused"; reason: string };
+
+/**
+ * A short-lived link to the take a shot shows, for a reviewer to watch (the media route serves it to the request's organization only).
+ * Read only. The link is never logged and never stored. A take with no record that matches its contract is refused, not linked.
+ */
+export async function shotTakeLink(sql: Sql, input: { organizationId: string; requestId: string; shotId: string }, signer: MediaLinkSigner): Promise<ShotTakeLink> {
+  const read = await readEngineRequest(sql, input.organizationId, input.requestId);
+  if (!read) throw new EngineError("not_found", `request ${input.requestId} is not in this workspace`);
+  const takeId = takeOfShot(read.state, input.shotId);
+  if (takeId === null) return { status: "not_ready", reason: "This shot has no take yet." };
+  const artifactId = read.state.artifacts[`take:${takeId}`];
+  if (artifactId === undefined) return { status: "not_ready", reason: "The take is not stored yet." };
+  const parsed = takeSchema.safeParse((await readArtifact(sql, { organizationId: input.organizationId, artifactId })).envelope.body);
+  if (!parsed.success) return { status: "refused", reason: "The take's record does not match its contract, so no link is made." };
+  const result = await signer.sign(input.organizationId, parsed.data.uri, ENGINE_MEDIA_LINK_TTL_SECONDS);
+  if (result.status === "ok") return { status: "ready", url: result.url, takeId, ttlSeconds: ENGINE_MEDIA_LINK_TTL_SECONDS };
+  return { status: result.status, reason: result.reason };
 }
 
 /** The chosen models' catalog prices for a remake (Bible 10.5), read the way estimate_reserve reads them. Absent: no model was chosen. */

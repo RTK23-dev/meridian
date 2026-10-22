@@ -53,6 +53,14 @@ export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
 
+/** One shot of a session's video, for a read of its take or a quote of its remake. */
+export function shotRefInput(input: unknown): { sessionId: string; shotId: string } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  return { sessionId: idOf(body.sessionId, "session"), shotId };
+}
+
 /** A remake of one shot: the session, the shot of its video, and the reviewer's direction. The engine trims and checks the direction. */
 export function remakeShotInput(input: unknown): { sessionId: string; shotId: string; directive: string | null } {
   const body = fields(input);
