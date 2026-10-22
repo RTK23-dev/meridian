@@ -784,3 +784,20 @@ outputs. That needs an engine contract change, and nothing is built until the ow
 
 Phase 0's verification (task 23) is complete on this basis: the full suite ran, typecheck, lint and build pass, and the one failure is fixed
 and re-run.
+
+## 2026-10-22: the next round of the Content Factory plan (M2.0, M3.1, M3.2, M5.2)
+
+- **M3.1, organic reads: checked against documentation, no change.** The four readers (Instagram Reels insights, Facebook Page video
+  insights, TikTok video query, YouTube statistics) match their endpoints, methods, scopes and metric names. The Instagram insights call
+  uses Graph API v25.0, and the current documentation's example uses v26.0. That is noted in the code and is not verified live.
+- **M3.2, paid insights: the request matches Meta's Ad Insights fields, but the conversion count is undefined.** `performance/sync.ts`
+  takes the first action whose type contains "conversion", so the count depends on the order Meta returns the actions in. This needs a
+  decision, D19, on which action type counts. Nothing is changed until then.
+- **M5.2, price table: not changed.** The table holds one priced entry, for OpenAI decision tokens. Adding entries needs the owner's list
+  of providers in use, and each entry needs the provider's pricing page and the date it was read.
+- **M2.0, readiness report.** `src/lib/meridian/credentials/live-readiness.ts` and `npm run live:readiness`. For each key category in the
+  credentials contract, the report says whether its deployment variable is set, and whether its shared default is opted in. It prints names
+  and yes or no, never a value, and calls no provider. A workspace's saved keys are not visible to it. Tests: `live-readiness.test.ts`, 7 of 7.
+  The live recorder that makes one call per step is not built.
+
+Checks: typecheck exit 0; lint on the new files clean.

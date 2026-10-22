@@ -24,15 +24,17 @@ how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and 
 | M1.2 | blocked | — | The live paid request sends no creative to any platform, Meta included, so a TikTok or Google route would create half-built ads. See D14 and D15. |
 | M1.3 | done, except D12 | `953d7da` | Higgsfield status and cancel use the documented path, not verified live. The webhook receiver is rate limited (300 a minute per client). Proxy headers are off by default. The artifact host allowlist is open by default (D12). |
 | M1.4 | done | `9485ff7` | Typecheck exit 0, lint 0 errors, build exit 0. The full src suite ran: 6,054 tests, 6,012 passing, 41 skipped for environment reasons, 1 failing. The failure was the `.env.example` contract, fixed in `9485ff7` and re-run alone (9 of 9). The scripts suite: 160 of 160. |
-| M2.0 | not built | — | The recorder needs the provider adapters and the key names confirmed. I did not guess the names. |
-| M3 | blocked | — | Needs the M2 live runs. |
+| M2.0 | partly done | `live-readiness` | `npm run live:readiness` reports, for each key category in the credentials contract, whether its deployment variable is set and whether its shared default is opted in. It prints names and yes or no, never a value, and calls no provider. The live recorder that makes one call per step is not built. |
+| M3.1 | done, no change | — | The four organic readers match their documentation. The endpoints, methods, scopes and fields were checked: Instagram Reels insights, Facebook video insights, TikTok video query, YouTube statistics. Instagram's insights call uses API version v25.0, and the documentation's example uses v26.0. Not verified live. |
+| M3.2 | blocked on D19 | — | The paid insights request matches Meta's Ad Insights fields. The conversion count is not defined: it takes the first action whose type contains "conversion", so the count depends on Meta's order. See D19. |
+| M3.3, M3.4 | blocked | — | Need the M2 live runs and D19. |
 | M4.1 | blocked on D1 | — | |
 | M4.2, M4.3 | blocked on D5 | — | M4.3 also needs M4.2. |
 | M4.4 | design written; awaiting D16 to D18 | — | `docs/engine/PLAN_TO_REQUEST_BRIDGE.md`. Recommends Option 1, the engine accepting a plan run's outputs. That needs an engine contract change (D17). |
 | M4.5 | blocked on D2 | — | |
 | M4.6 | blocked on D3 | — | |
 | M5.1 | blocked on D7 | — | |
-| M5.2 | not started | — | Needs the owner's list of providers in use. |
+| M5.2 | blocked on the owner's list | — | `factory/price-table.ts` holds one priced entry, for OpenAI decision tokens. Every other provider reports its bill or is unpriced. Entries need each provider's pricing page, read on a stated date. The list of providers the owner pays for decides which pages to read. |
 | M5.3 | no change | — | ROADMAP records no documented lookup for the providers that lack one. |
 | M5.4 | blocked on D4 | — | |
 | M5.5, M5.6 | blocked on live runs | — | |
@@ -230,6 +232,7 @@ The owner answers these. An agent reports the blocked task and does not choose a
 | D16 | Which way the plan-to-request bridge goes (M4.4): Option 1, the engine accepts a plan run's outputs; Option 2, the orchestrator compiles its own EDL; or Option 3, production runs through the brief request. Recommended: Option 1. | M4.4 steps 1 to 4 |
 | D17 | The engine contract change that Option 1 needs: a version bump, a Bible section 4 note, and the lead's approval. | M4.4 step 3 |
 | D18 | The style kit for a plan run: named by the plan, or the brand's default page kit. | M4.4 step 4 |
+| D19 | Which Meta action counts as a conversion. Today the first action whose type contains "conversion" is used, so the count depends on Meta's order. Proposed: a named action type per brand (for example `purchase`), and null when the account reports none of it. | M3.2, M3.4, and every paid conversion count |
 
 ## Out of scope for now
 

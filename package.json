@@ -32,7 +32,8 @@
     "e2e:content-factory": "node scripts/content-factory-flow.mjs",
     "engine:golden": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.run.ts",
     "engine:golden:update": "NODE_ENV=development node --experimental-strip-types --test src/engine/compose/test/golden/golden.update.ts",
-    "engine:e1": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/engine/e1-acceptance.ts"
+    "engine:e1": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/engine/e1-acceptance.ts",
+    "live:readiness": "node scripts/with-dotenv.mjs node --experimental-strip-types scripts/live-readiness.ts"
   },
   "dependencies": {
     "@axe-core/playwright": "^4.13.0",
