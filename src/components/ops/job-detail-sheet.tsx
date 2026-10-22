@@ -102,7 +102,7 @@ export function JobDetailSheet({ organizationId, jobId, canAdmin, retrying, canc
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-semibold uppercase tracking-wide text-fg-muted">{label}</dt>
+      <dt className="text-xs font-semibold text-fg-muted">{label}</dt>
       <dd className="mt-1 break-words">{children}</dd>
     </div>
   );

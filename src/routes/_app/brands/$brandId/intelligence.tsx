@@ -161,7 +161,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 />
                 <Card className="flex flex-col justify-between p-4">
                   <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-muted">
+                    <span className="text-xs font-semibold text-muted">
                       Brand Archetype
                     </span>
                     <div className="mt-2 flex items-center gap-2">
@@ -223,7 +223,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wider text-muted">
+                      <p className="text-xs font-medium text-muted">
                         High Frequency Hooks
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -239,7 +239,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                       </div>
                     </div>
                     <div className="pt-2 border-t border-line">
-                      <p className="text-xs font-medium uppercase tracking-wider text-warning flex items-center gap-1">
+                      <p className="text-xs font-medium text-warning flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Saturated Angles (&ge; 30% of content)
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
@@ -315,7 +315,7 @@ function Intelligence({ brandId }: { brandId: string }) {
 
                         {item.detectedObjections && item.detectedObjections.length > 0 && (
                           <div className="border-t border-line pt-2">
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-muted">
+                            <span className="text-[10px] font-medium text-muted">
                               Mined Objections:
                             </span>
                             <p className="mt-1 text-xs text-warning truncate">

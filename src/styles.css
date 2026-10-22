@@ -303,6 +303,10 @@ details > summary:hover { color: var(--color-fg); }
   to { stroke-dashoffset: -138.23; }
 }
 
+/* Overlays (DESIGN.md 5). Dark mode shows depth through the surface lightness, so no shadow. Light mode lifts a dialog, menu or popover with a
+   soft shadow, because a white surface on a near-white page needs one. */
+:root[data-theme="light"] .surface-overlay { box-shadow: 0 12px 32px rgb(17 16 22 / 0.12); }
+
 /* Toasts sit on the overlay surface with a hairline and a 2px status bar on the left. The sonner defaults for colour and
    shadow are replaced, so no toast casts a shadow and none is filled with a status colour. */
 [data-sonner-toast] {

@@ -261,7 +261,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
       ) : null}
       {shot.takes > 0 ? (
         <div className="mt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">The take</h4>
+          <h4 className="text-xs font-semibold text-fg-muted">The take</h4>
           {take.data?.status === "ready" ? (
             <video
               src={take.data.url}
@@ -283,7 +283,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
       ) : null}
       {shot.directives.length > 0 ? (
         <div className="mt-3">
-          <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Earlier directions</h4>
+          <h4 className="text-xs font-semibold text-fg-muted">Earlier directions</h4>
           <ul className="mt-1 list-disc space-y-1 pl-5 text-sm">
             {shot.directives.map((text, position) => <li key={`${position}-${text}`} className="break-words">{text}</li>)}
           </ul>

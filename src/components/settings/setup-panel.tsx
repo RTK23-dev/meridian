@@ -114,7 +114,7 @@ function GroupBlock({
   return (
     <div className="space-y-3" data-group={group}>
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-fg-muted">{label}</h3>
+        <h3 className="text-sm font-semibold text-fg-muted">{label}</h3>
         <p className="text-sm text-fg-muted">{hint}</p>
       </div>
       <ul className="space-y-3">

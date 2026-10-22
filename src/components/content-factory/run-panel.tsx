@@ -160,7 +160,7 @@ function Lines({ title, lines }: { title: string; lines: string[] }) {
   if (lines.length === 0) return null;
   return (
     <div>
-      <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">{title}</h4>
+      <h4 className="text-xs font-semibold text-fg-muted">{title}</h4>
       <ul className="mt-1 space-y-1 text-sm">{lines.map((line, index) => <li key={`${index}-${line}`} className="break-words">{line}</li>)}</ul>
     </div>
   );
@@ -181,7 +181,7 @@ function StepCard({ card, index }: { card: FeedCard; index: number }) {
         <Lines title="Reasons" lines={card.reasons} />
         {card.models.length > 0 ? (
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Models</h4>
+            <h4 className="text-xs font-semibold text-fg-muted">Models</h4>
             <ul className="mt-1 space-y-1 text-sm">
               {card.models.map((model, position) => (
                 <li key={`${position}-${model.label}`} className="break-words">

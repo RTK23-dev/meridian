@@ -119,7 +119,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
         </div>
 
         <div>
-          <p className="mb-2 block text-xs font-semibold uppercase tracking-wider text-fg-muted">
+          <p className="mb-2 block text-xs font-semibold text-fg-muted">
             Target Platform Accounts ({queueAccountIds.length} selected)
           </p>
           {errors.targetAccountIds?.message ? <p role="alert" className="mb-2 text-sm text-danger">{errors.targetAccountIds.message}</p> : null}
@@ -193,7 +193,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-xs">
               <caption className="sr-only">Publishing jobs for this brand</caption>
-              <thead className="border-b border-border text-fg-muted uppercase tracking-wider">
+              <thead className="border-b border-border text-fg-muted">
                 <tr>
                   <th scope="col" className="py-2 pr-3">Target Platform</th>
                   <th scope="col" className="py-2 pr-3">Creative ID</th>

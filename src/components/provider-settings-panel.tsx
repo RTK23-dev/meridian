@@ -237,7 +237,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   setMessage(null);
                   setDiscardRequested(false);
                 }}
-                className={`max-sm:min-h-11 pointer-coarse:min-h-11 rounded px-3 py-1.5 text-xs font-semibold uppercase tracking-wider transition ${
+                className={`max-sm:min-h-11 pointer-coarse:min-h-11 rounded px-3 py-1.5 text-xs font-semibold transition ${
                   activeTab === tab
                     ? "bg-paper text-fg shadow-sm"
                     : "text-muted hover:text-fg hover:bg-panel"

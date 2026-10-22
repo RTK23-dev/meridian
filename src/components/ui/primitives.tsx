@@ -15,7 +15,7 @@ import { cn } from "./cn";
 
 /** Floating layers are the overlay surface with a strong edge. No shadow. */
 const Overlay = "fixed inset-0 z-50 bg-scrim data-[state=open]:animate-in data-[state=closed]:animate-out";
-const Surface = "fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-sharp border border-border-strong bg-overlay p-6 text-fg focus:outline-none";
+const Surface = "surface-overlay fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border border-border-strong bg-overlay p-6 text-fg focus:outline-none";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
@@ -48,13 +48,13 @@ export function SheetContent({ className, side = "bottom", ...props }: Component
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
 export const PopoverClose = PopoverPrimitive.Close;
-export function PopoverContent({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Content>) { return <PopoverPrimitive.Portal><PopoverPrimitive.Content {...props} className={cn("z-50 rounded-sharp border border-border-strong bg-overlay p-4 text-fg", className)} /></PopoverPrimitive.Portal>; }
+export function PopoverContent({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Content>) { return <PopoverPrimitive.Portal><PopoverPrimitive.Content {...props} className={cn("z-50 surface-overlay rounded-md border border-border-strong bg-overlay p-4 text-fg", className)} /></PopoverPrimitive.Portal>; }
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 /** Menu rows are at least 40px on desktop and 44px on touch. The focused row keeps the global focus outline. */
 export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Item>) { return <DropdownMenuPrimitive.Item {...props} className={cn("relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-sharp px-3 py-1.5 text-small text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-raised pointer-coarse:min-h-11", className)} />; }
-export function DropdownMenuContent({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) { return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.Content {...props} className={cn("z-50 min-w-36 rounded-sharp border border-border-strong bg-overlay p-1 text-fg", className)} /></DropdownMenuPrimitive.Portal>; }
+export function DropdownMenuContent({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) { return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.Content {...props} className={cn("z-50 min-w-36 surface-overlay rounded-md border border-border-strong bg-overlay p-1 text-fg", className)} /></DropdownMenuPrimitive.Portal>; }
 
 export const TooltipProvider = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;

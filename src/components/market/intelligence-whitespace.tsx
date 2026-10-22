@@ -83,7 +83,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
         </dl>
 
         {opportunity.supportingEvidence.length ? <div className="mt-4 space-y-1">
-          <h4 className="text-[11px] font-semibold uppercase tracking-wider text-fg-muted">Supporting evidence</h4>
+          <h4 className="text-[11px] font-semibold text-fg-muted">Supporting evidence</h4>
           <ul className="list-inside list-disc space-y-0.5 text-xs text-fg-muted">
             {opportunity.supportingEvidence.map((line, lineIndex) => <li key={`${lineIndex}:${line}`}>{line}</li>)}
           </ul>

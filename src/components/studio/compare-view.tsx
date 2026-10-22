@@ -68,7 +68,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
           <div className="hidden overflow-x-auto rounded-md border border-border md:block">
             <table className="w-full min-w-[32rem] text-left text-sm">
               <caption className="sr-only">Metadata compared for the two variants. Each row says whether the values match.</caption>
-              <thead className="bg-surface-2 text-xs uppercase tracking-wider text-fg-muted">
+              <thead className="bg-surface-2 text-xs text-fg-muted">
                 <tr>
                   <th scope="col" className="px-3 py-2 font-semibold">Field</th>
                   <th scope="col" className="px-3 py-2 font-semibold">A</th>

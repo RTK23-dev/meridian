@@ -17,7 +17,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
             <div className="mt-4 hidden overflow-x-auto rounded-md border border-border md:block">
               <table className="w-full min-w-[44rem] text-left text-sm">
                 <caption className="sr-only">Decision questions stored for this variant</caption>
-                <thead className="bg-surface-2 text-xs uppercase tracking-wider text-fg-muted">
+                <thead className="bg-surface-2 text-xs text-fg-muted">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-semibold">ID</th>
                     <th scope="col" className="px-3 py-2 font-semibold">Question</th>

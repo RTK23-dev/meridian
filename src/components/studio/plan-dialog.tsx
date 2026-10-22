@@ -77,7 +77,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
                 {plan.plan?.deliverables?.map((deliverable, index) => (
                   <li key={deliverable.id || index} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
                     <div>
-                      <span className="mr-2 font-semibold uppercase text-fg-muted">{deliverable.kind}</span>
+                      <span className="mr-2 font-semibold text-fg-muted">{deliverable.kind}</span>
                       <span>{deliverable.title || `Deliverable ${index + 1}`}</span>
                     </div>
                     <span className="text-fg-muted">{deliverable.provider} · {deliverable.aspectRatio || "9:16"}</span>

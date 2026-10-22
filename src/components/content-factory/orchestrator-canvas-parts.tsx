@@ -86,7 +86,7 @@ export function NodeCard({ kind, title, model, state, stale, cost, reason }: Nod
         <span className={cn("grid size-6 shrink-0 place-items-center rounded-md", kindTone.soft, kindTone.text)}>
           <KindIcon kind={kind} className="size-3.5" />
         </span>
-        <span className="min-w-0 truncate text-[11px] font-medium uppercase tracking-wider text-fg-muted">{kindStyle.label}</span>
+        <span className="min-w-0 truncate text-[11px] font-medium text-fg-muted">{kindStyle.label}</span>
         <span className="ml-auto shrink-0">
           <StatePill label={look.label} accent={look.accent} pulse={look.pulse} />
         </span>

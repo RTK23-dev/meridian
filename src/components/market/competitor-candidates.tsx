@@ -37,7 +37,7 @@ export function CompetitorCandidates({ candidates, canEdit, pendingIds, onDecide
           onKeyDown={handleKey}
           className="flex flex-wrap items-center gap-2 border-t border-border py-3 first:border-t-0 first:pt-0 focus-visible:outline-2 focus-visible:outline-accent"
         >
-          <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Candidate</span>
+          <span className="text-xs font-semibold text-fg-muted">Candidate</span>
           <span className="font-semibold">{item.name}</span>
           <span className="text-sm text-fg-muted">· {item.kind}{item.website ? ` · ${item.website}` : ""}</span>
           {canEdit ? <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
