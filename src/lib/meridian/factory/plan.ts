@@ -12,7 +12,6 @@
 import type { BrainKey } from "../brain.ts";
 import { requireCitedDeliverables, validatePlanLineage, type PlanLineage } from "../creative/lineage.ts";
 import type {
-  AutonomyMode,
   CampaignObjective,
   CreationScope,
   CreativeDeliverable,
@@ -23,6 +22,7 @@ import type {
 import { FORMATS, type AdFormat, type CreativeDna } from "./creative-dna.ts";
 import { linesOf } from "./brain-facts.ts";
 import type { Concept } from "./pick.ts";
+import { studioAutonomyOfAutomation } from "./run-settings.ts";
 
 export const PLAN_ATTRIBUTES = ["hook", "angle", "format", "proof", "cta"] as const;
 export type PlanAttribute = (typeof PLAN_ATTRIBUTES)[number];
@@ -143,11 +143,6 @@ export type PlanInput = {
 };
 
 const SCOPE_BY_FORMAT: Record<string, CreationScope> = { image: "image_only", video: "video_only", carousel: "carousel_only" };
-const AUTONOMY_BY_AUTOMATION: Record<PlanRun["automation"], AutonomyMode> = {
-  manual: "manual",
-  semi: "semi_automatic",
-  full: "fully_automatic",
-};
 
 /** A deliverable per run format. Its copy is empty: the words are written at production, never copied from the winning ad. */
 function deliverablesOf(
@@ -207,7 +202,7 @@ export function creativePlanFor(input: PlanInput): CreativePlan {
   const deliverables = deliverablesOf(input.templateId, input.concept, input.attributes, formats, input.video, input.briefPrompt);
   requireCitedDeliverables(lineage, deliverables.length);
   const scope: CreationScope = formats.length === 1 ? SCOPE_BY_FORMAT[formats[0] ?? ""] ?? "mixed_campaign" : "mixed_campaign";
-  const autonomy = AUTONOMY_BY_AUTOMATION[input.run.automation];
+  const autonomy = studioAutonomyOfAutomation(input.run.automation);
   const estimateUsd = 0;
   const hasCap = input.run.capTotalCents > 0;
   const withinCap = hasCap && estimateUsd <= input.run.capTotalCents / 100;

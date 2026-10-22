@@ -359,6 +359,25 @@ export function automationFromBrainLevel(level: "manual" | "assisted" | "automat
   return "manual";
 }
 
+/** The Studio word for an automation mode. The reverse of automationFromStudioAutonomy. */
+export function studioAutonomyOfAutomation(mode: AutomationMode): "manual" | "semi_automatic" | "fully_automatic" {
+  if (mode === "full") return "fully_automatic";
+  if (mode === "semi") return "semi_automatic";
+  return "manual";
+}
+
+/**
+ * Where a brand's Factory runs and Studio plans start: the brand's saved run defaults when it has them, otherwise the brain's
+ * automation level. Every surface reads this one answer, so a brand's default is set in one place.
+ */
+export function brandAutomationDefault(input: {
+  runDefaults: string | null | undefined;
+  brainLevel: "manual" | "assisted" | "automated" | "autonomous";
+}): AutomationMode {
+  const saved = parseStoredSettings(input.runDefaults);
+  return saved ? saved.automation : automationFromBrainLevel(input.brainLevel);
+}
+
 /** The Factory level the existing owner ceiling and autopilot checks hold a mode to: manual is 1, semi 2 and full 3. */
 export function factoryLevelOfAutomation(mode: AutomationMode): 1 | 2 | 3 {
   if (mode === "full") return 3;

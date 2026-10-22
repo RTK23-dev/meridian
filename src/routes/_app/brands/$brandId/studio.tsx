@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
@@ -63,6 +63,11 @@ function Studio({ brandId }: { brandId: string }) {
     mode: "onBlur",
   });
   const generationDirty = generationForm.formState.isDirty;
+  const autonomyDefault = session?.autonomyDefault;
+  useEffect(() => {
+    // The brand's automation default fills the form once the session has loaded, unless the person has already changed it.
+    if (autonomyDefault && !generationForm.formState.isDirty) generationForm.setValue("autonomy", autonomyDefault);
+  }, [autonomyDefault, generationForm]);
 
   if (query.isError && !session) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!session) return <ScreenSkeleton label="Loading studio" shape="cards" />;

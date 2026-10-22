@@ -47,6 +47,8 @@ import { accountSnapshots, competitorCopy, factsFor, measureVideoFrames, qcBrand
 import { resolveActiveEngine } from "../decisions/selection.ts";
 import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
+import { isAutomationLevel } from "../brain.ts";
+import { brandAutomationDefault, studioAutonomyOfAutomation } from "../factory/run-settings.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -346,7 +348,25 @@ async function sessionFor(sql: Sql, userId: string, brandId: string, minimum: Ro
 export async function getStudioSession(userId: string, data: { brandId: string }) {
   const context = { userId };
     const sql = await getSql();
-    return (await sessionFor(sql, context.userId, data.brandId, "viewer")).session;
+    const { access, session } = await sessionFor(sql, context.userId, data.brandId, "viewer");
+    return { ...session, autonomyDefault: await studioAutonomyDefault(sql, access.organizationId, data.brandId) };
+}
+
+/**
+ * The autonomy a Studio plan starts from when the person does not choose one. It is the brand's automation default: its saved run
+ * defaults, else its brain's automation level. Studio and the Factory therefore start from the same setting.
+ */
+export async function studioAutonomyDefault(sql: Sql, organizationId: string, brandId: string): Promise<AutonomyMode> {
+  const rows = await sql<{ run_defaults: string | null; automation_level: string | null }>`
+    select b.run_defaults, bb.automation_level
+    from brands b
+    left join brand_brains bb on bb.brand_id = b.id
+    where b.id = ${brandId} and b.organization_id = ${organizationId}
+    limit 1
+  `;
+  const row = rows[0];
+  const brainLevel = row?.automation_level && isAutomationLevel(row.automation_level) ? row.automation_level : "manual";
+  return studioAutonomyOfAutomation(brandAutomationDefault({ runDefaults: row?.run_defaults, brainLevel }));
 }
 
 export { writeJudgment } from "./image-qc.server.ts";
@@ -489,7 +509,7 @@ export async function generateStudioVariants(
         data.mode === "research_only" ? "research_only" :
         "auto_choose"
       );
-    const autonomy: AutonomyMode = data.autonomy || "semi_automatic";
+    const autonomy: AutonomyMode = data.autonomy || (await studioAutonomyDefault(sql, access.organizationId, data.brandId));
 
     // Load the JEV decision this brief was produced under and gate it before any plan is written
     // or any provider is called. A null decision id or a missing row is refused, never skipped (M2).
