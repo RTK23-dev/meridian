@@ -740,3 +740,32 @@ Still not done:
 - Live runs of every step. The owner runs them.
 
 The plan of record for the next work is [CONTENT_FACTORY_PLAN.md](../CONTENT_FACTORY_PLAN.md).
+
+## 2026-10-22: the Content Factory plan, first execution pass (M0 and M1)
+
+Plan of record: [CONTENT_FACTORY_PLAN.md](../CONTENT_FACTORY_PLAN.md), with its status table after the title. Commits on `main`, in order:
+
+| Commit | Change | Checked |
+| --- | --- | --- |
+| `3f9094c` | M0.1: NORTH_STAR and FACTORY corrected. Thompson and creative linkage are wired. A run carries the Page id and link. Organic reads are implemented, not verified live. | Docs; link check |
+| `51d7558` | M0.2: Studio starts from the brand's automation default, which is the saved run defaults or else the brain's level. Factory and Studio share the mapping. Behaviour change: a brand with no saved defaults and a manual brain starts Studio at manual. | `studio/autonomy-default.test.ts` (7 tests); factory plan, stage-flow and run-settings suites |
+| `d3c11f0` | M0.3: the accounts screen says why Connect is disabled. The button audit reads `MERIDIAN_SMOKE_CHROMIUM`. | Button audit: 273 controls, 22 dialogs, 0 failing |
+| `b0bf80b` | M1.1: `factory/loop.test.ts` runs one intent-both run from produce to learn. The launch helpers moved to `testing/factory-launch-fixtures.ts`. | Loop, publish and run-finish suites: 15 of 15 |
+| `953d7da` | M1.3: Higgsfield status and cancel use the documented path. The webhook receiver is rate limited, 300 deliveries a minute per client. | Receiver and verify suites: 33 of 33. Six Higgsfield suites: 69 of 69 |
+
+Checks at the M1 gate, on the tree after `953d7da`:
+
+- Typecheck: exit 0.
+- Lint: 0 errors. The 4 warnings predate this work.
+- Build: exit 0. The database step was skipped because `DATABASE_URL` is unset.
+
+Not run: the full src suite. It needs the owner's approval, because of its token cost. The scripts suite was not run in this pass either.
+
+Not done, with the reason:
+
+- **M1.2, TikTok and Google on the Factory's paid path: blocked.** The live paid request sends no creative to any platform. Meta included. TikTok needs a video asset id, and Google needs an image or a video. A route to either would create campaigns with no ad. D14 (which platform a run's paid intent uses) and D15 (whether to upload approved creatives to the ad platforms) are open.
+- **M2.0, the live recorder: not built.** It needs the provider adapters and the key names confirmed. Those names were not guessed.
+- **M4 and M5: blocked** on the decisions in the plan (D1, D2, D3, D4, D5, D7), on the design approval for the plan-to-request bridge, or on live runs.
+- **D12, the artifact host allowlist:** the default is open. With `MERIDIAN_ARTIFACT_HOST_ALLOWLIST` unset, any public host passes. Changing the default is an owner decision.
+
+Verified without a live call: the Higgsfield path was checked against Higgsfield's documentation as read on 2026-10-22. The change is not confirmed by a live status poll, because no key is available to agents.

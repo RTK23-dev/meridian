@@ -13,6 +13,30 @@ how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and 
 - Stop at a decision marked in section 6. Do not pick an option for the owner.
 - Paths are short. A path with no `src/` prefix is under `src/lib/meridian/`, except `engine/` (`src/engine/`), `routes/` and `components/` (`src/routes/` and `src/components/`). `docs/`, `scripts/` and `migrations/` are from the repo root.
 
+## Status after the first execution pass (2026-10-22)
+
+| Task | State | Commit | What is true now |
+| --- | --- | --- | --- |
+| M0.1 | done | `3f9094c` | NORTH_STAR and FACTORY corrected: Thompson and creative linkage are wired, the run carries the Page id and link, organic reads are implemented but unverified live. |
+| M0.2 | done | `51d7558` | Studio starts from the brand's automation default (saved run defaults, else the brain level). Factory and Studio share the mapping. **Behaviour change:** a brand with no saved defaults and a manual brain starts Studio at manual; it started at semi-automatic. |
+| M0.3 | done | `d3c11f0` | Button audit against the dev server: 273 controls and 22 dialogs, 0 failing. The one failure (a disabled Connect with no reason) is fixed. Screenshots not taken for that text-only change. |
+| M1.1 | partly done | `b0bf80b` | `factory/loop.test.ts` runs one intent-both run from produce to learn. It does not cover discover, grade or pick (their suites do), nor the organic measured leg, which needs a connected channel. |
+| M1.2 | blocked | — | The live paid request sends no creative to any platform, Meta included, so a TikTok or Google route would create half-built ads. See D14 and D15. |
+| M1.3 | done, except D12 | `953d7da` | Higgsfield status and cancel use the documented path, not verified live. The webhook receiver is rate limited (300 a minute per client). Proxy headers are off by default. The artifact host allowlist is open by default (D12). |
+| M1.4 | partly done | — | Typecheck exit 0, lint 0 errors, build exit 0. The full src suite is not run; it needs your approval because of its token cost. |
+| M2.0 | not built | — | The recorder needs the provider adapters and the key names confirmed. I did not guess the names. |
+| M3 | blocked | — | Needs the M2 live runs. |
+| M4.1 | blocked on D1 | — | |
+| M4.2, M4.3 | blocked on D5 | — | M4.3 also needs M4.2. |
+| M4.4 | blocked on design approval | — | |
+| M4.5 | blocked on D2 | — | |
+| M4.6 | blocked on D3 | — | |
+| M5.1 | blocked on D7 | — | |
+| M5.2 | not started | — | Needs the owner's list of providers in use. |
+| M5.3 | no change | — | ROADMAP records no documented lookup for the providers that lack one. |
+| M5.4 | blocked on D4 | — | |
+| M5.5, M5.6 | blocked on live runs | — | |
+
 ## The loop and where each step stands
 
 The loop is Gather, Grade, Pick, Plan, Produce, Gate, Approve, Publish, Measure, Learn. Every step is built on recorded fixtures. None has
@@ -201,6 +225,8 @@ The owner answers these. An agent reports the blocked task and does not choose a
 | D11 | Calibration constants. Already accepted (NORTH_STAR section 9). Review them at 100 measured outcomes. | M3.4 |
 | D12 | Deployment settings: `MERIDIAN_TRUST_PROXY_HEADERS`, the host allowlist, the webhook limits. | M1.3 (the deployment part) |
 | D13 | Review item 7: whether embedding and email provider status should come from stored credentials, as the other providers' status does, or keep reading deployment variables. The code is unchanged. | Review item 7; M0.2's brain mapping (its `automated` to `semi` rule) |
+| D14 | Which ad platform a run's paid intent uses. Proposed: Facebook and Instagram go to Meta, TikTok to TikTok, and YouTube to Google. The Factory's paid path is Meta only today, whatever the run's platforms. | M1.2 |
+| D15 | Creative attachment for paid ads. The Factory's live paid request sends no media to any platform, Meta included. TikTok needs a video asset id, and Google needs an image or video. Approve the scope of uploading each approved creative to the ad platforms before any route to TikTok or Google is built. | M1.2, and the Meta paid path's creative |
 
 ## Out of scope for now
 
