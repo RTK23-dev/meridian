@@ -10,14 +10,18 @@ Owner direction, 2026-10-20: the orchestrating model is chosen by the user from 
 - `execute.ts`: executor with injected handlers. `not_connected`, `failed`, `skipped`, `paused` (budget) and `cache_hit` are all reported as they are.
 - `layout.ts`, `replay.ts`: canvas geometry and replay.
 - Canvas component: `src/components/content-factory/orchestrator-canvas.tsx`.
-- Tests: 52, all passing. `no-fixed-models.test.ts` fails if any source file here names a model id.
+- `run-budget.ts`: a run takes one reservation for what the plan may still spend, under an `orchestrator_run` request row. Refused when nothing is left, when the workspace month cannot cover it, or when the reservation does not match its contract. Released when the run stops.
+- `production.ts`: handlers for `reference` (text or a brand; no model call) and `analysis` and `script` (a paid text call on the model the plan chose, authorized and billed on the run's reservation; a missing connection stops before any hold; a repeated call is refused, not paid again; a missing upstream body fails closed).
+- Migration `0110`: `orchestrator_step_outputs.body`, so a downstream step reads content, not its hash.
+- Tests: 139 across this folder, all passing (`node --test src/engine/orchestrator/*.test.ts`). `no-fixed-models.test.ts` fails if any source file here names a model id.
 
 ## Fixtures
 - `openrouter-catalog-2026-10-20.json`: recorded from the four public OpenRouter listings, 2026-10-20, trimmed. Entries: 456 text, 30 video, 63 image, 36 speech.
 - `sample-plan.json`: authored by hand. Not model output. Its model ids are live ids from the catalog.
 
 ## Not done
-- No live call. No `OPENROUTER_API_KEY` is in the environment.
+- No live call. No `OPENROUTER_API_KEY` is in the environment. Every paid step reports not_connected until a key is set, and a step with no connection holds nothing.
+- No production handler yet for `visual`, `voice`, `video`, `avatar` (their adapters are not wired to a step) or `edit`, `compose`, `render` (the edit and render pipeline is not wired to a plan). These report not_connected. See `docs/engine/run/DECISIONS_2026-10-22.md` D5.
 - Not wired to the Factory API, the jobs queue or a screen.
 - No orchestrator model picker.
 - Not connected to HyperFrames re-render.

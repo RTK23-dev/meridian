@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { contentHash } from "../contracts/hash.ts";
 import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "./contracts.ts";
 import { editNode } from "./dirty.ts";
-import { runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
+import { CallRefusedError, NotConnectedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
 import { loadCatalog } from "./catalog.ts";
 import { KIND_CATALOG, validatePlan } from "./validate.ts";
 
@@ -172,3 +172,55 @@ test("a paid step with no estimate fails before any call is made", async () => {
   assert.equal(stateOf(events, "shot_1"), "failed");
   assert.equal(calls.includes("shot_1"), false);
 });
+
+test("a paid step whose provider is not connected reports not_connected: it holds nothing and adds nothing to the spend", async () => {
+  const paidId = order.find((id) => KIND_CATALOG[nodeById.get(id)?.kind ?? "reference"] !== undefined) ?? "";
+  const kind = nodeById.get(paidId)?.kind ?? "analysis";
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  const result = await run(sample, recordingHandlers(calls, { [kind]: async () => { throw new NotConnectedError("OpenRouter is not connected") } }), new Map(), events);
+  assert.equal(stateOf(events, paidId), "not_connected");
+  assert.equal(calls.includes(paidId), false);
+  const doneCost = events.filter((event) => event.state === "done").reduce((sum, event) => sum + (event.costUsd ?? 0), 0);
+  assert.equal(result.spentUsd, doneCost, "the not connected step is charged nothing");
+});
+
+test("a step is given the body of each step it reads, not its hash", async () => {
+  const seen = new Map<string, Map<string, string | null>>();
+  const handlers: Handlers = {};
+  for (const kind of NODE_KINDS) {
+    handlers[kind] = async ({ node, upstream }) => {
+      seen.set(node.id, new Map(upstream));
+      return { outputHash: contentHash({ id: node.id }), costUsd: null, body: `BODY:${node.id}` };
+    };
+  }
+  await run(sample, handlers, new Map());
+  for (const node of sample.nodes) {
+    for (const dep of node.dependsOn) {
+      assert.equal(seen.get(node.id)?.get(dep), `BODY:${dep}`, `${node.id} reads the body of ${dep}`);
+    }
+  }
+});
+
+test("a failed paid step records the estimate it holds on its failed event, so a later run counts it", async () => {
+  const paidId = order.find((id) => KIND_CATALOG[nodeById.get(id)?.kind ?? "reference"] !== undefined) ?? "";
+  const kind = nodeById.get(paidId)?.kind ?? "analysis";
+  const events: NodeEvent[] = [];
+  await run(sample, recordingHandlers([], { [kind]: async () => { throw new Error("the provider answered with an error") } }), new Map(), events);
+  const failed = events.filter((event) => event.nodeId === paidId).at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, estimateOf(paidId), "the held estimate is recorded");
+});
+
+test("a paid step refused before any call fails and holds nothing, so a retry does not inflate the spend", async () => {
+  const paidId = order.find((id) => KIND_CATALOG[nodeById.get(id)?.kind ?? "reference"] !== undefined) ?? "";
+  const kind = nodeById.get(paidId)?.kind ?? "analysis";
+  const events: NodeEvent[] = [];
+  const result = await run(sample, recordingHandlers([], { [kind]: async () => { throw new CallRefusedError("the budget refused this call") } }), new Map(), events);
+  const failed = events.filter((event) => event.nodeId === paidId).at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, null, "no call was made, so nothing is recorded as held");
+  const doneCost = events.filter((event) => event.state === "done").reduce((sum, event) => sum + (event.costUsd ?? 0), 0);
+  assert.equal(result.spentUsd, doneCost);
+});
+

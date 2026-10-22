@@ -650,3 +650,15 @@ fixed and the open items and the decision each open item needs: [REVIEW_2026-10-
   estimate is a fixed 8000 tokens; a step's price uses the input tokens the model wrote; a plan's reservation release; a status that the
   metric jobs refuse; token expiry is not stored; environment-based provider status (waits for the owner); a revision racing a remake.
 
+
+## 2026-10-22: production step handlers, run budget and step bodies
+
+- Migration `0110_orchestrator_step_body.sql`: `orchestrator_step_outputs.body`. A downstream step is given the body of each step it reads, not its hash.
+- `execute.ts`: `NotConnectedError` reports `not_connected` with nothing held. A failed paid step records the estimate it holds on its failed event.
+- `run-budget.ts` (new): a run takes one reservation for what the plan may still spend, released when the run stops. Refused before it starts when nothing is left or the month cannot cover it.
+- `run.ts`: the run takes its reservation from `budget`; spend counts stored outputs and failed-step holds.
+- `production.ts` (new): `reference` (text or brand, no model call), `analysis` and `script` (paid text calls on the chosen model, authorized and billed on the run's reservation).
+- `api.ts`: `runPlanFor` passes the budget and the production dependencies from the live gateway. `PRODUCTION_STEP_HANDLERS` (empty) removed.
+- Not done: production handlers for `visual`, `voice`, `video`, `avatar`, `edit`, `compose`, `render` (reported not_connected); re-render wiring to HyperFrames; live runs (no key in this environment).
+- Decisions made on the owner's behalf: `docs/engine/run/DECISIONS_2026-10-22.md` (D1 to D5).
+- Tests: `node --test src/engine/orchestrator/*.test.ts`, 139 passing. Lint clean on the changed files. No typecheck, no full src suite (per the owner's instruction).

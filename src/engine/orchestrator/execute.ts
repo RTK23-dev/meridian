@@ -9,9 +9,36 @@ import type { NodeEvent, NodeKind, NodeState, OrchestratorPlan, PlanNode } from 
 import { cacheKeys } from "./dirty.ts";
 import { KIND_CATALOG } from "./validate.ts";
 
-export type NodeOutput = { outputHash: string; costUsd: number | null };
+/**
+ * What a step produced. `outputHash` identifies it; `body` is its text content (a script, an analysis, a reference's text), or null for a
+ * step with no text. A downstream step is given the body of each step it reads, never the hash.
+ */
+export type NodeOutput = { outputHash: string; costUsd: number | null; body?: string | null };
 
-export type NodeHandler = (input: { node: PlanNode; key: string; upstream: Map<string, string> }) => Promise<NodeOutput>;
+/**
+ * Thrown by a handler whose provider is not connected, before any call is made and before any money is held. The step reports
+ * not_connected and nothing is charged. Any other error is a failure, and a paid step's estimate is held for it.
+ */
+export class NotConnectedError extends Error {
+  constructor(reason: string) {
+    super(reason.slice(0, REASON_MAX));
+    this.name = "NotConnectedError";
+  }
+}
+
+/**
+ * Thrown by a handler that stopped before any call was made, or before a call was authorized: a refused budget, a call already made, a
+ * missing model or upstream body. The step fails, and nothing is held, because no money was committed by it.
+ */
+export class CallRefusedError extends Error {
+  constructor(reason: string) {
+    super(reason.slice(0, REASON_MAX));
+    this.name = "CallRefusedError";
+  }
+}
+
+/** `upstream` maps each step the handler reads to its body. A null body means no content was stored: the handler must fail closed. */
+export type NodeHandler = (input: { node: PlanNode; key: string; upstream: Map<string, string | null> }) => Promise<NodeOutput>;
 
 export type Handlers = Partial<Record<NodeKind, NodeHandler>>;
 
@@ -41,6 +68,7 @@ export async function runPlan(opts: {
   const keys = cacheKeys(plan, order);
   const states = new Map<string, NodeState>();
   const outputs = new Map<string, string>();
+  const bodies = new Map<string, string | null>();
   let spent = opts.spentUsd ?? 0;
 
   const set = (nodeId: string, state: NodeState, outputHash: string | null, costUsd: number | null, reason: string | null) => {
@@ -67,6 +95,7 @@ export async function runPlan(opts: {
     const hit = cache.get(key);
     if (hit !== undefined) {
       outputs.set(id, hit.outputHash);
+      bodies.set(id, hit.body ?? null);
       set(id, "cache_hit", hit.outputHash, 0, null);
       continue;
     }
@@ -97,7 +126,7 @@ export async function runPlan(opts: {
 
     set(id, "running", null, null, null);
     try {
-      const upstream = new Map(node.dependsOn.map((dep) => [dep, outputs.get(dep) ?? ""]));
+      const upstream = new Map(node.dependsOn.map((dep) => [dep, bodies.get(dep) ?? null]));
       const output = await handler({ node, key, upstream });
       // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the estimate is
       // charged. Anything else fails the step, and nothing is added to the spend or kept as output.
@@ -108,15 +137,29 @@ export async function runPlan(opts: {
       }
       // A paid step keeps its charged cost on the stored output, so a later run can total the plan's spend from its stored outputs alone.
       const charged = paidKind ? (reported ?? estimate) : reported;
-      cache.set(key, { ...output, costUsd: charged });
+      const body = output.body ?? null;
+      cache.set(key, { outputHash: output.outputHash, costUsd: charged, body });
       outputs.set(id, output.outputHash);
+      bodies.set(id, body);
       spent += charged ?? 0;
       set(id, "done", output.outputHash, charged, null);
     } catch (error) {
-      // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error.
-      if (paidKind) spent += estimate;
+      // No provider is connected: the handler stopped before any call, so nothing is held and nothing is kept.
+      if (error instanceof NotConnectedError) {
+        set(id, "not_connected", null, null, error.message);
+        continue;
+      }
+      // A refusal before any call: the step fails, and no estimate is held, because nothing was committed.
+      if (error instanceof CallRefusedError) {
+        set(id, "failed", null, null, error.message);
+        continue;
+      }
+      // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error. The held amount
+      // is recorded on the failed event, so a later run counts it in the plan's spend.
+      const held = paidKind ? estimate : null;
+      if (held !== null) spent += held;
       const message = error instanceof Error ? error.message : "the step failed";
-      set(id, "failed", null, null, message.slice(0, REASON_MAX));
+      set(id, "failed", null, held, message.slice(0, REASON_MAX));
     }
   }
 
