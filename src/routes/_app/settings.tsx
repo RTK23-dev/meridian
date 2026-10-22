@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { GeneralTab } from "@/components/settings/general-tab";
+import { AppearanceTab } from "@/components/settings/appearance-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { WeightsTab } from "@/components/settings/weights-tab";
 import { LearningTab } from "@/components/settings/learning-tab";
@@ -12,10 +13,11 @@ import { SETTINGS_SCREEN_LINKS } from "@/lib/navigation/model";
 
 export const Route = createFileRoute("/_app/settings")({ staticData: { pageTitle: "Settings" }, component: SettingsPage });
 
-type SettingsTab = "general" | "members" | "weights" | "alerts" | "learning" | "danger";
+type SettingsTab = "general" | "appearance" | "members" | "weights" | "alerts" | "learning" | "danger";
 
 const TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: "general", label: "General" },
+  { id: "appearance", label: "Appearance" },
   { id: "members", label: "Members" },
   { id: "weights", label: "Scoring weights" },
   { id: "alerts", label: "Alerts" },
@@ -54,6 +56,10 @@ function SettingsPage() {
         {/* General and Weights keep their drafts when the person switches tabs, so they stay mounted (hidden). */}
         <TabsContent value="general" forceMount className="data-[state=inactive]:hidden">
           <GeneralTab organizationId={active.id} name={active.name} canAdmin={canAdmin} />
+        </TabsContent>
+
+        <TabsContent value="appearance">
+          <AppearanceTab />
         </TabsContent>
 
         <TabsContent value="members">

@@ -65,6 +65,74 @@
   --scrim: rgb(17 16 22 / 0.4);
 }
 
+/* The Katana style, chosen in Settings (Appearance). It sets data-design="katana" on <html> and declares the same roles as the
+   AttentionOS blocks, with its own values, so every component reads the active style through the same variables. Its values are
+   in docs/design/tokens/katana-tokens.json, which src/styles.design.test.ts checks against these blocks. Its faces load on demand
+   (components/ui/katana-fonts.ts). The light block is more specific than the AttentionOS light block, so it wins. */
+:root[data-design="katana"] {
+  --bg-base: #000000;
+  --bg-raised: #0E0E0E;
+  --bg-overlay: #161616;
+  --border-hairline: #262626;
+  --border-strong: #6B6B6B;
+  --fg-primary: #FFFFFF;
+  --fg-secondary: #C4C4C4;
+  --fg-muted: #949494;
+  --accent: #FF2E38;
+  --accent-hover: #FF5A63;
+  --accent-text: #FF2E38;
+  --accent-muted: #2A0B0F;
+  --on-accent: #000000;
+  --white-accent: #FFFFFF;
+  --success: #3DDC84;
+  --warning: #FFB020;
+  --danger: #FF4D6A;
+  --info: #5AA9FF;
+  --scrim: rgb(0 0 0 / 0.6);
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 360ms;
+  --dur-flip: 900ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-exit: cubic-bezier(0.4, 0, 1, 1);
+  --ease-signal: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-linear: linear;
+  --font-text: "Instrument Sans Variable", "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --font-sans: var(--font-text);
+  --font-display: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-wordmark: "Archivo Variable", "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --color-surface-2: var(--bg-raised);
+  --radius-sharp: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
+  --text-eyebrow: 0.6875rem;
+  --text-body--line-height: 1.375rem;
+}
+:root[data-design="katana"][data-theme="light"] {
+  --bg-base: #FFFFFF;
+  --bg-raised: #F4F4F4;
+  --bg-overlay: #FFFFFF;
+  --border-hairline: #E2E2E2;
+  --border-strong: #767676;
+  --fg-primary: #0A0A0A;
+  --fg-secondary: #3D3D3D;
+  --fg-muted: #5E5E5E;
+  --accent: #C8102E;
+  --accent-hover: #A50D25;
+  --accent-text: #C8102E;
+  --accent-muted: #FBE3E6;
+  --on-accent: #FFFFFF;
+  --white-accent: #0A0A0A;
+  --success: #14703A;
+  --warning: #8A5A00;
+  --danger: #B3133A;
+  --info: #0B5FB8;
+  --scrim: rgb(10 10 10 / 0.4);
+}
+
 /* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
    (bg, surface, fg, accent and the rest) stay as aliases of the AttentionOS roles, so screens not yet migrated keep working. */
 @theme static {
@@ -306,6 +374,8 @@ details > summary:hover { color: var(--color-fg); }
 /* Overlays (DESIGN.md 5). Dark mode shows depth through the surface lightness, so no shadow. Light mode lifts a dialog, menu or popover with a
    soft shadow, because a white surface on a near-white page needs one. */
 :root[data-theme="light"] .surface-overlay { box-shadow: 0 12px 32px rgb(17 16 22 / 0.12); }
+/* Katana has no soft effects: its light overlays keep the hairline and the surface step, with no shadow. */
+:root[data-design="katana"][data-theme="light"] .surface-overlay { box-shadow: none; }
 
 /* Toasts sit on the overlay surface with a hairline and a 2px status bar on the left. The sonner defaults for colour and
    shadow are replaced, so no toast casts a shadow and none is filled with a status colour. */
@@ -336,21 +406,39 @@ details > summary:hover { color: var(--color-fg); }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the
-   targets in styles.contrast.test.ts for the base values. */
+   targets in styles.contrast.test.ts for the base values. The AttentionOS blocks leave the Katana style out; it has its own. */
 @media (prefers-contrast: more) {
-  :root:not([data-theme="light"]) {
+  :root:not([data-theme="light"]):not([data-design="katana"]) {
     --border-hairline: #6B6280;
     --border-strong: #B9B3C7;
     --fg-primary: #FDFDFD;
     --fg-muted: #D6D0E2;
     --accent-text: #C9A8FF;
   }
-  :root[data-theme="light"] {
+  :root[data-theme="light"]:not([data-design="katana"]) {
     --border-hairline: #7A7086;
     --border-strong: #4B4357;
     --fg-primary: #050505;
     --fg-muted: #474747;
     --accent: #5A1FC2;
     --accent-text: #4A1699;
+  }
+}
+@media (prefers-contrast: more) {
+  :root[data-design="katana"]:not([data-theme="light"]) {
+    --border-hairline: #6B6B6B;
+    --border-strong: #B3B3B3;
+    --fg-primary: #FDFDFD;
+    --fg-muted: #D9D9D9;
+    --accent: #FF5A63;
+    --accent-text: #FF5A63;
+  }
+  :root[data-design="katana"][data-theme="light"] {
+    --border-hairline: #7A7A7A;
+    --border-strong: #5E5E5E;
+    --fg-primary: #050505;
+    --fg-muted: #474747;
+    --accent: #A50D25;
+    --accent-text: #A50D25;
   }
 }
