@@ -38,7 +38,8 @@ export const ENGINE_POLL_JOB_TYPE = "engine.poll" as const;
  * The engine's maintenance jobs (contract v9). They are not stages: each has no request and no artifact, and runs on the workspace of its job.
  * Each is one job type on Meridian's queue. A workspace schedules one with a job_schedules row (jobs/STATUS.md, "Scheduling").
  */
-export const ENGINE_MAINTENANCE_JOBS = { reconcile_holds: "engine.reconcile_holds" } as const;
+// asset_poll: settles the orchestrator's queued video and avatar submits when their provider has finished (orchestrator_asset_jobs).
+export const ENGINE_MAINTENANCE_JOBS = { reconcile_holds: "engine.reconcile_holds", asset_poll: "engine.asset_poll" } as const;
 export type EngineMaintenanceJob = keyof typeof ENGINE_MAINTENANCE_JOBS;
 
 /** The maintenance job a job type names, or null when it names none. */

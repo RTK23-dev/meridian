@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { contentHash } from "../contracts/hash.ts";
 import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "./contracts.ts";
 import { editNode } from "./dirty.ts";
-import { CallRefusedError, NotConnectedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
+import { CallRefusedError, NotConnectedError, StepQueuedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
 import { loadCatalog } from "./catalog.ts";
 import { KIND_CATALOG, validatePlan } from "./validate.ts";
 
@@ -224,3 +224,17 @@ test("a paid step refused before any call fails and holds nothing, so a retry do
   assert.equal(result.spentUsd, doneCost);
 });
 
+test("a step the provider accepted is queued: it holds its estimate for this run, is not done, and the steps that read it wait", async () => {
+  const paid = sample.nodes.find((node) => node.estimateUsd !== null && node.estimateUsd > 0 && KIND_CATALOG[node.kind] !== undefined);
+  if (paid === undefined) throw new Error("the sample plan has a paid step with an estimate");
+  const queued: NodeHandler = async () => {
+    throw new StepQueuedError("accepted by the provider and queued");
+  };
+  const events: NodeEvent[] = [];
+  const result = await run(sample, recordingHandlers([], { [paid.kind]: queued }), new Map(), events);
+  assert.equal(stateOf(events, paid.id), "queued");
+  assert.notEqual(result.status, "complete", "a queued step is not finished");
+  assert.ok(result.spentUsd >= estimateOf(paid.id), "the queued estimate is held for this run");
+  const dependent = sample.nodes.find((node) => node.dependsOn.includes(paid.id));
+  if (dependent !== undefined) assert.equal(stateOf(events, dependent.id), "skipped");
+});

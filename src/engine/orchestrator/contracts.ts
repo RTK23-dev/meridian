@@ -64,7 +64,8 @@ export const orchestratorPlanSchema = z
 export type OrchestratorPlan = z.infer<typeof orchestratorPlanSchema>;
 
 /** What the executor reports for each step, in order. The canvas draws from these. */
-export const NODE_STATES = ["planned", "running", "done", "cache_hit", "skipped", "failed", "not_connected", "paused"] as const;
+// queued: an asset the provider accepted and has not finished. Its poll is durable (orchestrator_asset_jobs); a later run reads the stored output.
+export const NODE_STATES = ["planned", "running", "done", "cache_hit", "skipped", "failed", "not_connected", "paused", "queued"] as const;
 export const nodeStateSchema = z.enum(NODE_STATES);
 export type NodeState = z.infer<typeof nodeStateSchema>;
 

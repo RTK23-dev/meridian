@@ -10,6 +10,7 @@ import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
+import { queueAssetJob } from "./asset-poll.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
 import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
@@ -110,6 +111,8 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
           brand: (brandId) => readBrandFacts(sql, input.organizationId, brandId),
           // The run's own asset router: a visual or voice step is made on the run's reservation, like a shot is.
           router: composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId }),
+          // A video or avatar the provider accepts is queued here, and the asset poll (engine.asset_poll) settles it.
+          queueAsset: (entry) => queueAssetJob(sql, input.organizationId, entry),
           catalogReadAt: catalog.takenAt,
         }),
     },

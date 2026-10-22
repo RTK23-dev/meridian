@@ -37,8 +37,27 @@ export class CallRefusedError extends Error {
   }
 }
 
-/** `upstream` maps each step the handler reads to its body. A null body means no content was stored: the handler must fail closed. */
-export type NodeHandler = (input: { node: PlanNode; key: string; upstream: Map<string, string | null> }) => Promise<NodeOutput>;
+/**
+ * Thrown by a handler whose asset the provider accepted but has not finished. The step is queued: its poll is durable (asset jobs), and a
+ * later run finds the stored output. The estimate is held for this run so it cannot overrun, and nothing is stored yet.
+ */
+export class StepQueuedError extends Error {
+  constructor(reason: string) {
+    super(reason.slice(0, REASON_MAX));
+    this.name = "StepQueuedError";
+  }
+}
+
+/**
+ * `upstream` maps each step the handler reads to its body. A null body means no content was stored: the handler must fail closed.
+ * `upstreamKinds` maps the same steps to their kinds, so a handler can tell a visual or voice asset from a text answer.
+ */
+export type NodeHandler = (input: {
+  node: PlanNode;
+  key: string;
+  upstream: Map<string, string | null>;
+  upstreamKinds: Map<string, NodeKind>;
+}) => Promise<NodeOutput>;
 
 export type Handlers = Partial<Record<NodeKind, NodeHandler>>;
 
@@ -127,7 +146,12 @@ export async function runPlan(opts: {
     set(id, "running", null, null, null);
     try {
       const upstream = new Map(node.dependsOn.map((dep) => [dep, bodies.get(dep) ?? null]));
-      const output = await handler({ node, key, upstream });
+      const upstreamKinds = new Map<string, NodeKind>();
+      for (const dep of node.dependsOn) {
+        const kind = byId.get(dep)?.kind;
+        if (kind !== undefined) upstreamKinds.set(dep, kind);
+      }
+      const output = await handler({ node, key, upstream, upstreamKinds });
       // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the estimate is
       // charged. Anything else fails the step, and nothing is added to the spend or kept as output.
       const reported = output.costUsd ?? null;
@@ -147,6 +171,12 @@ export async function runPlan(opts: {
       // No provider is connected: the handler stopped before any call, so nothing is held and nothing is kept.
       if (error instanceof NotConnectedError) {
         set(id, "not_connected", null, null, error.message);
+        continue;
+      }
+      // Accepted by the provider, not finished: queued. The estimate is held for this run; the stored output comes when the poll settles it.
+      if (error instanceof StepQueuedError) {
+        if (paidKind) spent += estimate;
+        set(id, "queued", null, null, error.message);
         continue;
       }
       // A refusal before any call: the step fails, and no estimate is held, because nothing was committed.

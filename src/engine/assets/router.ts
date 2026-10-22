@@ -257,6 +257,8 @@ export type StepReport = {
 /** The router with its asynchronous entry points. produce is the submit and poll loop over these two. */
 export interface AsyncAssetRouter extends AssetRouter {
   submit(input: ProduceInput): Promise<StepReport>;
+  /** One poll of a submitted job, without waiting. A pending answer means poll again later; a finished one goes to settle. */
+  pollOnce(job: AssetJob, input: ProduceInput): Promise<ProviderPoll>;
   settle(job: AssetJob, polled: ProviderPoll, input: ProduceInput): Promise<StepReport>;
 }
 
@@ -1078,6 +1080,37 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     }
   }
 
+  /**
+   * One poll of a submitted job, without waiting. The durable poller uses it; produce waits instead. A poll past the job's deadline is a
+   * timeout: the job is cancelled where the provider allows it, and the poll is finished as failed, so settle can close it.
+   */
+  async function pollOnce(job: AssetJob, input: ProduceInput): Promise<ProviderPoll> {
+    const checked = parseAssetJob(job);
+    checkJobFor(checked, input);
+    const target = checked.targets[checked.targetIndex] as AssetTarget;
+    const adapter = adapterForTarget(target, checked.modelClass, input);
+    let poll: ProviderPoll;
+    try {
+      poll = await adapter.poll(checked.jobRef);
+    } catch (thrown) {
+      const transient = classifyError(thrown);
+      if (!transient.retryable) return { state: "failed", error: transient };
+      poll = { state: "pending" };
+    }
+    if (poll.state !== "pending") return poll;
+    if (now() < Date.parse(checked.submittedAt) + settings.pollTimeoutMs) return poll;
+    let note = "";
+    if (adapter.cancel !== undefined) {
+      try {
+        await adapter.cancel(checked.jobRef);
+        note = " (cancelled)";
+      } catch (thrown) {
+        note = ` (cancel failed: ${classifyError(thrown).message})`;
+      }
+    }
+    return { state: "failed", error: { kind: "timeout", retryable: true, message: `no result within ${settings.pollTimeoutMs} ms${note}` } };
+  }
+
   /** Submit, then poll and settle each job until the asset is terminal. For synchronous callers and tests. */
   async function produce(input: ProduceInput): Promise<ProduceReport> {
     const decisions: Decision[] = [];
@@ -1108,7 +1141,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     return { outcome: step, decisions, alerts, attempts };
   }
 
-  return { produce, submit, settle };
+  return { produce, submit, settle, pollOnce };
 }
 
 type Session = {

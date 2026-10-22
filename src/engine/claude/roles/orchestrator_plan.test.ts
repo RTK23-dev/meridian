@@ -16,12 +16,13 @@ const input: OrchestratorPlanInput = {
 };
 
 describe("orchestrator_plan role", () => {
-  it("runs on the direction tier at the plan stage, against orchestrator_plan@1, which has the four prompt parts", () => {
+  it("runs on the direction tier at the plan stage, against orchestrator_plan@2, which has the four prompt parts", () => {
     assert.equal(orchestratorPlan.role, "orchestrator_plan");
     assert.equal(orchestratorPlan.capability, "llm.direction");
     assert.equal(orchestratorPlan.stage, "plan");
     const prompt = loadPrompt(orchestratorPlan.prompt);
-    assert.equal(prompt.id, "orchestrator_plan@1");
+    assert.equal(prompt.id, "orchestrator_plan@2");
+    assert.match(prompt.text, /params\.model_class/, "the video class is named in the rules");
     for (const heading of ["## Role and rules", "## Reference material", "## Task input", "## Output contract"]) {
       assert.match(prompt.text, new RegExp(`^${heading}$`, "m"));
     }

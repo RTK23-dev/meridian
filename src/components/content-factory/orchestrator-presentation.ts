@@ -52,6 +52,8 @@ export const STATE_STYLE: Record<NodeState, StateStyle> = {
   // "NOT CONNECTED" is the literal word. A step with no handler did not run and has no output.
   not_connected: { label: "NOT CONNECTED", accent: "warning", pulse: false, showsReason: true },
   paused: { label: "Paused at budget", accent: "warning", pulse: false, showsReason: true },
+  // Accepted by the provider and not finished: its poll settles it later. The reason says the step is queued and how to pick it up.
+  queued: { label: "Queued at the provider", accent: "info", pulse: false, showsReason: true },
 };
 
 /** A step an edit would run again. It shows this instead of its last state. */

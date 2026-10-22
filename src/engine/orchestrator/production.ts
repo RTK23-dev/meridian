@@ -5,14 +5,17 @@
 // - reference: text the user supplied, or a brand from the organization's Meridian record. No model call, no spend.
 // - analysis and script: a text model the plan chose, called through the gateway on the run's budget. The call is authorized before it is
 //   made (paid.ts), its bill is recorded on the ledger, and the answer is stored as the step's body.
-// - visual, voice and video: the asset is made through the run's asset router, on the run's own reservation, when a router is connected.
-//   Without one, the step is not connected. The router waits for a video's job to finish within the call (produce polls it), so a long
-//   video holds its worker job for its whole length; a job the router left queued is not picked up later, because no poller is built
-//   for queued jobs. A video step names its model class in params.model_class, which the planner prompt does not ask for yet.
+// - visual and voice: the asset is made inline through the run's asset router, on the run's own reservation, when a router is connected.
+//   Without one, the step is not connected. The router waits for the provider's answer within the call.
+// - video and avatar: the router submits the job. A job the provider accepted is queued (StepQueuedError) and kept in orchestrator_asset_jobs;
+//   the durable poll (engine.asset_poll, asset-poll.ts) settles it when the provider has finished, and stores the step's output so the next
+//   run of the plan reuses it. A video step names its model class in params.model_class (planner prompt v2 asks for it). An avatar step
+//   reads its presenter image (a visual step) and its voice steps. Without a durable poll connected, neither step is connected.
 //
-// Not connected, and so reported as not_connected by the executor because they have no handler: avatar (a presenter's voice and image
-// are not inputs a plan step carries yet), and edit, compose, render (the engine's edit and render pipeline is not wired to a plan).
-//
+// Not connected, and so reported as not_connected by the executor because they have no handler: edit, compose and render. The engine's
+// edit and render stages run inside a production request, on its artifacts (EDL, voice timings, kit inputs). A plan step carries none of
+// those, so connecting them needs a bridge from a plan to a request, which is a design decision still open.
+
 // Untrusted: the material a step reads (the user's text, a brand, an earlier step's answer) is data. It is passed in the user message as
 // JSON under a field the system prompt names as data, and an answer is parsed with its schema before it is stored. It is never executed.
 
@@ -21,10 +24,11 @@ import { contentHash } from "../contracts/hash.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import type { ChatMessage } from "../gateway/openrouter.ts";
 import { paidCall, type LockableLedger } from "../gateway/paid.ts";
-import type { PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
+import type { NodeKind, PlanNode } from "./contracts.ts";
+import { CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
 import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
-import type { AssetRouter, ProduceInput } from "../assets/router.ts";
+import type { AsyncAssetRouter, ProduceInput, ProduceOutcome } from "../assets/router.ts";
+import type { AssetJob } from "../assets/job.ts";
 
 export const ANALYSIS_MAX_TOKENS = 1200;
 export const SCRIPT_MAX_TOKENS = 2000;
@@ -80,9 +84,25 @@ export type ProductionDeps = {
    * The asset router of this run (runtime.ts assetRouter, on the run's own reservation). Absent: the visual and voice steps are not connected.
    * The router authorizes, caches and bills each asset; the step keeps the asset's uri as its body.
    */
-  router?: Pick<AssetRouter, "produce">;
+  router?: Pick<AsyncAssetRouter, "produce" | "submit">;
+  /**
+   * Records an accepted submit (a video or an avatar the provider has not finished) so the durable poller settles it. Absent: those steps
+   * are not connected, so nothing is submitted that no poll would ever collect.
+   */
+  queueAsset?: (entry: QueuedAsset) => Promise<void>;
   /** The time the orchestrating catalog was read (ISO). The model choice of an asset step carries it. */
   catalogReadAt: string;
+};
+
+/** An accepted submit that the durable poller must settle: the step it belongs to, its cache key, the provider's job and its input. */
+export type QueuedAsset = {
+  planId: string;
+  stepId: string;
+  cacheKey: string;
+  kind: "video" | "avatar";
+  input: ProduceInput;
+  job: AssetJob;
+  runAfterMs: number;
 };
 
 type TextStepSpec<T> = {
@@ -213,8 +233,7 @@ function seedOf(hex: string): number {
  * random, so the same step names the same spec and the cache answers a repeat without a second paid call. The model is the one the plan chose,
  * carried as the orchestrator's choice (contract v7).
  */
-function assetSpecOf(deps: ProductionDeps, node: PlanNode, key: string, modelClass: AssetSpec["modelClass"], prompt: string, durationMs: number): AssetSpec {
-  // Its refs stay empty: a step names no reference asset in the plan path yet (see the header of this file).
+function assetSpecOf(deps: ProductionDeps, node: PlanNode, key: string, modelClass: AssetSpec["modelClass"], prompt: string, durationMs: number, refs: readonly string[] = []): AssetSpec {
   // A ULID's first character is 0 to 7 (its timestamp), so the id leads with 0 and takes 25 characters of the hash.
   const hex = contentHash({ plan: deps.planId, step: key }).replace(/^.*?:/, "").toUpperCase();
   const choice = node.model === null ? null : modelChoiceOf(deps, node);
@@ -224,7 +243,7 @@ function assetSpecOf(deps: ProductionDeps, node: PlanNode, key: string, modelCla
     shotId: `shot_0${hex.slice(0, 25)}`,
     modelClass,
     prompt,
-    refs: [],
+    refs: [...refs],
     durationMs,
     aspect: "9:16",
     width: 1080,
@@ -251,15 +270,15 @@ function speechDurationMs(text: string): number {
 }
 
 /**
- * A visual or voice step: one asset from the run's asset router. The router is the production path, so the budget, the cache and the bill are
- * the ones a shot uses. The step's output is the asset's uri, and its cost is what the router billed (zero on a cache hit).
+ * A visual or voice step: one asset from the run's asset router, made inline. The router is the production path, so the budget, the cache and
+ * the bill are the ones a shot uses. The step's output is the asset's uri, and its cost is what the router billed (zero on a cache hit).
  */
-type AssetKind = "visual" | "voice" | "video";
+type AssetKind = "visual" | "voice" | "video" | "avatar";
 
 /** The video model classes a video step may name in params.model_class. A step that names none is refused: the class is never guessed. */
 const VIDEO_CLASSES: readonly string[] = ["video.cinematic", "video.budget", "video.i2v_pinned"];
 
-/** A video step's length in milliseconds. validatePlan has already bounded params.seconds to the plan's limits. */
+/** A video or avatar step's length in milliseconds. validatePlan has already bounded params.seconds to the plan's limits. */
 function videoDurationMs(node: PlanNode): number {
   const seconds = node.params.seconds;
   if (typeof seconds !== "number") throw new CallRefusedError(`the ${node.kind} step names no seconds, so nothing is made`);
@@ -267,15 +286,45 @@ function videoDurationMs(node: PlanNode): number {
 }
 
 /**
+ * The uris an avatar step reads: the presenter image is the first visual step it reads, and every voice step it reads is a voice reference.
+ * A read step with no asset fails closed, because the presenter would be made without its input.
+ */
+function assetRefsOf(node: PlanNode, upstream: Map<string, string | null>, upstreamKinds: Map<string, NodeKind>): { presenter: string | null; voices: string[] } {
+  let presenter: string | null = null;
+  const voices: string[] = [];
+  for (const dep of node.dependsOn) {
+    const kind = upstreamKinds.get(dep);
+    if (kind !== "visual" && kind !== "voice") continue;
+    const uri = upstream.get(dep) ?? null;
+    if (uri === null) throw new CallRefusedError(`the step ${dep} has no asset, so the ${node.kind} step is not made`);
+    if (kind === "visual" && presenter === null) presenter = uri;
+    if (kind === "voice") voices.push(uri);
+  }
+  return { presenter, voices };
+}
+
+/** The speech a voice step says: the bodies of the steps it reads, in order. */
+function voiceTextOf(node: PlanNode, upstream: Map<string, string | null>): string {
+  return materialOf(node, upstream).map((item) => item.content).join("\n");
+}
+
+/**
  * The spec a router-made step asks for. The model class decides which adapters may take the call, so a video step names it in
  * params.model_class; the planner prompt does not ask for one yet, so until it does a video step is refused rather than guessed.
  */
-function assetSpecFor(deps: ProductionDeps, node: PlanNode, key: string, kind: AssetKind, upstream: Map<string, string | null>): AssetSpec {
+function assetSpecFor(
+  deps: ProductionDeps,
+  node: PlanNode,
+  key: string,
+  kind: AssetKind,
+  upstream: Map<string, string | null>,
+  upstreamKinds: Map<string, NodeKind>,
+): AssetSpec {
   switch (kind) {
     case "visual":
       return assetSpecOf(deps, node, key, "image.keyframe", requireText(node, "prompt"), 1000);
     case "voice": {
-      const text = materialOf(node, upstream).map((item) => item.content).join("\n");
+      const text = voiceTextOf(node, upstream);
       return assetSpecOf(deps, node, key, "tts", text, speechDurationMs(text));
     }
     case "video": {
@@ -285,44 +334,83 @@ function assetSpecFor(deps: ProductionDeps, node: PlanNode, key: string, kind: A
       }
       return assetSpecOf(deps, node, key, modelClass as AssetSpec["modelClass"], requireText(node, "prompt"), videoDurationMs(node));
     }
+    case "avatar": {
+      const refs = assetRefsOf(node, upstream, upstreamKinds);
+      if (refs.presenter === null) throw new CallRefusedError("the avatar step reads no presenter image (a visual step), so nothing is made");
+      return assetSpecOf(deps, node, key, "avatar", requireText(node, "prompt"), videoDurationMs(node), [refs.presenter, ...refs.voices]);
+    }
   }
 }
 
-function assetStep(deps: ProductionDeps, kind: AssetKind): NodeHandler {
-  return async ({ node, key, upstream }): Promise<NodeOutput> => {
+/** What one router outcome means for a step: the asset's uri is the output; every other outcome stops the step with its reason. */
+export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
+  switch (outcome.status) {
+    case "done":
+      return { outputHash: contentHash({ uri: outcome.asset.uri, cacheKey: outcome.asset.cacheKey }), costUsd: outcome.asset.costUsd, body: outcome.asset.uri };
+    case "not_connected":
+      throw new NotConnectedError(outcome.reasons.join("; ") || `no ${kind} provider is connected`);
+    case "refused":
+      throw new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`);
+    case "duplicate":
+      throw new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`);
+    case "queued":
+      throw new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`);
+    case "failed":
+      throw new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300));
+    case "unsettled":
+      throw new Error(`the ${kind} submit is unsettled at its provider (${outcome.reason}); an operator settles it before the step runs again`.slice(0, 300));
+    case "unavailable":
+      throw new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300));
+    default:
+      throw new Error(`the ${kind} asset's outcome is not known yet, so the step does not count it: ${(outcome as { status: string }).status}`.slice(0, 300));
+  }
+}
+
+function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voiceId: string | null): ProduceInput {
+  return {
+    spec,
+    workspaceId: deps.organizationId,
+    requestId: deps.requestId,
+    reservationId: deps.reservationId,
+    stage: `orchestrator_${kind}`,
+    voiceId,
+    voiceProvider: null,
+  };
+}
+
+/** A visual or voice step: made inline through the run's router, which waits for the provider's answer. */
+function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler {
+  return async ({ node, key, upstream, upstreamKinds }): Promise<NodeOutput> => {
     const router = deps.router;
     if (router === undefined) throw new NotConnectedError("no asset router is connected for this run");
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
-    const spec = assetSpecFor(deps, node, key, kind, upstream);
-    const input: ProduceInput = {
-      spec,
-      workspaceId: deps.organizationId,
-      requestId: deps.requestId,
-      reservationId: deps.reservationId,
-      stage: `orchestrator_${kind}`,
-      voiceId: kind === "voice" ? requireText(node, "voice") : null,
-      voiceProvider: null,
-    };
-    const report = await router.produce(input);
-    const outcome = report.outcome;
-    switch (outcome.status) {
-      case "done":
-        return { outputHash: contentHash({ uri: outcome.asset.uri, cacheKey: outcome.asset.cacheKey }), costUsd: outcome.asset.costUsd, body: outcome.asset.uri };
-      case "not_connected":
-        throw new NotConnectedError(outcome.reasons.join("; ") || `no ${kind} provider is connected`);
-      case "refused":
-        throw new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`);
-      case "duplicate":
-        throw new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`);
-      case "queued":
-        throw new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`);
-      case "failed":
-        throw new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300));
-      case "unavailable":
-        throw new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300));
-      default:
-        throw new Error(`the ${kind} asset's outcome is not known yet, so the step does not count it: ${(outcome as { status: string }).status}`.slice(0, 300));
+    const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
+    const voiceId = kind === "voice" ? requireText(node, "voice") : null;
+    const report = await router.produce(routedInput(deps, spec, kind, voiceId));
+    return outputOf(report.outcome, kind);
+  };
+}
+
+/**
+ * A video or avatar step. The provider takes the job and makes it later, so the router only submits: an accepted job is queued, and the
+ * durable poller (engine.asset_poll) settles it. A later run of the plan finds the stored output. Anything that is not a queued job is
+ * an outcome, handled as the inline steps handle theirs.
+ */
+function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHandler {
+  return async ({ node, key, upstream, upstreamKinds }): Promise<NodeOutput> => {
+    const router = deps.router;
+    if (router === undefined) throw new NotConnectedError("no asset router is connected for this run");
+    const queue = deps.queueAsset;
+    if (queue === undefined) throw new NotConnectedError("no durable poll is connected for queued assets, so nothing is submitted");
+    if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
+    const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
+    const input = routedInput(deps, spec, kind, null);
+    const report = await router.submit(input);
+    if (report.step.status === "submitted") {
+      await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs });
+      throw new StepQueuedError(`the ${kind} is accepted by its provider and queued. Its poll is durable; run the plan again once it has finished to use it.`);
     }
+    return outputOf(report.step, kind);
   };
 }
 
@@ -334,10 +422,13 @@ function requireText(node: PlanNode, name: string): string {
 }
 
 export function productionHandlers(deps: ProductionDeps): Handlers {
+  const inline = deps.router === undefined ? {} : { visual: assetStep(deps, "visual"), voice: assetStep(deps, "voice") };
+  const queued = deps.router === undefined || deps.queueAsset === undefined ? {} : { video: queuedAssetStep(deps, "video"), avatar: queuedAssetStep(deps, "avatar") };
   return {
     reference: referenceHandler(deps),
     analysis: textStep(deps, analysisSpec),
     script: textStep(deps, scriptSpec),
-    ...(deps.router === undefined ? {} : { visual: assetStep(deps, "visual"), voice: assetStep(deps, "voice"), video: assetStep(deps, "video") }),
+    ...inline,
+    ...queued,
   };
 }

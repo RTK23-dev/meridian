@@ -28,6 +28,16 @@ async function tick() {
      )
      on conflict (id) do nothing`,
   );
+  // One asset poller per workspace: it settles the orchestrator's queued video and avatar submits (orchestrator_asset_jobs).
+  await pool.query(
+    `insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled, payload)
+     select 'asset_poll:' || o.id, o.id, null, 'engine.asset_poll', 60, now(), true, '{}'
+     from organizations o
+     where not exists (
+       select 1 from job_schedules existing where existing.id = 'asset_poll:' || o.id
+     )
+     on conflict (id) do nothing`,
+  );
   const due = await pool.query<{
     id: string;
     organization_id: string;

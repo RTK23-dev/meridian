@@ -12,8 +12,8 @@ import type { RoleDefinition } from "../role.ts";
 
 export const ORCHESTRATOR_PLAN_ROLE = "orchestrator_plan";
 
-/** The prompt version this code is written against. The file is prompts/orchestrator_plan@1.md. */
-export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 1 } as const;
+/** The prompt version this code is written against. The file is prompts/orchestrator_plan@2.md (v2 names the video class and the avatar inputs). */
+export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 2 } as const;
 
 /** The most candidates the orchestrator is shown, per kind, in the catalog's order. Bounds the priced input. */
 export const ORCHESTRATOR_MAX_CANDIDATES_PER_KIND = 40;

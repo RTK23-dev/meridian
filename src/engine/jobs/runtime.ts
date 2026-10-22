@@ -102,6 +102,7 @@ import { sqlEventStore } from "./event-store-sql.ts";
 import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import { listRoleCalls } from "./role-call-store.ts";
+import { pollAssetJobs, sqlAssetPollStore } from "../orchestrator/asset-poll.ts";
 
 /** The stages built in other workstreams (W6: analyze_reference and voice; W10: render). Registered only when given. */
 export type ExternalStageHandlers = Partial<Record<"analyze_reference" | "voice" | "render", StageHandler>>;
@@ -395,6 +396,24 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
         run: async (ctx) => {
           const held = await reconcileHolds(ctx.sql, { organizationId: ctx.organizationId, now: runtime.now(), readers });
           return `reconciled:settled=${held.settled.count},open=${held.stillOpen.count},operator=${held.needsOperator.count}`;
+        },
+      },
+    };
+  }
+  // The asset poll (engine.asset_poll): settles the orchestrator's queued video and avatar submits once their provider has finished. It
+  // needs the composition's asset router, which production always has.
+  const routerFor = composition.assetRouter;
+  if (routerFor !== undefined) {
+    runtime.jobs = {
+      ...runtime.jobs,
+      asset_poll: {
+        run: async (ctx) => {
+          const report = await pollAssetJobs({
+            store: sqlAssetPollStore(ctx.sql, ctx.organizationId),
+            organizationId: ctx.organizationId,
+            routerFor,
+          });
+          return `polled:${report.polled}:done:${report.done}:failed:${report.failed}:waiting:${report.waiting}`;
         },
       },
     };

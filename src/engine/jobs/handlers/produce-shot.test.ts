@@ -300,6 +300,9 @@ describe("prompt, spec and identity helpers", () => {
   test("the router generator asks the router for one shot, on the request's reservation, and returns its report", async () => {
     const seen: string[] = [];
     const generator = routerGenerator(() => ({
+      async pollOnce() {
+        return { state: "pending" as const };
+      },
       async submit(input) {
         seen.push(`${input.stage}:${input.reservationId}:${input.spec.shotId}`);
         return { step: { status: "not_connected", reasons: ["fixture"] }, decisions: [], alerts: [], attempts: [] };

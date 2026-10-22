@@ -50,7 +50,7 @@ test("NOT CONNECTED stays the literal word, and only the reason states show a re
       .filter(([, style]) => style.showsReason)
       .map(([state]) => state)
       .sort(),
-    ["failed", "not_connected", "paused"],
+    ["failed", "not_connected", "paused", "queued"],
   );
   assert.equal(STALE_STYLE.label, "To re-run");
   assert.equal(STALE_STYLE.accent, "warning");

@@ -5,8 +5,8 @@ import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts
 import { newId } from "../contracts/ids.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
-import type { PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, type NodeHandler } from "./execute.ts";
+import type { NodeKind, PlanNode } from "./contracts.ts";
+import { CallRefusedError, NotConnectedError, StepQueuedError, type NodeHandler } from "./execute.ts";
 import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps } from "./production.ts";
 
 const ORG = "org_production_a";
@@ -69,12 +69,13 @@ function node(over: Partial<PlanNode> & Pick<PlanNode, "id" | "kind">): PlanNode
 }
 
 const NO_UPSTREAM = new Map<string, string | null>();
+const NO_KINDS = new Map();
 
 describe("production handlers: reference (no model call)", () => {
   test("a reference with text stores the text as its body and spends nothing", async () => {
     const ledger = await ledgerWith(1);
     const handler = productionHandlers(depsWith(ledger)).reference as NodeHandler;
-    const out = await handler({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { text: "Launch day copy" } }), key: "k", upstream: NO_UPSTREAM });
+    const out = await handler({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { text: "Launch day copy" } }), key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
     assert.equal(out.body, "Launch day copy");
     assert.equal(out.costUsd, null);
     assert.equal((await ledger.listEntries(RES)).length, 0, "no call, so no ledger entry");
@@ -84,19 +85,19 @@ describe("production handlers: reference (no model call)", () => {
     const facts = { name: "Acme", description: "tools", category: "", industry: "", website: "", countryMarket: "", sells: "" };
     const found = productionHandlers(depsWith(await ledgerWith(1), { brand: async () => facts }))
       .reference as NodeHandler;
-    const out = await found({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { brandId: "brand_a" } }), key: "k", upstream: NO_UPSTREAM });
+    const out = await found({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { brandId: "brand_a" } }), key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
     assert.deepEqual(JSON.parse(out.body ?? "null"), facts);
 
     const missing = productionHandlers(depsWith(await ledgerWith(1))).reference as NodeHandler;
     await assert.rejects(
-      missing({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { brandId: "brand_b" } }), key: "k", upstream: NO_UPSTREAM }),
+      missing({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null, params: { brandId: "brand_b" } }), key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }),
       /not in this organization/,
     );
   });
 
   test("a reference with neither a brand nor text fails and reads nothing", async () => {
     const handler = productionHandlers(depsWith(await ledgerWith(1))).reference as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null }), key: "k", upstream: NO_UPSTREAM }), /nothing to read/);
+    await assert.rejects(handler({ node: node({ id: "ref", kind: "reference", model: null, estimateUsd: null }), key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), /nothing to read/);
   });
 });
 
@@ -112,7 +113,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).script as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "s", kind: "script" }), key: "k", upstream: new Map([["ref", "brief text"]]) }), NotConnectedError);
+    await assert.rejects(handler({ node: node({ id: "s", kind: "script" }), key: "k", upstream: new Map([["ref", "brief text"]]), upstreamKinds: NO_KINDS }), NotConnectedError);
     assert.equal(called, false);
     assert.equal((await ledger.listEntries(RES)).length, 0);
   });
@@ -127,7 +128,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).script as NodeHandler;
-    const out = await handler({ node: node({ id: "s", kind: "script", dependsOn: ["ref"] }), key: "k1", upstream: new Map([["ref", "brief text"]]) });
+    const out = await handler({ node: node({ id: "s", kind: "script", dependsOn: ["ref"] }), key: "k1", upstream: new Map([["ref", "brief text"]]), upstreamKinds: NO_KINDS });
     assert.equal(out.body, "Hook line\nSecond line");
     assert.equal(out.costUsd, 0.0012);
     const entries = await ledger.listEntries(RES);
@@ -146,7 +147,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).analysis as NodeHandler;
-    const input = { node: node({ id: "a", kind: "analysis", dependsOn: ["ref"] }), key: "same", upstream: new Map([["ref", "x"]]) };
+    const input = { node: node({ id: "a", kind: "analysis", dependsOn: ["ref"] }), key: "same", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS };
     await handler(input);
     await assert.rejects(handler(input), /already made/);
     assert.equal(calls, 1);
@@ -162,7 +163,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).analysis as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 0.01 }), key: "k", upstream: new Map([["ref", "x"]]) }), /budget refused/);
+    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 0.01 }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }), /budget refused/);
     assert.equal(called, false);
   });
 
@@ -172,7 +173,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       structured: async (_route, call) => ({ value: call.schema.parse({ wrong: true }), actualUsd: 0.001 }),
     });
     const handler = productionHandlers(deps).analysis as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"] }), key: "k", upstream: new Map([["ref", "x"]]) }));
+    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"] }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }));
     const entries = await ledger.listEntries(RES);
     assert.equal(entries.length, 1, "the call was authorized, so its hold is kept");
   });
@@ -180,7 +181,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
   test("a step that reads an upstream step with no stored body fails closed, and calls nothing", async () => {
     const ledger = await ledgerWith(1);
     const handler = productionHandlers(depsWith(ledger)).script as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "s", kind: "script", dependsOn: ["ref"] }), key: "k", upstream: new Map([["ref", null]]) }), /no stored content/);
+    await assert.rejects(handler({ node: node({ id: "s", kind: "script", dependsOn: ["ref"] }), key: "k", upstream: new Map([["ref", null]]), upstreamKinds: NO_KINDS }), /no stored content/);
     assert.equal((await ledger.listEntries(RES)).length, 0);
   });
 
@@ -205,8 +206,15 @@ function routerAnswering(outcome: unknown, asked: unknown[] = []): NonNullable<P
       asked.push(input);
       return { outcome, decisions: [], alerts: [], attempts: [] } as never;
     },
+    // A submit answers with the same step: a finished outcome, or a submitted job when the test gives one.
+    submit: async (input: unknown) => {
+      asked.push(input);
+      return { step: outcome, decisions: [], alerts: [], attempts: [] } as never;
+    },
   } as unknown as NonNullable<ProductionDeps["router"]>;
 }
+
+const SUBMITTED_JOB = { idempotencyKey: "job-1", jobRef: "provider-job-1" } as unknown as import("../assets/job.ts").AssetJob;
 
 const DONE_ASSET = { status: "done", asset: { providerId: "openrouter:image", modelClass: "image.keyframe", uri: "engine/org/req/visual/asset.png", cacheKey: "k", costUsd: 0.02, cacheHit: false, savedUsd: 0, ledgerEntryId: null, generationId: null, mediaType: "image/png", submits: 1 } };
 
@@ -217,7 +225,7 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
     const handler = handlers.visual as NodeHandler;
     assert.ok(handler, "a visual handler exists when the run has a router");
     const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl of fruit" }, estimateUsd: 0.02 });
-    const out = await handler({ node: visual, key: "k-img", upstream: NO_UPSTREAM });
+    const out = await handler({ node: visual, key: "k-img", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
     assert.equal(out.body, "engine/org/req/visual/asset.png");
     assert.equal(out.costUsd, 0.02, "the router's bill is the step's cost");
     assert.equal(asked[0]?.spec.modelClass, "image.keyframe");
@@ -230,7 +238,7 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
     const asked: Array<{ spec: { modelClass: string; prompt: string; durationMs: number }; voiceId: string | null }> = [];
     const handlers = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ ...DONE_ASSET, asset: { ...DONE_ASSET.asset, uri: "engine/org/req/voice/a.mp3", costUsd: 0.01 } }, asked) }));
     const voice = node({ id: "vo", kind: "voice", dependsOn: ["scr"], model: { provider: "openrouter", id: "elevenlabs/voice-model" }, params: { voice: "warm-narrator" }, estimateUsd: 0.01 });
-    const out = await (handlers.voice as NodeHandler)({ node: voice, key: "k-vo", upstream: new Map([["scr", "Hook line\nSecond line"]]) });
+    const out = await (handlers.voice as NodeHandler)({ node: voice, key: "k-vo", upstream: new Map([["scr", "Hook line\nSecond line"]]), upstreamKinds: NO_KINDS });
     assert.equal(out.body, "engine/org/req/voice/a.mp3");
     assert.equal(asked[0]?.spec.modelClass, "tts");
     assert.equal(asked[0]?.spec.prompt, "Hook line\nSecond line");
@@ -242,8 +250,8 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
     const asked: Array<{ spec: { specId: string; seed: number } }> = [];
     const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).visual as NodeHandler;
     const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.02 });
-    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM });
-    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM });
+    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
+    await handler({ node: visual, key: "same", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
     assert.equal(asked[0]?.spec.specId, asked[1]?.spec.specId);
     assert.equal(asked[0]?.spec.seed, asked[1]?.spec.seed);
   });
@@ -251,30 +259,69 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
   test("the router's refusals stop the step as the budget and the connection stop it: nothing is held for a refusal, and not_connected holds nothing", async () => {
     const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "openai/image-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.02 });
     const notConnected = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "not_connected", reasons: ["no image provider"] }) })).visual as NodeHandler;
-    await assert.rejects(notConnected({ node: visual, key: "k", upstream: NO_UPSTREAM }), NotConnectedError);
+    await assert.rejects(notConnected({ node: visual, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), NotConnectedError);
     const refused = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "refused", reasons: ["the reservation is full"] }) })).visual as NodeHandler;
-    await assert.rejects(refused({ node: visual, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    await assert.rejects(refused({ node: visual, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), CallRefusedError);
     const duplicate = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering({ status: "duplicate", providerId: "p", ledgerEntryId: "e" }) })).visual as NodeHandler;
-    await assert.rejects(duplicate({ node: visual, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    await assert.rejects(duplicate({ node: visual, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), CallRefusedError);
   });
 
   test("a video step names its video class: none, or a class that is not a video class, is refused before the router is asked", async () => {
     const asked: unknown[] = [];
-    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).video as NodeHandler;
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked), queueAsset: async () => {} })).video as NodeHandler;
     const video = node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 4 }, estimateUsd: 0.4 });
-    await assert.rejects(handler({ node: video, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    await assert.rejects(handler({ node: video, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), CallRefusedError);
     const wrong = { ...video, params: { ...video.params, model_class: "image.keyframe" } };
-    await assert.rejects(handler({ node: wrong, key: "k", upstream: NO_UPSTREAM }), CallRefusedError);
+    await assert.rejects(handler({ node: wrong, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), CallRefusedError);
     assert.equal(asked.length, 0, "nothing reaches the router when the class is missing or wrong");
   });
 
-  test("a video step asks the router for its named class and its length in milliseconds", async () => {
+  test("a video step submits on its named class and length, and a finished answer is its output", async () => {
     const asked: Array<{ spec: { modelClass: string; durationMs: number } }> = [];
-    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked) })).video as NodeHandler;
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked), queueAsset: async () => {} })).video as NodeHandler;
     const video = node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 4, model_class: "video.budget" }, estimateUsd: 0.4 });
-    await handler({ node: video, key: "k", upstream: NO_UPSTREAM });
+    const out = await handler({ node: video, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
     assert.equal(asked[0]?.spec.modelClass, "video.budget");
     assert.equal(asked[0]?.spec.durationMs, 4000);
+    assert.equal(out.body, DONE_ASSET.asset.uri);
+  });
+
+  test("an accepted video is queued: its submit is recorded for the poll, and the step stops as queued with no output", async () => {
+    const queued: unknown[] = [];
+    const submitted = { status: "submitted", job: SUBMITTED_JOB, runAfterMs: 5000 };
+    const handler = productionHandlers(depsWith(await ledgerWith(1), {
+      router: routerAnswering(submitted),
+      queueAsset: async (entry) => { queued.push(entry); },
+    })).video as NodeHandler;
+    const video = node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 4, model_class: "video.budget" }, estimateUsd: 0.4 });
+    await assert.rejects(handler({ node: video, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), StepQueuedError);
+    const entry = queued[0] as { kind: string; stepId: string; cacheKey: string; runAfterMs: number; job: unknown };
+    assert.equal(queued.length, 1);
+    assert.equal(entry.kind, "video");
+    assert.equal(entry.stepId, "clip");
+    assert.equal(entry.cacheKey, "k");
+    assert.equal(entry.runAfterMs, 5000);
+    assert.deepEqual(entry.job, SUBMITTED_JOB);
+  });
+
+  test("an avatar step reads its presenter image and its voice, and is refused when it reads no presenter image", async () => {
+    const asked: Array<{ spec: { modelClass: string; refs: string[] } }> = [];
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(DONE_ASSET, asked), queueAsset: async () => {} })).avatar as NodeHandler;
+    const avatar = node({ id: "host", kind: "avatar", dependsOn: ["img", "vo"], model: { provider: "openrouter", id: "vendor/avatar-model" }, params: { prompt: "Say hello", seconds: 6 }, estimateUsd: 0.5 });
+    const kinds = new Map<string, NodeKind>([["img", "visual"], ["vo", "voice"]]);
+    await handler({ node: avatar, key: "k-av", upstream: new Map([["img", "engine/x/presenter.png"], ["vo", "engine/x/voice.mp3"]]), upstreamKinds: kinds });
+    assert.equal(asked[0]?.spec.modelClass, "avatar");
+    assert.deepEqual(asked[0]?.spec.refs, ["engine/x/presenter.png", "engine/x/voice.mp3"]);
+    await assert.rejects(
+      handler({ node: avatar, key: "k-av2", upstream: new Map([["vo", "engine/x/voice.mp3"]]), upstreamKinds: new Map<string, NodeKind>([["vo", "voice"]]) }),
+      CallRefusedError,
+    );
+  });
+
+  test("a video or avatar step with no durable poll connected is not connected, and nothing is submitted", () => {
+    const handlers = productionHandlers(depsWith(memoryLedgerStore(), { router: routerAnswering(DONE_ASSET) }));
+    assert.equal(handlers.video, undefined);
+    assert.equal(handlers.avatar, undefined);
   });
 
   test("without a router the visual, voice and video steps have no handler, so the executor reports them not_connected", () => {
