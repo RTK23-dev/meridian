@@ -1,4 +1,4 @@
-// The call telemetry store on engine_call_telemetry (migration 0111; gateway/telemetry.ts). It is offered only inside a budget
+// The call telemetry store on engine_call_telemetry (migration 0112; gateway/telemetry.ts). It is offered only inside a budget
 // transaction (withReservationLedger), so a call's row is written in the same transaction as its ledger settlement: the two are kept
 // or lost together.
 //

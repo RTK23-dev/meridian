@@ -3,7 +3,7 @@
 // It settles only to a verified bill: no bill, no settlement, and nothing is estimated (contract v6). A held call with no providerRef is
 // never read: nothing names the provider's record of it, so it is given up once and reported for an operator.
 //
-// Reads are tracked in engine_bill_reads (migration 0111), one row per held call that has been read or given up. A held call is read at
+// Reads are tracked in engine_bill_reads (migration 0112), one row per held call that has been read or given up. A held call is read at
 // most MAX_BILL_READS times ever: the Nth failed read waits BILL_READ_BACKOFF_MS[N-1], and the MAX_BILL_READS-th failure gives reading up.
 // A read that returns a bill settles the call through reconcileCall, then its tracking row is deleted. Tracking never changes the ledger row.
 //

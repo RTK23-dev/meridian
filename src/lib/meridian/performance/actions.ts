@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
-import { providerCredentialState } from "../providers/access-token.ts";
+import { OAUTH_METRIC_PROVIDERS, providerCredentialState } from "../providers/access-token.ts";
 import { phaseForStoredConnection, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
 import { validatePerformanceOwnership } from "./ownership.ts";
@@ -88,8 +88,8 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
       where organization_id = ${data.organizationId} and provider = ${data.provider}
       limit 1
     `;
-    const secrets = await sql<{ sealed_token: string }>`
-      select sealed_token from provider_secrets
+    const secrets = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+      select sealed_token, sealed_refresh, expires_at from provider_secrets
       where organization_id = ${data.organizationId} and provider = ${data.provider}
       limit 1
     `;
@@ -100,6 +100,9 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
       sealed: secrets[0]?.sealed_token ?? "",
       encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
       env: process.env,
+      requireOAuth: OAUTH_METRIC_PROVIDERS.includes(data.provider),
+      expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,
+      hasRefresh: (secrets[0]?.sealed_refresh ?? "").trim() !== "",
     });
     const row = connections[0];
     const phase = phaseForStoredConnection({

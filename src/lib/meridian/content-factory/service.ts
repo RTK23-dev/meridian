@@ -20,8 +20,10 @@ import {
   productionReadinessPorts,
   decideEngineShot,
   quoteEngineDecision,
+  quoteEngineClip,
   quoteEngineShotRemake,
   remakeEngineShot,
+  replaceShotWithClip,
   shotTakeLink,
   startEngineRequest,
   type EngineReadiness,
@@ -545,6 +547,19 @@ export type ReviseOutcome =
  * Reopens a session after its current video is delivered or has failed. The current request id is kept. The next start uses
  * the next revision, so it does not reuse that request. A video that is still running is left alone.
  */
+/**
+ * A revision with a direction for the whole video (D9). The session reopens as a draft (reviseSession), and the direction is posted as its next
+ * instruction, so the brief of the new video carries it. The whole video is planned again, as a revision is; only the plan decides which shots
+ * change. A refused revision changes nothing, and the direction is not posted.
+ */
+export async function reviseWithDirection(sql: Sql, userId: string, input: { sessionId: string; direction: string }): Promise<ReviseOutcome> {
+  const revised = await reviseSession(sql, userId, { sessionId: input.sessionId });
+  if (revised.status !== "draft") return revised;
+  const direction = input.direction.trim();
+  if (direction !== "") await postMessage(sql, userId, { sessionId: input.sessionId, text: direction, beatRole: null });
+  return revised;
+}
+
 export async function reviseSession(sql: Sql, userId: string, input: { sessionId: string }): Promise<ReviseOutcome> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
@@ -615,6 +630,37 @@ export async function shotTakeOf(sql: Sql, userId: string, input: { sessionId: s
   if (row.status !== "started" || row.engine_request_id === null) return { status: "not_ready", reason: "This session has no video yet." };
   const mediaLinks = signer ?? (await import("../storage/engine-media-link.ts")).engineMediaLinkSigner();
   return shotTakeLink(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId }, mediaLinks);
+}
+
+/**
+ * A reviewer's own clip for one shot of the session's video (D12). The file is probed and must be an H.264 MP4 at the take size that covers
+ * the shot. The remake runs with the clip as the shot's take: no model is called for it. Admin of the session's workspace only.
+ */
+export async function shotClip(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array<ArrayBuffer> }, ports?: RemakePorts): Promise<RemakeOutcome> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
+  }
+  const outcome = await replaceShotWithClip(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, bytes: input.bytes, now: new Date().toISOString() }, ports);
+  if (outcome.status === "refused") return outcome;
+  await audit(sql, {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    actorId: userId,
+    action: "content_factory.shot_clip",
+    objectId: row.id,
+    metadata: { requestId: row.engine_request_id, shotId: input.shotId, revision: String(outcome.revision) },
+  });
+  return { status: "queued", revision: outcome.revision };
+}
+
+/** What a reviewer's clip would reserve for one shot, before it is confirmed. Read only. */
+export async function shotClipQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array<ArrayBuffer> }, ports?: RemakePorts): Promise<RemakeQuote> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) {
+    return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
+  }
+  return quoteEngineClip(sql, { organizationId: row.organization_id, requestId: row.engine_request_id, shotId: input.shotId, bytes: input.bytes, now: new Date().toISOString() }, ports);
 }
 
 /** The models a reviewer may pick for one generated shot of the session's video (D11). Read only. */

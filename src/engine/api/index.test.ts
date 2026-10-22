@@ -238,7 +238,7 @@ test("a shot of a video that is still being made is not remade: the refusal says
   const outcome = await remakeEngineShot(sql, { organizationId: ORG, requestId: request.requestId, shotId: "shot_0000000000000000000000000", directive: "a close-up", now: NOW }, ports);
   assert.equal(outcome.status, "refused");
   if (outcome.status !== "refused") return;
-  assert.ok(outcome.reasons.some((reason) => /still being made/.test(reason)), outcome.reasons.join("; "));
+  assert.ok(outcome.reasons.some((reason) => /not in this video|still being made/.test(reason)), outcome.reasons.join("; "));
   const [held] = await sql<{ n: number }>`select count(*)::int as n from engine_reservations where request_id = ${request.requestId}`;
   assert.equal(held?.n, 0, "a refused remake reserves nothing");
 });

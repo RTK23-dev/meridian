@@ -147,3 +147,33 @@ Section 4, items 1 and 9, are done on fixtures. Nothing here calls a live provid
   for one shot's remake: the plan's chosen model is read in `chosenPricesFor`, and changing it needs the model-choice artifact and the produce
   stage to take the new choice. 5, remake mid-run. 6, a direction for the whole video. 7, splice render (blocked on the caption layer). 8, variants
   after a remake. The page has not been looked at in a browser: no screenshot was taken.
+
+## 8. Update 2026-10-22, autonomous run: section 4, items 2 to 8
+
+Every item below is built and tested on fixtures. Nothing calls a live provider, and no browser check of the page was made.
+
+- **2. Review inbox actions.** `edit_prompt` edits a generated shot's prompt (D8). `change_visual_type` changes a shot to cinematic (from a
+  prompt) or to stock footage (from a query). Any other type is refused. Both are replacements of the shot's spec (D7) and run as a remake.
+  The decision contract is `src/engine/review/shot-decision.ts`.
+- **3. The reviewer's own clip.** A clip is probed (an H.264 MP4 at the take size, long enough to cover the shot), stored as the shot's take, and
+  accepted with the reviewer's acceptance as its verdict. No model is called for it. The editor reads an asset shot's take like any other take. The
+  clip is licensed by the reviewer's attestation (`src/engine/jobs/reviewer-clips.ts`). Production's licence port is not wired anywhere yet, so the
+  pre-render gate still cannot evaluate rights for any video. That is the open gap, not the clip.
+- **4. A model for one shot.** The reviewer picks a model from the live catalog. Only models eligible for the shot's need are offered, priced the way
+  the orchestrator's choices are, checked again when the remake is made, and carried to the take's produce job (D11, source `reviewer`).
+- **5. A shot changed while the video is made (D10).** A shot still being made can be changed in place: its direction and its model. Its epoch moves,
+  so the take in flight is stored as stale and never counted. The video's revision does not move, and the change draws on the video's own reservation:
+  the new call is authorized against it when it is made. A change that does not fit pauses the video for budget. Source changes and accepted shots
+  wait for delivery.
+- **6. A direction for the whole video (D9).** A revision can carry a direction. It is posted as the session's next instruction after the revision
+  reopens the session, so the new brief carries it, and the whole video is planned again. An empty direction revises as it always did.
+- **7. Splice render: planner only.** `src/engine/render/splice.ts` plans the window a change re-renders (widened to the nearest beats) and the parts to
+  keep. Execution is not built, and cannot be built yet: the repository has no window render (HyperFrames is rendered whole) and no trim or join in the
+  media functions (they probe, sample and measure only). Until both exist and are verified live, a remake renders the whole video. This is the owner's
+  decision to make, with the render and media work.
+- **8. Variants after a remake.** A delivered video with variants can be remade. Its variant branches are superseded, and the variant stage runs again
+  on the new master, which delivery waits for. A video is delivered only after its variants settle, so no variant job is in flight at a remake.
+
+Still open, from this list and the record: the production licence port (rights for every video, including a reviewer's clip); the splice execution
+(item 7 above); the orchestrator's handlers for visual, voice, video, avatar, edit, compose and render; and the open review items in
+`docs/engine/REVIEW_2026-10-22.md`.

@@ -17,16 +17,24 @@ without waiting for the next command. Each item is committed to `main` with its 
 
 (Further decisions are appended below as they are made.)
 
-## Status
+## Status (updated as the run goes)
 
-| Item | State | Commit |
+| Item | State | Commits on main |
 | --- | --- | --- |
-| 14 replacement shot spec | in progress | |
-| 2 review inbox actions | pending | |
-| 3 reviewer clip | pending | |
-| 4 model choice per remake | pending | |
-| 5 mid-run remake | pending | |
-| 6 whole-video direction | pending | |
-| 7 splice render | pending | |
-| 8 variants after remake | pending | |
-| remaining: step handlers, re-render wiring, review items | pending | |
+| 14 replacement shot spec (D7) | done, fixtures | replacement commit |
+| 2 review inbox actions (edit prompt, change visual type; D8) | done, fixtures; board controls with item 4 | review inbox commit, items 2 and 4 commit |
+| 3 reviewer's own clip (D12) | done, fixtures; the production licence port is not wired (see below) | item 3 commit |
+| 4 model per remake (D11) | done, fixtures | items 2 and 4 commit |
+| 5 remake while the video is made (D10) | done, state-machine tests; the API path has no integration test | item 5 commit, lint fix |
+| 6 direction for the whole video (D9) | done, fixtures | item 6 commit |
+| 7 splice render | planner done; execution NOT built: no window render and no trim/join in the repo | splice planner commit |
+| 8 variants after a remake | done, state test | item 8 commit |
+| review items 1 to 4 (paid retry, plan hold, text bound, plan release) | done | review items 1 to 4 commit |
+| review item 5 (status vs metric jobs) | done for the status and the metric schedule | review item 5 commit |
+| review item 6 (token expiry) | status side done; the job-side checks are NOT done | review item 6 commit |
+| remaining: orchestrator handlers for visual, voice, video, avatar, edit, compose, render | open | |
+| remaining: re-render wiring to HyperFrames | open (needs a window render) | |
+| remaining: review items 7 to 11 | open (7 owner decision; 8 latent; 9 needs concurrency; 10 no caller; 11 small copy) | |
+| remaining: production licence port (rights) | open: an owner decision on which sources are licensed | |
+
+Known limits: every item is verified on recorded fixtures only. No live provider was called. The page has not been checked in a browser.

@@ -1,11 +1,11 @@
 # STATUS
 
-## Bill reads of held calls are tracked and bounded (contract v9, migration 0111)
+## Bill reads of held calls are tracked and bounded (contract v9, migration 0112)
 
 Fixes the strain: `reconcileHolds` used to read every held call's bill on every run, forever, and rows with no providerRef filled the
 100-row batch so that newer calls were never read. Branch `bill-reads-holds` (see the report); `feature/bill-reads` was not touched.
 
-- **Tracking.** `engine_bill_reads` (migration 0111, unchanged) holds one row per held call that has been read or given up. The
+- **Tracking.** `engine_bill_reads` (migration 0112, unchanged) holds one row per held call that has been read or given up. The
   ledger row is never changed by it. A settled call's row is deleted (by the read that settled it, or by the next run if another path
   settled it).
 - **Limits (`reconcile-holds.ts`, beside `HOLD_SETTLE_AFTER_MS` and `HOLD_BATCH_LIMIT`).** `BILL_READ_BACKOFF_MS` = [15 min, 60 min,

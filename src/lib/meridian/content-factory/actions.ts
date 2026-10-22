@@ -6,6 +6,8 @@ import {
   createSessionInput,
   messageInput,
   remakeShotInput,
+  clipInput,
+  reviseDirectionInput,
   shotDecisionInput,
   shotRefInput,
   sessionInput,
@@ -14,7 +16,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -64,6 +66,11 @@ export const startContentFactoryRun = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => startRun(await getSql(), context.userId, data));
 
+export const reviseContentFactoryWithDirection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => reviseDirectionInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => reviseWithDirection(await getSql(), context.userId, data));
+
 export const reviseContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
   .middleware([authMiddleware])
@@ -73,6 +80,21 @@ export const remakeContentFactoryShot = createServerFn({ method: "POST" })
   .validator((input: unknown) => remakeShotInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => remakeShot(await getSql(), context.userId, data));
+
+/** The base64 of a reviewer's clip, decoded here so the engine receives bytes. */
+function clipBytes(base64: string): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(Buffer.from(base64, "base64"));
+}
+
+export const quoteContentFactoryShotClip = createServerFn({ method: "POST" })
+  .validator((input: unknown) => clipInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => shotClipQuote(await getSql(), context.userId, { sessionId: data.sessionId, shotId: data.shotId, bytes: clipBytes(data.base64) }));
+
+export const replaceContentFactoryShotWithClip = createServerFn({ method: "POST" })
+  .validator((input: unknown) => clipInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => shotClip(await getSql(), context.userId, { sessionId: data.sessionId, shotId: data.shotId, bytes: clipBytes(data.base64) }));
 
 export const getContentFactoryShotModels = createServerFn({ method: "POST" })
   .validator((input: unknown) => shotRefInput(input))

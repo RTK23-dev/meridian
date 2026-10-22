@@ -8,7 +8,7 @@ Nothing yet.
 
 The cost and time record for paid engine calls, a bound on how often held bills are read, the 2026-10-22 review fixes from main, and the orchestrator's text steps. Tests use fixtures. No live provider call is recorded in this release. The owner's live check of the OpenRouter bill field and the token figures is still to run.
 
-**Upgrade notes.** Two migrations are new since 0.1.0-beta.14: `0110_orchestrator_step_body.sql` (`orchestrator_step_outputs.body`, so a downstream step reads the content an upstream step produced) and `0111_engine_call_telemetry.sql` (`engine_call_telemetry` and `engine_bill_reads`, both additive). No new packages.
+**Upgrade notes.** Three migrations are new since 0.1.0-beta.14: `0110_orchestrator_step_body.sql` (`orchestrator_step_outputs.body`, so a downstream step reads the content an upstream step produced), `0111_provider_token_expiry.sql` (`provider_secrets.expires_at`; a token with no stated expiry keeps null and is not treated as expired) and `0112_engine_call_telemetry.sql` (`engine_call_telemetry` and `engine_bill_reads`, both additive). No new packages.
 
 - **Cost and time per call.** Each paid call writes one telemetry row in the same transaction as its ledger settlement: its tokens, latency, generation id and the cost its response reported. If that row fails, it rolls back to a savepoint and the settlement stands. No extra OpenRouter request is made.
 - **Held bills are read a bounded number of times.** A held call's bill is read at most five times, 15 minutes, 1 hour, 4 hours and 12 hours apart. A call with no provider reference is not read. Overlapping runs cannot read the same call twice. Before this, a bill that never arrived was read every 15 minutes, indefinitely.

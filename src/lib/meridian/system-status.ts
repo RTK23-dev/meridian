@@ -4,7 +4,7 @@ import { INTEGRATIONS } from "./providers/integrations.ts";
 import { objectStorageStatus } from "./storage/object-store.ts";
 import { emailDeliveryState, isoOrNull } from "./notifications/email-state.ts";
 import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "./publishing/provider.ts";
-import { providerCredentialState, type ProviderCredentialState } from "./providers/access-token.ts";
+import { OAUTH_METRIC_PROVIDERS, providerCredentialState, type ProviderCredentialState } from "./providers/access-token.ts";
 import { isLiveProvider, phaseForProbe, phaseForStoredConnection, type LiveProvider } from "./providers/live.ts";
 
 const CONNECTION_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
@@ -73,19 +73,24 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
         `;
         // The sealed tokens of this workspace only. Each provider's credential state comes from providerCredentialState, so no
         // environment variable can make a provider connected.
-        const secrets = await sql<{ provider: string; sealed_token: string }>`
-          select provider, sealed_token from provider_secrets where organization_id = ${input.organizationId}
+        const secrets = await sql<{ provider: string; sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+          select provider, sealed_token, sealed_refresh, expires_at from provider_secrets where organization_id = ${input.organizationId}
         `;
         const encryptionKey = process.env.TOKEN_ENCRYPTION_KEY ?? "";
         const credentials: Record<string, ProviderCredentialState> = {};
         for (const provider of CONNECTION_PROVIDERS) {
-          const sealed = secrets.find((item) => item.provider === provider)?.sealed_token ?? "";
+          const stored = secrets.find((item) => item.provider === provider);
+          const sealed = stored?.sealed_token ?? "";
+          // A provider whose metrics are read per tenant is connected only through its OAuth token, the same rule the metric sync applies.
           credentials[provider] = await providerCredentialState(sql, {
             organizationId: input.organizationId,
             provider,
             sealed,
             encryptionKey,
             env: process.env,
+            requireOAuth: OAUTH_METRIC_PROVIDERS.includes(provider),
+            expiresAt: stored?.expires_at ? new Date(stored.expires_at).toISOString() : null,
+            hasRefresh: (stored?.sealed_refresh ?? "").trim() !== "",
           });
         }
         connections = CONNECTION_PROVIDERS.map((provider) => {

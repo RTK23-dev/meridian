@@ -1,4 +1,4 @@
-// The telemetry row of a paid call, written in the transaction of its settlement on engine_call_telemetry (migration 0111), against a
+// The telemetry row of a paid call, written in the transaction of its settlement on engine_call_telemetry (migration 0112), against a
 // real database (PGlite through the test helper). No live call: the provider answers from the recorded chat fixture.
 
 import assert from "node:assert/strict";

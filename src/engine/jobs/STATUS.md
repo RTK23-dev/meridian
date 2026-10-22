@@ -1,6 +1,6 @@
 # STATUS: engine jobs and orchestration (W2)
 
-## Call telemetry (migration 0111; branch `telemetry-capture-agent`, 2026-10-22)
+## Call telemetry (migration 0112; branch `telemetry-capture-agent`, 2026-10-22)
 
 - `call-telemetry-sql.ts` (new): the telemetry store for a budget transaction. It writes one `engine_call_telemetry` row under a savepoint,
   so a refused row leaves the settlement in place. A row for another workspace is refused. The rules of the row are in

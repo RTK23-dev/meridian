@@ -18,6 +18,19 @@ import type { WriterText } from "../variants/writer.ts";
 export type ShotSourceKind = "generate" | "stock" | "component" | "asset" | "chain";
 
 /** What the plan stage reports about one shot. The orchestrator plans work from this, not from the plan body. */
+/** A take a reviewer supplied for a shot (D12): its take artifact, the store uri of its media, and what the probe read. */
+export type ReviewerTake = {
+  takeId: string;
+  artifactId: string;
+  uri: string;
+  durationMs: number;
+  width: number;
+  height: number;
+  /** The reviewer's acceptance, as a verdict the take record keeps. A reviewer\'s clip has no check of its own, so the accept is the verdict. */
+  verdict: TakeVerdict;
+  verdictArtifactId: string;
+};
+
 export type ShotSummary = {
   shotId: string;
   visualType: VisualType;
@@ -171,6 +184,8 @@ export type EngineEvent =
       replacement?: ShotSummary | null;
       /** The reviewer's model for this shot's remake (D11), priced and checked against the live catalog. Null: the orchestrator's choice. */
       modelChoice?: ModelChoice | null;
+      /** The reviewer's own clip for this shot (D12), stored as its take. The shot is accepted with it, and no produce job runs. */
+      reviewerTake?: ReviewerTake | null;
     };
 
 export type StageContext = {

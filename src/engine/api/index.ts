@@ -28,7 +28,9 @@ import {
   type ScenePlan,
 } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
-import { readArtifact, writeArtifact } from "../jobs/artifact-store.ts";
+import { mediaKey, readArtifact, writeArtifact, type MediaStorePort } from "../jobs/artifact-store.ts";
+import type { MediaFunctions } from "../media/interface.ts";
+import { takeShapeOf } from "../jobs/handlers/produce-shot.ts";
 import { applyEngineEvent, readEngineRequest, startEngineRequest as startOrchestratorRequest } from "../jobs/orchestrator-sql.ts";
 import { ENGINE_STAGES, type EngineStage } from "../jobs/registry.ts";
 import { sqlLedgerStore, withReservationLedger, withWorkspaceLedger } from "../jobs/sql-ledger-store.ts";
@@ -41,13 +43,15 @@ import type { GoldMetrics } from "../review/gold.ts";
 import { takeReviewItemSchema } from "../review/inbox.ts";
 import { routes } from "../config/routes.ts";
 import { budgets } from "../config/budgets.ts";
-import { reserve } from "../budget/reserve.ts";
+import { committedFor, reserve } from "../budget/reserve.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
 import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
 import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
 import { shotSummaryOf } from "../jobs/handlers/plan.ts";
 import { shotChangeFor, type ShotDecision } from "../review/shot-decision.ts";
 import { modelChoiceSchema as modelChoiceContract, type ModelChoice } from "../contracts/assets.ts";
+import { contentHash } from "../contracts/hash.ts";
+import type { ReviewerTake } from "../jobs/types.ts";
 import { needFor, catalogCallUsd } from "../assets/model-choice.ts";
 import { eligibleCandidates, rejectionOf, type ModelNeed } from "../gateway/catalog-fit.ts";
 import { chosenCallPricesOf, SINGLE_CALL_OUTPUT } from "../plan/model-choices.ts";
@@ -276,6 +280,8 @@ export type RemakeInput = {
   replacement?: ShotReplacement | null;
   /** The reviewer's model for this shot's remake, by its catalog id (D11). Absent: the orchestrator's choice. Generated shots only. */
   modelId?: string | null;
+  /** The reviewer's own clip for this shot (D12). It replaces the shot's source and is accepted as its take. */
+  clip?: ReviewerClipInput | null;
 };
 
 /** A shot's new visual type and source, for a remake that changes what the shot is (D7). The shot keeps its beat, its timing and its layer. */
@@ -285,7 +291,20 @@ export type ShotReplacement = { visualType: VisualType; source: ShotSource };
 export type RemakePorts = {
   monthBudget: WorkspaceBudgetSource;
   catalog?: ModelCatalogSource;
+  /** Probes a clip the reviewer supplies (D12). Absent: a clip is refused. */
+  media?: Pick<MediaFunctions, "probe">;
+  /** Stores a clip the reviewer supplies, as the take's media. Absent: a clip is refused. */
+  objects?: MediaStorePort;
 };
+
+/** The shape a clip must state: its duration and its size, as the probe read them (takeShapeOf). */
+export type ClipShape = { durationMs: number; width: number; height: number };
+
+/**
+ * A clip a reviewer supplies for one shot (D12). The bytes are the file to store. A quote passes the shape alone (bytes null), since the
+ * price does not depend on the file.
+ */
+export type ReviewerClipInput = { shape: ClipShape; bytes: Uint8Array | null };
 
 export type RemakeResult = { status: "queued"; revision: number; reservationId: string } | { status: "refused"; reasons: string[] };
 
@@ -348,12 +367,22 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   const checked = await remakeContextOf(sql, input, ports);
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const { context } = checked;
+  if (context.state.status === "running") return remakeWhileMaking(sql, input, context, directive);
+
+  // A reviewer's clip (D12) is the shot's new source. Its store uri is named before the plan is written, so the plan and the take agree.
+  const clipped = input.clip ? clipPlanOf(input.clip, input, context) : null;
+  if (typeof clipped === "string") return { status: "refused", reasons: [clipped] };
+  const storage = clipped !== null ? (ports ?? (await productionRemakePorts(sql))) : null;
+  if (clipped !== null && (storage?.objects === undefined || storage.media === undefined)) {
+    return { status: "refused", reasons: ["this runtime cannot read or store a clip, so the clip is not used"] };
+  }
+  const replacement = clipped !== null ? clipReplacementOf(context, input.replacement, clipped.uri) : (input.replacement ?? null);
 
   const reservationId = newId("res_");
   let replaced: ReplacedPlan | null = null;
   let modelChoice: ModelChoice | null = null;
   try {
-    replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
+    replaced = replacement ? await replacedPlanOf(sql, context, replacement, clipped !== null) : null;
     const picked = await pickedRemake(sql, context, replaced, input.modelId ?? null);
     modelChoice = picked.modelChoice;
     const chosenPrices = picked.chosenPrices;
@@ -382,6 +411,7 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
   try {
     // A replacement's plan is written before the event that names it, so the event carries the artifact it applies.
     const planArtifactId = replaced === null ? null : (await writeReplacedPlan(sql, input, context, replaced.plan)).artifactId;
+    const reviewerTake = clipped === null || storage?.objects === undefined ? null : await writeReviewerTake(sql, input, clipped, planArtifactId, storage.objects);
     const outcome = await applyEngineEvent(sql, {
       organizationId: input.organizationId,
       requestId: input.requestId,
@@ -394,6 +424,7 @@ export async function remakeEngineShot(sql: Sql, input: RemakeInput, ports?: Rem
         planArtifactId,
         replacement: replaced?.summary ?? null,
         modelChoice,
+        reviewerTake,
       },
       dedupeKey: `remake|${input.requestId}|${input.shotId}|${context.revision}`,
     });
@@ -415,7 +446,7 @@ type ReplacedPlan = { plan: ScenePlan; shot: ScenePlan["shots"][number]; summary
  * The plan with its shot replaced. The shot keeps its id, beat, timing and layer; its visual type and source are the replacement's. Its
  * estimate is priced the way reserve() prices it. Throws when the replacement is not a valid shot or is not one a take makes.
  */
-async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: ShotReplacement): Promise<ReplacedPlan> {
+async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: ShotReplacement, allowAsset = false): Promise<ReplacedPlan> {
   const original = context.plan.shots.find((candidate) => candidate.shotId === context.shot.shotId);
   if (original === undefined) throw new EngineError("invalid_input", "that shot is not in the plan of this video", { stage: "produce_shot" });
   const shot = shotSpecSchema.parse({
@@ -425,8 +456,9 @@ async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: Sho
     downgradeTo: original.downgradeTo === replacement.visualType ? undefined : original.downgradeTo,
   });
   // Only a shot that a take makes can be replaced: the produce path is the one that makes it. Refused before anything is written.
-  if (shot.source.kind !== "generate" && shot.source.kind !== "stock" && shot.source.kind !== "chain") {
-    throw new EngineError("invalid_input", "a replacement must be a shot that a take makes (generate, stock or chain)", { stage: "produce_shot" });
+  const takes = shot.source.kind === "generate" || shot.source.kind === "stock" || shot.source.kind === "chain";
+  if (!takes && !(allowAsset && shot.source.kind === "asset")) {
+    throw new EngineError("invalid_input", "a replacement must be a shot that a take makes (generate, stock or chain), or the reviewer's own clip", { stage: "produce_shot" });
   }
   const draft = scenePlanSchema.parse({ ...context.plan, shots: context.plan.shots.map((candidate) => (candidate.shotId === shot.shotId ? shot : candidate)) });
   const chosenPrices = await chosenPricesFor({ sql, organizationId: context.organizationId, state: context.state, plan: draft, catalog: context.catalog });
@@ -437,6 +469,68 @@ async function replacedPlanOf(sql: Sql, context: RemakeContext, replacement: Sho
     summary: shotSummaryOf(shot),
     chosenPrices,
   };
+}
+
+/**
+ * A change to a shot still being made (D10): its direction and its model, on the video's own reservation. The new call is authorized against
+ * that reservation when it is made, so a change that does not fit pauses the video for budget rather than overrunning it. Its source changes
+ * wait for delivery, when the video's shots are final.
+ */
+async function remakeWhileMaking(sql: Sql, input: RemakeInput, context: RemakeContext, directive: string | null): Promise<RemakeResult> {
+  if (input.replacement || input.clip) {
+    return { status: "refused", reasons: ["A shot's visual type and source change once the video is delivered. While it is being made, its direction and model change."] };
+  }
+  const reservationId = context.state.budgetReservationId;
+  if (!reservationId) return { status: "refused", reasons: ["the video has no budget reservation yet, so the shot cannot be changed until it has one"] };
+  let modelChoice: ModelChoice | null;
+  try {
+    modelChoice = (await pickedRemake(sql, context, null, input.modelId ?? null)).modelChoice;
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+  const changes = (context.state.shots[input.shotId]?.remakes ?? 0) + 1;
+  try {
+    const outcome = await applyEngineEvent(sql, {
+      organizationId: input.organizationId,
+      requestId: input.requestId,
+      event: { type: "remake", shotId: input.shotId, directive, budgetReservationId: reservationId, at: input.now, modelChoice },
+      dedupeKey: `change|${input.requestId}|${input.shotId}|${changes}`,
+    });
+    const current = outcome.applied ? null : await readEngineRequest(sql, input.organizationId, input.requestId);
+    return { status: "queued", revision: current?.state.revision ?? context.state.revision ?? 0, reservationId: current?.state.budgetReservationId ?? reservationId };
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
+}
+
+/** A quote of a change to a shot still being made: its estimate, and whether the video's reservation has room for it (D10). Read only. */
+async function quoteWhileMaking(sql: Sql, input: Omit<RemakeInput, "directive">, context: RemakeContext): Promise<RemakeQuote> {
+  if (input.replacement || input.clip) {
+    return { status: "refused", reasons: ["A shot's visual type and source change once the video is delivered. While it is being made, its direction and model change."] };
+  }
+  const reservationId = context.state.budgetReservationId;
+  if (!reservationId) return { status: "refused", reasons: ["the video has no budget reservation yet, so the shot cannot be changed until it has one"] };
+  try {
+    const picked = await pickedRemake(sql, context, null, input.modelId ?? null);
+    const estimate = estimatePlan({ ...picked.plan, shots: [picked.shot] }, picked.chosenPrices ?? new Map());
+    const { reservedUsd, committedUsd } = await withWorkspaceLedger(sql, input.organizationId, async (store) => ({
+      reservedUsd: (await store.getReservation(reservationId))?.reservedUsd ?? 0,
+      committedUsd: await committedFor(store, reservationId),
+    }));
+    const projected = sumUsd([committedUsd, estimate.estimateUsd]);
+    const reasons = projected > reservedUsd ? [`the change would take the video's reservation to $${projected.toFixed(4)}, above its $${reservedUsd.toFixed(4)}`] : [];
+    return {
+      status: "quoted",
+      revision: context.state.revision ?? 0,
+      estimateUsd: estimate.estimateUsd,
+      reservedUsd: estimate.estimateUsd,
+      redoAllowanceUsd: estimate.redoAllowanceUsd,
+      fits: reasons.length === 0,
+      reasons,
+    };
+  } catch (error) {
+    return { status: "refused", reasons: [messageOf(error)] };
+  }
 }
 
 /** A remake's pricing inputs: the plan and shot it reserves, its chosen prices, and the reviewer's model when one is picked (D11). */
@@ -523,6 +617,101 @@ function priceOfCall(entry: ModelCatalogEntry, durationMs: number): number | nul
   }
 }
 
+/** A clip as the remake plans it: its shape, its bytes (null for a quote), and the ids and store uri its take will have. */
+type ClipPlan = { shape: ClipShape; bytes: Uint8Array | null; artifactId: string; takeId: string; uri: string };
+
+/** A clip's plan, or the reason it does not fit the shot: a clip must cover the shot's length. */
+function clipPlanOf(clip: ReviewerClipInput, input: { organizationId: string; requestId: string }, context: RemakeContext): ClipPlan | string {
+  const span = context.shot.endMs - context.shot.startMs;
+  if (clip.shape.durationMs < span) return `the clip is ${clip.shape.durationMs} ms, shorter than the shot's ${span} ms`;
+  const artifactId = newId("art_");
+  const uri = mediaKey({ workspaceId: input.organizationId, requestId: input.requestId, stage: "produce_shot", artifactId, extension: "mp4" });
+  return { shape: clip.shape, bytes: clip.bytes, artifactId, takeId: newId("take_"), uri };
+}
+
+/** The replacement a clip makes of the shot: the shot keeps its visual type unless the reviewer changed it, and its source is the clip. */
+function clipReplacementOf(context: RemakeContext, replacement: ShotReplacement | null | undefined, uri: string): ShotReplacement {
+  return { visualType: replacement?.visualType ?? context.shot.visualType, source: { kind: "asset", assetUri: uri } };
+}
+
+/** The clip's take, stored with its media, as a take of the request. The reviewer supplied it, so it cost nothing and was checked by no model. */
+async function writeReviewerTake(sql: Sql, input: RemakeInput, clip: ClipPlan, planArtifactId: string | null, objects: MediaStorePort): Promise<ReviewerTake> {
+  if (clip.bytes === null) throw new EngineError("invalid_input", "a clip is stored only for a remake, not for a quote", { stage: "produce_shot" });
+  const rows = (await sql<{ brand_id: string | null }>`
+    select brand_id from engine_requests where id = ${input.requestId} and organization_id = ${input.organizationId} limit 1
+  `) as Array<{ brand_id: string | null }>;
+  const brandId = rows[0]?.brand_id ?? null;
+  if (brandId === null) throw new EngineError("invalid_input", "the request has no brand, so the clip cannot be stored (Bible 5.2)", { stage: "produce_shot" });
+  const take = takeSchema.parse({
+    schema: "meridian.take/v1",
+    takeId: clip.takeId,
+    shotId: input.shotId,
+    attempt: 1,
+    provider: "reviewer",
+    model: "upload",
+    uri: clip.uri,
+    durationMs: clip.shape.durationMs,
+    width: clip.shape.width,
+    height: clip.shape.height,
+    promptHash: contentHash({ reviewerClip: clip.uri }),
+    costUsd: 0,
+    latencyMs: 0,
+  });
+  const takeArtifact = await writeArtifact(sql, {
+    organizationId: input.organizationId,
+    requestId: input.requestId,
+    stage: "produce_shot",
+    type: "take",
+    body: take,
+    parentIds: planArtifactId === null ? [] : [planArtifactId],
+    createdAt: input.now,
+    artifactId: clip.artifactId,
+    media: { store: objects, brandId, extension: "mp4", bytes: clip.bytes },
+  });
+  // The reviewer accepted the clip: that acceptance is the take's verdict, stored as the check stage stores one.
+  const verdict = takeVerdictSchema.parse({ takeId: clip.takeId, pass: true, confidence: 1, checks: [{ rule: "reviewer.accepted", pass: true }], action: "accept" });
+  const verdictArtifact = await writeArtifact(sql, {
+    organizationId: input.organizationId,
+    requestId: input.requestId,
+    stage: "check_take",
+    type: "take_verdict",
+    body: verdict,
+    parentIds: [takeArtifact.artifactId],
+    createdAt: input.now,
+  });
+  return {
+    takeId: clip.takeId,
+    artifactId: takeArtifact.artifactId,
+    uri: clip.uri,
+    durationMs: clip.shape.durationMs,
+    width: clip.shape.width,
+    height: clip.shape.height,
+    verdict,
+    verdictArtifactId: verdictArtifact.artifactId,
+  };
+}
+
+/**
+ * A reviewer's own clip for one shot (D12). The file is probed: it must be an H.264 MP4 with a readable duration and size, and it must cover
+ * the shot. Then the remake runs with the clip as the shot's take, with its own reservation for the fixed lines of the master. A refusal
+ * names its reasons and stores nothing.
+ */
+export async function replaceShotWithClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array<ArrayBuffer>; now: string }, ports?: RemakePorts): Promise<RemakeResult> {
+  const storage = ports ?? (await productionRemakePorts(sql));
+  if (storage.media === undefined || storage.objects === undefined) {
+    return { status: "refused", reasons: ["this runtime cannot read or store a clip"] };
+  }
+  let probe: Awaited<ReturnType<MediaFunctions["probe"]>>;
+  try {
+    probe = await storage.media.probe({ source: { kind: "bytes", bytes: input.bytes } });
+  } catch (error) {
+    return { status: "refused", reasons: [`the clip could not be read: ${messageOf(error)}`] };
+  }
+  const shape = takeShapeOf(probe);
+  if (shape === null) return { status: "refused", reasons: ["the clip must be an H.264 MP4 at the take size, with a readable duration"] };
+  return remakeEngineShot(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, directive: null, now: input.now, clip: { shape, bytes: input.bytes } }, storage);
+}
+
 /** The plan of a replacement, stored as the request's scene plan. Its parent is the plan it replaces, so the record keeps the history. */
 function writeReplacedPlan(sql: Sql, input: RemakeInput, context: RemakeContext, plan: ScenePlan) {
   return writeArtifact(sql, {
@@ -548,8 +737,12 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
   const checked = await remakeContextOf(sql, input, ports);
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   const { context } = checked;
+  if (context.state.status === "running") return quoteWhileMaking(sql, input, context);
   try {
-    const replaced = input.replacement ? await replacedPlanOf(sql, context, input.replacement) : null;
+    const clipped = input.clip ? clipPlanOf(input.clip, input, context) : null;
+    if (typeof clipped === "string") return { status: "refused", reasons: [clipped] };
+    const replacement = clipped !== null ? clipReplacementOf(context, input.replacement, clipped.uri) : (input.replacement ?? null);
+    const replaced = replacement ? await replacedPlanOf(sql, context, replacement, clipped !== null) : null;
     const picked = await pickedRemake(sql, context, replaced, input.modelId ?? null);
     const estimate = estimatePlan({ ...picked.plan, shots: [picked.shot] }, picked.chosenPrices ?? new Map());
     const reasons: string[] = [];
@@ -595,6 +788,21 @@ export async function quoteEngineDecision(sql: Sql, input: DecideInput, ports?: 
   const change = shotChangeFor(checked.context.shot, input.decision);
   if (!change.ok) return { status: "refused", reasons: [change.reason] };
   return quoteEngineShotRemake(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, now: input.now, replacement: change.change, modelId: input.modelId ?? null }, ports);
+}
+
+/** What a reviewer's clip would reserve for one shot, before it is confirmed: the file is probed, and nothing is stored or reserved (D12). */
+export async function quoteEngineClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array<ArrayBuffer>; now: string }, ports?: RemakePorts): Promise<RemakeQuote> {
+  const storage = ports ?? (await productionRemakePorts(sql));
+  if (storage.media === undefined) return { status: "refused", reasons: ["this runtime cannot read a clip"] };
+  let probe: Awaited<ReturnType<MediaFunctions["probe"]>>;
+  try {
+    probe = await storage.media.probe({ source: { kind: "bytes", bytes: input.bytes } });
+  } catch (error) {
+    return { status: "refused", reasons: [`the clip could not be read: ${messageOf(error)}`] };
+  }
+  const shape = takeShapeOf(probe);
+  if (shape === null) return { status: "refused", reasons: ["the clip must be an H.264 MP4 at the take size, with a readable duration"] };
+  return quoteEngineShotRemake(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, now: input.now, clip: { shape, bytes: null } }, storage);
 }
 
 /** The take a shot shows: its accepted take, or else its newest take made in the current plan epoch. Null when the shot has none. */
@@ -652,7 +860,8 @@ async function releaseRemakeReservation(sql: Sql, organizationId: string, reserv
 /** The production ports of a remake: the workspace's monthly budget and the composition's model catalog. */
 export async function productionRemakePorts(sql: Sql): Promise<RemakePorts> {
   const [{ monthBudget }, { productionComposition }] = await Promise.all([productionReadinessPorts(sql), import("../jobs/runtime.ts")]);
-  return { monthBudget, catalog: productionComposition(sql).shotPorts?.catalog };
+  const shot = productionComposition(sql).shotPorts;
+  return { monthBudget, catalog: shot?.catalog, media: shot?.media, objects: shot?.objects };
 }
 
 function messageOf(error: unknown): string {

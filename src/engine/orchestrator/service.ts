@@ -13,9 +13,11 @@
 
 import { estimateFromPriceUsd } from "../claude/rates.ts";
 import { ORCHESTRATOR_PLAN_ESTIMATE_TOKENS, orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
+import { textInputTokensOf } from "./validate.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema, sumUsd, type BudgetReservation } from "../contracts/index.ts";
+import { releaseReservation } from "../budget/reconcile.ts";
 import { newId } from "../contracts/ids.ts";
 import type { RoleDeps } from "../claude/client.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
@@ -89,7 +91,10 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
   }
 
   // The client allows one retry of an answer that fails its contract, and the retry is a second paid call. The hold covers both.
-  const estimateUsd = roundUpUsd(estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, ORCHESTRATOR_PLAN_ESTIMATE_TOKENS));
+  // The plan call's input is the planner's prompt: the brief, and the catalog it is shown. The hold is sized from both (review 2026-10-22, item 2),
+  // so a full catalog is not held as if it were the fixed 8000 tokens it once was. The output is the planner's own maximum.
+  const inputTokens = planInputTokensOf(scope.catalog, brief.data);
+  const estimateUsd = roundUpUsd(estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output }));
   const redoUsd = estimateUsd;
   const heldUsd = sumUsd([estimateUsd, redoUsd]);
   if (heldUsd > stored.budgetUsd) {
@@ -128,6 +133,17 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
   return { ok: true, brief: { ...brief.data }, reservation: reservation.data };
 }
 
+/**
+ * The input tokens a plan call may send: the catalog it is shown (about three characters a token), and the brief, never less than the fixed
+ * estimate. The bound is the larger of the two, so the hold covers the call that is made.
+ */
+export function planInputTokensOf(catalog: Map<string, CatalogEntry>, brief: unknown): number {
+  const catalogTokens = Math.ceil(JSON.stringify([...catalog.values()]).length / 3);
+  return Math.min(PRICING_LIMIT_INPUT, Math.max(ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.input, catalogTokens + textInputTokensOf(brief)));
+}
+
+const PRICING_LIMIT_INPUT = 200_000;
+
 /** The call and what it returns: the hold is written, the model is asked, and its outcome is stored. Runs only while the plan is claimed. */
 async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extract<Checked, { ok: true }>, attempt: Attempt): Promise<PlanDraftOutcome> {
   const { requestId, reservationId, ledger } = attempt;
@@ -144,15 +160,22 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
     now: scope.now,
     journal: sqlRoleCallJournal(scope.sql, { organizationId: scope.organizationId, requestId }),
   };
-  const outcome = await planWithRole({
-    deps,
-    requestId,
-    workspaceId: scope.organizationId,
-    reservationId,
-    orchestrator: { provider: "openrouter", id: stored.orchestratorModel },
-    brief: checked.brief,
-    catalog: scope.catalog,
-  });
+  // The plan's hold is released once the call is over: what was billed is settled on the ledger, and the unused part is given back. A call
+  // that was not billed or settled keeps its hold, so money a provider may have charged is never released as if it were free (review 2026-10-22, item 4).
+  let outcome: Awaited<ReturnType<typeof planWithRole>>;
+  try {
+    outcome = await planWithRole({
+      deps,
+      requestId,
+      workspaceId: scope.organizationId,
+      reservationId,
+      orchestrator: { provider: "openrouter", id: stored.orchestratorModel },
+      brief: checked.brief,
+      catalog: scope.catalog,
+    });
+  } finally {
+    await releaseReservation(attempt.ledger, reservationId).catch(() => undefined);
+  }
 
   await scope.sql`
     update engine_requests set status = ${outcome.ok ? "delivered" : "rejected"}, current_stage = 'plan', updated_at = now()

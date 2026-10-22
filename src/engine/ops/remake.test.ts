@@ -54,7 +54,7 @@ describe("a remade shot of a delivered video, on the engine", () => {
     assert.equal(queuedShot?.status, "pending", "the shot is being made again");
     assert.deepEqual(queuedShot?.directives, [DIRECTION]);
     assert.equal(queuedShot?.remakes, 1);
-    assert.match(queuedShot?.remakeRefusal ?? "", /still being made/, "another remake waits until this revision is delivered");
+    assert.equal(queuedShot?.remakeRefusal, null, "a shot still being made can be changed while the video is made (D10)");
 
     const { takeId, edlId } = await answerRemadeChain(sql, { organizationId: ORG, requestId, shot, ids: ids!, now: NOW });
 

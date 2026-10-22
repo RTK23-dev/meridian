@@ -14,7 +14,7 @@ import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { openRunBudget, releaseRunBudget, type RunBudget } from "./run-budget.ts";
 import { editNode, type NodeChange } from "./stale.ts";
 import { appendPlanEvents, failedHoldsUsd, getPlan, listStepOutputs, putStepOutput, setPlanStatus, updatePlanJson } from "./store.ts";
-import { planBudgetReason, validatePlan } from "./validate.ts";
+import { planBudgetReason, textInputTokensOf, validatePlan } from "./validate.ts";
 
 export type RunOutcome =
   | { status: "not_found" }
@@ -54,7 +54,7 @@ export async function runStoredPlan(
   const overBudget = planBudgetReason(stored.plan.budgetUsd, stored.budgetUsd);
   if (overBudget !== null) return { status: "not_runnable", reasons: [overBudget] };
 
-  const checked = validatePlan(stored.plan, opts.catalog);
+  const checked = validatePlan(stored.plan, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief) });
   if (!checked.ok) return { status: "not_runnable", reasons: checked.reasons };
   if (!(await claimRun(sql, opts.organizationId, opts.planId))) return { status: "not_runnable", reasons: ["the plan is already running"] };
 
@@ -155,7 +155,7 @@ export async function editStoredPlan(
   } catch (error) {
     return { status: "refused", reasons: [error instanceof Error ? error.message : "the edit could not be applied"] };
   }
-  const checked = validatePlan(next, opts.catalog);
+  const checked = validatePlan(next, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief) });
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   // The write is refused by the store when a run has started since the read above, so an edit never clears a run in progress.
   const saved = await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan);

@@ -1,6 +1,6 @@
 # Gateway status
 
-## Call telemetry (migration 0111; branch `telemetry-capture-agent`, 2026-10-22)
+## Call telemetry (migration 0112; branch `telemetry-capture-agent`, 2026-10-22)
 
 What each paid call's provider request measured goes to `engine_call_telemetry`, one row per ledger entry. The ledger stays the money
 record: no entry is written or settled differently.
