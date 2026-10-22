@@ -132,9 +132,9 @@ describe("Content Factory sessions", () => {
   test("a shot is remade only by an admin of the session's workspace, and only once the video exists; before that the refusal says so", async () => {
     const shot = "shot_01M4T7V8BR00000000000AFP71";
     const created = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Remake" });
-    await assert.rejects(remakeShot(db.sql, MEMBER, { sessionId: created.id, shotId: shot, directive: null }), { message: ADMIN_REFUSAL });
-    await assert.rejects(remakeShot(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot, directive: null }), { message: SESSION_REFUSAL });
-    assert.deepEqual(await remakeShot(db.sql, ADMIN, { sessionId: created.id, shotId: shot, directive: "close up" }), {
+    await assert.rejects(remakeShot(db.sql, MEMBER, { sessionId: created.id, shotId: shot, directive: null, modelId: null }), { message: ADMIN_REFUSAL });
+    await assert.rejects(remakeShot(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot, directive: null, modelId: null }), { message: SESSION_REFUSAL });
+    assert.deepEqual(await remakeShot(db.sql, ADMIN, { sessionId: created.id, shotId: shot, directive: "close up", modelId: null }), {
       status: "refused",
       reasons: ["This session has no video yet. Make the video first."],
     });
@@ -144,7 +144,7 @@ describe("Content Factory sessions", () => {
     const shot = "shot_01M4T7V8BR00000000000AFP71";
     const created = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Take" });
     await assert.rejects(shotTakeOf(db.sql, MEMBER, { sessionId: created.id, shotId: shot }), { message: ADMIN_REFUSAL });
-    await assert.rejects(shotRemakeQuote(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot }), { message: SESSION_REFUSAL });
+    await assert.rejects(shotRemakeQuote(db.sql, OTHER_ADMIN, { sessionId: created.id, shotId: shot, modelId: null }), { message: SESSION_REFUSAL });
     const signed: string[] = [];
     const signer = {
       sign: async (_organizationId: string, key: string) => {
@@ -157,7 +157,7 @@ describe("Content Factory sessions", () => {
       reason: "This session has no video yet.",
     });
     assert.deepEqual(signed, [], "nothing is signed for a session with no video");
-    assert.deepEqual(await shotRemakeQuote(db.sql, ADMIN, { sessionId: created.id, shotId: shot }), {
+    assert.deepEqual(await shotRemakeQuote(db.sql, ADMIN, { sessionId: created.id, shotId: shot, modelId: null }), {
       status: "refused",
       reasons: ["This session has no video yet. Make the video first."],
     });

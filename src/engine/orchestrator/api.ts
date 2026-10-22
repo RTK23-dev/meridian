@@ -88,6 +88,7 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
         productionHandlers({
           organizationId: input.organizationId,
           planId: input.planId,
+          requestId: budget.requestId,
           reservationId: budget.reservationId,
           ledger: budget.ledger,
           now: input.now,

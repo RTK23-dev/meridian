@@ -4,6 +4,29 @@
 
 Nothing yet.
 
+## 0.1.0-beta.15 — prerelease
+
+The cost and time record for paid engine calls, a bound on how often held bills are read, the 2026-10-22 review fixes from main, and the orchestrator's text steps. Tests use fixtures. No live provider call is recorded in this release. The owner's live check of the OpenRouter bill field and the token figures is still to run.
+
+**Upgrade notes.** Three migrations are new since 0.1.0-beta.14: `0110_orchestrator_step_body.sql` (`orchestrator_step_outputs.body`, so a downstream step reads the content an upstream step produced), `0111_provider_token_expiry.sql` (`provider_secrets.expires_at`; a token with no stated expiry keeps null and is not treated as expired) and `0112_engine_call_telemetry.sql` (`engine_call_telemetry` and `engine_bill_reads`, both additive). No new packages.
+
+- **Cost and time per call.** Each paid call writes one telemetry row in the same transaction as its ledger settlement: its tokens, latency, generation id and the cost its response reported. If that row fails, it rolls back to a savepoint and the settlement stands. No extra OpenRouter request is made.
+- **Held bills are read a bounded number of times.** A held call's bill is read at most five times, 15 minutes, 1 hour, 4 hours and 12 hours apart. A call with no provider reference is not read. Overlapping runs cannot read the same call twice. Before this, a bill that never arrived was read every 15 minutes, indefinitely.
+- **Orchestrator.** Plan, run and step edits need an admin, on the server and in the UI. A plan's spend counts every stored output, and a paid step records what it was charged. A run takes one budget reservation and releases what it does not spend. Text steps (reference, analysis, script) run. Visual and voice steps make their asset through the run's asset router; that path is covered by fixtures and no live call has run. Video, avatar, edit, compose and render are not connected, and they say so. Decisions made on the owner's behalf are in `docs/engine/run/DECISIONS_2026-10-22.md`.
+- **Content Factory board.** Each shot shows its take as a 15-minute link, or says in words why there is none. A remake is quoted before it is confirmed, and the quote writes nothing. A reviewer can edit a generated shot's prompt, change a shot to cinematic or to stock footage, or pick a model for a generated shot. Each change is quoted, runs as a remake with its own reservation, and is limited to admins. A remake can replace one shot's visual type and source; any other visual type is refused, not guessed. A reviewer can also upload a clip for one shot. The file is probed and quoted before anything is stored. It must be an H.264 MP4 at the take size that covers the shot, and it becomes that shot's take with no model call.
+- **Provider status.** The most recent probe decides, so a failure after an earlier success reads FAILED. A saved credential that cannot be used is a failed probe with its reason. A failed read of stored connections reports FAILED with the kind of error. The unused environment-token `providers` field is gone from system status.
+- **Content Factory.** Search in the source picker no longer sends the composer's message. The script and model-choice cards show the right stages. File, message and source writes check the draft status in the same transaction. An ISO file counts as video only when its brand is MP4 or QuickTime.
+- **Provider requests.** Provider redirects are refused, so a provider key is never sent to a redirect target. Live-priced estimates round up to four decimals, the ledger's precision.
+- **Tests.** The deprecated-model fixture's shutdown date is in 2030, so it reads DEPRECATED on any date.
+
+**Known issues.**
+- The OpenRouter generation-stats bill field and the token and cost figures are not confirmed against a live call. Run a few small calls and compare them with OpenRouter's dashboard.
+- Video poll costs are not in the telemetry rows. They settle in the asset stages.
+- The cost and time report and dashboard are not built. The existing Usage & cost screen still reads the older model-run data.
+- The pull-request line's engine (contracts v5, its own billing) is not in main. It stays on GitHub as separate branches.
+- Content Factory's remaining open items are listed in `docs/engine/CONTENT_FACTORY_STATE_2026-10-18.md`, section 7.
+- Credentials are not yet in one API and hub.
+
 ## 0.1.0-beta.14 — prerelease
 
 The Katana redesign's first waves, the connection-state fix, and the Create progress model, with the Content Factory work listed below. Tests use fixtures. No live provider call or live video run is recorded in this release.
@@ -20,6 +43,7 @@ The Katana redesign's first waves, the connection-state fix, and the Create prog
 - **Performance accounts.** Google Ads sync reads the brand's `google_ads` account. TikTok sync reads `tiktok_ads`. A TikTok creator profile is not sent as an advertiser id.
 - **Organic observations.** A measurement key is stored on the row (migration `0107`). Two syncs cannot insert that measurement twice.
 - **Rate limits.** A shared Postgres window gives up after 10 seconds if the database does not answer.
+- **Status.** The system status no longer reports provider tokens found in the environment. Its unused `providers` field is removed.
 
 **Known issues.**
 

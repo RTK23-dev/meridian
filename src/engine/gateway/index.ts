@@ -5,7 +5,19 @@ export { DEFAULT_PROVIDERS, PROVIDER_IDS, isProviderId, type ProviderId, type Pr
 export { Gateway, createGateway, type GatewayCall, type GatewayOptions, type GatewayResult, type ResolvedRoute } from "./gateway.ts";
 export { bodyText, httpError, jsonBody } from "./errors.ts";
 export { openRouterGenerationBill, type GenerationBill } from "./generation.ts";
-export { paidCall, type PaidCallInput, type PaidCallOutcome, type PaidRun } from "./paid.ts";
+export { paidCall, type BudgetStore, type LockableLedger, type PaidCallInput, type PaidCallOutcome, type PaidRun } from "./paid.ts";
+export {
+  callTelemetryOf,
+  keepCallTelemetry,
+  newProbe,
+  probeRequests,
+  usdUpToFour,
+  type CallTelemetry,
+  type CallTelemetryRecord,
+  type CallTelemetryStore,
+  type RequestProbe,
+  type RequestSample,
+} from "./telemetry.ts";
 export {
   StructuredOutputError,
   jsonSchemaFor,

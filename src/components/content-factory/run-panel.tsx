@@ -5,6 +5,7 @@ import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState
 import { PlainErrorState } from "@/components/plain-error";
 import { reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
 import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
+import { MAX_MESSAGE_CHARS } from "@/lib/meridian/content-factory/model";
 import type { RunView } from "@/lib/meridian/content-factory/service";
 import { FlowBoard } from "./run-board";
 import { STATUS_LABELS } from "./status";

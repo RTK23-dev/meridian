@@ -41,6 +41,7 @@ function depsWith(ledger: LedgerStore, extra: Partial<ProductionDeps> = {}): Pro
   return {
     organizationId: ORG,
     planId: "plan_1",
+    requestId: REQ,
     reservationId: RES,
     ledger,
     now: () => CREATED,

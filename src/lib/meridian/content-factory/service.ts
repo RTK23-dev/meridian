@@ -652,7 +652,7 @@ export async function shotTakeOf(sql: Sql, userId: string, input: { sessionId: s
  * A reviewer's own clip for one shot of the session's video (D12). The file is probed and must be an H.264 MP4 at the take size that covers
  * the shot. The remake runs with the clip as the shot's take: no model is called for it. Admin of the session's workspace only.
  */
-export async function shotClip(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array }, ports?: RemakePorts): Promise<RemakeOutcome> {
+export async function shotClip(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array<ArrayBuffer> }, ports?: RemakePorts): Promise<RemakeOutcome> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };
@@ -671,7 +671,7 @@ export async function shotClip(sql: Sql, userId: string, input: { sessionId: str
 }
 
 /** What a reviewer's clip would reserve for one shot, before it is confirmed. Read only. */
-export async function shotClipQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array }, ports?: RemakePorts): Promise<RemakeQuote> {
+export async function shotClipQuote(sql: Sql, userId: string, input: { sessionId: string; shotId: string; bytes: Uint8Array<ArrayBuffer> }, ports?: RemakePorts): Promise<RemakeQuote> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reasons: ["This session has no video yet. Make the video first."] };

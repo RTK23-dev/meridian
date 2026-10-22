@@ -52,8 +52,8 @@ import { shotChangeFor, type ShotDecision } from "../review/shot-decision.ts";
 import { modelChoiceSchema as modelChoiceContract, type ModelChoice } from "../contracts/assets.ts";
 import { contentHash } from "../contracts/hash.ts";
 import type { ReviewerTake } from "../jobs/types.ts";
-import { needFor, catalogCallUsd, type ModelNeed } from "../assets/model-choice.ts";
-import { eligibleCandidates, rejectionOf } from "../gateway/catalog-fit.ts";
+import { needFor, catalogCallUsd } from "../assets/model-choice.ts";
+import { eligibleCandidates, rejectionOf, type ModelNeed } from "../gateway/catalog-fit.ts";
 import { chosenCallPricesOf, SINGLE_CALL_OUTPUT } from "../plan/model-choices.ts";
 import type { ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ShotSummary } from "../jobs/types.ts";
@@ -696,7 +696,7 @@ async function writeReviewerTake(sql: Sql, input: RemakeInput, clip: ClipPlan, p
  * the shot. Then the remake runs with the clip as the shot's take, with its own reservation for the fixed lines of the master. A refusal
  * names its reasons and stores nothing.
  */
-export async function replaceShotWithClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array; now: string }, ports?: RemakePorts): Promise<RemakeResult> {
+export async function replaceShotWithClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array<ArrayBuffer>; now: string }, ports?: RemakePorts): Promise<RemakeResult> {
   const storage = ports ?? (await productionRemakePorts(sql));
   if (storage.media === undefined || storage.objects === undefined) {
     return { status: "refused", reasons: ["this runtime cannot read or store a clip"] };
@@ -791,7 +791,7 @@ export async function quoteEngineDecision(sql: Sql, input: DecideInput, ports?: 
 }
 
 /** What a reviewer's clip would reserve for one shot, before it is confirmed: the file is probed, and nothing is stored or reserved (D12). */
-export async function quoteEngineClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array; now: string }, ports?: RemakePorts): Promise<RemakeQuote> {
+export async function quoteEngineClip(sql: Sql, input: { organizationId: string; requestId: string; shotId: string; bytes: Uint8Array<ArrayBuffer>; now: string }, ports?: RemakePorts): Promise<RemakeQuote> {
   const storage = ports ?? (await productionRemakePorts(sql));
   if (storage.media === undefined) return { status: "refused", reasons: ["this runtime cannot read a clip"] };
   let probe: Awaited<ReturnType<MediaFunctions["probe"]>>;

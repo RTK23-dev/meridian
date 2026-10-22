@@ -82,7 +82,7 @@ export const remakeContentFactoryShot = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => remakeShot(await getSql(), context.userId, data));
 
 /** The base64 of a reviewer's clip, decoded here so the engine receives bytes. */
-function clipBytes(base64: string): Uint8Array {
+function clipBytes(base64: string): Uint8Array<ArrayBuffer> {
   return new Uint8Array(Buffer.from(base64, "base64"));
 }
 
