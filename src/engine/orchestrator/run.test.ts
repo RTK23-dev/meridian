@@ -88,7 +88,8 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
   });
 
   test("after one edit, only the edited step and what reads it run again; the rest are reused", async () => {
-    await storedReadyPlan("plan_run_edit");
+    // A larger budget than the example's: the first run's spend and the edited shot must both fit.
+    await storedReadyPlan("plan_run_edit", { ...examplePlan, budgetUsd: 5 });
     await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_edit", catalog, handlers: standIn([]) });
     const edit = await editStoredPlan(db.sql, {
       organizationId: ORG,
@@ -105,6 +106,24 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
     assert.deepEqual([...calls].sort(), ["compose", "edit", "render", "shot_1"]);
     for (const event of outcome.events) if (event.state === "cache_hit") events.push(event.nodeId);
     assert.deepEqual([...events].sort(), ["analyze_ref", "brand", "hero_still", "ref_viral", "script", "voice"]);
+  });
+
+  test("a re-run after an edit counts the money the earlier run already spent, so it pauses before an overrun", async () => {
+    await storedReadyPlan("plan_run_edit_budget");
+    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_edit_budget", catalog, handlers: standIn([]) });
+    const edit = await editStoredPlan(db.sql, {
+      organizationId: ORG,
+      planId: "plan_run_edit_budget",
+      catalog,
+      nodeId: "shot_1",
+      change: { params: { seconds: 6, aspect: "9:16", resolution: "1080p" } },
+    });
+    assert.equal(edit.status, "edited");
+    const calls: string[] = [];
+    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_edit_budget", catalog, handlers: standIn(calls) });
+    // The first run's spend stays spent: it is counted with the re-run of the shot, which would take the plan past its $2 budget.
+    assert.equal(outcome.status, "paused");
+    assert.equal(calls.includes("shot_1"), false, "the paused shot is not called");
   });
 
   test("an edit the engine refuses changes nothing: the plan is the same, and the reasons are given", async () => {

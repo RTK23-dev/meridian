@@ -263,6 +263,9 @@ describe("Content Factory sessions", () => {
   });
 
   test("a session with no reference video is refused at the start with the schema's reason, and nothing is started", async () => {
+    // Counted before and after: an earlier test in this workspace starts a request of its own.
+    const countRequests = async () => (await db.sql<{ n: number }>`select count(*)::int as n from engine_requests where organization_id = ${WS}`)[0]?.n ?? 0;
+    const requestsBefore = await countRequests();
     const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "No reference" });
     await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "A reel for our blender, with the pacing of a saved reel.", beatRole: null });
     const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: memoryStore() });
@@ -278,8 +281,7 @@ describe("Content Factory sessions", () => {
     const stored = await getSession(db.sql, ADMIN, { sessionId: session.id });
     assert.equal(stored.status, "draft");
     assert.ok(stored.lastRefusal.includes(problemWords("format.referenceVideo")), "the refusal is kept on the session");
-    const requests = await db.sql<{ n: number }>`select count(*)::int as n from engine_requests where organization_id = ${WS}`;
-    assert.equal(requests[0]?.n, 0);
+    assert.equal(await countRequests(), requestsBefore, "no engine request was created by this refused start");
   });
 
   test("a complete session starts one engine request, unless the engine is not connected; then it takes no more changes", async () => {

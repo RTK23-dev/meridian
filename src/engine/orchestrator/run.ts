@@ -7,7 +7,6 @@
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { CatalogEntry } from "./catalog.ts";
 import type { NodeEvent, OrchestratorPlan } from "./contracts.ts";
-import { cacheKeys } from "./dirty.ts";
 import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { editNode, type NodeChange } from "./stale.ts";
 import { appendPlanEvents, getPlan, listStepOutputs, putStepOutput, setPlanStatus, updatePlanJson } from "./store.ts";
@@ -50,16 +49,11 @@ export async function runStoredPlan(
   let settled = false;
   try {
     const persisted = await listStepOutputs(sql, opts.organizationId, opts.planId);
-    const keys = cacheKeys(checked.plan, checked.order);
 
-    // What the plan has spent so far: each step whose current output is stored is charged its actual cost, or its estimate when none was reported.
+    // What the plan has spent so far: every stored output of the plan, including outputs of steps an edit has since changed. Money spent on
+    // an earlier version of a step is still spent, so the budget counts it. A paid output carries its charged cost (execute.ts).
     let spentSoFar = 0;
-    const byId = new Map(checked.plan.nodes.map((node) => [node.id, node]));
-    for (const id of checked.order) {
-      const output = persisted.get(keys.get(id) ?? "");
-      if (output === undefined) continue;
-      spentSoFar += output.costUsd ?? byId.get(id)?.estimateUsd ?? 0;
-    }
+    for (const output of persisted.values()) spentSoFar += output.costUsd ?? 0;
 
     const cache: RunCache = new Map(persisted);
     const before = new Set(cache.keys());

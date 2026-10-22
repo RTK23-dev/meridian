@@ -106,10 +106,12 @@ export async function runPlan(opts: {
         set(id, "failed", null, null, "the step reported an unusable cost");
         continue;
       }
-      cache.set(key, output);
+      // A paid step keeps its charged cost on the stored output, so a later run can total the plan's spend from its stored outputs alone.
+      const charged = paidKind ? (reported ?? estimate) : reported;
+      cache.set(key, { ...output, costUsd: charged });
       outputs.set(id, output.outputHash);
-      spent += reported ?? estimate;
-      set(id, "done", output.outputHash, reported, null);
+      spent += charged ?? 0;
+      set(id, "done", output.outputHash, charged, null);
     } catch (error) {
       // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error.
       if (paidKind) spent += estimate;

@@ -1,6 +1,7 @@
 import type { NodeEvent } from "../contracts.ts";
 
 // The recorded example run, written by recordedExampleRun() (example.ts). A test recomputes the run and fails if this differs.
+// Regenerated 2026-10-22: a paid step's done event carries its charged cost (its reported cost, or its estimate when none was reported).
 
 export const exampleEvents: NodeEvent[] = [
   {
@@ -112,7 +113,7 @@ export const exampleEvents: NodeEvent[] = [
     "nodeId": "analyze_ref",
     "state": "done",
     "outputHash": "sha256:5ec05ce0ef7743d533f3a977ab7d9001de363aa05f62d596c5b2a3e86c02aff5",
-    "costUsd": null,
+    "costUsd": 0.0015999999999999999,
     "reason": null
   },
   {
@@ -126,7 +127,7 @@ export const exampleEvents: NodeEvent[] = [
     "nodeId": "script",
     "state": "done",
     "outputHash": "sha256:0bc5d43bd475bec3645078418ef372da1e64cc2ce33465e285ad14c9080eb1ef",
-    "costUsd": null,
+    "costUsd": 0.064,
     "reason": null
   },
   {
@@ -140,7 +141,7 @@ export const exampleEvents: NodeEvent[] = [
     "nodeId": "hero_still",
     "state": "done",
     "outputHash": "sha256:66f791f4ebaab33aaf4a72707e6f1920eb7688fb9bbf19af10f48f4e09263e09",
-    "costUsd": null,
+    "costUsd": 0.003,
     "reason": null
   },
   {
@@ -154,7 +155,7 @@ export const exampleEvents: NodeEvent[] = [
     "nodeId": "voice",
     "state": "done",
     "outputHash": "sha256:35ede0c1bbdf971f97931b75d048aaab4e50ae8fcf87c99b22fe590796612a11",
-    "costUsd": null,
+    "costUsd": 0.016,
     "reason": null
   },
   {
@@ -168,7 +169,7 @@ export const exampleEvents: NodeEvent[] = [
     "nodeId": "shot_1",
     "state": "done",
     "outputHash": "sha256:1b5198007639ad2925448ef84b12f2c28529f8634382b5bcd4e2b3cba590c160",
-    "costUsd": null,
+    "costUsd": 1,
     "reason": null
   },
   {
