@@ -369,3 +369,30 @@ export const silenceResultSchema = z
     { message: "longestMs is the longest silence, 0 when none, and null with no audio stream" },
   );
 export type SilenceResult = z.infer<typeof silenceResultSchema>;
+
+// --- splice (the surgical re-render joins trimmed spans) ---------------------------------------------------------------------------------
+
+/** Most segments one splice joins. A master and one re-rendered window is two or three; the bound leaves room for a long plan. */
+export const SPLICE_MAX_SEGMENTS = 40;
+
+export const spliceSegmentSchema = z
+  .strictObject({
+    source: mediaSourceSchema,
+    inMs: z.int().nonnegative(),
+    outMs: z.int().nonnegative(),
+  })
+  .refine((segment) => segment.outMs > segment.inMs, { message: "a segment ends after it starts" });
+
+export const spliceRequestSchema = z.strictObject({
+  segments: z.array(spliceSegmentSchema).min(1).max(SPLICE_MAX_SEGMENTS),
+});
+export type SpliceRequest = z.infer<typeof spliceRequestSchema>;
+
+/** The joined MP4, as base64. durationMs is the sum of the segments as requested; it is not a length measured from the output. */
+export const spliceResultSchema = z.strictObject({
+  mediaType: z.literal("video/mp4"),
+  base64: z.string().min(1),
+  durationMs: z.int().positive(),
+});
+export type SpliceResult = z.infer<typeof spliceResultSchema>;
+

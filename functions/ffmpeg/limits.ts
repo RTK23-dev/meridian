@@ -37,6 +37,7 @@ export const FFMPEG_LIMITS = {
     flicker: 90_000,
     motion: 90_000,
     silence: 60_000,
+    splice: 300_000,
     version: 10_000,
   },
   /** Characters of tool stderr kept in an error message. */

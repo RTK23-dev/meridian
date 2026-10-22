@@ -11,6 +11,7 @@ import * as frames from "./frames.ts";
 import * as loudness from "./loudness.ts";
 import * as picture from "./picture.ts";
 import * as probe from "./probe.ts";
+import * as splice from "./splice.ts";
 import * as timeline from "./timeline.ts";
 import type { UrlPolicy } from "./source.ts";
 import {
@@ -21,12 +22,14 @@ import {
   wirePictureRequestSchema,
   wireProbeRequestSchema,
   framesToWire,
+  wireSpliceRequestSchema,
   type WireFramesResult,
 } from "./wire.ts";
 import {
   parseInput,
   type BlackFramesResult,
   type CutsResult,
+  type SpliceResult,
   type FlickerResult,
   type LoudnessResult,
   type MotionResult,
@@ -151,6 +154,16 @@ const ROUTES: Record<string, Route> = {
     const input = parseInput(wirePictureRequestSchema, body, "media.http");
     const result: PictureResult = await picture.run(
       { source: sourceFromWire(input.source), cutsMs: input.cutsMs },
+      options,
+    );
+    return result;
+  },
+  "/splice": async (body, options) => {
+    const input = parseInput(wireSpliceRequestSchema, body, "media.http");
+    const result: SpliceResult = await splice.run(
+      {
+        segments: input.segments.map((segment) => ({ source: sourceFromWire(segment.source), inMs: segment.inMs, outMs: segment.outMs })),
+      },
       options,
     );
     return result;

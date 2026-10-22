@@ -9,6 +9,7 @@ import {
   sceneScoreSchema,
   MAX_FRAMES_PER_CALL,
   MAX_PICTURE_CUTS,
+  SPLICE_MAX_SEGMENTS,
   type FramesResult,
   type MediaSource,
 } from "./types.ts";
@@ -89,3 +90,17 @@ export function framesToWire(result: FramesResult): WireFramesResult {
     })),
   };
 }
+
+/** The splice request over HTTP: each segment's source is a wire source, so the bytes travel as base64 like every other call. */
+export const wireSpliceRequestSchema = z.strictObject({
+  segments: z
+    .array(
+      z
+        .strictObject({ source: wireSourceSchema, inMs: z.int().nonnegative(), outMs: z.int().nonnegative() })
+        .refine((segment) => segment.outMs > segment.inMs, { message: "a segment ends after it starts" }),
+    )
+    .min(1)
+    .max(SPLICE_MAX_SEGMENTS),
+});
+export type WireSpliceRequest = z.infer<typeof wireSpliceRequestSchema>;
+

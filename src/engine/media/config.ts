@@ -28,6 +28,7 @@ export const mediaConfig = {
     flicker: 200_000,
     motion: 200_000,
     silence: 140_000,
+    splice: 340_000,
   },
 
   /** Validation limits for speech-to-text output (untrusted, Bible 2 and 6.3). */
