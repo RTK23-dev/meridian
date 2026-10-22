@@ -62,7 +62,20 @@ export const OAUTH_METRIC_PROVIDERS: readonly string[] = ["meta", "tiktok", "goo
 
 export async function providerCredentialState(
   sql: Sql,
-  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv; requireOAuth?: boolean },
+  input: {
+    organizationId: string;
+    provider: string;
+    sealed: string;
+    encryptionKey: string;
+    env?: CredentialEnv;
+    requireOAuth?: boolean;
+    /** When the stored access token expires (ISO), or null when the provider stated none. */
+    expiresAt?: string | null;
+    /** Whether a refresh token is stored, so an expired access token can be renewed. */
+    hasRefresh?: boolean;
+    /** The time the state is read (ISO). Defaults to now. */
+    now?: string;
+  },
 ): Promise<ProviderCredentialState> {
   try {
     if (input.requireOAuth === true && !input.sealed.trim()) {
@@ -71,6 +84,10 @@ export async function providerCredentialState(
     if (input.sealed.trim()) {
       const opened = openAccessToken({ sealed: input.sealed, key: input.encryptionKey });
       if ("error" in opened) return { state: "unusable", reason: opened.error };
+      // An access token past its stated expiry is not usable. With a refresh token it is renewed on use; without one, the workspace must connect again.
+      if (input.expiresAt && Date.parse(input.expiresAt) <= Date.parse(input.now ?? new Date().toISOString()) && input.hasRefresh !== true) {
+        return { state: "unusable", reason: "The access token has expired and no refresh token is stored. Connect the provider again. Nothing was sent." };
+      }
       return { state: "usable", reason: "The stored access token can be opened." };
     }
     const category = SAVED_KEY_CATEGORY[input.provider];

@@ -35,12 +35,15 @@ export const Route = createFileRoute("/api/oauth/callback")({
         if (typeof sealed !== "string") return new Response(sealed.error, { status: 500 });
         const sealedRefresh = exchanged.refreshToken ? sealSecret(exchanged.refreshToken, process.env.TOKEN_ENCRYPTION_KEY ?? "") : "";
         if (typeof sealedRefresh !== "string") return new Response(sealedRefresh.error, { status: 500 });
+        // The token's expiry is kept when the provider states one, so a token that has passed it is not reported as usable (review 2026-10-22, item 6).
+        const expiresAt = exchanged.expiresIn === null ? null : new Date(Date.now() + exchanged.expiresIn * 1000).toISOString();
         await sql`
-          insert into provider_secrets (id, organization_id, provider, sealed_token, sealed_refresh)
-          values (${crypto.randomUUID()}, ${match.organizationId}, ${provider}, ${sealed}, ${sealedRefresh})
+          insert into provider_secrets (id, organization_id, provider, sealed_token, sealed_refresh, expires_at)
+          values (${crypto.randomUUID()}, ${match.organizationId}, ${provider}, ${sealed}, ${sealedRefresh}, ${expiresAt})
           on conflict (organization_id, provider) do update set
             sealed_token = excluded.sealed_token,
             sealed_refresh = excluded.sealed_refresh,
+            expires_at = excluded.expires_at,
             updated_at = now()
         `;
         return new Response(null, { status: 302, headers: { location: oauthReturnPath(match.returnPath) } });

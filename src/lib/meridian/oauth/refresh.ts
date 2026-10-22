@@ -40,8 +40,9 @@ export const refreshStoredToken = createServerFn({ method: "POST" })
     if (typeof next !== "string" || typeof nextRefresh !== "string") {
       return { status: "failed" as const, detail: "TOKEN_ENCRYPTION_KEY is not configured. The token was not replaced." };
     }
+    const expiresAt = refreshed.expiresIn === null ? null : new Date(Date.now() + refreshed.expiresIn * 1000).toISOString();
     await sql`
-      update provider_secrets set sealed_token = ${next}, sealed_refresh = ${nextRefresh}, updated_at = now()
+      update provider_secrets set sealed_token = ${next}, sealed_refresh = ${nextRefresh}, expires_at = ${expiresAt}, updated_at = now()
       where organization_id = ${data.organizationId} and provider = ${data.provider}
     `;
     return { status: "rotated" as const, detail: "The provider returned a new access token. It is stored sealed and is not shown here." };

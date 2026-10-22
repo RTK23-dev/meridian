@@ -79,13 +79,14 @@ export const getSystemStatus = createServerFn({ method: "POST" })
           `;
           // The sealed tokens of this workspace only. Each provider's credential state comes from providerCredentialState, so no
           // environment variable can make a provider connected.
-          const secrets = await sql<{ provider: string; sealed_token: string }>`
-            select provider, sealed_token from provider_secrets where organization_id = ${data.organizationId}
+          const secrets = await sql<{ provider: string; sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+            select provider, sealed_token, sealed_refresh, expires_at from provider_secrets where organization_id = ${data.organizationId}
           `;
           const encryptionKey = process.env.TOKEN_ENCRYPTION_KEY ?? "";
           const credentials: Record<string, ProviderCredentialState> = {};
           for (const provider of CONNECTION_PROVIDERS) {
-            const sealed = secrets.find((item) => item.provider === provider)?.sealed_token ?? "";
+            const stored = secrets.find((item) => item.provider === provider);
+            const sealed = stored?.sealed_token ?? "";
             // A provider whose metrics are read per tenant is connected only through its OAuth token, the same rule the metric sync applies.
             credentials[provider] = await providerCredentialState(sql, {
               organizationId: data.organizationId,
@@ -94,6 +95,8 @@ export const getSystemStatus = createServerFn({ method: "POST" })
               encryptionKey,
               env: process.env,
               requireOAuth: OAUTH_METRIC_PROVIDERS.includes(provider),
+              expiresAt: stored?.expires_at ? new Date(stored.expires_at).toISOString() : null,
+              hasRefresh: (stored?.sealed_refresh ?? "").trim() !== "",
             });
           }
           connections = CONNECTION_PROVIDERS.map((provider) => {
