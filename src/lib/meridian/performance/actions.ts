@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
-import { providerCredentialState } from "../providers/access-token.ts";
+import { OAUTH_METRIC_PROVIDERS, providerCredentialState } from "../providers/access-token.ts";
 import { phaseForStoredConnection, type LiveProvider } from "../providers/live.ts";
 import { planPerformanceSchedule } from "./schedule.ts";
 import { validatePerformanceOwnership } from "./ownership.ts";
@@ -100,6 +100,7 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
       sealed: secrets[0]?.sealed_token ?? "",
       encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
       env: process.env,
+      requireOAuth: OAUTH_METRIC_PROVIDERS.includes(data.provider),
     });
     const row = connections[0];
     const phase = phaseForStoredConnection({

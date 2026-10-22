@@ -54,11 +54,20 @@ const UNCHECKED_REASON = "The stored credential could not be checked. Nothing wa
  * sealed token, the saved key's state comes from resolveCredential. An opened token is dropped here. A thrown error is unusable
  * with a fixed message, and nothing from the error is returned.
  */
+/**
+ * The providers whose performance is read per tenant: their metric sync checks the ownership of each account with the workspace's own OAuth
+ * token (performance/ownership.ts). A saved key is not enough for them, so the status must say so too (review 2026-10-22, item 5).
+ */
+export const OAUTH_METRIC_PROVIDERS: readonly string[] = ["meta", "tiktok", "google"];
+
 export async function providerCredentialState(
   sql: Sql,
-  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv },
+  input: { organizationId: string; provider: string; sealed: string; encryptionKey: string; env?: CredentialEnv; requireOAuth?: boolean },
 ): Promise<ProviderCredentialState> {
   try {
+    if (input.requireOAuth === true && !input.sealed.trim()) {
+      return { state: "unusable", reason: "Metric sync needs the workspace's OAuth connection; a saved key is not enough, so nothing was read." };
+    }
     if (input.sealed.trim()) {
       const opened = openAccessToken({ sealed: input.sealed, key: input.encryptionKey });
       if ("error" in opened) return { state: "unusable", reason: opened.error };

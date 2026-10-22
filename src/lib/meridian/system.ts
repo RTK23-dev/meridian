@@ -7,7 +7,7 @@ import { objectStorageStatus } from "@/lib/meridian/storage/object-store";
 import { emailDeliveryState, isoOrNull } from "@/lib/meridian/notifications/email-state";
 import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "@/lib/meridian/publishing/provider";
 import { accountProviderState } from "@/lib/meridian/providers/boundaries";
-import { providerCredentialState, type ProviderCredentialState } from "@/lib/meridian/providers/access-token";
+import { OAUTH_METRIC_PROVIDERS, providerCredentialState, type ProviderCredentialState } from "@/lib/meridian/providers/access-token";
 import { isLiveProvider, phaseForProbe, phaseForStoredConnection, type LiveProvider } from "@/lib/meridian/providers/live";
 
 const CONNECTION_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
@@ -86,12 +86,14 @@ export const getSystemStatus = createServerFn({ method: "POST" })
           const credentials: Record<string, ProviderCredentialState> = {};
           for (const provider of CONNECTION_PROVIDERS) {
             const sealed = secrets.find((item) => item.provider === provider)?.sealed_token ?? "";
+            // A provider whose metrics are read per tenant is connected only through its OAuth token, the same rule the metric sync applies.
             credentials[provider] = await providerCredentialState(sql, {
               organizationId: data.organizationId,
               provider,
               sealed,
               encryptionKey,
               env: process.env,
+              requireOAuth: OAUTH_METRIC_PROVIDERS.includes(provider),
             });
           }
           connections = CONNECTION_PROVIDERS.map((provider) => {
