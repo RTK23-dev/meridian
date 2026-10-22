@@ -8,6 +8,7 @@ import { sealSecret } from "../oauth/flow.server.ts";
 import { encryptPayload } from "../vault/crypto.ts";
 import { providerCredentialState, type ProviderCredentialState } from "./access-token.ts";
 import { phaseForProbe, phaseForStoredConnection, type LiveProvider } from "./live.ts";
+import { connectionPhase } from "./phase.ts";
 
 const KEY = "connection-state-test-key";
 const SEALED_VALUE = "sealed-token-test-value";
@@ -133,6 +134,33 @@ test("a usable credential with a recorded provider error is FAILED with that err
   assert.equal(phase.phase, "FAILED");
   assert.equal(phase.detail, "The provider rejected the token.");
 });
+
+test("the most recent probe decides: a failure after an earlier success is FAILED, and a success after a failure is HEALTHY", withEncryptionKey(async () => {
+  const phase = connectionPhase({ configured: true, disconnected: false, probing: false, syncing: false, lastOk: true, stale: true, lastError: "The provider rejected the token." });
+  assert.equal(phase.phase, "FAILED", "a recorded error wins over an earlier success, even a stale one");
+
+  const failedLatest = await statusFor(
+    workspaceDb({
+      connections: [{ provider: "tiktok", last_success_at: SUCCESS_AT, last_error: "The provider rejected the token.", disconnected_at: null }],
+      vault: [savedKeyRow(SAVED_VALUE)],
+    }),
+    "org-1",
+    "tiktok",
+  );
+  assert.equal(failedLatest.phase, "FAILED");
+  assert.equal(failedLatest.detail, "The provider rejected the token.");
+
+  // A successful probe clears last_error and records a new last_success_at (connect.ts saveProbe).
+  const succeededLatest = await statusFor(
+    workspaceDb({
+      connections: [{ provider: "tiktok", last_success_at: "2026-10-21T10:00:00.000Z", last_error: "", disconnected_at: null }],
+      vault: [savedKeyRow(SAVED_VALUE)],
+    }),
+    "org-1",
+    "tiktok",
+  );
+  assert.equal(succeededLatest.phase, "HEALTHY");
+}));
 
 test("a usable credential with no recorded provider result is not HEALTHY", () => {
   const phase = phaseForStoredConnection({ provider: "meta", credential: USABLE, lastSuccessAt: null, lastError: "", disconnected: false });

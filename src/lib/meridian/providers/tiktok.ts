@@ -26,10 +26,15 @@ export async function probeTikTok(credentials: TikTokCredentials, transport: Tra
     return { ok: false, error: textField(user.json, "message") || user.error || "TikTok did not confirm the token.", status: user.status };
   }
   const accounts = await advertiserList(credentials, transport);
+  // The account is one of this token's own advertisers. The deployment's advertiser id is never recorded for a token: it may belong to
+  // another token. With no advertiser for the token, the probe fails and says so, and no account is recorded.
+  if (accounts.length === 0) {
+    return { ok: false, error: "TikTok returned no advertiser account for this token. No account was recorded.", status: user.status };
+  }
   const name = nested(user.json, "display_name");
   return {
     ok: true,
-    accountId: accounts[0]?.id || credentials.advertiserId || "",
+    accountId: accounts[0]?.id ?? "",
     accountName: name || accounts[0]?.name || "",
     accounts,
     permissions: [],

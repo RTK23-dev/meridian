@@ -134,7 +134,7 @@ const CARD_STAGES: Record<CardId, { stages: string[]; gates: string[] }> = {
   reference_analysis: { stages: ["analyze_reference"], gates: ["dna"] },
   plan: { stages: ["plan", "estimate_reserve"], gates: ["plan", "budget"] },
   model_choices: { stages: [], gates: [] },
-  script: { stages: ["intake"], gates: ["request"] },
+  script: { stages: ["intake", "write_script"], gates: ["request"] },
   voice: { stages: ["voice"], gates: ["voice"] },
   visuals: { stages: ["produce_shot", "check_take"], gates: ["take"] },
   edit: { stages: ["edit"], gates: ["edit"] },
@@ -202,9 +202,13 @@ function cardDone(id: CardId, feed: EngineRequestFeed, artifacts: readonly FeedA
     case "plan":
       return passed("plan") && passed("estimate_reserve");
     case "model_choices":
-      return artifacts.some((artifact) => artifact.type === "scene_plan");
-    case "script":
-      return passed("intake");
+      // The request's model choices are an artifact of their own (Bible 10.5). The feed reports an artifact type it does not model as "other".
+      return artifacts.some((artifact) => artifact.type === "other" && artifact.artifactType === "model_choices");
+    case "script": {
+      // A brief's script is written by write_script after analysis (contract v8). A request with its own script is done at intake.
+      const request = latest(artifacts, "production_request");
+      return passed(request !== null && request.brief === null ? "intake" : "write_script");
+    }
     case "voice":
       return passed("voice");
     case "visuals": {

@@ -31,13 +31,38 @@ function ascii(bytes: Uint8Array, start: number, length: number): string {
   return String.fromCharCode(...bytes.subarray(start, start + length));
 }
 
-const QUICKTIME_BRANDS = new Set(["qt  "]);
+/**
+ * The major brands of ISO base media files that are video, and the media type each one is. Any other ISO brand (HEIC and AVIF photos,
+ * M4A audio, and the rest) is not a video, so an ISO file with another brand is refused rather than read as one.
+ */
+const VIDEO_BRANDS = new Map<string, string>([
+  ["isom", "video/mp4"],
+  ["iso2", "video/mp4"],
+  ["iso4", "video/mp4"],
+  ["iso5", "video/mp4"],
+  ["iso6", "video/mp4"],
+  ["mp41", "video/mp4"],
+  ["mp42", "video/mp4"],
+  ["avc1", "video/mp4"],
+  ["M4V ", "video/mp4"],
+  ["M4VH", "video/mp4"],
+  ["qt  ", "video/quicktime"],
+]);
+
+/** The major brand of an ISO base media file (the four bytes after its "ftyp" box type), or null when the bytes are not one. */
+function isoBrandOf(bytes: Uint8Array): string | null {
+  return bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp" ? ascii(bytes, 8, 4) : null;
+}
+
+/** A brand as a refusal names it: its letters and digits only, so a file's bytes never reach the message as they are. */
+function brandLabel(brand: string): string {
+  return brand.replace(/[^A-Za-z0-9]/g, "") || "unknown";
+}
 
 /** The media type of a binary file, read from its first bytes, or null when the bytes are not one of the binary types. */
 export function sniffBinaryMediaType(bytes: Uint8Array): string | null {
-  if (bytes.length >= 12 && ascii(bytes, 4, 4) === "ftyp") {
-    return QUICKTIME_BRANDS.has(ascii(bytes, 8, 4)) ? "video/quicktime" : "video/mp4";
-  }
+  const brand = isoBrandOf(bytes);
+  if (brand !== null) return VIDEO_BRANDS.get(brand) ?? null;
   if (bytes.length >= 4 && bytes[0] === 0x1a && bytes[1] === 0x45 && bytes[2] === 0xdf && bytes[3] === 0xa3) return "video/webm";
   if (bytes.length >= 8 && bytes[0] === 0x89 && ascii(bytes, 1, 3) === "PNG" && bytes[4] === 0x0d && bytes[5] === 0x0a) return "image/png";
   if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return "image/jpeg";
@@ -168,6 +193,9 @@ export type FileCheck = { ok: true; file: CheckedFile } | { ok: false; reason: s
 export function checkFile(bytes: Uint8Array, purpose: FilePurpose, fileName = ""): FileCheck {
   if (bytes.byteLength === 0) return { ok: false, reason: "The file is empty, so it was not stored." };
   if (bytes.byteLength > MAX_FILE_BYTES) return { ok: false, reason: `The file is larger than ${MAX_FILE_BYTES / 1_000_000} MB, so it was not stored.` };
+  // An ISO file with a brand that is not a video brand is refused here, before the plain-text check, which would refuse it with another reason.
+  const brand = isoBrandOf(bytes);
+  if (brand !== null && !VIDEO_BRANDS.has(brand)) return { ok: false, reason: `This file is not a video (its type is ${brandLabel(brand)}).` };
   const binary = sniffBinaryMediaType(bytes);
   if (binary !== null) return checkBinary(bytes, binary, purpose);
   const plain = readPlainText(bytes);

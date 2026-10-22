@@ -12,6 +12,7 @@ import { createContentFactorySession, getContentFactorySession, listContentFacto
 import { MAX_TITLE_CHARS, type SessionSummary } from "@/lib/meridian/content-factory/model";
 import { ChatPanel } from "./chat-panel";
 import { OrchestratorModelPanel } from "./orchestrator-model-panel";
+import { OrchestratorPlans } from "./orchestrator-plans";
 import { RunPanel } from "./run-panel";
 import { SettingsPanel } from "./settings-panel";
 
@@ -61,6 +62,7 @@ export function ContentFactoryScreen() {
     <div className="space-y-6">
       {header}
       <OrchestratorModelPanel organizationId={organizationId} />
+      <OrchestratorPlans />
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"
