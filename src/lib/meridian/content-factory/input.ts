@@ -3,6 +3,7 @@
  * workspace named in a session's request body is never a way to reach another workspace (service.ts reads the workspace from the session).
  */
 import { MAX_BASE64_CHARS } from "./model.ts";
+import { shotDecisionSchema, type ShotDecision } from "../../../engine/review/shot-decision.ts";
 import {
   isFilePurpose,
   isKeepableGene,
@@ -59,6 +60,16 @@ export function shotRefInput(input: unknown): { sessionId: string; shotId: strin
   const shotId = idOf(body.shotId, "shot");
   if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
   return { sessionId: idOf(body.sessionId, "session"), shotId };
+}
+
+/** A reviewer's change to one shot: the session, the shot and the decision, checked by the engine's schema before anything is read. */
+export function shotDecisionInput(input: unknown): { sessionId: string; shotId: string; decision: ShotDecision } {
+  const body = fields(input);
+  const shotId = idOf(body.shotId, "shot");
+  if (!shotId.startsWith("shot_")) throw new Error("Choose a shot of this video.");
+  const parsed = shotDecisionSchema.safeParse(body.decision);
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "The change to this shot is not valid.");
+  return { sessionId: idOf(body.sessionId, "session"), shotId, decision: parsed.data };
 }
 
 /** A remake of one shot: the session, the shot of its video, and the reviewer's direction. The engine trims and checks the direction. */

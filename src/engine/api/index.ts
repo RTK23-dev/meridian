@@ -46,6 +46,7 @@ import { releaseReservation } from "../budget/reconcile.ts";
 import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
 import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
 import { shotSummaryOf } from "../jobs/handlers/plan.ts";
+import { shotChangeFor, type ShotDecision } from "../review/shot-decision.ts";
 import type { ShotSummary } from "../jobs/types.ts";
 import { sumUsd } from "../contracts/money.ts";
 import { ENGINE_MEDIA_LINK_TTL_SECONDS, type MediaLinkSigner } from "../jobs/media-link.ts";
@@ -480,6 +481,30 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
   } catch (error) {
     return { status: "refused", reasons: [messageOf(error)] };
   }
+}
+
+/** A reviewer's change to one shot, as the decision it is (review/shot-decision.ts). */
+export type DecideInput = { organizationId: string; requestId: string; shotId: string; decision: ShotDecision; now: string };
+
+/**
+ * Applies a reviewer's change to one shot (the review inbox's edit_prompt and change_visual_type, Bible 12.5): the change is a replacement
+ * of the shot's spec (D7), and the remake runs as any remake does, with its own reservation. A refusal names its reasons.
+ */
+export async function decideEngineShot(sql: Sql, input: DecideInput, ports?: RemakePorts): Promise<RemakeResult> {
+  const checked = await remakeContextOf(sql, input, ports);
+  if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const change = shotChangeFor(checked.context.shot, input.decision);
+  if (!change.ok) return { status: "refused", reasons: [change.reason] };
+  return remakeEngineShot(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, directive: null, now: input.now, replacement: change.change }, ports);
+}
+
+/** What a reviewer's change would reserve, before it is confirmed. Read only, as quoteEngineShotRemake. */
+export async function quoteEngineDecision(sql: Sql, input: DecideInput, ports?: RemakePorts): Promise<RemakeQuote> {
+  const checked = await remakeContextOf(sql, input, ports);
+  if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const change = shotChangeFor(checked.context.shot, input.decision);
+  if (!change.ok) return { status: "refused", reasons: [change.reason] };
+  return quoteEngineShotRemake(sql, { organizationId: input.organizationId, requestId: input.requestId, shotId: input.shotId, now: input.now, replacement: change.change }, ports);
 }
 
 /** The take a shot shows: its accepted take, or else its newest take made in the current plan epoch. Null when the shot has none. */

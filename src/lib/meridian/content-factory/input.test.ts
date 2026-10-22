@@ -1,5 +1,6 @@
 // The input checks of a shot remake (input.ts). A remake names a session, a shot of its video and an optional direction. The workspace is
 // never taken from the request: the service reads it from the session.
+import { shotDecisionInput } from "./input.ts";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { REMAKE_DIRECTIVE_MAX_CHARS } from "../../../engine/jobs/remake.ts";
@@ -31,4 +32,11 @@ test("the workspace is never read from the request", () => {
 
 test("the screen's direction limit is the engine's limit", () => {
   assert.equal(REMAKE_DIRECTION_MAX_CHARS, REMAKE_DIRECTIVE_MAX_CHARS);
+});
+
+test("a shot decision is checked before it is read: an action the engine does not take, or a shot that is not a shot, is refused", () => {
+  const ok = shotDecisionInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", decision: { action: "edit_prompt", prompt: "Dawn" } });
+  assert.equal(ok.decision.action, "edit_prompt");
+  assert.throws(() => shotDecisionInput({ sessionId: "session_abc123", shotId: "shot_01M4T7V8BR00000000000AFP71", decision: { action: "delete_video" } }));
+  assert.throws(() => shotDecisionInput({ sessionId: "session_abc123", shotId: "take_1", decision: { action: "edit_prompt", prompt: "x" } }), /Choose a shot/);
 });

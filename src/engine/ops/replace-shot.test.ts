@@ -12,6 +12,7 @@ import { scenePlanSchema } from "../contracts/plan.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { chainWorld, drain, startChainRequest } from "./test/chain.ts";
 import { answerRemadeChain } from "./test/remade.ts";
+import { decideEngineShot } from "../api/index.ts";
 
 const ORG = "org_replace_shot";
 const BRAND = "brand_replace_shot";
@@ -95,5 +96,15 @@ describe("a remake that replaces a shot's visual type and source, on a delivered
     const after = await readEngineRequest(db.sql, ORG, requestId);
     assert.equal(after?.state.artifacts.plan, before?.state.artifacts.plan, "no plan was written for the refused replacement");
     assert.equal(after?.state.revision, before?.state.revision);
+  });
+
+  test("a reviewer's edit of a generated shot's prompt is a remake of that shot, with the new prompt in the plan", async () => {
+    const outcome = await decideEngineShot(db.sql, { organizationId: ORG, requestId, shotId: shot, now: NOW, decision: { action: "edit_prompt", prompt: "A kitchen at noon, the product in the light" } }, PORTS);
+    assert.equal(outcome.status, "queued", outcome.status === "refused" ? outcome.reasons.join("; ") : "");
+    const read = await readEngineRequest(db.sql, ORG, requestId);
+    const plan = scenePlanSchema.parse((await readArtifact(db.sql, { organizationId: ORG, artifactId: read?.state.artifacts.plan ?? "" })).envelope.body);
+    const edited = plan.shots.find((candidate) => candidate.shotId === shot);
+    assert.equal(edited?.source.kind === "generate" ? edited.source.prompt : "", "A kitchen at noon, the product in the light");
+    assert.equal(edited?.visualType, "cinematic", "the visual type is kept");
   });
 });

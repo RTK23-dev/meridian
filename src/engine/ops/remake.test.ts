@@ -6,10 +6,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import * as fx from "../contracts/fixtures/index.ts";
-import { newId } from "../contracts/index.ts";
 import { engineDeliveredMaster, engineRequestFeed, engineRequestStatus, remakeEngineShot, type RemakePorts } from "../api/index.ts";
-import { writeArtifact } from "../jobs/artifact-store.ts";
-import { cleanRender } from "../review/test/render.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { chainWorld, drain, startChainRequest } from "./test/chain.ts";
 import { answerRemadeChain } from "./test/remade.ts";
