@@ -27,6 +27,9 @@ const ENGINE_TABLES = [
   "engine_asset_cache_hits",
   // Chain call records (migrations/0094): the spec and the output of each call of a chain (contract v5, Bible 7.1).
   "engine_chain_calls",
+  // Call telemetry and bill reads (migrations/0110): what each paid call measured, and how held calls' bills are read.
+  "engine_call_telemetry",
+  "engine_bill_reads",
 ] as const;
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "migrations", "0077_engine_core.sql");
