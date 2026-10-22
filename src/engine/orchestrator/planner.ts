@@ -103,6 +103,10 @@ export async function planWithModel(opts: {
     return { ok: false, reasons: ["the plan does not match the schema", ...paths] };
   }
 
+  // The plan names the model that wrote it. That name must be the model the call was made on, or the plan is not the call's answer (review 2026-10-22, item 10).
+  if (parsed.data.orchestrator.provider !== opts.orchestrator.provider || parsed.data.orchestrator.id !== opts.orchestrator.id) {
+    return { ok: false, reasons: [`the plan names ${parsed.data.orchestrator.id}, but it was written by ${opts.orchestrator.id}, so it is refused`] };
+  }
   const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };

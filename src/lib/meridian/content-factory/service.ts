@@ -16,7 +16,6 @@ import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
   engineRequestFeed,
-  engineRequestStatus,
   productionReadinessPorts,
   decideEngineShot,
   quoteEngineDecision,
@@ -497,7 +496,7 @@ async function readinessOf(sql: Sql, organizationId: string, ports: ContentFacto
 }
 
 export type StartOutcome =
-  | { status: "started"; requestId: string }
+  | { status: "started"; auditRecorded: boolean; requestId: string }
   | { status: "refused"; problems: string[]; notConnected: string[] };
 
 /**
@@ -533,10 +532,18 @@ export async function startRun(sql: Sql, userId: string, input: { sessionId: str
     const started = await startEngineRequest(sql, { organizationId: row.organization_id, brandId: row.brand_id, request, variantCount: 0, beforeQueue: markStarted });
     if (started.status === "exists") await markStarted(sql);
   } catch (error) {
+    // A second start of the same session, racing this one, meets the unique key of the request: say so, not the database's words (review 2026-10-22, item 11).
+    const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : "";
+    if (code === "23505") return refuse(["This session is already starting a video. Refresh to see it; nothing was started twice."], []);
+    if (code !== "") return refuse(["The request could not be stored right now. Nothing was started. Try again."], []);
     return refuse([`The engine refused the request: ${error instanceof Error ? error.message : "no reason was given."}`], []);
   }
-  await audit(sql, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.run_started", objectId: row.id, metadata: { requestId: request.requestId } });
-  return { status: "started", requestId: request.requestId };
+  // The video has started. A failure to write its audit line is not a failed start: the outcome says the line is missing (review item 11).
+  const auditRecorded = await audit(sql, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.run_started", objectId: row.id, metadata: { requestId: request.requestId } }).then(
+    () => true,
+    () => false,
+  );
+  return { status: "started", requestId: request.requestId, auditRecorded };
 }
 
 export type ReviseOutcome =
@@ -565,20 +572,29 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
   if (row.status !== "started" || row.engine_request_id === null) {
     return { status: "refused", reason: "This session has no video to revise." };
   }
-  const current = await engineRequestStatus(sql, row.organization_id, row.engine_request_id);
-  if (!current || (current.status !== "delivered" && current.status !== "failed")) {
-    return { status: "refused", reason: "A revision waits until this video is delivered or has failed. Nothing was changed." };
-  }
   const kept = [...priorIds(row.prior_request_ids), row.engine_request_id];
   const revision = (Number(row.revision) || 0) + 1;
-  const updated = await sql<{ id: string }>`
-    update content_factory_sessions
-    set status = 'draft', engine_request_id = null, revision = ${revision}, prior_request_ids = ${JSON.stringify(kept)},
-        last_refusal = '[]', updated_at = now()
-    where id = ${row.id} and organization_id = ${row.organization_id} and status = 'started' and engine_request_id = ${row.engine_request_id}
-    returning id
-  `;
-  if (!updated[0]) return { status: "refused", reason: "This session changed before the revision was saved. Nothing was changed." };
+  // The request row is locked for the check and the change together. A remake of the same request takes the same lock when it is applied
+  // (orchestrator-sql.ts), so the two cannot both see the video as delivered and both change it (review 2026-10-22, item 9).
+  const outcome = await withTransaction<ReviseOutcome>(sql, async (tx) => {
+    const locked = await tx<{ status: string }>`
+      select status from engine_requests where id = ${row.engine_request_id} and organization_id = ${row.organization_id} for update
+    `;
+    const status = locked[0]?.status ?? null;
+    if (status !== "delivered" && status !== "failed") {
+      return { status: "refused", reason: "A revision waits until this video is delivered or has failed. Nothing was changed." };
+    }
+    const updated = await tx<{ id: string }>`
+      update content_factory_sessions
+      set status = 'draft', engine_request_id = null, revision = ${revision}, prior_request_ids = ${JSON.stringify(kept)},
+          last_refusal = '[]', updated_at = now()
+      where id = ${row.id} and organization_id = ${row.organization_id} and status = 'started' and engine_request_id = ${row.engine_request_id}
+      returning id
+    `;
+    if (!updated[0]) return { status: "refused", reason: "This session changed before the revision was saved. Nothing was changed." };
+    return { status: "draft", revision, priorRequestId: row.engine_request_id };
+  });
+  if (outcome.status !== "draft") return outcome;
   await audit(sql, {
     organizationId: row.organization_id,
     brandId: row.brand_id,
@@ -587,7 +603,7 @@ export async function reviseSession(sql: Sql, userId: string, input: { sessionId
     objectId: row.id,
     metadata: { priorRequestId: row.engine_request_id, revision: String(revision) },
   });
-  return { status: "draft", revision, priorRequestId: row.engine_request_id };
+  return outcome;
 }
 
 export type RemakeOutcome = { status: "queued"; revision: number } | { status: "refused"; reasons: string[] };

@@ -242,7 +242,8 @@ function statusOf(id: CardId, feed: EngineRequestFeed): { status: CardStatus; te
   }
   if (jobs.running) return { status: "running", text: "Working now." };
   if (jobs.queued) return { status: "waiting", text: "Queued. The engine has not picked it up yet." };
-  if (status.status === "failed") return { status: "not_started", text: "Not started: the request did not pass intake." };
+  // A step with no record after a failure was not reached: the request stopped before it, wherever the failure was (review 2026-10-22, item 11).
+  if (status.status === "failed") return { status: "not_started", text: "Not reached: the request stopped before this step." };
   return { status: "not_started", text: "Not started yet." };
 }
 

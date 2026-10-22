@@ -165,6 +165,10 @@ export class Gateway {
       if (authenticated) {
         const found = await this.lookup(spec, organizationId, refresh);
         if (found?.status === "not_connected") return { status: "not_connected", reason: found.reason };
+        // A credentialed provider with no credential configured is not connected: nothing is sent without its key (review 2026-10-22, item 8).
+        if (found === null && spec.auth.kind !== "none") {
+          return { status: "not_connected", reason: `${spec.id} has no credential configured for this workspace or deployment. Nothing was sent.` };
+        }
         if (found?.status === "ready") {
           if (spec.auth.kind === "api_key_query") {
             const token = found.credential.kind === "api_key" ? found.credential.secret : found.credential.accessToken;

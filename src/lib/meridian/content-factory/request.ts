@@ -48,7 +48,8 @@ const PROBLEM_WORDS: Record<string, string> = {
   "format.formatId": "Attach a reference video from your computer and mark it as the reference. The engine studies how it is made; its footage is never used.",
   "format.keep": "Choose which parts of the reference to keep.",
   "script.language": "You wrote script lines, so set the language they are written in. Without script lines, the engine writes the script and chooses the language.",
-  "brief.text": "Tell the engine what the video is for: send at least one instruction in the chat. The engine writes the script from it.",
+  // A brief has the engine write the script, so it needs an instruction. A script request never gets here: it sends its lines instead.
+  "brief.text": "Tell the engine what the video is for: send at least one instruction in the chat, or mark your own script lines instead. The engine writes the script from the instructions.",
   "brief.sources": `Attach at most ${BRIEF_LIST_MAX} Meridian records and text files to one session.`,
   "brief.attachments": `Attach at most ${BRIEF_LIST_MAX} files besides the reference video to one session.`,
   "page.pageId": "Attach a theme page from the Pages screen. Its style, persona and voice kits are used.",
