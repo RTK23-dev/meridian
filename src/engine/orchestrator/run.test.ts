@@ -9,10 +9,21 @@ import { examplePlan } from "./example.ts";
 import type { Handlers, NodeHandler } from "./execute.ts";
 import { editStoredPlan, runStoredPlan, type RunOutcome } from "./run.ts";
 import { createPlanDraft, getPlan, listPlanEvents, recordPlanOutcome } from "./store.ts";
+import type { Sql } from "../../lib/meridian/learning/store.ts";
 
 const ORG = "org_run_a";
 const OTHER = "org_run_b";
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
+
+type Tagged = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
+
+/** The same database, with every write to one table refused. Reads and the other writes go through unchanged. */
+function failingWritesTo(table: string, sql: Sql): Sql {
+  const tagged = sql as unknown as Tagged;
+  const wrapped: Tagged = (strings, ...values) =>
+    strings.join("?").includes(`insert into ${table}`) ? Promise.reject(new Error("the database refused the write")) : tagged(strings, ...values);
+  return wrapped as unknown as Sql;
+}
 
 /** The spend of a run that ran (a run that did not run has none). */
 function spentOf(outcome: RunOutcome): number {
@@ -150,5 +161,27 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
     const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_draft", catalog, handlers: standIn([]) });
     assert.equal(outcome.status, "not_runnable");
     if (outcome.status === "not_runnable") assert.match(outcome.reasons[0] ?? "", /no checked plan to run/);
+  });
+
+  test("a plan whose budget is above the budget the user set is not runnable, and nothing is called", async () => {
+    assert.ok(examplePlan.budgetUsd > 1, "the example plan asks for more than the budget this test sets");
+    await createPlanDraft(db.sql, { id: "plan_run_overbudget", organizationId: ORG, title: "over", brief: {}, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 1 });
+    await recordPlanOutcome(db.sql, { id: "plan_run_overbudget", organizationId: ORG, plan: examplePlan, reasons: [], catalogReadAt: null });
+    const calls: string[] = [];
+    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_overbudget", catalog, handlers: standIn(calls) });
+    assert.deepEqual(outcome, {
+      status: "not_runnable",
+      reasons: [`the plan's budget $${examplePlan.budgetUsd.toFixed(4)} is above the budget you set, $1.0000`],
+    });
+    assert.deepEqual(calls, []);
+  });
+
+  test("a database error during a run leaves the plan ready, so a later run is not refused, and the error is the one thrown", async () => {
+    await storedReadyPlan("plan_run_dberror");
+    const failing = failingWritesTo("orchestrator_plan_events", db.sql);
+    await assert.rejects(runStoredPlan(failing, { organizationId: ORG, planId: "plan_run_dberror", catalog, handlers: standIn([]) }), /the database refused the write/);
+    assert.equal((await getPlan(db.sql, ORG, "plan_run_dberror"))?.status, "ready");
+    const again = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_dberror", catalog, handlers: standIn([]) });
+    assert.notEqual(again.status, "not_runnable", "the plan can be run again");
   });
 });

@@ -10,6 +10,7 @@ import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import type { Handlers } from "./execute.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
+import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
 export type CatalogState =
   | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string }
@@ -39,7 +40,15 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
   if (catalog.status !== "ok") return catalog;
   const { productionComposition } = await import("../jobs/runtime.ts");
   return planStoredDraft(
-    { sql, organizationId: input.organizationId, gateway: productionComposition(sql).gateway, catalog: catalog.catalog, catalogReadAt: catalog.takenAt, now: input.now },
+    {
+      sql,
+      organizationId: input.organizationId,
+      gateway: productionComposition(sql).gateway,
+      catalog: catalog.catalog,
+      catalogReadAt: catalog.takenAt,
+      now: input.now,
+      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
+    },
     input.planId,
   );
 }

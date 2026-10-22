@@ -91,6 +91,30 @@ export async function setPlanStatus(sql: Sql, organizationId: string, id: string
   return getPlan(sql, organizationId, id);
 }
 
+/**
+ * Claim a draft or a refused plan for planning. One conditional update, so two requests cannot both call the model: true only when this
+ * call took the plan. False when the plan is not the organization's or is not in a state that can be planned.
+ */
+export async function claimForPlanning(sql: Sql, organizationId: string, planId: string): Promise<boolean> {
+  const rows = (await sql`
+    update orchestrator_plans set status = 'planning', updated_at = now()
+    where id = ${planId} and organization_id = ${organizationId} and status in ('draft', 'refused')
+    returning id
+  `) as Row[];
+  return rows.length > 0;
+}
+
+/**
+ * Give a claimed plan back its previous status, but only while it is still planning: an outcome the call already stored is kept.
+ * Used when planning throws, so the plan is never left in planning with nothing running.
+ */
+export async function releasePlanning(sql: Sql, organizationId: string, planId: string, to: PlanStatus): Promise<void> {
+  await sql`
+    update orchestrator_plans set status = ${to}, updated_at = now()
+    where id = ${planId} and organization_id = ${organizationId} and status = 'planning'
+  `;
+}
+
 export async function getPlan(sql: Sql, organizationId: string, id: string): Promise<StoredPlan | null> {
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
@@ -145,11 +169,14 @@ export async function listPlanEvents(sql: Sql, organizationId: string, planId: s
   }));
 }
 
-/** Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's. */
+/**
+ * Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's, or when
+ * it is running: an edit never clears a run in progress, and nothing is written.
+ */
 export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan): Promise<StoredPlan | null> {
   const rows = (await sql`
     update orchestrator_plans set plan = ${JSON.stringify(plan)}::jsonb, status = 'ready', updated_at = now()
-    where id = ${id} and organization_id = ${organizationId}
+    where id = ${id} and organization_id = ${organizationId} and status <> 'running'
     returning id
   `) as Row[];
   if (rows.length === 0) return null;

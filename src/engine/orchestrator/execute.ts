@@ -99,11 +99,20 @@ export async function runPlan(opts: {
     try {
       const upstream = new Map(node.dependsOn.map((dep) => [dep, outputs.get(dep) ?? ""]));
       const output = await handler({ node, key, upstream });
+      // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the estimate is
+      // charged. Anything else fails the step, and nothing is added to the spend or kept as output.
+      const reported = output.costUsd ?? null;
+      if (reported !== null && !(Number.isFinite(reported) && reported >= 0)) {
+        set(id, "failed", null, null, "the step reported an unusable cost");
+        continue;
+      }
       cache.set(key, output);
       outputs.set(id, output.outputHash);
-      spent += output.costUsd ?? estimate;
-      set(id, "done", output.outputHash, output.costUsd, null);
+      spent += reported ?? estimate;
+      set(id, "done", output.outputHash, reported, null);
     } catch (error) {
+      // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error.
+      if (paidKind) spent += estimate;
       const message = error instanceof Error ? error.message : "the step failed";
       set(id, "failed", null, null, message.slice(0, REASON_MAX));
     }

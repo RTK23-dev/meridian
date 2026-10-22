@@ -57,9 +57,12 @@ const EDITABLE_PARAM: Record<string, { name: string; field: "seconds" | "charact
   script: { name: "max_tokens", field: "maxTokens", label: "Output tokens" },
 };
 
-/** A catalog that cannot be read is said plainly. It is never shown as a plan that was made. */
-function notConnected(reason: string): string {
-  return `NOT CONNECTED. ${reason}`;
+/**
+ * A catalog that cannot be read is said plainly, and never shown as a plan that was made. NOT CONNECTED is only for a catalog with no
+ * connected key; a read that failed is a read error, with its reason.
+ */
+function catalogState(status: "not_connected" | "failed", reason: string): string {
+  return status === "not_connected" ? `NOT CONNECTED. ${reason}` : `The catalog could not be read: ${reason}`;
 }
 
 /**
@@ -80,8 +83,9 @@ export function OrchestratorPlans() {
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // The model every new plan uses: the one stored in the Content Factory panel. Null means none is stored yet.
+  // The model every new plan uses: the one stored in the Content Factory panel. Null means none is stored yet, or the read failed.
   const [storedModel, setStoredModel] = useState<string | null>(null);
+  const [storedModelError, setStoredModelError] = useState<string | null>(null);
 
   async function refresh(id = brandId) {
     if (!id) return;
@@ -100,8 +104,15 @@ export function OrchestratorPlans() {
     setDetail(null);
     refresh().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "The plans could not be read."));
     getBrandOrchestratorModel({ data: { brandId } })
-      .then((stored) => setStoredModel(stored.orchestratorModel))
-      .catch(() => setStoredModel(null));
+      .then((stored) => {
+        setStoredModel(stored.orchestratorModel);
+        setStoredModelError(null);
+      })
+      .catch((error: unknown) => {
+        // A failed read is not "no model stored": the composer says the read failed.
+        setStoredModel(null);
+        setStoredModelError(error instanceof Error ? error.message : "The stored model could not be read.");
+      });
     // A brand change reads that brand's plans.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandId]);
@@ -139,7 +150,7 @@ export function OrchestratorPlans() {
   const run = (planId: string) =>
     act(async () => {
       const outcome = await runOrchestratorPlan({ data: { brandId, planId } });
-      if (outcome.status === "not_connected" || outcome.status === "failed") setMessage(notConnected(outcome.reason));
+      if (outcome.status === "not_connected" || outcome.status === "failed") setMessage(catalogState(outcome.status, outcome.reason));
       else if (outcome.status === "not_runnable") setMessage(outcome.reasons.join("; "));
       else if ("spentUsd" in outcome) setMessage(`The run ${outcome.status}. Spend so far: ${(outcome.spentUsd ?? 0).toFixed(4)}.`);
       else setMessage(`The run ${outcome.status}.`);
@@ -154,6 +165,7 @@ export function OrchestratorPlans() {
         brandId={brandId}
         onBrandChange={setChosenBrand}
         storedModel={storedModel}
+        storedModelError={storedModelError}
         showPreview={plans.length === 0}
         onChanged={draftSaved}
       />
@@ -289,7 +301,7 @@ function StepEdit(props: {
       if (model !== (step.model ?? "")) body.modelId = model;
       const outcome = await editOrchestratorStep({ data: body as never });
       if (outcome.status === "refused") onMessage(`The edit would not run: ${outcome.reasons.join("; ")}`);
-      else if (outcome.status === "not_connected" || outcome.status === "failed") onMessage(notConnected(outcome.reason));
+      else if (outcome.status === "not_connected" || outcome.status === "failed") onMessage(catalogState(outcome.status, outcome.reason));
       else {
         onMessage("The step is saved and the plan is priced again.");
         await onSaved();

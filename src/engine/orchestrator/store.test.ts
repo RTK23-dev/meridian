@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { examplePlan, recordedExampleRun } from "./example.ts";
-import { appendPlanEvents, createPlanDraft, getPlan, listPlanEvents, listPlans, recordPlanOutcome, setPlanStatus } from "./store.ts";
+import { appendPlanEvents, claimForPlanning, createPlanDraft, getPlan, listPlanEvents, listPlans, recordPlanOutcome, releasePlanning, setPlanStatus, updatePlanJson } from "./store.ts";
 
 const ORG_A = "org_orch_a";
 const ORG_B = "org_orch_b";
@@ -73,5 +73,32 @@ describe("orchestrator plan store (migration 0108)", () => {
     assert.deepEqual(plans.map((plan) => plan.id).sort(), ["plan_draft_1", "plan_refused_1"]);
     const running = await setPlanStatus(db.sql, ORG_A, "plan_draft_1", "running");
     assert.equal(running?.status, "running");
+  });
+
+  test("a draft is claimed for planning once: the second claim finds it taken, and another organization claims nothing", async () => {
+    await createPlanDraft(db.sql, { id: "plan_claim_1", organizationId: ORG_A, title: "Claim", brief: BRIEF, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 2 });
+    assert.equal(await claimForPlanning(db.sql, ORG_A, "plan_claim_1"), true);
+    assert.equal((await getPlan(db.sql, ORG_A, "plan_claim_1"))?.status, "planning");
+    assert.equal(await claimForPlanning(db.sql, ORG_A, "plan_claim_1"), false, "a plan being planned is not claimed again");
+    assert.equal(await claimForPlanning(db.sql, ORG_B, "plan_claim_1"), false, "another organization cannot claim it");
+  });
+
+  test("releasing a claim gives the plan its previous status, but keeps an outcome the call already stored", async () => {
+    await releasePlanning(db.sql, ORG_A, "plan_claim_1", "draft");
+    assert.equal((await getPlan(db.sql, ORG_A, "plan_claim_1"))?.status, "draft");
+    assert.equal(await claimForPlanning(db.sql, ORG_A, "plan_claim_1"), true);
+    await recordPlanOutcome(db.sql, { id: "plan_claim_1", organizationId: ORG_A, plan: null, reasons: ["refused for the test"], catalogReadAt: null });
+    await releasePlanning(db.sql, ORG_A, "plan_claim_1", "draft");
+    assert.equal((await getPlan(db.sql, ORG_A, "plan_claim_1"))?.status, "refused");
+  });
+
+  test("an edit is not written over a run in progress, and is written once the run has stopped", async () => {
+    await createPlanDraft(db.sql, { id: "plan_edit_guard", organizationId: ORG_A, title: "Edit guard", brief: BRIEF, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 2 });
+    await recordPlanOutcome(db.sql, { id: "plan_edit_guard", organizationId: ORG_A, plan: examplePlan, reasons: [], catalogReadAt: null });
+    await setPlanStatus(db.sql, ORG_A, "plan_edit_guard", "running");
+    assert.equal(await updatePlanJson(db.sql, ORG_A, "plan_edit_guard", examplePlan), null);
+    assert.equal((await getPlan(db.sql, ORG_A, "plan_edit_guard"))?.status, "running");
+    await setPlanStatus(db.sql, ORG_A, "plan_edit_guard", "paused");
+    assert.equal((await updatePlanJson(db.sql, ORG_A, "plan_edit_guard", examplePlan))?.status, "ready");
   });
 });

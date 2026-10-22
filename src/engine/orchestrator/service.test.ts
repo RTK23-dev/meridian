@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { fixture, gatewayFor, json } from "../claude/test/helpers.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog, type CatalogEntry } from "./catalog.ts";
+import type { WorkspaceBudgetSource, WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
 import { planStoredDraft, type PlanScope } from "./service.ts";
 import { createPlanDraft, getPlan } from "./store.ts";
 
@@ -21,6 +22,11 @@ const BRIEF = {
 const recorded = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8")));
 const catalog = recorded.byId;
 
+/** A workspace month source with a fixed answer: a known budget, or not connected. It reads nothing. */
+function monthOf(answer: WorkspaceMonthBudget): WorkspaceBudgetSource {
+  return { monthBudget: async () => answer };
+}
+
 function scopeFor(db: TestDatabase, responses: Parameters<typeof gatewayFor>[0], ids: { request: string; reservation: string }, catalogOverride?: Map<string, CatalogEntry>): PlanScope {
   return {
     sql: db.sql,
@@ -30,7 +36,13 @@ function scopeFor(db: TestDatabase, responses: Parameters<typeof gatewayFor>[0],
     catalogReadAt: recorded.takenAt,
     now: () => NOW,
     mint: { request: () => ids.request, reservation: () => ids.reservation },
+    workspaceBudget: monthOf({ status: "known", usd: 100 }),
   };
+}
+
+async function holdCount(db: TestDatabase, reservationId: string): Promise<number> {
+  const rows = (await db.sql`select count(*) as n from engine_reservations where id = ${reservationId}`) as Array<{ n: string | number }>;
+  return Number(rows[0]?.n ?? 0);
 }
 
 async function draft(db: TestDatabase, id: string, budgetUsd = 2, model = HAIKU): Promise<void> {
@@ -108,5 +120,51 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     assert.equal(again.status, "not_planned");
     const elsewhere = await planStoredDraft({ ...scopeFor(db, [], ids), organizationId: OTHER }, "plan_svc_ready");
     assert.deepEqual(elsewhere, { status: "not_found" });
+  });
+
+  test("a plan call that would take the workspace month over its budget is refused, and no hold is written", async () => {
+    await draft(db, "plan_svc_month");
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ6", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ6" };
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: 0.0001 }) };
+    const outcome = await planStoredDraft(scope, "plan_svc_month");
+    assert.equal(outcome.status, "refused");
+    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /workspace monthly budget 0\.0001 USD would be exceeded/);
+    assert.equal((await getPlan(db.sql, ORG, "plan_svc_month"))?.status, "refused");
+    assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
+    assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+  });
+
+  test("a workspace month that is not known refuses the call before any hold, with the source's reason", async () => {
+    await draft(db, "plan_svc_nomonth");
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ7", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ7" };
+    const reason = "no monthly video budget is set for this workspace; set \"Monthly video budget (USD)\" in Settings";
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "not_connected", reason }) };
+    const outcome = await planStoredDraft(scope, "plan_svc_nomonth");
+    assert.equal(outcome.status, "refused");
+    if (outcome.status === "refused") assert.deepEqual(outcome.reasons, [reason]);
+    assert.equal(await roleCallsFor(db, ids.request), 0);
+    assert.equal(await holdCount(db, ids.reservation), 0);
+  });
+
+  test("a plan whose budget is above the budget the user set is refused, and is not stored as ready", async () => {
+    await draft(db, "plan_svc_overbudget", 1);
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ8", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ8" };
+    const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_overbudget");
+    assert.equal(outcome.status, "refused");
+    if (outcome.status === "refused") assert.equal(outcome.reasons[0], "the plan's budget $2.0000 is above the budget you set, $1.0000");
+    assert.equal((await getPlan(db.sql, ORG, "plan_svc_overbudget"))?.plan, null);
+  });
+
+  test("a model whose hold would have more than four decimals never leaves the plan in planning", async () => {
+    await draft(db, "plan_svc_cheap");
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ9", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ9" };
+    const entry = catalog.get(HAIKU);
+    if (entry === undefined) throw new Error("haiku must be in the recorded catalog");
+    const cheap = new Map(catalog);
+    cheap.set(HAIKU, { ...entry, pricing: { ...entry.pricing, promptUsdPerToken: 0.000000123 } });
+    await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids, cheap), "plan_svc_cheap");
+    const stored = await getPlan(db.sql, ORG, "plan_svc_cheap");
+    assert.ok(stored?.status === "ready" || stored?.status === "refused", `the plan is ${stored?.status}, not planning`);
+    assert.equal(await holdCount(db, ids.reservation), 1, "the hold is written, with a valid reservation shape");
   });
 });

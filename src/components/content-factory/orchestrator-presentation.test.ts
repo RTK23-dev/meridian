@@ -22,6 +22,7 @@ import {
   parseBudget,
   replayStatus,
   stepName,
+  undrawnReason,
 } from "./orchestrator-presentation.ts";
 
 test("every step kind has a label, a colour role, an icon and a summary, in the order a reader meets them", () => {
@@ -120,6 +121,23 @@ test("the composer names exactly what is missing, in form order", () => {
   assert.deepEqual(missingFields({ ...ready, storedModel: null }), ["an orchestrating model, stored in the Content Factory panel"]);
 });
 
+test("a plan that cannot be drawn says why: a missing step, or a loop", () => {
+  assert.equal(
+    undrawnReason([
+      { id: "a", dependsOn: [] },
+      { id: "b", dependsOn: ["a", "gone"] },
+    ]),
+    "step b reads step gone, which is not in the plan.",
+  );
+  assert.equal(
+    undrawnReason([
+      { id: "a", dependsOn: ["b"] },
+      { id: "b", dependsOn: ["a"] },
+    ]),
+    "the steps depend on each other in a loop, so there is no order to draw them in.",
+  );
+});
+
 test("listWords joins items the way a sentence does", () => {
   assert.equal(listWords([]), "");
   assert.equal(listWords(["a title"]), "a title");
@@ -138,7 +156,11 @@ test("a planning outcome is said plainly and only a ready plan is called ready",
   const notConnected = describePlanOutcome({ status: "not_connected", reason: "No OpenRouter key is connected." });
   assert.equal(notConnected.tone, "warning");
   assert.ok(notConnected.text.startsWith("NOT CONNECTED. No OpenRouter key is connected"));
-  assert.match(describePlanOutcome({ status: "failed", reason: "timeout" }).text, /^The planning call failed: timeout/);
+  // A failed read is a catalog read error, never NOT CONNECTED: only a catalog with no key is not connected.
+  const failed = describePlanOutcome({ status: "failed", reason: "timeout" });
+  assert.equal(failed.tone, "danger");
+  assert.match(failed.text, /^The catalog could not be read: timeout\./);
+  assert.doesNotMatch(failed.text, /NOT CONNECTED/);
   assert.equal(describePlanOutcome({ status: "something_new" }).tone, "danger", "an unknown outcome is never a success");
 });
 

@@ -31,6 +31,7 @@ export function OrchestratorComposer({
   brandId,
   onBrandChange,
   storedModel,
+  storedModelError,
   showPreview,
   onChanged,
 }: {
@@ -38,6 +39,8 @@ export function OrchestratorComposer({
   brandId: string;
   onBrandChange: (id: string) => void;
   storedModel: string | null;
+  /** Why the stored model could not be read. It is said instead of "no model is stored", which would be untrue. */
+  storedModelError: string | null;
   /** The step kinds a plan can draw, shown as the composer's preview while there are no plans yet. */
   showPreview: boolean;
   /** Called once a draft is saved, with its id, so the plans list reloads and opens it. */
@@ -227,7 +230,9 @@ export function OrchestratorComposer({
             <h3 id="composer-model-heading" className="text-sm font-semibold">
               Orchestrating model
             </h3>
-            {storedModel === null ? (
+            {storedModelError !== null ? (
+              <p className="text-sm text-danger">The stored model could not be read: {storedModelError}</p>
+            ) : storedModel === null ? (
               <p className="text-sm text-warning">No model is stored for this workspace yet.</p>
             ) : (
               <p className="flex flex-col gap-1 text-sm">

@@ -11,12 +11,22 @@ import { cacheKeys } from "./dirty.ts";
 import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { editNode, type NodeChange } from "./stale.ts";
 import { appendPlanEvents, getPlan, listStepOutputs, putStepOutput, setPlanStatus, updatePlanJson } from "./store.ts";
-import { validatePlan } from "./validate.ts";
+import { planBudgetReason, validatePlan } from "./validate.ts";
 
 export type RunOutcome =
   | { status: "not_found" }
   | { status: "not_runnable"; reasons: string[] }
   | { status: "complete" | "paused" | "incomplete"; spentUsd: number; events: NodeEvent[] };
+
+/** The run's claim: one conditional update, so two runs of one plan cannot both start. True only for the call that took the plan. */
+async function claimRun(sql: Sql, organizationId: string, planId: string): Promise<boolean> {
+  const rows = (await sql`
+    update orchestrator_plans set status = 'running', updated_at = now()
+    where id = ${planId} and organization_id = ${organizationId} and status <> 'running'
+    returning id
+  `) as Array<{ id: string }>;
+  return rows.length > 0;
+}
 
 export async function runStoredPlan(
   sql: Sql,
@@ -27,40 +37,52 @@ export async function runStoredPlan(
   if (stored.plan === null) return { status: "not_runnable", reasons: ["the plan has no checked plan to run: it is a draft or was refused"] };
   if (stored.status === "running") return { status: "not_runnable", reasons: ["the plan is already running"] };
 
+  // A second guard: the plan's budget is the one the model wrote, so it must not be above the budget the user set (service.ts refuses it when it is written).
+  const overBudget = planBudgetReason(stored.plan.budgetUsd, stored.budgetUsd);
+  if (overBudget !== null) return { status: "not_runnable", reasons: [overBudget] };
+
   const checked = validatePlan(stored.plan, opts.catalog);
   if (!checked.ok) return { status: "not_runnable", reasons: checked.reasons };
+  if (!(await claimRun(sql, opts.organizationId, opts.planId))) return { status: "not_runnable", reasons: ["the plan is already running"] };
 
-  await setPlanStatus(sql, opts.organizationId, opts.planId, "running");
-  const persisted = await listStepOutputs(sql, opts.organizationId, opts.planId);
-  const keys = cacheKeys(checked.plan, checked.order);
+  // From the claim until the final status is stored, the plan is running. A failure in between puts it back to ready, which is correct:
+  // the plan has a checked plan. The original error is what the caller sees, so a failure to reset is not thrown over it.
+  let settled = false;
+  try {
+    const persisted = await listStepOutputs(sql, opts.organizationId, opts.planId);
+    const keys = cacheKeys(checked.plan, checked.order);
 
-  // What the plan has spent so far: each step whose current output is stored is charged its actual cost, or its estimate when none was reported.
-  let spentSoFar = 0;
-  const byId = new Map(checked.plan.nodes.map((node) => [node.id, node]));
-  for (const id of checked.order) {
-    const output = persisted.get(keys.get(id) ?? "");
-    if (output === undefined) continue;
-    spentSoFar += output.costUsd ?? byId.get(id)?.estimateUsd ?? 0;
+    // What the plan has spent so far: each step whose current output is stored is charged its actual cost, or its estimate when none was reported.
+    let spentSoFar = 0;
+    const byId = new Map(checked.plan.nodes.map((node) => [node.id, node]));
+    for (const id of checked.order) {
+      const output = persisted.get(keys.get(id) ?? "");
+      if (output === undefined) continue;
+      spentSoFar += output.costUsd ?? byId.get(id)?.estimateUsd ?? 0;
+    }
+
+    const cache: RunCache = new Map(persisted);
+    const before = new Set(cache.keys());
+    const events: NodeEvent[] = [];
+    const result = await runPlan({
+      plan: checked.plan,
+      order: checked.order,
+      handlers: opts.handlers,
+      cache,
+      spentUsd: spentSoFar,
+      emit: (event) => events.push(event),
+    });
+
+    for (const [key, output] of cache) {
+      if (!before.has(key)) await putStepOutput(sql, opts.organizationId, opts.planId, key, output);
+    }
+    await appendPlanEvents(sql, opts.organizationId, opts.planId, events);
+    await setPlanStatus(sql, opts.organizationId, opts.planId, result.status === "complete" ? "complete" : result.status === "paused" ? "paused" : "incomplete");
+    settled = true;
+    return { status: result.status, spentUsd: result.spentUsd, events };
+  } finally {
+    if (!settled) await setPlanStatus(sql, opts.organizationId, opts.planId, "ready").catch(() => undefined);
   }
-
-  const cache: RunCache = new Map(persisted);
-  const before = new Set(cache.keys());
-  const events: NodeEvent[] = [];
-  const result = await runPlan({
-    plan: checked.plan,
-    order: checked.order,
-    handlers: opts.handlers,
-    cache,
-    spentUsd: spentSoFar,
-    emit: (event) => events.push(event),
-  });
-
-  for (const [key, output] of cache) {
-    if (!before.has(key)) await putStepOutput(sql, opts.organizationId, opts.planId, key, output);
-  }
-  await appendPlanEvents(sql, opts.organizationId, opts.planId, events);
-  await setPlanStatus(sql, opts.organizationId, opts.planId, result.status === "complete" ? "complete" : result.status === "paused" ? "paused" : "incomplete");
-  return { status: result.status, spentUsd: result.spentUsd, events };
 }
 
 export type EditOutcome =
@@ -89,6 +111,8 @@ export async function editStoredPlan(
   }
   const checked = validatePlan(next, opts.catalog);
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
-  await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan);
+  // The write is refused by the store when a run has started since the read above, so an edit never clears a run in progress.
+  const saved = await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan);
+  if (saved === null) return { status: "refused", reasons: ["the plan is running, so it cannot be edited until the run stops; nothing was changed"] };
   return { status: "edited", plan: checked.plan };
 }

@@ -1,5 +1,6 @@
 // Server functions for the orchestrator's plans (owner direction 2026-10-20). Every one resolves the brand's organization, checks the
-// caller's role (viewer to read, member to change anything), validates its input, and then calls the engine's orchestrator entry points.
+// caller's role (viewer to read, admin to change anything: plan, run, step edit and model changes are admin only), validates its input,
+// and then calls the engine's orchestrator entry points.
 // Without a connected OpenRouter key, anything that needs the live catalog says NOT_CONNECTED and calls nothing.
 
 import { createServerFn } from "@tanstack/react-start";
@@ -123,7 +124,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "member");
+    const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "admin");
     const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
     if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
     const brief = {
@@ -151,7 +152,7 @@ export const planOrchestratorDraft = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "admin");
     const outcome = await planDraftFor(sql, { organizationId, planId: data.planId, now });
     if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
     if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
@@ -169,7 +170,7 @@ export const runOrchestratorPlan = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "admin");
     const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now });
     if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
     if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
@@ -199,7 +200,7 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "member");
+    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "admin");
     const stored = await getPlan(sql, organizationId, data.planId);
     if (stored === null || stored.plan === null) throw new Error("Plan not found.");
     const node = stored.plan.nodes.find((candidate) => candidate.id === data.nodeId);
