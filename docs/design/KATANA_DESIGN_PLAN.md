@@ -1,6 +1,6 @@
 # Katana design plan for Meridian
 
-Status: draft for owner review. Written 2026-10-21 on branch run/factory-6h. This plan changes no app code. The files it creates are this document, `docs/design/tokens/katana-tokens.json` (item l asks for a JSON file), `docs/design/logo/meridian-logo.html` and four frames in `docs/design/logo/frames/`.
+Status: the standard design (owner decision, 2026-10-22), and the app uses it by default. Written 2026-10-21 on branch run/factory-6h as a plan; the app change followed on 2026-10-22. The files it creates are this document, `docs/design/tokens/katana-tokens.json` (item l asks for a JSON file), `docs/design/logo/meridian-logo.html` and four frames in `docs/design/logo/frames/`.
 
 Katana is the visual system for Meridian: a black room, a red meridian, white for primary actions, hairline structure and no soft effects. It is built for people who run campaigns for hours. Every screen should say what it has, what it is missing and what runs now.
 

@@ -87,8 +87,11 @@ test("the AttentionOS high-contrast values stay out of the Katana style, and Kat
   assert.ok(stylesheet.includes(':root[data-design="katana"][data-theme="light"] .surface-overlay { box-shadow: none; }'));
 });
 
-test("the Katana faces are not loaded by the stylesheet, so the default style ships no extra font files", () => {
-  assert.equal(stylesheet.includes("@fontsource-variable/archivo"), false);
-  assert.equal(stylesheet.includes("@fontsource-variable/instrument-sans"), false);
-  assert.equal(stylesheet.includes("jetbrains-mono"), false);
+test("the Katana faces are imported by the stylesheet, since Katana is the default, and the AttentionOS faces are not", () => {
+  assert.ok(stylesheet.includes('@import "@fontsource-variable/archivo";'));
+  assert.ok(stylesheet.includes('@import "@fontsource-variable/instrument-sans";'));
+  assert.ok(stylesheet.includes('@import "@fontsource/jetbrains-mono/400.css";'));
+  assert.equal(stylesheet.includes("@fontsource-variable/inter"), false);
+  assert.equal(stylesheet.includes("@fontsource-variable/sora"), false);
+  assert.equal(stylesheet.includes("geist-mono"), false);
 });

@@ -1,6 +1,6 @@
 import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-router";
 import { AuthProvider } from "@/lib/auth/provider";
-import { DesignStyleProvider, designStyleBootstrap, ThemeProvider, themeBootstrap } from "@/components/ui";
+import { DEFAULT_DESIGN_STYLE, DesignStyleProvider, designStyleBootstrap, ThemeProvider, themeBootstrap } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
 import { RootNotFound } from "@/components/status-pages";
 import appCss from "../styles.css?url";
@@ -22,7 +22,7 @@ export const Route = createRootRoute({
     ],
   }),
   component: () => (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning data-design={DEFAULT_DESIGN_STYLE}>
       <head>
         <HeadContent />
       </head>

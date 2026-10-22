@@ -18,8 +18,8 @@ export function DesignStyleProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!ready) return;
     document.documentElement.setAttribute("data-design", style);
-    // The Katana faces are fetched only while that style is in use.
-    if (style === "katana") void import("./katana-fonts");
+    // The AttentionOS faces are fetched only while that style is in use. Katana's faces are part of the stylesheet.
+    if (style === "attentionos") void import("./attentionos-fonts");
   }, [ready, style]);
   const setStyle = useCallback((next: DesignStyle) => {
     try { localStorage.setItem(DESIGN_STORAGE_KEY, next); } catch { /* Keep the choice for this page view only. */ }

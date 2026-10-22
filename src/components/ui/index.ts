@@ -10,7 +10,7 @@ export { DataTable } from "./data-table";
 export { Avatar, Logo } from "./avatar";
 export { ThemeProvider, useTheme, themeBootstrap, type Theme } from "./theme";
 export { DesignStyleProvider, useDesignStyle } from "./design-style-provider";
-export { DESIGN_STYLES, DESIGN_STYLE_INFO, designStyleBootstrap, parseDesignStyle, type DesignStyle } from "./design-style";
+export { DEFAULT_DESIGN_STYLE, DESIGN_STYLES, DESIGN_STYLE_INFO, designStyleBootstrap, parseDesignStyle, type DesignStyle } from "./design-style";
 export { LoadingMark } from "./loading-mark";
 export { Mark } from "./mark";
 export { Drawer } from "./drawer";

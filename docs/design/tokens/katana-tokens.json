@@ -1,6 +1,6 @@
 {
   "name": "Katana",
-  "status": "selectable in Settings (Appearance) as an alternate style; AttentionOS stays the default. The app reads these values from src/styles.css, and src/styles.design.test.ts checks the two files agree",
+  "status": "the default style; Settings (Appearance) can switch to AttentionOS. The app reads these values from src/styles.css, and src/styles.design.test.ts checks the two files agree",
   "source": "Katana design plan, docs/design/KATANA_DESIGN_PLAN.md. The values are those of release f248884d, renamed to the role keys AttentionOS uses.",
   "note": "Colour roles only in themes. Keys match the CSS custom properties in src/styles.css, without the leading --. Dark is the default theme of this style; light applies under [data-theme=\"light\"], and this style applies under [data-design=\"katana\"]. accent is a fill (buttons, the attention signal); accent-text is the same colour for text. on-accent is the text on an accent fill: the base colour of the theme.",
   "themes": {

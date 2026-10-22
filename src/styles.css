@@ -1,7 +1,7 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/sora";
-@import "@fontsource/geist-mono/400.css";
-@import "@fontsource/geist-mono/500.css";
+@import "@fontsource-variable/archivo";
+@import "@fontsource-variable/instrument-sans";
+@import "@fontsource/jetbrains-mono/400.css";
+@import "@fontsource/jetbrains-mono/500.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
@@ -10,7 +10,8 @@
 @custom-variant dark (&:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *));
 
 /* AttentionOS tokens (design/DESIGN.md, sections 2, 5 and 6). Source: docs/design/tokens/attentionos-tokens.json; the contrast test reads
-   the same values. Dark is the default. The accent is a fill (buttons, the attention signal); accent-text is the same violet for text. */
+   the same values. Dark is the default. The accent is a fill (buttons, the attention signal); accent-text is the same violet for text.
+   These values apply when AttentionOS is chosen in Settings. Katana, the default style, is declared below and overrides them. */
 :root {
   color-scheme: dark;
   --bg-base: #08070B;
@@ -65,10 +66,11 @@
   --scrim: rgb(17 16 22 / 0.4);
 }
 
-/* The Katana style, chosen in Settings (Appearance). It sets data-design="katana" on <html> and declares the same roles as the
-   AttentionOS blocks, with its own values, so every component reads the active style through the same variables. Its values are
-   in docs/design/tokens/katana-tokens.json, which src/styles.design.test.ts checks against these blocks. Its faces load on demand
-   (components/ui/katana-fonts.ts). The light block is more specific than the AttentionOS light block, so it wins. */
+/* The Katana style, the default. The root layout sets data-design="katana" on <html>, and the before-paint script changes it when
+   AttentionOS is chosen. It declares the same roles as the AttentionOS blocks, with its own values, so every component reads the active
+   style through the same variables. Its values are in docs/design/tokens/katana-tokens.json, which src/styles.design.test.ts checks
+   against these blocks. Its faces are imported at the top of this file. The light block is more specific than the AttentionOS light
+   block, so it wins. */
 :root[data-design="katana"] {
   --bg-base: #000000;
   --bg-raised: #0E0E0E;

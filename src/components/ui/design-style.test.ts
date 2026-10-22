@@ -23,9 +23,9 @@ function bootstrapped(stored: string | null | "unreadable"): string | undefined 
   return attributes["data-design"];
 }
 
-test("the app offers the two designs, and AttentionOS is the default", () => {
-  assert.deepEqual([...DESIGN_STYLES], ["attentionos", "katana"]);
-  assert.equal(DEFAULT_DESIGN_STYLE, "attentionos");
+test("the app offers the two designs, and Katana is the default", () => {
+  assert.deepEqual([...DESIGN_STYLES], ["katana", "attentionos"]);
+  assert.equal(DEFAULT_DESIGN_STYLE, "katana");
 });
 
 test("a stored or submitted value that names no design falls back to the default", () => {
@@ -39,9 +39,9 @@ test("a stored or submitted value that names no design falls back to the default
 test("the before-paint script applies the stored design, and keeps the default when storage cannot be read", () => {
   assert.equal(bootstrapped("katana"), "katana");
   assert.equal(bootstrapped("attentionos"), "attentionos");
-  assert.equal(bootstrapped(null), "attentionos");
-  assert.equal(bootstrapped("unreadable"), "attentionos");
-  assert.equal(bootstrapped("red"), "attentionos");
+  assert.equal(bootstrapped(null), "katana");
+  assert.equal(bootstrapped("unreadable"), "katana");
+  assert.equal(bootstrapped("red"), "katana");
 });
 
 test("the preview in Settings shows the accent, surface and text that each design's token file defines for dark", () => {

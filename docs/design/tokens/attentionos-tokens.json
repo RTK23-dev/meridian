@@ -1,6 +1,6 @@
 {
   "name": "AttentionOS",
-  "status": "applied: the app reads these values from src/styles.css, and src/styles.contrast.test.ts checks the two files agree",
+  "status": "applied as the alternate style in Settings (Appearance); Katana is the default. The app reads these values from src/styles.css, and src/styles.contrast.test.ts checks the two files agree",
   "source": "AttentionOS design/DESIGN.md sections 2, 3, 5 and 6, applied to Meridian's own mark and product. Meridian keeps its own logo.",
   "note": "Colour roles only in themes. Keys match the CSS custom properties in src/styles.css, without the leading --. Dark is the default theme; light applies under [data-theme=\"light\"]. accent is a fill (buttons, the attention signal); accent-text is violet for text and icons.",
   "themes": {
