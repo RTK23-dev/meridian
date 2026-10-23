@@ -4,22 +4,27 @@
 
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { structuredChat } from "../gateway/openrouter.ts";
+import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
 import type { CatalogEntry } from "./catalog.ts";
 import type { NodeChange } from "./stale.ts";
 import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from "./run.ts";
 import { readOrchestratorPolicy } from "./policy-store.ts";
-import type { BudgetTolerance } from "../budget/tolerance.ts";
 import { isDisabledModel } from "../config/model-policy.ts";
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
 import { queueAssetJob } from "./asset-poll.ts";
+import type { MeasureOptions } from "./measure.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
 import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
 export type CatalogState =
-  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[]; budgetTolerance: BudgetTolerance }
+  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[] }
   | { status: "not_connected" | "failed"; reason: string };
+
+/** The ids a run with no reservation carries. Such a run makes no paid call: the executor pauses before one, and the ledger refuses any it made. */
+const NO_REQUEST_ID = "req_none";
+const NO_RESERVATION_ID = "res_none";
 
 /** The brand's facts from the organization's record, or null when it is not the organization's or is deleted. */
 async function readBrandFacts(sql: Sql, organizationId: string, brandId: string): Promise<BrandFacts | null> {
@@ -61,7 +66,6 @@ async function catalogFor(sql: Sql, organizationId: string, now: () => string): 
     catalog,
     takenAt: read.catalog.takenAt,
     disabledFamilies: policy.disabledModelFamilies,
-    budgetTolerance: policy.budgetTolerance,
   };
 }
 
@@ -76,7 +80,6 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
       gateway: productionComposition(sql).gateway,
       catalog: catalog.catalog,
       disabledFamilies: catalog.disabledFamilies,
-      budgetTolerance: catalog.budgetTolerance,
       catalogReadAt: catalog.takenAt,
       now: input.now,
       workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
@@ -85,29 +88,39 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
   );
 }
 
-export async function runPlanFor(sql: Sql, input: { organizationId: string; planId: string; now: () => string }): Promise<RunOutcome | CatalogState> {
+/**
+ * Runs a stored plan. Measure mode is null unless an option is passed: the admin toggle comes in a later wave (D15). The handlers are made
+ * from the run's reservation, so every paid call is authorized against it, and the queued-job guard reads the plan's waiting jobs.
+ */
+export async function runPlanFor(
+  sql: Sql,
+  input: { organizationId: string; planId: string; now: () => string; measure?: MeasureOptions | null },
+): Promise<RunOutcome | CatalogState> {
   const catalog = await catalogFor(sql, input.organizationId, input.now);
   if (catalog.status !== "ok") return catalog;
   const { productionComposition } = await import("../jobs/runtime.ts");
   const composition = productionComposition(sql);
   const gateway = composition.gateway;
+  const measure = input.measure ?? null;
   return runStoredPlan(sql, {
     organizationId: input.organizationId,
     planId: input.planId,
     catalog: catalog.catalog,
     disabledFamilies: catalog.disabledFamilies,
-    budgetTolerance: catalog.budgetTolerance,
+    measure,
     budget: {
       workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
       now: input.now,
-      // The handlers are made from the run's reservation, so every paid call is authorized against it.
-      handlersFor: (budget) =>
-        productionHandlers({
+      // The handlers are made from the run's reservation, so every paid call is authorized against it. A run that starts at its line has none:
+      // its paid steps pause before any call, and the handlers for the steps that spend nothing are made with the ids of no reservation.
+      handlersFor: (budget, runMeasure) => {
+        const reserved = budget !== null;
+        return productionHandlers({
           organizationId: input.organizationId,
           planId: input.planId,
-          requestId: budget.requestId,
-          reservationId: budget.reservationId,
-          ledger: budget.ledger,
+          requestId: budget?.requestId ?? NO_REQUEST_ID,
+          reservationId: budget?.reservationId ?? NO_RESERVATION_ID,
+          ledger: budget?.ledger ?? scopedLedgerStore(sql, input.organizationId, NO_RESERVATION_ID),
           now: input.now,
           connection: () => gateway.connection("openrouter", input.organizationId),
           textRoute: (modelId) => gateway.chosen("llm.analysis", modelId),
@@ -125,12 +138,15 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
             return { value: result.value, actualUsd: result.usage.costUsd };
           },
           brand: (brandId) => readBrandFacts(sql, input.organizationId, brandId),
-          // The run's own asset router: a visual or voice step is made on the run's reservation, like a shot is.
-          router: composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId }),
+          // The run's own asset router: a visual or voice step is made on the run's reservation, like a shot is. None without a reservation.
+          router: reserved ? composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId }) : undefined,
           // A video or avatar the provider accepts is queued here, and the asset poll (engine.asset_poll) settles it.
-          queueAsset: (entry) => queueAssetJob(sql, input.organizationId, entry),
+          queueAsset: reserved ? (entry) => queueAssetJob(sql, input.organizationId, entry) : undefined,
+          sql,
+          measure: runMeasure,
           catalogReadAt: catalog.takenAt,
-        }),
+        });
+      },
     },
   });
 }

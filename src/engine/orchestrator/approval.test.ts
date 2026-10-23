@@ -50,13 +50,14 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
     await recordPlanOutcome(db.sql, { id, organizationId: ORG, plan: sample, reasons: [], catalogReadAt: null });
   }
 
-  test("an approval raises a paused plan's budget, and the run then continues past the old allowance", async () => {
-    await storedPlan("plan_approval_resume", 0.5);
+  test("an approval raises a paused plan's budget, and the run then continues past the old line", async () => {
+    // The line is $0.20: the analysis, the script, the still and the voice start below it ($0.23 committed), and the video does not start.
+    await storedPlan("plan_approval_resume", 0.2);
     const paused = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_resume", catalog, handlers: standIn() });
-    assert.equal(paused.status, "paused", "a plan whose total passes the user's budget and its tolerance pauses");
+    assert.equal(paused.status, "paused", "a plan whose spend reaches the user's budget pauses before the next paid step");
 
     const approved = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_resume", budgetUsd: 2, actorId: "user_admin_a" });
-    assert.deepEqual(approved, { status: "approved", previousUsd: 0.5, budgetUsd: 2 });
+    assert.deepEqual(approved, { status: "approved", previousUsd: 0.2, budgetUsd: 2 });
     const stored = await getPlan(db.sql, ORG, "plan_approval_resume");
     assert.equal(stored?.budgetUsd, 2, "the set budget is the approved amount");
     assert.equal(stored?.plan?.budgetUsd, 2, "the plan's own budget is raised too, so the run's target is the approved amount");
@@ -66,15 +67,15 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
   });
 
   test("an approval is refused unless the plan is paused, and the amount must be above the budget the plan has now", async () => {
-    await storedPlan("plan_approval_ready", 0.5);
+    await storedPlan("plan_approval_ready", 0.2);
     const ready = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_ready", budgetUsd: 2, actorId: "user_admin_a" });
     assert.equal(ready.status, "refused");
     assert.match(ready.status === "refused" ? ready.reasons.join(" ") : "", /only a plan paused for an approval/);
 
     await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_ready", catalog, handlers: standIn() });
-    const notAbove = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_ready", budgetUsd: 0.5, actorId: "user_admin_a" });
+    const notAbove = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_ready", budgetUsd: 0.2, actorId: "user_admin_a" });
     assert.equal(notAbove.status, "refused");
-    assert.match(notAbove.status === "refused" ? notAbove.reasons.join(" ") : "", /must be above the \$0\.5000/);
+    assert.match(notAbove.status === "refused" ? notAbove.reasons.join(" ") : "", /must be above the \$0\.2000/);
     assert.equal((await getPlan(db.sql, ORG, "plan_approval_ready"))?.status, "paused", "a refused approval changes nothing");
   });
 

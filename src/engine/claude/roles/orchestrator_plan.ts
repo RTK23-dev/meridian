@@ -14,10 +14,10 @@ import type { RoleDefinition } from "../role.ts";
 export const ORCHESTRATOR_PLAN_ROLE = "orchestrator_plan";
 
 /**
- * The prompt version this code is written against. The file is prompts/orchestrator_plan@3.md: v3 adds the category budgets (owner direction
- * 2026-10-23). v2 named the video class and the avatar inputs.
+ * The prompt version this code is written against. The file is prompts/orchestrator_plan@4.md: v4 states the budget as a line (owner direction
+ * 2026-10-23, D12). v3 added the category budgets, and v2 named the video class and the avatar inputs.
  */
-export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 3 } as const;
+export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 4 } as const;
 
 /** The model brief the orchestrator reads with its candidates (prompts/model_brief@1.md): a dated reference of the models the engine can price. */
 export const MODEL_BRIEF_PROMPT = { role: "model_brief", version: 1 } as const;
@@ -42,7 +42,8 @@ export const orchestratorBriefSchema = z.object({
   budgetUsd: z.number().positive().max(1000),
   /**
    * Optional budgets by category (owner direction 2026-10-23, D3). Copy is the text steps, creative the image and video steps, and voice the
-   * speech steps. A set category is the most its steps may cost, with the tolerance. An unset one is the orchestrator's to split under budgetUsd.
+   * speech steps. A set category is a line: its paid steps start only while its committed spend is below it (D12). An unset one is the
+   * orchestrator's to split under budgetUsd.
    */
   copyBudgetUsd: z.number().positive().max(1000).optional(),
   creativeBudgetUsd: z.number().positive().max(1000).optional(),

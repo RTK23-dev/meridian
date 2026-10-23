@@ -1,33 +1,24 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { INITIAL_BUDGET_TOLERANCE } from "../budget/tolerance.ts";
-import { allowancesOf, categoryEnvelopesOf, envelopeOf, positionOf } from "./envelope.ts";
+import { startsBelowLine } from "../budget/line.ts";
+import { lineOf, planAskNote } from "./envelope.ts";
 
-describe("the envelopes of a run and of its categories (owner direction 2026-10-23)", () => {
-  it("a plan's envelope targets the lower of its own budget and the budget the user set, and allows the tolerance on that target", () => {
-    const envelope = envelopeOf(3, 2);
-    assert.equal(envelope.targetUsd, 2);
-    assert.equal(envelope.allowanceUsd, 2.25, "the initial tolerance is the larger of 10 percent and 25 cents");
+describe("the run's line (owner direction 2026-10-23, D12)", () => {
+  it("a plan's line is the lower of its own budget and the budget the user set", () => {
+    assert.equal(lineOf(3, 2), 2);
+    assert.equal(lineOf(2, 3), 2);
+    assert.equal(lineOf(2, 2), 2);
   });
 
-  it("a category the brief sets has its own envelope; a category it leaves unset has none", () => {
-    const envelopes = categoryEnvelopesOf({ copy: 1 });
-    assert.deepEqual(envelopes.copy, { targetUsd: 1, allowanceUsd: 1.25, tolerance: INITIAL_BUDGET_TOLERANCE });
-    assert.equal(envelopes.creative, undefined);
-    assert.equal(envelopes.voice, undefined);
-    assert.deepEqual(allowancesOf(envelopes), { copy: 1.25 });
+  it("the line is the budget itself: a spend at it has reached it, with no tolerance past it", () => {
+    const line = lineOf(3, 0.5);
+    assert.equal(startsBelowLine(0.5, line), false, "a spend at the line does not start a paid step");
+    assert.equal(startsBelowLine(0.49, line), true);
   });
 
-  it("for a large category the percentage is the larger part of the tolerance", () => {
-    assert.equal(categoryEnvelopesOf({ creative: 10 }).creative?.allowanceUsd, 11);
-  });
-
-  it("with the tolerance at zero the allowance is the budget, so one cent over it needs an approval", () => {
-    const strict = { percent: 0, cents: 0 };
-    const voice = categoryEnvelopesOf({ voice: 0.5 }, strict).voice;
-    assert.ok(voice);
-    assert.equal(voice.allowanceUsd, 0.5);
-    assert.equal(positionOf(0.5, voice), "within_target");
-    assert.equal(positionOf(0.51, voice), "needs_approval");
+  it("a plan that asks for more than the user set gets a note that the run stops at the user's budget, and no note otherwise", () => {
+    assert.equal(planAskNote(3, 2), "the plan asks for $3.0000; the run stops at the $2.0000 budget you set");
+    assert.equal(planAskNote(2, 2), null);
+    assert.equal(planAskNote(1, 2), null);
   });
 });

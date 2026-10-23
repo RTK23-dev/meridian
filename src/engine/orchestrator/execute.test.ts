@@ -14,7 +14,7 @@ const validated = validatePlan(sample, catalog);
 if (!validated.ok) throw new Error(`sample plan must validate: ${validated.reasons.join("; ")}`);
 const order = validated.order;
 
-/** Recorded handlers: each returns a deterministic output and no actual cost, so the run charges the estimate. */
+/** Recorded handlers: each returns a deterministic output and no actual cost, so the run charges the hold. */
 function recordingHandlers(calls: string[], overrides: Partial<Record<string, NodeHandler>> = {}): Handlers {
   const make =
     (kind: string): NodeHandler =>
@@ -32,6 +32,7 @@ async function run(plan: OrchestratorPlan, handlers: Handlers, cache: RunCache, 
 }
 
 const stateOf = (events: NodeEvent[], id: string) => events.filter((event) => event.nodeId === id).at(-1)?.state;
+const reasonOf = (events: NodeEvent[], id: string, state: NodeEvent["state"]) => events.find((event) => event.nodeId === id && event.state === state)?.reason ?? "";
 const nodeById = new Map(sample.nodes.map((node) => [node.id, node]));
 const estimateOf = (id: string): number => nodeById.get(id)?.estimateUsd ?? 0;
 
@@ -138,21 +139,92 @@ test("a handler that throws fails its step, skips its readers, and cuts the mess
   for (const id of ["edit", "compose", "render"]) assert.equal(stateOf(events, id), "skipped");
 });
 
-test("the run pauses before a step that would overrun the budget, and calls nothing after it", async () => {
+test("a hold that exactly fits starts, and the run stops at the line before the next paid step", async () => {
   const calls: string[] = [];
   const events: NodeEvent[] = [];
-  const tight: OrchestratorPlan = { ...sample, budgetUsd: 0.5 };
-  const result = await runPlan({ plan: tight, order, handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e) });
+  // The line is $0.12. analyze_ref ($0.02) and script ($0.10) fit it exactly: the script's hold takes the spend to the line, so it starts.
+  // hero_still starts at the line, so it pauses before its call.
+  const result = await runPlan({ plan: sample, order, handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e), lineUsd: 0.12 });
+  assert.equal(stateOf(events, "script"), "done", "a hold that fits starts");
   assert.equal(result.status, "paused");
-  assert.equal(stateOf(events, "shot_1"), "paused");
-  assert.match(events.find((e) => e.nodeId === "shot_1" && e.state === "paused")?.reason ?? "", /past the \$0\.5000 allowance/);
-  assert.equal(calls.includes("shot_1"), false);
-  assert.ok(result.spentUsd <= 0.5, `spent ${result.spentUsd} must not exceed the budget`);
+  assert.equal(stateOf(events, "hero_still"), "paused");
+  assert.equal(
+    reasonOf(events, "hero_still", "paused"),
+    "budget reached, project not finished: the next step's hold of $0.0600 would take the spend past the $0.1200 budget (committed $0.1200)",
+  );
+  assert.equal(calls.includes("hero_still"), false, "the paused step is not called");
+  assert.equal(calls.includes("shot_1"), false, "nothing after the pause starts");
+  assert.ok(Math.abs(result.spentUsd - 0.12) < 1e-9, `spent ${result.spentUsd}`);
+});
+
+test("a hold that does not fit pauses the run before its call, with the reason; the steps before it still run and add nothing", async () => {
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  // The line is $0.10. analyze_ref ($0.02) fits. script's hold ($0.10) would take the spend to $0.12, past the line, so it does not start.
+  const result = await runPlan({ plan: sample, order, handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e), lineUsd: 0.1 });
+  assert.equal(result.status, "paused");
+  assert.equal(stateOf(events, "analyze_ref"), "done", "the step before the pause still runs");
+  assert.equal(stateOf(events, "script"), "paused");
+  assert.equal(
+    reasonOf(events, "script", "paused"),
+    "budget reached, project not finished: the next step's hold of $0.1000 would take the spend past the $0.1000 budget (committed $0.0200)",
+  );
+  assert.equal(calls.includes("script"), false, "no request is made for a hold that does not fit");
+  assert.equal(calls.includes("hero_still"), false, "nothing after the pause starts");
+  assert.ok(Math.abs(result.spentUsd - 0.02) < 1e-9, `spent ${result.spentUsd}: the paused step adds nothing`);
+});
+
+test("a zero-estimate paid step at the line does not start: the line is checked alongside the fit (D17)", async () => {
+  const zeroPlan: OrchestratorPlan = {
+    version: sample.version,
+    orchestrator: sample.orchestrator,
+    budgetUsd: 1,
+    nodes: [
+      { id: "a1", kind: "analysis", title: "a1", why: "a test step", dependsOn: [], model: null, params: {}, estimateUsd: 0.5 },
+      { id: "s1", kind: "script", title: "s1", why: "a test step", dependsOn: ["a1"], model: null, params: {}, estimateUsd: 0 },
+    ],
+  };
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  const result = await runPlan({ plan: zeroPlan, order: ["a1", "s1"], handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e), lineUsd: 0.5 });
+  assert.equal(stateOf(events, "a1"), "done");
+  assert.equal(stateOf(events, "s1"), "paused", "the spend is at the line, so a step of no cost still does not start");
+  assert.equal(calls.includes("s1"), false);
+  assert.equal(result.status, "paused");
+});
+
+test("a zero-estimate paid step below the line starts, and its zero hold adds nothing", async () => {
+  const zeroPlan: OrchestratorPlan = {
+    version: sample.version,
+    orchestrator: sample.orchestrator,
+    budgetUsd: 1,
+    nodes: [
+      { id: "a1", kind: "analysis", title: "a1", why: "a test step", dependsOn: [], model: null, params: {}, estimateUsd: 0.5 },
+      { id: "s1", kind: "script", title: "s1", why: "a test step", dependsOn: ["a1"], model: null, params: {}, estimateUsd: 0 },
+    ],
+  };
+  const calls: string[] = [];
+  const result = await runPlan({ plan: zeroPlan, order: ["a1", "s1"], handlers: recordingHandlers(calls), cache: new Map(), emit: () => {}, lineUsd: 1 });
+  assert.equal(result.status, "complete");
+  assert.deepEqual(calls, ["a1", "s1"]);
+  assert.ok(Math.abs(result.spentUsd - 0.5) < 1e-9);
+});
+
+test("a call in flight finishes, and its cost may take the spend past the line: the overshoot is recorded", async () => {
+  const events: NodeEvent[] = [];
+  // The line is $0.15. The script's hold ($0.10) fits after the analysis ($0.02), so it starts. Its call then finishes at $0.50, a bill above its
+  // estimate, so the spend is $0.52 when hero_still is reached: the overshoot is recorded, and hero_still does not start.
+  const handlers = recordingHandlers([], { script: async ({ node }) => ({ outputHash: contentHash({ id: node.id }), costUsd: 0.5 }) });
+  const result = await runPlan({ plan: sample, order, handlers, cache: new Map(), emit: (e) => events.push(e), lineUsd: 0.15 });
+  assert.equal(stateOf(events, "script"), "done");
+  assert.equal(events.find((e) => e.nodeId === "script" && e.state === "done")?.costUsd, 0.5, "the call's own cost is recorded");
+  assert.equal(stateOf(events, "hero_still"), "paused");
+  assert.ok(Math.abs(result.spentUsd - 0.52) < 1e-9, `spent ${result.spentUsd}: the analysis $0.02, then the script's $0.50`);
 });
 
 test("a paused run that resumes with a bigger budget ends with the same outputs as a run that never paused", async () => {
   const cache: RunCache = new Map();
-  const paused = await runPlan({ plan: { ...sample, budgetUsd: 0.5 }, order, handlers: recordingHandlers([]), cache, emit: () => {} });
+  const paused = await runPlan({ plan: sample, order, handlers: recordingHandlers([]), cache, emit: () => {}, lineUsd: 0.1 });
   assert.equal(paused.status, "paused");
   const resumed = await runPlan({ plan: sample, order, handlers: recordingHandlers([]), cache, emit: () => {} });
   assert.equal(resumed.status, "complete");
@@ -160,7 +232,7 @@ test("a paused run that resumes with a bigger budget ends with the same outputs 
   assert.equal(runFingerprint(resumed.outputs), runFingerprint(clean.outputs));
 });
 
-test("a paid step with no estimate fails before any call is made", async () => {
+test("a paid step with no estimate and no measure mode fails before any call is made, and says it has no price", async () => {
   const calls: string[] = [];
   const events: NodeEvent[] = [];
   const noEstimate = editNode(sample, "shot_1", {});
@@ -170,7 +242,43 @@ test("a paid step with no estimate fails before any call is made", async () => {
   };
   await runPlan({ plan: patched, order, handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e) });
   assert.equal(stateOf(events, "shot_1"), "failed");
+  assert.equal(reasonOf(events, "shot_1", "failed"), "the step has no price, and measure mode is off, so it did not run");
   assert.equal(calls.includes("shot_1"), false);
+});
+
+test("measure mode holds an unpriced video to its ceiling times its length, and the hold is charged when no bill is reported", async () => {
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  const unpriced: OrchestratorPlan = {
+    ...sample,
+    nodes: sample.nodes.map((node) => (node.id === "shot_1" ? { ...node, estimateUsd: null } : node)),
+  };
+  const result = await runPlan({
+    plan: unpriced,
+    order,
+    handlers: recordingHandlers(calls),
+    cache: new Map(),
+    emit: (e) => events.push(e),
+    measure: { ceilingUsdPerSecond: 0.5 },
+    lineUsd: 3,
+  });
+  // Five seconds at a $0.50 ceiling is a $2.50 hold. The steps before it cost $0.23, so the hold fits a $3.00 line and the run ends at $2.73.
+  assert.equal(stateOf(events, "shot_1"), "done");
+  assert.equal(events.find((e) => e.nodeId === "shot_1" && e.state === "done")?.costUsd, 2.5);
+  assert.ok(calls.includes("shot_1"));
+  assert.ok(Math.abs(result.spentUsd - 2.73) < 1e-9, `spent ${result.spentUsd}`);
+  assert.equal(result.status, "complete");
+});
+
+test("a measured video whose provider reports its bill is charged that bill, not the ceiling", async () => {
+  const events: NodeEvent[] = [];
+  const unpriced: OrchestratorPlan = {
+    ...sample,
+    nodes: sample.nodes.map((node) => (node.id === "shot_1" ? { ...node, estimateUsd: null } : node)),
+  };
+  const billed: NodeHandler = async ({ node }) => ({ outputHash: contentHash({ id: node.id }), costUsd: 1.25 });
+  await runPlan({ plan: unpriced, order, handlers: recordingHandlers([], { video: billed }), cache: new Map(), emit: (e) => events.push(e), measure: { ceilingUsdPerSecond: 0.5 }, lineUsd: 3 });
+  assert.equal(events.find((e) => e.nodeId === "shot_1" && e.state === "done")?.costUsd, 1.25);
 });
 
 test("a paid step whose provider is not connected reports not_connected: it holds nothing and adds nothing to the spend", async () => {
@@ -202,7 +310,7 @@ test("a step is given the body of each step it reads, not its hash", async () =>
   }
 });
 
-test("a failed paid step records the estimate it holds on its failed event, so a later run counts it", async () => {
+test("a failed paid step records the hold it keeps on its failed event, so a later run counts it", async () => {
   const paidId = order.find((id) => KIND_CATALOG[nodeById.get(id)?.kind ?? "reference"] !== undefined) ?? "";
   const kind = nodeById.get(paidId)?.kind ?? "analysis";
   const events: NodeEvent[] = [];
@@ -224,7 +332,7 @@ test("a paid step refused before any call fails and holds nothing, so a retry do
   assert.equal(result.spentUsd, doneCost);
 });
 
-test("a step the provider accepted is queued: it holds its estimate for this run, is not done, and the steps that read it wait", async () => {
+test("a step the provider accepted is queued: it holds its hold for this run, is not done, and the steps that read it wait", async () => {
   const paid = sample.nodes.find((node) => node.estimateUsd !== null && node.estimateUsd > 0 && KIND_CATALOG[node.kind] !== undefined);
   if (paid === undefined) throw new Error("the sample plan has a paid step with an estimate");
   const queued: NodeHandler = async () => {
@@ -237,4 +345,58 @@ test("a step the provider accepted is queued: it holds its estimate for this run
   assert.ok(result.spentUsd >= estimateOf(paid.id), "the queued estimate is held for this run");
   const dependent = sample.nodes.find((node) => node.dependsOn.includes(paid.id));
   if (dependent !== undefined) assert.equal(stateOf(events, dependent.id), "skipped");
+});
+
+test("a step whose job is already waiting reports queued: the line does not hold it, it calls nothing, and it adds no spend", async () => {
+  const cache: RunCache = new Map();
+  // The first run stores every step but the video, which has no handler yet, so the video is the only step left to run.
+  const withoutVideo = recordingHandlers([]);
+  delete withoutVideo.video;
+  await runPlan({ plan: sample, order, handlers: withoutVideo, cache, emit: () => {} });
+
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  // The video's job is waiting, so its hold ($0.90) is already in the starting spend. The line ($0.50) is already reached.
+  const result = await runPlan({
+    plan: sample,
+    order,
+    handlers: recordingHandlers(calls),
+    cache,
+    emit: (e) => events.push(e),
+    spentUsd: 0.9,
+    lineUsd: 0.5,
+    queued: new Set(["shot_1"]),
+  });
+  assert.equal(stateOf(events, "shot_1"), "queued");
+  assert.match(reasonOf(events, "shot_1", "queued"), /still queued at its provider/);
+  assert.equal(calls.includes("shot_1"), false, "nothing is submitted for a waiting job");
+  assert.equal(result.spentUsd, 0.9, "its hold is already in the starting spend, so nothing is added");
+  assert.equal(result.status, "incomplete", "the steps that read the waiting video wait for its poll");
+  assert.equal(stateOf(events, "edit"), "skipped");
+});
+
+test("a measured hold is held to the line like any other: a video whose ceiling does not fit pauses before its call", async () => {
+  const calls: string[] = [];
+  const events: NodeEvent[] = [];
+  const unpriced: OrchestratorPlan = {
+    ...sample,
+    nodes: sample.nodes.map((node) => (node.id === "shot_1" ? { ...node, estimateUsd: null } : node)),
+  };
+  const result = await runPlan({
+    plan: unpriced,
+    order,
+    handlers: recordingHandlers(calls),
+    cache: new Map(),
+    emit: (e) => events.push(e),
+    measure: { ceilingUsdPerSecond: 0.5 },
+    lineUsd: 2,
+  });
+  // The $2.50 ceiling for five seconds would take the $0.23 committed before it past a $2.00 line, so the video does not start.
+  assert.equal(stateOf(events, "shot_1"), "paused");
+  assert.equal(
+    reasonOf(events, "shot_1", "paused"),
+    "budget reached, project not finished: the next step's hold of $2.5000 would take the spend past the $2.0000 budget (committed $0.2300)",
+  );
+  assert.equal(calls.includes("shot_1"), false, "no request is made for a hold that does not fit");
+  assert.equal(result.status, "paused");
 });

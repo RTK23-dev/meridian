@@ -16,14 +16,17 @@ const input: OrchestratorPlanInput = {
 };
 
 describe("orchestrator_plan role", () => {
-  it("runs on the direction tier at the plan stage, against orchestrator_plan@3, which has the four prompt parts", () => {
+  it("runs on the direction tier at the plan stage, against orchestrator_plan@4, which has the four prompt parts", () => {
     assert.equal(orchestratorPlan.role, "orchestrator_plan");
     assert.equal(orchestratorPlan.capability, "llm.direction");
     assert.equal(orchestratorPlan.stage, "plan");
     const prompt = loadPrompt(orchestratorPlan.prompt);
-    assert.equal(prompt.id, "orchestrator_plan@3");
+    assert.equal(prompt.id, "orchestrator_plan@4");
     assert.match(prompt.text, /params\.model_class/, "the video class is named in the rules");
     assert.match(prompt.text, /copyBudgetUsd/, "the category budgets are named in the rules, so the split is delegated to the orchestrator");
+    assert.match(prompt.text, /A paid step starts only while the committed spend is below the budget/, "rule 7 states the budget as a line (D12)");
+    assert.match(prompt.text, /the project pauses until an admin raises the budget/, "rule 7 says the project pauses at the line");
+    assert.doesNotMatch(prompt.text, /tolerance/i, "no tolerance is named: a budget is a line (D12)");
     for (const heading of ["## Role and rules", "## Reference material", "## Task input", "## Output contract"]) {
       assert.match(prompt.text, new RegExp(`^${heading}$`, "m"));
     }

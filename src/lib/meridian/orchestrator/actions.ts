@@ -239,7 +239,7 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
   });
 
 /** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
-/** The workspace's budget tolerance and switched-off model families, with the initial values. Any member of the brand's workspace reads it. */
+/** The workspace's switched-off model families, with the initial values. Any member of the brand's workspace reads it. */
 export const getOrchestratorPolicyFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
   .middleware([authMiddleware])
@@ -252,15 +252,10 @@ export const getOrchestratorPolicyFor = createServerFn({ method: "POST" })
 export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const tolerance = body.budgetTolerance === undefined ? undefined : objectInput(body.budgetTolerance);
     const families = Array.isArray(body.disabledModelFamilies) ? body.disabledModelFamilies.map((family) => text(family, 200, "Model family")) : undefined;
     return {
       brandId: text(body.brandId, 80, "Brand", true),
       disabledModelFamilies: families === undefined ? undefined : families.filter((family) => family !== ""),
-      budgetTolerance:
-        tolerance === undefined
-          ? undefined
-          : { percent: number(tolerance.percent, "Tolerance percent", 0, 100), cents: number(tolerance.cents, "Tolerance cents", 0, 10000) },
     };
   })
   .middleware([authMiddleware])
@@ -269,7 +264,7 @@ export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
     const policy = await writeOrchestratorPolicy(sql, {
       organizationId,
       actorId: context.userId,
-      patch: { disabledModelFamilies: data.disabledModelFamilies, budgetTolerance: data.budgetTolerance },
+      patch: { disabledModelFamilies: data.disabledModelFamilies },
     });
     return { policy };
   });

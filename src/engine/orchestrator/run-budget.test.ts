@@ -6,7 +6,6 @@ import { loadCatalog } from "./catalog.ts";
 import { examplePlan } from "./example.ts";
 import type { Handlers } from "./execute.ts";
 import { openRunBudget, releaseRunBudget } from "./run-budget.ts";
-import { envelopeOf } from "./envelope.ts";
 import { runStoredPlan } from "./run.ts";
 import { createPlanDraft, recordPlanOutcome } from "./store.ts";
 import { NODE_KINDS } from "./contracts.ts";
@@ -14,8 +13,6 @@ import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts
 
 const ORG = "org_run_budget_a";
 const NOW = "2026-10-22T10:00:00.000Z";
-/** No tolerance: these cases test the exact budget. The tolerance cases are marked below. */
-const STRICT = { percent: 0, cents: 0 };
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
 
 function monthOf(usd: number): WorkspaceBudgetSource {
@@ -26,7 +23,7 @@ function monthOf(usd: number): WorkspaceBudgetSource {
   };
 }
 
-describe("a run's budget (run-budget.ts)", () => {
+describe("a run's budget (run-budget.ts, D12: a budget is a line)", () => {
   let db: TestDatabase;
 
   before(async () => {
@@ -38,46 +35,48 @@ describe("a run's budget (run-budget.ts)", () => {
     await db.close();
   });
 
-  test("a plan with nothing left to spend is not started: no reservation and no request row", async () => {
+  test("a run whose spend has reached its line is not started: no reservation and no request row", async () => {
+    const countRequests = async () =>
+      Number(((await db.sql`select count(*) as n from engine_requests where organization_id = ${ORG} and format_id = 'orchestrator_run'`) as Array<{ n: string | number }>)[0]?.n);
+    const requestsBefore = await countRequests();
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_none_left",
-      envelope: envelopeOf(1, 1, STRICT),
+      lineUsd: 1,
       spentUsd: 1,
       workspaceBudget: monthOf(100),
       now: () => NOW,
     });
     assert.equal(opened.status, "refused");
     if (opened.status === "refused") assert.match(opened.reasons[0] ?? "", /no paid step can run/);
+    assert.equal(await countRequests(), requestsBefore, "no request row is written");
   });
 
-  test("a run may spend inside its tolerance past its budget, and is refused only past the allowance", async () => {
-    // The budget is $1.00 and the tolerance is 25 cents, so the allowance is $1.25.
-    const inside = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_tolerance_inside", envelope: envelopeOf(1, 1), spentUsd: 1.2, workspaceBudget: monthOf(100), now: () => NOW });
-    assert.equal(inside.status, "open", "$1.20 spent leaves $0.05 of the allowance, so the run may start");
-    const past = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_tolerance_past", envelope: envelopeOf(1, 1), spentUsd: 1.26, workspaceBudget: monthOf(100), now: () => NOW });
-    assert.equal(past.status, "refused");
-    if (past.status === "refused") assert.match(past.reasons[0] ?? "", /allowance/);
+  test("a run opens while its spend is below the line, and is refused once the spend reaches it: there is no tolerance", async () => {
+    const inside = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_line_inside", lineUsd: 1, spentUsd: 0.99, workspaceBudget: monthOf(100), now: () => NOW });
+    assert.equal(inside.status, "open", "$0.99 committed leaves $0.01 of the line, so the run may start");
+    const atLine = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_line_at", lineUsd: 1, spentUsd: 1, workspaceBudget: monthOf(100), now: () => NOW });
+    assert.equal(atLine.status, "refused", "a spend at the line has reached it: no tolerance past it");
   });
 
-  test("a run that would take the workspace month past its budget is refused before it starts", async () => {
+  test("a run is refused only when its workspace month is at its line, with the month's reason", async () => {
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_month_full",
-      envelope: envelopeOf(0.5, 0.5, STRICT),
+      lineUsd: 0.5,
       spentUsd: 0,
-      workspaceBudget: monthOf(0.1),
+      workspaceBudget: monthOf(0),
       now: () => NOW,
     });
     assert.equal(opened.status, "refused");
-    if (opened.status === "refused") assert.match(opened.reasons[0] ?? "", /monthly budget/);
+    if (opened.status === "refused") assert.match(opened.reasons[0] ?? "", /^workspace monthly budget reached/);
   });
 
-  test("a run takes one reservation for what the plan may still spend, and releasing it gives back what was not spent", async () => {
+  test("a run takes one reservation for what its line leaves, with no allowance fields, and releasing it gives back what was not spent", async () => {
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_open_release",
-      envelope: envelopeOf(0.5, 1, STRICT),
+      lineUsd: 0.5,
       spentUsd: 0.1,
       workspaceBudget: monthOf(100),
       now: () => NOW,
@@ -85,7 +84,11 @@ describe("a run's budget (run-budget.ts)", () => {
     assert.equal(opened.status, "open");
     if (opened.status !== "open") return;
     const before = await opened.budget.ledger.getReservation(opened.budget.reservationId);
-    assert.equal(before?.reservedUsd, 0.4, "the reservation is what the plan has not yet spent");
+    assert.equal(before?.reservedUsd, 0.4, "the reservation is what the line leaves");
+    assert.equal(before?.requestBudgetUsd, 0.4, "the request budget is what the run may still spend");
+    assert.equal(before?.mode, "cap");
+    assert.equal(before && "requestAllowanceUsd" in before, false, "no request allowance is written (contract v11)");
+    assert.equal(before && "workspaceMonthAllowanceUsd" in before, false, "no month allowance is written (contract v11)");
 
     await releaseRunBudget(db.sql, { organizationId: ORG, budget: opened.budget, requestStatus: "delivered" });
     const after = await opened.budget.ledger.getReservation(opened.budget.reservationId);
