@@ -101,6 +101,8 @@ test("a budget line that refuses a call pauses the run at that step: the step is
     const result = await run(sample, recordingHandlers([], { [kind]: refused }), new Map(), events);
     assert.equal(result.status, "paused", `${kind}: the run pauses`);
     assert.equal(stateOf(events, stepId), "paused", `${kind}: the step is paused`);
+    // A refused call never ran: its pause carries no cost, and no failed event is written for it, so no hold is charged.
+    assert.equal(events.filter((event) => event.nodeId === stepId).at(-1)?.costUsd, null, `${kind}: a refused call charges nothing`);
     assert.equal(
       events.some((event) => event.nodeId === stepId && event.state === "failed"),
       false,
