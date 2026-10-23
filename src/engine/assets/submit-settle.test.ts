@@ -17,6 +17,8 @@ import { memoryBucketStore } from "./buckets.ts";
 import { memoryMediaStore } from "./adapter.ts";
 import { openRouterVideoAdapter, videoProfilesFromListing } from "./providers/openrouterVideo.ts";
 import { assetSpec, fakeClock, fixture, gatewayFor, json, ledgerWithReservation, raw, routesWith, scripted, WORKSPACE, type Reply } from "./test/recorded.ts";
+import { gatewayDownloader } from "../gateway/download.ts";
+import { publicTestResolver } from "../gateway/test/resolver.ts";
 import type { HttpRequest, HttpResponse } from "../gateway/types.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import type { LedgerRow } from "../budget/store.ts";
@@ -95,7 +97,7 @@ async function harness(options: HarnessOptions = {}) {
     media,
     videoProfiles: profiles,
     signals,
-    ...(options.takes ? { takes: {} } : {}),
+    ...(options.takes ? { takes: { downloader: gatewayDownloader(gateway, { resolver: publicTestResolver }) } } : {}),
     ...(options.settings ? { settings: options.settings } : {}),
     now: clock.now,
     sleep: clock.sleep,

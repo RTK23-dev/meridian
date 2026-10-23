@@ -24,6 +24,7 @@ import { createProduceShotHandler, routerGenerator } from "./handlers/produce-sh
 import { createCheckTakeHandler } from "./handlers/check-take.ts";
 import { registerEngineHandlers } from "./handlers/register.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { publicTestResolver } from "../gateway/test/resolver.ts";
 import { routes } from "../config/routes.ts";
 import { routesWith } from "../assets/test/recorded.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
@@ -155,7 +156,7 @@ function runtimeFor(options: { gateway: ReturnType<typeof gatewayWith>; profiles
       generator: routerGenerator(routerFor),
       stock: (input) =>
         searchStock({ gateway, organizationId: input.organizationId, query: input.query, minDurationMs: input.minDurationMs, providerFor: (route) => stockProviderFor(route, gateway) }),
-      downloader: gatewayDownloader(gateway),
+      downloader: gatewayDownloader(gateway, { resolver: publicTestResolver }),
       media,
       objects,
       now: () => Date.parse(NOW),

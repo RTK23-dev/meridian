@@ -1,35 +1,53 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { EngineError } from "../contracts/errors.ts";
-import { fetchInitFor, redirectRefusal } from "./transport.ts";
+import { pinnedLookup } from "./transport.ts";
 
-describe("transport: a redirect is refused, never followed", () => {
-  it("sends every request with redirect set to error, so a key header never follows a 3xx", () => {
-    const get = fetchInitFor({ method: "GET", url: "https://api.provider.test/v1/models", headers: { "x-api-key": "test-key" } });
-    assert.equal(get.redirect, "error");
-    const post = fetchInitFor({
-      method: "POST",
-      url: "https://api.provider.test/v1/chat/completions",
-      headers: { "content-type": "application/json" },
-      body: "{}",
+const CHECKED = [
+  { address: "93.184.216.34", family: 4 },
+  { address: "2606:2800:220:1:248:1893:25c8:1946", family: 6 },
+];
+
+/** Calls the lookup the way Node's connection does, and resolves with what it answered. */
+function ask(options: { all?: boolean; family?: number }): Promise<{ error: Error | null; answer: unknown; family?: number }> {
+  return new Promise((resolve) => {
+    pinnedLookup(CHECKED)("download.example.com", options, (error: unknown, answer: unknown, family?: number) => {
+      resolve({ error: error as Error | null, answer, ...(family === undefined ? {} : { family }) });
     });
-    assert.equal(post.redirect, "error");
-    assert.equal(post.body, "{}");
+  });
+}
+
+describe("pinnedLookup: a download connects only to the addresses it checked", () => {
+  it("answers with every checked address when the connection asks for all of them", async () => {
+    const { error, answer } = await ask({ all: true });
+    assert.equal(error, null);
+    assert.deepEqual(answer, CHECKED);
   });
 
-  it("refuses a 302 as a non-retryable provider error that names the class of answer and carries no URL or key", () => {
-    // Node's fetch rejects a 302 under redirect "error" with this shape (its cause is "unexpected redirect"). The redirect target is never requested.
-    const refused = redirectRefusal(new TypeError("fetch failed", { cause: new Error("unexpected redirect") }));
-    assert.ok(refused instanceof EngineError);
-    assert.equal(refused.kind, "provider");
-    assert.equal(refused.retryable, false);
-    assert.match(refused.message, /redirect \(3xx\)/);
-    assert.doesNotMatch(refused.message, /https?:\/\/|key=/);
+  it("answers with one checked address, of the requested family", async () => {
+    const v4 = await ask({ family: 4 });
+    assert.equal(v4.error, null);
+    assert.equal(v4.answer, "93.184.216.34");
+    assert.equal(v4.family, 4);
+    const v6 = await ask({ family: 6 });
+    assert.equal(v6.answer, "2606:2800:220:1:248:1893:25c8:1946");
   });
 
-  it("leaves every other failure as it was, so the classifier still sees a network reset, an abort or a plain error", () => {
-    assert.equal(redirectRefusal(new TypeError("fetch failed", { cause: new Error("ECONNRESET") })), null);
-    assert.equal(redirectRefusal(new DOMException("The operation was aborted", "AbortError")), null);
-    assert.equal(redirectRefusal(new Error("unexpected redirect")), null);
+  it("answers with a checked address when no family is asked for", async () => {
+    const { error, answer, family } = await ask({});
+    assert.equal(error, null);
+    assert.equal(answer, "93.184.216.34");
+    assert.equal(family, 4);
+  });
+
+  it("refuses with no answer when no checked address has the requested family", async () => {
+    const onlyV4 = pinnedLookup([{ address: "93.184.216.34", family: 4 }]);
+    await new Promise<void>((resolve) => {
+      onlyV4("download.example.com", { family: 6 }, (error: unknown, answer: unknown) => {
+        assert.ok(error instanceof Error);
+        assert.equal((error as NodeJS.ErrnoException).code, "ENOTFOUND");
+        assert.equal(answer, "");
+        resolve();
+      });
+    });
   });
 });

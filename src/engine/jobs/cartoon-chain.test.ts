@@ -35,6 +35,7 @@ import { memoryMediaStore, type MediaStore } from "../assets/adapter.ts";
 import { openRouterImageAdapter } from "../assets/providers/openrouterImage.ts";
 import { openRouterVideoAdapter, videoProfilesFromListing, type VideoProfile } from "../assets/providers/openrouterVideo.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { publicTestResolver } from "../gateway/test/resolver.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { check, gateResult } from "../review/gates/common.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
@@ -219,7 +220,7 @@ function produceHandler(gateway: Gateway, media: MediaStore, objects: ReturnType
     stock: async () => {
       throw new EngineError("internal", "the cartoon chain test makes no stock search");
     },
-    downloader: gatewayDownloader(gateway),
+    downloader: gatewayDownloader(gateway, { resolver: publicTestResolver }),
     media: fakeMedia({ probe: () => probeOf({ durationMs: 3000, bytes: MP4_BYTES.byteLength }) }),
     objects,
     now: () => Date.parse(NOW),

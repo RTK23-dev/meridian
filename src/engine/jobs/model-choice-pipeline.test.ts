@@ -29,6 +29,7 @@ import { createProduceShotHandler, routerGenerator } from "./handlers/produce-sh
 import { createCheckTakeHandler } from "./handlers/check-take.ts";
 import { registerEngineHandlers } from "./handlers/register.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { publicTestResolver } from "../gateway/test/resolver.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { EngineRuntime, ShotSummary, StageOutput } from "./types.ts";
 import { fakeMedia, fakeObjects, fixture, gatewayWith, json, MP4_BYTES, MP4_STOCK_BYTES, probeOf, raw, recordedTransport, runQueued, scorerFrom } from "./test/harness.ts";
@@ -179,7 +180,7 @@ function runtimeFor(options: { gateway: ReturnType<typeof gatewayWith>; catalog:
       generator: routerGenerator(routerFor),
       stock: (input) =>
         searchStock({ gateway, organizationId: input.organizationId, query: input.query, minDurationMs: input.minDurationMs, providerFor: (route) => stockProviderFor(route, gateway) }),
-      downloader: gatewayDownloader(gateway),
+      downloader: gatewayDownloader(gateway, { resolver: publicTestResolver }),
       media,
       objects,
       now: () => Date.parse(NOW),
