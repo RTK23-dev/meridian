@@ -86,6 +86,12 @@ describe("asset job references", () => {
   it("refuses a model class the contract does not know", () => {
     assert.match(refusedWith({ ...validJob(), modelClass: "video.unknown" }), /does not parse/);
   });
+
+  it("carries the bills of the earlier targets, and a job stored before that field parses with none", () => {
+    assert.equal(parseAssetJob(validJob({ earlierTargetsBilledUsd: 0.25 })).earlierTargetsBilledUsd, 0.25);
+    assert.equal(parseAssetJob(validJob()).earlierTargetsBilledUsd, undefined, "absent is absent, not a zero bill");
+    assert.match(refusedWith(validJob({ earlierTargetsBilledUsd: -0.25 })), /does not parse/);
+  });
 });
 
 describe("the settlement store", () => {

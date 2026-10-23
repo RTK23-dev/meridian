@@ -223,6 +223,20 @@ describe("router with a model choice", () => {
     assert.match(report.decisions[0]?.reason ?? "", /no model catalog/);
   });
 
+  it("a measured clip on the chosen model holds the plan's measure hold, not the catalog estimate, and the bill replaces it", async () => {
+    const h = await harness({
+      script: { "POST /api/v1/videos": submitFor({ [WAN]: accepted("job-second") }), "GET /api/v1/videos/job-second": completed("job-second", 0.31) },
+    });
+    const spec = assetSpec({ durationMs: 5000, modelChoice: choice(WAN) });
+    // The catalog estimate for five seconds is 0.2125; the plan's measure hold for the same clip is 2.5 (five seconds at 0.50).
+    const report = await h.router.produce({ ...h.input(spec), measureHoldUsd: 2.5 });
+    assert.equal(report.outcome.status, "done", JSON.stringify(report.outcome));
+    const [row] = await h.ledger.listEntries(h.reservationId);
+    assert.equal(row?.estimateUsd, 2.5, "the measure hold is what the ledger holds");
+    assert.equal(row?.reservedUsd, 2.5);
+    assert.equal(row?.actualUsd, 0.31, "the bill replaces the hold");
+  });
+
   it("keeps two models' assets apart in the cache: the provider id names the chosen model", async () => {
     const cache = memoryAssetCache();
     const h = await harness({

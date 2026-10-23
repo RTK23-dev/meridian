@@ -9,9 +9,10 @@
 import { assetCacheKey, type AssetSpec } from "../contracts/assets.ts";
 import { newId } from "../contracts/ids.ts";
 import type { LedgerStore } from "../budget/store.ts";
+import { EngineError } from "../contracts/errors.ts";
 import { paidCall, type PaidRun } from "../gateway/paid.ts";
 import type { Gateway, ResolvedRoute } from "../gateway/gateway.ts";
-import { INITIAL_DISABLED_MODEL_FAMILIES, isDisabledModel } from "../config/model-policy.ts";
+import { isDisabledModel } from "../config/model-policy.ts";
 import { openRouterVideoAdapter, isVideoClass, listVideoModels, videoProfilesFromListing, VIDEO_ASPECT, VIDEO_RESOLUTION, type VideoProfile } from "./providers/openrouterVideo.ts";
 import { classifyError } from "./classify.ts";
 
@@ -24,6 +25,17 @@ const SWITCHED_OFF = "switched off by the workspace's model policy";
 /** Whether a route names a model of a family the workspace has switched off. */
 function switchedOff(route: ResolvedRoute, families: readonly string[]): boolean {
   return route.model !== null && isDisabledModel(route.model, families);
+}
+
+/**
+ * The workspace's switched-off families, which every decision of the table and the live test is made against. None is refused, before any
+ * read or request: the built-in list is the initial policy, not this workspace's, so it is never a stand-in for the families a run passes (D16).
+ */
+function requiredFamilies(families: readonly string[] | undefined): readonly string[] {
+  if (families === undefined) {
+    throw new EngineError("invalid_input", "the workspace's switched-off model families must be passed; none were, so no route is decided or tested");
+  }
+  return families;
 }
 
 export const FRAME_TEST_PROMPT = "A single product on a plain table, a slow push-in. Frame test for Bible 20.3 item 2.";
@@ -93,18 +105,14 @@ function rowFor(route: ResolvedRoute, profile: VideoProfile | null, durationSeco
 
 /**
  * The table from a GET /videos/models answer alone. No call is made, so every row's basis is listing_only. A route whose model is in a
- * switched-off family does not pass: it is not tested, so the table cannot pin it.
+ * switched-off family does not pass: it is not tested, so the table cannot pin it. The families are the workspace's and are required.
  */
-export function frameTestFromListing(
-  listing: unknown,
-  routes: ResolvedRoute[],
-  durationSeconds: number,
-  disabledFamilies: readonly string[] = INITIAL_DISABLED_MODEL_FAMILIES,
-): FrameTestRow[] {
+export function frameTestFromListing(listing: unknown, routes: ResolvedRoute[], durationSeconds: number, disabledFamilies: readonly string[]): FrameTestRow[] {
+  const families = requiredFamilies(disabledFamilies);
   const { profiles } = videoProfilesFromListing(listing);
   return routes.map((route) => {
     const profile = route.model === null ? null : (profiles.get(route.model) ?? null);
-    if (switchedOff(route, disabledFamilies)) return { ...rowFor(route, profile, durationSeconds, { kind: "not_run", reason: SWITCHED_OFF }), pass: false };
+    if (switchedOff(route, families)) return { ...rowFor(route, profile, durationSeconds, { kind: "not_run", reason: SWITCHED_OFF }), pass: false };
     const submit: SubmitOutcome = { kind: "not_run", reason: frameTestPrecheck(profile, durationSeconds) ?? "listing only; no submit" };
     return rowFor(route, profile, durationSeconds, submit);
   });
@@ -155,8 +163,11 @@ export type FrameTestInput = {
   durationSeconds: number;
   /** ISO time of the test. */
   at: string;
-  /** The workspace's switched-off model families. Absent means the initial policy (config/model-policy.ts), so Veo is not submitted. */
-  disabledFamilies?: readonly string[];
+  /**
+   * The workspace's switched-off model families (required). A family in this list is never submitted, and its row says why. A call that
+   * passes none is refused before any request (D16).
+   */
+  disabledFamilies: readonly string[];
 };
 
 /**
@@ -164,10 +175,11 @@ export type FrameTestInput = {
  * the reservation and is keyed by its cache key. A model whose precheck fails is not submitted at all.
  */
 export async function runFirstLastFrameTest(input: FrameTestInput): Promise<FrameTestRun> {
+  // Refused before the listing is read: a run with no families is not a run of this workspace's policy.
+  const families = requiredFamilies(input.disabledFamilies);
   const listing = await listVideoModels(input.gateway, input.organizationId);
   const parsed = videoProfilesFromListing(listing);
   const routes = videoRoutesForFrameTest(input.gateway);
-  const families = input.disabledFamilies ?? INITIAL_DISABLED_MODEL_FAMILIES;
   const rows: FrameTestRow[] = [];
 
   for (const route of routes) {
