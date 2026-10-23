@@ -6,9 +6,9 @@ import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg
 import { approvePlanBudget, listBudgetApprovals } from "./approval.ts";
 import { loadCatalog } from "./catalog.ts";
 import { NODE_KINDS, orchestratorPlanSchema, type OrchestratorPlan } from "./contracts.ts";
-import type { Handlers, NodeHandler } from "./execute.ts";
+import { CallRefusedError, type Handlers, type NodeHandler } from "./execute.ts";
 import { runStoredPlan } from "./run.ts";
-import { createPlanDraft, getPlan, listPlanEvents, recordPlanOutcome } from "./store.ts";
+import { appendPlanEvents, createPlanDraft, getPlan, listPlanEvents, recordPlanOutcome } from "./store.ts";
 
 const ORG = "org_approval_a";
 const OTHER = "org_approval_b";
@@ -266,5 +266,35 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
     }
     assert.deepEqual(await getPlan(db.sql, ORG, "plan_approval_copy_auditfail"), before, "the brief is exactly as it was before the approval");
     assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_copy_auditfail", 10), []);
+  });
+
+  test("a workspace month pause is refused for every approval, with the reason to raise the month in settings, and nothing changes", async () => {
+    // The workspace month is at its budget: the run's call is refused, and the run pauses at that step (execute.ts, D17).
+    await storedPlan("plan_approval_month", 0.5);
+    const handlers = standIn();
+    handlers.analysis = async () => {
+      throw new CallRefusedError("the budget refused this call, so it was not made: the workspace month has committed 5 USD, at or above its 5 USD budget, so no paid call starts");
+    };
+    const paused = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_month", catalog, handlers });
+    assert.equal(paused.status, "paused");
+    const before = await getPlan(db.sql, ORG, "plan_approval_month");
+
+    // A month pause from a video call, which the asset path words with the adapter first.
+    await appendPlanEvents(db.sql, ORG, "plan_approval_month", [
+      {
+        nodeId: "shot_1",
+        state: "paused",
+        outputHash: null,
+        costUsd: null,
+        reason: "budget reached, project not finished: openrouter:video: call video would take the workspace month to 0.9 USD, above its 0.5 USD budget, so it does not start",
+      },
+    ]);
+    const total = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_month", budgetUsd: 2, actorId: "user_admin_a" });
+    const copy = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_month", budgetUsd: 2, actorId: "user_admin_a", category: "copy" });
+    for (const outcome of [total, copy]) {
+      assert.deepEqual(outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget in settings"] });
+    }
+    assert.deepEqual(await getPlan(db.sql, ORG, "plan_approval_month"), before, "a refused approval changes nothing: the plan, its status and its budgets");
+    assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_month", 10), [], "a refused approval writes no audit row");
   });
 });

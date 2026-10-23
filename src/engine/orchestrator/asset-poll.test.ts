@@ -12,6 +12,8 @@ import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg
 import { waitingHoldsByNode } from "./holds.ts";
 import { ASSET_POLL_AGAIN_MS, RUN_ENDED_REASON, pollAssetJobs, queueAssetJob, sqlAssetPollStore, type AssetPollStore, type DueAsset } from "./asset-poll.ts";
 import { createPlanDraft, failedHoldsByNode, failedHoldsUsd, listPlanEvents, listStepOutputs } from "./store.ts";
+import { writeBrandPolicy } from "./brand-policy.ts";
+import { writeOrchestratorPolicy } from "./policy-store.ts";
 
 const JOB = { idempotencyKey: "job-1", jobRef: "provider-job-1" } as unknown as AssetJob;
 const NEXT_JOB = { idempotencyKey: "job-1-retry", jobRef: "provider-job-2" } as unknown as AssetJob;
@@ -35,8 +37,8 @@ function row(overrides: Partial<DueAsset> = {}): DueAsset {
   };
 }
 
-/** A store that records every write, so each test can read what the poll did. */
-function fakeStore(due: DueAsset[]) {
+/** A store that records every write, so each test can read what the poll did. `families` are the plan's switched-off families at the poll. */
+function fakeStore(due: DueAsset[], families: string[] = []) {
   const writes = {
     rescheduled: [] as Array<{ id: string; job: AssetJob; runAfterMs: number }>,
     finished: [] as Array<{ id: string; status: string; result: string }>,
@@ -62,6 +64,10 @@ function fakeStore(due: DueAsset[]) {
       if (r.heldUsd !== null) writes.charged.push({ id: r.id, hold: r.heldUsd });
       writes.finished.push({ id: r.id, status: "failed", result: reason });
       return true;
+    },
+    async disabledFamiliesOf() {
+      // The families as they are at the poll: the test changes this list to switch a family off after the row was queued.
+      return families;
     },
   };
   return { store, writes };
@@ -236,6 +242,68 @@ describe("the poll over recorded answers", () => {
     assert.deepEqual(done, { polled: 1, done: 0, failed: 0, waiting: 0 }, "a completed close that wrote nothing is not counted");
     const failed = await pollAssetJobs({ store: closedElsewhere, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: null, pollThrows: true })) });
     assert.deepEqual(failed, { polled: 1, done: 0, failed: 0, waiting: 0 }, "a failed close that wrote nothing is not counted");
+  });
+
+  test("a family switched off after the job was queued is not picked by the poll's settle-time fallback: the router that settles it is built with the families as they are now", async () => {
+    // The job's fallbacks, in order: a target in "vendor-x", then one in "vendor-c". The router picks the first fallback whose family is not
+    // switched off in the scope it is built with (the settle-time check of the router, which the poll now feeds).
+    const fallbacks = [
+      { id: "target-x", family: "vendor-x" },
+      { id: "target-c", family: "vendor-c" },
+    ];
+    const settledWith: Array<readonly string[]> = [];
+    const routerFor = (scope: { disabledFamilies: readonly string[] }): AsyncAssetRouter => {
+      settledWith.push(scope.disabledFamilies);
+      const next = fallbacks.find((target) => !scope.disabledFamilies.includes(target.family));
+      return {
+        async pollOnce() {
+          return { state: "failed", error: { kind: "server", retryable: true, message: "503" } };
+        },
+        async settle() {
+          const step =
+            next === undefined
+              ? { status: "unavailable", reasons: ["no fallback is left in a family that is on"] }
+              : { status: "submitted", job: { ...NEXT_JOB, targetId: next.id }, runAfterMs: 15_000 };
+          return { step, decisions: [], alerts: [], attempts: [] };
+        },
+      } as unknown as AsyncAssetRouter;
+    };
+    const targetOf = (job: AssetJob | undefined): unknown => (job as unknown as { targetId?: string } | undefined)?.targetId;
+
+    // Polled while no family is switched off, the fallback is the first target.
+    const beforeSwitch = fakeStore([row()]);
+    await pollAssetJobs({ store: beforeSwitch.store, organizationId: "org_1", routerFor });
+    assert.equal(targetOf(beforeSwitch.writes.rescheduled[0]?.job), "target-x", "with no family switched off, the fallback is the first target");
+
+    // The same job, polled after "vendor-x" was switched off: its fallback is the next target, never the switched-off one.
+    const afterSwitch = fakeStore([row()], ["vendor-x"]);
+    await pollAssetJobs({ store: afterSwitch.store, organizationId: "org_1", routerFor });
+    assert.equal(targetOf(afterSwitch.writes.rescheduled[0]?.job), "target-c", "the switched-off target is not picked by the fallback");
+    assert.deepEqual(settledWith.at(-1), ["vendor-x"], "the router that settled the job was built with the families as they are at this poll");
+  });
+
+  test("a poll whose plan's families cannot be read leaves the row open, and builds no router for it", async () => {
+    const { store, writes } = fakeStore([row()]);
+    const unreadable: AssetPollStore = {
+      ...store,
+      async disabledFamiliesOf() {
+        throw new Error("the workspace's policy is unreadable");
+      },
+    };
+    let routers = 0;
+    const report = await pollAssetJobs({
+      store: unreadable,
+      organizationId: "org_1",
+      routerFor: () => {
+        routers += 1;
+        return fakeRouter({ poll: { state: "done", uri: "x" }, settle: DONE_WITH_BILL });
+      },
+    });
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 0, waiting: 1 });
+    assert.equal(routers, 0, "no router is asked about the job while its families are unknown");
+    assert.deepEqual(writes.rescheduled, [{ id: "row-1", job: JOB, runAfterMs: ASSET_POLL_AGAIN_MS }]);
+    assert.equal(writes.finished.length, 0, "the row is not closed");
+    assert.equal(writes.charged.length, 0, "its hold is not charged");
   });
 });
 
@@ -524,5 +592,22 @@ describe("the poll on the database: holds, bills, measurements and organizations
     assert.equal(await failedHoldsUsd(db.sql, org, plan), 0.8, "the job's hold is charged once");
     const events = await listPlanEvents(db.sql, org, plan, 0);
     assert.deepEqual(events.map((e) => [e.nodeId, e.state, e.costUsd, e.reason]), [["clip", "failed", 0.8, RUN_ENDED_REASON]]);
+  });
+
+  test("the families a poll reads are the workspace's, with the plan's brand's, read from the database at each poll; a family switched off later is read at the next poll", async () => {
+    const org = "org_poll_families";
+    const brand = "brand_poll_families";
+    await seedWorkspace(db.sql, org, brand);
+    await writeOrchestratorPolicy(db.sql, { organizationId: org, actorId: "user_poll", patch: { disabledModelFamilies: ["vendor-w"] } });
+    await writeBrandPolicy(db.sql, { organizationId: org, brandId: brand, actorId: "user_poll", disabledModelFamilies: ["vendor-b"] });
+    await createPlanDraft(db.sql, { id: "plan_poll_brand", organizationId: org, title: "brand", brief: {}, orchestratorModel: "vendor-a/model-x", budgetUsd: 5, brandId: brand });
+    await createPlanDraft(db.sql, { id: "plan_poll_nobrand", organizationId: org, title: "no brand", brief: {}, orchestratorModel: "vendor-a/model-x", budgetUsd: 5 });
+    const store = sqlAssetPollStore(db.sql, org);
+    assert.deepEqual([...(await store.disabledFamiliesOf("plan_poll_brand"))], ["vendor-b", "vendor-w"], "the workspace's families and the brand's");
+    assert.deepEqual([...(await store.disabledFamiliesOf("plan_poll_nobrand"))], ["vendor-w"], "a plan with no brand has the workspace's alone");
+
+    await writeOrchestratorPolicy(db.sql, { organizationId: org, actorId: "user_poll", patch: { disabledModelFamilies: ["vendor-w", "vendor-z"] } });
+    assert.deepEqual([...(await store.disabledFamiliesOf("plan_poll_brand"))], ["vendor-b", "vendor-w", "vendor-z"], "a family switched off after the job was queued is read at the next poll");
+    await assert.rejects(store.disabledFamiliesOf("plan_poll_not_here"), /not in this organization/, "a plan that is not the organization's has no families read for it");
   });
 });

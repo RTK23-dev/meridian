@@ -35,6 +35,19 @@ export type BudgetApproval = {
 const CATEGORY_PAUSE = "^(copy|creative|voice) budget reached, project not finished";
 const CATEGORY_PAUSE_RE = new RegExp(CATEGORY_PAUSE);
 
+/**
+ * The reason of a month pause: a call was refused because the workspace month is at its budget (budget/reserve.ts words both refusals so, and
+ * the executor passes them on). A plan's budget does not raise the month, so no approval of the plan raises it.
+ */
+const MONTH_PAUSE = "the workspace month has committed|would take the workspace month to";
+const MONTH_PAUSE_RE = new RegExp(MONTH_PAUSE);
+
+/**
+ * Why an approval of a month pause is refused. The month budget is set in settings, not on the plan, so no approval of the plan clears a pause
+ * at the month line: the refusal says where the budget is raised.
+ */
+const MONTH_REFUSAL = "the workspace month is at its budget; raise the monthly budget in settings";
+
 /** The brief's key of each category's line. categories.ts categoryBudgetsOf reads the same keys. */
 const LINE_KEY: Record<BudgetCategory, string> = { copy: "copyBudgetUsd", creative: "creativeBudgetUsd", voice: "voiceBudgetUsd" };
 
@@ -59,8 +72,12 @@ export async function approvePlanBudget(
   const category = opts.category ?? null;
   if (category !== null && !BUDGET_CATEGORIES.some((name) => name === category)) return refusedWith(`${category} is not a budget category`);
 
+  // A month pause is not a line of the plan: no approval raises the workspace month, so every approval of it is refused, with the way to raise it.
+  const pauseReason = await lastPauseReason(sql, opts.organizationId, opts.planId);
+  if (pauseReason !== null && MONTH_PAUSE_RE.test(pauseReason)) return refusedWith(MONTH_REFUSAL);
+
   // The line the run stopped at, and the approval must name it: a category's line, or the total (no category).
-  const pausedAt = categoryOfPause(await lastPauseReason(sql, opts.organizationId, opts.planId));
+  const pausedAt = categoryOfPause(pauseReason);
   if (pausedAt !== category) {
     if (pausedAt === null) return refusedWith(`the plan is paused at its plan budget, not its ${category} budget; approve it without a category`);
     if (category === null) return refusedWith(`the plan is paused at its ${pausedAt} budget; approve it with the ${pausedAt} category`);
@@ -92,7 +109,8 @@ async function approveTotal(sql: Sql, opts: ApproveOpts, stored: StoredPlan): Pr
     ),
     prior as (
       select p.id as plan_id, p.budget_usd, p.brief, lastpause.reason as pause_reason,
-        substring(lastpause.reason from ${CATEGORY_PAUSE}::text) as pause_category
+        substring(lastpause.reason from ${CATEGORY_PAUSE}::text) as pause_category,
+        coalesce(lastpause.reason ~ ${MONTH_PAUSE}::text, false) as pause_month
       from orchestrator_plans p
       left join lastpause on lastpause.plan_id = p.id
       where p.id = ${opts.planId} and p.organization_id = ${opts.organizationId}
@@ -106,7 +124,7 @@ async function approveTotal(sql: Sql, opts: ApproveOpts, stored: StoredPlan): Pr
       where id = ${opts.planId} and organization_id = ${opts.organizationId}
         and status = 'paused' and plan is not null
         and budget_usd = ${stored.budgetUsd}::numeric and budget_usd < ${opts.budgetUsd}::numeric
-        and exists (select 1 from prior where prior.pause_category is null)
+        and exists (select 1 from prior where prior.pause_category is null and not prior.pause_month)
       returning id
     )
     insert into orchestrator_budget_approvals (id, organization_id, plan_id, actor_id, previous_budget_usd, approved_budget_usd, reason)
@@ -137,7 +155,8 @@ async function approveCategory(sql: Sql, opts: ApproveOpts, stored: StoredPlan, 
     ),
     prior as (
       select p.id as plan_id, p.budget_usd, p.brief, lastpause.reason as pause_reason,
-        substring(lastpause.reason from ${CATEGORY_PAUSE}::text) as pause_category
+        substring(lastpause.reason from ${CATEGORY_PAUSE}::text) as pause_category,
+        coalesce(lastpause.reason ~ ${MONTH_PAUSE}::text, false) as pause_month
       from orchestrator_plans p
       left join lastpause on lastpause.plan_id = p.id
       where p.id = ${opts.planId} and p.organization_id = ${opts.organizationId}
@@ -149,7 +168,7 @@ async function approveCategory(sql: Sql, opts: ApproveOpts, stored: StoredPlan, 
       where id = ${opts.planId} and organization_id = ${opts.organizationId}
         and status = 'paused' and plan is not null and budget_usd = ${stored.budgetUsd}::numeric
         and (brief->>${key})::numeric = ${line}::numeric
-        and exists (select 1 from prior where prior.pause_category = ${category}::text)
+        and exists (select 1 from prior where prior.pause_category = ${category}::text and not prior.pause_month)
       returning id
     )
     insert into orchestrator_budget_approvals (id, organization_id, plan_id, actor_id, previous_budget_usd, approved_budget_usd, reason)
