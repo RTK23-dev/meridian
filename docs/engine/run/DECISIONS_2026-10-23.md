@@ -42,3 +42,12 @@ is verified by a live run.
 ## D7. Rights and calibration are not changed
 
 - Per-creative attestation (point 2) and the calibration bootstrap (point 3) are untouched, as the owner directed.
+
+## D8. A category's spend is counted from stored outputs and failed holds
+
+- A stored output records its step's category (migration `0116`, nullable, additive). A failed paid step's hold takes its step's
+  category, because an edit changes a step's model and params and never its kind, so the step's category is fixed for the plan's life.
+- An output stored before the migration has no category. Its plan has no category budgets, so no check reads it.
+- The planning call is not in any category. It is the orchestrator's own call, held against the total as before.
+- A plan past a category's allowance is still a plan. The run pauses at the step that would pass it, as it does for the total. The total
+  is checked first, so a step that passes both reports the total.

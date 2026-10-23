@@ -9,6 +9,7 @@
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { AssetJob } from "../assets/job.ts";
 import type { AsyncAssetRouter, ProduceInput } from "../assets/router.ts";
+import { categoryOf } from "./categories.ts";
 import { outputOf, type QueuedAsset } from "./production.ts";
 import { putStepOutput, type StoredStepOutput } from "./store.ts";
 
@@ -64,7 +65,12 @@ export async function pollAssetJobs(opts: {
       }
       // outputOf names the reason for every outcome that is not a finished asset, so the row records why it stopped.
       const output = outputOf(step, row.kind);
-      await opts.store.putOutput(row.planId, row.cacheKey, { outputHash: output.outputHash, costUsd: output.costUsd, body: output.body ?? null });
+      await opts.store.putOutput(row.planId, row.cacheKey, {
+        outputHash: output.outputHash,
+        costUsd: output.costUsd,
+        body: output.body ?? null,
+        category: categoryOf(row.kind),
+      });
       await opts.store.finish(row.id, "done", "stored");
       report.done += 1;
     } catch (error) {

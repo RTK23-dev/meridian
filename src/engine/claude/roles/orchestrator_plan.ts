@@ -12,8 +12,11 @@ import type { RoleDefinition } from "../role.ts";
 
 export const ORCHESTRATOR_PLAN_ROLE = "orchestrator_plan";
 
-/** The prompt version this code is written against. The file is prompts/orchestrator_plan@2.md (v2 names the video class and the avatar inputs). */
-export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 2 } as const;
+/**
+ * The prompt version this code is written against. The file is prompts/orchestrator_plan@3.md: v3 adds the category budgets (owner direction
+ * 2026-10-23). v2 named the video class and the avatar inputs.
+ */
+export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 3 } as const;
 
 /** The most candidates the orchestrator is shown, per kind, in the catalog's order. Bounds the priced input. */
 export const ORCHESTRATOR_MAX_CANDIDATES_PER_KIND = 40;
@@ -31,7 +34,15 @@ export const orchestratorBriefSchema = z.object({
   format: z.string().min(1).max(4000),
   userInputs: z.string().max(4000),
   brand: z.object({ name: z.string().min(1).max(200), summary: z.string().max(2000) }),
+  /** The plan's total budget. */
   budgetUsd: z.number().positive().max(1000),
+  /**
+   * Optional budgets by category (owner direction 2026-10-23, D3). Copy is the text steps, creative the image and video steps, and voice the
+   * speech steps. A set category is the most its steps may cost, with the tolerance. An unset one is the orchestrator's to split under budgetUsd.
+   */
+  copyBudgetUsd: z.number().positive().max(1000).optional(),
+  creativeBudgetUsd: z.number().positive().max(1000).optional(),
+  voiceBudgetUsd: z.number().positive().max(1000).optional(),
 });
 export type OrchestratorBrief = z.infer<typeof orchestratorBriefSchema>;
 

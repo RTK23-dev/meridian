@@ -15,6 +15,11 @@ const ORG = "org_run_a";
 const OTHER = "org_run_b";
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
 
+/** A brief as planning stores it. A run checks the stored brief against its contract before it runs (run.ts), so the fixtures are valid briefs. */
+function storedBrief(budgetUsd: number, extra: Record<string, number> = {}) {
+  return { goal: "A short branded video", format: "a hook, a product shot, a call to action", userInputs: "", brand: { name: "Example", summary: "plain" }, budgetUsd, ...extra };
+}
+
 type Tagged = (strings: TemplateStringsArray, ...values: unknown[]) => Promise<unknown>;
 
 /** The same database, with every write to one table refused. Reads and the other writes go through unchanged. */
@@ -58,7 +63,7 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
   });
 
   async function storedReadyPlan(id: string, plan: OrchestratorPlan = examplePlan): Promise<void> {
-    await createPlanDraft(db.sql, { id, organizationId: ORG, title: id, brief: { goal: "g" }, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: plan.budgetUsd });
+    await createPlanDraft(db.sql, { id, organizationId: ORG, title: id, brief: storedBrief(plan.budgetUsd), orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: plan.budgetUsd });
     await recordPlanOutcome(db.sql, { id, organizationId: ORG, plan, reasons: [], catalogReadAt: null });
   }
 
@@ -176,7 +181,7 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
   });
 
   test("a draft that has not been planned, or a refused plan, is not runnable, and says why", async () => {
-    await createPlanDraft(db.sql, { id: "plan_run_draft", organizationId: ORG, title: "d", brief: {}, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 2 });
+    await createPlanDraft(db.sql, { id: "plan_run_draft", organizationId: ORG, title: "d", brief: storedBrief(2), orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 2 });
     const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_draft", catalog, handlers: standIn([]) });
     assert.equal(outcome.status, "not_runnable");
     if (outcome.status === "not_runnable") assert.match(outcome.reasons[0] ?? "", /no checked plan to run/);
@@ -184,7 +189,7 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
 
   test("a plan whose budget is above the budget the user set is held to the user's budget and its tolerance: it waits at the step that passes the allowance", async () => {
     assert.ok(examplePlan.budgetUsd > 0.01, "the example plan asks for more than the budget this test sets");
-    await createPlanDraft(db.sql, { id: "plan_run_overbudget", organizationId: ORG, title: "over", brief: {}, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 0.01 });
+    await createPlanDraft(db.sql, { id: "plan_run_overbudget", organizationId: ORG, title: "over", brief: storedBrief(0.01), orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 0.01 });
     await recordPlanOutcome(db.sql, { id: "plan_run_overbudget", organizationId: ORG, plan: examplePlan, reasons: [], catalogReadAt: null });
     const calls: string[] = [];
     const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_overbudget", catalog, handlers: standIn(calls) });

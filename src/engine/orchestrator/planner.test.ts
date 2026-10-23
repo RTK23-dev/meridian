@@ -31,6 +31,11 @@ test("the prompt names only live candidates from the catalog, and asks for a pla
   assert.match(prompt.user, /Budget \(USD\): 2/);
 });
 
+test("the prompt tells the orchestrator the category budgets the user set, and that an unset category is its to split", () => {
+  assert.match(buildPlannerPrompt({ ...brief, copyBudgetUsd: 0.5, voiceBudgetUsd: 0.2 }, catalog).user, /Category budgets \(USD\): copy 0\.5, voice 0\.2/);
+  assert.match(buildPlannerPrompt(brief, catalog).user, /Category budgets \(USD\): none set; split the total yourself/);
+});
+
 test("a plan in the reply is accepted when it validates, and the orchestrating model is the one that was called", async () => {
   const asked: { model?: string } = {};
   const outcome = await planWithModel({ orchestrator, brief, catalog, call: answering(JSON.stringify(examplePlanRaw), asked) });

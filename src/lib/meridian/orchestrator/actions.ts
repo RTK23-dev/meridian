@@ -38,6 +38,12 @@ function number(value: unknown, label: string, min: number, max: number): number
   return parsed;
 }
 
+/** A category budget the user may leave unset: absent, empty or null is unset, and the orchestrator splits that category. Otherwise a number in range. */
+function optionalBudget(value: unknown, label: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return number(value, label, 0.01, 1000);
+}
+
 /** The brand's organization and the caller's role in it, checked against the minimum the action needs. */
 async function requireBrand(userId: string, brandId: string, minimum: Role) {
   const sql = await getSql();
@@ -119,6 +125,9 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       userInputs: text(body.userInputs, 4000, "Your inputs"),
       brandSummary: text(body.brandSummary, 2000, "Brand summary"),
       budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+      copyBudgetUsd: optionalBudget(body.copyBudgetUsd, "Copy budget"),
+      creativeBudgetUsd: optionalBudget(body.creativeBudgetUsd, "Creative budget"),
+      voiceBudgetUsd: optionalBudget(body.voiceBudgetUsd, "Voice budget"),
       orchestratorModelId: model === "" ? null : model,
     };
   })
@@ -127,12 +136,16 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
     const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "admin");
     const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
     if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
+    // A category the user leaves unset is absent from the brief (JSON drops it), so the orchestrator splits that category (categories.ts).
     const brief = {
       goal: data.goal,
       format: data.format,
       userInputs: data.userInputs,
       brand: { name: brandName, summary: data.brandSummary },
       budgetUsd: data.budgetUsd,
+      copyBudgetUsd: data.copyBudgetUsd,
+      creativeBudgetUsd: data.creativeBudgetUsd,
+      voiceBudgetUsd: data.voiceBudgetUsd,
     };
     const stored = await createPlanDraft(sql, {
       id: `plan_${randomUUID().replace(/-/g, "")}`,

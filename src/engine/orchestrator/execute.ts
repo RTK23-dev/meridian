@@ -3,11 +3,13 @@
 // - a step whose handler throws is `failed`, and every step that reads it is `skipped`;
 // - a step whose estimate would take the run past its allowance (the budget plus its tolerance) is never started: the run `paused` there,
 //   waiting for an approval, and nothing else runs. A small overrun inside the tolerance is never a pause.
+// - a category the brief budgets (copy, creative, voice) is held to its own allowance as well, once the total has been checked (categories.ts).
 // Cache hits are reported as `cache_hit` and cost nothing. The handlers are injected, so this file calls no provider.
 
 import { contentHash } from "../contracts/hash.ts";
 import type { NodeEvent, NodeKind, NodeState, OrchestratorPlan, PlanNode } from "./contracts.ts";
 import { cacheKeys } from "./dirty.ts";
+import { categoryOf, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
 import { KIND_CATALOG } from "./validate.ts";
 
 /**
@@ -84,9 +86,15 @@ export async function runPlan(opts: {
   spentUsd?: number;
   /** The most the run may spend: the envelope's allowance, the budget plus its tolerance. Absent: the plan's own budget. */
   allowanceUsd?: number;
+  /** The most each category may spend in all: its budget plus its tolerance (envelope.ts). A category not listed has no allowance of its own. */
+  categoryAllowanceUsd?: CategoryAmounts;
+  /** What earlier runs of this plan have spent in each category (categories.ts categorySpentOf). */
+  categorySpentUsd?: CategoryAmounts;
 }): Promise<RunResult> {
   const { plan, order, handlers, cache, emit } = opts;
   const allowance = opts.allowanceUsd ?? plan.budgetUsd;
+  const categoryAllowance: CategoryAmounts = opts.categoryAllowanceUsd ?? {};
+  const categorySpent: CategoryAmounts = { ...opts.categorySpentUsd };
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
   const keys = cacheKeys(plan, order);
   const states = new Map<string, NodeState>();
@@ -97,6 +105,12 @@ export async function runPlan(opts: {
   const set = (nodeId: string, state: NodeState, outputHash: string | null, costUsd: number | null, reason: string | null) => {
     states.set(nodeId, state);
     emit({ nodeId, state, outputHash, costUsd, reason });
+  };
+
+  // Spend counts toward the total, and toward the step's category when it has one.
+  const addSpend = (category: BudgetCategory | null, usd: number) => {
+    spent += usd;
+    if (category !== null) categorySpent[category] = (categorySpent[category] ?? 0) + usd;
   };
 
   for (const id of order) set(id, "planned", null, null, null);
@@ -147,6 +161,21 @@ export async function runPlan(opts: {
       break;
     }
 
+    const category = categoryOf(node.kind);
+    const categoryLimit = category === null ? undefined : categoryAllowance[category];
+    if (category !== null && categoryLimit !== undefined && (categorySpent[category] ?? 0) + estimate > categoryLimit + 1e-9) {
+      const next = (categorySpent[category] ?? 0) + estimate;
+      set(
+        id,
+        "paused",
+        null,
+        null,
+        `the next ${category} step would take ${category} spend to $${next.toFixed(4)}, past the $${categoryLimit.toFixed(4)} allowance for ${category} steps (the ${category} budget plus its tolerance); the run waits for an approval`,
+      );
+      paused = true;
+      break;
+    }
+
     set(id, "running", null, null, null);
     try {
       const upstream = new Map(node.dependsOn.map((dep) => [dep, bodies.get(dep) ?? null]));
@@ -169,7 +198,7 @@ export async function runPlan(opts: {
       cache.set(key, { outputHash: output.outputHash, costUsd: charged, body });
       outputs.set(id, output.outputHash);
       bodies.set(id, body);
-      spent += charged ?? 0;
+      addSpend(category, charged ?? 0);
       set(id, "done", output.outputHash, charged, null);
     } catch (error) {
       // No provider is connected: the handler stopped before any call, so nothing is held and nothing is kept.
@@ -179,7 +208,7 @@ export async function runPlan(opts: {
       }
       // Accepted by the provider, not finished: queued. The estimate is held for this run; the stored output comes when the poll settles it.
       if (error instanceof StepQueuedError) {
-        if (paidKind) spent += estimate;
+        if (paidKind) addSpend(category, estimate);
         set(id, "queued", null, null, error.message);
         continue;
       }
@@ -191,7 +220,7 @@ export async function runPlan(opts: {
       // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error. The held amount
       // is recorded on the failed event, so a later run counts it in the plan's spend.
       const held = paidKind ? estimate : null;
-      if (held !== null) spent += held;
+      if (held !== null) addSpend(category, held);
       const message = error instanceof Error ? error.message : "the step failed";
       set(id, "failed", null, held, message.slice(0, REASON_MAX));
     }

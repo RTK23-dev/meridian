@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { examplePlan, recordedExampleRun } from "./example.ts";
-import { appendPlanEvents, claimForPlanning, createPlanDraft, getPlan, listPlanEvents, listPlans, recordPlanOutcome, releasePlanning, setPlanStatus, updatePlanJson } from "./store.ts";
+import { appendPlanEvents, claimForPlanning, createPlanDraft, failedHoldsByNode, getPlan, listPlanEvents, listPlans, listStepOutputs, outputsSpentByCategory, putStepOutput, recordPlanOutcome, releasePlanning, setPlanStatus, updatePlanJson } from "./store.ts";
 
 const ORG_A = "org_orch_a";
 const ORG_B = "org_orch_b";
@@ -90,6 +90,23 @@ describe("orchestrator plan store (migration 0108)", () => {
     await recordPlanOutcome(db.sql, { id: "plan_claim_1", organizationId: ORG_A, plan: null, reasons: ["refused for the test"], catalogReadAt: null });
     await releasePlanning(db.sql, ORG_A, "plan_claim_1", "draft");
     assert.equal((await getPlan(db.sql, ORG_A, "plan_claim_1"))?.status, "refused");
+  });
+
+  test("a stored output keeps its budget category, category spend is totalled per plan, and a failed hold is kept by its step", async () => {
+    const planId = "plan_store_categories";
+    await createPlanDraft(db.sql, { id: planId, organizationId: ORG_A, title: "categories", brief: BRIEF, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 2 });
+    await putStepOutput(db.sql, ORG_A, planId, "copy-key-1", { outputHash: "h1", costUsd: 0.25, body: "text", category: "copy" });
+    await putStepOutput(db.sql, ORG_A, planId, "creative-key-1", { outputHash: "h2", costUsd: 0.5, body: null, category: "creative" });
+    await putStepOutput(db.sql, ORG_A, planId, "reference-key-1", { outputHash: "h3", costUsd: null, body: "ref", category: null });
+    await appendPlanEvents(db.sql, ORG_A, planId, [{ nodeId: "a1", state: "failed", outputHash: null, costUsd: 0.3, reason: "the provider failed" }]);
+
+    const outputs = await listStepOutputs(db.sql, ORG_A, planId);
+    assert.equal(outputs.get("copy-key-1")?.category, "copy");
+    assert.equal(outputs.get("reference-key-1")?.category, null);
+    assert.deepEqual(await outputsSpentByCategory(db.sql, ORG_A, planId), { copy: 0.25, creative: 0.5 });
+    assert.deepEqual([...(await failedHoldsByNode(db.sql, ORG_A, planId))], [["a1", 0.3]]);
+    assert.deepEqual(await outputsSpentByCategory(db.sql, ORG_B, planId), {}, "another organization reads no spend");
+    assert.deepEqual([...(await failedHoldsByNode(db.sql, ORG_B, planId))], [], "another organization reads no holds");
   });
 
   test("an edit is not written over a run in progress, and is written once the run has stopped", async () => {

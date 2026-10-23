@@ -13,9 +13,22 @@ import type { NodeEvent, OrchestratorPlan } from "./contracts.ts";
 import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { openRunBudget, releaseRunBudget, type RunBudget } from "./run-budget.ts";
 import { editNode, type NodeChange } from "./stale.ts";
-import { appendPlanEvents, failedHoldsUsd, getPlan, listStepOutputs, putStepOutput, setPlanStatus, updatePlanJson } from "./store.ts";
+import {
+  appendPlanEvents,
+  failedHoldsByNode,
+  failedHoldsUsd,
+  getPlan,
+  listStepOutputs,
+  outputsSpentByCategory,
+  putStepOutput,
+  setPlanStatus,
+  updatePlanJson,
+} from "./store.ts";
 import { textInputTokensOf, validatePlan } from "./validate.ts";
-import { envelopeOf } from "./envelope.ts";
+import { allowancesOf, categoryEnvelopesOf, envelopeOf } from "./envelope.ts";
+import { categoryBudgetsOf, categoryOf, categorySpentOf, type BudgetCategory } from "./categories.ts";
+import { cacheKeys } from "./dirty.ts";
+import { orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
 import type { BudgetTolerance } from "../budget/tolerance.ts";
 
 export type RunOutcome =
@@ -63,10 +76,15 @@ export async function runStoredPlan(
   // The run's envelope (envelope.ts): the target is the lower of the plan's budget and the budget the user set, and the allowance adds the
   // tolerance. A plan that asks for more than the user set is held to the user's budget and its tolerance: a note, not a refusal.
   const envelope = envelopeOf(stored.plan.budgetUsd, stored.budgetUsd, opts.budgetTolerance);
+  // The brief's category budgets (categories.ts). A brief that does not match its contract gives no budgets to check against, so the run is refused.
+  const brief = orchestratorBriefSchema.safeParse(stored.brief);
+  if (!brief.success) return { status: "not_runnable", reasons: ["the brief does not match the brief contract, so the plan cannot run"] };
+  const categories = categoryEnvelopesOf(categoryBudgetsOf(brief.data), opts.budgetTolerance);
   const checked = validatePlan(stored.plan, opts.catalog, {
     textInputTokens: textInputTokensOf(stored.brief),
     disabledFamilies: opts.disabledFamilies,
     budget: envelope,
+    categories,
   });
   if (!checked.ok) return { status: "not_runnable", reasons: checked.reasons };
   if (!(await claimRun(sql, opts.organizationId, opts.planId))) return { status: "not_runnable", reasons: ["the plan is already running"] };
@@ -83,6 +101,9 @@ export async function runStoredPlan(
     // of paid steps that failed. Money spent on an earlier version of a step is still spent, so the budget counts it. A paid output carries
     // its charged cost (execute.ts).
     const spentSoFar = sumUsd([...[...persisted.values()].map((output) => output.costUsd ?? 0), await failedHoldsUsd(sql, opts.organizationId, opts.planId)]);
+    // Each category's spend so far, by the same rule: the stored outputs of the category, and the failed holds of its steps (categories.ts).
+    const outputsByCategory = await outputsSpentByCategory(sql, opts.organizationId, opts.planId);
+    const categorySpentSoFar = categorySpentOf(checked.plan.nodes, outputsByCategory, await failedHoldsByNode(sql, opts.organizationId, opts.planId));
 
     let handlers: Handlers = opts.handlers ?? {};
     if (opts.budget !== undefined) {
@@ -109,12 +130,26 @@ export async function runStoredPlan(
       cache,
       spentUsd: spentSoFar,
       allowanceUsd: envelope.allowanceUsd,
+      categoryAllowanceUsd: allowancesOf(categories),
+      categorySpentUsd: categorySpentSoFar,
       emit: (event) => events.push(event),
     });
 
+    // A new output keeps the category of its step, so a later run totals each category from the stored outputs.
+    const keys = cacheKeys(checked.plan, checked.order);
+    const categoryOfKey = new Map<string, BudgetCategory | null>();
+    for (const node of checked.plan.nodes) {
+      const key = keys.get(node.id);
+      if (key !== undefined) categoryOfKey.set(key, categoryOf(node.kind));
+    }
     for (const [key, output] of cache) {
       if (!before.has(key)) {
-        await putStepOutput(sql, opts.organizationId, opts.planId, key, { outputHash: output.outputHash, costUsd: output.costUsd, body: output.body ?? null });
+        await putStepOutput(sql, opts.organizationId, opts.planId, key, {
+          outputHash: output.outputHash,
+          costUsd: output.costUsd,
+          body: output.body ?? null,
+          category: categoryOfKey.get(key) ?? null,
+        });
       }
     }
     await appendPlanEvents(sql, opts.organizationId, opts.planId, events);

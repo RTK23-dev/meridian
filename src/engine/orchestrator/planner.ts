@@ -10,6 +10,7 @@
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import { orchestratorPlanSchema, type ModelRef, type OrchestratorPlan } from "./contracts.ts";
 import { textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
+import { BUDGET_CATEGORIES, categoryBudgetsOf } from "./categories.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { RoleAnswerError } from "../claude/errors.ts";
 import { orchestratorPlan, ORCHESTRATOR_MAX_CANDIDATES_PER_KIND, type OrchestratorPlanInput } from "../claude/roles/orchestrator_plan.ts";
@@ -21,6 +22,10 @@ export type PlannerBrief = {
   userInputs: string;
   brand: { name: string; summary: string };
   budgetUsd: number;
+  /** The category budgets the user set, in USD (categories.ts). A category the user did not set is the orchestrator's to split. */
+  copyBudgetUsd?: number;
+  creativeBudgetUsd?: number;
+  voiceBudgetUsd?: number;
 };
 
 /** One text completion from the orchestrating model. Injected: production passes the gateway's call, tests pass a recording. */
@@ -41,6 +46,13 @@ export function candidateList(catalog: Map<string, CatalogEntry>): string {
     .join("\n\n");
 }
 
+/** The category budgets the user set, for the prompt. A category the user did not set is the orchestrator's to split under the total. */
+function categoryLine(brief: PlannerBrief): string {
+  const budgets = categoryBudgetsOf(brief);
+  const set = BUDGET_CATEGORIES.filter((category) => budgets[category] !== undefined).map((category) => `${category} ${budgets[category]}`);
+  return set.length === 0 ? "none set; split the total yourself" : set.join(", ");
+}
+
 export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, CatalogEntry>): { system: string; user: string } {
   const stepKinds = Object.keys(KIND_CATALOG).join(", ");
   const system = [
@@ -51,6 +63,7 @@ export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, Cat
     '"params" (flat object of strings, numbers, booleans or null), "estimateUsd" (a number, or null when you do not know the cost).',
     `Step kinds: reference, analysis, script, visual, video, voice, avatar, edit, compose, render. Kinds that call a model are: ${stepKinds}.`,
     "Use only model ids from the candidate list below. A step that makes no model call has model null.",
+    "Copy is the analysis and script steps, creative the visual, video and avatar steps, voice the voice steps. A category the brief sets is the most its steps may cost.",
     "If you do not know a step's cost, say null: such a step will not run.",
   ].join("\n");
   const user = [
@@ -59,6 +72,7 @@ export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, Cat
     `User inputs: ${brief.userInputs}`,
     `Brand: ${brief.brand.name}. ${brief.brand.summary}`,
     `Budget (USD): ${brief.budgetUsd}`,
+    `Category budgets (USD): ${categoryLine(brief)}`,
     "",
     "Candidate models from the live catalog:",
     candidateList(catalog),

@@ -8,6 +8,7 @@
 import { isDisabledModel } from "../config/model-policy.ts";
 import type { BudgetPosition } from "../budget/tolerance.ts";
 import { envelopeOf, positionOf, type BudgetEnvelope } from "./envelope.ts";
+import { BUDGET_CATEGORIES, categoryOf, type BudgetCategory } from "./categories.ts";
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import type { NodeKind, OrchestratorPlan, PlanNode } from "./contracts.ts";
 
@@ -36,17 +37,18 @@ export const PRICING_LIMITS = {
 /** The plan's money against its envelope (envelope.ts). A plan past the allowance is still checked; the run waits for an approval there. */
 export type BudgetView = { estimateUsd: number; targetUsd: number; allowanceUsd: number; position: BudgetPosition };
 
-export type ValidationResult = { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView } | { ok: false; reasons: string[] };
+/** One category's money against its own envelope, for each category the brief sets (categories.ts). */
+export type CategoryView = BudgetView & { category: BudgetCategory };
+
+export type ValidationResult =
+  | { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView; categories: CategoryView[] }
+  | { ok: false; reasons: string[] };
 
 /** A model id that is an alias (a ~ id, or one with "latest" in it) is not pinned: the same id can mean a different model next week. */
 export function isAliasModelId(id: string): boolean {
   return id.startsWith("~") || id.toLowerCase().includes("latest");
 }
 
-/**
- * The reason a plan is refused when its own budget is above the budget the user set, or null when it is not. The model writes the plan's
- * budget, so the user's budget is the limit, and a plan that asks for more is never run.
- */
 /** The steps in an order where every step comes after the steps it depends on. Null when the graph has a cycle. */
 export function topologicalOrder(nodes: PlanNode[]): string[] | null {
   const pending = new Map(nodes.map((node) => [node.id, new Set(node.dependsOn)]));
@@ -138,6 +140,8 @@ export type ValidateOptions = {
   disabledFamilies?: readonly string[];
   /** The run's envelope (owner direction 2026-10-23). Absent: the plan's own budget is the target, with the initial tolerance. */
   budget?: BudgetEnvelope;
+  /** The envelope of each category the brief sets (envelope.ts categoryEnvelopesOf). A category without one has no check of its own. */
+  categories?: Partial<Record<BudgetCategory, BudgetEnvelope>>;
 };
 
 /** Why a model id is not a candidate: switched off by the workspace's policy, or not in the live catalog. */
@@ -203,13 +207,30 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   const envelope = options.budget ?? envelopeOf(plan.budgetUsd, plan.budgetUsd);
   const budget: BudgetView = { estimateUsd: paidTotal, targetUsd: envelope.targetUsd, allowanceUsd: envelope.allowanceUsd, position: positionOf(paidTotal, envelope) };
 
+  // Each category the brief sets is summed from its own steps and placed against its own envelope. The same rule as the total: past the
+  // allowance is still a plan, and the run waits for an approval at the step that would pass it (execute.ts).
+  const categories: CategoryView[] = [];
+  for (const category of BUDGET_CATEGORIES) {
+    const categoryEnvelope = options.categories?.[category];
+    if (categoryEnvelope === undefined) continue;
+    let estimateUsd = 0;
+    for (const node of plan.nodes) if (categoryOf(node.kind) === category) estimateUsd += costs.get(node.id) ?? 0;
+    categories.push({
+      category,
+      estimateUsd,
+      targetUsd: categoryEnvelope.targetUsd,
+      allowanceUsd: categoryEnvelope.allowanceUsd,
+      position: positionOf(estimateUsd, categoryEnvelope),
+    });
+  }
+
   const order = topologicalOrder(plan.nodes);
   if (order === null) reasons.push("the steps have a cycle, so there is no order to run them in");
 
   if (reasons.length > 0 || order === null) return { ok: false, reasons };
 
   const priced = plan.nodes.map((node) => ({ ...node, estimateUsd: costs.get(node.id) ?? null }));
-  return { ok: true, order, plan: { ...plan, nodes: priced }, budget };
+  return { ok: true, order, plan: { ...plan, nodes: priced }, budget, categories };
 }
 
 /** The steps a plan's steps need, for the message a reviewer reads. Pure. */

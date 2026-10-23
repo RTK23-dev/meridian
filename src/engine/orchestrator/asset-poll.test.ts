@@ -24,7 +24,7 @@ function row(overrides: Partial<DueAsset> = {}): DueAsset {
 
 /** A store that records every write, so each test can read what the poll did. */
 function fakeStore(due: DueAsset[]) {
-  const writes = { rescheduled: [] as Array<{ id: string; job: AssetJob; runAfterMs: number }>, finished: [] as Array<{ id: string; status: string; result: string }>, outputs: [] as Array<{ planId: string; cacheKey: string; body: string | null; costUsd: number | null }> };
+  const writes = { rescheduled: [] as Array<{ id: string; job: AssetJob; runAfterMs: number }>, finished: [] as Array<{ id: string; status: string; result: string }>, outputs: [] as Array<{ planId: string; cacheKey: string; body: string | null; costUsd: number | null; category: string | null }> };
   const store: AssetPollStore = {
     async due() {
       return due;
@@ -36,7 +36,7 @@ function fakeStore(due: DueAsset[]) {
       writes.finished.push({ id, status, result });
     },
     async putOutput(planId, cacheKey, output) {
-      writes.outputs.push({ planId, cacheKey, body: output.body, costUsd: output.costUsd });
+      writes.outputs.push({ planId, cacheKey, body: output.body, costUsd: output.costUsd, category: output.category });
     },
   };
   return { store, writes };
@@ -77,7 +77,7 @@ test("a finished job stores its output under the step's cache key and closes the
   const { store, writes } = fakeStore([row()]);
   const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "engine/org/req/video/a.mp4" }, settle: done })) });
   assert.deepEqual(report, { polled: 1, done: 1, failed: 0, waiting: 0 });
-  assert.deepEqual(writes.outputs, [{ planId: "plan-1", cacheKey: "step-key", body: "engine/org/req/video/a.mp4", costUsd: 0.4 }]);
+  assert.deepEqual(writes.outputs, [{ planId: "plan-1", cacheKey: "step-key", body: "engine/org/req/video/a.mp4", costUsd: 0.4, category: "creative" }]);
   assert.deepEqual(writes.finished, [{ id: "row-1", status: "done", result: "stored" }]);
 });
 

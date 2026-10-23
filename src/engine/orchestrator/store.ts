@@ -5,6 +5,7 @@
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { NodeEvent, OrchestratorPlan } from "./contracts.ts";
 import { orchestratorPlanSchema } from "./contracts.ts";
+import { BUDGET_CATEGORIES, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
 
 export const PLAN_STATUSES = ["draft", "planning", "refused", "ready", "running", "paused", "incomplete", "complete"] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
@@ -26,8 +27,11 @@ export type StoredPlan = {
 
 export type StoredEvent = NodeEvent & { seq: number; at: string };
 
-/** A step output as stored: its hash, its charged cost, and its body (null when the step has no text). */
-export type StoredStepOutput = { outputHash: string; costUsd: number | null; body: string | null };
+/**
+ * A step output as stored: its hash, its charged cost, its body (null when the step has no text) and its budget category (null for a step with
+ * no model call). An output stored before categories existed has a null category; its plan has no category budgets, so none reads it.
+ */
+export type StoredStepOutput = { outputHash: string; costUsd: number | null; body: string | null; category: BudgetCategory | null };
 
 type Row = Record<string, unknown>;
 
@@ -191,12 +195,13 @@ export async function listStepOutputs(sql: Sql, organizationId: string, planId: 
   const out = new Map<string, StoredStepOutput>();
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return out;
-  const rows = (await sql`select cache_key, output_hash, cost_usd, body from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
+  const rows = (await sql`select cache_key, output_hash, cost_usd, body, category from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
   for (const row of rows) {
     out.set(String(row.cache_key), {
       outputHash: String(row.output_hash),
       costUsd: row.cost_usd === null || row.cost_usd === undefined ? null : Number(row.cost_usd),
       body: row.body === null || row.body === undefined ? null : String(row.body),
+      category: row.category === null || row.category === undefined ? null : (String(row.category) as BudgetCategory),
     });
   }
   return out;
@@ -207,8 +212,8 @@ export async function putStepOutput(sql: Sql, organizationId: string, planId: st
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return false;
   await sql`
-    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd, body)
-    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd}, ${output.body})
+    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd, body, category)
+    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd}, ${output.body}, ${output.category})
     on conflict (plan_id, cache_key) do nothing
   `;
   return true;
@@ -226,4 +231,33 @@ export async function failedHoldsUsd(sql: Sql, organizationId: string, planId: s
     select coalesce(sum(cost_usd), 0) as total from orchestrator_plan_events where plan_id = ${planId} and state = 'failed'
   `) as Row[];
   return Number(rows[0]?.total ?? 0);
+}
+
+/** The failed holds of a plan, summed by step. The same holds as failedHoldsUsd, kept apart so each takes its step's category. */
+export async function failedHoldsByNode(sql: Sql, organizationId: string, planId: string): Promise<Map<string, number>> {
+  const holds = new Map<string, number>();
+  const owned = await getPlan(sql, organizationId, planId);
+  if (owned === null) return holds;
+  const rows = (await sql`
+    select node_id, coalesce(sum(cost_usd), 0) as total from orchestrator_plan_events
+    where plan_id = ${planId} and state = 'failed' group by node_id
+  `) as Row[];
+  for (const row of rows) holds.set(String(row.node_id), Number(row.total));
+  return holds;
+}
+
+/** What the plan's stored outputs have cost, by category. An output with no category is in none (categories.ts). */
+export async function outputsSpentByCategory(sql: Sql, organizationId: string, planId: string): Promise<CategoryAmounts> {
+  const spent: CategoryAmounts = {};
+  const owned = await getPlan(sql, organizationId, planId);
+  if (owned === null) return spent;
+  const rows = (await sql`
+    select category, coalesce(sum(cost_usd), 0) as total from orchestrator_step_outputs
+    where plan_id = ${planId} and category is not null group by category
+  `) as Row[];
+  for (const row of rows) {
+    const category = BUDGET_CATEGORIES.find((name) => name === String(row.category));
+    if (category !== undefined) spent[category] = Number(row.total);
+  }
+  return spent;
 }

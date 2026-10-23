@@ -96,7 +96,7 @@ describe("a run's budget (run-budget.ts)", () => {
   });
 
   test("a stored plan run with a budget releases its reservation when it stops, and ends delivered", async () => {
-    await createPlanDraft(db.sql, { id: "plan_budget_run", organizationId: ORG, title: "budget run", brief: { goal: "g" }, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: examplePlan.budgetUsd });
+    await createPlanDraft(db.sql, { id: "plan_budget_run", organizationId: ORG, title: "budget run", brief: { goal: "A short branded video", format: "a hook, a product shot, a call to action", userInputs: "", brand: { name: "Example", summary: "plain" }, budgetUsd: examplePlan.budgetUsd }, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: examplePlan.budgetUsd });
     await recordPlanOutcome(db.sql, { id: "plan_budget_run", organizationId: ORG, plan: examplePlan, reasons: [], catalogReadAt: null });
 
     // Stand-in handlers for every kind: no provider and no ledger write, so the run takes its reservation and gives it back in full.

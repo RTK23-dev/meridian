@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadPrompt } from "../../prompts/load.ts";
-import { orchestratorPlan, orchestratorPlanInputSchema, orchestratorUserContent, type OrchestratorPlanInput } from "./orchestrator_plan.ts";
+import { orchestratorBriefSchema, orchestratorPlan, orchestratorPlanInputSchema, orchestratorUserContent, type OrchestratorPlanInput } from "./orchestrator_plan.ts";
 
 const input: OrchestratorPlanInput = {
   brief: {
@@ -16,16 +16,29 @@ const input: OrchestratorPlanInput = {
 };
 
 describe("orchestrator_plan role", () => {
-  it("runs on the direction tier at the plan stage, against orchestrator_plan@2, which has the four prompt parts", () => {
+  it("runs on the direction tier at the plan stage, against orchestrator_plan@3, which has the four prompt parts", () => {
     assert.equal(orchestratorPlan.role, "orchestrator_plan");
     assert.equal(orchestratorPlan.capability, "llm.direction");
     assert.equal(orchestratorPlan.stage, "plan");
     const prompt = loadPrompt(orchestratorPlan.prompt);
-    assert.equal(prompt.id, "orchestrator_plan@2");
+    assert.equal(prompt.id, "orchestrator_plan@3");
     assert.match(prompt.text, /params\.model_class/, "the video class is named in the rules");
+    assert.match(prompt.text, /copyBudgetUsd/, "the category budgets are named in the rules, so the split is delegated to the orchestrator");
     for (const heading of ["## Role and rules", "## Reference material", "## Task input", "## Output contract"]) {
       assert.match(prompt.text, new RegExp(`^${heading}$`, "m"));
     }
+  });
+
+  it("takes optional category budgets: each is a positive amount, and a category the user leaves unset is absent from the brief", () => {
+    const set = orchestratorBriefSchema.parse({ ...input.brief, copyBudgetUsd: 0.5, creativeBudgetUsd: 1.25 });
+    assert.equal(set.copyBudgetUsd, 0.5);
+    assert.equal(set.voiceBudgetUsd, undefined);
+    assert.equal(orchestratorBriefSchema.safeParse({ ...input.brief, copyBudgetUsd: 0 }).success, false);
+    assert.equal(orchestratorBriefSchema.safeParse({ ...input.brief, voiceBudgetUsd: -1 }).success, false);
+    assert.doesNotMatch(JSON.stringify(orchestratorUserContent(input)), /copyBudgetUsd/, "an unset category is not in the brief the orchestrator reads");
+    const shown = orchestratorUserContent({ ...input, brief: { ...input.brief, copyBudgetUsd: 0.5 } });
+    const text = shown.map((part) => ("text" in part ? part.text : "")).join("\n");
+    assert.match(text, /"copyBudgetUsd":0\.5/);
   });
 
   it("takes a brief, the orchestrating model's id and at most 160 candidates", () => {
