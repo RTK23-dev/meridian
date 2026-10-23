@@ -1,6 +1,24 @@
 import type { Sql } from "../learning/store.ts";
 import { transitionCreativePlanState, type CreativePlanState } from "./state-machine.ts";
 
+/**
+ * Records that a plan prepared for approval (manual or semi-automatic autonomy) is awaiting it. A plan still in draft moves to
+ * awaiting_approval, so the approval that follows is a legal transition. A plan that already waits, or has moved on, is left as it is.
+ */
+export async function markPlanAwaitingApproval(
+  sql: Sql,
+  input: { organizationId: string; brandId: string; planId: string; actorId: string },
+): Promise<void> {
+  const rows = await sql<{ status: CreativePlanState }>`
+    select status from creative_plans
+    where id = ${input.planId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+    limit 1
+  `;
+  if (!rows[0]) throw new Error("Creative plan not found.");
+  if (rows[0].status !== "draft") return;
+  await transitionCreativePlan(sql, { ...input, target: "awaiting_approval" });
+}
+
 /** Atomically transitions a tenant-scoped plan and appends its audit event. */
 export async function transitionCreativePlan(
   sql: Sql,
