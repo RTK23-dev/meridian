@@ -22,6 +22,8 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
   const { user, isPending } = useCurrentUserState();
   const { data: workspace } = useWorkspace();
   const canAdmin = hasRole(workspace?.active?.role ?? "viewer", "admin");
+  // The message is kept here, not in the form: a save refetches the policy, and the form remounts on the new values.
+  const [message, setMessage] = useState<string | null>(null);
   const policy = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["orchestrator-policy", brandId]),
     queryFn: () => getOrchestratorPolicyFor({ data: { brandId } }),
@@ -36,7 +38,15 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
       </CardHeader>
       {policy.isError && !policy.data ? <PlainErrorState error={policy.error} onRetry={() => void policy.refetch()} /> : null}
       {policy.data ? (
-        <PolicyForm key={JSON.stringify(policy.data.policy)} brandId={brandId} data={policy.data} canAdmin={canAdmin} onSaved={() => void policy.refetch()} />
+        <PolicyForm
+          key={JSON.stringify(policy.data.policy)}
+          brandId={brandId}
+          data={policy.data}
+          canAdmin={canAdmin}
+          message={message}
+          onMessage={setMessage}
+          onSaved={() => void policy.refetch()}
+        />
       ) : policy.isError ? null : (
         <p role="status" className="p-4 text-sm text-fg-muted sm:p-6">
           Loading the policy.
@@ -46,14 +56,27 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
   );
 }
 
-function PolicyForm({ brandId, data, canAdmin, onSaved }: { brandId: string; data: PolicyData; canAdmin: boolean; onSaved: () => void }) {
+function PolicyForm({
+  brandId,
+  data,
+  canAdmin,
+  message,
+  onMessage,
+  onSaved,
+}: {
+  brandId: string;
+  data: PolicyData;
+  canAdmin: boolean;
+  message: string | null;
+  onMessage: (text: string | null) => void;
+  onSaved: () => void;
+}) {
   const { policy, initial } = data;
   const [percent, setPercent] = useState(String(policy.budgetTolerance.percent));
   const [cents, setCents] = useState(String(policy.budgetTolerance.cents));
   const [veoOff, setVeoOff] = useState(policy.disabledModelFamilies.includes(VEO_FAMILY));
   const [others, setOthers] = useState(policy.disabledModelFamilies.filter((family) => family !== VEO_FAMILY).join(", "));
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   const percentValue = Number(percent);
   const centsValue = Number(cents);
@@ -72,13 +95,13 @@ function PolicyForm({ brandId, data, canAdmin, onSaved }: { brandId: string; dat
   async function save() {
     if (!percentValid || !centsValid) return;
     setSaving(true);
-    setMessage(null);
+    onMessage(null);
     try {
       await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: families, budgetTolerance: { percent: percentValue, cents: centsValue } } });
-      setMessage("Saved. Every run that starts from now on uses these values.");
+      onMessage("Saved. Every run that starts from now on uses these values.");
       onSaved();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "The policy could not be saved.");
+      onMessage(error instanceof Error ? error.message : "The policy could not be saved.");
     } finally {
       setSaving(false);
     }

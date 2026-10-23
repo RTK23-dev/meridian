@@ -61,3 +61,22 @@ The Studio publish dialog and two Factory details could not be captured (see Not
 
 Not captured: a started run's decision feed. The engine is not connected here (no monthly budget, no OpenRouter or render key), so no request can start, and a feed would have to be invented. The feed is covered by
 `src/lib/meridian/content-factory/feed.test.ts` on a recorded engine run.
+
+## Orchestrator (`/content-factory`: the composer and the budget policy)
+
+- **Before:** `19223045`, the base of the budget run. A detached checkout, run with `npm run dev` on port 8080 and a fresh PGlite database,
+  then removed. The fixture is the same as the Content Factory section: "Feature screens fixture", with a brand "Harbour Coffee (fixture)".
+- **After:** this branch, `npm run dev` on port 8080 with its own PGlite database. The orchestrating model was saved in the Content Factory
+  panel as `anthropic/claude-haiku-5.5`, as typed (the live catalog is not connected). No provider key is set.
+- Playwright with `/opt/pw-browsers/chromium`. 1280x800 and 390x844 viewport captures.
+
+| Screen id | Before (`19223045`) | After (this branch) |
+| --- | --- | --- |
+| `orchestrator-composer` | The brief with one budget field, and no choice of what to start from. | The "Start from" choice ("A format to copy or make", "My own inputs"), which decides which field is required. Under the budget, "Budget by category (optional)": copy, creative and voice. An empty category is unset. |
+| `orchestrator-policy` | Not present at the base. | "Budget tolerance and model policy": the tolerance in percent and cents (10 and 25 by default), the Veo switch (on, meaning Veo is off), other families to switch off, and "Save the policy". |
+
+Checked in the browser, without a screenshot: switching to "My own inputs" makes the format optional and the inputs required; saving the
+tolerance as 15 shows "Saved", persists across a reload, and was put back to 10.
+
+Not captured: the approval block for a paused plan, and any plan's run states. A plan needs the orchestrating model's call, which needs a
+provider key, and none is set, so no plan can be made or paused here. The approval is covered by `src/engine/orchestrator/approval.test.ts`.
