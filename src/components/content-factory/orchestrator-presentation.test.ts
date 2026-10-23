@@ -173,7 +173,15 @@ test("example goals are filled in as text and name no model", () => {
 });
 
 // The UI files may not name a model id or inject raw HTML. Plan text, model ids and reasons are untrusted data.
-const UI_FILES = ["orchestrator-presentation.ts", "orchestrator-canvas.tsx", "orchestrator-canvas-parts.tsx", "orchestrator-composer.tsx", "orchestrator-plans.tsx", "orchestrator-screen.tsx"];
+const UI_FILES = [
+  "orchestrator-presentation.ts",
+  "orchestrator-canvas.tsx",
+  "orchestrator-canvas-parts.tsx",
+  "orchestrator-composer.tsx",
+  "orchestrator-plans.tsx",
+  "orchestrator-policy-panel.tsx",
+  "orchestrator-screen.tsx",
+];
 const MODEL_ID_IN_QUOTES = /"~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*"/i;
 
 test("no orchestrator UI file names a model id or uses raw HTML injection", () => {

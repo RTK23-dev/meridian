@@ -3,6 +3,8 @@
 // no node:* imports), so the rules are tested here and the components only draw them. Nothing in this file names a model.
 
 import type { NodeKind, NodeState } from "../../engine/orchestrator/contracts.ts";
+// The category list is the engine's, read from a module that is free of Node-only imports, so the screen and the engine name the same lines.
+import { BUDGET_CATEGORIES, type BudgetCategory } from "../../engine/orchestrator/categories.ts";
 
 /** A colour role. Each one is a theme token from styles.css, so the light and dark themes both read. */
 export type Accent = "muted" | "info" | "success" | "warning" | "danger" | "accent";
@@ -120,9 +122,14 @@ export const EXAMPLE_GOALS = [
 
 /** The budget as a number, or null when it is blank, not a number, or outside the range the server accepts. */
 export function parseBudget(value: string): number | null {
+  return parseAmount(value, BUDGET.min, BUDGET.max);
+}
+
+/** A typed number from `min` to `max`, or null when it is blank, not a number, or outside the range. */
+function parseAmount(value: string, min: number, max: number): number | null {
   if (value.trim() === "") return null;
   const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= BUDGET.min && parsed <= BUDGET.max ? parsed : null;
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max ? parsed : null;
 }
 
 /** A brief from a format to copy or make, or from the person's own inputs. The mode says which of the two is required. */
@@ -224,4 +231,175 @@ export function describePlanOutcome(outcome: PlanOutcome): Notice {
     default:
       return { tone: "danger", text: "The plan outcome was not recognised. Nothing was planned." };
   }
+}
+
+// The budget line, the approvals, the measured average and the model policy (owner direction 2026-10-23: decisions D12 to D17).
+
+const unique = (items: readonly string[]): string[] => [...new Set(items)];
+
+/** A dollar amount with a fixed number of places, as the screens show budgets and costs. */
+const dollars = (value: number, places: number): string => `$${value.toFixed(places)}`;
+
+/** The measure ceiling's range, in USD per second. The server checks the same range (policy-store.ts). */
+export const CEILING = { min: 0.01, max: 5 } as const;
+
+/** The measure ceiling as a number, or null when it is blank, not a number, or outside the range. */
+export function parseCeiling(value: string): number | null {
+  return parseAmount(value, CEILING.min, CEILING.max);
+}
+
+/** The ceiling in words: "$0.50 per second". */
+export function ceilingText(usdPerSecond: number): string {
+  return `${dollars(usdPerSecond, 2)} per second`;
+}
+
+/** A budget line a pause can stop at: the total (no category) or one of the category lines (copy, creative or voice). */
+export type PauseCategory = BudgetCategory;
+
+/** The heading of the alert for a plan paused at the total budget line. Every viewer sees it; only an admin gets the approval control. */
+export const BUDGET_PAUSE_HEADING = "Budget reached, project not finished";
+
+/** The opening of a pause reason: the category, when the line is a category's, then the phrase the run writes (execute.ts). */
+const PAUSE_OPENING = new RegExp(`^(?:(${BUDGET_CATEGORIES.join("|")}) )?budget reached, project not finished`, "i");
+
+/**
+ * The category a pause stopped at, read from the pause event's reason. The event carries no category field, so the run's own opening words are
+ * the source. Null for the total line, and for a reason that names no category. Pure.
+ */
+export function pauseCategoryOf(reason: string | null | undefined): PauseCategory | null {
+  const match = PAUSE_OPENING.exec((reason ?? "").trim());
+  return match?.[1] === undefined ? null : (match[1].toLowerCase() as PauseCategory);
+}
+
+/** The heading of the alert for a pause: the total line, or the category's line named the way the run names it ("Copy budget reached, ..."). */
+export function budgetPauseHeading(category: PauseCategory | null): string {
+  if (category === null) return BUDGET_PAUSE_HEADING;
+  return `${category.charAt(0).toUpperCase()}${category.slice(1)} budget reached, project not finished`;
+}
+
+/**
+ * The pause reason under the alert heading. The run's own words are kept, and the opening the heading already says (the total line's, or a
+ * category's) is taken off the front, so it is not said twice. A missing reason is said to be missing, never shown as a guess. Pure.
+ */
+export function budgetPauseDetail(reason: string | null | undefined): string {
+  const text = (reason ?? "").trim();
+  if (text === "") return "No reason was recorded for this pause.";
+  const match = PAUSE_OPENING.exec(text);
+  if (match === null) return text;
+  const rest = text.slice(match[0].length).replace(/^[\s:]+/, "");
+  if (rest === "") return "The run stopped at its budget line.";
+  return `${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
+}
+
+/** One recorded budget approval, as the plan's list shows it. */
+export type ApprovalRow = { id: string; actorId: string; previousUsd: number; approvedUsd: number; createdAt: string };
+
+/** The time an approval was made, for ordering. A time that cannot be read sorts as the oldest, so it never moves a row up. */
+function approvalTime(row: { createdAt: string }): number {
+  const time = Date.parse(row.createdAt);
+  return Number.isFinite(time) ? time : Number.NEGATIVE_INFINITY;
+}
+
+/** The approvals newest first. Two at the same time keep the larger id first. The list passed is not changed. Pure. */
+export function approvalsNewestFirst<T extends { id: string; createdAt: string }>(approvals: readonly T[]): T[] {
+  return [...approvals].sort((a, b) => {
+    const byTime = approvalTime(b) - approvalTime(a);
+    if (byTime !== 0 && !Number.isNaN(byTime)) return byTime;
+    return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+  });
+}
+
+/** The name a row shows for who approved: the member's name, else the email, else a plain note when that person is no longer a member. Pure. */
+export function actorNameOf(actorId: string, members: ReadonlyArray<{ userId: string; name: string; email: string }>): string {
+  const member = members.find((candidate) => candidate.userId === actorId);
+  if (member === undefined) return "A member no longer in this workspace";
+  return member.name.trim() || member.email.trim() || "A workspace member";
+}
+
+/** One approval in words: who approved it, the approved budget, and the budget it came from. */
+export function approvalText(row: { actor: string; previousUsd: number; approvedUsd: number }): string {
+  return `${row.actor} approved ${dollars(row.approvedUsd, 2)}, from a budget of ${dollars(row.previousUsd, 2)}.`;
+}
+
+/**
+ * The line under the approval amount: what the amount does, or what it must be. The total line's amount must be above the plan's budget. A
+ * category's line is not on the screen, so the server checks that amount, and the line says what it must be above. Pure.
+ */
+export function approvalHint(input: { category: PauseCategory | null; budgetUsd: number; amount: number | null }): string {
+  const { category, budgetUsd, amount } = input;
+  if (category === null) {
+    if (amount !== null && amount > budgetUsd) return `Approving ${dollars(amount, 2)} raises the budget from ${dollars(budgetUsd, 2)}.`;
+    return `The run stops at the budget line of ${dollars(budgetUsd, 2)}. The approved budget must be above it.`;
+  }
+  if (amount === null) return `Enter the amount the ${category} budget should be raised to.`;
+  return `Approving ${dollars(amount, 2)} raises the ${category} budget. The amount must be above the ${category} budget the plan has now.`;
+}
+
+/**
+ * The measured average (D15): the reported cost per second over the workspace's clips, or that no clip has been measured. It is shown as a
+ * measurement and never as a prediction, and it never sets a hold. A missing average or a clip count below one reads as not measured.
+ */
+export function measuredAverageText(measured: { measuredAverageUsdPerSecond: number | null; clips: number }): string {
+  const { measuredAverageUsdPerSecond: average, clips } = measured;
+  if (average === null || !Number.isFinite(average) || !(clips >= 1)) return "no clip measured yet";
+  return `measured average: ${dollars(average, 4)} per second over ${clips} ${clips === 1 ? "clip" : "clips"}`;
+}
+
+/** A model family as the policy stores it: lowercase, with no leading ~, which marks a live alias. Pure. */
+export function normalizeFamily(text: string): string {
+  return text.trim().replace(/^~/, "").toLowerCase();
+}
+
+/** The families typed in a comma-separated box: each normalized, with the empty and the repeated ones dropped, in the order typed. Pure. */
+export function familiesFromText(text: string): string[] {
+  const families: string[] = [];
+  for (const part of text.split(",")) {
+    const family = normalizeFamily(part);
+    if (family !== "" && !families.includes(family)) families.push(family);
+  }
+  return families;
+}
+
+/** A list of families with one family switched on or off. The order is kept and nothing repeats. Pure. */
+export function withFamily(families: readonly string[], family: string, on: boolean): string[] {
+  if (!on) return families.filter((existing) => existing !== family);
+  return families.includes(family) ? [...families] : [...families, family];
+}
+
+/** One row of a family list: the family, whether it is switched off, whether a brand may not change it, and whether it is off by default. */
+export type FamilyRow = { family: string; switchedOff: boolean; locked: boolean; offByDefault: boolean };
+
+/**
+ * The rows of the workspace's list. The families off by default come first, so each one shows even when it is switched on; then the other
+ * families the workspace switches off. A row is switched off when the workspace's list holds it. Pure.
+ */
+export function workspaceFamilyRows(input: { defaults: readonly string[]; switchedOff: readonly string[] }): FamilyRow[] {
+  return unique([...input.defaults, ...input.switchedOff]).map((family) => ({
+    family,
+    switchedOff: input.switchedOff.includes(family),
+    locked: false,
+    offByDefault: input.defaults.includes(family),
+  }));
+}
+
+/**
+ * The rows of a brand's list: the families the workspace switches off, locked on for the brand, then the brand's own families. A family in
+ * both lists shows once, as locked. Pure.
+ */
+export function brandFamilyRows(input: { workspaceFamilies: readonly string[]; brandFamilies: readonly string[] }): FamilyRow[] {
+  const locked = unique(input.workspaceFamilies);
+  const own = unique(input.brandFamilies).filter((family) => !locked.includes(family));
+  return [
+    ...locked.map((family) => ({ family, switchedOff: true, locked: true, offByDefault: false })),
+    ...own.map((family) => ({ family, switchedOff: true, locked: false, offByDefault: false })),
+  ];
+}
+
+/**
+ * A brand's own list with one family switched on or off for that brand. A family the workspace switches off is locked on for the brand: the
+ * list comes back unchanged, so no brand can switch it on. Pure.
+ */
+export function brandFamiliesAfter(brandFamilies: readonly string[], workspaceFamilies: readonly string[], family: string, on: boolean): string[] {
+  if (workspaceFamilies.includes(family)) return [...brandFamilies];
+  return withFamily(brandFamilies, family, on);
 }

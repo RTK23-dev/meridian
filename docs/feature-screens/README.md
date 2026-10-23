@@ -75,8 +75,25 @@ Not captured: a started run's decision feed. The engine is not connected here (n
 | `orchestrator-composer` | The brief with one budget field, and no choice of what to start from. | The "Start from" choice ("A format to copy or make", "My own inputs"), which decides which field is required. Under the budget, "Budget by category (optional)": copy, creative and voice. An empty category is unset. |
 | `orchestrator-policy` | Not present at the base. | "Budget tolerance and model policy": the tolerance in percent and cents (10 and 25 by default), the Veo switch (on, meaning Veo is off), other families to switch off, and "Save the policy". |
 
+The `orchestrator-policy` row describes the panel that D12 replaced. Its after image was replaced by the capture in the section at the end.
+
 Checked in the browser, without a screenshot: switching to "My own inputs" makes the format optional and the inputs required; saving the
 tolerance as 15 shows "Saved", persists across a reload, and was put back to 10.
 
 Not captured: the approval block for a paused plan, and any plan's run states. A plan needs the orchestrating model's call, which needs a
 provider key, and none is set, so no plan can be made or paused here. The approval is covered by `src/engine/orchestrator/approval.test.ts`.
+
+## Orchestrator: model policy and plans (2026-10-23, decisions D12 to D17)
+
+- **Before:** `f867dcc6`, the base of this branch. Exported with `git archive` into a scratch folder, so no worktree or branch was changed. Run with `npm run dev` on port 8093 and a fresh PGlite database.
+- **After:** this branch, at the commit that adds this section. Run with `npm run dev` on port 8093 and its own PGlite database.
+- The fixture is the same as the sections above: "Feature screens fixture", a workspace, and a brand "Harbour Coffee (fixture)". The orchestrating model is a placeholder id, `example/orchestrator`, saved as typed; the live catalog is not connected, so nothing is checked. One draft plan is made from the composer. Planning says NOT CONNECTED, so the draft stays a draft. No run is started and no provider is called.
+- For these captures the app's top bar is set to static and its phone bottom bar is hidden, so neither covers the section.
+- Playwright with `/opt/pw-browsers/chromium`. 1280x800 and 390x844 viewport captures.
+
+| Screen id | Before (`f867dcc6`) | After (this branch) |
+| --- | --- | --- |
+| `orchestrator-policy` | Model policy: a switch for the family that is off by default, a box for other families, and "Save the policy". | Workspace: the switched-off families, the family off by default marked as such, a box to switch off more, and "Measure ceiling (USD per second)" with its initial value. Brand: a brand picker; the workspace's families are locked on for the brand, with the reason; the brand's own families; and "Save the brand's families". |
+| `orchestrator-plans` | Your plans and a draft's detail: the budget and "Plan with ...". | A measured-average line for the workspace ("no clip measured yet", with "Shown for reference. It never sets a hold."), and "Budget approvals" for the draft: "No budget has been approved for this plan." |
+
+Not captured, and why: the budget-reached alert and its approval control (an admin's), the approval list with entries, the measured average over clips, and the "Measure unpriced video" choice at run start. Each needs a plan that is ready or paused, which needs the orchestrating model's call and so a provider key, or a live run. No such state is invented for a screenshot. They are covered by `src/components/content-factory/orchestrator-presentation-budget.test.ts` and the approval tests.
