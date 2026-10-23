@@ -48,8 +48,9 @@ export type RoleRequest<Input> = {
   /** res_ id of the request's budget reservation. A call is made only against it. */
   reservationId: string;
   /**
-   * The job's infrastructure attempt (Bible 5.1), from 1. A call that returned no answer (a timeout or a 5xx) keeps its hold
-   * on the ledger, and its key cannot be used again. The job retries it with the next attempt number, which is a new key.
+   * The job's infrastructure attempt (Bible 5.1), from 1. The key does not include it: a call that returned no answer (a timeout or
+   * a 5xx) keeps its hold on the ledger, and a retry of the job reuses the same key. The ledger returns the first authorization, so the
+   * retry is never a second paid call (review 2026-10-22, item 1).
    */
   attempt?: number;
   signal?: AbortSignal;
@@ -81,7 +82,7 @@ export type RoleOutcome<Answer> = OutcomeBase &
     | { status: "refused"; reason: string }
     /**
      * The key was already authorized, so no call was made. Use the stored answer. If the entry has no actual cost, the earlier
-     * call returned no answer and the job may retry with a higher attempt number.
+     * call returned no answer: a retry of the job gets this duplicate again and no answer, so it must not be read as one.
      */
     | { status: "duplicate"; entry: LedgerRow; samePayload: boolean }
   );
