@@ -5,6 +5,7 @@ import { modelCatalogEntrySchema } from "../contracts/catalog.ts";
 import { createGateway } from "./gateway.ts";
 import { modelCatalogCache, parseModelsCatalog, parseVideoCatalog, readModelCatalog } from "./catalog.ts";
 import { json, recorded, staticKeys } from "./test/recorded.ts";
+import { exclusionFor, MODEL_EXCLUSIONS, OPENROUTER_VIDEO_LISTING } from "../config/model-exclusions.ts";
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`./test/fixtures/${name}.json`, import.meta.url), "utf8"));
 const READ_AT = "2026-10-16T09:00:00.000Z";
@@ -22,6 +23,7 @@ describe("catalog parse: GET /videos/models", () => {
       parsed.entries.map((entry) => [entry.id, entry.price.usd, entry.price.sku]),
       [
         ["kwaivgi/kling-v3.0-std", 0.14, "per-video-second-1080p"],
+        ["google/veo-3.1-lite", 0.05, "per-video-second"],
         ["alibaba/wan-2.6", 0.0425, "per-video-second-1080p"],
       ],
     );
@@ -58,15 +60,30 @@ describe("catalog parse: GET /videos/models", () => {
     assert.match(reasons.get("vendor/free-preview") ?? "", /no positive per-second price/);
     assert.match(reasons.get("vendor/per-video-only") ?? "", /no positive per-second price/);
     assert.match(reasons.get("broken/entry") ?? "", /does not match the listing shape/);
-    assert.match(reasons.get("google/veo-3.1-lite") ?? "", /retired by owner decision/, "a retired model is dropped with its reason");
+    assert.equal(reasons.has("google/veo-3.1-lite"), false, "a listed model with a usable price is kept, not dropped");
     assert.equal(parsed.dropped.filter((drop) => drop.id === null).length, 1, "the row that is not an object is dropped with no id");
-    assert.equal(parsed.dropped.length, 6, "five as before, and the retired Veo 3.1 Lite row");
+    assert.equal(parsed.dropped.length, 5, "the five rows the listing drops, as before");
   });
 
   it("treats a body with no data array as a failed listing", () => {
     const empty = parseVideoCatalog({ models: [] }, READ_AT);
     assert.deepEqual(empty.entries, []);
     assert.deepEqual(empty.dropped, [{ source: "videos", id: null, reason: "the listing has no data array" }]);
+  });
+});
+
+describe("model exclusions: scoped to one endpoint, each with its reason", () => {
+  it("ships with no exclusion, so every listed model with a usable price is kept", () => {
+    assert.deepEqual(MODEL_EXCLUSIONS, []);
+  });
+
+  it("drops an excluded model on the endpoint it names, with its reason, and no other endpoint applies it", () => {
+    const reason = "test: the listing refused it on the check's date";
+    const exclusions = [{ endpoint: OPENROUTER_VIDEO_LISTING, model: "google/veo-3.1-lite", reason }];
+    const parsed = parseVideoCatalog(fixture("openrouter-catalog-videos"), READ_AT, exclusions);
+    assert.equal(parsed.entries.some((entry) => entry.id === "google/veo-3.1-lite"), false);
+    assert.equal(parsed.dropped.find((drop) => drop.id === "google/veo-3.1-lite")?.reason, reason);
+    assert.equal(exclusionFor("openrouter:POST /api/v1/images", "google/veo-3.1-lite", exclusions), null, "another endpoint does not apply it");
   });
 });
 
@@ -112,7 +129,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.equal(read.catalog.readAt, READ_AT);
     assert.deepEqual(read.catalog.failed, []);
-    assert.equal(read.catalog.entries.length, 5, "2 video (Veo 3.1 Lite is retired), 2 image, 1 speech");
+    assert.equal(read.catalog.entries.length, 6, "3 video, 2 image, 1 speech");
     assert.notEqual(read.catalog.videoListing, null, "the video listing is kept for the video adapters' profiles");
     assert.deepEqual(
       transport.requests.map((request) => `${request.method} ${request.url}`),

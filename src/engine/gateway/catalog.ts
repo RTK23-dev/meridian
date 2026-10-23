@@ -27,7 +27,7 @@
 
 import { z } from "zod";
 import { adapters } from "../config/adapters.ts";
-import { RETIRED_MODEL_IDS } from "../config/retired-models.ts";
+import { exclusionFor, MODEL_EXCLUSIONS, OPENROUTER_VIDEO_LISTING, type ModelExclusion } from "../config/model-exclusions.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { modelCatalogEntrySchema, type CatalogCapabilities, type CatalogPrice, type ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ModelClass } from "../contracts/plan.ts";
@@ -155,8 +155,8 @@ function videoPrice(skus: unknown): CatalogPrice | string {
   return `no positive per-second price (${VIDEO_SECOND_SKUS.join(" or ")}), so a call could not be reserved`;
 }
 
-/** Parses GET /videos/models. Pure. */
-export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
+/** Parses GET /videos/models. Pure. An exclusion applies to this endpoint only, and its reason is recorded on the drop. */
+export function parseVideoCatalog(body: unknown, readAt: string, exclusions: readonly ModelExclusion[] = MODEL_EXCLUSIONS): Parsed {
   const out: Parsed = { entries: [], dropped: [] };
   const listing = listingSchema.safeParse(body);
   if (!listing.success) {
@@ -170,9 +170,9 @@ export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
       continue;
     }
     const model = row.data;
-    const retired = RETIRED_MODEL_IDS[model.id];
-    if (retired !== undefined) {
-      out.dropped.push({ source: "videos", id: model.id, reason: retired });
+    const excluded = exclusionFor(OPENROUTER_VIDEO_LISTING, model.id, exclusions);
+    if (excluded !== null) {
+      out.dropped.push({ source: "videos", id: model.id, reason: excluded });
       continue;
     }
     const price = videoPrice(model.pricing_skus);

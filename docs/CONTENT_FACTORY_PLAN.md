@@ -160,8 +160,8 @@ provider. The engine's own edit, compose and render steps are not connected (M4.
 ### M4. Engine media depth
 
 - **M4.1. Veo replacement (handoff phase 0; D1).** Owner decision, 2026-10-23: remove Veo 3.1 completely and replace it with the latest model.
-  In code, `engine/config/routes.ts` and `prices.ts` no longer name Veo, and `engine/config/retired-models.ts` drops the three Veo ids from
-  every catalog read, with a reason. The route table names no video model, so the live catalog chooses (Bible 10.5).
+  In code, `engine/config/routes.ts` and `prices.ts` name no Veo model, and no model is excluded globally: `engine/config/model-exclusions.ts`
+  is scoped to one provider endpoint, with a reason, and is empty. The route table names no video model, so the live catalog chooses (Bible 10.5).
   *Accept:* a current model is chosen and wired through the gateway (`engine/gateway/`). Open: the owner confirms the catalog's choice as the
   replacement, or names a model for the route table once its price is verified (D20).
 
@@ -216,7 +216,7 @@ The owner answers these. An agent reports the blocked task and does not choose a
 
 | ID | Decision | Blocks |
 | --- | --- | --- |
-| D1 | Veo replacement. Decided 2026-10-23 by the owner: remove Veo 3.1 completely and replace it with the latest model. Removed in code (M4.1). Still open: the model the owner wants named in the route table, and its verified price (D20). Google's Veo documentation says the Veo 3.1 Preview models in the Gemini API were shut down on 22 October 2026, and recommends Gemini Omni Flash or a GA Veo model. | M4.1 |
+| D1 | Veo replacement. The owner's 2026-10-23 removal was superseded the same day by the operating brief: no global Veo exclusion, and exclusions are scoped to an endpoint (M4.1). Veo 3.1 is listed on OpenRouter's video endpoint, and no Gemini or Omni video model appears there. Still open: the model the owner wants named in the route table, and its verified price (D20). Google's Veo documentation says the Veo 3.1 Preview models in the Gemini API were shut down on 22 October 2026, and recommends Gemini Omni Flash or a GA Veo model. | M4.1 |
 | D2 | `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. An empty value licenses none. | M4.5, engine video at Gate |
 | D3 | The HyperFrames price per minute, and the render fallback (Shotstack, or none). | M4.6, M2.3 (engine path) |
 | D4 | The Apify key and plan price. | M5.4 |

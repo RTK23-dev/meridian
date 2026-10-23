@@ -1411,7 +1411,7 @@ Fourteen workstreams, each owning modules and contracts with clear boundaries, s
 
 Six phases. A phase is complete only when every acceptance test passes in a **recorded live run** on real APIs, with artifacts and costs attached to the phase PR. Phases overlap: workstreams start the next phase's work on fixtures while integration finishes.
 
-**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39. **Amended 2026-10-23 (owner decision):** Veo 3.1 is removed from the engine rather than moved. The route table names no video model, the live catalog chooses each one (Bible 10.5), and the retired Veo ids are dropped from every catalog read (`src/engine/config/retired-models.ts`).
+**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39. **Amended 2026-10-23, superseded the same day:** an owner decision removed Veo 3.1 from the engine. The operating brief that followed bars a global Veo exclusion. No model is excluded globally now. An exclusion is scoped to one provider endpoint and carries a reason (`src/engine/config/model-exclusions.ts`), and that list is empty. Veo 3.1 is a candidate on OpenRouter's video listing, chosen by capability and price like any other model (Bible 10.5).
 
 ### E1 Skeleton (waves 0–1)
 
