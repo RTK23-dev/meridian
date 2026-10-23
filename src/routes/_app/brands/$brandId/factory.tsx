@@ -10,7 +10,7 @@ import { factoryControlsPayload, factoryControlsSchema, type FactoryControlsInpu
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { hasRole } from "@/lib/meridian/access";
 import { FACTORY_LEVEL_DETAIL, FACTORY_LEVEL_LABELS, type FactoryLevel } from "@/lib/meridian/factory/autopilot";
-import { useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation, useThemePagesQuery } from "@/lib/query/hooks";
+import { useBrandQueueQuery, useFactoryQuery, useDistributionChannelsQuery, useOrganicDistributionQuery, usePipelineConfigQuery, useProviderSettingsQuery, useScopedMutation, useThemePagesQuery } from "@/lib/query/hooks";
 import { approveFactoryStage, attestFactoryLicence, checkFactoryLearning, confirmFactoryAiLabel, resumeFactoryRun, revokeFactoryAiLabel, revokeFactoryLicence, saveFactoryRunDefaults, startFactoryRun, setFactoryControls, setKillSwitch } from "@/lib/meridian/factory/actions";
 import type { LicenceKind } from "@/lib/meridian/factory/rights-wording";
 import { organicMetricsLine } from "@/components/studio/organic-metrics";
@@ -24,6 +24,7 @@ import { RunBuilder } from "@/components/factory/run-builder";
 import { RunList, type RunListItem, type RunPickLine } from "@/components/factory/run-list";
 import { SleepModePanel } from "@/components/factory/sleep-mode-panel";
 import { SalesByReelPanel } from "@/components/factory/sales-by-reel";
+import { ProductionQueue } from "@/components/factory/production-queue";
 import type { RunSettings } from "@/lib/meridian/factory/run-settings";
 import { qk } from "@/lib/query/keys";
 
@@ -108,6 +109,7 @@ function Page() {
 
 function FactoryPage({ brandId }: { brandId: string }) {
   const query = useFactoryQuery(brandId);
+  const queue = useBrandQueueQuery(brandId);
   const board = query.data ?? null;
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const pagesQuery = useThemePagesQuery(brandId);
@@ -131,7 +133,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
     mutationKey: factoryKey("run"),
     mutationFn: (vars: { niche: string; settings: RunSettings }) => startFactoryRun({ data: { brandId, niche: vars.niche, level: 0, settings: vars.settings } }),
     // A run queues jobs and may produce research and creatives, so the jobs, market and studio screens change with it.
-    invalidate: () => [qk.factory(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
+    invalidate: () => [qk.factory(brandId), qk.brandQueue(brandId), qk.jobs(board?.organizationId ?? ""), qk.market(brandId), qk.studio(brandId)],
     onSuccess: (result) => {
       setNote(`Queued ${result.jobs} factory jobs as run ${result.runId}.`);
       setBuilderKey((key) => key + 1);
@@ -378,8 +380,13 @@ function FactoryPage({ brandId }: { brandId: string }) {
         </TabsContent>
 
         <TabsContent value="production" className="space-y-4">
-          <section className="space-y-3">
-            <h2 className="text-section font-semibold">Production queue</h2>
+          <section aria-labelledby="production-queue" className="space-y-3">
+            <h2 id="production-queue" className="text-section font-semibold">Production queue</h2>
+            <p className="text-sm text-muted">The jobs this brand has, read from the job records. The stages below are the order a run goes through.</p>
+            <ProductionQueue query={queue} />
+          </section>
+          <section aria-labelledby="production-stages" className="space-y-3">
+            <h2 id="production-stages" className="text-section font-semibold">Production stages</h2>
             <ol className="grid gap-2 md:grid-cols-2">
               {board.stages.map((stage) => (
                 <li key={stage.type} className="rounded-md border border-line p-3 text-sm">

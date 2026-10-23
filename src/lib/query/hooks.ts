@@ -6,6 +6,7 @@ import { getBrand } from "@/lib/meridian/api";
 import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, listLibrary, listOpportunities, listReviews, getTrace, resolveReview, dismissOpportunity } from "@/lib/meridian/machine";
 import { getCalibration, listCalibrationVersions } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
+import { getBrandProductionQueue } from "@/lib/meridian/jobs/actions";
 import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, listWindowReleasedBudget } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
@@ -91,6 +92,10 @@ export const learningQueryOptions = (userId: string | null | undefined, brandId:
 export const factoryQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.factory(brandId)),
   queryFn: () => getFactoryBoard({ data: { brandId } }),
+});
+export const brandQueueQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.brandQueue(brandId)),
+  queryFn: () => getBrandProductionQueue({ data: { brandId } }),
 });
 export const calibrationQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.calibration(brandId)),
@@ -283,6 +288,19 @@ export const useFactoryQuery = (brandId: string, enabled = true) => {
     ...factoryQueryOptions(userId, brandId),
     enabled: ready && enabled && !!brandId,
     refetchInterval: (query) => query.state.data?.runs.some((run) => run.status === "queued" || run.status === "running") ? ACTIVE_POLL_MS : false,
+  });
+};
+
+/** Polls only while a job is queued, running or retrying, so a settled brand is not refetched on a timer. */
+export const useBrandQueueQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    ...brandQueueQueryOptions(userId, brandId),
+    enabled: ready && enabled && !!brandId,
+    refetchInterval: (query) => {
+      const counts = query.state.data?.counts;
+      return counts && counts.queued + counts.running + counts.retry > 0 ? ACTIVE_POLL_MS : false;
+    },
   });
 };
 

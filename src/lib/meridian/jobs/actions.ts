@@ -16,6 +16,7 @@ import {
   workerHealthView,
   workspaceInput,
 } from "./ops.ts";
+import { brandProductionQueue } from "./brand-queue.ts";
 
 async function requireAdmin(userId: string, organizationId: string) {
   const sql = await getSql();
@@ -34,6 +35,18 @@ async function healthSnapshot(sql: Sql, organizationId: string) {
   ]);
   return { beats, counts: countsByStatus(counts) };
 }
+
+/** The production queue for one brand, for anyone who can view the brand. See brand-queue.ts for what it reads. */
+export const getBrandProductionQueue = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = input && typeof input === "object" && typeof (input as { brandId?: unknown }).brandId === "string"
+      ? (input as { brandId: string }).brandId.trim().slice(0, 80)
+      : "";
+    if (!brandId) throw new Error("brandId is required.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => brandProductionQueue(await getSql(), context.userId, data.brandId));
 
 /** Jobs for one workspace, filtered by status, job type and brand, 50 per page, newest first. */
 export const listJobs = createServerFn({ method: "POST" })
