@@ -63,6 +63,11 @@ export const assetJobSchema = z
     targetIndex: z.int().nonnegative(),
     /** The provider bills of this target's earlier submits (and of this one, once settled). Never an estimate (contract v6). */
     targetBilledUsd: usdSchema,
+    /**
+     * The provider bills of the asset's earlier targets. Each of them was billed, then failed, and the router moved on. A failed target's bill
+     * is never dropped: the asset's cost is these plus the bills of this target. Absent in a job stored before this field: zero.
+     */
+    earlierTargetsBilledUsd: usdSchema.optional(),
     /** Submits made on this target, this one included. */
     targetSubmits: z.int().positive(),
     /** The ledger entry of the target's first submit, which the asset names as its ledger entry. */

@@ -484,6 +484,38 @@ describe("concurrency buckets and the breaker", () => {
   });
 });
 
+describe("a measured clip holds the plan's measure hold on the ledger (D15)", () => {
+  it("the ledger holds the measure hold for the call, not the route's own price, and the bill replaces it", async () => {
+    const h = await harness({
+      script: {
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }),
+        "GET /api/v1/videos/job-first": completed("job-first", 0.6125),
+      },
+    });
+    const spec = assetSpec();
+    // Five seconds at a 0.50 a second ceiling: the plan holds 2.5 for this clip, and the ledger holds the same 2.5.
+    const report = await h.router.produce({ ...h.input(spec), measureHoldUsd: 2.5 });
+    assert.equal(report.outcome.status, "done");
+    const entry = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
+    assert.equal(entry?.estimateUsd, 2.5, "the plan's measure hold, not the route's 0.63");
+    assert.equal(entry?.reservedUsd, 2.5);
+    assert.equal(entry?.actualUsd, 0.6125, "the provider's bill replaces the hold");
+  });
+
+  it("a priced step names no measure hold and holds the route's own price", async () => {
+    const h = await harness({
+      script: {
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }),
+        "GET /api/v1/videos/job-first": completed("job-first", 0.6125),
+      },
+    });
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "done");
+    assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.estimateUsd, 0.63, "five seconds at the price table's rate");
+  });
+});
+
 describe("scoring", () => {
   it("names the unknown dimensions and keeps every score within [0, 1]", async () => {
     const h = await harness({

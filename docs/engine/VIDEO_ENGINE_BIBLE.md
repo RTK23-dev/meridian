@@ -1210,12 +1210,12 @@ No paid call happens without a reservation, and every call is reconciled to its 
 ### 14.1 Flow
 
 1. **Estimate** in `estimate_reserve`: price every shot from the price table (section 10.3), plus Claude, render and media-function costs, plus a redo allowance (initial 25% of generated-shot cost).
-2. **Reserve** the estimate against the request budget and the workspace's monthly budget. If either would pass its allowance, the request pauses (not fails) with a reason. The allowance is the budget plus its tolerance, the larger of a percentage and a number of cents (owner direction 2026-10-23; `budget/tolerance.ts`). Within it, work proceeds.
+2. **Reserve** the estimate against the request budget and the workspace's monthly budget. A budget is a line (owner direction 2026-10-23, D12). A paid call starts only while the committed spend of its request and of its workspace month is below their budgets, and only if its own hold fits under both: the committed spend before the call plus the call's estimate is not above either budget (D17; `budget/reserve.ts`, `authorizeCall`). Committed spend is each ledger entry's actual cost, or its hold until it settles. A call that does not fit is refused before any request is made, and the request pauses (not fails) with the reason. A reservation is never paused at a line; a plan above a budget is held with a note.
 3. **Spend:** every adapter call writes a `LedgerEntry` with estimate and reservation before submitting.
 4. **Reconcile:** on completion the adapter settles the call to the provider's verified bill (from the provider's response or billing API). With no bill, the call stays held at its reservation and its cost is unknown: no list price is booked as an actual (amended for contract v6, owner direction 2026-10-16; section 4, v6 changes).
 5. **Release** unused reservation at `deliver`.
 
-**Modes per workspace:** `observe` (record only), `warn` (record and alert on overrun), `cap` (a call proceeds within its allowance, the reservation plus its tolerance; beyond it the request pauses for an approval, and a small overrun never fails). Production runs in `cap`.
+**Modes per workspace:** `observe` (record only), `warn` (authorize the call and alert on any overshoot of a line), `cap` (a paid call starts only if its own hold fits under each line, D17; a call that would pass a line is refused, and a settled bill that takes a line marks its reservation `exceeded`). Production runs in `cap`.
 
 ### 14.2 Cost per master
 

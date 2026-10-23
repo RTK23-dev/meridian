@@ -49,7 +49,7 @@ Every run has the full stage graph. The mode decides where a stage waits (`facto
 | Stage | `manual` | `semi` | `full` |
 | --- | --- | --- | --- |
 | Discover, ingest, decode, grade, trend, pick, template, gate | runs | runs | runs |
-| Produce (spends), launch (publishes), test (shifts budget) | waits for approval | waits for approval | runs inside the allowance, the budget plus its tolerance |
+| Produce (spends), launch (publishes), test (shifts budget) | waits for approval | waits for approval | runs; a budget is a line (D12), and a paid step starts only if its own hold fits under it (D17) |
 | Review | waits for approval | runs | runs |
 
 - **The kill switch stops every stage in every mode**, approved or not. The run is marked `paused` with the reason.
@@ -132,7 +132,7 @@ Produce materializes each variant of the run for each format the run makes, thro
   matrix's refusal). This is the same for images, slides and videos.
 - The provider is the run's choice for the format. `auto` lets the capability matrix choose. A named provider that is not configured
   or not connected stops the run, and the run row carries the provider's reason. No other provider is used in its place.
-- The budget is reserved before the provider is called. A call that returns a failure releases the reservation. A call that does not
+- The budget is reserved before the provider is called. A budget is a line (D12): a paid step starts only while its committed spend (the settled cost of finished steps, plus the holds of calls in flight or queued and of failed paid calls) is below it, and only if its own hold fits under it (D17). A call that returns a failure releases the reservation. A call that does not
   return keeps its reservation held. A held reservation is released on its own only when the provider's own lookup confirms it holds no job for the submission. The sweep asks once the submission window has passed. No provider has such a lookup yet, so every held reservation stays for an admin, who sees the last check on the panel (see [OPERATIONS.md](OPERATIONS.md), Budgets). An admin or owner
   releases it on the Factory screen, in the Held budget panel. Other roles see the panel's rule and the reason they cannot release it.
 - The image, slide and video are stored, judged and recorded by the materializer that Studio uses. The creative is in `creative_records`,
