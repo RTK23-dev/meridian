@@ -12,6 +12,8 @@
  *   delivered or has failed, a revision reopens the session. The earlier request stays stored, and the next video gets its own id.
  * - The engine is reached only through src/engine/api: start, requestProblems (through request.ts), readiness and the request feed.
  */
+import { hookHistoryOf, type HookHistory } from "./hook-history.ts";
+import { readStartedHooks } from "./hook-history-store.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -573,6 +575,16 @@ export async function startRun(sql: Sql, userId: string, input: { sessionId: str
     () => false,
   );
   return { status: "started", requestId: request.requestId, auditRecorded };
+}
+
+/**
+ * The hooks of a brand's started videos, and where they repeat (portfolio). Admins of the brand's workspace only, and the brand must be in
+ * that workspace. Reads what the runs stored; it writes nothing and invents no hook.
+ */
+export async function brandHookHistory(sql: Sql, userId: string, input: { organizationId: string; brandId: string }): Promise<HookHistory> {
+  await requireWorkspaceAdmin(sql, userId, input.organizationId);
+  await requireBrandInWorkspace(sql, input.organizationId, input.brandId);
+  return hookHistoryOf(await readStartedHooks(sql, input.organizationId, input.brandId));
 }
 
 export type ReviseOutcome =

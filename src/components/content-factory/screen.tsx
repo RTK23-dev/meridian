@@ -8,7 +8,8 @@ import { AdminOnlyNotice } from "@/components/ops/ops-shared";
 import { hasRole } from "@/lib/meridian/access";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentFactorySession, getContentFactorySession, listContentFactorySessions, readContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { createContentFactorySession, getBrandHookHistory, getContentFactorySession, listContentFactorySessions, readContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import type { HookHistory } from "@/lib/meridian/content-factory/hook-history";
 import { MAX_TITLE_CHARS, type SessionSummary } from "@/lib/meridian/content-factory/model";
 import { ChatPanel } from "./chat-panel";
 import { OrchestratorModelPanel } from "./orchestrator-model-panel";
@@ -82,6 +83,13 @@ export function ContentFactoryScreen() {
               {list.map((item) => <option key={item.id} value={item.id}>{item.title} · {item.status === "started" ? "video started" : "draft"}</option>)}
             </SelectInput>
           </div>
+          {selected.brandId ? (
+            <HookHistoryCard
+              organizationId={organizationId}
+              brandId={selected.brandId}
+              brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
+            />
+          ) : null}
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
         </>
       ) : null}
@@ -163,6 +171,68 @@ function SessionView({ session, brands, userId }: { session: SessionSummary; bra
       <div className="min-w-0">
         <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} />
       </div>
+    </div>
+  );
+}
+
+/**
+ * The hooks of one brand's started videos, read from what the runs stored (portfolio). A repeat is shown with the videos it appears in, so a
+ * person can change the wording on purpose. The count is read as it is: a video whose script has no hook is not counted as a hook.
+ */
+function HookHistoryCard({ organizationId, brandId, brandName }: { organizationId: string; brandId: string; brandName: string }) {
+  const { user } = useCurrentUserState();
+  const history = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "hooks", organizationId, brandId]),
+    queryFn: () => getBrandHookHistory({ data: { organizationId, brandId } }),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Hooks in {brandName}</CardTitle>
+        <CardDescription>The hook each started video opened with, read from its stored script. Repeated wording is listed so you can change it on purpose.</CardDescription>
+      </CardHeader>
+      {history.isError && !history.data ? <PlainErrorState error={history.error} onRetry={() => void history.refetch()} /> : null}
+      {history.isPending ? <p role="status" className="text-sm text-fg-muted">Reading the hooks.</p> : null}
+      {history.data ? <HookHistoryBody history={history.data} /> : null}
+    </Card>
+  );
+}
+
+function HookHistoryBody({ history }: { history: HookHistory }) {
+  if (history.started === 0) {
+    return <p className="text-sm text-fg-muted">No video has been started for this brand yet. Its hooks appear here once a run starts.</p>;
+  }
+  if (history.hooked === 0) {
+    return (
+      <p className="text-sm text-fg-muted">
+        {history.started} started {history.started === 1 ? "video has" : "videos have"} no recorded hook yet. The engine writes each script after its run starts, and a hook is listed once the script exists.
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-sm">
+        {history.hooked} of {history.started} started {history.started === 1 ? "video has" : "videos have"} a recorded hook.
+      </p>
+      {history.repeats.length === 0 ? (
+        <p className="text-sm text-fg-muted">No hook repeats. Each recorded hook is worded differently.</p>
+      ) : (
+        <ol className="space-y-3" aria-label="Repeated hooks">
+          {history.repeats.map((group) => (
+            <li key={group.records.map((record) => record.sessionId).join(":")} className="space-y-2 rounded-md border border-border bg-surface-2 p-3">
+              <p className="text-sm font-semibold">{group.kind === "same" ? "Same wording" : "Similar wording (shared words)"}</p>
+              <p className="text-sm">&ldquo;{group.hook}&rdquo;</p>
+              <ul className="space-y-1 text-xs text-fg-muted">
+                {group.records.map((record) => (
+                  <li key={record.sessionId}>
+                    {record.title} · {record.startedAt ? record.startedAt.slice(0, 10) : "start date not recorded"}
+                  </li>
+                ))}
+              </ul>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   );
 }

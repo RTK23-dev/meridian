@@ -50,6 +50,10 @@ export function workspaceInput(input: unknown): { organizationId: string } {
   return { organizationId: idOf(fields(input).organizationId, "workspace") };
 }
 
+export function brandHookInput(input: unknown): { organizationId: string; brandId: string } {
+  return { organizationId: idOf(fields(input).organizationId, "workspace"), brandId: idOf(fields(input).brandId, "brand") };
+}
+
 export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }

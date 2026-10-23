@@ -3,6 +3,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import {
   attachSourceInput,
+  brandHookInput,
   createSessionInput,
   messageInput,
   remakeShotInput,
@@ -16,7 +17,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, brandHookHistory, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -25,6 +26,12 @@ export const listContentFactorySessions = createServerFn({ method: "POST" })
   .validator((input: unknown) => workspaceInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => listSessions(await getSql(), context.userId, data));
+
+/** The hooks of a brand's started videos and where they repeat (portfolio). Admins of the brand's workspace only. */
+export const getBrandHookHistory = createServerFn({ method: "POST" })
+  .validator((input: unknown) => brandHookInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => brandHookHistory(await getSql(), context.userId, data));
 
 export const createContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => createSessionInput(input))
