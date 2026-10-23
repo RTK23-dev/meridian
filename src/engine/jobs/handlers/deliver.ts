@@ -62,6 +62,7 @@ import { writeArtifactOnce } from "../../deliver/write-once.ts";
 import { diffEdl } from "../../variants/diff.ts";
 import { readJobInputs, type StoredArtifact } from "../artifact-store.ts";
 import { writeManifestRow } from "../manifest-store.ts";
+import { sampleDelivery, type SamplingPorts } from "../sampling.ts";
 import { stableId } from "../stable-id.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
 
@@ -82,6 +83,11 @@ export type DeliverPorts = {
    * the manifest discloses it (disclosuresFor). Undefined means unknown.
    */
   paidPartnership?: (scope: DeliverScope) => Promise<boolean | undefined>;
+  /**
+   * Sampling after delivery (Bible 6.14, 12.5): a sampled video is queued as a review item after the delivery is recorded. Absent, nothing
+   * is sampled. The queueing never blocks the delivery, and a retry queues each item once (jobs/sampling.ts).
+   */
+  sampling?: SamplingPorts;
   events: EventStore;
   now: () => string;
 };
@@ -347,6 +353,18 @@ export function createDeliverHandler(ports: DeliverPorts): StageHandler {
         },
       });
       await emitLearningEvents(ports.events, scope, events, { at, jobId: ctx.jobId });
+
+      // 5. Sampling after delivery (Bible 6.14). The delivery is recorded above; a sampled video becomes a review item for a person.
+      if (ports.sampling !== undefined) {
+        await sampleDelivery(ports.sampling, {
+          organizationId: ctx.organizationId,
+          requestId: ctx.requestId,
+          formatKey: request.format.formatId,
+          videoIds: videos.map((video) => video.videoId),
+          thresholdVersion: versions.thresholds,
+          now: at,
+        });
+      }
 
       return {
         kind: "done",

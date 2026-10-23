@@ -99,6 +99,7 @@ import { createRenderHandler, type RenderPorts } from "./handlers/render.ts";
 import { createVariantsHandler, type VariantPorts } from "./handlers/variants.ts";
 import { createDeliverHandler, type DeliverPorts } from "./handlers/deliver.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
+import { sqlSamplingPorts } from "./sampling-store.ts";
 import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import { listRoleCalls } from "./role-call-store.ts";
@@ -471,6 +472,7 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       roleCalls: (scope) => listRoleCalls(composition.sql, scope),
       gates: (scope) => gateResultsOf(composition.sql, scope),
       decisions: (scope) => decisionsOf(composition.sql, scope),
+      sampling: sqlSamplingPorts(composition.sql),
       events: sqlEventStore(composition.sql),
       now,
     },

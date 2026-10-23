@@ -15,6 +15,7 @@ const ENGINE_TABLES = [
   "engine_reservations",
   "engine_manifests",
   "engine_review_items",
+  "engine_sampling_state",
   "engine_kits",
   "engine_cache_index",
   "engine_events",
