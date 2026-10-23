@@ -44,6 +44,8 @@ export type SetupRow = {
   label: string;
   group: SetupGroup;
   status: SetupStatus;
+  /** True when the row is chosen (the engine is set for the workspace or deployment) or a key is saved for it. Read from the server state. */
+  selected: boolean;
   /** The reason, in plain words. It names the variable or the step that is missing. It never contains a key. */
   reason: string;
   /** The masked fingerprint of the key in use, or null. */
@@ -147,6 +149,7 @@ function keyedRow(category: CredentialCategory, summary: ProviderConfigSummary):
     label: KEYED_LABEL[category],
     group: groupOf(category),
     status,
+    selected: state !== "not_configured",
     reason,
     fingerprint: state === "usable" ? summary.keyFingerprint ?? null : null,
     note,
@@ -176,6 +179,7 @@ function decisionEngineRow(engines: SetupEngines): SetupRow {
     label: "Decision engine",
     group: "decisions",
     status,
+    selected: engines.active.source === "workspace" || engines.active.source === "deployment",
     reason: `${lead} ${chosen} ${health.message ?? ""}`.trim(),
     fingerprint: null,
     note: invalid ? `DECISION_ENGINE is set to "${invalid}", which is not an engine. The default is in use.` : null,
@@ -193,6 +197,7 @@ function driveRow(summary: ProviderConfigSummary): SetupRow {
     label: "Google Drive",
     group: "storage",
     status: summary.configured ? "deployment_shared_default" : "not_configured",
+    selected: summary.configured,
     reason: summary.configured
       ? `${detail} The deployment shares these credentials with every workspace.`
       : `${detail} Until Google Drive is connected, files use the filesystem fallback.`,
@@ -228,6 +233,77 @@ export function setupRows(input: SetupInput): SetupRow[] {
 /** The rows of one group, in their listed order. */
 export function rowsIn(rows: SetupRow[], group: SetupGroup): SetupRow[] {
   return rows.filter((row) => row.group === group);
+}
+
+/** One of the three states a row is read in: selected (chosen, or a key is saved), connected (the credential is read and usable), or tested. */
+export type SetupStateName = "selected" | "connected" | "tested";
+
+/** One state of a row. "not_applicable" is for a row the check does not cover. A "no" names what is missing. */
+export type SetupStateReading = { name: SetupStateName; label: string; value: "yes" | "no" | "not_applicable"; detail: string };
+
+/** The last Test Connection answer for a row, from this session only. Null until the person has run one. */
+export type TestAnswer = { status: string } | null;
+
+/**
+ * The three states of a row, in order. Selected: the row is chosen, or a key is saved for it. Connected: the credential is read and
+ * usable (for the engine, the engine answers). Tested: a Test Connection passed in this session, or the engine's live health is READY.
+ * A "no" names what is missing, from the row's own reason where there is one, so no state implies a check that did not run.
+ */
+export function setupStates(row: SetupRow, test: TestAnswer): SetupStateReading[] {
+  const engine = row.id === "decision_engine";
+  const connected = row.status === "usable" || row.status === "deployment_shared_default";
+
+  const selected: SetupStateReading = row.selected
+    ? {
+        name: "selected",
+        label: "Selected",
+        value: "yes",
+        detail: engine ? "Chosen for this workspace or set by the deployment." : "A key is saved, or the deployment shares one.",
+      }
+    : {
+        name: "selected",
+        label: "Selected",
+        value: "no",
+        detail: engine ? "No engine is chosen, so the default answers." : "No key is saved for this row yet.",
+      };
+
+  const connectedReading: SetupStateReading = connected
+    ? {
+        name: "connected",
+        label: "Connected",
+        value: "yes",
+        detail: engine ? "The engine is ready to answer decisions." : "The credential is read and can be used.",
+      }
+    : { name: "connected", label: "Connected", value: "no", detail: row.reason };
+
+  let tested: SetupStateReading;
+  if (engine) {
+    tested =
+      row.status === "usable"
+        ? { name: "tested", label: "Tested", value: "yes", detail: "The engine's live health check reported READY." }
+        : { name: "tested", label: "Tested", value: "no", detail: "The live health check is not READY, so the engine has not answered." };
+  } else if (!row.testable) {
+    tested = {
+      name: "tested",
+      label: "Tested",
+      value: "not_applicable",
+      detail: "This row has no connection test here. Its state is read from the saved key.",
+    };
+  } else if (test?.status === "READY") {
+    tested = {
+      name: "tested",
+      label: "Tested",
+      value: "yes",
+      detail: "Test Connection passed in this session. It reads the key and calls no provider.",
+    };
+  } else if (test) {
+    tested = { name: "tested", label: "Tested", value: "no", detail: `The last Test Connection did not pass: ${test.status}.` };
+  } else if (connected) {
+    tested = { name: "tested", label: "Tested", value: "no", detail: "Not tested yet. Run Test Connection." };
+  } else {
+    tested = { name: "tested", label: "Tested", value: "no", detail: "Save a key first, then run Test Connection." };
+  }
+  return [selected, connectedReading, tested];
 }
 
 /** How many rows are in each state. The panel's headline is built from these counts. */

@@ -210,7 +210,16 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
  * Test Connection for a row that offers it. The server reads the key through the resolver and calls no provider, so the
  * answer is never shown as a pass unless the server says READY.
  */
-export function TestConnection({ row, organizationId }: { row: SetupRow; organizationId: string }) {
+export function TestConnection({
+  row,
+  organizationId,
+  onAnswer,
+}: {
+  row: SetupRow;
+  organizationId: string;
+  /** Told each answer, so a parent can show the row's Tested state. The answer is kept for this session only. */
+  onAnswer?: (answer: { status: string }) => void;
+}) {
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
   const test = useScopedMutation({
     mutationKey: ["mutation", "setup.key.test", organizationId, row.id],
@@ -226,8 +235,14 @@ export function TestConnection({ row, organizationId }: { row: SetupRow; organiz
         onClick={() => {
           setResult(null);
           void test.mutateAsync(undefined).then(
-            (answer) => setResult(answer),
-            (error: unknown) => setResult({ status: "ERROR", message: error instanceof Error ? error.message : "The test could not run." }),
+            (answer) => {
+              setResult(answer);
+              onAnswer?.({ status: answer.status });
+            },
+            (error: unknown) => {
+              setResult({ status: "ERROR", message: error instanceof Error ? error.message : "The test could not run." });
+              onAnswer?.({ status: "ERROR" });
+            },
           );
         }}
       >

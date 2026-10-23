@@ -6,6 +6,7 @@ import {
   setupCounts,
   setupHeadline,
   setupRows,
+  setupStates,
   SETUP_GROUPS,
   type SetupEngines,
   type SetupRow,
@@ -273,6 +274,59 @@ test("the counts and the headline state counts only, and never claim a live prov
   const headline = setupHeadline(rows);
   assert.match(headline, /2 usable/);
   assert.match(headline, /Nothing is checked against a live provider here\./);
+});
+
+test("a usable key is selected and connected, and is not tested until Test Connection passes in this session", () => {
+  const testableId = setupRows({ summaries: summaries(), engines: READY_ENGINES }).find((row) => row.testable)?.id;
+  assert.ok(testableId, "a video engine row is testable");
+  const row = rowOf(
+    setupRows({
+      summaries: summaries({ [testableId]: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "…ab12" } }),
+      engines: READY_ENGINES,
+    }),
+    testableId,
+  );
+  assert.deepEqual(setupStates(row, null).map((state) => state.value), ["yes", "yes", "no"]);
+  assert.match(setupStates(row, null)[2]?.detail ?? "", /Not tested yet/);
+  assert.equal(setupStates(row, { status: "READY" })[2]?.value, "yes", "a passed test in this session makes the row tested");
+  const failed = setupStates(row, { status: "ERROR" })[2];
+  assert.equal(failed?.value, "no");
+  assert.match(failed?.detail ?? "", /did not pass: ERROR/);
+});
+
+test("a row with no saved key is not selected or connected, and says to save a key before testing", () => {
+  const row = setupRows({ summaries: summaries(), engines: READY_ENGINES }).find((item) => item.testable);
+  assert.ok(row, "a video engine row is testable");
+  const [selected, connected, tested] = setupStates(row, null);
+  assert.equal(selected?.value, "no");
+  assert.equal(connected?.value, "no");
+  assert.equal(connected?.detail, row.reason, "a missing connection names what is missing, from the row's own reason");
+  assert.match(tested?.detail ?? "", /Save a key first/);
+});
+
+test("the decision engine is selected when it is chosen, and tested only when its live health is READY", () => {
+  const chosen = rowOf(
+    setupRows({ summaries: summaries(), engines: { ...READY_ENGINES, active: { engineId: "jev", source: "workspace" } } }),
+    "decision_engine",
+  );
+  assert.deepEqual(setupStates(chosen, null).map((state) => state.value), ["yes", "yes", "yes"]);
+
+  const unset = rowOf(
+    setupRows({
+      summaries: summaries(),
+      engines: {
+        active: { engineId: "openai-decisions", source: "default" },
+        engines: [{ id: "openai-decisions", label: "OpenAI Decisions", health: { status: "NOT_CONFIGURED", message: "No OpenAI key is saved." } }],
+      },
+    }),
+    "decision_engine",
+  );
+  assert.deepEqual(setupStates(unset, null).map((state) => state.value), ["no", "no", "no"]);
+});
+
+test("Google Drive has no connection test here, so its tested state is not applicable", () => {
+  const drive = rowOf(setupRows({ summaries: summaries(), engines: READY_ENGINES }), "google_drive");
+  assert.equal(setupStates(drive, null)[2]?.value, "not_applicable");
 });
 
 test("the video engine group lists OpenRouter, HeyGen, Anthropic and Deepgram, each with a key form and Test Connection", () => {

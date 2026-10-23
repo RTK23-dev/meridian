@@ -1,10 +1,10 @@
 import { Link } from "@tanstack/react-router";
 import { CircleCheck, CircleDashed, Circle } from "lucide-react";
-import type { ReactNode } from "react";
+import { createContext, useContext, useState, type ReactNode } from "react";
 import { Button, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { KeyForm, TestConnection } from "@/components/settings/setup-panel";
-import { setupRows, type SetupEngines, type SetupInput, type SetupRow, type SetupStatus } from "@/components/settings/setup-model";
+import { setupRows, setupStates, type SetupEngines, type SetupInput, type SetupRow, type SetupStatus } from "@/components/settings/setup-model";
 import { hasRole } from "@/lib/meridian/access";
 import { useDecisionEnginesQuery, useProviderSettingsQuery } from "@/lib/query/hooks";
 import { guideFacts } from "@/lib/setup/facts";
@@ -24,10 +24,22 @@ const MEDIA_IDS = ["perception", "production", "hypit"];
 const ACTION = "max-w-full shrink whitespace-normal text-left";
 
 const STATUS_LABEL: Record<SetupStatus, { text: string; className: string }> = {
-  usable: { text: "In use", className: "bg-success-soft text-success" },
+  usable: { text: "Connected", className: "bg-success-soft text-success" },
   deployment_shared_default: { text: "Shared by the server", className: "bg-info-soft text-info" },
   unusable: { text: "Key cannot be used", className: "bg-danger-soft text-danger" },
   not_configured: { text: "Not set up", className: "bg-surface-2 text-fg-muted" },
+};
+
+/** This session's Test Connection answers, by row, and the way to record one. Every row list on the page reads the same answers. */
+const SetupTests = createContext<{ tests: Record<string, { status: string }>; record: (id: string, answer: { status: string }) => void }>({
+  tests: {},
+  record: () => {},
+});
+
+const STATE_VALUE: Record<"yes" | "no" | "not_applicable", { text: string; className: string }> = {
+  yes: { text: "Yes", className: "text-success" },
+  no: { text: "No", className: "text-warning" },
+  not_applicable: { text: "Not applicable", className: "text-fg-muted" },
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {
@@ -48,6 +60,8 @@ export function SetupGuide() {
   const organizationId = data?.active?.id ?? "";
   const providers = useProviderSettingsQuery(organizationId);
   const engines = useDecisionEnginesQuery(organizationId);
+  const [testAnswers, setTestAnswers] = useState<Record<string, { status: string }>>({});
+  const recordTest = (id: string, answer: { status: string }) => setTestAnswers((previous) => ({ ...previous, [id]: answer }));
 
   if (loading) return <p role="status" className="text-sm text-fg-muted">Loading setup...</p>;
   if (!data?.active) {
@@ -106,6 +120,7 @@ export function SetupGuide() {
   };
 
   return (
+    <SetupTests.Provider value={{ tests: testAnswers, record: recordTest }}>
     <div className="space-y-10">
       <PageHeader
         title="Set up Meridian"
@@ -150,6 +165,7 @@ export function SetupGuide() {
         <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
       </section>
     </div>
+    </SetupTests.Provider>
   );
 }
 
@@ -247,6 +263,7 @@ function RowList({
   descriptions?: Record<string, string>;
   footnote?: string;
 }) {
+  const { tests, record } = useContext(SetupTests);
   if (!loaded) return <p className="text-sm text-fg-muted">Loading the saved keys...</p>;
   return (
     <div className="space-y-3">
@@ -266,6 +283,16 @@ function RowList({
               </div>
               <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${status.className}`}>{status.text}</span>
             </div>
+            <ul className="grid gap-2 sm:grid-cols-3" aria-label={`${row.label}: setup states`}>
+              {setupStates(row, tests[id] ?? null).map((reading) => (
+                <li key={reading.name} className="rounded-md border border-border p-2.5">
+                  <p className="text-sm font-semibold text-fg">
+                    {reading.label}: <span className={STATE_VALUE[reading.value].className}>{STATE_VALUE[reading.value].text}</span>
+                  </p>
+                  <p className="mt-0.5 text-xs text-fg-muted [overflow-wrap:anywhere]">{reading.detail}</p>
+                </li>
+              ))}
+            </ul>
             {row.save.kind === "form" && !row.fingerprint ? (
               <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
             ) : null}
@@ -277,7 +304,7 @@ function RowList({
                 </div>
               </details>
             ) : null}
-            {row.testable && canAdmin ? <TestConnection row={row} organizationId={organizationId} /> : null}
+            {row.testable && canAdmin ? <TestConnection row={row} organizationId={organizationId} onAnswer={(answer) => record(id, answer)} /> : null}
           </div>
         );
       })}
