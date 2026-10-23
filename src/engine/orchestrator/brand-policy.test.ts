@@ -1,8 +1,14 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { effectiveDisabledFamilies, readBrandPolicy, writeBrandPolicy } from "./brand-policy.ts";
+import { effectiveDisabledFamilies, planBrandRefusal, readBrandPolicy, writeBrandPolicy } from "./brand-policy.ts";
 import { createPlanDraft, getPlan, listPlans } from "./store.ts";
+
+test("a plan can only be made for a brand of its own workspace: a brand of another organization is refused, and the workspace's own is not", () => {
+  assert.equal(planBrandRefusal("org_a", "org_a"), null, "a brand of the workspace is accepted");
+  const refusal = planBrandRefusal("org_a", "org_b");
+  assert.equal(refusal, "That brand is not in this workspace, so a plan cannot be made for it.");
+});
 
 const ORG = "org_brand_policy_a";
 const OTHER = "org_brand_policy_b";

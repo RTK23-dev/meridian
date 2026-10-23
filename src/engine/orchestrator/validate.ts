@@ -70,7 +70,11 @@ export function topologicalOrder(nodes: PlanNode[]): string[] | null {
   return order;
 }
 
-type Priced = { usd: number } | { reason: string };
+/**
+ * A step's price: its cost, why it has none (the step is refused), or that it needs measure mode (a planning note, D15). A step that needs
+ * measure mode has no cost until a run in measure mode gives it a hold.
+ */
+type Priced = { usd: number } | { reason: string } | { needsMeasure: string };
 
 /** A whole-number parameter within a range, or the default when the parameter is absent. */
 function countParam(node: PlanNode, name: string, fallback: number, max: number): number | { reason: string } {
@@ -95,8 +99,12 @@ export function priceStep(node: PlanNode, entry: CatalogEntry, options: Validate
       if (price.usdPerSecond1080p === null) {
         // Measure mode (D15): the hold is the ceiling times the length. The plan's own estimate is advisory and is not read here.
         const measured = holdUsdOf({ ...node, estimateUsd: null }, options.measure ?? null);
-        if (measured === null) return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing` };
-        return { usd: measured };
+        if (measured !== null) return { usd: measured };
+        // Planning (D15): the plan is stored with a note, and the step has no cost. The run refuses it until a run in measure mode holds it.
+        if (options.planning === true) {
+          return { needsMeasure: `step ${node.id}: ${entry.id} has no per-second price in the listing, so the step needs measure mode; it does not run until a run in measure mode holds it` };
+        }
+        return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing, so the step needs measure mode, which an admin starts` };
       }
       return { usd: price.usdPerSecond1080p * seconds };
     }
@@ -153,6 +161,12 @@ export type ValidateOptions = {
   categoryBudgetsUsd?: CategoryAmounts;
   /** Measure mode (D15): a video or avatar step with no engine price is held to its ceiling and may run. Absent or null: off. */
   measure?: MeasureOptions | null;
+  /**
+   * Planning (D15): a video or avatar step with no engine price, and no measure mode, is not refused. The plan is stored with a note that the
+   * step needs measure mode, and the step has no cost. The run still refuses such a plan until a run in measure mode holds the step. Every
+   * other unpriced step is still refused.
+   */
+  planning?: boolean;
 };
 
 /**
@@ -195,6 +209,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   }
 
   const costs = new Map<string, number>();
+  const notes: string[] = [];
   for (const node of plan.nodes) {
     for (const dep of node.dependsOn) {
       if (dep === node.id) reasons.push(`step ${node.id}: depends on itself`);
@@ -229,6 +244,10 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
       reasons.push(priced.reason);
       continue;
     }
+    if ("needsMeasure" in priced) {
+      notes.push(priced.needsMeasure);
+      continue;
+    }
     costs.set(node.id, priced.usd);
   }
 
@@ -249,7 +268,6 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   }
 
   // A plan or a category whose estimate is above its line is accepted with a note (D17). The run stops at the first step that does not fit.
-  const notes: string[] = [];
   if (budget.position === "over_budget") {
     notes.push(`the plan's estimate of $${paidTotal.toFixed(4)} is above its $${lineUsd.toFixed(4)} budget; the run stops at the first step that does not fit`);
   }

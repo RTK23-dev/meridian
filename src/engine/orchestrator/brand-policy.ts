@@ -97,3 +97,11 @@ export async function writeBrandPolicy(
   `;
   return families;
 }
+
+/**
+ * The check on the brand a plan is made for (D16): the brand must belong to the workspace the plan is made in. The brand is looked up the way
+ * the other server functions look a brand up; this is the rule on the organization it was found in. Returns the refusal, or null. Pure.
+ */
+export function planBrandRefusal(workspaceOrganizationId: string, brandOrganizationId: string): string | null {
+  return brandOrganizationId === workspaceOrganizationId ? null : "That brand is not in this workspace, so a plan cannot be made for it.";
+}

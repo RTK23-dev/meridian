@@ -1,62 +1,58 @@
-# Status: budget approvals are recorded (D13) and the brand policy (D16)
+# Status: approvals (D13), the brand policy (D16), and measure mode (D15)
 
-Branch `feat/orchestrator-approvals-brand`, from `bbba4799`. Not pushed. The lead merges. `STATUS.md` in the orchestrator folder is not touched.
+Branch `feat/orchestrator-approvals-brand`. Not pushed. The lead merges.
 
-## What changed
+## Merge
 
-Part A, D13 (migration 0118):
-- `migrations/0118_orchestrator_budget_approvals.sql`: new table `orchestrator_budget_approvals` and its index on (organization, plan, created_at desc).
-- `src/engine/orchestrator/approval.ts`: `approvePlanBudget` takes `actorId` and writes the plan update and the audit row in one statement. `listBudgetApprovals(sql, organizationId, planId, limit)` returns the plan's approvals newest first, scoped to the organization.
-- `src/lib/meridian/orchestrator/actions.ts`: `approveOrchestratorBudget` passes `context.userId` as `actorId` (line 290). `listBudgetApprovalsFor` (viewer) is appended at line 362.
+- The run branch at `45ce8ff1` already contained this branch's commit `3e2b4f59` (merged as `66d2ade0`). Merging it here was a fast-forward, with no conflicts.
+- Baseline on the merged tree: 263 orchestrator tests, 262 passing. The one failure, `production.test.ts:159` ("a call past the request budget is not made"), predates this branch: D12 made a budget a line, and the test still expects a refusal at the request budget.
 
-Part B, D16 (migration 0119):
-- `migrations/0119_orchestrator_brand_policy.sql`: new table `orchestrator_brand_policies` (primary key organization and brand), and a nullable `brand_id` on `orchestrator_plans` with an index on (organization, brand).
-- `src/engine/orchestrator/brand-policy.ts` (new): `effectiveDisabledFamilies(workspace, brand)` (union, unique, sorted, normalized, validated), `readBrandPolicy(sql, organizationId, brandId)`, `writeBrandPolicy(sql, {organizationId, brandId, actorId, disabledModelFamilies})` (upsert after validation). It does not import `policy-store.ts`; the family rule is copied in.
-- `src/engine/orchestrator/store.ts`: `createPlanDraft` takes an optional `brandId`; `StoredPlan.brandId` is returned by `getPlan` and `listPlans`.
-- `src/lib/meridian/orchestrator/actions.ts`: `getBrandPolicyFor` (viewer) and `saveBrandPolicyFor` (admin, `writeBrandPolicy` after `requireBrand(..., "admin")`), appended at lines 379 and 397.
+## Brand override (D16): the families a plan is held to
 
-## Decisions taken inside the brief
+- `api.ts` `disabledFamiliesFor(sql, organizationId, planId)`: the workspace's families, plus the brand's when the plan records a brand (`brand-policy.ts` `effectiveDisabledFamilies`). A plan with no brand, or one that is not the organization's, uses the workspace's alone.
+- `api.ts` wiring: `catalogFor` (line 90) filters the catalog with the plan's set. `planDraftFor` (line 99), `runPlanFor` (line 128) and `editPlanStepFor` (line 188) each resolve the set with `disabledFamiliesFor` first.
+- `actions.ts` `createOrchestratorDraft` (line 120): an optional `planBrandId`. The composer's `brandId` stays the acting brand and stays required, because `requireBrand` needs it. The plan's brand is looked up with `requireBrand` (viewer) and refused unless it belongs to the caller's workspace (`planBrandRefusal`, `brand-policy.ts`). When `planBrandId` is absent, the acting brand is recorded (line 172), so the brand's families apply to plans made under it. The brief said "absent, no brand". Recording the acting brand fails closed instead. The owner should confirm it.
 
-1. **One statement, not `sql.begin`.** D13 says the audit row is written "in the same statement as the plan's budget update". The brief said "one transaction (sql.begin ...)". I built D13 as written: a data-modifying CTE in one statement, which is atomic on its own. If the lead wants `sql.begin`, the change is local to `approvePlanBudget` (`withTransaction` in `learning/store.ts`).
-2. The statement raises the plan with `jsonb_set` on `budgetUsd`, so a plan changed in between is never overwritten from a stale copy. Only that number changes, and the new JSON is not re-checked by zod.
-3. The statement is conditional on the status being paused, the plan being present, and the budget still equal to the one read. A concurrent approval that meets a change is refused ("the plan changed while the approval was made"), and writes nothing.
-4. The reason is read in the same statement from the plan's last `paused` event (`orchestrator_plan_events`), and cut to 500 characters, the column limit. An empty reason means no paused event was stored.
-5. `listPlans` also selects `brand_id`, beyond the brief's list (`getPlan` and `createPlanDraft`). Without it, `listPlans` would return `brandId: null` for every plan.
-6. `orchestrator_plans.brand_id` has a check (null, or 1 to 200 characters). The brief did not spell it out.
+## Measure mode (D15)
 
-## Functions and their checks
+- `policy-store.ts`: `measureCeilingUsdPerSecond` is in the same strict schema and the same row as the families. Initial value 0.50; range 0.01 to 5, checked by zod, so an out-of-range value writes nothing. `saveOrchestratorPolicyFor` takes it, for an admin.
+- `policy-store.ts` `measureModeFor(policy, { measure, admin })`: off when not asked; refused for a non-admin who asks; otherwise the workspace's ceiling as `MeasureOptions`.
+- `actions.ts` `runOrchestratorPlan` (line 199) takes `measure: boolean` (a value that is not a boolean is refused). It checks the role with `hasRole` through `measureModeFor`, and passes the options to `runPlanFor`. The run itself already requires an admin.
 
-- `approvePlanBudget`: not found; refused unless the plan is paused, has a checked plan, and the amount is finite and above the budget now. Then one statement.
-- `listBudgetApprovals`: `organization_id` and `plan_id` in the query, `order by created_at desc, id desc`, limit 1 to 100.
-- `readBrandPolicy`: empty when no row; throws when the stored list does not check.
-- `writeBrandPolicy`: normalizes (lowercase, no leading ~), validates (vendor, or vendor/model prefix; at most 20), dedupes, sorts, then upserts.
-- The brand server functions use `requireBrand` (`viewer` to read, `admin` to write), as the file's other functions do.
+## Averages (D15)
+
+- `api.ts` `measuredAverageFor(sql, organizationId)` (line 203) returns `{ measuredAverageUsdPerSecond, clips, seconds }` from `holds.ts`. `actions.ts` `getMeasuredAverageFor` (line 444) is the viewer function.
+
+## Planning gap
+
+- `validate.ts`: a `planning` option. When planning, a video or avatar step with no per-second price and no measure mode is a note, not a refusal, and it has no cost. The run (`validatePlan` without `planning`) still refuses it without measure mode, with a reason that says so. Every other unpriced step is still refused.
+- `planner.ts` (`planWithRole`, `planWithModel`) and `service.ts` (`callAndStore`) plan with that option. `service.ts` `checkPlanCall` says "switched off by the model policy" for a disabled orchestrator, instead of "not in the live catalog".
+
+## Server functions for the UI
+
+- `runOrchestratorPlan({ brandId, planId, measure })`: the run, with measure mode for an admin.
+- `getMeasuredAverageFor({ brandId })`: the measured average.
+- `getBrandPolicyFor({ brandId })` and `saveBrandPolicyFor({ brandId, disabledModelFamilies })`: the brand policy.
+- `listBudgetApprovalsFor({ brandId, planId })`: a plan's approvals, newest first.
+- `saveOrchestratorPolicyFor({ brandId, disabledModelFamilies?, measureCeilingUsdPerSecond? })`: the workspace's ceiling and families.
+- `createOrchestratorDraft({ ..., planBrandId? })`: a draft for a brand.
 
 ## Tests
 
-- `src/engine/orchestrator/approval.test.ts`: 8 tests (3 existing, updated with `actorId`; 5 new). New: one audit row with actor, previous and approved budget and the pause reason; a refused approval writes no row; a failing audit insert (a trigger raises) leaves the plan exactly as it was; newest-first order, the limit, and organization scoping; two approvals at the same time.
-- `src/engine/orchestrator/brand-policy.test.ts`: 11 tests (new). Union, a brand cannot remove a workspace family, one spelling per family, invalid and oversized lists refused, save and read, upsert, organization scoping, a malformed stored list refused on read, and a plan records its brand.
-- `src/engine/orchestrator/store.test.ts`: 10 tests, unchanged, pass.
-- All orchestrator tests (`src/engine/orchestrator/*.test.ts`): 247 run, 246 pass, 1 fail. The failure is `production.test.ts:159` ("a call past the request budget is not made"). It fails the same way on the base commit `bbba4799`, which I checked in an export of that commit. It is not caused by this branch.
-- `scripts/migration-plan.test.mjs`: 8 pass. `src/engine/jobs/migration.test.ts`: 7 pass.
-- `npm run typecheck`: pass. `npx eslint` on the six changed TypeScript files: pass.
-- Mutation checks, in a scratch copy: a two-statement approval with no transaction fails the failing-insert test. Removing the budget compare-and-set fails the concurrency test. The worktree was not changed by these checks.
-- Not verified: a live Postgres run. The test database here is PGlite, which runs one statement at a time. The concurrency test asserts the refusal only under PGlite. Under a real server it checks the invariants (each landed approval is recorded once, and the record chain matches the budget history) without fixing which approval wins.
+- `api.test.ts` (new, 10): the families at each entry point. A brand's family reaches the editor, the planner's catalog and the runner, and no other organization's brand or workspace family does. The averages: null with none, the ratio with clips, organization-scoped.
+- `measure-plan.test.ts` (new, 3): a draft with an unpriced video step is stored with a note. The run refuses it without measure mode, and completes it with measure mode at the ceiling. Another unpriced step is still refused at planning.
+- `validate-planning.test.ts` (new, 3): the planning note, the run refusal, the other refusals, and the measured hold.
+- `policy-store.test.ts`: two expectations updated for the new key. Added: the ceiling's start value, its range, the strict parse, the single row, and the measure decision.
+- `brand-policy.test.ts`: `planBrandRefusal`.
+- Orchestrator suite (`src/engine/orchestrator/*.test.ts`): 284 run, 283 pass, 1 fail (`production.test.ts:159`, which predates this branch).
+- `npm run typecheck`: pass. `npx eslint` on the changed files: pass.
+- Not tested: the server functions in `actions.ts`. The file imports `@/` aliases, which the test runner cannot resolve. The rules they call are tested in the engine.
 
-## Not done: wiring and follow-ups
+## Open
 
-- **Brand families are not in any run or plan yet.** The exact call sites are in `src/engine/orchestrator/api.ts`. `catalogFor` (lines 52 to 66) is workspace-only: it filters the catalog with `policy.disabledModelFamilies` (line 58) and returns `disabledFamilies` (line 63). The brand must be read per plan in `planDraftFor` (line 68; `disabledFamilies` at line 78), `runPlanFor` (line 88; at line 98) and `editPlanStepFor` (line 138; at line 144). Each one needs `getPlan` for `brandId`, then `readBrandPolicy`, then `effectiveDisabledFamilies(workspace, brand)` in place of the workspace list, including the catalog filter at line 58.
-- **Plans do not record a brand yet.** `createOrchestratorDraft` (`actions.ts`, the `createPlanDraft` call at line 157) does not pass `brandId`. One line, `brandId: data.brandId,`, is needed. The brief said to change nothing else in existing functions, so I did not.
-- **No screen shows the approvals or the brand policy.** `orchestrator-plans.tsx` is off-limits to me. It should call `listBudgetApprovalsFor`. The brand policy has no screen.
-
-## Bugs and doubts
-
-1. `src/engine/orchestrator/policy-store.ts:43`: when a stored workspace row fails validation, `policyFrom` falls back to the initial policy as a whole. The initial disabled list may lack a family the workspace had switched off, so a malformed row can switch that family on. The comment at lines 37 to 38 says it never does. Not changed: the file is off-limits.
-2. `src/engine/orchestrator/brand-policy.ts:74`: a stored brand list that does not check makes `readBrandPolicy` throw. Runs of that brand then stop until the row is fixed. That is fail-closed, but it can block a run.
-3. `migrations/0119_orchestrator_brand_policy.sql` and `writeBrandPolicy`: `brand_id` has no foreign key, and nothing in the database checks that the brand belongs to the organization. The server functions check it with `requireBrand`. The engine function does not.
-4. Migrations 0118 and 0119 are taken by this branch. Another branch that adds a migration with the same number will trip the migration-numbering test.
-5. A family is a prefix (`src/engine/config/model-policy.ts:14` to `19`). A brand family such as one vendor name also switches off every id that begins with it. The owner should know a brand family is a prefix.
-6. `approval.ts:48`: the pre-check compares JavaScript numbers with a `numeric` column. A budget with about 15 or more significant digits could fail the compare-and-set and be refused. Budgets are entered with two decimals, so this is theoretical.
-7. `actions.ts`, `listBudgetApprovalsFor` (line 362): it returns user ids to every viewer of the brand's workspace. Names may be wanted.
-8. The approval leaves the plan paused (D11), so approvals can stack before a run. Each one is recorded.
-9. The audit reason is a copy of the `paused` event's text (`execute.ts:155` and `:170`). The other agent's change to the event wording will show up in new rows only.
+1. `jobs/runtime.ts:559-570`: the asset router reads only the workspace's families. If a route falls back to another model at call time, a family the brand switched off could be chosen. Not verified in a live run. Fixing it needs `runtime.ts`, which is outside this change.
+2. `run.ts` `editStoredPlan` validates without planning, so an edit cannot set an unpriced video step. Planning accepts such a step with a note. The lead decides.
+3. `api.ts` `textModelsFor` (line 82) gives the composer the workspace's families, not the brand's. The planner still refuses a model the brand switched off.
+4. `policy-store.ts:48-56` `policyFrom`: a malformed row replaces the whole policy, families included, with the initial list. The initial list can lack a family the workspace had switched off, which is a fail-open. This predates the wave. The strict parse is kept, as asked. The new ceiling makes one more value reachable.
+5. `brand_id` has no foreign key and no organization check in the database (`migrations/0119`). The server functions check it with `requireBrand`.
+6. Migrations 0118 and 0119 are on this branch. Another branch with the same numbers will trip the numbering test.
