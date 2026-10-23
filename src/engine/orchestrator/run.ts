@@ -43,7 +43,7 @@ async function claimRun(sql: Sql, organizationId: string, planId: string): Promi
 
 export async function runStoredPlan(
   sql: Sql,
-  opts: { organizationId: string; planId: string; catalog: Map<string, CatalogEntry>; handlers?: Handlers; budget?: RunBudgetSource },
+  opts: { organizationId: string; planId: string; catalog: Map<string, CatalogEntry>; disabledFamilies?: readonly string[]; handlers?: Handlers; budget?: RunBudgetSource },
 ): Promise<RunOutcome> {
   const stored = await getPlan(sql, opts.organizationId, opts.planId);
   if (stored === null) return { status: "not_found" };
@@ -54,7 +54,7 @@ export async function runStoredPlan(
   const overBudget = planBudgetReason(stored.plan.budgetUsd, stored.budgetUsd);
   if (overBudget !== null) return { status: "not_runnable", reasons: [overBudget] };
 
-  const checked = validatePlan(stored.plan, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief) });
+  const checked = validatePlan(stored.plan, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief), disabledFamilies: opts.disabledFamilies });
   if (!checked.ok) return { status: "not_runnable", reasons: checked.reasons };
   if (!(await claimRun(sql, opts.organizationId, opts.planId))) return { status: "not_runnable", reasons: ["the plan is already running"] };
 
@@ -142,7 +142,7 @@ export type EditOutcome =
  */
 export async function editStoredPlan(
   sql: Sql,
-  opts: { organizationId: string; planId: string; catalog: Map<string, CatalogEntry>; nodeId: string; change: NodeChange },
+  opts: { organizationId: string; planId: string; catalog: Map<string, CatalogEntry>; disabledFamilies?: readonly string[]; nodeId: string; change: NodeChange },
 ): Promise<EditOutcome> {
   const stored = await getPlan(sql, opts.organizationId, opts.planId);
   if (stored === null) return { status: "not_found" };
@@ -155,7 +155,7 @@ export async function editStoredPlan(
   } catch (error) {
     return { status: "refused", reasons: [error instanceof Error ? error.message : "the edit could not be applied"] };
   }
-  const checked = validatePlan(next, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief) });
+  const checked = validatePlan(next, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief), disabledFamilies: opts.disabledFamilies });
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
   // The write is refused by the store when a run has started since the read above, so an edit never clears a run in progress.
   const saved = await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan);

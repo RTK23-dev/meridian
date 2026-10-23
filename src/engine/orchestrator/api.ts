@@ -7,6 +7,8 @@ import { structuredChat } from "../gateway/openrouter.ts";
 import type { CatalogEntry } from "./catalog.ts";
 import type { NodeChange } from "./stale.ts";
 import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from "./run.ts";
+import { readOrchestratorPolicy } from "./policy-store.ts";
+import { isDisabledModel } from "../config/model-policy.ts";
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
@@ -15,7 +17,7 @@ import { textChoices, type TextModelChoice } from "./settings.ts";
 import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
 export type CatalogState =
-  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string }
+  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[] }
   | { status: "not_connected" | "failed"; reason: string };
 
 /** The brand's facts from the organization's record, or null when it is not the organization's or is deleted. */
@@ -50,7 +52,10 @@ async function catalogFor(sql: Sql, organizationId: string, now: () => string): 
   const { productionComposition } = await import("../jobs/runtime.ts");
   const read = await readOrchestratorCatalog(productionComposition(sql).gateway, { organizationId, now });
   if (read.status !== "ok") return { status: read.status, reason: read.reason };
-  return { status: "ok", catalog: read.catalog.byId, takenAt: read.catalog.takenAt };
+  // The workspace's model policy (owner direction 2026-10-23): a switched-off family is not in the catalog the orchestrator is shown or checked against.
+  const { disabledModelFamilies } = await readOrchestratorPolicy(sql, organizationId);
+  const catalog = new Map([...read.catalog.byId].filter(([id]) => !isDisabledModel(id, disabledModelFamilies)));
+  return { status: "ok", catalog, takenAt: read.catalog.takenAt, disabledFamilies: disabledModelFamilies };
 }
 
 export async function planDraftFor(sql: Sql, input: { organizationId: string; planId: string; now: () => string }): Promise<PlanDraftOutcome | CatalogState> {
@@ -63,6 +68,7 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
       organizationId: input.organizationId,
       gateway: productionComposition(sql).gateway,
       catalog: catalog.catalog,
+      disabledFamilies: catalog.disabledFamilies,
       catalogReadAt: catalog.takenAt,
       now: input.now,
       workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
@@ -81,6 +87,7 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
     organizationId: input.organizationId,
     planId: input.planId,
     catalog: catalog.catalog,
+    disabledFamilies: catalog.disabledFamilies,
     budget: {
       workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
       now: input.now,
@@ -125,5 +132,5 @@ export async function editPlanStepFor(
 ): Promise<EditOutcome | CatalogState> {
   const catalog = await catalogFor(sql, input.organizationId, input.now);
   if (catalog.status !== "ok") return catalog;
-  return editStoredPlan(sql, { organizationId: input.organizationId, planId: input.planId, catalog: catalog.catalog, nodeId: input.nodeId, change: input.change });
+  return editStoredPlan(sql, { organizationId: input.organizationId, planId: input.planId, catalog: catalog.catalog, disabledFamilies: catalog.disabledFamilies, nodeId: input.nodeId, change: input.change });
 }

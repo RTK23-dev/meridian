@@ -5,6 +5,7 @@
 // plan's own estimateUsd is advisory and is overwritten: a model that understates its cost cannot pass the budget check. A step whose
 // model has no usable price in the listing, or whose parameters do not give a basis for the price, does not run.
 
+import { isDisabledModel } from "../config/model-policy.ts";
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import type { NodeKind, OrchestratorPlan, PlanNode } from "./contracts.ts";
 
@@ -133,14 +134,21 @@ export type ValidateOptions = {
    * it, so a model cannot understate what its text steps cost.
    */
   textInputTokens?: number;
+  /** The model families the workspace has switched off (owner direction 2026-10-23). A model of one is refused with that reason, not as unlisted. */
+  disabledFamilies?: readonly string[];
 };
+
+/** Why a model id is not a candidate: switched off by the workspace's policy, or not in the live catalog. */
+export function listingReason(id: string, disabledFamilies: readonly string[]): string {
+  return isDisabledModel(id, disabledFamilies) ? `${id} is switched off by the workspace's model policy` : `${id} is not in the live catalog`;
+}
 
 export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, CatalogEntry>, options: ValidateOptions = {}): ValidationResult {
   const reasons: string[] = [];
 
   const orchestrator = catalog.get(plan.orchestrator.id);
   if (isAliasModelId(plan.orchestrator.id)) reasons.push(`orchestrator ${plan.orchestrator.id}: the model id is an alias, not a pinned id`);
-  if (!orchestrator) reasons.push(`orchestrator ${plan.orchestrator.id} is not in the live catalog`);
+  if (!orchestrator) reasons.push(`orchestrator ${listingReason(plan.orchestrator.id, options.disabledFamilies ?? [])}`);
   else if (orchestrator.kind !== "text") reasons.push(`orchestrator ${plan.orchestrator.id} is a ${orchestrator.kind} model, not a text model`);
 
   const ids = new Set<string>();
@@ -172,7 +180,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
     }
     const entry = catalog.get(node.model.id);
     if (!entry) {
-      reasons.push(`step ${node.id}: ${node.model.id} is not in the live catalog`);
+      reasons.push(`step ${node.id}: ${listingReason(node.model.id, options.disabledFamilies ?? [])}`);
       continue;
     }
     if (entry.kind !== expected) {

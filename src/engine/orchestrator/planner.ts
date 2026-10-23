@@ -139,7 +139,9 @@ export type RoleCallScope = {
  * Fail closed. The chosen model must be a live text model with a per-token price in the catalog, or no call is made. A refused call, a
  * failed call, an answer that does not match the plan contract, and a plan the engine refuses all give no plan, with the reasons.
  */
-export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRef; brief: PlannerBrief; catalog: Map<string, CatalogEntry> }): Promise<PlanOutcome> {
+export async function planWithRole(
+  opts: RoleCallScope & { orchestrator: ModelRef; brief: PlannerBrief; catalog: Map<string, CatalogEntry>; disabledFamilies?: readonly string[] },
+): Promise<PlanOutcome> {
   const id = opts.orchestrator.id;
   const entry = opts.catalog.get(id);
   if (!entry) return { ok: false, reasons: [`orchestrator ${id} is not in the live catalog, so no call is made`] };
@@ -175,7 +177,7 @@ export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRe
   if (outcome.status === "refused") return { ok: false, reasons: [`the orchestrating model's call was refused: ${outcome.reason}`] };
   if (outcome.status === "duplicate") return { ok: false, reasons: ["this plan call already has a stored answer that is not read here, so it is not asked again"] };
 
-  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
+  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), disabledFamilies: opts.disabledFamilies });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }

@@ -72,6 +72,8 @@ import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
 import { modelCatalogCache, type ModelCatalogSource } from "../gateway/catalog.ts";
+import { withModelPolicy } from "../gateway/catalog-policy.ts";
+import { readOrchestratorPolicy } from "../orchestrator/policy-store.ts";
 import { meridianCredentialSource } from "../gateway/meridian.ts";
 import { fetchHttpTransport } from "../gateway/transport.ts";
 import type { MediaFunctions } from "../media/interface.ts";
@@ -562,7 +564,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
         { organizationId: scope.organizationId, requestId: scope.requestId },
       ),
     videoProfiles: videoProfileLoader({ gateway }),
-    catalog: modelCatalogCache({ gateway }),
+    catalog: withModelPolicy(modelCatalogCache({ gateway }), async (organizationId) => (await readOrchestratorPolicy(sql, organizationId)).disabledModelFamilies),
     shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
   };
   // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so

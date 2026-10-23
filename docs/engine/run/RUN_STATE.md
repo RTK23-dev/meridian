@@ -72,3 +72,16 @@ Governing plan: `REPLAN_2026-10-20.md`.
 - Done: step bodies (migration 0110), run reservation (`run-budget.ts`), text production handlers (`production.ts`: reference, analysis, script), failed-hold accounting. Decisions D1 to D5 in `DECISIONS_2026-10-22.md`.
 - Still open: handlers for visual, voice, video, avatar, edit, compose and render; re-render wiring; every live run (no key in this environment); the Content Factory standalone page phases.
 - The earlier note that production handlers are empty is superseded for reference, analysis and script.
+
+## Run 2026-10-23: soft budgets, delegated category budgets, model brief, Veo off
+
+Governing plan: `REPLAN_2026-10-23.md`. Decisions: `DECISIONS_2026-10-23.md`. Branch `run/orchestrator-budgets-2026-10-23`, from `origin/main` 19223045.
+
+- 2026-10-23. B0 setup: worktree and `npm ci --ignore-scripts`. Run plan and decisions committed and pushed (`8b619aa2`).
+- 2026-10-23. B1 Veo off and the model policy, done on fixtures.
+  - `src/engine/config/model-policy.ts`: the initial disabled families (`google/veo`), prefix matching, aliases and case ignored.
+  - `src/engine/gateway/catalog-policy.ts`: the policy applied on every catalog read (the families are read per call, so a Settings change is immediate). Removes the family from the entries and from the video listing.
+  - `migrations/0114_orchestrator_policy.sql`: one JSON policy row per workspace (additive). `src/engine/orchestrator/policy-store.ts` validates every read and write; a missing key takes its initial value; a malformed row falls back to the initial policy as a whole.
+  - The orchestrator's catalog (`api.ts`) drops the switched-off family before the orchestrator is shown or checks a plan. `validatePlan` names the policy as the reason (`listingReason`). The family list is threaded through `planWithRole`, `runStoredPlan` and `editStoredPlan`.
+  - `src/engine/jobs/runtime.ts`: the engine's catalog source is wrapped with the policy (the reviewer's pick and the router's chooser read the same filtered catalog).
+  - Tests: `model-policy.test.ts`, `catalog-policy.test.ts`, `policy-store.test.ts` (PGlite), `validate-policy.test.ts`. The B1 set passes (67 tests), the migration and store suites pass (36), typecheck exit 0, eslint exit 0 on the changed files.

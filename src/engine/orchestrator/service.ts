@@ -34,6 +34,8 @@ export type PlanScope = {
   organizationId: string;
   gateway: Gateway;
   catalog: Map<string, CatalogEntry>;
+  /** The model families the workspace has switched off. The catalog above has none of them; a plan naming one is refused with that reason. */
+  disabledFamilies?: readonly string[];
   /** When the catalog was read. It is stored with the plan. */
   catalogReadAt: string | null;
   /** The clock, as an ISO time. */
@@ -172,6 +174,7 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
       orchestrator: { provider: "openrouter", id: stored.orchestratorModel },
       brief: checked.brief,
       catalog: scope.catalog,
+      disabledFamilies: scope.disabledFamilies,
     });
   } finally {
     await releaseReservation(attempt.ledger, reservationId).catch(() => undefined);
