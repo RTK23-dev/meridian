@@ -16,6 +16,7 @@
 // The catalog, the gateway and the workspace's monthly budget source are passed in. In production the catalog is read through the gateway;
 // without a connected key it is NOT_CONNECTED and nothing here is called. Without a known monthly budget, nothing is held.
 
+import { isDisabledModel } from "../config/model-policy.ts";
 import { estimateFromPriceUsd } from "../claude/rates.ts";
 import { MODEL_BRIEF_PROMPT, ORCHESTRATOR_PLAN_ESTIMATE_TOKENS, orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
 import { loadPrompt } from "../prompts/load.ts";
@@ -88,7 +89,13 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
   if (!brief.success) return noCall("the brief does not match the brief contract, so no call is made");
 
   const entry = scope.catalog.get(stored.orchestratorModel);
-  if (!entry) return noCall(`orchestrator ${stored.orchestratorModel} is not in the live catalog, so no call is made`);
+  if (!entry) {
+    // The catalog a plan is checked against holds no switched-off model (api.ts), so the reason says which of the two it is.
+    if (isDisabledModel(stored.orchestratorModel, scope.disabledFamilies ?? [])) {
+      return noCall(`orchestrator ${stored.orchestratorModel} is switched off by the model policy, so no call is made`);
+    }
+    return noCall(`orchestrator ${stored.orchestratorModel} is not in the live catalog, so no call is made`);
+  }
   if (entry.kind !== "text") return noCall(`orchestrator ${stored.orchestratorModel} is a ${entry.kind} model, not a text model, so no call is made`);
   const { promptUsdPerToken, completionUsdPerToken } = entry.pricing;
   if (promptUsdPerToken === null || completionUsdPerToken === null) {
@@ -199,11 +206,13 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
 
   // A ready plan is stored with its notes (D17, envelope.ts): an estimate above its line, and a plan that asks for more than the user set. The
   // notes come from the same check the run makes, with the line the run will hold the plan to.
+  // Planning (D15): an unpriced video or avatar step is noted, not refused, and the run refuses it until measure mode holds it.
   const noted = validatePlan(outcome.plan, scope.catalog, {
     textInputTokens: textInputTokensOf(stored.brief),
     disabledFamilies: scope.disabledFamilies,
     budgetUsd: lineOf(outcome.plan.budgetUsd, stored.budgetUsd),
     categoryBudgetsUsd: categoryBudgetsOf(checked.brief),
+    planning: true,
   });
   if (!noted.ok) return refusal(scope, stored, noted.reasons);
   const asked = planAskNote(outcome.plan.budgetUsd, stored.budgetUsd);

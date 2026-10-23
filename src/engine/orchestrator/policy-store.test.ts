@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { INITIAL_POLICY, policyFrom, readOrchestratorPolicy, writeOrchestratorPolicy } from "./policy-store.ts";
+import { INITIAL_POLICY, measureModeFor, orchestratorPolicySchema, policyFrom, readOrchestratorPolicy, writeOrchestratorPolicy } from "./policy-store.ts";
 
 const ORG_A = "org_policy_a";
 const ORG_B = "org_policy_b";
@@ -40,13 +40,33 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
       insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
       values (${ORG_C}, ${JSON.stringify({ disabledModelFamilies: ["example/family"], budgetTolerance: { percent: 5, cents: 10 } })}::jsonb, 'user_c', now())
     `;
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { disabledModelFamilies: ["example/family"] });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 });
   });
 
   test("a change that does not validate throws and writes nothing", async () => {
     const before = await readOrchestratorPolicy(db.sql, ORG_A);
     await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { disabledModelFamilies: ["bad family!"] } }));
     assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_A), before);
+  });
+
+  test("the measure ceiling starts at 0.50 USD a second, and is stored in the same row as the families", async () => {
+    assert.equal(INITIAL_POLICY.measureCeilingUsdPerSecond, 0.5);
+    const families = await readOrchestratorPolicy(db.sql, ORG_A);
+    const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: 1.25 } });
+    assert.deepEqual(stored, { ...families, measureCeilingUsdPerSecond: 1.25 }, "the families stay as they were, and the ceiling changes");
+    const rows = await db.sql<{ policy_json: string }>`select policy::text as policy_json from orchestrator_policies where organization_id = ${ORG_A}`;
+    assert.deepEqual(JSON.parse(rows[0]?.policy_json ?? "{}"), stored, "both values are in the one stored row");
+  });
+
+  test("the measure ceiling takes 0.01 to 5 USD a second, and a value outside it writes nothing", async () => {
+    for (const value of [0.01, 5]) {
+      const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: value } });
+      assert.equal(stored.measureCeilingUsdPerSecond, value, `${value} is in the range`);
+    }
+    for (const value of [0.009, 5.01, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: value } }), `${value} is outside the range`);
+    }
+    assert.equal((await readOrchestratorPolicy(db.sql, ORG_A)).measureCeilingUsdPerSecond, 5, "the last value in range stands; the refused ones wrote nothing");
   });
 
   test("another workspace never reads a change made in this one", async () => {
@@ -62,7 +82,30 @@ test("a stored policy that does not validate is replaced by the initial policy, 
 });
 
 test("policyFrom drops the retired budgetTolerance key before it parses, and keeps the families of the row", () => {
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], budgetTolerance: { percent: 10, cents: 25 } }), { disabledModelFamilies: [] });
-  assert.deepEqual(policyFrom({ disabledModelFamilies: ["example/family"], budgetTolerance: { percent: 10, cents: 25 } }), { disabledModelFamilies: ["example/family"] });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], budgetTolerance: { percent: 10, cents: 25 } }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: ["example/family"], budgetTolerance: { percent: 10, cents: 25 } }), {
+    disabledModelFamilies: ["example/family"],
+    measureCeilingUsdPerSecond: 0.5,
+  });
   assert.deepEqual(policyFrom({ budgetTolerance: { percent: 10, cents: 25 } }), INITIAL_POLICY, "a row with no families takes the initial families");
+});
+
+test("the measure ceiling is checked by the same strict parse as the families: an unknown key, a missing value or an out-of-range value does not validate", () => {
+  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5, extra: true }).success, false, "an unknown key is refused");
+  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [] }).success, false, "the parsed policy carries its ceiling");
+  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.001 }).success, false);
+  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 5 }).success, true, "the top of the range is in it");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 9 }), INITIAL_POLICY, "a ceiling out of range makes the stored row malformed");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 }, "a missing ceiling takes its initial value");
+});
+
+test("measure mode is off unless it is asked for; an admin's run takes the workspace's ceiling, and anyone else who asks is refused", () => {
+  const policy = { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.75 };
+  assert.deepEqual(measureModeFor(policy, { measure: false, admin: true }), { status: "off", measure: null });
+  assert.deepEqual(measureModeFor(policy, { measure: false, admin: false }), { status: "off", measure: null }, "a run that does not ask takes none, whatever the role");
+  assert.deepEqual(measureModeFor(policy, { measure: true, admin: true }), { status: "on", measure: { ceilingUsdPerSecond: 0.75 } });
+  const refused = measureModeFor(policy, { measure: true, admin: false });
+  assert.equal(refused.status, "refused");
+  assert.match(refused.status === "refused" ? refused.reason : "", /Only a workspace admin may run a plan in measure mode/);
 });

@@ -7,14 +7,14 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertRole, isRole, type Role } from "@/lib/meridian/access";
+import { assertRole, hasRole, isRole, type Role } from "@/lib/meridian/access";
 import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
-import { editPlanStepFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
+import { editPlanStepFor, measuredAverageFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
 import { approvePlanBudget, listBudgetApprovals } from "@/engine/orchestrator/approval";
-import { INITIAL_POLICY, readOrchestratorPolicy, writeOrchestratorPolicy } from "@/engine/orchestrator/policy-store";
-import { effectiveDisabledFamilies, readBrandPolicy, writeBrandPolicy } from "@/engine/orchestrator/brand-policy";
+import { INITIAL_POLICY, MEASURE_CEILING_RANGE, measureModeFor, readOrchestratorPolicy, writeOrchestratorPolicy } from "@/engine/orchestrator/policy-store";
+import { effectiveDisabledFamilies, planBrandRefusal, readBrandPolicy, writeBrandPolicy } from "@/engine/orchestrator/brand-policy";
 import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
@@ -61,7 +61,7 @@ async function requireBrand(userId: string, brandId: string, minimum: Role) {
   const role = members[0]?.role;
   if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
   assertRole(role, minimum);
-  return { sql, organizationId: brand.organization_id, brandName: brand.name, now: () => new Date().toISOString() };
+  return { sql, organizationId: brand.organization_id, brandName: brand.name, now: () => new Date().toISOString(), role };
 }
 
 /** A plan as the screens show it: its status, its reasons and its steps, without the stored JSON strings. */
@@ -135,12 +135,20 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       creativeBudgetUsd: optionalBudget(body.creativeBudgetUsd, "Creative budget"),
       voiceBudgetUsd: optionalBudget(body.voiceBudgetUsd, "Voice budget"),
       orchestratorModelId: model === "" ? null : model,
+      // The brand the plan is made for (D16). Optional: absent, the brand the composer is working in is the plan's brand.
+      planBrandId: body.planBrandId === undefined || body.planBrandId === null || body.planBrandId === "" ? undefined : text(body.planBrandId, 80, "Brand", true),
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "admin");
+    const acting = await requireBrand(context.userId, data.brandId, "admin");
+    const { sql, organizationId } = acting;
     if (data.format === "" && data.userInputs === "") throw new Error("Give the format to rebuild or make, or your own inputs.");
+    // The plan's brand: looked up as the other functions look a brand up, and refused unless it belongs to this workspace. Its switched-off
+    // families apply to the plan (D16), so a plan made without a brand would lose them.
+    const planBrand = data.planBrandId === undefined ? acting : await requireBrand(context.userId, data.planBrandId, "viewer");
+    const refusal = planBrandRefusal(organizationId, planBrand.organizationId);
+    if (refusal !== null) throw new Error(refusal);
     const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
     if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
     // A category the user leaves unset is absent from the brief (JSON drops it), so the orchestrator splits that category (categories.ts).
@@ -148,7 +156,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       goal: data.goal,
       format: data.format === "" ? OWN_INPUTS_FORMAT : data.format,
       userInputs: data.userInputs,
-      brand: { name: brandName, summary: data.brandSummary },
+      brand: { name: planBrand.brandName, summary: data.brandSummary },
       budgetUsd: data.budgetUsd,
       copyBudgetUsd: data.copyBudgetUsd,
       creativeBudgetUsd: data.creativeBudgetUsd,
@@ -161,6 +169,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       brief,
       orchestratorModel: model,
       budgetUsd: data.budgetUsd,
+      brandId: data.planBrandId ?? data.brandId,
     });
     return { plan: summaryOf(stored) };
   });
@@ -183,15 +192,22 @@ export const planOrchestratorDraft = createServerFn({ method: "POST" })
     return { status: "ready", reasons: [], plan: summaryOf(outcome.stored) };
   });
 
+/**
+ * Runs a plan. `measure` asks for measure mode (D15): only a workspace admin may ask, and an admin's run is held to the workspace's ceiling.
+ * A run that does not ask takes no measure mode.
+ */
 export const runOrchestratorPlan = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+    if (body.measure !== undefined && typeof body.measure !== "boolean") throw new Error("Measure must be true or false.");
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true), measure: body.measure === true };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "admin");
-    const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now });
+    const { sql, organizationId, now, role } = await requireBrand(context.userId, data.brandId, "admin");
+    const mode = measureModeFor(await readOrchestratorPolicy(sql, organizationId), { measure: data.measure, admin: hasRole(role, "admin") });
+    if (mode.status === "refused") throw new Error(mode.reason);
+    const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now, measure: mode.measure });
     if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
     if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
     if (outcome.status === "not_found") throw new Error("Plan not found.");
@@ -253,9 +269,15 @@ export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
     const families = Array.isArray(body.disabledModelFamilies) ? body.disabledModelFamilies.map((family) => text(family, 200, "Model family")) : undefined;
+    // The measure ceiling (D15): absent keeps its value; otherwise a number in the range the engine allows, which the engine checks again.
+    const ceiling =
+      body.measureCeilingUsdPerSecond === undefined || body.measureCeilingUsdPerSecond === null || body.measureCeilingUsdPerSecond === ""
+        ? undefined
+        : number(body.measureCeilingUsdPerSecond, "Measure ceiling", MEASURE_CEILING_RANGE.min, MEASURE_CEILING_RANGE.max);
     return {
       brandId: text(body.brandId, 80, "Brand", true),
       disabledModelFamilies: families === undefined ? undefined : families.filter((family) => family !== ""),
+      measureCeilingUsdPerSecond: ceiling,
     };
   })
   .middleware([authMiddleware])
@@ -264,7 +286,7 @@ export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
     const policy = await writeOrchestratorPolicy(sql, {
       organizationId,
       actorId: context.userId,
-      patch: { disabledModelFamilies: data.disabledModelFamilies },
+      patch: { disabledModelFamilies: data.disabledModelFamilies, measureCeilingUsdPerSecond: data.measureCeilingUsdPerSecond },
     });
     return { policy };
   });
@@ -413,4 +435,16 @@ export const saveBrandPolicyFor = createServerFn({ method: "POST" })
       workspaceFamilies: workspace.disabledModelFamilies,
       effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies),
     };
+  });
+
+/**
+ * The measured average cost per second of the workspace's clips (D15): the reported bills over their lengths. It is shown, never used to set a
+ * hold, and null until a clip has been measured. Any member of the brand's workspace reads it.
+ */
+export const getMeasuredAverageFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    return measuredAverageFor(sql, organizationId);
   });

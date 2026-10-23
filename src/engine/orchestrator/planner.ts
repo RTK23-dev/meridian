@@ -121,7 +121,7 @@ export async function planWithModel(opts: {
   if (parsed.data.orchestrator.provider !== opts.orchestrator.provider || parsed.data.orchestrator.id !== opts.orchestrator.id) {
     return { ok: false, reasons: [`the plan names ${parsed.data.orchestrator.id}, but it was written by ${opts.orchestrator.id}, so it is refused`] };
   }
-  const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
+  const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), planning: true });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }
@@ -195,7 +195,8 @@ export async function planWithRole(
   if (outcome.status === "refused") return { ok: false, reasons: [`the orchestrating model's call was refused: ${outcome.reason}`] };
   if (outcome.status === "duplicate") return { ok: false, reasons: ["this plan call already has a stored answer that is not read here, so it is not asked again"] };
 
-  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), disabledFamilies: opts.disabledFamilies });
+  // Planning (D15): an unpriced video or avatar step is stored with a note that it needs measure mode, and the run decides (validate.ts).
+  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), disabledFamilies: opts.disabledFamilies, planning: true });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }

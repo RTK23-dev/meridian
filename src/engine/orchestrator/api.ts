@@ -1,13 +1,18 @@
 // The orchestrator's production entry points, for the web layer's server functions. Each one takes the organization it acts for, reads
 // the live catalog through the production gateway, and calls the engine's planner, runner or editor. The runtime is loaded on demand, so
 // importing this module does not load the job runtime. Without a connected key the catalog is not_connected, and nothing is called.
+//
+// The switched-off model families of a plan (D16) are the workspace's, with the brand's added when the plan records a brand. The planner,
+// the runner and the editor all check against the same set, and the catalog they are shown holds none of its families.
 
 import type { Sql } from "../../lib/meridian/learning/store.ts";
+import type { Gateway } from "../gateway/gateway.ts";
 import { structuredChat } from "../gateway/openrouter.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
 import type { CatalogEntry } from "./catalog.ts";
 import type { NodeChange } from "./stale.ts";
 import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from "./run.ts";
+import { effectiveDisabledFamilies, readBrandPolicy } from "./brand-policy.ts";
 import { readOrchestratorPolicy } from "./policy-store.ts";
 import { isDisabledModel } from "../config/model-policy.ts";
 import { readOrchestratorCatalog } from "./live-catalog.ts";
@@ -15,8 +20,16 @@ import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
 import { queueAssetJob } from "./asset-poll.ts";
 import type { MeasureOptions } from "./measure.ts";
+import { measuredAverageUsdPerSecond } from "./holds.ts";
+import { getPlan } from "./store.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
 import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
+
+/**
+ * The gateway the entry points call. Production passes none, and the runtime's gateway is used. A test passes a gateway that answers from
+ * recorded replies, so no test calls a provider.
+ */
+export type ApiDeps = { gateway?: Gateway };
 
 export type CatalogState =
   | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[] }
@@ -47,37 +60,56 @@ async function readBrandFacts(sql: Sql, organizationId: string, brandId: string)
 
 export type TextModelsState = { status: "ok"; models: TextModelChoice[] } | { status: "not_connected" | "failed"; reason: string };
 
+/** The gateway, and the asset router for a run, of the production runtime, loaded on demand. A gateway passed in replaces the runtime's gateway. */
+async function runtimeFor(sql: Sql, deps: ApiDeps) {
+  if (deps.gateway !== undefined) return { gateway: deps.gateway, assetRouter: undefined };
+  const { productionComposition } = await import("../jobs/runtime.ts");
+  return productionComposition(sql);
+}
+
+/**
+ * The families a plan is held to (D16): the workspace's switched-off families, with the brand's added when the plan records a brand. A plan
+ * with no brand uses the workspace's alone. A plan that is not the organization's has no brand here, so the workspace's alone.
+ */
+export async function disabledFamiliesFor(sql: Sql, organizationId: string, planId: string): Promise<string[]> {
+  const workspace = await readOrchestratorPolicy(sql, organizationId);
+  const plan = await getPlan(sql, organizationId, planId);
+  const brandFamilies = plan?.brandId ? await readBrandPolicy(sql, organizationId, plan.brandId) : [];
+  return effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies);
+}
+
 /** The text models the orchestrator may plan with, read from the live catalog. Without a connected key the read is not_connected. */
-export async function textModelsFor(sql: Sql, input: { organizationId: string; now: () => string }): Promise<TextModelsState> {
-  const catalog = await catalogFor(sql, input.organizationId, input.now);
+export async function textModelsFor(sql: Sql, input: { organizationId: string; now: () => string }, deps: ApiDeps = {}): Promise<TextModelsState> {
+  const policy = await readOrchestratorPolicy(sql, input.organizationId);
+  const catalog = await catalogFor(sql, input.organizationId, input.now, policy.disabledModelFamilies, deps);
   if (catalog.status !== "ok") return catalog;
   return { status: "ok", models: textChoices(catalog.catalog) };
 }
 
-async function catalogFor(sql: Sql, organizationId: string, now: () => string): Promise<CatalogState> {
-  const { productionComposition } = await import("../jobs/runtime.ts");
-  const read = await readOrchestratorCatalog(productionComposition(sql).gateway, { organizationId, now });
+/** The live catalog with the switched-off families removed. A read that is not connected or fails is returned as it is, and nothing is guessed. */
+async function catalogFor(sql: Sql, organizationId: string, now: () => string, disabledFamilies: readonly string[], deps: ApiDeps): Promise<CatalogState> {
+  const { gateway } = await runtimeFor(sql, deps);
+  const read = await readOrchestratorCatalog(gateway, { organizationId, now });
   if (read.status !== "ok") return { status: read.status, reason: read.reason };
-  // The workspace's model policy (owner direction 2026-10-23): a switched-off family is not in the catalog the orchestrator is shown or checked against.
-  const policy = await readOrchestratorPolicy(sql, organizationId);
-  const catalog = new Map([...read.catalog.byId].filter(([id]) => !isDisabledModel(id, policy.disabledModelFamilies)));
-  return {
-    status: "ok",
-    catalog,
-    takenAt: read.catalog.takenAt,
-    disabledFamilies: policy.disabledModelFamilies,
-  };
+  // A switched-off family (owner direction 2026-10-23; D16) is not in the catalog the orchestrator is shown or checked against.
+  const catalog = new Map([...read.catalog.byId].filter(([id]) => !isDisabledModel(id, disabledFamilies)));
+  return { status: "ok", catalog, takenAt: read.catalog.takenAt, disabledFamilies };
 }
 
-export async function planDraftFor(sql: Sql, input: { organizationId: string; planId: string; now: () => string }): Promise<PlanDraftOutcome | CatalogState> {
-  const catalog = await catalogFor(sql, input.organizationId, input.now);
+export async function planDraftFor(
+  sql: Sql,
+  input: { organizationId: string; planId: string; now: () => string },
+  deps: ApiDeps = {},
+): Promise<PlanDraftOutcome | CatalogState> {
+  const disabledFamilies = await disabledFamiliesFor(sql, input.organizationId, input.planId);
+  const catalog = await catalogFor(sql, input.organizationId, input.now, disabledFamilies, deps);
   if (catalog.status !== "ok") return catalog;
-  const { productionComposition } = await import("../jobs/runtime.ts");
+  const { gateway } = await runtimeFor(sql, deps);
   return planStoredDraft(
     {
       sql,
       organizationId: input.organizationId,
-      gateway: productionComposition(sql).gateway,
+      gateway,
       catalog: catalog.catalog,
       disabledFamilies: catalog.disabledFamilies,
       catalogReadAt: catalog.takenAt,
@@ -89,17 +121,19 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
 }
 
 /**
- * Runs a stored plan. Measure mode is null unless an option is passed: the admin toggle comes in a later wave (D15). The handlers are made
- * from the run's reservation, so every paid call is authorized against it, and the queued-job guard reads the plan's waiting jobs.
+ * Runs a stored plan. Measure mode is null unless the caller passes its options: the server function passes them only for an admin who asks,
+ * with the workspace's ceiling (D15). The handlers are made from the run's reservation, so every paid call is authorized against it, and the
+ * queued-job guard reads the plan's waiting jobs.
  */
 export async function runPlanFor(
   sql: Sql,
   input: { organizationId: string; planId: string; now: () => string; measure?: MeasureOptions | null },
+  deps: ApiDeps = {},
 ): Promise<RunOutcome | CatalogState> {
-  const catalog = await catalogFor(sql, input.organizationId, input.now);
+  const disabledFamilies = await disabledFamiliesFor(sql, input.organizationId, input.planId);
+  const catalog = await catalogFor(sql, input.organizationId, input.now, disabledFamilies, deps);
   if (catalog.status !== "ok") return catalog;
-  const { productionComposition } = await import("../jobs/runtime.ts");
-  const composition = productionComposition(sql);
+  const composition = await runtimeFor(sql, deps);
   const gateway = composition.gateway;
   const measure = input.measure ?? null;
   return runStoredPlan(sql, {
@@ -154,8 +188,23 @@ export async function runPlanFor(
 export async function editPlanStepFor(
   sql: Sql,
   input: { organizationId: string; planId: string; nodeId: string; change: NodeChange; now: () => string },
+  deps: ApiDeps = {},
 ): Promise<EditOutcome | CatalogState> {
-  const catalog = await catalogFor(sql, input.organizationId, input.now);
+  const disabledFamilies = await disabledFamiliesFor(sql, input.organizationId, input.planId);
+  const catalog = await catalogFor(sql, input.organizationId, input.now, disabledFamilies, deps);
   if (catalog.status !== "ok") return catalog;
   return editStoredPlan(sql, { organizationId: input.organizationId, planId: input.planId, catalog: catalog.catalog, disabledFamilies: catalog.disabledFamilies, nodeId: input.nodeId, change: input.change });
+}
+
+/**
+ * The organization's measured average cost per second (D15): the reported bills of its measured clips over their lengths. It is shown, and it
+ * never sets a hold. Null until a clip has been measured. Only the organization's clips count.
+ */
+export async function measuredAverageFor(sql: Sql, organizationId: string): Promise<{ measuredAverageUsdPerSecond: number | null; clips: number; seconds: number }> {
+  const average = await measuredAverageUsdPerSecond(sql, organizationId);
+  return {
+    measuredAverageUsdPerSecond: average === null ? null : average.usdPerSecond,
+    clips: average?.clips ?? 0,
+    seconds: average?.seconds ?? 0,
+  };
 }
