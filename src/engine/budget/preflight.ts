@@ -25,6 +25,7 @@ import {
 } from "../contracts/index.ts";
 import { estimatePlan, fixedBudgetLines, type ChosenCallPrices } from "./estimate.ts";
 import { committedFor, type BudgetAlert, type ReserveResult } from "./reserve.ts";
+import { allowanceUsd, INITIAL_BUDGET_TOLERANCE, type BudgetTolerance } from "./tolerance.ts";
 import type { LedgerStore } from "./store.ts";
 
 const RESERVE_FIXED_STAGE = "intake";
@@ -57,17 +58,18 @@ function modeIn(value: unknown, stage: string): BudgetMode {
   return parsed.data;
 }
 
-type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string };
+type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string; tolerance: BudgetTolerance };
+type LimitsInput = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string; tolerance?: BudgetTolerance };
 
-/** The two budgets and the time, checked. `now` decides the workspace month, as in reserve(). */
-function limitsIn(input: Limits, stage: string): Limits {
+/** The two budgets, the time and the overrun tolerance, checked. `now` decides the workspace month, as in reserve(). */
+function limitsIn(input: LimitsInput, stage: string): Limits {
   const request = usdSchema.safeParse(input.requestBudgetUsd);
   if (!request.success) throw invalid("requestBudgetUsd must be a USD amount, finite, >= 0, at most 4 decimals", stage);
   const month = usdSchema.safeParse(input.workspaceMonthBudgetUsd);
   if (!month.success) throw invalid("workspaceMonthBudgetUsd must be a USD amount, finite, >= 0, at most 4 decimals", stage);
   const time = z.iso.datetime().safeParse(input.now);
   if (!time.success) throw invalid("now must be an ISO time", stage);
-  return { requestBudgetUsd: request.data, workspaceMonthBudgetUsd: month.data, now: time.data };
+  return { requestBudgetUsd: request.data, workspaceMonthBudgetUsd: month.data, now: time.data, tolerance: input.tolerance ?? INITIAL_BUDGET_TOLERANCE };
 }
 
 /**
@@ -75,15 +77,19 @@ function limitsIn(input: Limits, stage: string): Limits {
  * The messages match reserve() so that the reasons read the same wherever they appear.
  */
 function limitReasons(limits: Limits, holdUsd: number, monthUsd: number): { reasons: string[]; alerts: BudgetAlert[] } {
+  const requestAllowance = allowanceUsd(limits.requestBudgetUsd, limits.tolerance);
+  const monthAllowance = allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance);
   const reasons: string[] = [];
   const alerts: BudgetAlert[] = [];
+  // An alert marks an overrun of the budget itself. A reason (which pauses cap mode) needs an overrun past the allowance.
   if (holdUsd > limits.requestBudgetUsd) {
     const message = `request budget ${limits.requestBudgetUsd} USD is below the reservation of ${holdUsd} USD`;
-    reasons.push(message);
+    if (holdUsd > requestAllowance) reasons.push(`${message}, past its allowance of ${requestAllowance} USD (the budget plus its tolerance)`);
     alerts.push({ kind: "overrun", scope: "request", limitUsd: limits.requestBudgetUsd, committedUsd: holdUsd, message });
   }
   if (monthUsd > limits.workspaceMonthBudgetUsd) {
     const message = `workspace monthly budget ${limits.workspaceMonthBudgetUsd} USD would be exceeded: ${monthUsd} USD committed`;
+    if (monthUsd > monthAllowance) reasons.push(`${message}, past its allowance of ${monthAllowance} USD (the budget plus its tolerance)`);
     reasons.push(message);
     alerts.push({
       kind: "overrun",
@@ -108,6 +114,8 @@ export type ReserveFixedInput = {
   now: string;
   /** Pass an id to make the call idempotent: a second call with the same id returns the first reservation. */
   reservationId?: string;
+  /** The overrun tolerance on both budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
+  tolerance?: BudgetTolerance;
 };
 
 /**
@@ -149,6 +157,10 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
     estimateUsd: fixedUsd,
     redoAllowanceUsd: 0,
     reservedUsd: fixedUsd,
+    requestBudgetUsd: limits.requestBudgetUsd,
+    workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
+    requestAllowanceUsd: allowanceUsd(limits.requestBudgetUsd, limits.tolerance),
+    workspaceMonthAllowanceUsd: allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance),
     state: paused ? "paused" : "reserved",
     ...(paused ? { pausedReason: reasons.join("; ") } : {}),
     createdAt: limits.now,
@@ -168,6 +180,8 @@ export type ExtendReservationInput = {
   now: string;
   /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: every call is priced from the price table. */
   chosenPrices?: ChosenCallPrices;
+  /** The overrun tolerance on both budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
+  tolerance?: BudgetTolerance;
 };
 
 export type ExtendResult =
@@ -236,6 +250,10 @@ export async function extendReservation(store: LedgerStore, input: ExtendReserva
     estimateUsd: estimate.estimateUsd,
     redoAllowanceUsd: estimate.redoAllowanceUsd,
     reservedUsd: holdUsd,
+    requestBudgetUsd: limits.requestBudgetUsd,
+    workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
+    requestAllowanceUsd: allowanceUsd(limits.requestBudgetUsd, limits.tolerance),
+    workspaceMonthAllowanceUsd: allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance),
   });
 
   // The month total already includes this reservation at its current hold. Swap that for the new hold.

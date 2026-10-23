@@ -6,6 +6,8 @@
 // model has no usable price in the listing, or whose parameters do not give a basis for the price, does not run.
 
 import { isDisabledModel } from "../config/model-policy.ts";
+import type { BudgetPosition } from "../budget/tolerance.ts";
+import { envelopeOf, positionOf, type BudgetEnvelope } from "./envelope.ts";
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import type { NodeKind, OrchestratorPlan, PlanNode } from "./contracts.ts";
 
@@ -31,7 +33,10 @@ export const PRICING_LIMITS = {
   charactersPerSpeechToken: 3,
 } as const;
 
-export type ValidationResult = { ok: true; order: string[]; plan: OrchestratorPlan } | { ok: false; reasons: string[] };
+/** The plan's money against its envelope (envelope.ts). A plan past the allowance is still checked; the run waits for an approval there. */
+export type BudgetView = { estimateUsd: number; targetUsd: number; allowanceUsd: number; position: BudgetPosition };
+
+export type ValidationResult = { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView } | { ok: false; reasons: string[] };
 
 /** A model id that is an alias (a ~ id, or one with "latest" in it) is not pinned: the same id can mean a different model next week. */
 export function isAliasModelId(id: string): boolean {
@@ -42,11 +47,6 @@ export function isAliasModelId(id: string): boolean {
  * The reason a plan is refused when its own budget is above the budget the user set, or null when it is not. The model writes the plan's
  * budget, so the user's budget is the limit, and a plan that asks for more is never run.
  */
-export function planBudgetReason(planUsd: number, setUsd: number): string | null {
-  if (planUsd <= setUsd) return null;
-  return `the plan's budget $${planUsd.toFixed(4)} is above the budget you set, $${setUsd.toFixed(4)}`;
-}
-
 /** The steps in an order where every step comes after the steps it depends on. Null when the graph has a cycle. */
 export function topologicalOrder(nodes: PlanNode[]): string[] | null {
   const pending = new Map(nodes.map((node) => [node.id, new Set(node.dependsOn)]));
@@ -136,6 +136,8 @@ export type ValidateOptions = {
   textInputTokens?: number;
   /** The model families the workspace has switched off (owner direction 2026-10-23). A model of one is refused with that reason, not as unlisted. */
   disabledFamilies?: readonly string[];
+  /** The run's envelope (owner direction 2026-10-23). Absent: the plan's own budget is the target, with the initial tolerance. */
+  budget?: BudgetEnvelope;
 };
 
 /** Why a model id is not a candidate: switched off by the workspace's policy, or not in the live catalog. */
@@ -195,10 +197,11 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
     costs.set(node.id, priced.usd);
   }
 
+  // The plan's money is checked against its envelope: the position says whether it sits within the target, within the tolerance, or past the
+  // allowance. A plan past the allowance is still a plan. The run waits for an approval at the step that would pass the allowance.
   const paidTotal = [...costs.values()].reduce((sum, usd) => sum + usd, 0);
-  if (paidTotal > plan.budgetUsd) {
-    reasons.push(`estimated cost $${paidTotal.toFixed(4)} exceeds the budget $${plan.budgetUsd.toFixed(4)}`);
-  }
+  const envelope = options.budget ?? envelopeOf(plan.budgetUsd, plan.budgetUsd);
+  const budget: BudgetView = { estimateUsd: paidTotal, targetUsd: envelope.targetUsd, allowanceUsd: envelope.allowanceUsd, position: positionOf(paidTotal, envelope) };
 
   const order = topologicalOrder(plan.nodes);
   if (order === null) reasons.push("the steps have a cycle, so there is no order to run them in");
@@ -206,7 +209,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   if (reasons.length > 0 || order === null) return { ok: false, reasons };
 
   const priced = plan.nodes.map((node) => ({ ...node, estimateUsd: costs.get(node.id) ?? null }));
-  return { ok: true, order, plan: { ...plan, nodes: priced } };
+  return { ok: true, order, plan: { ...plan, nodes: priced }, budget };
 }
 
 /** The steps a plan's steps need, for the message a reviewer reads. Pure. */

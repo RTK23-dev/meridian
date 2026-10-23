@@ -182,17 +182,16 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
     if (outcome.status === "not_runnable") assert.match(outcome.reasons[0] ?? "", /no checked plan to run/);
   });
 
-  test("a plan whose budget is above the budget the user set is not runnable, and nothing is called", async () => {
-    assert.ok(examplePlan.budgetUsd > 1, "the example plan asks for more than the budget this test sets");
-    await createPlanDraft(db.sql, { id: "plan_run_overbudget", organizationId: ORG, title: "over", brief: {}, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 1 });
+  test("a plan whose budget is above the budget the user set is held to the user's budget and its tolerance: it waits at the step that passes the allowance", async () => {
+    assert.ok(examplePlan.budgetUsd > 0.01, "the example plan asks for more than the budget this test sets");
+    await createPlanDraft(db.sql, { id: "plan_run_overbudget", organizationId: ORG, title: "over", brief: {}, orchestratorModel: "anthropic/claude-haiku-5.5", budgetUsd: 0.01 });
     await recordPlanOutcome(db.sql, { id: "plan_run_overbudget", organizationId: ORG, plan: examplePlan, reasons: [], catalogReadAt: null });
     const calls: string[] = [];
     const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_overbudget", catalog, handlers: standIn(calls) });
-    assert.deepEqual(outcome, {
-      status: "not_runnable",
-      reasons: [`the plan's budget $${examplePlan.budgetUsd.toFixed(4)} is above the budget you set, $1.0000`],
-    });
-    assert.deepEqual(calls, []);
+    // The allowance is the $0.01 the user set plus the 25-cent floor of the initial tolerance: $0.26.
+    assert.notEqual(outcome.status, "not_runnable");
+    assert.equal(outcome.status, "paused", "the first paid step past $0.26 waits for an approval");
+    if (outcome.status === "paused") assert.ok(outcome.events.some((event) => event.state === "paused" && /past the \$0\.2600 allowance/.test(event.reason ?? "")));
   });
 
   test("a database error during a run leaves the plan ready, so a later run is not refused, and the error is the one thrown", async () => {

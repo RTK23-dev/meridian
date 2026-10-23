@@ -23,6 +23,8 @@ type ReservationRow = {
   reserved_usd: string | number;
   request_budget_usd: string | number | null;
   month_budget_usd: string | number | null;
+  request_allowance_usd: string | number | null;
+  month_allowance_usd: string | number | null;
   paused_reason: string | null;
   created_at: unknown;
 };
@@ -66,6 +68,8 @@ function rowToReservation(row: ReservationRow): BudgetReservation {
   };
   if (row.request_budget_usd !== null) reservation.requestBudgetUsd = Number(row.request_budget_usd);
   if (row.month_budget_usd !== null) reservation.workspaceMonthBudgetUsd = Number(row.month_budget_usd);
+  if (row.request_allowance_usd !== null) reservation.requestAllowanceUsd = Number(row.request_allowance_usd);
+  if (row.month_allowance_usd !== null) reservation.workspaceMonthAllowanceUsd = Number(row.month_allowance_usd);
   if (row.paused_reason !== null) reservation.pausedReason = row.paused_reason;
   return reservation;
 }
@@ -105,7 +109,7 @@ function refuseOtherWorkspace(organizationId: string, workspaceId: string): void
 export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
   const getReservation = async (reservationId: string): Promise<BudgetReservation | null> => {
     const rows = await sql<ReservationRow>`
-      select id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd, reserved_usd, request_budget_usd, month_budget_usd, paused_reason, created_at from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} limit 1
+      select id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd, reserved_usd, request_budget_usd, month_budget_usd, request_allowance_usd, month_allowance_usd, paused_reason, created_at from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} limit 1
     `;
     return rows[0] ? rowToReservation(rows[0]) : null;
   };
@@ -123,10 +127,11 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       try {
         const inserted = await sql<{ id: string }>`
           insert into engine_reservations (id, organization_id, request_id, mode, state, lines, estimate_usd, redo_allowance_usd,
-            reserved_usd, request_budget_usd, month_budget_usd, paused_reason, created_at)
+            reserved_usd, request_budget_usd, month_budget_usd, request_allowance_usd, month_allowance_usd, paused_reason, created_at)
           values (${reservation.reservationId}, ${organizationId}, ${reservation.requestId}, ${reservation.mode}, ${reservation.state},
             ${JSON.stringify(reservation.lines)}, ${reservation.estimateUsd}, ${reservation.redoAllowanceUsd}, ${reservation.reservedUsd},
             ${reservation.requestBudgetUsd ?? null}, ${reservation.workspaceMonthBudgetUsd ?? null},
+            ${reservation.requestAllowanceUsd ?? null}, ${reservation.workspaceMonthAllowanceUsd ?? null},
             ${reservation.pausedReason ?? null}, ${reservation.createdAt})
           on conflict (id) do nothing
           returning id
@@ -147,6 +152,7 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
         set state = ${reservation.state}, lines = ${JSON.stringify(reservation.lines)}, estimate_usd = ${reservation.estimateUsd},
           redo_allowance_usd = ${reservation.redoAllowanceUsd}, reserved_usd = ${reservation.reservedUsd},
           request_budget_usd = ${reservation.requestBudgetUsd ?? null}, month_budget_usd = ${reservation.workspaceMonthBudgetUsd ?? null},
+          request_allowance_usd = ${reservation.requestAllowanceUsd ?? null}, month_allowance_usd = ${reservation.workspaceMonthAllowanceUsd ?? null},
           paused_reason = ${reservation.pausedReason ?? null}
         where id = ${reservation.reservationId} and organization_id = ${organizationId}
         returning id

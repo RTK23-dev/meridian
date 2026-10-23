@@ -17,6 +17,7 @@ import {
   type ScenePlan,
 } from "../contracts/index.ts";
 import { estimatePlan, type ChosenCallPrices } from "./estimate.ts";
+import { allowanceUsd, INITIAL_BUDGET_TOLERANCE, type BudgetTolerance } from "./tolerance.ts";
 import type { LedgerRow, LedgerStore } from "./store.ts";
 
 function usdInput(value: number, name: string): number {
@@ -58,6 +59,8 @@ export type ReserveInput = {
   reservationId?: string;
   /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: the price table prices every call. */
   chosenPrices?: ChosenCallPrices;
+  /** The overrun tolerance on both budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
+  tolerance?: BudgetTolerance;
 };
 
 export type ReserveResult = {
@@ -89,12 +92,15 @@ export async function reserve(store: LedgerStore, input: ReserveInput): Promise<
   const estimate = estimatePlan(input.plan, input.chosenPrices ?? new Map());
   const reservedUsd = estimate.reservedUsd;
 
+  const tolerance = input.tolerance ?? INITIAL_BUDGET_TOLERANCE;
+  const requestAllowanceUsd = allowanceUsd(input.requestBudgetUsd, tolerance);
+  const monthAllowanceUsd = allowanceUsd(input.workspaceMonthBudgetUsd, tolerance);
   const reasons: string[] = [];
   const alerts: BudgetAlert[] = [];
 
   if (reservedUsd > input.requestBudgetUsd) {
     const message = `request budget ${input.requestBudgetUsd} USD is below the reservation of ${reservedUsd} USD`;
-    reasons.push(message);
+    if (reservedUsd > requestAllowanceUsd) reasons.push(`${message}, past its allowance of ${requestAllowanceUsd} USD (the budget plus its tolerance)`);
     alerts.push({
       kind: "overrun",
       scope: "request",
@@ -108,7 +114,7 @@ export async function reserve(store: LedgerStore, input: ReserveInput): Promise<
   const monthCommittedUsd = sumUsd([totals.reservedUsd, reservedUsd]);
   if (monthCommittedUsd > input.workspaceMonthBudgetUsd) {
     const message = `workspace monthly budget ${input.workspaceMonthBudgetUsd} USD would be exceeded: ${monthCommittedUsd} USD committed`;
-    reasons.push(message);
+    if (monthCommittedUsd > monthAllowanceUsd) reasons.push(`${message}, past its allowance of ${monthAllowanceUsd} USD (the budget plus its tolerance)`);
     alerts.push({
       kind: "overrun",
       scope: "workspace_month",
@@ -131,6 +137,8 @@ export async function reserve(store: LedgerStore, input: ReserveInput): Promise<
     reservedUsd,
     requestBudgetUsd: input.requestBudgetUsd,
     workspaceMonthBudgetUsd: input.workspaceMonthBudgetUsd,
+    requestAllowanceUsd,
+    workspaceMonthAllowanceUsd: monthAllowanceUsd,
     state: paused ? "paused" : "reserved",
     ...(paused ? { pausedReason: reasons.join("; ") } : {}),
     createdAt: input.now,
@@ -241,11 +249,14 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
   // The request budget and the month budget the reservation was authorized against (contract v6). The month's committed total is
   // the reservations' amounts, and this call raises this reservation's amount only by what is above it.
   const requestOver = reservation.requestBudgetUsd !== undefined && projectedUsd > reservation.requestBudgetUsd;
+  const requestBeyond =
+    reservation.requestBudgetUsd !== undefined && projectedUsd > (reservation.requestAllowanceUsd ?? reservation.requestBudgetUsd);
   const monthBudget = reservation.workspaceMonthBudgetUsd;
   const monthTotals = monthBudget === undefined ? null : await store.sumForMonth(reservation.workspaceId, reservation.createdAt.slice(0, 7));
   const monthProjectedUsd =
     monthTotals === null ? 0 : sumUsd([monthTotals.reservedUsd, Math.max(0, projectedUsd - reservation.reservedUsd)]);
   const monthOver = monthBudget !== undefined && monthProjectedUsd > monthBudget;
+  const monthBeyond = monthBudget !== undefined && monthProjectedUsd > (reservation.workspaceMonthAllowanceUsd ?? monthBudget);
   const budgetAlerts: BudgetAlert[] = [];
   if (requestOver) {
     budgetAlerts.push({
@@ -266,9 +277,18 @@ export async function authorizeCall(store: LedgerStore, input: CallInput): Promi
     });
   }
 
+  // Cap mode refuses a call only past an allowance (owner direction 2026-10-23). Inside both allowances, a call that overruns its hold is
+  // authorized and the hold is raised to what the call takes it to. Warn and observe record the overrun, as before.
+  // A reservation that records no budget has no allowance to measure a call against. An overrun of its hold is then still refused in cap
+  // mode, which fails closed; the tolerance applies to the reservations that carry their budgets.
+  const allowanceKnown = reservation.requestBudgetUsd !== undefined || reservation.workspaceMonthBudgetUsd !== undefined;
+  const beyondAllowance = requestBeyond || monthBeyond || (overrun && !allowanceKnown);
   const reasons = [...(overrun ? [message] : []), ...budgetAlerts.map((item) => item.message)];
-  if (reasons.length > 0 && reservation.mode === "cap") {
+  if (beyondAllowance && reservation.mode === "cap") {
     return { status: "refused", reason: reasons.join("; "), alerts: [...(overrun ? [alert] : []), ...budgetAlerts] };
+  }
+  if (overrun && reservation.mode === "cap") {
+    await store.updateReservation(budgetReservationSchema.parse({ ...reservation, reservedUsd: projectedUsd }));
   }
 
   const row: LedgerRow = {

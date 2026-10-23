@@ -9,6 +9,8 @@ import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema, sumUsd } from "../c
 import { newId } from "../contracts/ids.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
+import { allowanceUsd, roundUpUsd } from "../budget/tolerance.ts";
+import type { BudgetEnvelope } from "./envelope.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
 import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts";
 
@@ -20,32 +22,29 @@ export type RunBudget = {
 
 export type OpenRunBudget = { status: "open"; budget: RunBudget } | { status: "refused"; reasons: string[] };
 
-/** Up to four decimals, rounded up: the hold is never smaller than what the run may spend. */
-function roundUpUsd(value: number): number {
-  return Math.ceil(value * 10000 - 1e-6) / 10000;
-}
-
 /**
- * Take the run's reservation for what the plan has not yet spent. Refused, with the reasons, when nothing is left to spend, when the
- * workspace month cannot cover it, or when the reservation does not match its contract. A refused run is not started.
+ * Take the run's reservation for what the plan may still spend: its envelope's allowance (the budget plus its tolerance, envelope.ts) less
+ * what earlier runs spent. Refused, with the reasons, when that is used up, or when the workspace month cannot cover it past its own tolerance.
+ * A refused run is not started: it waits for an approval, which raises the budget. Money is in USD, to four decimals.
  */
 export async function openRunBudget(
   sql: Sql,
   opts: {
     organizationId: string;
     planId: string;
-    planBudgetUsd: number;
-    requestBudgetUsd: number;
+    envelope: BudgetEnvelope;
     spentUsd: number;
     workspaceBudget: WorkspaceBudgetSource;
     now: () => string;
   },
 ): Promise<OpenRunBudget> {
-  const remaining = roundUpUsd(opts.planBudgetUsd - opts.spentUsd);
+  const remaining = roundUpUsd(opts.envelope.allowanceUsd - opts.spentUsd);
   if (remaining <= 0) {
     return {
       status: "refused",
-      reasons: [`the plan has spent $${opts.spentUsd.toFixed(4)} of its $${opts.planBudgetUsd.toFixed(4)} budget, so no paid step can run; raise the budget to run it again`],
+      reasons: [
+        `the plan has spent $${opts.spentUsd.toFixed(4)} of its $${opts.envelope.allowanceUsd.toFixed(4)} allowance (the budget plus its tolerance), so no paid step can run until the budget is raised`,
+      ],
     };
   }
 
@@ -54,14 +53,20 @@ export async function openRunBudget(
   const createdAt = opts.now();
   const month = await opts.workspaceBudget.monthBudget({ organizationId: opts.organizationId, requestId, now: createdAt });
   if (month.status !== "known") return { status: "refused", reasons: [month.reason] };
+  const monthAllowance = allowanceUsd(month.usd, month.tolerance ?? opts.envelope.tolerance);
 
   const ledger = scopedLedgerStore(sql, opts.organizationId, reservationId);
   const totals = await ledger.sumForMonth(opts.organizationId, createdAt.slice(0, 7));
   const committedUsd = sumUsd([totals.reservedUsd, remaining]);
-  if (committedUsd > month.usd) {
-    return { status: "refused", reasons: [`workspace monthly budget ${month.usd} USD would be exceeded: ${committedUsd} USD committed`] };
+  if (committedUsd > monthAllowance) {
+    return {
+      status: "refused",
+      reasons: [`workspace monthly budget ${month.usd} USD (allowance ${monthAllowance} USD, the budget plus its tolerance) would be exceeded: ${committedUsd} USD committed`],
+    };
   }
 
+  // The run's own limits are what it may still spend. That amount already includes the tolerance, so the run's request budget and its
+  // allowance are the same figure: a call past it is refused in cap mode (budget/reserve.ts).
   const reservation = budgetReservationSchema.safeParse({
     schema: BUDGET_RESERVATION_SCHEMA,
     reservationId,
@@ -72,8 +77,10 @@ export async function openRunBudget(
     estimateUsd: remaining,
     redoAllowanceUsd: 0,
     reservedUsd: remaining,
-    requestBudgetUsd: opts.requestBudgetUsd,
+    requestBudgetUsd: remaining,
+    requestAllowanceUsd: remaining,
     workspaceMonthBudgetUsd: month.usd,
+    workspaceMonthAllowanceUsd: monthAllowance,
     state: "reserved",
     createdAt,
   });

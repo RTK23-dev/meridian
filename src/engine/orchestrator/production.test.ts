@@ -153,7 +153,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
     assert.equal(calls, 1);
   });
 
-  test("a call the budget refuses is not made", async () => {
+  test("a call past the request budget is not made", async () => {
     const ledger = await ledgerWith(0.001);
     let called = false;
     const deps = depsWith(ledger, {
@@ -163,7 +163,8 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).analysis as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 0.01 }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }), /budget refused/);
+    // The reservation carries its request budget ($5) and no allowance, so a $6 call is past the budget and is refused in cap mode.
+    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 6 }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }), /budget refused/);
     assert.equal(called, false);
   });
 

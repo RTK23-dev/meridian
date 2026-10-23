@@ -82,7 +82,7 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { RoleDeps } from "../claude/client.ts";
 import { sqlRoleCallJournal } from "./role-call-store.ts";
 import { scopedLedgerStore, sqlAssetCache, sqlBreakerStore, sqlBucketStore, sqlProviderStats } from "./asset-stores-sql.ts";
-import { workspaceBudgetFromSettings, meridianMonthlyBudgetReader } from "./workspace-budget.ts";
+import { workspaceBudgetFromSettings, meridianMonthlyBudgetReader, meridianToleranceReader } from "./workspace-budget.ts";
 import { createEditHandler } from "./handlers/edit.ts";
 import { createEstimateReserveHandler, type WorkspaceBudgetSource } from "./handlers/estimate-reserve.ts";
 import { createCheckTakeHandler, type CheckTakePorts } from "./handlers/check-take.ts";
@@ -551,7 +551,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
   // process from GET /v1/projects (cached per workspace), and a call's workspace comes from the request.
   const projects = deepgramProjects(gateway);
   const speech = speechPortsOf(gateway, { resolve: (route) => deepgramForRoute(route, { gateway, projects }) });
-  const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
+  const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql));
   // The shot ports (Bible 6.6, 6.7): the take and image stores under each request's brand, the video profiles of the listing, and the
   // connection check that refuses a shot before any paid call when the media functions or the workspace's Drive are not connected.
   const shotPorts: ShotPorts = {

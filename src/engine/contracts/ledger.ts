@@ -48,6 +48,10 @@ export const budgetReservationSchema = z
     reservedUsd: usdSchema,
     requestBudgetUsd: usdSchema.optional(),
     workspaceMonthBudgetUsd: usdSchema.optional(),
+    /** The request budget plus its overrun tolerance, fixed when the reservation is made (owner direction 2026-10-23). Absent: the budget. */
+    requestAllowanceUsd: usdSchema.optional(),
+    /** The workspace month budget plus its overrun tolerance, fixed when the reservation is made. Absent: the budget. */
+    workspaceMonthAllowanceUsd: usdSchema.optional(),
     state: reservationStateSchema,
     pausedReason: z.string().min(1).optional(),
     createdAt: z.iso.datetime(),

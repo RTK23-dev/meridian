@@ -23,6 +23,7 @@ import {
 } from "../../contracts/index.ts";
 import { extendReservation } from "../../budget/preflight.ts";
 import type { ChosenCallPrices } from "../../budget/estimate.ts";
+import type { BudgetTolerance } from "../../budget/tolerance.ts";
 import { modelChoicesSchema } from "../../contracts/model-choices.ts";
 import type { CatalogRead, ModelCatalogSource } from "../../gateway/catalog.ts";
 import { chosenCallPricesOf } from "../../plan/model-choices.ts";
@@ -48,6 +49,8 @@ export type ExtendForPlanInput = {
   now: string;
   /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: the price table prices every call. */
   chosenPrices?: ChosenCallPrices;
+  /** The overrun tolerance on both budgets (owner direction 2026-10-23), from the workspace month budget source. */
+  tolerance?: BudgetTolerance;
 };
 
 export type ExtendForPlanResult = {
@@ -74,6 +77,7 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
       requestBudgetUsd: input.requestBudgetUsd,
       workspaceMonthBudgetUsd: input.workspaceMonthBudgetUsd,
       now: input.now,
+      ...(input.tolerance === undefined ? {} : { tolerance: input.tolerance }),
       ...(input.chosenPrices === undefined ? {} : { chosenPrices: input.chosenPrices }),
     });
   } catch (error) {
@@ -98,7 +102,8 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
 }
 
 /** The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount; "not_connected" the reason. */
-export type WorkspaceMonthBudget = { status: "known"; usd: number } | { status: "not_connected"; reason: string };
+/** The workspace month budget. `tolerance` is the overrun tolerance a production source reads from the workspace policy (owner direction 2026-10-23). */
+export type WorkspaceMonthBudget = { status: "known"; usd: number; tolerance?: BudgetTolerance } | { status: "not_connected"; reason: string };
 
 export type WorkspaceBudgetScope = { organizationId: string; requestId: string; now: string };
 
@@ -214,6 +219,7 @@ export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): 
           requestBudgetUsd: parsedRequest.data.constraints.budgetUsd,
           workspaceMonthBudgetUsd: month.usd,
           now,
+          ...(month.tolerance === undefined ? {} : { tolerance: month.tolerance }),
           ...(chosenPrices === undefined ? {} : { chosenPrices }),
         }),
       );

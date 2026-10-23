@@ -8,6 +8,8 @@ import { memoryLedgerStore, type LedgerStore } from "./store.ts";
 
 const NOW = "2026-10-13T09:00:00.000Z";
 const RESERVED = 0.9595; // scenePlanFixture: estimate 0.8716 + redo allowance 0.0879
+/** No tolerance: these cases test the exact budget boundary. The tolerance cases are in tolerance-admission.test.ts. */
+const STRICT = { percent: 0, cents: 0 };
 
 function input(overrides: Partial<ReserveInput> = {}): ReserveInput {
   return {
@@ -18,6 +20,7 @@ function input(overrides: Partial<ReserveInput> = {}): ReserveInput {
     requestBudgetUsd: 4,
     workspaceMonthBudgetUsd: 100,
     now: NOW,
+    tolerance: STRICT,
     ...overrides,
   };
 }
@@ -122,14 +125,14 @@ test("an unknown price stops the reservation with a typed error, and nothing is 
   assert.deepEqual(await store.sumForMonth("ws_fixture", "2026-10"), { reservedUsd: 0, actualUsd: 0 });
 });
 
-test("cap refuses a call that would take the reservation beyond its amount, and records nothing", async () => {
+test("cap authorizes a call over its hold while it stays inside the allowances, and raises the hold to what the call takes it to", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation }));
-  const refused = await authorizeCall(store, call({ estimateUsd: RESERVED + 0.01 }));
-  assert.equal(refused.status, "refused");
-  assert.match(refused.status === "refused" ? refused.reason : "", /above its/);
-  assert.equal(refused.status === "refused" ? refused.alerts[0].scope : "", "call");
-  assert.deepEqual(await store.listEntries(ID.reservation), []);
+  const authorized = await authorizeCall(store, call({ estimateUsd: RESERVED + 0.01 }));
+  assert.equal(authorized.status, "authorized");
+  const held = await store.getReservation(ID.reservation);
+  assert.equal(held?.reservedUsd, RESERVED + 0.01);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1);
 });
 
 test("cap refuses a call that would take the request over its budget, names the request, and records nothing", async () => {

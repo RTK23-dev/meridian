@@ -14,7 +14,9 @@ import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { openRunBudget, releaseRunBudget, type RunBudget } from "./run-budget.ts";
 import { editNode, type NodeChange } from "./stale.ts";
 import { appendPlanEvents, failedHoldsUsd, getPlan, listStepOutputs, putStepOutput, setPlanStatus, updatePlanJson } from "./store.ts";
-import { planBudgetReason, textInputTokensOf, validatePlan } from "./validate.ts";
+import { textInputTokensOf, validatePlan } from "./validate.ts";
+import { envelopeOf } from "./envelope.ts";
+import type { BudgetTolerance } from "../budget/tolerance.ts";
 
 export type RunOutcome =
   | { status: "not_found" }
@@ -43,18 +45,29 @@ async function claimRun(sql: Sql, organizationId: string, planId: string): Promi
 
 export async function runStoredPlan(
   sql: Sql,
-  opts: { organizationId: string; planId: string; catalog: Map<string, CatalogEntry>; disabledFamilies?: readonly string[]; handlers?: Handlers; budget?: RunBudgetSource },
+  opts: {
+    organizationId: string;
+    planId: string;
+    catalog: Map<string, CatalogEntry>;
+    disabledFamilies?: readonly string[];
+    budgetTolerance?: BudgetTolerance;
+    handlers?: Handlers;
+    budget?: RunBudgetSource;
+  },
 ): Promise<RunOutcome> {
   const stored = await getPlan(sql, opts.organizationId, opts.planId);
   if (stored === null) return { status: "not_found" };
   if (stored.plan === null) return { status: "not_runnable", reasons: ["the plan has no checked plan to run: it is a draft or was refused"] };
   if (stored.status === "running") return { status: "not_runnable", reasons: ["the plan is already running"] };
 
-  // A second guard: the plan's budget is the one the model wrote, so it must not be above the budget the user set (service.ts refuses it when it is written).
-  const overBudget = planBudgetReason(stored.plan.budgetUsd, stored.budgetUsd);
-  if (overBudget !== null) return { status: "not_runnable", reasons: [overBudget] };
-
-  const checked = validatePlan(stored.plan, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief), disabledFamilies: opts.disabledFamilies });
+  // The run's envelope (envelope.ts): the target is the lower of the plan's budget and the budget the user set, and the allowance adds the
+  // tolerance. A plan that asks for more than the user set is held to the user's budget and its tolerance: a note, not a refusal.
+  const envelope = envelopeOf(stored.plan.budgetUsd, stored.budgetUsd, opts.budgetTolerance);
+  const checked = validatePlan(stored.plan, opts.catalog, {
+    textInputTokens: textInputTokensOf(stored.brief),
+    disabledFamilies: opts.disabledFamilies,
+    budget: envelope,
+  });
   if (!checked.ok) return { status: "not_runnable", reasons: checked.reasons };
   if (!(await claimRun(sql, opts.organizationId, opts.planId))) return { status: "not_runnable", reasons: ["the plan is already running"] };
 
@@ -76,8 +89,7 @@ export async function runStoredPlan(
       const opened = await openRunBudget(sql, {
         organizationId: opts.organizationId,
         planId: opts.planId,
-        planBudgetUsd: checked.plan.budgetUsd,
-        requestBudgetUsd: stored.budgetUsd,
+        envelope,
         spentUsd: spentSoFar,
         workspaceBudget: opts.budget.workspaceBudget,
         now: opts.budget.now,
@@ -96,6 +108,7 @@ export async function runStoredPlan(
       handlers,
       cache,
       spentUsd: spentSoFar,
+      allowanceUsd: envelope.allowanceUsd,
       emit: (event) => events.push(event),
     });
 

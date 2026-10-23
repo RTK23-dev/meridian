@@ -8,16 +8,17 @@ import type { CatalogEntry } from "./catalog.ts";
 import type { NodeChange } from "./stale.ts";
 import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from "./run.ts";
 import { readOrchestratorPolicy } from "./policy-store.ts";
+import type { BudgetTolerance } from "../budget/tolerance.ts";
 import { isDisabledModel } from "../config/model-policy.ts";
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
 import { queueAssetJob } from "./asset-poll.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
-import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
+import { meridianMonthlyBudgetReader, meridianToleranceReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
 export type CatalogState =
-  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[] }
+  | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[]; budgetTolerance: BudgetTolerance }
   | { status: "not_connected" | "failed"; reason: string };
 
 /** The brand's facts from the organization's record, or null when it is not the organization's or is deleted. */
@@ -53,9 +54,15 @@ async function catalogFor(sql: Sql, organizationId: string, now: () => string): 
   const read = await readOrchestratorCatalog(productionComposition(sql).gateway, { organizationId, now });
   if (read.status !== "ok") return { status: read.status, reason: read.reason };
   // The workspace's model policy (owner direction 2026-10-23): a switched-off family is not in the catalog the orchestrator is shown or checked against.
-  const { disabledModelFamilies } = await readOrchestratorPolicy(sql, organizationId);
-  const catalog = new Map([...read.catalog.byId].filter(([id]) => !isDisabledModel(id, disabledModelFamilies)));
-  return { status: "ok", catalog, takenAt: read.catalog.takenAt, disabledFamilies: disabledModelFamilies };
+  const policy = await readOrchestratorPolicy(sql, organizationId);
+  const catalog = new Map([...read.catalog.byId].filter(([id]) => !isDisabledModel(id, policy.disabledModelFamilies)));
+  return {
+    status: "ok",
+    catalog,
+    takenAt: read.catalog.takenAt,
+    disabledFamilies: policy.disabledModelFamilies,
+    budgetTolerance: policy.budgetTolerance,
+  };
 }
 
 export async function planDraftFor(sql: Sql, input: { organizationId: string; planId: string; now: () => string }): Promise<PlanDraftOutcome | CatalogState> {
@@ -69,9 +76,10 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
       gateway: productionComposition(sql).gateway,
       catalog: catalog.catalog,
       disabledFamilies: catalog.disabledFamilies,
+      budgetTolerance: catalog.budgetTolerance,
       catalogReadAt: catalog.takenAt,
       now: input.now,
-      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
+      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql)),
     },
     input.planId,
   );
@@ -88,8 +96,9 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
     planId: input.planId,
     catalog: catalog.catalog,
     disabledFamilies: catalog.disabledFamilies,
+    budgetTolerance: catalog.budgetTolerance,
     budget: {
-      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
+      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql)),
       now: input.now,
       // The handlers are made from the run's reservation, so every paid call is authorized against it.
       handlersFor: (budget) =>

@@ -6,6 +6,7 @@ import { loadCatalog } from "./catalog.ts";
 import { examplePlan } from "./example.ts";
 import type { Handlers } from "./execute.ts";
 import { openRunBudget, releaseRunBudget } from "./run-budget.ts";
+import { envelopeOf } from "./envelope.ts";
 import { runStoredPlan } from "./run.ts";
 import { createPlanDraft, recordPlanOutcome } from "./store.ts";
 import { NODE_KINDS } from "./contracts.ts";
@@ -13,6 +14,8 @@ import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts
 
 const ORG = "org_run_budget_a";
 const NOW = "2026-10-22T10:00:00.000Z";
+/** No tolerance: these cases test the exact budget. The tolerance cases are marked below. */
+const STRICT = { percent: 0, cents: 0 };
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
 
 function monthOf(usd: number): WorkspaceBudgetSource {
@@ -39,8 +42,7 @@ describe("a run's budget (run-budget.ts)", () => {
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_none_left",
-      planBudgetUsd: 1,
-      requestBudgetUsd: 1,
+      envelope: envelopeOf(1, 1, STRICT),
       spentUsd: 1,
       workspaceBudget: monthOf(100),
       now: () => NOW,
@@ -49,12 +51,20 @@ describe("a run's budget (run-budget.ts)", () => {
     if (opened.status === "refused") assert.match(opened.reasons[0] ?? "", /no paid step can run/);
   });
 
+  test("a run may spend inside its tolerance past its budget, and is refused only past the allowance", async () => {
+    // The budget is $1.00 and the tolerance is 25 cents, so the allowance is $1.25.
+    const inside = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_tolerance_inside", envelope: envelopeOf(1, 1), spentUsd: 1.2, workspaceBudget: monthOf(100), now: () => NOW });
+    assert.equal(inside.status, "open", "$1.20 spent leaves $0.05 of the allowance, so the run may start");
+    const past = await openRunBudget(db.sql, { organizationId: ORG, planId: "plan_tolerance_past", envelope: envelopeOf(1, 1), spentUsd: 1.26, workspaceBudget: monthOf(100), now: () => NOW });
+    assert.equal(past.status, "refused");
+    if (past.status === "refused") assert.match(past.reasons[0] ?? "", /allowance/);
+  });
+
   test("a run that would take the workspace month past its budget is refused before it starts", async () => {
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_month_full",
-      planBudgetUsd: 0.5,
-      requestBudgetUsd: 0.5,
+      envelope: envelopeOf(0.5, 0.5, STRICT),
       spentUsd: 0,
       workspaceBudget: monthOf(0.1),
       now: () => NOW,
@@ -67,8 +77,7 @@ describe("a run's budget (run-budget.ts)", () => {
     const opened = await openRunBudget(db.sql, {
       organizationId: ORG,
       planId: "plan_open_release",
-      planBudgetUsd: 0.5,
-      requestBudgetUsd: 1,
+      envelope: envelopeOf(0.5, 1, STRICT),
       spentUsd: 0.1,
       workspaceBudget: monthOf(100),
       now: () => NOW,

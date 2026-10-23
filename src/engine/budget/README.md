@@ -90,3 +90,18 @@ extendReservation(store, { reservationId, plan, requestBudgetUsd, workspaceMonth
 `authorizeCall`, `reconcileCall`, `reserveFixed` and `extendReservation` read, then write. On Postgres each must run in one
 transaction with a row lock on the reservation (and, for the two reservation functions, on the workspace's month totals), and
 the idempotency key needs a unique index. The memory store is atomic only because it is single-threaded.
+
+## Overrun tolerance (owner direction, 2026-10-23)
+
+A budget is a target, not a hard limit. Each budget has a tolerance: the larger of a percentage of the target and a fixed number of cents
+(`tolerance.ts`). Its allowance is the target plus the tolerance. The initial values are 10 percent and 25 cents, adjustable per workspace in
+the orchestrator policy (migration 0114).
+
+- **Reservations.** `reserve`, `reserveFixed` and `extendReservation` store the allowances of the request budget and the workspace month
+  (`requestAllowanceUsd`, `workspaceMonthAllowanceUsd`, migration 0115). A reservation made before the migration keeps its budgets as its limits.
+- **Cap mode.** A hold or a call is refused only past an allowance. Inside the allowances, a call that overruns its hold is authorized and the
+  hold is raised to what the call takes it to. A reservation that records no budget has no allowance to measure against, so an overrun of its
+  hold is still refused: the rule fails closed.
+- **Warn and observe.** Unchanged. An overrun of the budget itself is recorded as an alert, whether or not it is within the tolerance.
+- **Nothing is refused for a small overrun.** One cent over the budget is held inside the tolerance and the request continues. A request past
+  its allowance pauses for an approval, which raises the budget.

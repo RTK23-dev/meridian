@@ -27,6 +27,9 @@ function monthOf(answer: WorkspaceMonthBudget): WorkspaceBudgetSource {
   return { monthBudget: async () => answer };
 }
 
+/** No tolerance: these cases test the exact budget boundary. The tolerance cases are in tolerance-admission.test.ts and validate-policy.test.ts. */
+const STRICT = { percent: 0, cents: 0 };
+
 function scopeFor(db: TestDatabase, responses: Parameters<typeof gatewayFor>[0], ids: { request: string; reservation: string }, catalogOverride?: Map<string, CatalogEntry>): PlanScope {
   return {
     sql: db.sql,
@@ -109,9 +112,9 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
   test("a call whose estimate is over the plan's budget is refused before the hold", async () => {
     await draft(db, "plan_svc_budget", 0.0001);
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ4", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ4" };
-    const outcome = await planStoredDraft(scopeFor(db, [], ids), "plan_svc_budget");
+    const outcome = await planStoredDraft({ ...scopeFor(db, [], ids), budgetTolerance: STRICT }, "plan_svc_budget");
     assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /over the plan's \$0\.0001 budget, so no call is made/);
+    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /past the \$0\.0001 allowance of the \$0\.0001 budget, so no call is made/);
   });
 
   test("a plan that is already ready is not planned again, and another organization gets not found", async () => {
@@ -125,10 +128,10 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
   test("a plan call that would take the workspace month over its budget is refused, and no hold is written", async () => {
     await draft(db, "plan_svc_month");
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ6", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ6" };
-    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: 0.0001 }) };
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: 0.0001 }), budgetTolerance: STRICT };
     const outcome = await planStoredDraft(scope, "plan_svc_month");
     assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /workspace monthly budget 0\.0001 USD would be exceeded/);
+    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /workspace monthly budget 0\.0001 USD \(allowance 0\.0001 USD, the budget plus its tolerance\) would be exceeded/);
     assert.equal((await getPlan(db.sql, ORG, "plan_svc_month"))?.status, "refused");
     assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
     assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
@@ -146,13 +149,14 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     assert.equal(await holdCount(db, ids.reservation), 0);
   });
 
-  test("a plan whose budget is above the budget the user set is refused, and is not stored as ready", async () => {
+  test("a plan whose budget is above the budget the user set is stored as ready: the run is held to the user's budget and its tolerance", async () => {
     await draft(db, "plan_svc_overbudget", 1);
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ8", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ8" };
     const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_overbudget");
-    assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.equal(outcome.reasons[0], "the plan's budget $2.0000 is above the budget you set, $1.0000");
-    assert.equal((await getPlan(db.sql, ORG, "plan_svc_overbudget"))?.plan, null);
+    assert.equal(outcome.status, "ready", "a plan that asks for more is a plan, not a refusal (envelope.ts)");
+    const stored = await getPlan(db.sql, ORG, "plan_svc_overbudget");
+    assert.equal(stored?.plan?.budgetUsd, 2, "the plan keeps the budget it asked for");
+    assert.equal(stored?.budgetUsd, 1, "the user's budget is unchanged");
   });
 
   test("a model whose hold would have more than four decimals never leaves the plan in planning", async () => {

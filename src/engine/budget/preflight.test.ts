@@ -15,6 +15,8 @@ import { authorizeCall } from "./reserve.ts";
 import { memoryLedgerStore, type LedgerStore } from "./store.ts";
 
 const NOW = "2026-10-13T09:00:00.000Z";
+/** No tolerance: these cases test the exact budget boundary. The tolerance cases are in tolerance-admission.test.ts. */
+const STRICT = { percent: 0, cents: 0 };
 const WORKSPACE = "ws_fixture";
 const SECOND_RESERVATION = "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X";
 const THIRD_RESERVATION = "res_01J9ZK3M4N5P6Q7R8S9T0V1W3Y";
@@ -33,6 +35,7 @@ function fixedInput(overrides: Partial<ReserveFixedInput> = {}): ReserveFixedInp
     workspaceMonthBudgetUsd: 100,
     now: NOW,
     reservationId: ID.reservation,
+    tolerance: STRICT,
     ...overrides,
   };
 }
@@ -44,6 +47,7 @@ function extendInput(overrides: Partial<ExtendReservationInput> = {}): ExtendRes
     requestBudgetUsd: 4,
     workspaceMonthBudgetUsd: 100,
     now: NOW,
+    tolerance: STRICT,
     ...overrides,
   };
 }

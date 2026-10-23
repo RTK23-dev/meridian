@@ -27,7 +27,7 @@ import type { CatalogEntry } from "./catalog.ts";
 import type { OrchestratorPlan } from "./contracts.ts";
 import { planWithRole, type PlannerBrief } from "./planner.ts";
 import { claimForPlanning, getPlan, recordPlanOutcome, releasePlanning, type StoredPlan } from "./store.ts";
-import { planBudgetReason } from "./validate.ts";
+import { allowanceUsd, INITIAL_BUDGET_TOLERANCE, mayStart, type BudgetTolerance } from "../budget/tolerance.ts";
 
 export type PlanScope = {
   sql: Sql;
@@ -36,6 +36,8 @@ export type PlanScope = {
   catalog: Map<string, CatalogEntry>;
   /** The model families the workspace has switched off. The catalog above has none of them; a plan naming one is refused with that reason. */
   disabledFamilies?: readonly string[];
+  /** The overrun tolerance on the budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
+  budgetTolerance?: BudgetTolerance;
   /** When the catalog was read. It is stored with the plan. */
   catalogReadAt: string | null;
   /** The clock, as an ISO time. */
@@ -99,17 +101,22 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
   const estimateUsd = roundUpUsd(estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output }));
   const redoUsd = estimateUsd;
   const heldUsd = sumUsd([estimateUsd, redoUsd]);
-  if (heldUsd > stored.budgetUsd) {
-    return noCall(`the plan call and its one retry are estimated at $${heldUsd.toFixed(4)}, over the plan's $${stored.budgetUsd.toFixed(4)} budget, so no call is made`);
+  // The planning call is held against the budget the user set and its tolerance (owner direction 2026-10-23). A hold past the allowance waits.
+  const tolerance = scope.budgetTolerance ?? INITIAL_BUDGET_TOLERANCE;
+  if (!mayStart(0, heldUsd, stored.budgetUsd, tolerance)) {
+    return noCall(
+      `the plan call and its one retry are estimated at $${heldUsd.toFixed(4)}, past the $${allowanceUsd(stored.budgetUsd, tolerance).toFixed(4)} allowance of the $${stored.budgetUsd.toFixed(4)} budget, so no call is made until the budget is raised`,
+    );
   }
 
   const month = await scope.workspaceBudget.monthBudget({ organizationId: scope.organizationId, requestId: attempt.requestId, now: attempt.createdAt });
   if (month.status !== "known") return noCall(month.reason);
   const totals = await attempt.ledger.sumForMonth(scope.organizationId, attempt.createdAt.slice(0, 7));
   const committedUsd = sumUsd([totals.reservedUsd, heldUsd]);
+  const monthAllowance = allowanceUsd(month.usd, month.tolerance ?? tolerance);
   const reasons: string[] = [];
-  if (committedUsd > month.usd) {
-    reasons.push(`workspace monthly budget ${month.usd} USD would be exceeded: ${committedUsd} USD committed`);
+  if (committedUsd > monthAllowance) {
+    reasons.push(`workspace monthly budget ${month.usd} USD (allowance ${monthAllowance} USD, the budget plus its tolerance) would be exceeded: ${committedUsd} USD committed`);
   }
 
   const reservation = budgetReservationSchema.safeParse({
@@ -124,6 +131,8 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
     reservedUsd: heldUsd,
     requestBudgetUsd: stored.budgetUsd,
     workspaceMonthBudgetUsd: month.usd,
+    requestAllowanceUsd: allowanceUsd(stored.budgetUsd, tolerance),
+    workspaceMonthAllowanceUsd: monthAllowance,
     state: "reserved",
     createdAt: attempt.createdAt,
   });
@@ -185,9 +194,7 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
     where organization_id = ${scope.organizationId} and id = ${requestId}
   `;
   if (!outcome.ok) return refusal(scope, stored, outcome.reasons);
-  // The model wrote the plan's budget, and the run is capped by it. A plan that asks for more than the user set is refused, not stored as ready.
-  const overBudget = planBudgetReason(outcome.plan.budgetUsd, stored.budgetUsd);
-  if (overBudget !== null) return refusal(scope, stored, [overBudget]);
+  // A plan that asks for more than the user set is stored as ready: the run is held to the user's budget and its tolerance (envelope.ts).
 
   const ready = await recordPlanOutcome(scope.sql, {
     id: stored.id,

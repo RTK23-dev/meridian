@@ -74,11 +74,15 @@ test("a paid step with no usable seconds does not run: the engine has no price b
   if (!result.ok) assert.match(result.reasons.join("\n"), /step shot_1: params\.seconds must be a number from 0 to 60/);
 });
 
-test("a plan whose estimate is over budget is refused, with both totals", () => {
+test("a plan whose estimate is past its allowance is still checked, and its position says it needs an approval", () => {
   const plan = planWith((p) => (p.budgetUsd = 0.5));
   const result = validatePlan(plan, catalog);
-  assert.equal(result.ok, false);
-  if (!result.ok) assert.match(result.reasons.join("\n"), /estimated cost \$1\.0846 exceeds the budget \$0\.5000/);
+  assert.equal(result.ok, true, "a plan past the allowance is a plan: the run waits at the step that passes it, it is not refused here");
+  if (!result.ok) return;
+  assert.equal(result.budget.targetUsd, 0.5);
+  assert.equal(result.budget.allowanceUsd, 0.75, "the $0.50 budget plus the 25-cent floor");
+  assert.ok(Math.abs(result.budget.estimateUsd - 1.0846) < 0.0001, "the estimate is the sum of the paid steps");
+  assert.equal(result.budget.position, "needs_approval");
 });
 
 test("a cycle is refused and no order is given", () => {

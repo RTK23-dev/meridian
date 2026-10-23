@@ -145,7 +145,7 @@ test("the run pauses before a step that would overrun the budget, and calls noth
   const result = await runPlan({ plan: tight, order, handlers: recordingHandlers(calls), cache: new Map(), emit: (e) => events.push(e) });
   assert.equal(result.status, "paused");
   assert.equal(stateOf(events, "shot_1"), "paused");
-  assert.match(events.find((e) => e.nodeId === "shot_1" && e.state === "paused")?.reason ?? "", /the run stops here/);
+  assert.match(events.find((e) => e.nodeId === "shot_1" && e.state === "paused")?.reason ?? "", /past the \$0\.5000 allowance/);
   assert.equal(calls.includes("shot_1"), false);
   assert.ok(result.spentUsd <= 0.5, `spent ${result.spentUsd} must not exceed the budget`);
 });

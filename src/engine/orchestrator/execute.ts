@@ -1,7 +1,8 @@
 // Runs a validated plan one step at a time, in order, and reports each step as it changes. Fail closed:
 // - a step with no handler for its kind is `not_connected`: it does not run and returns no output;
 // - a step whose handler throws is `failed`, and every step that reads it is `skipped`;
-// - a step whose estimate would take the run past the budget is never started: the run `paused` there and nothing else runs.
+// - a step whose estimate would take the run past its allowance (the budget plus its tolerance) is never started: the run `paused` there,
+//   waiting for an approval, and nothing else runs. A small overrun inside the tolerance is never a pause.
 // Cache hits are reported as `cache_hit` and cost nothing. The handlers are injected, so this file calls no provider.
 
 import { contentHash } from "../contracts/hash.ts";
@@ -81,8 +82,11 @@ export async function runPlan(opts: {
   emit: (event: NodeEvent) => void;
   /** What earlier runs of this plan have spent. */
   spentUsd?: number;
+  /** The most the run may spend: the envelope's allowance, the budget plus its tolerance. Absent: the plan's own budget. */
+  allowanceUsd?: number;
 }): Promise<RunResult> {
   const { plan, order, handlers, cache, emit } = opts;
+  const allowance = opts.allowanceUsd ?? plan.budgetUsd;
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
   const keys = cacheKeys(plan, order);
   const states = new Map<string, NodeState>();
@@ -131,13 +135,13 @@ export async function runPlan(opts: {
       set(id, "failed", null, null, "no cost estimate, so the step did not run");
       continue;
     }
-    if (spent + estimate > plan.budgetUsd) {
+    if (spent + estimate > allowance + 1e-9) {
       set(
         id,
         "paused",
         null,
         null,
-        `the next step would take spend to $${(spent + estimate).toFixed(4)} of the $${plan.budgetUsd.toFixed(4)} budget; the run stops here`,
+        `the next step would take spend to $${(spent + estimate).toFixed(4)}, past the $${allowance.toFixed(4)} allowance (the budget plus its tolerance); the run waits for an approval`,
       );
       paused = true;
       break;

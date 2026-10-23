@@ -340,6 +340,7 @@ export function createIntakeHandler(ports: IntakePorts): StageHandler {
           workspaceMonthBudgetUsd: month.usd,
           now,
           reservationId,
+          ...(month.tolerance === undefined ? {} : { tolerance: month.tolerance }),
         }),
       );
       if (held.reservation.state !== "reserved") {
