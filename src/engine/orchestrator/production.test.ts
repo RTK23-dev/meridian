@@ -420,7 +420,7 @@ describe("production handlers: a queued clip waits once, and measure mode holds 
     const plan: OrchestratorPlan = { version: ORCHESTRATOR_PLAN_VERSION, orchestrator: { provider: "openrouter", id: "vendor/orchestrator-model" }, budgetUsd: 5, nodes: [clip({ estimateUsd: 0.4 })] };
     const runOnce = async (): Promise<NodeEvent[]> => {
       const events: NodeEvent[] = [];
-      await runPlan({ plan, order: ["clip"], handlers: productionHandlers(deps), cache: new Map(), emit: (event) => events.push(event), spentUsd: 0, allowanceUsd: 5 });
+      await runPlan({ plan, order: ["clip"], handlers: productionHandlers(deps), cache: new Map(), emit: (event) => events.push(event), spentUsd: 0, lineUsd: 5 });
       return events;
     };
 
