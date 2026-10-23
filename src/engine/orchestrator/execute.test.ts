@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { contentHash } from "../contracts/hash.ts";
 import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type NodeKind, type OrchestratorPlan } from "./contracts.ts";
 import { editNode } from "./dirty.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
+import { BilledStopError, CallRefusedError, NotConnectedError, StepQueuedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
 import { loadCatalog } from "./catalog.ts";
 import { KIND_CATALOG, validatePlan } from "./validate.ts";
 
@@ -462,4 +462,88 @@ test("a measured hold is held to the line like any other: a video whose ceiling 
   );
   assert.equal(calls.includes("shot_1"), false, "no request is made for a hold that does not fit");
   assert.equal(result.status, "paused");
+});
+
+/** One analysis step with no inputs and the given hold, so that the run's spend is that step's cost alone. */
+function soloAnalysis(usd: number): { plan: OrchestratorPlan; stepId: string } {
+  const node = sample.nodes.find((candidate) => candidate.kind === "analysis");
+  if (node === undefined) throw new Error("the sample plan has an analysis step");
+  return { plan: { ...sample, nodes: [{ ...node, dependsOn: [], estimateUsd: usd }] }, stepId: node.id };
+}
+
+/** The handlers of one analysis step that stops after its asset was billed: the stop carries the bill (BilledStopError). */
+function billedStop(billedUsd: number, reason: string): Handlers {
+  return recordingHandlers([], {
+    analysis: async () => {
+      throw new BilledStopError(reason, billedUsd);
+    },
+  });
+}
+
+test("a fallback that bills 0.25 and then fails, on a 0.40 hold, records 0.40 as failed: the larger of the hold and the bill", async () => {
+  const solo = soloAnalysis(0.4);
+  const events: NodeEvent[] = [];
+  const result = await runPlan({ plan: solo.plan, order: [solo.stepId], handlers: billedStop(0.25, "no analysis target produced an answer"), cache: new Map(), emit: (event) => events.push(event) });
+  const failed = events.filter((event) => event.nodeId === solo.stepId).at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, 0.4, "the failed event carries the hold, which is the larger amount");
+  assert.equal(result.spentUsd, 0.4, "the plan's failed holds count 0.40 in a later run");
+});
+
+test("a fallback that bills 0.60 and then fails records 0.60 as failed, above its 0.40 hold", async () => {
+  const solo = soloAnalysis(0.4);
+  const events: NodeEvent[] = [];
+  const result = await runPlan({ plan: solo.plan, order: [solo.stepId], handlers: billedStop(0.6, "no analysis target produced an answer"), cache: new Map(), emit: (event) => events.push(event) });
+  const failed = events.filter((event) => event.nodeId === solo.stepId).at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, 0.6, "the bill is the larger amount, so the failed event carries it");
+  assert.equal(result.spentUsd, 0.6);
+});
+
+test("a queued fallback that stopped after a bill is not at cost zero: a 0.25 bill with no hold records 0.25", async () => {
+  const solo = soloAnalysis(0);
+  const events: NodeEvent[] = [];
+  const result = await runPlan({
+    plan: solo.plan,
+    order: [solo.stepId],
+    handlers: billedStop(0.25, "this analysis waits for a free slot and was not sent; run the plan again"),
+    cache: new Map(),
+    emit: (event) => events.push(event),
+  });
+  const failed = events.filter((event) => event.nodeId === solo.stepId).at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, 0.25, "the bill is recorded, not zero");
+  assert.equal(result.spentUsd, 0.25);
+});
+
+test("a budget line that refuses a step after its asset was billed pauses the run: the bill is counted on a failed event, and the hold is not", async () => {
+  const solo = soloAnalysis(0.4);
+  const refusal = "openrouter:x: call analysis would take the request to 0.9 USD, above its 0.5 USD budget, so it does not start";
+  const events: NodeEvent[] = [];
+  const result = await runPlan({
+    plan: solo.plan,
+    order: [solo.stepId],
+    handlers: billedStop(0.25, `the budget refused this analysis, so it was not made: ${refusal}`),
+    cache: new Map(),
+    emit: (event) => events.push(event),
+  });
+  assert.equal(result.status, "paused");
+  const failed = events.find((event) => event.nodeId === solo.stepId && event.state === "failed");
+  assert.equal(failed?.costUsd, 0.25, "the bill is recorded on the failed event, so the next run counts it");
+  assert.equal(stateOf(events, solo.stepId), "paused", "the step is paused at the line");
+  assert.equal(reasonOf(events, solo.stepId, "paused"), `budget reached, project not finished: ${refusal}`);
+  assert.equal(result.spentUsd, 0.25, "nothing is held for the paused call: the spend is the bill alone");
+});
+
+test("a step whose stop carries an unusable bill charges its hold: an unusable figure is not a free call", async () => {
+  for (const bad of [Number.NaN, -1, Number.POSITIVE_INFINITY]) {
+    const solo = soloAnalysis(0.4);
+    const events: NodeEvent[] = [];
+    const result = await runPlan({ plan: solo.plan, order: [solo.stepId], handlers: billedStop(bad, "no analysis target produced an answer"), cache: new Map(), emit: (event) => events.push(event) });
+    const failed = events.filter((event) => event.nodeId === solo.stepId).at(-1);
+    assert.equal(failed?.state, "failed", `${String(bad)}: the step fails`);
+    assert.equal(failed?.reason, "the step reported an unusable bill");
+    assert.equal(failed?.costUsd, 0.4, `${String(bad)}: the hold is charged`);
+    assert.equal(result.spentUsd, 0.4);
+  }
 });

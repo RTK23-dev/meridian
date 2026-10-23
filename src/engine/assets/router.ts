@@ -19,7 +19,8 @@
 // Ledger (Bible 14.1, contract v6). Every submit is authorized before it is sent, under its own key: the first submit of a target uses
 // the target's cache key, and a retry uses that key with an attempt suffix. A submit is settled only to the provider's verified bill, or
 // as absent when the provider refused it before any job existed. With no bill the submit stays held at its reservation and its cost is
-// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target. The provider's own
+// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target. Every outcome that stops
+// an asset carries the bills of the targets it failed after billing (billedUsd), so a stop never drops a bill (D12). The provider's own
 // id for the call (the generation id an adapter reports, contract v9) is recorded on its entry whether or not the bill arrives, so the
 // reconciler can read a held bill later (budget/reconcile-holds.ts).
 //
@@ -228,26 +229,31 @@ export type AttemptLog = {
   latencyMs: number | null;
 };
 
+/**
+ * What the router did with an asset. `billedUsd` on each outcome that can follow a submit is what the asset's failed targets were billed,
+ * failed ones included (D12, D14). The router sets it, zero when none was billed, so a stop never drops a bill. It is optional so that
+ * outcomes built elsewhere in the engine still type-check.
+ */
 export type ProduceOutcome =
   | { status: "done"; asset: ProducedAsset }
   /** A content or input refusal. The planner rewrites the prompt once, then downgrades the shot (Bible 10.4). */
-  | { status: "failed"; providerId: string; error: ProviderError }
+  | { status: "failed"; providerId: string; error: ProviderError; billedUsd?: number }
   /** No eligible target is connected. Nothing was sent. */
   | { status: "not_connected"; reasons: string[] }
   /** Every target the budget could take was refused. Nothing was sent. */
-  | { status: "refused"; reasons: string[] }
+  | { status: "refused"; reasons: string[]; billedUsd?: number }
   /** A concurrency bucket is full. The job stays queued; it does not spin. */
-  | { status: "queued"; reasons: string[] }
+  | { status: "queued"; reasons: string[]; billedUsd?: number }
   /** The same call was already authorized. Nothing was sent again. */
-  | { status: "duplicate"; providerId: string; ledgerEntryId: string }
+  | { status: "duplicate"; providerId: string; ledgerEntryId: string; billedUsd?: number }
   /** No target produced an asset. */
-  | { status: "unavailable"; reasons: string[] }
+  | { status: "unavailable"; reasons: string[]; billedUsd?: number }
   /**
    * A paid submit has an unknown outcome: a server error, a timeout, or an answer with no job id, so the provider may have billed it.
    * Nothing else is submitted for the asset, on this target or any other, until the submit is settled from its invoice or confirmed
    * absent by the provider (resolveAmbiguousSubmit). The stage stops with this reason.
    */
-  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string };
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; billedUsd?: number };
 
 export type ProduceReport = {
   outcome: ProduceOutcome;
@@ -337,6 +343,12 @@ export function capabilityGap(spec: AssetSpec, caps: { maxSeconds: number; minSe
  */
 const DEFINITIVE_REFUSALS: ReadonlySet<ProviderError["kind"]> = new Set(["rate_limit", "invalid_input", "content_policy"]);
 
+/**
+ * A budget line's refusal, in the words budget/reserve.ts gives it (the executor reads the same words, orchestrator/execute.ts). A refusal
+ * of a budget line is what stops an asset when no target submitted, even when a target before it failed (D17).
+ */
+const BUDGET_LINE_REFUSAL = /budget, so (?:no paid call starts|it does not start)/;
+
 function isDefinitiveRefusal(error: ProviderError): boolean {
   return DEFINITIVE_REFUSALS.has(error.kind);
 }
@@ -406,12 +418,21 @@ function absorb(carry: AssetJobCarry, result: Exclude<TargetResult, { kind: "sub
   }
 }
 
-/** The final outcome of an asset whose targets have all been tried, from what was carried (the order is the one produce always used). */
-function finalOutcome(carry: AssetJobCarry): ProduceOutcome {
-  if (carry.queued.length > 0) return { status: "queued", reasons: [...carry.queued, ...carry.exhausted] };
-  if (carry.duplicate !== null) return { status: "duplicate", providerId: carry.duplicate.providerId, ledgerEntryId: carry.duplicate.ledgerEntryId };
-  if (carry.refused.length > 0 && carry.exhausted.length === 0) return { status: "refused", reasons: carry.refused };
-  return { status: "unavailable", reasons: [...carry.exhausted, ...carry.refused, ...carry.excluded] };
+/**
+ * The final outcome of an asset whose targets have all been tried, from what was carried (the order is the one produce always used).
+ * `billedUsd` is what its failed targets were billed (D12). A budget line that refused a target is the outcome when no target submitted,
+ * even when a target before it failed, so the step pauses at the line rather than reading as unavailable (D17).
+ */
+function finalOutcome(carry: AssetJobCarry, billedUsd: number): ProduceOutcome {
+  if (carry.queued.length > 0) return { status: "queued", reasons: [...carry.queued, ...carry.exhausted], billedUsd };
+  if (carry.duplicate !== null) {
+    return { status: "duplicate", providerId: carry.duplicate.providerId, ledgerEntryId: carry.duplicate.ledgerEntryId, billedUsd };
+  }
+  const budgetRefused = carry.refused.some((reason) => BUDGET_LINE_REFUSAL.test(reason));
+  if (carry.refused.length > 0 && (carry.exhausted.length === 0 || budgetRefused)) {
+    return { status: "refused", reasons: [...carry.refused, ...carry.exhausted], billedUsd };
+  }
+  return { status: "unavailable", reasons: [...carry.exhausted, ...carry.refused, ...carry.excluded], billedUsd };
 }
 
 /** Releases a concurrency slot once. A slot is held by one job at a time; the holder clears its own reference before handing it on. */
@@ -689,14 +710,21 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         return { status: "submitted", job: parseAssetJob({ ...result.job, carry: next }), runAfterMs: 0 };
       }
       if (result.kind === "unsettled") {
-        return { status: "unsettled", providerId: result.providerId, idempotencyKey: result.idempotencyKey, ledgerEntryId: result.ledgerEntryId, reason: result.reason };
+        return {
+          status: "unsettled",
+          providerId: result.providerId,
+          idempotencyKey: result.idempotencyKey,
+          ledgerEntryId: result.ledgerEntryId,
+          reason: result.reason,
+          billedUsd: earlierBilledUsd,
+        };
       }
-      if (result.kind === "planner") return { status: "failed", providerId: result.providerId, error: result.error };
+      if (result.kind === "planner") return { status: "failed", providerId: result.providerId, error: result.error, billedUsd: earlierBilledUsd };
       // The target failed and the router moves on: whatever it was billed is carried to the next target, never dropped.
       earlierBilledUsd = sumUsd([earlierBilledUsd, state.targetBilledUsd]);
       fallback = absorb(next, result);
     }
-    return finalOutcome(next);
+    return finalOutcome(next, earlierBilledUsd);
   }
 
   /** The video profiles of a catalog read, from its GET /videos/models body. Built once per read. */
@@ -857,7 +885,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     }
     if (candidates.length === 0) {
       if (notConnected.length > 0 && excluded.length === 0) return report(session, { status: "not_connected", reasons: notConnected });
-      return report(session, { status: "unavailable", reasons: [...notConnected, ...excluded] });
+      return report(session, { status: "unavailable", reasons: [...notConnected, ...excluded], billedUsd: 0 });
     }
 
     // 3. Score: each dimension is a value in [0, 1] or unknown. Unknowns are left out of the mean (score.ts).
@@ -888,7 +916,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     });
     scored.sort((a, b) => compareScored({ score: a.score, priority: a.priority }, { score: b.score, priority: b.priority }));
     const winner = scored[0];
-    if (winner === undefined) return report(session, { status: "unavailable", reasons: [...excluded] });
+    if (winner === undefined) return report(session, { status: "unavailable", reasons: [...excluded], billedUsd: 0 });
     session.decisions.push({
       at: at(),
       chose: winner.adapter.id,
@@ -1025,6 +1053,8 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         idempotencyKey: job.idempotencyKey,
         ledgerEntryId: reconciled.entry.entryId,
         reason: `${target.adapterId}: the provider reported no bill for ${job.idempotencyKey}, so the submit stays unsettled`,
+        // The bills so far, without this submit: its bill is not known, and its hold stands on the ledger.
+        billedUsd: sumUsd([job.earlierTargetsBilledUsd ?? 0, job.targetBilledUsd]),
       });
     }
     const targetBilledUsd = sumUsd([job.targetBilledUsd, reconciled.entry.actualUsd]);
@@ -1067,7 +1097,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     await recordAttempt(session, target.adapterId, startedMs, failure, null, job.attemptOnTarget);
     if (failure.kind === "content_policy" || failure.kind === "invalid_input") {
       await freeSlot(slot, deps.buckets);
-      return report(session, { status: "failed", providerId: target.adapterId, error: failure });
+      return report(session, { status: "failed", providerId: target.adapterId, error: failure, billedUsd: assetBilledUsd });
     }
 
     const failureReason = `${target.adapterId}: ${failure.kind}: ${failure.message}`;
@@ -1096,7 +1126,9 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           runAfterMs: backoffFor(job.attemptOnTarget),
         });
       }
-      if (retried.kind === "planner") return report(session, { status: "failed", providerId: retried.providerId, error: retried.error });
+      if (retried.kind === "planner") {
+        return report(session, { status: "failed", providerId: retried.providerId, error: retried.error, billedUsd: assetBilledUsd });
+      }
       if (retried.kind === "unsettled") {
         return report(session, {
           status: "unsettled",
@@ -1104,6 +1136,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           idempotencyKey: retried.idempotencyKey,
           ledgerEntryId: retried.ledgerEntryId,
           reason: retried.reason,
+          billedUsd: assetBilledUsd,
         });
       }
       submitNumber = state.submitNumber;

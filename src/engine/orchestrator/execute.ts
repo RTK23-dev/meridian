@@ -9,6 +9,8 @@
 // - a step with no handler for its kind is `not_connected`: it does not run and returns no output.
 // - a step whose handler throws is `failed`, and every step that reads it is `skipped`.
 // - a budget line that refuses a call pauses the run at that step (D17): the step is not failed, and nothing is held for it.
+// - a step whose asset was billed before it stopped fails with the larger of its hold and its bills (BilledStopError, D12, D14). A budget
+//   line that refuses it still pauses the run, after the bills are recorded.
 // - an unusable cost is not a free call: a paid step charges its hold, as a failed step does.
 // - each step's output is handed to onOutput as the step completes, before it counts as done. A write that throws fails the step, and its
 //   cost stays counted on its failed event, so a later run counts it (D12).
@@ -58,6 +60,21 @@ export class StepQueuedError extends Error {
   constructor(reason: string) {
     super(reason.slice(0, REASON_MAX));
     this.name = "StepQueuedError";
+  }
+}
+
+/**
+ * Thrown by a handler whose asset was billed before the step stopped (D12, D14): a submit the provider billed and then failed, followed by a
+ * fallback that refused, queued or failed. The bills are the step's cost at least. The step fails with the larger of its hold and its bills,
+ * so the plan's failed holds count them in a later run. A budget line that refused the step still pauses the run, and the bills are recorded
+ * before the pause.
+ */
+export class BilledStopError extends Error {
+  readonly billedUsd: number;
+  constructor(reason: string, billedUsd: number) {
+    super(reason.slice(0, REASON_MAX));
+    this.name = "BilledStopError";
+    this.billedUsd = billedUsd;
   }
 }
 
@@ -288,6 +305,32 @@ export async function runPlan(opts: {
       if (error instanceof StepQueuedError) {
         if (paidKind && hold !== null) addSpend(category, hold);
         set(id, "queued", null, null, error.message);
+        continue;
+      }
+      // The asset was billed before the step stopped (D12, D14). Its bills are the cost at least: the failed event carries the larger of the hold
+      // and the bills, and nothing billed is dropped. A budget line that refused the step pauses the run after the bills are recorded, and
+      // nothing is held for the paused call. An unusable bill is not a free call: the hold is charged, as an unusable cost is.
+      if (error instanceof BilledStopError) {
+        const billed = error.billedUsd;
+        if (!(Number.isFinite(billed) && billed >= 0)) {
+          const held = paidKind ? hold : null;
+          if (held !== null) addSpend(category, held);
+          set(id, "failed", null, held, "the step reported an unusable bill");
+          continue;
+        }
+        const refusal = budgetLineRefusalOf(error.message);
+        if (refusal !== null) {
+          if (billed > 0) {
+            addSpend(category, billed);
+            set(id, "failed", null, billed, `billed $${billed.toFixed(4)} before a budget line refused its next call`);
+          }
+          set(id, "paused", null, null, `budget reached, project not finished: ${refusal}`);
+          paused = true;
+          break;
+        }
+        const cost = paidKind && hold !== null ? Math.max(hold, billed) : billed;
+        addSpend(category, cost);
+        set(id, "failed", null, cost, error.message.slice(0, REASON_MAX));
         continue;
       }
       // A refusal before any call. A budget line that refused it pauses the run at this step (D17): the step is not failed, and nothing was

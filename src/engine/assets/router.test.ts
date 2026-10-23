@@ -5,7 +5,9 @@ import { EngineError } from "../contracts/errors.ts";
 import { newId } from "../contracts/ids.ts";
 import { routes, type RouteTable } from "../config/routes.ts";
 import type { HttpResponse } from "../gateway/types.ts";
-import { createAssetRouter, type ProduceInput, type RouterSignals, type RouterSettings } from "./router.ts";
+import { createAssetRouter, type ProduceInput, type ProduceOutcome, type RouterSignals, type RouterSettings } from "./router.ts";
+import { budgetReservationSchema, type BudgetReservation } from "../contracts/index.ts";
+import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
 import { memoryAssetCache, type AssetCache } from "./cache.ts";
 import { memoryProviderStats } from "./stats.ts";
 import { memoryBreakerStore } from "./breaker.ts";
@@ -32,6 +34,8 @@ const target = (model: string, priceKey: "kling_v3_standard" | "wan_2_6" | "seed
 const VIDEO_TARGETS = [target(KLING, "kling_v3_standard"), target(WAN, "wan_2_6"), target(SEED, "seedance_2_5")];
 const KLING_TARGET = target(KLING, "kling_v3_standard");
 const videoTable: RouteTable = routesWith("video.cinematic", VIDEO_TARGETS, routes.table);
+/** The first two targets in scored order. A five-second clip costs 0.63 USD on the first and 0.75 USD on the second: a 0.70 request budget admits the first and refuses the second. */
+const TWO_TARGETS: RouteTable = routesWith("video.cinematic", VIDEO_TARGETS.slice(0, 2), routes.table);
 
 /** Quality makes Kling first, then Wan, then Seedance, so the order under test is the scored order and not chance. */
 const QUALITY: Record<string, number> = { [KLING]: 0.9, [WAN]: 0.5, [SEED]: 0.1 };
@@ -46,6 +50,8 @@ const pending = (jobId: string): HttpResponse => json(200, { id: jobId, status: 
 const accepted = (jobId: string): HttpResponse => json(200, { id: jobId, status: "pending" });
 const completed = (jobId: string, cost: number): HttpResponse =>
   json(200, { id: jobId, status: "completed", unsigned_urls: [`https://openrouter.ai/api/v1/videos/${jobId}/content?index=0`], usage: { cost } });
+/** A job the provider failed after billing it: its poll reports the bill it charged (usage.cost). */
+const failedBilled = (jobId: string, cost: number): HttpResponse => json(200, { id: jobId, status: "failed", error: "the render stopped", usage: { cost } });
 
 /** The submit endpoint is shared by every video model, so the reply is chosen by the model in the body. */
 function submitFor(queues: Record<string, Array<HttpResponse | Error>>): Reply {
@@ -65,17 +71,44 @@ type HarnessOptions = {
   table?: RouteTable;
   keys?: Record<string, string>;
   reservationUsd?: number;
+  /** A budget line on the request: a call that would take the request past it is refused (contract ledger v11). */
+  requestBudgetUsd?: number;
   signals?: RouterSignals;
   settings?: Partial<RouterSettings>;
   cache?: AssetCache;
   clock?: ReturnType<typeof fakeClock>;
 };
 
+/** A reservation whose request has a budget line, so a call that would take the request past the line is refused by the line (D17). */
+async function ledgerWithRequestBudget(reservedUsd: number, requestBudgetUsd: number): Promise<{ ledger: LedgerStore; reservationId: string }> {
+  const ledger = memoryLedgerStore();
+  const reservationId = newId("res_");
+  const reservation: BudgetReservation = budgetReservationSchema.parse({
+    schema: "meridian.budget_reservation/v1",
+    reservationId,
+    requestId: newId("req_"),
+    workspaceId: WORKSPACE,
+    mode: "cap",
+    lines: [{ stage: "produce_shot", estimateUsd: reservedUsd }],
+    estimateUsd: reservedUsd,
+    redoAllowanceUsd: 0,
+    reservedUsd,
+    requestBudgetUsd,
+    state: "reserved",
+    createdAt: "2026-10-14T10:00:00.000Z",
+  });
+  await ledger.createReservation(reservation);
+  return { ledger, reservationId };
+}
+
 async function harness(options: HarnessOptions = {}) {
   const clock = options.clock ?? fakeClock();
   const script = scripted(options.script ?? {});
   const gateway = gatewayFor(script.transport, { ...(options.keys ? { keys: options.keys } : {}), routes: options.table ?? videoTable });
-  const { ledger, reservationId } = await ledgerWithReservation(options.reservationUsd ?? 10);
+  const { ledger, reservationId } =
+    options.requestBudgetUsd === undefined
+      ? await ledgerWithReservation(options.reservationUsd ?? 10)
+      : await ledgerWithRequestBudget(options.reservationUsd ?? 10, options.requestBudgetUsd);
   const cache = options.cache ?? memoryAssetCache();
   const stats = memoryProviderStats();
   const breakers = memoryBreakerStore();
@@ -108,6 +141,11 @@ async function harness(options: HarnessOptions = {}) {
 
 function posts(requests: { method: string; url: string }[]): number {
   return requests.filter((request) => request.method === "POST" && request.url.endsWith("/videos")).length;
+}
+
+/** The billed sum an outcome carries. A done or not_connected outcome has none. */
+function billedOf(outcome: ProduceOutcome): number | undefined {
+  return outcome.status === "done" || outcome.status === "not_connected" ? undefined : outcome.billedUsd;
 }
 
 describe("routing and fallback", () => {
@@ -688,5 +726,141 @@ describe("speech voices (Bible 10.4): the voice is part of the cache key", () =>
     const report = await h.router.produce({ ...h.input(spec), stage: "voice", voiceId: "voice_a", voiceProvider: "elevenlabs" });
     assert.equal(report.outcome.status, "not_connected");
     assert.equal(h.requests.filter((request) => request.url.endsWith("/chat/completions")).length, 0, "nothing is sent");
+  });
+});
+
+describe("a billed failure keeps its bills on the outcome (D12, D14, D17)", () => {
+  // The targets are named by position, so the block names no model.
+  const [FIRST, SECOND, THIRD] = VIDEO_TARGETS.map((candidate) => candidate.model);
+  const SECOND_ID = `openrouter:${SECOND}`;
+  const rateLimited = (): HttpResponse[] => [json(429, {}), json(429, {}), json(429, {})];
+
+  it("a fallback that bills 0.25 and then fails: the outcome carries the 0.25, and the ledger holds the same bill", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: rateLimited(), [SECOND]: [accepted("job-second")] }),
+        "GET /api/v1/videos/job-second": failedBilled("job-second", 0.25),
+      },
+    });
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "unavailable");
+    assert.equal(billedOf(report.outcome), 0.25, "the fallback's bill is on the outcome, not dropped");
+    assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, SECOND_ID)))?.actualUsd, 0.25, "the ledger holds the same bill");
+  });
+
+  it("a fallback that bills 0.60 and then fails: the outcome carries the 0.60", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: rateLimited(), [SECOND]: [accepted("job-second")] }),
+        "GET /api/v1/videos/job-second": failedBilled("job-second", 0.6),
+      },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "unavailable");
+    assert.equal(billedOf(report.outcome), 0.6);
+  });
+
+  it("every billed target adds to the outcome: the first target's bill of 0.25 and the second's of 0.60 make 0.85", async () => {
+    const h = await harness({
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: [accepted("job-first")], [SECOND]: [accepted("job-second")], [THIRD]: rateLimited() }),
+        "GET /api/v1/videos/job-first": failedBilled("job-first", 0.25),
+        "GET /api/v1/videos/job-second": failedBilled("job-second", 0.6),
+      },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "unavailable");
+    assert.equal(billedOf(report.outcome), 0.85, "both failed targets are on the outcome");
+  });
+
+  it("a queued fallback after a billed target: the outcome is queued, and it still carries the 0.25", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: [accepted("job-first")] }),
+        "GET /api/v1/videos/job-first": failedBilled("job-first", 0.25),
+      },
+    });
+    for (let i = 0; i < 10; i += 1) await h.buckets.tryAcquire(SECOND_ID, 10);
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "queued");
+    assert.equal(billedOf(report.outcome), 0.25, "the target before the queued one keeps its bill");
+    assert.equal(posts(h.requests), 1, "nothing was sent to the full bucket");
+  });
+
+  it("an ambiguous fallback after a billed target: the outcome is unsettled, and it still carries the 0.25", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: [accepted("job-first")], [SECOND]: [json(503, {})] }),
+        "GET /api/v1/videos/job-first": failedBilled("job-first", 0.25),
+      },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "unsettled");
+    assert.equal(billedOf(report.outcome), 0.25, "the target before the unsettled one keeps its bill");
+  });
+
+  it("a content refusal of a fallback after a billed target: the planner gets the failure, and it still carries the 0.25", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: [accepted("job-first")], [SECOND]: [json(400, { error: "Refused by content moderation policy" })] }),
+        "GET /api/v1/videos/job-first": failedBilled("job-first", 0.25),
+      },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "failed");
+    if (report.outcome.status === "failed") assert.equal(report.outcome.error.kind, "content_policy");
+    assert.equal(billedOf(report.outcome), 0.25, "the planner's failure keeps the bill of the target before it");
+  });
+
+  it("a rate-limited target followed by a budget refusal is a refusal, not unavailable, and nothing is held for the refused call", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      requestBudgetUsd: 0.7,
+      script: { "POST /api/v1/videos": submitFor({ [FIRST]: rateLimited(), [SECOND]: [accepted("job-second")] }) },
+    });
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "refused", "the budget line stops the asset, so the step can pause at it (D17)");
+    if (report.outcome.status === "refused") {
+      assert.match(report.outcome.reasons.join(" "), /so it does not start/, "the budget line is the first reason");
+      assert.match(report.outcome.reasons.join(" "), /rate_limit/, "the rate limit is kept with it");
+    }
+    assert.equal(billedOf(report.outcome), 0, "nothing was billed");
+    assert.equal(posts(h.requests), 3, "the first target's three submits; the second is never sent");
+    assert.equal(await h.ledger.getEntryByKey(assetCacheKey(spec, SECOND_ID)), null, "the refused call writes no ledger row");
+  });
+
+  it("a budget refusal after a billed target is a refusal that carries the bill, so the executor counts it", async () => {
+    const h = await harness({
+      table: TWO_TARGETS,
+      requestBudgetUsd: 0.7,
+      script: {
+        "POST /api/v1/videos": submitFor({ [FIRST]: [accepted("job-first")], [SECOND]: [accepted("job-second")] }),
+        "GET /api/v1/videos/job-first": failedBilled("job-first", 0.25),
+      },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "refused");
+    assert.equal(billedOf(report.outcome), 0.25, "the first target's bill is on the refusal");
+    assert.equal(posts(h.requests), 1, "the second target is refused by the line, so it is never sent");
+  });
+
+  it("a refusal that is not a budget line, after a rate-limited target, stays unavailable", async () => {
+    // The reservation has no budget line, so its own hold is the limit: the second target's 0.75 USD does not fit the 0.70 USD reservation.
+    const h = await harness({
+      table: TWO_TARGETS,
+      reservationUsd: 0.7,
+      script: { "POST /api/v1/videos": submitFor({ [FIRST]: rateLimited(), [SECOND]: [accepted("job-second")] }) },
+    });
+    const report = await h.router.produce(h.input(assetSpec()));
+    assert.equal(report.outcome.status, "unavailable", "only a budget line makes the outcome a refusal");
+    assert.equal(billedOf(report.outcome), 0);
+    assert.equal(posts(h.requests), 3);
   });
 });

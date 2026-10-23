@@ -1,5 +1,6 @@
 import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts/index.ts";
 import { newId } from "../contracts/ids.ts";
@@ -7,8 +8,8 @@ import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
 import type { AsyncAssetRouter } from "../assets/router.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { ORCHESTRATOR_PLAN_VERSION, type NodeEvent, type NodeKind, type OrchestratorPlan, type PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, runPlan, type NodeHandler } from "./execute.ts";
+import { ORCHESTRATOR_PLAN_VERSION, orchestratorPlanSchema, type NodeEvent, type NodeKind, type OrchestratorPlan, type PlanNode } from "./contracts.ts";
+import { BilledStopError, CallRefusedError, NotConnectedError, StepQueuedError, runPlan, type NodeHandler } from "./execute.ts";
 import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps, type QueuedAsset } from "./production.ts";
 import { pollAssetJobs, queueAssetJob, sqlAssetPollStore } from "./asset-poll.ts";
 import { appendPlanEvents, createPlanDraft, failedHoldsUsd } from "./store.ts";
@@ -523,3 +524,102 @@ describe("production handlers: a queued clip waits once, and measure mode holds 
   });
 });
 
+describe("production handlers: a stop after a bill keeps the bill, and a budget line pauses the run (D12, D14, D17)", () => {
+  const samplePlan = orchestratorPlanSchema.parse(JSON.parse(readFileSync(new URL("./fixtures/sample-plan.json", import.meta.url), "utf8")));
+  const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "test/visual-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.4 });
+  // The reasons the router gives for a rate-limited target and then a budget line (router.ts, budget/reserve.ts).
+  const RATE_LIMIT = "openrouter:target-one: rate_limit: the provider limited the requests";
+  const BUDGET_LINE = "openrouter:target-two: call produce_shot would take the request to 0.75 USD, above its 0.7 USD budget, so it does not start";
+
+  /** The error the visual step stops with, when its router answers the outcome. */
+  async function stopOf(outcome: object): Promise<Error> {
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(outcome) })).visual as NodeHandler;
+    try {
+      await handler({ node: visual, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
+    } catch (error) {
+      return error as Error;
+    }
+    throw new Error("the visual step did not stop");
+  }
+
+  /** One visual step, alone in its plan with the given hold, on the router's answer: the run's result, its events and the step's last event. */
+  async function runVisual(outcome: object, hold: number) {
+    const step = { ...visual, estimateUsd: hold };
+    const events: NodeEvent[] = [];
+    const result = await runPlan({
+      plan: { ...samplePlan, nodes: [step] },
+      order: [step.id],
+      handlers: productionHandlers(depsWith(await ledgerWith(10), { router: routerAnswering(outcome) })),
+      cache: new Map(),
+      lineUsd: 10,
+      emit: (event) => events.push(event),
+    });
+    return { result, events, last: events.filter((event) => event.nodeId === step.id).at(-1) };
+  }
+
+  test("a stop that follows a bill carries the bill on its error; a stop with no bill throws the error it always threw", async () => {
+    const stops: Array<[object, new (message: string) => Error]> = [
+      [{ status: "refused", reasons: [BUDGET_LINE] }, CallRefusedError],
+      [{ status: "queued", reasons: ["bucket full"] }, CallRefusedError],
+      [{ status: "duplicate", providerId: "p", ledgerEntryId: "e" }, CallRefusedError],
+      [{ status: "unavailable", reasons: ["no target"] }, Error],
+      [{ status: "unsettled", providerId: "p", idempotencyKey: "k", ledgerEntryId: "e", reason: "no bill" }, Error],
+      [{ status: "failed", providerId: "p", error: { kind: "server", retryable: false, message: "x" } }, Error],
+    ];
+    for (const [outcome, kind] of stops) {
+      const status = (outcome as { status: string }).status;
+      const plain = await stopOf(outcome);
+      assert.equal(plain instanceof BilledStopError, false, `${status}: with no bill, no bill is carried`);
+      assert.ok(plain instanceof kind, `${status}: the error it always threw`);
+      const billed = await stopOf({ ...outcome, billedUsd: 0.25 });
+      assert.ok(billed instanceof BilledStopError, `${status}: the bill is carried on the error`);
+      assert.equal((billed as BilledStopError).billedUsd, 0.25);
+      assert.equal(billed.message, plain.message, `${status}: the same reason`);
+    }
+  });
+
+  test("a fallback that bills 0.25 and then fails, on a 0.40 hold, records 0.40 as failed, so the plan counts it", async () => {
+    const run = await runVisual({ status: "unavailable", reasons: ["no image target produced an asset"], billedUsd: 0.25 }, 0.4);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.4, "the larger of the hold and the bill");
+    assert.equal(run.result.spentUsd, 0.4);
+  });
+
+  test("a fallback that bills 0.60 and then fails records 0.60 as failed", async () => {
+    const run = await runVisual({ status: "unavailable", reasons: ["no image target produced an asset"], billedUsd: 0.6 }, 0.4);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.6);
+    assert.equal(run.result.spentUsd, 0.6);
+  });
+
+  test("a queued fallback that stopped after a bill is not at cost zero: its failed event carries the 0.25", async () => {
+    const run = await runVisual({ status: "queued", reasons: ["no free slot"], billedUsd: 0.25 }, 0);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.25, "the bill is recorded, not zero");
+    assert.equal(run.result.spentUsd, 0.25);
+  });
+
+  test("a rate-limited target followed by a budget refusal pauses the run at the step, and nothing is held for it", async () => {
+    const run = await runVisual({ status: "refused", reasons: [RATE_LIMIT, BUDGET_LINE], billedUsd: 0 }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.events.some((event) => event.state === "failed"), false, "the step is not failed");
+    assert.equal(run.last?.reason, `budget reached, project not finished: ${RATE_LIMIT}; ${BUDGET_LINE}`, "the pause names the line and the rate limit");
+    assert.equal(run.result.spentUsd, 0, "its 0.40 hold is not charged");
+  });
+
+  test("a budget refusal with no bill pauses the run, and nothing is held for the call that did not start", async () => {
+    const run = await runVisual({ status: "refused", reasons: [BUDGET_LINE] }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.result.spentUsd, 0);
+  });
+
+  test("a budget refusal after a billed target pauses the run, and the bill is counted on a failed event: the hold is not", async () => {
+    const run = await runVisual({ status: "refused", reasons: [BUDGET_LINE], billedUsd: 0.25 }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.events.find((event) => event.state === "failed")?.costUsd, 0.25, "the bill is recorded so a later run counts it");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.result.spentUsd, 0.25);
+  });
+});

@@ -29,7 +29,7 @@ import type { ChatMessage } from "../gateway/openrouter.ts";
 import { paidCall, type LockableLedger } from "../gateway/paid.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { NodeKind, PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
+import { BilledStopError, CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
 import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceOutcome } from "../assets/router.ts";
 import type { AssetJob } from "../assets/job.ts";
@@ -359,6 +359,14 @@ function assetSpecFor(
   }
 }
 
+/**
+ * The error a stopped outcome throws. An outcome that follows a bill (billedUsd above zero) carries it on a BilledStopError, so the executor
+ * charges the bill (D12, D14): a bill is never dropped. Without a bill it is the error the outcome always threw.
+ */
+function stoppedWith(error: Error, billedUsd: number | undefined): Error {
+  return billedUsd === undefined || billedUsd === 0 ? error : new BilledStopError(error.message, billedUsd);
+}
+
 /** What one router outcome means for a step: the asset's uri is the output; every other outcome stops the step with its reason. */
 export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
   switch (outcome.status) {
@@ -367,17 +375,23 @@ export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
     case "not_connected":
       throw new NotConnectedError(outcome.reasons.join("; ") || `no ${kind} provider is connected`);
     case "refused":
-      throw new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`);
+      throw stoppedWith(new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`), outcome.billedUsd);
     case "duplicate":
-      throw new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`);
+      throw stoppedWith(
+        new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`),
+        outcome.billedUsd,
+      );
     case "queued":
-      throw new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`);
+      throw stoppedWith(new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`), outcome.billedUsd);
     case "failed":
-      throw new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300));
+      throw stoppedWith(new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300)), outcome.billedUsd);
     case "unsettled":
-      throw new Error(`the ${kind} submit is unsettled at its provider (${outcome.reason}); an operator settles it before the step runs again`.slice(0, 300));
+      throw stoppedWith(
+        new Error(`the ${kind} submit is unsettled at its provider (${outcome.reason}); an operator settles it before the step runs again`.slice(0, 300)),
+        outcome.billedUsd,
+      );
     case "unavailable":
-      throw new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300));
+      throw stoppedWith(new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300)), outcome.billedUsd);
     default:
       throw new Error(`the ${kind} asset's outcome is not known yet, so the step does not count it: ${(outcome as { status: string }).status}`.slice(0, 300));
   }
