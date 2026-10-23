@@ -24,6 +24,8 @@ import { readDriveConnectionMeta } from "../../lib/meridian/storage/drive-connec
 import { sqlEventStore } from "./event-store-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import type { ProduceShotPorts } from "./handlers/produce-shot.ts";
+import type { VoicePortsFor } from "./handlers/voice.ts";
+import type { SpeechPorts } from "../media/stt-connection.ts";
 import type { PostRenderPorts } from "./handlers/post-render-review.ts";
 import type { RenderPorts, RenderScope } from "./handlers/render.ts";
 import type { VariantGenerationPorts, VariantPorts } from "./handlers/variants.ts";
@@ -193,13 +195,24 @@ export function productionPostRenderPorts(input: ProductionPostRenderInput): Pos
 }
 
 /** The reason a variant's voice cannot be spoken in production: no voice port is built, so no voice call is made (variants/STATUS.md). */
-const VOICE_NOT_WIRED = notConnectedReason(
-  "the voice of a variant is not wired in production: the speech route, speech-to-text, the media functions and the audio loader have no deployment wiring yet",
-);
+/**
+ * The reason a variant's voice cannot be spoken on this deployment (null: it can). The voice needs the voice stage's ports, built for the
+ * deployment, and a speech-to-text connection that is ready, because the voice gate reads the take before any paid call is kept.
+ */
+export function variantVoiceReasonOf(input: { speech: SpeechPorts | undefined; voice: VoicePortsFor | undefined }): string | null {
+  if (input.voice === undefined) return notConnectedReason("the voice stage's ports are not built on this deployment, so no variant can be spoken");
+  if (input.speech === undefined) return notConnectedReason("the speech-to-text connection is not built on this deployment, so no variant can be spoken");
+  if (input.speech.connection.status !== "ready") return input.speech.connection.reason;
+  return null;
+}
 
 export type ProductionVariantInput = {
   sql: Sql;
   gateway: Gateway;
+  /** The speech-to-text connection and list price of this deployment (speechPortsOf). Read by the voice reason before any call. */
+  speech?: SpeechPorts;
+  /** The voice stage's ports, per reservation (productionVoicePortsFor). Absent on a deployment that did not build them: no variant is spoken. */
+  voice?: VoicePortsFor;
   /** The Claude client's deps for one request on its reservation (the composition's roles). */
   roles: VariantGenerationPorts["roles"];
   /** Meridian's Settings, through workspace-budget.ts: the workspace's monthly budget. */
@@ -212,8 +225,8 @@ export type ProductionVariantInput = {
 /**
  * The variants stage's ports in production (Bible 6.13). The writer's route is read from the gateway, and its key comes from Meridian's
  * credential resolver: a route with no key is NOT_CONNECTED before any call. The kits are the workspace's engine_kits rows, the monthly budget
- * is Meridian's Settings, and the events are the engine's table. The voice is not connected (VOICE_NOT_WIRED), and music is not either, so a
- * variant that needs a voice is reported NOT_CONNECTED with its reason, and no music variant is built.
+ * is Meridian's Settings, and the events are the engine's table. The voice is the voice stage's own ports, built per reservation, and it is
+ * connected only when the speech-to-text connection is ready (variantVoiceReasonOf). Music is not connected, so no music variant is built.
  */
 export function productionVariantPorts(input: ProductionVariantInput): VariantPorts {
   return {
@@ -228,10 +241,11 @@ export function productionVariantPorts(input: ProductionVariantInput): VariantPo
     },
     generation: {
       roles: input.roles,
-      connection: async (scope) => ({ writer: await writerReasonOf(input.gateway, scope.organizationId), voice: VOICE_NOT_WIRED }),
+      connection: async (scope) => ({ writer: await writerReasonOf(input.gateway, scope.organizationId), voice: variantVoiceReasonOf({ speech: input.speech, voice: input.voice }) }),
       loadProductKit: (scope) => productKitBySku(input.sql, scope),
       loadPersona: async (scope) => (await readKit<Persona>(input.sql, { organizationId: scope.organizationId, kind: "persona", kitId: scope.personaId }))?.body,
       loadVoiceKit: async (scope) => (await readKit<VoiceKit>(input.sql, { organizationId: scope.organizationId, kind: "voice", kitId: scope.voiceId }))?.body,
+      ...(input.voice === undefined ? {} : { voice: input.voice }),
     },
   };
 }

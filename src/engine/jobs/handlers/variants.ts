@@ -66,7 +66,7 @@ import { productPromptsInputFor, writeVariantText, writerInputFor, type WriterCh
 import { speakVariantScript, runVoiceOverPorts, type VoiceRunner } from "../../variants/speak.ts";
 import { personaReferenceOf, productReferenceOf, variantScenePlan } from "../../variants/plan.ts";
 import { generationWorkOf, variantWorkItemSchema, VARIANT_PHASES, type VariantWorkItem } from "../../variants/work.ts";
-import type { VoicePorts } from "../../voice/voice.ts";
+import type { VoicePortsFor } from "./voice.ts";
 import type { RoleDeps } from "../../claude/client.ts";
 import { NOT_CONNECTED, notConnectedReason } from "../../media/stt-connection.ts";
 import { assembleVariantEdl, type AssemblyInput } from "../../variants/assemble.ts";
@@ -99,8 +99,8 @@ export type VariantGenerationPorts = {
   roles: (scope: { organizationId: string; requestId: string; reservationId: string }) => RoleDeps;
   /** Whether the writer's route and the voice are connected, with the reason when not. Read before any paid call. */
   connection: (scope: { organizationId: string }) => Promise<VariantConnection>;
-  /** The voice stage's ports (router, speech connection, media, roles, audio). Absent: the voice is not connected unless `speak` is given. */
-  voice?: VoicePorts;
+  /** The voice stage's ports, built for one variant's reservation (production: productionVoicePortsFor). Absent: the voice is not connected unless `speak` is given. */
+  voice?: VoicePortsFor;
   /** Speaks a variant's script. Absent: the voice stage (runVoice) over `voice`. */
   speak?: VoiceRunner;
   /** The product kit of a SKU in this workspace, or undefined. */
@@ -555,8 +555,9 @@ async function voicePhase(
   }
   const language = item.change.kind === "language" ? item.change.language : script.language;
   const lines = text !== null && text.kind === "lines" ? text.lines : [];
+  const voicePorts = generation.voice?.({ organizationId, requestId: ctx.requestId, reservationId });
   const spoken = await speakVariantScript(
-    generation.voice,
+    voicePorts,
     {
       organizationId,
       requestId: ctx.requestId,

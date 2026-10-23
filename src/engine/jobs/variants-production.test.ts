@@ -3,13 +3,15 @@
 // that needs a voice is NOT_CONNECTED too. The product kit of a SKU is read from the workspace's own kit rows. Recorded and local only.
 
 import assert from "node:assert/strict";
-import { after, before, test } from "node:test";
+import { after, before, describe, it, test } from "node:test";
 import { gatewayFor } from "../claude/test/helpers.ts";
 import type { ProductKit } from "../contracts/index.ts";
 import { productKitFixture } from "../contracts/fixtures/index.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { notConnectedWorkspaceBudget } from "./handlers/estimate-reserve.ts";
-import { productionVariantPorts } from "./production-ports.ts";
+import { productionVariantPorts, variantVoiceReasonOf } from "./production-ports.ts";
+import type { VoicePortsFor } from "./handlers/voice.ts";
+import type { SpeechPorts } from "../media/stt-connection.ts";
 import { productKitBySku, writeKit } from "./kit-store.ts";
 
 const WS = "ws_variants_production";
@@ -50,7 +52,7 @@ test("without an OpenRouter key, the writer is NOT_CONNECTED with its reason and
   const connection = await generation.connection({ organizationId: WS });
   assert.ok(connection.writer?.startsWith("NOT_CONNECTED:"), `the writer reason is NOT_CONNECTED: ${connection.writer}`);
   assert.ok(connection.voice?.startsWith("NOT_CONNECTED:"), `the voice reason is NOT_CONNECTED: ${connection.voice}`);
-  assert.match(connection.voice ?? "", /speech route/);
+  assert.match(connection.voice ?? "", /ports are not built/, "with no voice ports built, the reason names them");
   assert.equal(requests.length, 0, "the connection check makes no call");
 });
 
@@ -87,4 +89,31 @@ test("the product kit of a SKU is read from the workspace's own rows, the highes
   assert.equal(await productKitBySku(db.sql, { organizationId: WS, sku: "SKU-NOPE" }), undefined);
   assert.equal(await productKitBySku(db.sql, { organizationId: OTHER_WS, sku: kit.sku }), undefined, "another workspace's kit is not read");
   assert.equal((await productKitBySku(db.sql, { organizationId: OTHER_WS, sku: "SKU-OTHER" }))?.name, "Other");
+});
+
+describe("the variant voice's connection reason (variantVoiceReasonOf)", () => {
+  const readySpeech = { connection: { status: "ready", stt: {} as never }, sttPricePerMinuteUsd: 0.0043 } as SpeechPorts;
+  const offSpeech = {
+    connection: { status: "not_connected", reason: "NOT_CONNECTED: the stt route names deepgram:nova-3, but no adapter is resolved" },
+    sttPricePerMinuteUsd: null,
+  } as SpeechPorts;
+  const voicePorts = (() => undefined) as unknown as VoicePortsFor;
+
+  it("is null only when the voice ports and a ready speech-to-text connection are both built", () => {
+    assert.equal(variantVoiceReasonOf({ speech: readySpeech, voice: voicePorts }), null);
+  });
+
+  it("names the missing voice ports before anything else, as NOT_CONNECTED", () => {
+    const reason = variantVoiceReasonOf({ speech: readySpeech, voice: undefined });
+    assert.match(reason ?? "", /^NOT_CONNECTED: .*ports are not built/);
+  });
+
+  it("names the missing speech-to-text connection, as NOT_CONNECTED, when there is no speech port", () => {
+    const reason = variantVoiceReasonOf({ speech: undefined, voice: voicePorts });
+    assert.match(reason ?? "", /^NOT_CONNECTED: .*speech-to-text connection is not built/);
+  });
+
+  it("carries the speech connection's own reason when it is not ready, so the gate reads one truth", () => {
+    assert.equal(variantVoiceReasonOf({ speech: offSpeech, voice: voicePorts }), offSpeech.connection.status === "not_connected" ? offSpeech.connection.reason : null);
+  });
 });

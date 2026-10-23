@@ -34,7 +34,7 @@ import {
 import { memoryEventStore, type EventStore, type EventRecord } from "../../events/store.ts";
 import { readArtifact, writeArtifact } from "../artifact-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../test/pg-test-db.ts";
-import type { VoiceOutcome, VoiceRun } from "../../voice/voice.ts";
+import type { VoiceOutcome, VoicePorts, VoiceRun } from "../../voice/voice.ts";
 import type { VoiceRunner } from "../../variants/speak.ts";
 import { generationWorkOf, variantSubjectOf, type VariantPhase, type VariantWorkItem } from "../../variants/work.ts";
 import { expandVariants } from "../../variants/expand.ts";
@@ -102,6 +102,8 @@ const altPersona: Persona = { ...(personaFixture as Persona), personaId: "person
 const altVoiceKit: VoiceKit = { ...(voiceKitFixture as VoiceKit), voiceId: ALT_VOICE_ID, providerVoiceId: "variant-voice-id" };
 
 const PASS_TRACK: VoiceTrack = voiceTrackFixture as VoiceTrack;
+/** A sentinel for the voice stage's ports, so a test can see which ports the speaker was given. */
+const VARIANT_VOICE_PORTS = { marker: "variant-voice-ports" } as unknown as VoicePorts;
 
 /** A chat answer in the shape the gateway parses, whose content is the given object. */
 function chat(content: unknown) {
@@ -117,12 +119,14 @@ function chat(content: unknown) {
 /** Records every voice call. It answers with a passing track, or not connected when the test asks for it. */
 function recordedSpeaker(status: "done" | "not_connected" = "done") {
   const calls: VoiceRun[] = [];
-  const runner: VoiceRunner = async (run): Promise<VoiceOutcome> => {
+  const portsSeen: (VoicePorts | undefined)[] = [];
+  const runner: VoiceRunner = async (run, ports): Promise<VoiceOutcome> => {
     calls.push(run);
+    portsSeen.push(ports);
     if (status === "not_connected") return { status: "not_connected", reason: "no speech-to-text key" };
     return { status: "done", gate: { gate: "voice", subjectId: run.subjectId, pass: true, checks: [{ rule: "length_within_max", pass: true }] }, track: PASS_TRACK };
   };
-  return { runner, calls };
+  return { runner, calls, portsSeen };
 }
 
 type Harness = {
@@ -130,6 +134,9 @@ type Harness = {
   events: EventStore;
   writerRequests: () => number;
   calls: VoiceRun[];
+  /** The scopes the voice factory was asked for, and the ports the speaker was given: one per voice call. */
+  voiceScopes: () => { organizationId: string; requestId: string; reservationId: string }[];
+  portsSeen: () => (VoicePorts | undefined)[];
   ports: VariantPorts;
   setConnection: (connection: VariantConnection) => void;
 };
@@ -144,6 +151,8 @@ async function harness(options: {
   monthBudgetUsd?: number;
   speaker?: "done" | "not_connected";
   writerAnswers?: ReturnType<typeof json>[];
+  /** Wires the voice stage's ports, built per scope, as production does (productionVoicePortsFor). */
+  voice?: boolean;
 }): Promise<Harness> {
   const ledger = memoryLedgerStore();
   await ledger.createReservation({ ...budgetReservationFixture, workspaceId: WS, requestId: REQ, reservedUsd: options.reservedUsd ?? 5, state: "reserved" });
@@ -151,6 +160,7 @@ async function harness(options: {
   const answers = options.writerAnswers ?? [json(200, HOOK_ANSWER), json(200, HOOK_ANSWER), json(200, HOOK_ANSWER)];
   const recorded = gatewayFor(answers);
   const speaker = recordedSpeaker(options.speaker);
+  const voiceScopes: { organizationId: string; requestId: string; reservationId: string }[] = [];
   let connection: VariantConnection = CONNECTED;
   const generation =
     options.generation === false
@@ -159,6 +169,14 @@ async function harness(options: {
           roles: () => deps(recorded.gateway, ledger),
           connection: async () => connection,
           speak: speaker.runner,
+          ...(options.voice
+            ? {
+                voice: (scope: { organizationId: string; requestId: string; reservationId: string }) => {
+                  voiceScopes.push(scope);
+                  return VARIANT_VOICE_PORTS;
+                },
+              }
+            : {}),
           loadProductKit: async ({ sku }: { sku: string }) =>
             sku === productKitFixture.sku ? (productKitFixture as ProductKit) : sku === altProductKit.sku || sku.startsWith("SKU-FIX-") ? { ...altProductKit, sku } : undefined,
           loadPersona: async ({ personaId }: { personaId: string }) =>
@@ -180,6 +198,8 @@ async function harness(options: {
     events,
     writerRequests: () => recorded.requests.length,
     calls: speaker.calls,
+    voiceScopes: () => voiceScopes,
+    portsSeen: () => speaker.portsSeen,
     ports,
     setConnection: (next) => {
       connection = next;
@@ -583,4 +603,17 @@ test("an assembly whose style kit is not the one the request names is not built,
   assert.equal(result.output.outcome.status, "not_built");
   if (result.output.outcome.status === "not_built") assert.match(result.output.outcome.reason, /did not load/);
   assert.deepEqual(result.output.artifacts, {});
+});
+
+test("the variant's voice is spoken through the voice ports built for its own reservation, which the speaker receives", async () => {
+  const h = await harness({ voice: true });
+  const { output, inputIds } = await runRequestPhase(h, requestWith({ hooks: 1, maxVariants: 4, budgetUsd: 1 }));
+  const item = workOf(output, "hook:1");
+  const writer = await runWriter(h, inputIds, item);
+  if (writer.status !== "done") throw new Error("the writer did not answer");
+
+  const { outcome } = await runVoice(h, inputIds, item, writer.text);
+  assert.equal(outcome.status, "done");
+  assert.deepEqual(h.voiceScopes(), [{ organizationId: WS, requestId: REQ, reservationId: RESERVATION }], "the ports are built for this variant's reservation");
+  assert.equal(h.portsSeen()[0], VARIANT_VOICE_PORTS, "the speaker is given the ports built for that scope");
 });

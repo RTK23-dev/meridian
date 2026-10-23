@@ -636,13 +636,15 @@ export function productionEngineRuntime(sql: Sql): EngineRuntime {
   const existing = productionRuntimes.get(sql);
   if (existing) return existing;
   const composition = productionComposition(sql);
-  // The variants stage (Bible 6.13): the writer over the gateway, the kits and the month budget. Its voice is not connected in production,
-  // so a variant that needs one is NOT_CONNECTED with its reason and no call is made (variants/STATUS.md).
+  // The variants stage (Bible 6.13): the writer over the gateway, the kits, the month budget and the voice stage's ports. A variant that needs
+  // a voice is NOT_CONNECTED with its reason, and no call is made, unless the speech-to-text connection is ready (variantVoiceReasonOf).
   const runtime = createEngineRuntime({
     ...composition,
     variants: productionVariantPorts({
       sql,
       gateway: composition.gateway,
+      speech: composition.speech,
+      voice: typeof composition.voice === "function" ? composition.voice : undefined,
       roles: rolesFor(composition),
       workspaceBudget: composition.workspaceBudget,
       loadStyleKit: kitPorts(sql).loadStyleKit,
