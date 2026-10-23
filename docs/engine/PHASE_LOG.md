@@ -912,15 +912,16 @@ and tenancy tests for each server function, against a migrated database), and `a
 match planning). Before the merge, `4be77e79` moved a Node-only import out of the client bundle, which the browser check had found, and
 `6854260b` kept the policy save message.
 
-**Gates.** Test totals to be filled at release. Typecheck, lint and build results to be filled at release.
+**Gates.** On the release commit's tree before the release commit: `npm test` 6400 tests, 6359 passing, 0 failing, 41 skipped. `npm run typecheck` passes. `npm run lint` has 0 errors and 4 warnings that were already on main. The build result is in the release entry.
 
 **No live run.** None has happened, and the first live test has not been run. No provider key is set in this environment.
 
 **Open items.**
 
 Open, from the lead's list:
-1. A provider fallback's billed failure may not be fully counted in the plan's own total. It stays open unless the router fix closes it. The
-   router fix is being made on `fix/router-fallback-bill`; no commit on that branch is past `a5490585`, and this branch does not contain it.
+1. Resolved. A provider fallback's billed failure is counted in the plan's own total: a failed target keeps its bill, a failed queued job is
+   charged the larger of its hold and its bill, and a budget refusal through a fallback pauses the run. The shot handler keeps a failed
+   attempt's bill as a decision, because stage outputs have no cost field (`83727a10`, `4d6681ff`, `0b70fb27`, `ea133954`).
 2. The retry after a settle conflict. When a settle loses its claim to another settle, the poll closes the row as failed and charges its hold.
    A later bill for that job is then not stored (`asset-poll.test.ts`). Whether the poll should retry instead is pending the owner's decision.
 3. The consolidated CLAUDE.md question. Main's `e3bfd3a5` consolidated the working rules into the file this branch carries. The earlier file's
@@ -937,9 +938,10 @@ For the owner:
 7. The engine reads only a per-second USD video price at 1080p (D10). Other price forms are the owner's call.
 
 In the code, not verified live (`STATUS_APPROVALS_BRAND.md`, open items 1, 3 to 5):
-8. The factory's shot and voice routes, and the poll router, may not exclude a switched-off family. A route-table fallback there could reach one.
+8. The poll router now receives the plan's families. The brief path's shot and voice routes still receive no switched-off family list, so a
+   route-table fallback there could reach a switched-off family. No orchestrator run reaches those routes.
 9. The composer's model list uses the workspace's families, not the brand's. The planner still refuses a model the brand switched off.
-10. An unreadable policy row shows its reason, but the policy panel has no form to save the policy again.
+10. Resolved. An unreadable policy row refuses planning, runs and edits, and the policy panel has a form that saves the policy again (`4fe78df7`).
 11. `brand_id` has no foreign key or organization check in the database (0119). The server functions check it.
 
 ## 2026-10-23: Veo 3.1 removed from the engine

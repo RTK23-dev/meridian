@@ -4,6 +4,34 @@
 
 Nothing yet.
 
+## 0.1.0-beta.16 — prerelease
+
+The budget run. A budget is a line: a paid step starts only while its request's and its workspace month's committed spend is below their budgets, and its own hold fits within them. Queued paid work counts until it settles. Every approval is audited. A brand's policy can only switch model families off. Measure mode lets an admin run an unpriced video at a per-second ceiling. Main's changes since beta.15 are merged in, including the removal of Veo from the fixed routes.
+
+**Upgrade notes.** Three migrations are new: `0117_orchestrator_queued_holds.sql` (queued holds and measurements), `0118_orchestrator_budget_approvals.sql` (the approval audit) and `0119_orchestrator_brand_policy.sql` (brand overrides and the plan's brand). The orchestrator policy requires its model families: a stored policy that does not parse refuses planning, runs and edits until it is saved again, and a row without the measure ceiling takes 0.50 USD per second. The reservation's allowance fields are retired (contract v11); stored rows keep them.
+
+- **The budget is a line.** A paid call starts only while the committed spend of its request and its workspace month is below their budgets, and its own hold fits within them (D12, D17). A call already in flight finishes, and its overshoot is recorded. The run pauses at the line with "budget reached, project not finished" until an admin raises the budget. The tolerance is removed.
+- **Queued paid work counts until it settles.** A video or avatar job keeps its hold in the plan's spend across runs. A failed job is charged the larger of its hold and its bill, and a re-run does not resubmit a job that failed (D14).
+- **Approvals are audited.** Every approval records its actor, the previous and approved budgets and the pause reason, in the same statement as the plan's update. An approval at a category pause raises that category's line. An approval cannot clear a pause at the workspace month line (D13, D18).
+- **Brand overrides only switch families off.** A plan's brand may switch off more model families than the workspace. It cannot switch on a family the workspace has switched off, on any route (D16).
+- **Measure mode (admin).** An admin may run an unpriced video or avatar at the workspace's per-second ceiling, which starts at 0.50 USD. The measured average cost per second is shown from reported bills only (D15).
+- **Money fixes from the reviews.** A fallback's billed failure keeps its bill. A budget refusal through a fallback pauses the run. Output is saved as each step completes. An unknown hold is never zero. An unusable cost charges its hold. The planning hold equals its check.
+- **Screens.** The policy panel has the ceiling, the brand overrides, and a form that saves an unreadable policy again. The plans screen shows the budget-reached alert, the approval list, the measured average and, for admins, the measure choice.
+- **Tests.** 6400 tests: 6359 passing, 0 failing, 41 skipped. Typecheck passes. Lint has 0 errors and 4 warnings that were already on main. The build passes; its migration step was skipped here because no database URL is set.
+
+**Known issues.**
+
+- No live run has happened, and the first live test has not been run. No provider key is set in this environment. Cents-per-second prices are deferred, so a measured clip's cost is known only from the provider's reported bill.
+- A text step whose output cannot be saved keeps its cost, and a re-run refuses it as already made. Edit the step to run it again.
+- A retry after a settle conflict closes the job as failed and drops the other settle's bill. This is pending the owner's decision (D18).
+- A shot attempt that fails after billing keeps its bill as a decision record only, because stage outputs have no cost field.
+- The brief path's shot and voice routes receive no switched-off family list. No orchestrator run reaches them.
+- Planning spend is outside the plan's line (D12).
+- The default model family (Veo, D1) is off in every workspace. It conflicts with main's operating brief, and the owner has not decided (PHASE_LOG open item 4).
+- The consolidated `CLAUDE.md` on main drops the earlier process rules. Which file governs is open (PHASE_LOG open item 3).
+- A draft with no brand named records the acting brand (PHASE_LOG open item 5).
+- Child tables lack `organization_id` columns; their parents enforce tenancy.
+
 ## 0.1.0-beta.15 — prerelease
 
 The cost and time record for paid engine calls, a bound on how often held bills are read, the 2026-10-22 review fixes from main, and the orchestrator's text steps. Tests use fixtures. No live provider call is recorded in this release. The owner's live check of the OpenRouter bill field and the token figures is still to run.
