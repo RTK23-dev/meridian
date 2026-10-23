@@ -837,3 +837,19 @@ attaches credentials only when the URL is on the provider's own host (`onHost`, 
 gap is that the URL is not checked against public addresses, and the connection is not pinned. The Factory's artifact downloader does both
 (`production/artifact-finalizer.ts`). The fix is to share that download with the engine through a neutral module. The change is an eng-pipeline
 change, so it is recorded in the plan (M1.3) and not made here.
+
+**Budget run, 2026-10-23: soft budgets, category budgets, the model brief, approvals, Veo off.** Branch `run/orchestrator-budgets-2026-10-23`.
+The governing plan is `run/REPLAN_2026-10-23.md`, the decisions are D1 to D11 in `run/DECISIONS_2026-10-23.md`, and the state is in
+`run/RUN_STATE.md`. Blocks: B0 setup; B1 Veo off as a workspace policy (`google/veo` by default, adjustable, nothing deleted); B2 soft
+budgets (`budget/tolerance.ts`: the larger of a percentage and cents; reservations store their allowances, migration 0115); B3 category
+budgets (copy, creative, voice; migration 0116); B4 the model brief (`prompts/model_brief@1.md`), the candidates the engine can price, and
+`orchestrator_plan@3`; B5 the composer's category budgets and own-inputs mode, the approval of a paused plan's budget, and the policy
+panel, with a browser check that found and fixed a Node-only import in the client bundle; B6 documents (CLAUDE.md rule 3, the handoff's
+rule 7, Bible 14.1, the factory's autonomy table); B7 gates.
+
+Not done, or open: a queued asset's estimate is held only for its own run, so an allowance can be passed by a queued asset until its poll
+settles it (a gap for the total and each category; the fix needs the estimate on the asset job row). The brand-level policy the direction
+names is not built, since the policy is per workspace. An approval has no audit row. The engine reads only a per-second 1080p video price,
+so most of the newest video models are not usable until the owner decides on the other price forms. No live run is recorded: no provider
+key is set in this environment, so every check is on fixtures, the public listings or the dev server. Per-creative attestation, the
+calibration bootstrap, paid ads and the plan-to-video bridge are untouched.

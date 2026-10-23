@@ -1187,12 +1187,12 @@ No paid call happens without a reservation, and every call is reconciled to its 
 ### 14.1 Flow
 
 1. **Estimate** in `estimate_reserve`: price every shot from the price table (section 10.3), plus Claude, render and media-function costs, plus a redo allowance (initial 25% of generated-shot cost).
-2. **Reserve** the estimate against the request budget and the workspace's monthly budget. If either would be exceeded, the request pauses (not fails) with a reason.
+2. **Reserve** the estimate against the request budget and the workspace's monthly budget. If either would pass its allowance, the request pauses (not fails) with a reason. The allowance is the budget plus its tolerance, the larger of a percentage and a number of cents (owner direction 2026-10-23; `budget/tolerance.ts`). Within it, work proceeds.
 3. **Spend:** every adapter call writes a `LedgerEntry` with estimate and reservation before submitting.
 4. **Reconcile:** on completion the adapter settles the call to the provider's verified bill (from the provider's response or billing API). With no bill, the call stays held at its reservation and its cost is unknown: no list price is booked as an actual (amended for contract v6, owner direction 2026-10-16; section 4, v6 changes).
 5. **Release** unused reservation at `deliver`.
 
-**Modes per workspace:** `observe` (record only), `warn` (record and alert on overrun), `cap` (refuse calls beyond the reservation). Production runs in `cap`.
+**Modes per workspace:** `observe` (record only), `warn` (record and alert on overrun), `cap` (a call proceeds within its allowance, the reservation plus its tolerance; beyond it the request pauses for an approval, and a small overrun never fails). Production runs in `cap`.
 
 ### 14.2 Cost per master
 

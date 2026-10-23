@@ -49,7 +49,7 @@ Every run has the full stage graph. The mode decides where a stage waits (`facto
 | Stage | `manual` | `semi` | `full` |
 | --- | --- | --- | --- |
 | Discover, ingest, decode, grade, trend, pick, template, gate | runs | runs | runs |
-| Produce (spends), launch (publishes), test (shifts budget) | waits for approval | waits for approval | runs inside the cap |
+| Produce (spends), launch (publishes), test (shifts budget) | waits for approval | waits for approval | runs inside the allowance, the budget plus its tolerance |
 | Review | waits for approval | runs | runs |
 
 - **The kill switch stops every stage in every mode**, approved or not. The run is marked `paused` with the reason.

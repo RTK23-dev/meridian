@@ -291,7 +291,7 @@ The 10 October honesty pass removed fake receipts and invented numbers from this
 4. **Every model, API and render call goes through the router and the credential resolver.** Never read an API key from the environment directly.
 5. **Every call writes its cost** to the ledger with stage, page, concept and video id.
 6. **Every paid job sends an idempotency key** (the input hash), so a retry never bills twice.
-7. **Respect budgets.** The Director's per-master ceiling and each page's monthly budget are hard limits; when one is reached, slow down, don't overrun.
+7. **Respect budgets.** The Director's per-master ceiling and each page's monthly budget are soft limits with a tolerance (owner direction 2026-10-23). Work proceeds within the allowance, the budget plus its tolerance. Beyond it, the request pauses for an approval; never spend past an allowance without one.
 8. **Secrets never enter git, logs or chat.** An OpenRouter key was exposed in a screenshot during planning; confirm it has been rotated before using OpenRouter.
 
 **Data and content**
