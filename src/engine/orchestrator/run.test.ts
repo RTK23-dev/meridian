@@ -325,4 +325,29 @@ describe("orchestrator runner over the stored plan (migration 0108)", () => {
     const again = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_dberror", catalog, handlers: standIn([]) });
     assert.notEqual(again.status, "not_runnable", "the plan can be run again");
   });
+
+  test("a write failure after a billed call leaves its cost counted in the next run: the step fails with its bill, and the next run starts from it", async () => {
+    // The user's budget is $0.50, so the line is $0.50. The analysis step is billed $0.50, and the write of its output is then refused.
+    await createPlanDraft(db.sql, { id: "plan_run_write_fail", organizationId: ORG, title: "write fail", brief: storedBrief(0.5), orchestratorModel: examplePlan.orchestrator.id, budgetUsd: 0.5 });
+    await recordPlanOutcome(db.sql, { id: "plan_run_write_fail", organizationId: ORG, plan: examplePlan, reasons: [], catalogReadAt: null });
+    const analysisHash = contentHash({ id: "analyze_ref" });
+    const billed = standIn([], null, { analysis: async () => ({ outputHash: analysisHash, costUsd: 0.5 }) });
+    // Only the write of the analysis step's output is refused. Every other write goes through, so the steps it reads are kept.
+    const refusingThatOutput = ((strings: TemplateStringsArray, ...values: unknown[]) =>
+      strings.join("?").includes("insert into orchestrator_step_outputs") && values.includes(analysisHash)
+        ? Promise.reject(new Error("the database refused the write"))
+        : (db.sql as unknown as Tagged)(strings, ...values)) as unknown as Sql;
+    await runStoredPlan(refusingThatOutput, { organizationId: ORG, planId: "plan_run_write_fail", catalog, handlers: billed });
+    const failed = (await listPlanEvents(db.sql, ORG, "plan_run_write_fail", 0)).filter((event) => event.nodeId === "analyze_ref").at(-1);
+    assert.equal(failed?.state, "failed");
+    assert.equal(failed?.costUsd, 0.5, "the bill is on the failed event");
+    assert.equal(failed?.reason, "the output could not be stored, so the step is not kept: the database refused the write");
+
+    // The next run reads the database as it is: the bill is in its starting spend, so the line is reached before its first paid step.
+    const calls: string[] = [];
+    const next = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_run_write_fail", catalog, handlers: standIn(calls) });
+    assert.equal(next.status, "paused");
+    assert.equal(calls.includes("analyze_ref"), false, "the billed step is not called again: its bill is already counted");
+    assert.match(next.status === "paused" ? (next.events.find((event) => event.nodeId === "analyze_ref" && event.state === "paused")?.reason ?? "") : "", /\(committed \$0\.5000\)$/);
+  });
 });

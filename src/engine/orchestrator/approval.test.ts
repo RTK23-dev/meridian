@@ -57,7 +57,7 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
     assert.equal(paused.status, "paused", "a plan whose spend reaches the user's budget pauses before the next paid step");
 
     const approved = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_resume", budgetUsd: 2, actorId: "user_admin_a" });
-    assert.deepEqual(approved, { status: "approved", previousUsd: 0.2, budgetUsd: 2 });
+    assert.deepEqual(approved, { status: "approved", previousUsd: 0.2, budgetUsd: 2, category: null });
     const stored = await getPlan(db.sql, ORG, "plan_approval_resume");
     assert.equal(stored?.budgetUsd, 2, "the set budget is the approved amount");
     assert.equal(stored?.plan?.budgetUsd, 2, "the plan's own budget is raised too, so the run's target is the approved amount");
@@ -180,5 +180,91 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
       budget = row.approvedUsd;
     }
     assert.equal((await getPlan(db.sql, ORG, "plan_approval_race"))?.budgetUsd, budget, "the plan holds the budget of the last approval");
+  });
+
+  /** A stored, ready plan whose brief sets a copy line (D3). The total is the user's $2, which the sample plan's steps fit. */
+  async function storedCopyPlan(id: string, copyBudgetUsd: number): Promise<void> {
+    const brief = {
+      goal: "A short branded video",
+      format: "a hook, a product shot, a call to action",
+      userInputs: "",
+      brand: { name: "Example", summary: "plain" },
+      budgetUsd: 2,
+      copyBudgetUsd,
+    };
+    await createPlanDraft(db.sql, { id, organizationId: ORG, title: id, brief, orchestratorModel: "vendor-a/model-x", budgetUsd: 2 });
+    await recordPlanOutcome(db.sql, { id, organizationId: ORG, plan: sample, reasons: [], catalogReadAt: null });
+  }
+
+  test("a copy pause is approved with its category: the brief's copy line is raised, the total is not, and the audit row names the category", async () => {
+    // The copy line is $0.05: the analysis ($0.02) starts below it, and the script's $0.10 hold would take the copy spend past it.
+    await storedCopyPlan("plan_approval_copy", 0.05);
+    const paused = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_copy", catalog, handlers: standIn() });
+    assert.equal(paused.status, "paused");
+    const pause = (await listPlanEvents(db.sql, ORG, "plan_approval_copy", 0)).filter((event) => event.state === "paused").at(-1);
+    assert.equal(pause?.nodeId, "script");
+    assert.match(pause?.reason ?? "", /^copy budget reached, project not finished/);
+
+    const approved = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_copy", budgetUsd: 0.5, actorId: "user_admin_a", category: "copy" });
+    assert.deepEqual(approved, { status: "approved", previousUsd: 0.05, budgetUsd: 0.5, category: "copy" });
+    const stored = await getPlan(db.sql, ORG, "plan_approval_copy");
+    assert.equal((stored?.brief as { copyBudgetUsd?: number } | undefined)?.copyBudgetUsd, 0.5, "the copy line in the brief is raised");
+    assert.equal(stored?.budgetUsd, 2, "the total is not touched");
+    assert.equal(stored?.plan?.budgetUsd, 2, "the plan's own budget is not touched");
+
+    const rows = await listBudgetApprovals(db.sql, ORG, "plan_approval_copy", 10);
+    assert.equal(rows.length, 1, "one approval, one audit row");
+    assert.equal(rows[0]?.actorId, "user_admin_a");
+    assert.equal(rows[0]?.previousUsd, 0.05, "the copy line it replaced");
+    assert.equal(rows[0]?.approvedUsd, 0.5, "the copy line it set");
+    assert.match(rows[0]?.reason ?? "", /^category copy; copy budget reached, project not finished/, "the audit row names the category");
+
+    const resumed = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_copy", catalog, handlers: standIn() });
+    assert.equal(resumed.status, "complete", "the next run passes the copy line");
+  });
+
+  test("a category pause and a total pause cannot be approved as each other, and a refused category approval changes nothing", async () => {
+    await storedCopyPlan("plan_approval_copy_refused", 0.05);
+    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_copy_refused", catalog, handlers: standIn() });
+    const before = await getPlan(db.sql, ORG, "plan_approval_copy_refused");
+
+    const asTotal = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_copy_refused", budgetUsd: 5, actorId: "user_admin_a" });
+    assert.equal(asTotal.status, "refused");
+    assert.match(asTotal.status === "refused" ? asTotal.reasons.join(" ") : "", /paused at its copy budget; approve it with the copy category/);
+    const asCreative = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_copy_refused", budgetUsd: 0.5, actorId: "user_admin_a", category: "creative" });
+    assert.equal(asCreative.status, "refused");
+    assert.match(asCreative.status === "refused" ? asCreative.reasons.join(" ") : "", /paused at its copy budget, not its creative budget/);
+    const notAbove = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_copy_refused", budgetUsd: 0.05, actorId: "user_admin_a", category: "copy" });
+    assert.equal(notAbove.status, "refused");
+    assert.match(notAbove.status === "refused" ? notAbove.reasons.join(" ") : "", /must be above the \$0\.0500 the plan has now/);
+    assert.deepEqual(await getPlan(db.sql, ORG, "plan_approval_copy_refused"), before, "a refused approval changes nothing");
+    assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_copy_refused", 10), [], "no refused approval is recorded");
+
+    await storedPlan("plan_approval_total_as_copy", 0.2);
+    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_total_as_copy", catalog, handlers: standIn() });
+    const totalAsCopy = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_total_as_copy", budgetUsd: 2, actorId: "user_admin_a", category: "copy" });
+    assert.equal(totalAsCopy.status, "refused");
+    assert.match(totalAsCopy.status === "refused" ? totalAsCopy.reasons.join(" ") : "", /paused at its plan budget, not its copy budget/);
+    assert.equal((await getPlan(db.sql, ORG, "plan_approval_total_as_copy"))?.budgetUsd, 0.2, "the total is not raised by a category approval");
+  });
+
+  test("a failing audit insert leaves a copy line unchanged: the brief update and its record are one statement", async () => {
+    await storedCopyPlan("plan_approval_copy_auditfail", 0.05);
+    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_approval_copy_auditfail", catalog, handlers: standIn() });
+    const before = await getPlan(db.sql, ORG, "plan_approval_copy_auditfail");
+    await db.exec(
+      "create function refuse_budget_audit() returns trigger language plpgsql as $$ begin raise exception 'the audit row was refused'; end $$;" +
+        " create trigger refuse_budget_audit before insert on orchestrator_budget_approvals for each row execute function refuse_budget_audit();",
+    );
+    try {
+      await assert.rejects(
+        approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_copy_auditfail", budgetUsd: 0.5, actorId: "user_admin_a", category: "copy" }),
+        /the audit row was refused/,
+      );
+    } finally {
+      await db.exec("drop trigger if exists refuse_budget_audit on orchestrator_budget_approvals; drop function if exists refuse_budget_audit();");
+    }
+    assert.deepEqual(await getPlan(db.sql, ORG, "plan_approval_copy_auditfail"), before, "the brief is exactly as it was before the approval");
+    assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_copy_auditfail", 10), []);
   });
 });

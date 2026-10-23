@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { contentHash } from "../contracts/hash.ts";
-import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "./contracts.ts";
+import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type NodeKind, type OrchestratorPlan } from "./contracts.ts";
 import { editNode } from "./dirty.ts";
 import { CallRefusedError, NotConnectedError, StepQueuedError, runPlan, runFingerprint, type Handlers, type NodeHandler, type RunCache } from "./execute.ts";
 import { loadCatalog } from "./catalog.ts";
@@ -36,18 +36,81 @@ const reasonOf = (events: NodeEvent[], id: string, state: NodeEvent["state"]) =>
 const nodeById = new Map(sample.nodes.map((node) => [node.id, node]));
 const estimateOf = (id: string): number => nodeById.get(id)?.estimateUsd ?? 0;
 
-test("a handler that reports an unusable cost fails its step, and nothing is added to the spend for it", async () => {
+test("a handler that reports an unusable cost fails its step, and its hold is charged: an unusable figure is not a free call", async () => {
   const paid = sample.nodes.find((node) => node.estimateUsd !== null);
   if (paid === undefined) throw new Error("the sample plan has a paid step");
-  for (const bad of [Number.NaN, -0.5, Number.POSITIVE_INFINITY]) {
+  // Not a number, negative, not finite, or a string where a number belongs.
+  for (const bad of [Number.NaN, -0.5, Number.POSITIVE_INFINITY, "0.5" as unknown as number]) {
     const reportsBad: NodeHandler = async ({ node }) => ({ outputHash: contentHash({ id: node.id }), costUsd: bad });
     const events: NodeEvent[] = [];
     const result = await run(sample, recordingHandlers([], { [paid.kind]: reportsBad }), new Map(), events);
-    assert.equal(stateOf(events, paid.id), "failed");
-    assert.equal(events.filter((event) => event.nodeId === paid.id).at(-1)?.reason, "the step reported an unusable cost");
+    const failed = events.filter((event) => event.nodeId === paid.id).at(-1);
+    assert.equal(failed?.state, "failed");
+    assert.equal(failed?.reason, "the step reported an unusable cost");
+    assert.equal(failed?.costUsd, estimateOf(paid.id), "the step's hold is charged, as a failed step's is");
     const done = order.filter((id) => stateOf(events, id) === "done");
-    const expected = done.reduce((sum, id) => sum + estimateOf(id), 0);
+    const expected = done.reduce((sum, id) => sum + estimateOf(id), 0) + estimateOf(paid.id);
     assert.ok(Math.abs(result.spentUsd - expected) < 1e-9, `spent ${result.spentUsd}, expected ${expected} for ${String(bad)}`);
+  }
+});
+
+test("an output the store refuses to keep fails its step: the bill stays counted on its failed event, nothing is cached, and its readers wait", async () => {
+  const billed: NodeHandler = async ({ node }) => ({ outputHash: contentHash({ id: node.id }), costUsd: 0.5 });
+  const events: NodeEvent[] = [];
+  const cache: RunCache = new Map();
+  const kept: string[] = [];
+  const result = await runPlan({
+    plan: sample,
+    order,
+    handlers: recordingHandlers([], { analysis: billed }),
+    cache,
+    emit: (event) => events.push(event),
+    onOutput: async (output) => {
+      if (output.nodeId === "analyze_ref") throw new Error("the database refused the write");
+      kept.push(output.nodeId);
+    },
+  });
+  const failed = events.filter((event) => event.nodeId === "analyze_ref").at(-1);
+  assert.equal(failed?.state, "failed");
+  assert.equal(failed?.costUsd, 0.5, "the bill is on the failed event, so a later run counts it");
+  assert.equal(failed?.reason, "the output could not be stored, so the step is not kept: the database refused the write");
+  assert.equal(stateOf(events, "script"), "skipped", "the step that reads the unkept output waits");
+  assert.equal(result.status, "incomplete");
+  assert.ok(Math.abs(result.spentUsd - 0.5) < 1e-9, `spent ${result.spentUsd}: the bill is spent`);
+  assert.equal(cache.size, kept.length, "only the outputs that were kept are cached");
+});
+
+test("a budget line that refuses a call pauses the run at that step: the step is not failed, nothing after it starts, and nothing is held for it", async () => {
+  const budgetRefusal = "so it was not made: ";
+  const cases: Array<{ kind: NodeKind; message: string }> = [
+    {
+      kind: "analysis",
+      message: `the budget refused this call, ${budgetRefusal}the workspace month has committed 5 USD, at or above its 5 USD budget, so no paid call starts`,
+    },
+    {
+      kind: "video",
+      message: `the budget refused this video, ${budgetRefusal}openrouter:video: call video would take the request to 0.9 USD, above its 0.5 USD budget, so it does not start`,
+    },
+  ];
+  for (const { kind, message } of cases) {
+    const stepId = sample.nodes.find((node) => node.kind === kind)?.id ?? "";
+    const events: NodeEvent[] = [];
+    const refused: NodeHandler = async () => {
+      throw new CallRefusedError(message);
+    };
+    const result = await run(sample, recordingHandlers([], { [kind]: refused }), new Map(), events);
+    assert.equal(result.status, "paused", `${kind}: the run pauses`);
+    assert.equal(stateOf(events, stepId), "paused", `${kind}: the step is paused`);
+    assert.equal(
+      events.some((event) => event.nodeId === stepId && event.state === "failed"),
+      false,
+      `${kind}: the step is not failed`,
+    );
+    assert.equal(reasonOf(events, stepId, "paused"), `budget reached, project not finished: ${message.slice(message.indexOf(budgetRefusal) + budgetRefusal.length)}`);
+    for (const id of order.slice(order.indexOf(stepId) + 1)) assert.equal(stateOf(events, id), "planned", `${id} does not start after the pause`);
+    const before = order.slice(0, order.indexOf(stepId));
+    const expected = before.reduce((sum, id) => sum + estimateOf(id), 0);
+    assert.ok(Math.abs(result.spentUsd - expected) < 1e-9, `spent ${result.spentUsd}, expected ${expected}: the paused step adds nothing`);
   }
 });
 

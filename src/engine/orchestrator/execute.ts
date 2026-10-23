@@ -8,6 +8,10 @@
 //   is already in the run's starting spend.
 // - a step with no handler for its kind is `not_connected`: it does not run and returns no output.
 // - a step whose handler throws is `failed`, and every step that reads it is `skipped`.
+// - a budget line that refuses a call pauses the run at that step (D17): the step is not failed, and nothing is held for it.
+// - an unusable cost is not a free call: a paid step charges its hold, as a failed step does.
+// - each step's output is handed to onOutput as the step completes, before it counts as done. A write that throws fails the step, and its
+//   cost stays counted on its failed event, so a later run counts it (D12).
 // Cache hits are reported as `cache_hit` and cost nothing. The handlers are injected, so this file calls no provider.
 
 import { contentHash } from "../contracts/hash.ts";
@@ -73,6 +77,16 @@ export type Handlers = Partial<Record<NodeKind, NodeHandler>>;
 /** Outputs kept between runs, by cache key. A cache hit reuses an output of an identical step. */
 export type RunCache = Map<string, NodeOutput>;
 
+/** A step's new output as it completes, for the store (run.ts). `costUsd` is the charged cost, the cost the stored output keeps. */
+export type CompletedOutput = {
+  nodeId: string;
+  cacheKey: string;
+  outputHash: string;
+  costUsd: number | null;
+  body: string | null;
+  category: BudgetCategory | null;
+};
+
 export type RunResult = {
   status: "complete" | "paused" | "incomplete";
   /** What the run has spent. A step that reports no actual cost is charged its hold, so the run never assumes a free call. */
@@ -97,6 +111,22 @@ function blockOf(committedUsd: number, holdUsd: number, lineUsd: number, categor
   return `${name}budget reached, project not finished: the next step's hold of $${holdUsd.toFixed(4)} would take the spend past the $${lineUsd.toFixed(4)} ${name}budget (committed $${committedUsd.toFixed(4)})`;
 }
 
+/** The budget's line refusal, as budget/reserve.ts words it: a line is reached, or the call's own hold would take it past. */
+const BUDGET_LINE_REFUSAL = /budget, so (?:no paid call starts|it does not start)/;
+
+/** What production.ts puts before the budget's own reason in a refused call's message. */
+const REFUSED_BEFORE_REASON = "so it was not made: ";
+
+/**
+ * The budget's reason when a call was refused by a budget line (D17), or null for any other refusal. A line refusal pauses the run at its
+ * step; any other refusal fails the step. The reason is the budget's own words, which carry the committed amount and the line.
+ */
+function budgetLineRefusalOf(message: string): string | null {
+  if (!BUDGET_LINE_REFUSAL.test(message)) return null;
+  const at = message.indexOf(REFUSED_BEFORE_REASON);
+  return at === -1 ? message : message.slice(at + REFUSED_BEFORE_REASON.length);
+}
+
 export async function runPlan(opts: {
   plan: OrchestratorPlan;
   order: string[];
@@ -115,6 +145,11 @@ export async function runPlan(opts: {
   queued?: ReadonlySet<string>;
   /** Measure mode (D15). Absent or null: off. */
   measure?: MeasureOptions | null;
+  /**
+   * Handed each step's new output as the step completes, before the step counts as done (run.ts stores it). Awaited: a write that throws
+   * fails the step, and its cost is still counted on its failed event (D12). Absent: the outputs are kept in the run's cache only.
+   */
+  onOutput?: (output: CompletedOutput) => Promise<void>;
 }): Promise<RunResult> {
   const { plan, order, handlers, cache, emit } = opts;
   const line = opts.lineUsd ?? plan.budgetUsd;
@@ -217,19 +252,31 @@ export async function runPlan(opts: {
       }
       const output = await handler({ node, key, upstream, upstreamKinds });
       // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the hold is
-      // charged. Anything else fails the step, and nothing is added to the spend or kept as output.
+      // charged. An unusable figure is not a free call either: a paid step charges its hold, as a failed step does (D12, fail closed).
       const reported = output.costUsd ?? null;
       if (reported !== null && !(Number.isFinite(reported) && reported >= 0)) {
-        set(id, "failed", null, null, "the step reported an unusable cost");
+        const held = paidKind ? hold : null;
+        if (held !== null) addSpend(category, held);
+        set(id, "failed", null, held, "the step reported an unusable cost");
         continue;
       }
       // A paid step keeps its charged cost on the stored output, so a later run can total the plan's spend from its stored outputs alone.
       const charged = paidKind ? (reported ?? hold ?? 0) : reported;
       const body = output.body ?? null;
+      // The bill is spent from here, whether or not its output can be kept: the spend counts it before the write is attempted.
+      addSpend(category, charged ?? 0);
+      try {
+        await opts.onOutput?.({ nodeId: id, cacheKey: key, outputHash: output.outputHash, costUsd: charged, body, category });
+      } catch (writeError) {
+        // The output is not kept, so nothing is cached and the steps that read it wait. The cost is not dropped: the failed event carries the
+        // charged cost, and a later run counts it as a failed hold.
+        const message = writeError instanceof Error ? writeError.message : "the write failed";
+        set(id, "failed", null, charged, `the output could not be stored, so the step is not kept: ${message}`.slice(0, REASON_MAX));
+        continue;
+      }
       cache.set(key, { outputHash: output.outputHash, costUsd: charged, body });
       outputs.set(id, output.outputHash);
       bodies.set(id, body);
-      addSpend(category, charged ?? 0);
       set(id, "done", output.outputHash, charged, null);
     } catch (error) {
       // No provider is connected: the handler stopped before any call, so nothing is held and nothing is kept.
@@ -243,8 +290,15 @@ export async function runPlan(opts: {
         set(id, "queued", null, null, error.message);
         continue;
       }
-      // A refusal before any call: the step fails, and no hold is kept, because nothing was committed.
+      // A refusal before any call. A budget line that refused it pauses the run at this step (D17): the step is not failed, and nothing was
+      // committed, so nothing is held. Any other refusal fails the step, with no hold, because nothing was committed.
       if (error instanceof CallRefusedError) {
+        const refusal = budgetLineRefusalOf(error.message);
+        if (refusal !== null) {
+          set(id, "paused", null, null, `budget reached, project not finished: ${refusal}`);
+          paused = true;
+          break;
+        }
         set(id, "failed", null, null, error.message);
         continue;
       }
