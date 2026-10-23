@@ -61,8 +61,6 @@ export function ContentFactoryScreen() {
   return (
     <div className="space-y-6">
       {header}
-      <OrchestratorModelPanel organizationId={organizationId} />
-      <OrchestratorPlans />
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"
@@ -87,6 +85,8 @@ export function ContentFactoryScreen() {
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
         </>
       ) : null}
+      <OrchestratorPlans />
+      <OrchestratorModelPanel organizationId={organizationId} />
     </div>
   );
 }
