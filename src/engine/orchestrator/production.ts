@@ -11,6 +11,8 @@
 //   the durable poll (engine.asset_poll, asset-poll.ts) settles it when the provider has finished, and stores the step's output so the next
 //   run of the plan reuses it. A video step names its model class in params.model_class (planner prompt v2 asks for it). An avatar step
 //   reads its presenter image (a visual step) and its voice steps. Without a durable poll connected, neither step is connected.
+//   A queued job keeps its hold until the poll settles it (D14): a step with a job still waiting for its cache key reports queued and submits
+//   nothing. A step with no engine price runs only in measure mode (D15), held to the ceiling times its length; otherwise it is refused.
 //
 // Not connected, and so reported as not_connected by the executor because they have no handler: edit, compose and render. The engine's
 // edit and render stages run inside a production request, on its artifacts (EDL, voice timings, kit inputs). A plan step carries none of
@@ -24,11 +26,14 @@ import { contentHash } from "../contracts/hash.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import type { ChatMessage } from "../gateway/openrouter.ts";
 import { paidCall, type LockableLedger } from "../gateway/paid.ts";
+import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { NodeKind, PlanNode } from "./contracts.ts";
 import { CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
 import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceOutcome } from "../assets/router.ts";
 import type { AssetJob } from "../assets/job.ts";
+import { openQueuedJob } from "./holds.ts";
+import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 
 export const ANALYSIS_MAX_TOKENS = 1200;
 export const SCRIPT_MAX_TOKENS = 2000;
@@ -90,6 +95,13 @@ export type ProductionDeps = {
    * are not connected, so nothing is submitted that no poll would ever collect.
    */
   queueAsset?: (entry: QueuedAsset) => Promise<void>;
+  /**
+   * The database the run's queued jobs are kept in (orchestrator_asset_jobs). A video or avatar step with a job still waiting for its cache
+   * key reports queued and submits nothing (D14). Absent: that guard is off, and a repeat submit is answered by the router as a duplicate.
+   */
+  sql?: Sql;
+  /** Measure mode (D15): a video or avatar step with no engine price may run, held to the ceiling times its length. Absent or null: off. */
+  measure?: MeasureOptions | null;
   /** The time the orchestrating catalog was read (ISO). The model choice of an asset step carries it. */
   catalogReadAt: string;
 };
@@ -103,6 +115,10 @@ export type QueuedAsset = {
   input: ProduceInput;
   job: AssetJob;
   runAfterMs: number;
+  /** The hold of this submit (D14): the engine's estimate, or in measure mode the ceiling times the length. It counts until the poll settles it. */
+  hold: number;
+  /** The clip's length in seconds when the step names a positive one, or null. A settled clip with a reported bill is measured by it. */
+  seconds: number | null;
 };
 
 type TextStepSpec<T> = {
@@ -395,6 +411,10 @@ function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler 
  * A video or avatar step. The provider takes the job and makes it later, so the router only submits: an accepted job is queued, and the
  * durable poller (engine.asset_poll) settles it. A later run of the plan finds the stored output. Anything that is not a queued job is
  * an outcome, handled as the inline steps handle theirs.
+ *
+ * The money of the step (D14, D15). A job already waiting for this cache key has its hold counted, so the step reports queued and nothing
+ * is submitted. Otherwise the step must have a hold: its engine estimate, or in measure mode its ceiling times its length. A step with no
+ * hold does not run. The accepted job is queued with its hold, which the poll keeps counted until it settles the job.
  */
 function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHandler {
   return async ({ node, key, upstream, upstreamKinds }): Promise<NodeOutput> => {
@@ -403,15 +423,26 @@ function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHa
     const queue = deps.queueAsset;
     if (queue === undefined) throw new NotConnectedError("no durable poll is connected for queued assets, so nothing is submitted");
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
+    if (deps.sql !== undefined && (await openQueuedJob(deps.sql, deps.organizationId, deps.planId, key))) {
+      throw new StepQueuedError(`the ${kind} is still queued at its provider. Its hold is already counted, so nothing is submitted; run the plan again once its poll has settled it.`);
+    }
+    const hold = holdUsdOf(node, deps.measure ?? null);
+    if (hold === null) throw new CallRefusedError(`the ${kind} step has no price and measure mode is off, so nothing is submitted`);
     const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
     const input = routedInput(deps, spec, kind, null);
     const report = await router.submit(input);
     if (report.step.status === "submitted") {
-      await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs });
+      await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs, hold, seconds: secondsOf(node) });
       throw new StepQueuedError(`the ${kind} is accepted by its provider and queued. Its poll is durable; run the plan again once it has finished to use it.`);
     }
     return outputOf(report.step, kind);
   };
+}
+
+/** A step's length in seconds when it names a positive one, or null. A queued clip keeps it, so a settled clip can be measured. */
+function secondsOf(node: PlanNode): number | null {
+  const seconds = node.params.seconds;
+  return typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
 /** A parameter the step must name as text, or a refusal that says which one is missing. */
