@@ -14,6 +14,7 @@ export const qk = {
   learning: (brandId: string) => ["learning", brandId] as const,
   factory: (brandId: string) => ["factory", brandId] as const,
   brandQueue: (brandId: string) => ["brand-queue", brandId] as const,
+  discoveredItems: (brandId: string) => ["discovered-items", brandId] as const,
   calibration: (brandId: string) => ["calibration", brandId] as const,
   calibrationVersions: (brandId: string) => ["calibration-versions", brandId] as const,
   integrations: (organizationId: string) => ["integrations", organizationId] as const,

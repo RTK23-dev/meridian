@@ -21,7 +21,9 @@ import {
 } from "@/lib/meridian/machine";
 import { HYPOTHESES } from "@/lib/meridian/opportunity/catalog";
 import { startDiscovery } from "@/lib/meridian/research/actions";
-import { useMarketQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
+import { useDiscoveredItemsQuery, useMarketQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
+import type { DiscoveredItemRow } from "@/lib/meridian/discovery/item-list";
+import { StoredPages } from "@/components/market/stored-pages";
 import { qk } from "@/lib/query/keys";
 import { competitorFieldsSchema, publicPageSchema, researchCollectionSchema, type CompetitorFields, type CompetitorFieldsOutput, type PublicPageFields, type ResearchCollection, type ResearchCollectionFields } from "@/lib/meridian/schemas/market";
 import { observationFieldsSchema, type ObservationFields, type ObservationFieldsOutput } from "@/lib/meridian/schemas/observation";
@@ -57,6 +59,17 @@ function Page() {
 
 function MarketPage({ brandId }: { brandId: string }) {
   const query = useMarketQuery(brandId);
+  const storedPages = useDiscoveredItemsQuery(brandId);
+
+  // The page's address and text fill the observation form. The member chooses the competitor, angle and hook, and ranking reads
+  // the observation only after it is stored.
+  function prefillObservationFromPage(item: DiscoveredItemRow) {
+    observationForm.setValue("sourceUrl", item.url, { shouldDirty: true });
+    observationForm.setValue("message", item.excerpt, { shouldDirty: true });
+    setNote(`Filled the observation from ${item.title || item.url}. Choose the competitor, angle and hook, then store it. Ranking reads it only after it is stored.`);
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    document.getElementById("market-observed")?.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "start" });
+  }
   const market = query.data ?? null;
   const [note, setNote] = useState<string | null>(null);
   const [researchView, setResearchView] = useState<"gallery" | "table">("gallery");
@@ -241,6 +254,11 @@ function MarketPage({ brandId }: { brandId: string }) {
         <div className="mt-6">
           <h3 className="text-xl">Recent discovery runs</h3>
           <div className="mt-3"><DiscoveryRunList runs={market.discoveryRuns} /></div>
+        </div>
+        <div className="mt-6">
+          <h3 className="text-xl">Stored pages and posts</h3>
+          <p className="mt-1 text-sm text-muted">Each one is evidence you can read. Ranking reads a page only after a member stores it as a competitor observation, so the angle and hook stay a person's decision.</p>
+          <div className="mt-3"><StoredPages query={storedPages} canEdit={canEdit} onUse={prefillObservationFromPage} /></div>
         </div>
       </Card>
       <Card>

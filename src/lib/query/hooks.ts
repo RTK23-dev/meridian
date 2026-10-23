@@ -7,6 +7,7 @@ import { getIntelligence, getLearning, getMachine, getMarket, listBrandAssets, l
 import { getCalibration, listCalibrationVersions } from "@/lib/meridian/calibration/actions";
 import { getFactoryBoard } from "@/lib/meridian/factory/actions";
 import { getBrandProductionQueue } from "@/lib/meridian/jobs/actions";
+import { listDiscoveredItems } from "@/lib/meridian/discovery/item-actions";
 import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, listWindowReleasedBudget } from "@/lib/meridian/studio/actions";
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
@@ -93,6 +94,14 @@ export const factoryQueryOptions = (userId: string | null | undefined, brandId: 
   queryKey: userScopedQueryKey(userId, qk.factory(brandId)),
   queryFn: () => getFactoryBoard({ data: { brandId } }),
 });
+export const discoveredItemsQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.discoveredItems(brandId)),
+  queryFn: () => listDiscoveredItems({ data: { brandId } }),
+});
+export const useDiscoveredItemsQuery = (brandId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...discoveredItemsQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
+};
 export const brandQueueQueryOptions = (userId: string | null | undefined, brandId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.brandQueue(brandId)),
   queryFn: () => getBrandProductionQueue({ data: { brandId } }),
