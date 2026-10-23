@@ -12,8 +12,9 @@ import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
 import { editPlanStepFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
-import { approvePlanBudget } from "@/engine/orchestrator/approval";
+import { approvePlanBudget, listBudgetApprovals } from "@/engine/orchestrator/approval";
 import { INITIAL_POLICY, readOrchestratorPolicy, writeOrchestratorPolicy } from "@/engine/orchestrator/policy-store";
+import { effectiveDisabledFamilies, readBrandPolicy, writeBrandPolicy } from "@/engine/orchestrator/brand-policy";
 import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
@@ -286,7 +287,7 @@ export const approveOrchestratorBudget = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
-    const outcome = await approvePlanBudget(sql, { organizationId, planId: data.planId, budgetUsd: data.budgetUsd });
+    const outcome = await approvePlanBudget(sql, { organizationId, planId: data.planId, budgetUsd: data.budgetUsd, actorId: context.userId });
     if (outcome.status === "not_found") throw new Error("Plan not found.");
     if (outcome.status === "refused") return { status: "refused" as const, reasons: outcome.reasons };
     const stored = await getPlan(sql, organizationId, data.planId);
@@ -355,4 +356,66 @@ export const saveOrchestratorModelSetting = createServerFn({ method: "POST" })
     }
     await setOrchestratorModel(sql, { organizationId: data.organizationId, modelId: data.orchestratorModelId, actorId: context.userId });
     return { orchestratorModel: data.orchestratorModelId, checkedAgainstCatalog };
+  });
+
+/** The budget approvals of a plan, newest first, for any member of the brand's workspace. Each one records who approved and the budgets (decision D13). */
+export const listBudgetApprovalsFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    const plan = await getPlan(sql, organizationId, data.planId);
+    if (plan === null) throw new Error("Plan not found.");
+    return { approvals: await listBudgetApprovals(sql, organizationId, data.planId, 50) };
+  });
+
+/**
+ * The model families the brand switches off, the workspace's, and the set a plan of this brand is held to (decision D16). Any member of the
+ * brand's workspace reads it.
+ */
+export const getBrandPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    const workspace = await readOrchestratorPolicy(sql, organizationId);
+    const brandFamilies = await readBrandPolicy(sql, organizationId, data.brandId);
+    return {
+      brandFamilies,
+      workspaceFamilies: workspace.disabledModelFamilies,
+      effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies),
+    };
+  });
+
+/**
+ * Save the model families the brand switches off. Only a workspace admin changes it. A brand may only add families: the workspace's stay off,
+ * and the engine checks every family it is given before anything is written.
+ */
+export const saveBrandPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    if (!Array.isArray(body.disabledModelFamilies)) throw new Error("The model families must be a list.");
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      disabledModelFamilies: body.disabledModelFamilies.map((family) => text(family, 200, "Model family")).filter((family) => family !== ""),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const brandFamilies = await writeBrandPolicy(sql, {
+      organizationId,
+      brandId: data.brandId,
+      actorId: context.userId,
+      disabledModelFamilies: data.disabledModelFamilies,
+    });
+    const workspace = await readOrchestratorPolicy(sql, organizationId);
+    return {
+      brandFamilies,
+      workspaceFamilies: workspace.disabledModelFamilies,
+      effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies),
+    };
   });
