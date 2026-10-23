@@ -18,7 +18,7 @@ import { videoProfilesFromListing } from "./providers/openrouterVideo.ts";
 import { assetSpec, fakeClock, fixture, gatewayFor, json, ledgerWithReservation, routesWith, scripted, WORKSPACE, type Reply } from "./test/recorded.ts";
 
 const KLING = "kwaivgi/kling-v3.0-std";
-const VEO_LITE = "google/veo-3.1-lite";
+const WAN = "alibaba/wan-2.6";
 const READ_AT = "2026-10-16T09:00:00.000Z";
 
 /** The recorded GET /videos/models listing of the gateway's catalog tests, unverified live (gateway/test/fixtures/README.md). */
@@ -60,7 +60,7 @@ const choice = (modelId: string, source: ModelChoice["source"] = "orchestrator")
   provider: "openrouter",
   modelId,
   source,
-  reason: "the cheapest eligible per-second price for a 6 s shot",
+  reason: "the cheapest eligible per-second price for a 5 s shot",
   catalogReadAt: READ_AT,
 });
 
@@ -103,27 +103,27 @@ const submittedModels = (requests: { method: string; url: string; body?: unknown
 describe("router with a model choice", () => {
   it("sends the call to the chosen OpenRouter model, estimates it from the catalog price, and settles to usage.cost", async () => {
     const h = await harness({
-      script: { "POST /api/v1/videos": submitFor({ [VEO_LITE]: accepted("job-lite") }), "GET /api/v1/videos/job-lite": completed("job-lite", 0.31) },
+      script: { "POST /api/v1/videos": submitFor({ [WAN]: accepted("job-wan") }), "GET /api/v1/videos/job-wan": completed("job-wan", 0.31) },
     });
-    const spec = assetSpec({ durationMs: 6000, modelChoice: choice(VEO_LITE) });
+    const spec = assetSpec({ durationMs: 5000, modelChoice: choice(WAN) });
     const report = await h.router.produce(h.input(spec));
 
     assert.equal(report.outcome.status, "done", JSON.stringify(report.outcome));
     if (report.outcome.status !== "done") return;
-    assert.deepEqual(submittedModels(h.requests), [VEO_LITE], "only the chosen model is called, not the route table's Kling");
-    assert.equal(report.outcome.asset.providerId, `openrouter:${VEO_LITE}`);
-    assert.equal(report.outcome.asset.cacheKey, routeCacheKey(spec, `openrouter:${VEO_LITE}`, {}));
+    assert.deepEqual(submittedModels(h.requests), [WAN], "only the chosen model is called, not the route table's Kling");
+    assert.equal(report.outcome.asset.providerId, `openrouter:${WAN}`);
+    assert.equal(report.outcome.asset.cacheKey, routeCacheKey(spec, `openrouter:${WAN}`, {}));
     assert.equal(report.outcome.asset.costUsd, 0.31, "the bill is OpenRouter's usage.cost, not the estimate");
 
     const rows = await h.ledger.listEntries(h.reservationId);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0]?.model, VEO_LITE);
-    assert.equal(rows[0]?.estimateUsd, 0.3, "6 s at the catalog's $0.05 per second");
+    assert.equal(rows[0]?.model, WAN);
+    assert.equal(rows[0]?.estimateUsd, 0.2125, "5 s at the catalog's $0.0425 per second");
     assert.equal(rows[0]?.actualUsd, 0.31);
 
     const decision = report.decisions.find((item) => item.by === "director");
-    assert.equal(decision?.chose, `openrouter:${VEO_LITE}`);
-    assert.match(decision?.reason ?? "", /catalog price \$0\.05 per_second \(per-video-second\)/);
+    assert.equal(decision?.chose, `openrouter:${WAN}`);
+    assert.match(decision?.reason ?? "", /catalog price \$0\.0425 per_second \(per-video-second-1080p\)/);
   });
 
   it("prices a chosen model that is also routed from the catalog, not from the price table", async () => {
@@ -136,13 +136,21 @@ describe("router with a model choice", () => {
     assert.equal(rows[0]?.estimateUsd, 0.7, "5 s at the catalog's 1080p rate $0.14, not the price table's $0.126");
   });
 
+  it("refuses a chosen model for a duration it does not list: it is not sent the call, and the fallback says which durations are listed", async () => {
+    const h = await harness({ script: {} });
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 6000, modelChoice: choice(KLING) })));
+    assert.equal(report.decisions[0]?.chose, "route table for video.cinematic");
+    assert.match(report.decisions[0]?.reason ?? "", /no longer fits the call \(duration_outside: 6 s is not one of the durations listed \(5, 10 s\)\)/);
+    assert.deepEqual(submittedModels(h.requests), [], "a 6 s call is not sent to a model that lists 5 and 10 s");
+  });
+
   it("falls back to the route table, and records it, when the chosen model has left the catalog", async () => {
-    const catalog = catalogSource(catalogEntries.filter((entry) => entry.id !== VEO_LITE));
+    const catalog = catalogSource(catalogEntries.filter((entry) => entry.id !== WAN));
     const h = await harness({
       catalog,
       script: { "POST /api/v1/videos": submitFor({ [KLING]: accepted("job-k") }), "GET /api/v1/videos/job-k": completed("job-k", 0.63) },
     });
-    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000, modelChoice: choice(VEO_LITE) })));
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000, modelChoice: choice(WAN) })));
     assert.equal(report.outcome.status, "done");
     if (report.outcome.status !== "done") return;
     assert.deepEqual(submittedModels(h.requests), [KLING]);
@@ -158,12 +166,12 @@ describe("router with a model choice", () => {
     const h = await harness({
       script: { "POST /api/v1/videos": submitFor({ [KLING]: accepted("job-k") }), "GET /api/v1/videos/job-k": completed("job-k", 0.63) },
     });
-    // Veo Lite takes no last frame (the recorded listing), and this call has one.
-    const spec = assetSpec({ durationMs: 5000, firstFrame: "https://cdn.example.com/a.png", lastFrame: "https://cdn.example.com/b.png", modelChoice: choice(VEO_LITE) });
+    // The recorded listing names no last frame for Wan 2.6, and this call has one: unknown does not fit.
+    const spec = assetSpec({ durationMs: 5000, lastFrame: "https://cdn.example.com/b.png", modelChoice: choice(WAN) });
     const report = await h.router.produce(h.input(spec));
     assert.equal(report.outcome.status, "done");
     assert.deepEqual(submittedModels(h.requests), [KLING]);
-    assert.match(report.decisions[0]?.reason ?? "", /no longer fits the call \(last_frame_unsupported/);
+    assert.match(report.decisions[0]?.reason ?? "", /no longer fits the call \(last_frame_unknown/);
   });
 
   it("falls back, and says so, when the runtime has no catalog", async () => {
@@ -171,7 +179,7 @@ describe("router with a model choice", () => {
       catalog: null,
       script: { "POST /api/v1/videos": submitFor({ [KLING]: accepted("job-k") }), "GET /api/v1/videos/job-k": completed("job-k", 0.63) },
     });
-    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000, modelChoice: choice(VEO_LITE) })));
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000, modelChoice: choice(WAN) })));
     assert.equal(report.outcome.status, "done");
     assert.deepEqual(submittedModels(h.requests), [KLING]);
     assert.match(report.decisions[0]?.reason ?? "", /no model catalog/);
@@ -182,21 +190,21 @@ describe("router with a model choice", () => {
     const h = await harness({
       cache,
       script: {
-        "POST /api/v1/videos": submitFor({ [VEO_LITE]: accepted("job-lite"), [KLING]: accepted("job-k") }),
-        "GET /api/v1/videos/job-lite": completed("job-lite", 0.3),
+        "POST /api/v1/videos": submitFor({ [WAN]: accepted("job-wan"), [KLING]: accepted("job-k") }),
+        "GET /api/v1/videos/job-wan": completed("job-wan", 0.3),
         "GET /api/v1/videos/job-k": completed("job-k", 0.84),
       },
     });
-    const base = assetSpec({ durationMs: 6000 });
-    const lite = await h.router.produce(h.input({ ...base, modelChoice: choice(VEO_LITE) }));
-    // Kling lists 5 and 10 s only, so the same 6 s spec cannot go to it; a 10 s spec can. The cache key differs by model either way.
+    const base = assetSpec({ durationMs: 5000 });
+    const lite = await h.router.produce(h.input({ ...base, modelChoice: choice(WAN) }));
+    // Kling lists 5 and 10 s, so it takes this 5 s spec and a 10 s one. The cache key differs by model either way.
     assert.equal(lite.outcome.status, "done");
-    const again = await h.router.produce(h.input({ ...base, modelChoice: choice(VEO_LITE) }));
+    const again = await h.router.produce(h.input({ ...base, modelChoice: choice(WAN) }));
     assert.equal(again.outcome.status === "done" && again.outcome.asset.cacheHit, true, "the same spec and model is a hit");
     const kling = await h.router.produce(h.input({ ...base, durationMs: 10000, modelChoice: choice(KLING) }));
     assert.equal(kling.outcome.status === "done" && kling.outcome.asset.cacheHit, false);
     assert.notEqual(
-      routeCacheKey({ ...base, modelChoice: choice(VEO_LITE) }, `openrouter:${VEO_LITE}`, {}),
+      routeCacheKey({ ...base, modelChoice: choice(WAN) }, `openrouter:${WAN}`, {}),
       routeCacheKey({ ...base, modelChoice: choice(KLING) }, `openrouter:${KLING}`, {}),
     );
   });

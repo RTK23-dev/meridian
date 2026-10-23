@@ -44,6 +44,8 @@ export type SetupRow = {
   label: string;
   group: SetupGroup;
   status: SetupStatus;
+  /** True when the row is chosen (the engine is set for the workspace or deployment) or a key is saved for it. Read from the server state. */
+  selected: boolean;
   /** The reason, in plain words. It names the variable or the step that is missing. It never contains a key. */
   reason: string;
   /** The masked fingerprint of the key in use, or null. */
@@ -53,7 +55,7 @@ export type SetupRow = {
   save: SetupSave;
   /** True when a saved workspace key is in the entry, so an admin can remove it. */
   removable: boolean;
-  /** True when the row offers Test Connection. The video engine rows do; their test reads the key and calls no provider. */
+  /** True when the row offers Check key. The video engine rows do; the check reads the key and calls no provider. */
   testable: boolean;
 };
 
@@ -147,6 +149,7 @@ function keyedRow(category: CredentialCategory, summary: ProviderConfigSummary):
     label: KEYED_LABEL[category],
     group: groupOf(category),
     status,
+    selected: state !== "not_configured",
     reason,
     fingerprint: state === "usable" ? summary.keyFingerprint ?? null : null,
     note,
@@ -176,6 +179,7 @@ function decisionEngineRow(engines: SetupEngines): SetupRow {
     label: "Decision engine",
     group: "decisions",
     status,
+    selected: engines.active.source === "workspace" || engines.active.source === "deployment",
     reason: `${lead} ${chosen} ${health.message ?? ""}`.trim(),
     fingerprint: null,
     note: invalid ? `DECISION_ENGINE is set to "${invalid}", which is not an engine. The default is in use.` : null,
@@ -193,6 +197,7 @@ function driveRow(summary: ProviderConfigSummary): SetupRow {
     label: "Google Drive",
     group: "storage",
     status: summary.configured ? "deployment_shared_default" : "not_configured",
+    selected: summary.configured,
     reason: summary.configured
       ? `${detail} The deployment shares these credentials with every workspace.`
       : `${detail} Until Google Drive is connected, files use the filesystem fallback.`,
@@ -230,6 +235,72 @@ export function rowsIn(rows: SetupRow[], group: SetupGroup): SetupRow[] {
   return rows.filter((row) => row.group === group);
 }
 
+/**
+ * One of the three states a row is read in: selected (chosen, or a key is saved), configured (the credential or setting is read and
+ * usable, with no provider call), or provider reached (a live provider request answered). Setup sends no provider request, so the
+ * last state is never "yes" here.
+ */
+export type SetupStateName = "selected" | "configured" | "provider";
+
+/**
+ * One state of a row. "not_checked" means no provider request was made to answer it, so it is never shown as a pass. A "no" names
+ * what is missing.
+ */
+export type SetupStateReading = { name: SetupStateName; label: string; value: "yes" | "no" | "not_checked"; detail: string };
+
+/** The last Check key answer for a row, from this session only. Null until the person has run one. */
+export type TestAnswer = { status: string } | null;
+
+/**
+ * The three states of a row, in order. Selected: the row is chosen, or a key is saved for it. Configured: the credential or setting
+ * is read and usable (for the engine, the engine has what it needs). Provider reached: always not checked here, because Setup reads
+ * saved configuration and sends no provider request. A Check key answer is recorded in the configured detail, and never as a
+ * provider check.
+ */
+export function setupStates(row: SetupRow, test: TestAnswer): SetupStateReading[] {
+  const engine = row.id === "decision_engine";
+  const configured = row.status === "usable" || row.status === "deployment_shared_default";
+
+  const selected: SetupStateReading = row.selected
+    ? {
+        name: "selected",
+        label: "Selected",
+        value: "yes",
+        detail: engine ? "Chosen for this workspace or set by the deployment." : "A key is saved, or the deployment shares one.",
+      }
+    : {
+        name: "selected",
+        label: "Selected",
+        value: "no",
+        detail: engine ? "No engine is chosen, so the default answers." : "No key is saved for this row yet.",
+      };
+
+  const configuredReading: SetupStateReading = configured
+    ? {
+        name: "configured",
+        label: "Configured",
+        value: "yes",
+        detail: engine
+          ? "The engine has what it needs to answer. No decision was requested."
+          : test?.status === "CONFIGURED"
+            ? "The key was read in a Check key run this session. No provider was called."
+            : "The key or setting is saved and readable. No provider was called.",
+      }
+    : { name: "configured", label: "Configured", value: "no", detail: row.reason };
+
+  // Setup sends no provider request for any row, so the provider state is never a pass here. A live run through the provider
+  // confirms connectivity, and the detail says so.
+  const provider: SetupStateReading = {
+    name: "provider",
+    label: "Provider reached",
+    value: "not_checked",
+    detail: engine
+      ? "Not checked. Setup reads the engine's credential and sends no decision request."
+      : "Not checked. Setup reads the saved configuration and sends no provider request. A live run confirms the provider.",
+  };
+  return [selected, configuredReading, provider];
+}
+
 /** How many rows are in each state. The panel's headline is built from these counts. */
 export function setupCounts(rows: SetupRow[]): Record<SetupStatus, number> & { total: number } {
   const counts = { usable: 0, deployment_shared_default: 0, unusable: 0, not_configured: 0, total: rows.length };
@@ -241,7 +312,7 @@ export function setupCounts(rows: SetupRow[]): Record<SetupStatus, number> & { t
 export function setupHeadline(rows: SetupRow[]): string {
   const counts = setupCounts(rows);
   const parts = [
-    `${counts.usable} usable`,
+    `${counts.usable} configured`,
     `${counts.deployment_shared_default} shared by the deployment`,
     `${counts.unusable} unusable`,
     `${counts.not_configured} not configured`,

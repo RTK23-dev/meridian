@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -7,7 +8,7 @@ import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { IdeaToTestBadge, Term } from "@/components/glossary";
 import { copy, decisionOutcome, percentOrUnknown } from "@/lib/copy";
-import { alternativeDirections, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
+import { alternativeDirections, briefableDirection, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
 import type { StudioData } from "./types.ts";
 
 /** The shortest reason that can accept a direction. The server enforces the same length. */
@@ -43,16 +44,21 @@ type DirectionStepProps = {
   pending: boolean;
   opportunities: readonly DirectionCandidate[] | undefined;
   opportunitiesFailed: boolean;
-  onAccept: (reason: string) => Promise<unknown>;
+  onAccept: (reason: string, opportunityId?: string) => Promise<unknown>;
 };
 
-/** Step 1. The recommended direction, the alternatives the stored opportunities show, and the accept action. */
+/**
+ * Step 1. The recommended direction, the alternatives the stored opportunities show, and the accept action. A person may choose
+ * one discovered alternative to brief instead; without a choice the brief is written from the recommendation, as before.
+ */
 export function DirectionStep({ session, canEdit, pending, opportunities, opportunitiesFailed, onAccept }: DirectionStepProps) {
   const reasonForm = useForm<DirectionReasonInput>({ resolver: zodResolver(directionReasonSchema), defaultValues: { reason: "" }, mode: "onChange" });
   const reason = reasonForm.watch("reason");
   const reasonDirty = reasonForm.formState.isDirty;
   const recommendation = session.recommendation;
   const alternatives = recommendation ? alternativeDirections(opportunities ?? [], recommendation.opportunityId) : [];
+  const [chosenId, setChosenId] = useState<string | null>(null);
+  const chosen = alternatives.find((item) => item.id === chosenId && briefableDirection(item)) ?? null;
 
   return (
     <div className="space-y-5">
@@ -87,6 +93,12 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           {canEdit ? (
             <div className="mt-4 space-y-3">
               <UnsavedChangesGuard dirty={reasonDirty} />
+              {chosen ? (
+                <p className="text-sm" role="status">
+                  The brief will be written from <span className="font-semibold">{chosen.label}</span>, not the recommended direction.{" "}
+                  <Button type="button" variant="quiet" size="sm" onClick={() => setChosenId(null)}>Use the recommended direction</Button>
+                </p>
+              ) : null}
               <DirectionReasonField id="direction-reason" registration={reasonForm.register("reason")} error={reasonForm.formState.errors.reason?.message} />
               <FormDiscardBar dirty={reasonDirty} subject="direction reason" onDiscard={() => reasonForm.reset({ reason: "" })} />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -96,7 +108,10 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
                   aria-describedby={(reason ?? "").trim().length < DIRECTION_REASON_MIN && !pending ? "accept-direction-hint" : undefined}
                   onClick={() => {
                     void reasonForm.handleSubmit(async (values) => {
-                      await onAccept(values.reason).then(() => reasonForm.reset({ reason: "" }), () => undefined);
+                      await onAccept(values.reason, chosen?.id).then(() => {
+                        reasonForm.reset({ reason: "" });
+                        setChosenId(null);
+                      }, () => undefined);
                     })();
                   }}
                 >
@@ -130,8 +145,8 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
         <Card>
           <h2 className="text-section font-semibold">Other directions</h2>
           <p className="mt-2 text-sm text-fg-muted">
-            The brief is always written from the recommended direction. These are the other open opportunities, for comparison.
-            Choosing one here is not available: the server writes the brief from the recommendation.
+            These are the other open opportunities. The brief is written from the recommended direction unless you choose a discovered one here.
+            An idea to test is for comparison only and cannot be briefed.
           </p>
           {opportunitiesFailed ? (
             <p role="alert" className="mt-3 text-sm text-danger">The other opportunities could not be read. Nothing is shown in their place.</p>
@@ -142,9 +157,22 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           ) : (
             <ul className="mt-3 divide-y divide-border text-sm">
               {alternatives.map((item) => (
-                <li key={item.id} className="py-3">
-                  <p className="font-semibold">{item.label}</p>
-                  <p className="text-fg-muted">{item.angle} · {item.source === "discovered" ? directionSourceLabel(item.source) : <IdeaToTestBadge />} · rank {item.expectedValue.toFixed(2)}</p>
+                <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
+                  <div className="min-w-0">
+                    <p className="font-semibold">{item.label}</p>
+                    <p className="text-fg-muted">{item.angle} · {item.source === "discovered" ? directionSourceLabel(item.source) : <IdeaToTestBadge />} · rank {item.expectedValue.toFixed(2)}</p>
+                  </div>
+                  {canEdit && briefableDirection(item) ? (
+                    <Button
+                      type="button"
+                      variant={item.id === chosen?.id ? "secondary" : "quiet"}
+                      size="sm"
+                      aria-pressed={item.id === chosen?.id}
+                      onClick={() => setChosenId(item.id === chosen?.id ? null : item.id)}
+                    >
+                      Brief this direction<span className="sr-only"> instead: {item.label}</span>
+                    </Button>
+                  ) : null}
                 </li>
               ))}
             </ul>

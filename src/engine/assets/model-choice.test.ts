@@ -13,14 +13,14 @@ function entry(id: string, price: ModelCatalogEntry["price"] = { unit: "per_seco
   return {
     id,
     modelClasses: ["video.cinematic", "video.budget"],
-    capabilities: { minSeconds: 4, maxSeconds: 10, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: null, audio: true },
+    capabilities: { minSeconds: 4, maxSeconds: 10, durationsSeconds: null, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: null, audio: true },
     price,
     readAt: READ_AT,
   };
 }
 
-const eligible = [entry("google/veo-3.1-lite"), entry("kwaivgi/kling-v3.0-std"), entry("alibaba/wan-2.6")];
-const base = { modelClass: "video.cinematic" as const, eligible, catalogReadAt: READ_AT, at: AT, fallbackModels: ["kwaivgi/kling-v3.0-std", "google/veo-3.1"] };
+const eligible = [entry("bytedance/seedance-2.0"), entry("kwaivgi/kling-v3.0-std"), entry("alibaba/wan-2.6")];
+const base = { modelClass: "video.cinematic" as const, eligible, catalogReadAt: READ_AT, at: AT, fallbackModels: ["kwaivgi/kling-v3.0-std", "alibaba/wan-2.6"] };
 
 function valid(result: ReturnType<typeof resolveModelChoice>): void {
   assert.ok(decisionSchema.safeParse(result.decision).success, "the decision fits the contract");
@@ -61,8 +61,8 @@ describe("resolveModelChoice", () => {
   });
 
   it("skips a route-table target that is not eligible and takes the next one", () => {
-    const result = resolveModelChoice({ ...base, eligible: [entry("google/veo-3.1")], pick: null, failure: "refused by the reservation" });
-    assert.equal(result.modelChoice?.modelId, "google/veo-3.1");
+    const result = resolveModelChoice({ ...base, eligible: [entry("alibaba/wan-2.6")], pick: null, failure: "refused by the reservation" });
+    assert.equal(result.modelChoice?.modelId, "alibaba/wan-2.6");
   });
 
   it("makes no choice with no candidates: modelChoice stays null and the call is left out", () => {

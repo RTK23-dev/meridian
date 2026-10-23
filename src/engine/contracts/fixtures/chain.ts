@@ -472,6 +472,7 @@ export const modelCatalogEntryFixture: ModelCatalogEntry = {
   capabilities: {
     minSeconds: 2,
     maxSeconds: 10,
+    durationsSeconds: null,
     aspectRatios: ["9:16", "16:9"],
     resolutions: ["1080p"],
     firstFrame: true,

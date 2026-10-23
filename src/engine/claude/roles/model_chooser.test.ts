@@ -16,7 +16,7 @@ const call = (callId: string, extra: Partial<ChooserCall> = {}): ChooserCall => 
   candidates: [
     {
       id: "alibaba/wan-2.6",
-      capabilities: { minSeconds: 5, maxSeconds: 5, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: null, lastFrame: null, refsMax: null, audio: false },
+      capabilities: { minSeconds: 5, maxSeconds: 5, durationsSeconds: [5], aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: null, lastFrame: null, refsMax: null, audio: false },
       price: { unit: "per_second", usd: 0.0425, sku: "per-video-second-1080p" },
     },
   ],

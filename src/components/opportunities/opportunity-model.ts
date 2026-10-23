@@ -6,6 +6,37 @@
 import { decisionOutcome, percentOrUnknown } from "../../lib/copy.ts";
 
 export type OpportunityCategory = "discovered" | "supported" | "hypothesis";
+
+/** The stored-evidence kind each ranking step records. Several steps share a kind, so the label says what kind it is, not which step. */
+const EVIDENCE_SOURCE_LABEL: Record<string, string> = {
+  creative_records: "Stored creatives",
+  market: "Stored creatives",
+  creative_embeddings: "Semantic clusters",
+  jev_research: "JEV Research (Meta Ad Library)",
+  learned_pattern: "Your recorded results",
+  performance: "Your recorded results",
+  reviews: "Your review decisions",
+  brand_brain: "Brand brain",
+  brand_rules: "Brand rules",
+  claim_rules: "Claim rules",
+  brief: "Brief",
+  vision: "Creative visual analysis",
+  products: "Product",
+  product_record: "Product",
+  workflow: "Workflow template",
+};
+
+/** Where an evidence line came from, in words a person reads. A source that is not in the list is named as unknown, never guessed. */
+export function evidenceSourceLabel(source: string): string {
+  return EVIDENCE_SOURCE_LABEL[source] ?? "Other stored evidence";
+}
+
+/**
+ * What ranking reads. Pages and posts found on Market are stored, but ranking does not read them, so the sheet says so
+ * rather than implying that every discovered page shapes an opportunity.
+ */
+export const RANKING_INPUTS_NOTE =
+  "Ranking reads stored creatives, JEV Research patterns from collected Meta Ad Library ads, your recorded results and your review decisions. Pages and posts found on Market are stored as evidence, and ranking does not read them yet.";
 export type OpportunitySortKey = "rank" | "confidence" | "status" | "risk" | "probability";
 export type SortDirection = "asc" | "desc";
 export type ScoreKey = "brandFit" | "historicalEvidence" | "marketSignal" | "novelty" | "reproducibility" | "saturation" | "risk";

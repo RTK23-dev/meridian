@@ -6,6 +6,7 @@ import {
   setupCounts,
   setupHeadline,
   setupRows,
+  setupStates,
   SETUP_GROUPS,
   type SetupEngines,
   type SetupRow,
@@ -271,11 +272,90 @@ test("the counts and the headline state counts only, and never claim a live prov
   assert.equal(counts.unusable, 1);
   assert.equal(counts.total, rows.length);
   const headline = setupHeadline(rows);
-  assert.match(headline, /2 usable/);
+  assert.match(headline, /2 configured/);
   assert.match(headline, /Nothing is checked against a live provider here\./);
 });
 
-test("the video engine group lists OpenRouter, HeyGen, Anthropic and Deepgram, each with a key form and Test Connection", () => {
+test("a usable key is selected and configured, and no check answer makes provider reached a pass", () => {
+  const testableId = setupRows({ summaries: summaries(), engines: READY_ENGINES }).find((row) => row.testable)?.id;
+  assert.ok(testableId, "a video engine row is testable");
+  const row = rowOf(
+    setupRows({
+      summaries: summaries({ [testableId]: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "…ab12" } }),
+      engines: READY_ENGINES,
+    }),
+    testableId,
+  );
+  assert.deepEqual(setupStates(row, null).map((state) => state.value), ["yes", "yes", "not_checked"]);
+  assert.match(setupStates(row, null)[2]?.detail ?? "", /Not checked/);
+  assert.equal(setupStates(row, { status: "NOT_TESTABLE" })[2]?.value, "not_checked", "a video key check is never a provider pass");
+});
+
+test("a Check key run is recorded as configuration only, and never as a provider reached", () => {
+  const jev = rowOf(
+    setupRows({
+      summaries: summaries({ jev: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...1111" } }),
+      engines: READY_ENGINES,
+    }),
+    "jev",
+  );
+  const checked = setupStates(jev, { status: "CONFIGURED" });
+  assert.equal(checked[1]?.value, "yes");
+  assert.match(checked[1]?.detail ?? "", /Check key run this session\. No provider was called\./);
+  assert.equal(checked[2]?.value, "not_checked", "a passed key check is configuration, not a provider connection");
+});
+
+test("no row reads provider reached as a pass, whatever the check answered", () => {
+  const rows = setupRows({
+    summaries: summaries({
+      jev: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...1111" },
+      production: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...2222" },
+    }),
+    engines: READY_ENGINES,
+  });
+  for (const row of rows) {
+    for (const answer of [null, { status: "CONFIGURED" }, { status: "READY" }, { status: "ERROR" }]) {
+      assert.notEqual(setupStates(row, answer)[2]?.value, "yes", `${row.id} never reads provider reached as yes`);
+    }
+  }
+});
+
+test("a row with no saved key is not selected or configured, and says what is missing", () => {
+  const row = setupRows({ summaries: summaries(), engines: READY_ENGINES }).find((item) => item.testable);
+  assert.ok(row, "a video engine row is testable");
+  const [selected, configured, provider] = setupStates(row, null);
+  assert.equal(selected?.value, "no");
+  assert.equal(configured?.value, "no");
+  assert.equal(configured?.detail, row.reason, "a missing configuration names what is missing, from the row's own reason");
+  assert.equal(provider?.value, "not_checked");
+});
+
+test("the decision engine is selected when it is chosen, and provider reached is never claimed from its credential", () => {
+  const chosen = rowOf(
+    setupRows({ summaries: summaries(), engines: { ...READY_ENGINES, active: { engineId: "jev", source: "workspace" } } }),
+    "decision_engine",
+  );
+  assert.deepEqual(setupStates(chosen, null).map((state) => state.value), ["yes", "yes", "not_checked"]);
+
+  const unset = rowOf(
+    setupRows({
+      summaries: summaries(),
+      engines: {
+        active: { engineId: "openai-decisions", source: "default" },
+        engines: [{ id: "openai-decisions", label: "OpenAI Decisions", health: { status: "NOT_CONFIGURED", message: "No OpenAI key is saved." } }],
+      },
+    }),
+    "decision_engine",
+  );
+  assert.deepEqual(setupStates(unset, null).map((state) => state.value), ["no", "no", "not_checked"]);
+});
+
+test("Google Drive has no provider request here, so its provider state is not checked", () => {
+  const drive = rowOf(setupRows({ summaries: summaries(), engines: READY_ENGINES }), "google_drive");
+  assert.equal(setupStates(drive, null)[2]?.value, "not_checked");
+});
+
+test("the video engine group lists OpenRouter, HeyGen, Anthropic and Deepgram, each with a key form and Check key", () => {
   const rows = setupRows({
     summaries: summaries({
       openrouter: { configured: true, source: "workspace", credentialState: "usable", keyFingerprint: "...4321" },

@@ -35,6 +35,7 @@ import { memoryMediaStore, type MediaStore } from "../assets/adapter.ts";
 import { openRouterImageAdapter } from "../assets/providers/openrouterImage.ts";
 import { openRouterVideoAdapter, videoProfilesFromListing, type VideoProfile } from "../assets/providers/openrouterVideo.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
+import { publicTestResolver } from "../gateway/test/resolver.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { check, gateResult } from "../review/gates/common.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
@@ -64,10 +65,10 @@ const CHAIN_SHOT = cartoonChainShotFixture.shotId;
  * the clip the way the fallback path reads them. The ids are the recorded listing's.
  */
 const KEYFRAME_MODEL = "bytedance-seed/seedream-4.5";
-const CLIP_MODEL = "google/veo-3.1-lite";
+const CLIP_MODEL = "bytedance/seedance-2.0-mini";
 const CHAIN_ROUTES = routesWith(
   "video.budget",
-  [{ provider: "openrouter", model: CLIP_MODEL, priceKey: "veo_3_1_lite", verified: false }],
+  [{ provider: "openrouter", model: CLIP_MODEL, priceKey: "seedance_2_0_mini", verified: false }],
   routesWith("image.keyframe", [{ provider: "openrouter", model: KEYFRAME_MODEL, priceKey: "seedream_4_5", verified: false }], routes.table),
 );
 const CLIP_JOB = "job-cartoon-clip-1";
@@ -219,7 +220,7 @@ function produceHandler(gateway: Gateway, media: MediaStore, objects: ReturnType
     stock: async () => {
       throw new EngineError("internal", "the cartoon chain test makes no stock search");
     },
-    downloader: gatewayDownloader(gateway),
+    downloader: gatewayDownloader(gateway, { resolver: publicTestResolver }),
     media: fakeMedia({ probe: () => probeOf({ durationMs: 3000, bytes: MP4_BYTES.byteLength }) }),
     objects,
     now: () => Date.parse(NOW),

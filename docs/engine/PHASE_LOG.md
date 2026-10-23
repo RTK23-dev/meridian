@@ -838,7 +838,9 @@ gap is that the URL is not checked against public addresses, and the connection 
 (`production/artifact-finalizer.ts`). The fix is to share that download with the engine through a neutral module. The change is an eng-pipeline
 change, so it is recorded in the plan (M1.3) and not made here.
 
-**Budget run, 2026-10-23: soft budgets, category budgets, the model brief, approvals, Veo off.** Branch `run/orchestrator-budgets-2026-10-23`.
+## 2026-10-23: the budget run, soft budgets, category budgets, the model brief, approvals, Veo off
+
+Branch `run/orchestrator-budgets-2026-10-23`.
 The governing plan is `run/REPLAN_2026-10-23.md`, the decisions are D1 to D11 in `run/DECISIONS_2026-10-23.md`, and the state is in
 `run/RUN_STATE.md`. Blocks: B0 setup; B1 Veo off as a workspace policy (`google/veo` by default, adjustable, nothing deleted); B2 soft
 budgets (`budget/tolerance.ts`: the larger of a percentage and cents; reservations store their allowances, migration 0115); B3 category
@@ -853,3 +855,72 @@ names is not built, since the policy is per workspace. An approval has no audit 
 so most of the newest video models are not usable until the owner decides on the other price forms. No live run is recorded: no provider
 key is set in this environment, so every check is on fixtures, the public listings or the dev server. Per-creative attestation, the
 calibration bootstrap, paid ads and the plan-to-video bridge are untouched.
+
+## 2026-10-23: Veo 3.1 removed from the engine
+
+The owner asked why Veo 3.1 was still in the engine after the move to the latest models, and asked for it to be removed and replaced with the
+latest model.
+
+**Who added it, and why.** Veo 3.1 had been removed once already: commit `4639ebd` on 11 October, "Remove Google Veo", took out the adapter.
+The Bible's provider registry (section 10.3, from the owner's upload of 13 October) still names Veo 3.1 Fast and Lite for the cinematic and
+budget classes. The engine build copied those names back into the route and price tables on 13 and 14 October (`c96fce8`, E1 wave A; `a61a340`,
+the API gateway). Commit `55154f8` on 21 October removed the fixed model ids from the route table but left the Veo price keys in `prices.ts`. So
+the engine kept naming Veo after its adapter was gone. I found no owner decision in the log to keep it in the tables.
+
+**What changed.**
+- `src/engine/config/routes.ts`: `video.cinematic` and `video.budget` name no Veo model. Their targets are null, so the live catalog chooses (Bible 10.5).
+- `src/engine/config/prices.ts`: `veo_3_1_fast` and `veo_3_1_lite` removed.
+- `src/engine/config/retired-models.ts` (new): the three Veo ids. `parseVideoCatalog` drops them from every catalog read, with the reason recorded.
+- Tests: pinned price lists, the recorded listing counts (5 entries, 6 drops), candidate lists and test routes moved from Veo to Kling, Wan 2.6 or
+  Seedance. The first-and-last-frame test keeps its accepted and rejected cases, both on Kling. The recorded fixtures still hold Veo rows: they are
+  recordings and were not edited.
+- Docs: Bible 10.3 and the note before E1 (dated amendment), `CONTENT_FACTORY_PLAN.md` (M4.1 and D1), `MERIDIAN_HANDOFF.md` (task 0.1 status).
+  `CLAUDE.md` line 44 still says no Veo provider exists in this repository. That remains true, and the file belongs to the owner, so it is unchanged.
+
+**Replacement.** No model is named in the route table, so no replacement price was written. The recorded listing offers Kling v3.0 Standard, Wan 2.6
+and Seedance 2.0 (no price listed). A fixed route target needs its price verified first (D20), and the owner chooses the model.
+
+**Open, found while testing.**
+- The catalog keeps a video model's durations as a minimum and a maximum. Kling lists 5 and 10 s only, so a 6 s call passes the fit check and
+  the provider refuses it as invalid input. `model-choice-pipeline.test.ts` hit this with a 6 s shot and was set to 5 s. The fix changes the
+  catalog's capability shape, so it needs eng-contracts and the lead.
+- The price key `wan_3_0` ($0.0425 a second) matches the recorded listing's price for `alibaba/wan-2.6`, not a Wan 3.0 listing. The owner should say which model the key is for.
+
+Checks: `npm run typecheck` exit 0; `eslint` on the changed TypeScript files exit 0; `src/engine` 3,198 of 3,198 pass across 264 files
+(`NODE_ENV=development node --test`), and the factory and config tests that import engine config pass.
+
+## 2026-10-23: fixes to the Veo review findings: listed durations, the Wan price, and the live listing
+
+**Duration finding (fixed; contract v10, lead approval pending).** The candidate filter checked a call's duration against a model's range.
+Wan 2.6 takes 5 and 10 s only, so a 6 s call passed the filter, the chooser could pick the model, and the adapter then refused the call,
+which sent the shot to replanning. A catalog entry now carries `durationsSeconds`, the durations the listing names. `rejectionOf`
+(`gateway/catalog-fit.ts`) refuses a duration outside that list, and the router's check on a chosen model uses the same filter, so the
+choice falls back instead of failing the shot. A model with only a range is still checked against the range. Tests: the parse keeps the
+lists (Kling 5 and 10, Wan 5); the contract refuses a list that does not run from minSeconds to maxSeconds, repeats, is empty or is not
+whole; the fit refuses 6 s for a listed model; the planner's 6 s clip has no candidate now (Kling was offered before); the router refuses a
+chosen model for 6 s and does not send it. Bible section 4 has a v10 note; `contracts/v10.test.ts` pins the set version.
+
+**Wan price (fixed).** `wan_3_0` was $0.0425, which is Wan 2.6's recorded rate under the Wan 3.0 name. OpenRouter's public listing (read
+2026-10-23) shows `alibaba/wan-3.0` at $0.20 a second at 1080p, so `wan_3_0` is now $0.20 with source `openrouter_listing`. `wan_2_6` is
+added at $0.15, Wan 2.6's first-frame rate at 1080p (the higher of its two 1080p rates). The test routes that name Wan 2.6 use `wan_2_6`.
+The route table's budget target is still `wan_3_0`, with a null model, so the chooser's catalog price applies. Bible 10.3 row amended.
+
+**Found, not fixed: the parser keeps no video model from the live listing.** Run on the public listing read 2026-10-23 (30 rows), the
+parser keeps none. It reads `per-video-second` and `per-video-second-1080p`, the names the docs and the recorded fixture use. The live
+listing names its rates `duration_seconds`, `duration_seconds_480p`, `_720p` and `_1080p`, `text_to_video_duration_seconds_*`,
+`image_to_video_duration_seconds_*` and `*_with_audio`, and it prices the Seedance models in tokens (`video_tokens*`). The listing is public
+(`GET https://openrouter.ai/api/v1/videos/models`, no key). Two decisions are needed before a live run can choose a video model:
+- **Which rate prices a call.** The adapter sends `generate_audio: false`, so the no-audio rate is the one billed. For Wan 2.6 the
+  text-to-video rate (0.12) and the image-to-video rate (0.15) differ at 1080p. This log proposes the higher, so a reservation never runs
+  short. The owner decides.
+- **Token-priced models** (Seedance 2.0, 2.0 mini and 2.5) have no per-second rate on the listing. They cannot be reserved until the owner
+  sets a basis.
+
+**Other differences from the live listing (recorded, not changed).**
+- Kling 3.0 Standard lists 3 to 15 s, at 720p only. The engine needs 1080p, so it is not a candidate at 1080p. Its no-audio rate is $0.084
+  a second; the table's $0.126 is the with-audio rate. Owner decision.
+- The recorded fixture lists Wan 2.6 at 5 s only; the listing now shows 5 and 10 s.
+- Veo 3.1, Fast and Lite are still served by OpenRouter. The removal decided on 2026-10-23 stands.
+
+Checks: `npm run typecheck` exit 0; `eslint` on the changed TypeScript files exit 0; `src/engine` 3,208 of 3,208 pass
+(`NODE_ENV=development node --test`); the factory and config tests that import engine config pass (59 of 59).

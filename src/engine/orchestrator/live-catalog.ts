@@ -7,7 +7,8 @@
 
 import type { Gateway } from "../gateway/gateway.ts";
 import { httpError, jsonBody } from "../gateway/errors.ts";
-import { loadCatalog, type CatalogLoad } from "./catalog.ts";
+import { exclusionFor, MODEL_EXCLUSIONS, type ModelExclusion } from "../config/model-exclusions.ts";
+import { loadCatalog, type CatalogExclusion, type CatalogLoad } from "./catalog.ts";
 
 const PROVIDER = "openrouter";
 
@@ -18,6 +19,11 @@ export const ORCHESTRATOR_LISTINGS = [
   { path: "/models?output_modalities=speech", kind: "speech" },
   { path: "/videos/models", kind: "video" },
 ] as const;
+
+/** The endpoint a listing is read from, named as config/model-exclusions.ts names it (openrouter:GET /api/v1/videos/models). */
+export function endpointOf(path: string): string {
+  return `openrouter:GET /api/v1${path}`;
+}
 
 export type LiveCatalogRead =
   | { status: "ok"; catalog: CatalogLoad }
@@ -57,11 +63,19 @@ export function rowOf(raw: unknown, kind: string): Record<string, unknown> {
   };
 }
 
-/** The four listings' bodies merged into one catalog: the most specific kind of a model wins, and the first row of a kind wins. */
-export function mergeListings(bodies: Array<{ kind: string; body: unknown }>, takenAt: string): CatalogLoad {
+/**
+ * The four listings' bodies merged into one catalog: the most specific kind of a model wins, and the first row of a kind wins. An exclusion
+ * removes a row from the listing (endpoint) it names only, so the same model on another listing is still kept (model-exclusions.ts).
+ */
+export function mergeListings(
+  bodies: Array<{ kind: string; body: unknown; endpoint?: string }>,
+  takenAt: string,
+  exclusions: readonly ModelExclusion[] = MODEL_EXCLUSIONS,
+): CatalogLoad {
   const rows = new Map<string, { row: Record<string, unknown>; specificity: number }>();
   const extra: unknown[] = [];
-  for (const { kind, body } of bodies) {
+  const excluded: CatalogExclusion[] = [];
+  for (const { kind, body, endpoint } of bodies) {
     const data = (body as { data?: unknown } | null)?.data;
     if (!Array.isArray(data)) continue;
     for (const raw of data) {
@@ -71,6 +85,13 @@ export function mergeListings(bodies: Array<{ kind: string; body: unknown }>, ta
         extra.push(row);
         continue;
       }
+      if (endpoint !== undefined) {
+        const reason = exclusionFor(endpoint, id, exclusions);
+        if (reason !== null) {
+          excluded.push({ id, endpoint, reason });
+          continue;
+        }
+      }
       const specificity = SPECIFICITY[kind] ?? 0;
       const held = rows.get(id);
       if (held === undefined || specificity > held.specificity) rows.set(id, { row, specificity });
@@ -78,7 +99,7 @@ export function mergeListings(bodies: Array<{ kind: string; body: unknown }>, ta
   }
   const entries: unknown[] = [...rows.values()].map((held) => held.row);
   entries.push(...extra);
-  return loadCatalog({ source: "OpenRouter's public listings: text, image, speech and video", takenAt, entries });
+  return { ...loadCatalog({ source: "OpenRouter's public listings: text, image, speech and video", takenAt, entries }), excluded };
 }
 
 async function readListing(gateway: Gateway, organizationId: string | null, path: string): Promise<{ kind: "body"; body: unknown } | { kind: "not_connected"; reason: string } | { kind: "failed"; reason: string }> {
@@ -101,13 +122,16 @@ async function readListing(gateway: Gateway, organizationId: string | null, path
   }
 }
 
-export async function readOrchestratorCatalog(gateway: Gateway, options: { organizationId: string | null; now: () => string }): Promise<LiveCatalogRead> {
-  const bodies: Array<{ kind: string; body: unknown }> = [];
+export async function readOrchestratorCatalog(
+  gateway: Gateway,
+  options: { organizationId: string | null; now: () => string; exclusions?: readonly ModelExclusion[] },
+): Promise<LiveCatalogRead> {
+  const bodies: Array<{ kind: string; body: unknown; endpoint: string }> = [];
   for (const listing of ORCHESTRATOR_LISTINGS) {
     const read = await readListing(gateway, options.organizationId, listing.path);
     if (read.kind === "not_connected") return { status: "not_connected", reason: read.reason };
     if (read.kind === "failed") return { status: "failed", reason: read.reason };
-    bodies.push({ kind: listing.kind, body: read.body });
+    bodies.push({ kind: listing.kind, body: read.body, endpoint: endpointOf(listing.path) });
   }
-  return { status: "ok", catalog: mergeListings(bodies, options.now()) };
+  return { status: "ok", catalog: mergeListings(bodies, options.now(), options.exclusions) };
 }

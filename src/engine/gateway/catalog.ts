@@ -27,6 +27,7 @@
 
 import { z } from "zod";
 import { adapters } from "../config/adapters.ts";
+import { exclusionFor, MODEL_EXCLUSIONS, OPENROUTER_VIDEO_LISTING, type ModelExclusion } from "../config/model-exclusions.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { modelCatalogEntrySchema, type CatalogCapabilities, type CatalogPrice, type ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ModelClass } from "../contracts/plan.ts";
@@ -154,8 +155,8 @@ function videoPrice(skus: unknown): CatalogPrice | string {
   return `no positive per-second price (${VIDEO_SECOND_SKUS.join(" or ")}), so a call could not be reserved`;
 }
 
-/** Parses GET /videos/models. Pure. */
-export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
+/** Parses GET /videos/models. Pure. An exclusion applies to this endpoint only, and its reason is recorded on the drop. */
+export function parseVideoCatalog(body: unknown, readAt: string, exclusions: readonly ModelExclusion[] = MODEL_EXCLUSIONS): Parsed {
   const out: Parsed = { entries: [], dropped: [] };
   const listing = listingSchema.safeParse(body);
   if (!listing.success) {
@@ -169,16 +170,23 @@ export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
       continue;
     }
     const model = row.data;
+    const excluded = exclusionFor(OPENROUTER_VIDEO_LISTING, model.id, exclusions);
+    if (excluded !== null) {
+      out.dropped.push({ source: "videos", id: model.id, reason: excluded });
+      continue;
+    }
     const price = videoPrice(model.pricing_skus);
     if (typeof price === "string") {
       out.dropped.push({ source: "videos", id: model.id, reason: price });
       continue;
     }
-    const durations = [...(model.supported_durations ?? [])].sort((a, b) => a - b);
+    const durations = [...new Set(model.supported_durations ?? [])].sort((a, b) => a - b);
     const frames = model.supported_frame_images;
     const capabilities: CatalogCapabilities = {
       minSeconds: durations.length > 0 ? (durations[0] as number) : null,
       maxSeconds: durations.length > 0 ? (durations[durations.length - 1] as number) : null,
+      // The listing names each duration the model takes, so the list is kept as it is: 6 s is not 5 s or 10 s.
+      durationsSeconds: durations.length > 0 ? durations : null,
       aspectRatios: model.supported_aspect_ratios ?? null,
       resolutions: model.supported_resolutions ?? null,
       firstFrame: frames === undefined ? null : frames.includes("first_frame"),
@@ -242,6 +250,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
       const capabilities: CatalogCapabilities = {
         minSeconds: null,
         maxSeconds: null,
+        durationsSeconds: null,
         aspectRatios: null,
         resolutions: null,
         firstFrame: takesImage,
@@ -256,6 +265,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
     const capabilities: CatalogCapabilities = {
       minSeconds: null,
       maxSeconds: null,
+      durationsSeconds: null,
       aspectRatios: null,
       resolutions: null,
       firstFrame: false,

@@ -5,6 +5,7 @@ import { modelCatalogEntrySchema } from "../contracts/catalog.ts";
 import { createGateway } from "./gateway.ts";
 import { modelCatalogCache, parseModelsCatalog, parseVideoCatalog, readModelCatalog } from "./catalog.ts";
 import { json, recorded, staticKeys } from "./test/recorded.ts";
+import { exclusionFor, MODEL_EXCLUSIONS, OPENROUTER_VIDEO_LISTING } from "../config/model-exclusions.ts";
 
 const fixture = (name: string): unknown => JSON.parse(readFileSync(new URL(`./test/fixtures/${name}.json`, import.meta.url), "utf8"));
 const READ_AT = "2026-10-16T09:00:00.000Z";
@@ -39,6 +40,7 @@ describe("catalog parse: GET /videos/models", () => {
     assert.deepEqual(kling?.capabilities, {
       minSeconds: 5,
       maxSeconds: 10,
+      durationsSeconds: [5, 10],
       aspectRatios: ["9:16", "16:9"],
       resolutions: ["720p", "1080p"],
       firstFrame: true,
@@ -49,6 +51,7 @@ describe("catalog parse: GET /videos/models", () => {
     const wan = parsed.entries.find((entry) => entry.id === "alibaba/wan-2.6");
     assert.equal(wan?.capabilities.firstFrame, null, "no supported_frame_images: unknown, not false");
     assert.equal(wan?.capabilities.lastFrame, null);
+    assert.deepEqual(wan?.capabilities.durationsSeconds, [5], "the listing names the one duration Wan 2.6 takes");
   });
 
   it("drops rows without a usable price and malformed rows, each with its reason", () => {
@@ -57,14 +60,30 @@ describe("catalog parse: GET /videos/models", () => {
     assert.match(reasons.get("vendor/free-preview") ?? "", /no positive per-second price/);
     assert.match(reasons.get("vendor/per-video-only") ?? "", /no positive per-second price/);
     assert.match(reasons.get("broken/entry") ?? "", /does not match the listing shape/);
+    assert.equal(reasons.has("google/veo-3.1-lite"), false, "a listed model with a usable price is kept, not dropped");
     assert.equal(parsed.dropped.filter((drop) => drop.id === null).length, 1, "the row that is not an object is dropped with no id");
-    assert.equal(parsed.dropped.length, 5);
+    assert.equal(parsed.dropped.length, 5, "the five rows the listing drops, as before");
   });
 
   it("treats a body with no data array as a failed listing", () => {
     const empty = parseVideoCatalog({ models: [] }, READ_AT);
     assert.deepEqual(empty.entries, []);
     assert.deepEqual(empty.dropped, [{ source: "videos", id: null, reason: "the listing has no data array" }]);
+  });
+});
+
+describe("model exclusions: scoped to one endpoint, each with its reason", () => {
+  it("ships with no exclusion, so every listed model with a usable price is kept", () => {
+    assert.deepEqual(MODEL_EXCLUSIONS, []);
+  });
+
+  it("drops an excluded model on the endpoint it names, with its reason, and no other endpoint applies it", () => {
+    const reason = "test: the listing refused it on the check's date";
+    const exclusions = [{ endpoint: OPENROUTER_VIDEO_LISTING, model: "google/veo-3.1-lite", reason }];
+    const parsed = parseVideoCatalog(fixture("openrouter-catalog-videos"), READ_AT, exclusions);
+    assert.equal(parsed.entries.some((entry) => entry.id === "google/veo-3.1-lite"), false);
+    assert.equal(parsed.dropped.find((drop) => drop.id === "google/veo-3.1-lite")?.reason, reason);
+    assert.equal(exclusionFor("openrouter:POST /api/v1/images", "google/veo-3.1-lite", exclusions), null, "another endpoint does not apply it");
   });
 });
 

@@ -588,6 +588,25 @@ a workspace. No row is rewritten.
 `speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
 records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
 
+### v10 changes and migration (listed durations, contract version `engine-contracts@10`)
+
+Requested by the owner on 2026-10-23, to fix a duration finding of the video model review. **Lead approval: pending** (the lead records it
+when it reviews the change). The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. The change is additive: no field
+is removed and no field changes its meaning.
+
+**Why.** A catalog entry kept a video model's durations as a range (`minSeconds`, `maxSeconds`). Some models take durations one by one: Wan
+2.6 takes 5 and 10 s and no others, so a 6 s call sat inside the range, passed the candidate filter, and was refused by the adapter after
+the chooser had picked the model.
+
+**What changed.**
+- `ModelCatalogEntry.capabilities` takes `durationsSeconds`: the whole-second durations the listing names, sorted, or null when the catalog
+  gives only a range. A list must run strictly upward from `minSeconds` to `maxSeconds`, and may not be empty.
+- The candidate filter (`rejectionOf`, `gateway/catalog-fit.ts`) refuses a duration that is not in the list, with reason
+  `duration_outside`. A null list keeps the range check. A chosen model that no longer fits falls back, as v7 says.
+
+**Migration.** None. A catalog entry is read and held in memory (`modelCatalogCache`), and a model choice stores its id, source, reason and
+read time, so no stored row holds a catalog entry.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.
@@ -984,12 +1003,12 @@ Adapted from OpenMontage's selector. For each eligible adapter (capabilities sat
 
 The highest score wins unless its concurrency bucket is full, in which case the next one is used. Every choice is a `Decision` on the shot.
 
-### 10.3 Provider registry (initial, October 2026 list prices)
+### 10.3 Provider registry (initial, October 2026 list prices; Veo 3.1 removed 2026-10-23)
 
 | Model class | Providers in priority order | Price |
 | --- | --- | --- |
-| `video.cinematic` | Kling v3.0 Standard; Veo 3.1 Fast; Seedance 2.5 (all via OpenRouter) | $0.126 / $0.10 / $0.1028 per s |
-| `video.budget` | Seedance 2.0 Mini; Wan 3.0; Veo 3.1 Lite | $0.0336 / $0.0425 / $0.05 per s |
+| `video.cinematic` | Kling v3.0 Standard; Seedance 2.5 (all via OpenRouter; the live catalog chooses, Bible 10.5) | $0.126 / $0.1028 per s |
+| `video.budget` | Seedance 2.0 Mini; Wan 3.0 | $0.0336 / $0.2 per s (Wan 3.0 at 1080p, OpenRouter listing read 2026-10-23; the earlier $0.0425 was Wan 2.6's rate) |
 | `video.i2v_pinned` | Only models that pass the first-and-last-frame test (E2 task); Kling first | per model |
 | `avatar` | HeyGen Avatar IV via OpenRouter | $0.05 per s |
 | `image.keyframe` | Seedream 5.0 Flash; Seedream 4.5 | $0.018 / $0.04 per image |
@@ -1392,7 +1411,7 @@ Fourteen workstreams, each owning modules and contracts with clear boundaries, s
 
 Six phases. A phase is complete only when every acceptance test passes in a **recorded live run** on real APIs, with artifacts and costs attached to the phase PR. Phases overlap: workstreams start the next phase's work on fixtures while integration finishes.
 
-**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39.
+**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39. **Amended 2026-10-23, superseded the same day:** an owner decision removed Veo 3.1 from the engine. The operating brief that followed bars a global Veo exclusion. No model is excluded globally now. An exclusion is scoped to one provider endpoint and carries a reason (`src/engine/config/model-exclusions.ts`), and that list is empty. Veo 3.1 is a candidate on OpenRouter's video listing, chosen by capability and price like any other model (Bible 10.5).
 
 ### E1 Skeleton (waves 0–1)
 

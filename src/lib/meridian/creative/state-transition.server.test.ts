@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
 import { getSql } from "../../db.ts";
-import { transitionCreativePlan } from "./state-transition.server.ts";
+import { markPlanAwaitingApproval, transitionCreativePlan } from "./state-transition.server.ts";
 
 async function seedPlan(sql: Awaited<ReturnType<typeof getSql>>, status = "awaiting_approval") {
   const id = globalThis.crypto.randomUUID();
@@ -58,6 +58,40 @@ test("duplicate approval transition is idempotent and cannot create duplicate au
     select count(*)::int as count from audit_log where object_type = 'creative_plan' and object_id = ${plan.id}
   `;
   assert.equal(rows[0].count, 1);
+});
+
+test("a draft plan prepared for approval is recorded as awaiting it, so the approval that follows is legal", async () => {
+  const sql = await getSql();
+  const plan = await seedPlan(sql, "draft");
+  await assert.rejects(
+    transitionCreativePlan(sql, { ...plan, actorId: "reviewer-1", target: "approved" }),
+    /Invalid transition from DRAFT to approved/,
+  );
+  await markPlanAwaitingApproval(sql, { ...plan, actorId: "creator-1" });
+  const waiting = await sql<{ status: string }>`select status from creative_plans where id = ${plan.id}`;
+  assert.equal(waiting[0]?.status, "awaiting_approval");
+  const approved = await transitionCreativePlan(sql, { ...plan, actorId: "reviewer-1", target: "approved" });
+  assert.equal(approved.status, "approved");
+});
+
+test("recording awaiting approval again changes nothing and writes no audit event", async () => {
+  const sql = await getSql();
+  const plan = await seedPlan(sql, "draft");
+  await markPlanAwaitingApproval(sql, { ...plan, actorId: "creator-1" });
+  await markPlanAwaitingApproval(sql, { ...plan, actorId: "creator-1" });
+  const rows = await sql<{ count: number }>`
+    select count(*)::int as count from audit_log where object_type = 'creative_plan' and object_id = ${plan.id}
+  `;
+  assert.equal(rows[0].count, 1, "one transition from draft; the repeat is a no-op");
+});
+
+test("recording awaiting approval for a plan in another tenant is refused", async () => {
+  const sql = await getSql();
+  const plan = await seedPlan(sql, "draft");
+  await assert.rejects(
+    markPlanAwaitingApproval(sql, { ...plan, organizationId: "another-tenant", actorId: "creator-1" }),
+    /not found/,
+  );
 });
 
 test("Studio production flow cannot bypass CreativePlan transition authority", async () => {

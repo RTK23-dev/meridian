@@ -41,7 +41,7 @@ import type { CreativeSpec } from "../production/types.ts";
 import { creativeSpecFromManifest } from "../production/spec-from-manifest.ts";
 import { resolveProductionTarget } from "../production/target.ts";
 import { submitWithPreflight, type SubmitWithPreflightResult } from "../production/submit.ts";
-import { transitionCreativePlan } from "../creative/state-transition.server.ts";
+import { markPlanAwaitingApproval, transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
 import { accountSnapshots, competitorCopy, factsFor, measureVideoFrames, qcBrandOf, sampleVideoForJudgment, videoVisualEvidence, writeJudgment } from "./image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
@@ -594,6 +594,13 @@ export async function generateStudioVariants(
 
     // Handle Manual or Semi-Automatic Approval Gate (P0-D)
     if (autonomy === "manual" || autonomy === "semi_automatic") {
+      // The row must say the plan waits for approval before the person can approve it. Approval is legal only from that state.
+      await markPlanAwaitingApproval(sql, {
+        organizationId: access.organizationId,
+        brandId: data.brandId,
+        planId: creativePlan.id,
+        actorId: context.userId,
+      });
       return {
         status: "awaiting_approval",
         planId: creativePlan.id,

@@ -248,7 +248,7 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] Test Connection reports READY only for a usable credential, and says the live provider was not called`, async () => {
+  test(`[${name}] Test Connection reports CONFIGURED, never READY, for a usable credential, and says the live provider was not called`, async () => {
     const usable = await studioTenant(sql, "test-usable");
     await storeVaultCredential(sql, usable.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: WORKSPACE_GEMINI });
     const expired = await studioTenant(sql, "test-expired");
@@ -257,7 +257,8 @@ for (const { name, sql } of backends) {
 
     await withEnv({ MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI, PRODUCTION_SHARED_DEFAULT: "deployment" }, async () => {
       const ok = await testWorkspaceProviderConnection(sql, { organizationId: usable.organizationId, category: "production" });
-      assert.equal(ok.status, "READY");
+      assert.equal(ok.status, "CONFIGURED", "a readable key is configuration, not a provider connection");
+      assert.notEqual(ok.status, "READY", "no provider was called, so the check never reports READY");
       assert.match(ok.message, /not called/);
       assert.equal(ok.message.includes(WORKSPACE_GEMINI), false);
 
@@ -274,11 +275,37 @@ for (const { name, sql } of backends) {
 
     await withEnv({ JEV_SHARED_DEFAULT: "deployment", TYPESAFE_JEV_API_KEY: DEPLOYMENT_TYPESAFE }, async () => {
       const jev = await testWorkspaceProviderConnection(sql, { organizationId: none.organizationId, category: "jev" });
-      assert.equal(jev.status, "READY");
+      assert.equal(jev.status, "CONFIGURED");
       assert.match(jev.message, /not called/);
       assert.match(jev.message, /OpenRouter is deployment-only and was not checked/);
       assert.equal(jev.message.includes(DEPLOYMENT_TYPESAFE), false);
     });
+  });
+
+  test(`[${name}] Cyclone: a gateway URL saved by a workspace must be a public address, and no request is made for an internal one`, async () => {
+    const internal = await studioTenant(sql, "test-cyclone-internal");
+    await storeVaultCredential(sql, internal.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "http://169.254.169.254/" } });
+    const publicGateway = await studioTenant(sql, "test-cyclone-public");
+    await storeVaultCredential(sql, publicGateway.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "https://gateway.example.com" } });
+
+    const realFetch = globalThis.fetch;
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      requested.push(String(input));
+      return new Response("", { status: 200 });
+    }) as typeof fetch;
+    try {
+      const refused = await testWorkspaceProviderConnection(sql, { organizationId: internal.organizationId, category: "cyclone" });
+      assert.equal(refused.status, "ERROR");
+      assert.match(refused.message, /not allowed/, "the saved internal address is refused");
+      assert.deepEqual(requested, [], "no request is made to a refused address");
+
+      const allowed = await testWorkspaceProviderConnection(sql, { organizationId: publicGateway.organizationId, category: "cyclone" });
+      assert.equal(allowed.status, "READY", "a public https gateway that answers is ready");
+      assert.deepEqual(requested, ["https://gateway.example.com/v1/device/status"]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   test(`[${name}] perception: PERCEPTION_PROVIDER=none turns it off in the summary and in Test Connection, even with a saved key`, async () => {

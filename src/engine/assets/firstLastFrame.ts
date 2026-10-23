@@ -11,11 +11,20 @@ import { newId } from "../contracts/ids.ts";
 import type { LedgerStore } from "../budget/store.ts";
 import { paidCall, type PaidRun } from "../gateway/paid.ts";
 import type { Gateway, ResolvedRoute } from "../gateway/gateway.ts";
+import { INITIAL_DISABLED_MODEL_FAMILIES, isDisabledModel } from "../config/model-policy.ts";
 import { openRouterVideoAdapter, isVideoClass, listVideoModels, videoProfilesFromListing, VIDEO_ASPECT, VIDEO_RESOLUTION, type VideoProfile } from "./providers/openrouterVideo.ts";
 import { classifyError } from "./classify.ts";
 
 /** The classes whose OpenRouter models the test covers. The pinned class has no model of its own yet. */
 export const FRAME_TEST_CLASSES = ["video.cinematic", "video.budget"] as const;
+
+/** The reason a route's model is not tested: its family is switched off by the workspace's model policy (owner direction 2026-10-23). */
+const SWITCHED_OFF = "switched off by the workspace's model policy";
+
+/** Whether a route names a model of a family the workspace has switched off. */
+function switchedOff(route: ResolvedRoute, families: readonly string[]): boolean {
+  return route.model !== null && isDisabledModel(route.model, families);
+}
 
 export const FRAME_TEST_PROMPT = "A single product on a plain table, a slow push-in. Frame test for Bible 20.3 item 2.";
 
@@ -82,11 +91,20 @@ function rowFor(route: ResolvedRoute, profile: VideoProfile | null, durationSeco
   };
 }
 
-/** The table from a GET /videos/models answer alone. No call is made, so every row's basis is listing_only. */
-export function frameTestFromListing(listing: unknown, routes: ResolvedRoute[], durationSeconds: number): FrameTestRow[] {
+/**
+ * The table from a GET /videos/models answer alone. No call is made, so every row's basis is listing_only. A route whose model is in a
+ * switched-off family does not pass: it is not tested, so the table cannot pin it.
+ */
+export function frameTestFromListing(
+  listing: unknown,
+  routes: ResolvedRoute[],
+  durationSeconds: number,
+  disabledFamilies: readonly string[] = INITIAL_DISABLED_MODEL_FAMILIES,
+): FrameTestRow[] {
   const { profiles } = videoProfilesFromListing(listing);
   return routes.map((route) => {
     const profile = route.model === null ? null : (profiles.get(route.model) ?? null);
+    if (switchedOff(route, disabledFamilies)) return { ...rowFor(route, profile, durationSeconds, { kind: "not_run", reason: SWITCHED_OFF }), pass: false };
     const submit: SubmitOutcome = { kind: "not_run", reason: frameTestPrecheck(profile, durationSeconds) ?? "listing only; no submit" };
     return rowFor(route, profile, durationSeconds, submit);
   });
@@ -137,6 +155,8 @@ export type FrameTestInput = {
   durationSeconds: number;
   /** ISO time of the test. */
   at: string;
+  /** The workspace's switched-off model families. Absent means the initial policy (config/model-policy.ts), so Veo is not submitted. */
+  disabledFamilies?: readonly string[];
 };
 
 /**
@@ -147,10 +167,16 @@ export async function runFirstLastFrameTest(input: FrameTestInput): Promise<Fram
   const listing = await listVideoModels(input.gateway, input.organizationId);
   const parsed = videoProfilesFromListing(listing);
   const routes = videoRoutesForFrameTest(input.gateway);
+  const families = input.disabledFamilies ?? INITIAL_DISABLED_MODEL_FAMILIES;
   const rows: FrameTestRow[] = [];
 
   for (const route of routes) {
     const profile = route.model === null ? null : (parsed.profiles.get(route.model) ?? null);
+    // A model of a switched-off family is not submitted, so the test spends nothing on it (owner direction 2026-10-23).
+    if (switchedOff(route, families)) {
+      rows.push({ ...rowFor(route, profile, input.durationSeconds, { kind: "not_run", reason: SWITCHED_OFF }), pass: false });
+      continue;
+    }
     const reason = frameTestPrecheck(profile, input.durationSeconds);
     if (profile === null || reason !== null || !isVideoClass(route.capability)) {
       rows.push(rowFor(route, profile, input.durationSeconds, { kind: "not_run", reason: reason ?? "not a video class" }));

@@ -290,7 +290,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 disabled={testing}
                 onClick={() => handleTest(activeTab)}
               >
-                {testing ? "Testing..." : "Test Connection"}
+                {testing ? "Checking..." : "Check key"}
               </Button>
               {activeSummary.source === "workspace" && canAdmin ? (
                 <Button
@@ -308,7 +308,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           {testResult ? (
             <div
               className={`rounded p-3 text-sm border ${
-                testResult.status === "READY"
+                testResult.status === "READY" || testResult.status === "CONFIGURED"
                   ? "bg-success/10 border-success/30 text-success"
                   : "bg-danger/10 border-danger/30 text-danger"
               }`}

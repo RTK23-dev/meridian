@@ -5,7 +5,7 @@ import { copy, percentOrUnknown, statusLabel } from "@/lib/copy";
 import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
-import { canDismiss, categoryLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
+import { canDismiss, categoryLabel, evidenceSourceLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, RANKING_INPUTS_NOTE, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
 
 // The radar pulls in recharts, so it loads only when the sheet shows the rank parts.
 const ScoreRadar = lazy(() => import("./score-radar").then((module) => ({ default: module.ScoreRadar })));
@@ -84,7 +84,8 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
 
       <section aria-labelledby="opportunity-evidence" className="space-y-2">
         <h3 id="opportunity-evidence" className="font-semibold">Evidence</h3>
-        {item.evidence.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-muted">{item.evidence.map((entry, index) => <li key={`${index}:${entry.id}`}>{entry.summary}</li>)}</ul> : <p className="text-sm text-muted">No evidence items are attached to this opportunity.</p>}
+        {item.evidence.length ? <ul className="list-disc space-y-1 pl-5 text-sm text-muted">{item.evidence.map((entry, index) => <li key={`${index}:${entry.id}`}><span className="font-semibold text-fg">{evidenceSourceLabel(entry.source)}.</span> {entry.summary}</li>)}</ul> : <p className="text-sm text-muted">No evidence items are attached to this opportunity.</p>}
+        <p className="text-xs text-muted">{RANKING_INPUTS_NOTE}</p>
         {item.supportingCreativeIds.length ? <div className="space-y-2 text-sm">
           <p className="text-muted">{item.supportingCreativeIds.length} source {item.supportingCreativeIds.length === 1 ? "creative is" : "creatives are"} linked to this opportunity. <Link to="/brands/$brandId/library" params={{ brandId }} className="font-semibold underline underline-offset-4">Open the creative library</Link> to review them.</p>
           <IdList label="source creative ids" ids={item.supportingCreativeIds} />

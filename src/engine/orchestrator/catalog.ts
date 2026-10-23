@@ -36,11 +36,16 @@ export const catalogSnapshotSchema = z.object({
   entries: z.array(z.unknown()),
 });
 
+/** A row an endpoint exclusion (config/model-exclusions.ts) removed from one listing, with the endpoint and the reason. */
+export type CatalogExclusion = { id: string; endpoint: string; reason: string };
+
 export type CatalogLoad = {
   takenAt: string;
   byId: Map<string, CatalogEntry>;
   /** Rows that did not parse, with their index, so the caller can show how many were dropped and why. */
   dropped: { index: number; reason: string }[];
+  /** Rows an endpoint exclusion removed. Empty for a recorded snapshot, which is loaded without exclusions. */
+  excluded: CatalogExclusion[];
 };
 
 /**
@@ -63,5 +68,5 @@ export function loadCatalog(raw: unknown): CatalogLoad {
     }
     byId.set(parsed.data.id, parsed.data);
   });
-  return { takenAt: envelope.takenAt, byId, dropped };
+  return { takenAt: envelope.takenAt, byId, dropped, excluded: [] };
 }

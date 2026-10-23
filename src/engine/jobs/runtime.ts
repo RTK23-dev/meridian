@@ -554,6 +554,9 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
   const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql));
   // The shot ports (Bible 6.6, 6.7): the take and image stores under each request's brand, the video profiles of the listing, and the
   // connection check that refuses a shot before any paid call when the media functions or the workspace's Drive are not connected.
+  // The workspace's switched-off model families (owner direction 2026-10-23): the catalog and the video profiles both read them on every call,
+  // so a switched-off family is in neither the models a chooser sees nor the profiles a route is given.
+  const switchedOffFamiliesOf = async (organizationId: string): Promise<readonly string[]> => (await readOrchestratorPolicy(sql, organizationId)).disabledModelFamilies;
   const shotPorts: ShotPorts = {
     media,
     objects,
@@ -563,8 +566,8 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
         { objects, brandOf: ({ organizationId, requestId }) => brandOfRequest(sql, organizationId, requestId) },
         { organizationId: scope.organizationId, requestId: scope.requestId },
       ),
-    videoProfiles: videoProfileLoader({ gateway }),
-    catalog: withModelPolicy(modelCatalogCache({ gateway }), async (organizationId) => (await readOrchestratorPolicy(sql, organizationId)).disabledModelFamilies),
+    videoProfiles: videoProfileLoader({ gateway, familiesFor: switchedOffFamiliesOf }),
+    catalog: withModelPolicy(modelCatalogCache({ gateway }), switchedOffFamiliesOf),
     shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
   };
   // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so

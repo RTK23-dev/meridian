@@ -12,6 +12,13 @@ export type HttpRequest = {
   /** Aborts the request after this many milliseconds. */
   timeoutMs?: number;
   signal?: AbortSignal;
+  /**
+   * A download's host, checked before the request: the connection goes only to these addresses, and a redirect is refused. Set by
+   * gateway/download.ts and by nothing else.
+   */
+  pinnedAddresses?: ReadonlyArray<{ address: string; family: number }>;
+  /** The largest answer body read, in bytes. A longer body is cut off and refused. Used with pinnedAddresses. */
+  maxBodyBytes?: number;
 };
 
 export type HttpResponse = { status: number; headers: Record<string, string>; body: Uint8Array };

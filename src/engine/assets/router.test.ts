@@ -17,23 +17,23 @@ import { routeCacheKey } from "./cache.ts";
 import { authorizeSubmit } from "./ledger-steps.ts";
 
 const KLING = "kwaivgi/kling-v3.0-std";
-const VEO = "google/veo-3.1";
+const WAN = "alibaba/wan-2.6";
 const SEED = "bytedance/seedance-2.0";
 const KLING_ID = `openrouter:${KLING}`;
-const VEO_ID = `openrouter:${VEO}`;
+const WAN_ID = `openrouter:${WAN}`;
 
-const target = (model: string, priceKey: "kling_v3_standard" | "veo_3_1_fast" | "seedance_2_5") => ({
+const target = (model: string, priceKey: "kling_v3_standard" | "wan_2_6" | "seedance_2_5") => ({
   provider: "openrouter",
   model,
   priceKey,
   verified: false,
 });
-const VIDEO_TARGETS = [target(KLING, "kling_v3_standard"), target(VEO, "veo_3_1_fast"), target(SEED, "seedance_2_5")];
+const VIDEO_TARGETS = [target(KLING, "kling_v3_standard"), target(WAN, "wan_2_6"), target(SEED, "seedance_2_5")];
 const KLING_TARGET = target(KLING, "kling_v3_standard");
 const videoTable: RouteTable = routesWith("video.cinematic", VIDEO_TARGETS, routes.table);
 
-/** Quality makes Kling first, then Veo, then Seedance, so the order under test is the scored order and not chance. */
-const QUALITY: Record<string, number> = { [KLING]: 0.9, [VEO]: 0.5, [SEED]: 0.1 };
+/** Quality makes Kling first, then Wan, then Seedance, so the order under test is the scored order and not chance. */
+const QUALITY: Record<string, number> = { [KLING]: 0.9, [WAN]: 0.5, [SEED]: 0.1 };
 const signals: RouterSignals = {
   qualityScore: (route) => QUALITY[route.model] ?? null,
   passRate: () => null,
@@ -113,8 +113,8 @@ describe("routing and fallback", () => {
   it("runs the best scored target first, retries a rate limit on it, then falls back when its retries are used up", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [json(429, {}), json(429, {}), json(429, {})], [VEO]: [accepted("job-veo")] }),
-        "GET /api/v1/videos/job-veo": completed("job-veo", 0.4),
+        "POST /api/v1/videos": submitFor({ [KLING]: [json(429, {}), json(429, {}), json(429, {})], [WAN]: [accepted("job-wan")] }),
+        "GET /api/v1/videos/job-wan": completed("job-wan", 0.4),
       },
     });
     const spec = assetSpec();
@@ -122,7 +122,7 @@ describe("routing and fallback", () => {
 
     assert.equal(report.outcome.status, "done");
     if (report.outcome.status !== "done") return;
-    assert.equal(report.outcome.asset.providerId, VEO_ID);
+    assert.equal(report.outcome.asset.providerId, WAN_ID);
     assert.equal(report.outcome.asset.costUsd, 0.4);
 
     const klingSubmits = h.requests.filter((request) => request.method === "POST" && String(request.body).includes(KLING));
@@ -132,14 +132,14 @@ describe("routing and fallback", () => {
     assert.equal(report.decisions[0]?.chose, KLING_ID, "the decision names the scored winner");
     assert.equal(report.decisions[0]?.alternatives.length, 3);
     assert.match(report.decisions[0]?.reason ?? "", /left out of the mean, not 0 or 1/);
-    assert.equal(report.decisions[1]?.chose, VEO_ID, "the fallback is a decision too");
+    assert.equal(report.decisions[1]?.chose, WAN_ID, "the fallback is a decision too");
     assert.deepEqual(
       report.attempts.map((attempt) => [attempt.providerId, attempt.outcome]),
       [
         [KLING_ID, "provider_failure"],
         [KLING_ID, "provider_failure"],
         [KLING_ID, "provider_failure"],
-        [VEO_ID, "success"],
+        [WAN_ID, "success"],
       ],
     );
 
@@ -158,15 +158,15 @@ describe("routing and fallback", () => {
     const klingEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
     assert.equal(klingEntry?.actualUsd, 0, "the first submit's entry is keyed by the cache key");
     assert.equal(klingEntry?.settlement, "confirmed_absent");
-    const veoEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, VEO_ID));
-    assert.equal(veoEntry?.actualUsd, 0.4);
-    assert.equal(veoEntry?.idempotencyKey, assetCacheKey(spec, VEO_ID), "the cache key is the idempotency key");
+    const wanEntry = await h.ledger.getEntryByKey(assetCacheKey(spec, WAN_ID));
+    assert.equal(wanEntry?.actualUsd, 0.4);
+    assert.equal(wanEntry?.idempotencyKey, assetCacheKey(spec, WAN_ID), "the cache key is the idempotency key");
   });
 
   it("a timed-out job with no bill is unsettled: no retry, and no fallback to the next provider", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [WAN]: [accepted("job-wan")] }),
         "GET /api/v1/videos/job-kling": pending("job-kling"),
       },
     });
@@ -184,7 +184,7 @@ describe("routing and fallback", () => {
 
   it("a content refusal goes back to the planner: no retry and no fallback", async () => {
     const h = await harness({
-      script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(400, { error: "Refused by content moderation policy" })], [VEO]: [accepted("job-veo")] }) },
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(400, { error: "Refused by content moderation policy" })], [WAN]: [accepted("job-wan")] }) },
     });
     const report = await h.router.produce(h.input(assetSpec()));
     assert.equal(report.outcome.status, "failed");
@@ -192,13 +192,13 @@ describe("routing and fallback", () => {
       assert.equal(report.outcome.providerId, KLING_ID);
       assert.equal(report.outcome.error.kind, "content_policy");
     }
-    assert.equal(h.requests.filter((request) => request.method === "POST").length, 1, "no second submit and no veo call");
+    assert.equal(h.requests.filter((request) => request.method === "POST").length, 1, "no second submit and no wan call");
   });
 
   it("an invalid input goes back to the planner: no retry and no fallback", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [json(400, fixture("video-400-unsupported.json"))], [VEO]: [accepted("job-veo")] }),
+        "POST /api/v1/videos": submitFor({ [KLING]: [json(400, fixture("video-400-unsupported.json"))], [WAN]: [accepted("job-wan")] }),
       },
     });
     const report = await h.router.produce(h.input(assetSpec()));
@@ -209,18 +209,18 @@ describe("routing and fallback", () => {
 
   it("an unrecognised refusal (403) is ambiguous: the submit stays unsettled, with no retry and no fallback", async () => {
     const h = await harness({
-      script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(403, {})], [VEO]: [accepted("job-veo")] }), "GET /api/v1/videos/job-veo": completed("job-veo", 0.5) },
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [json(403, {})], [WAN]: [accepted("job-wan")] }), "GET /api/v1/videos/job-wan": completed("job-wan", 0.5) },
     });
     const report = await h.router.produce(h.input(assetSpec()));
     assert.equal(report.outcome.status, "unsettled", "only rate_limit, invalid_input and content_policy are definitive refusals");
     assert.equal(report.attempts.filter((attempt) => attempt.providerId === KLING_ID).length, 1, "one submit, no retry");
-    assert.equal(h.requests.filter((request) => request.method === "POST" && String(request.body).includes(VEO)).length, 0, "no fallback");
+    assert.equal(h.requests.filter((request) => request.method === "POST" && String(request.body).includes(WAN)).length, 0, "no fallback");
   });
 
   it("an ambiguous server error is not retried and not fallen back from: the submit stays unsettled and its entry is held", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [json(503, {}), accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
+        "POST /api/v1/videos": submitFor({ [KLING]: [json(503, {}), accepted("job-kling")], [WAN]: [accepted("job-wan")] }),
       },
     });
     const spec = assetSpec();
@@ -419,14 +419,14 @@ describe("concurrency buckets and the breaker", () => {
   it("a full bucket sends the job to the next target", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [VEO]: [accepted("job-veo")] }),
-        "GET /api/v1/videos/job-veo": completed("job-veo", 0.5),
+        "POST /api/v1/videos": submitFor({ [WAN]: [accepted("job-wan")] }),
+        "GET /api/v1/videos/job-wan": completed("job-wan", 0.5),
       },
     });
     for (let i = 0; i < 10; i += 1) assert.equal(await h.buckets.tryAcquire(KLING_ID, 10), true);
     const report = await h.router.produce(h.input(assetSpec()));
     assert.equal(report.outcome.status, "done");
-    if (report.outcome.status === "done") assert.equal(report.outcome.asset.providerId, VEO_ID);
+    if (report.outcome.status === "done") assert.equal(report.outcome.asset.providerId, WAN_ID);
     assert.equal(posts(h.requests), 1, "nothing was sent to the full bucket");
   });
 
@@ -450,22 +450,22 @@ describe("concurrency buckets and the breaker", () => {
         "POST /api/v1/videos": (request) => {
           const model = (JSON.parse(String(request.body)) as { model: string }).model;
           if (model === KLING) return healthy ? accepted("job-kling") : json(429, {});
-          return accepted("job-veo");
+          return accepted("job-wan");
         },
         "GET /api/v1/videos/job-kling": completed("job-kling", 0.63),
-        "GET /api/v1/videos/job-veo": completed("job-veo", 0.5),
+        "GET /api/v1/videos/job-wan": completed("job-wan", 0.5),
       },
     });
 
     const first = await h.router.produce(h.input(assetSpec({ prompt: "First prompt." })));
     assert.equal(first.outcome.status, "done");
-    if (first.outcome.status === "done") assert.equal(first.outcome.asset.providerId, VEO_ID);
+    if (first.outcome.status === "done") assert.equal(first.outcome.asset.providerId, WAN_ID);
     const klingSubmitsAfterFirst = h.requests.filter((request) => request.method === "POST" && String(request.body).includes(KLING)).length;
     assert.equal(klingSubmitsAfterFirst, 3);
 
     const second = await h.router.produce(h.input(assetSpec({ prompt: "Second prompt." })));
     assert.equal(second.outcome.status, "done");
-    if (second.outcome.status === "done") assert.equal(second.outcome.asset.providerId, VEO_ID);
+    if (second.outcome.status === "done") assert.equal(second.outcome.asset.providerId, WAN_ID);
     assert.match(second.decisions[0]?.reason ?? "", /circuit open/, "the open provider is named in the reason");
     assert.equal(
       h.requests.filter((request) => request.method === "POST" && String(request.body).includes(KLING)).length,
@@ -478,7 +478,7 @@ describe("concurrency buckets and the breaker", () => {
     const third = await h.router.produce(h.input(assetSpec({ prompt: "Third prompt." })));
     assert.equal(third.outcome.status, "done");
     // The skip has ended, so Kling is eligible and scored again. Its 7-day reliability now holds the outage (0 of 3), so
-    // Veo can outscore it; that is the scorer working, not the breaker. The test checks eligibility, not the choice.
+    // Wan can outscore it; that is the scorer working, not the breaker. The test checks eligibility, not the choice.
     assert.doesNotMatch(third.decisions[0]?.reason ?? "", /circuit open/);
     assert.ok(third.decisions[0]?.alternatives.some((alternative) => alternative.option === KLING_ID), "Kling is scored again");
   });

@@ -153,13 +153,13 @@ describe("OpenRouter video", () => {
 
 describe("route check", () => {
   it("lists which routed OpenRouter models the models listing contains", async () => {
-    const { transport } = recorded([json(200, { data: [{ id: "anthropic/claude-haiku-5.5" }, { id: "google/veo-3.1-lite" }] })]);
+    const { transport } = recorded([json(200, { data: [{ id: "anthropic/claude-haiku-5.5" }, { id: "vendor/unrouted-video" }] })]);
     const gateway = createGateway({ transport, credentials: staticKeys({ openrouter: "sk-or-test" }) });
     const checked = await verifyRoutes(gateway, CAPABILITIES);
     const byModel = Object.fromEntries(checked.map((item) => [item.model, item.listed]));
     assert.equal(byModel["anthropic/claude-haiku-5.5"], true);
     // No table route names the budget video model any more: the live catalog chooses it (Bible 10.5).
-    assert.equal(checked.some((item) => item.model === "google/veo-3.1-lite"), false);
+    assert.equal(checked.some((item) => item.model === "vendor/unrouted-video"), false);
     assert.equal(byModel["anthropic/claude-opus-5.5"], false);
     assert.equal(checked.some((item) => item.model === "hyperframes"), false);
   });

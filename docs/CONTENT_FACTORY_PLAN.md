@@ -159,9 +159,11 @@ provider. The engine's own edit, compose and render steps are not connected (M4.
 
 ### M4. Engine media depth
 
-- **M4.1. Veo replacement (handoff phase 0; D1).** The engine's Veo preview model shuts down on 22 October 2026. The Video Engine Bible
-  requires the move before E1. No Veo provider exists in this repository.
-  *Accept:* a current model is chosen and wired through the gateway (`engine/gateway/`).
+- **M4.1. Veo replacement (handoff phase 0; D1).** Owner decision, 2026-10-23: remove Veo 3.1 completely and replace it with the latest model.
+  In code, `engine/config/routes.ts` and `prices.ts` name no Veo model, and no model is excluded globally: `engine/config/model-exclusions.ts`
+  is scoped to one provider endpoint, with a reason, and is empty. The route table names no video model, so the live catalog chooses (Bible 10.5).
+  *Accept:* a current model is chosen and wired through the gateway (`engine/gateway/`). Open: the owner confirms the catalog's choice as the
+  replacement, or names a model for the route table once its price is verified (D20).
 
 - **M4.2. Window renderer (D5).** `engine/render/splice-run.ts` reports `not_connected` today, because no window renderer exists.
   Build the window render on `engine/render/hyperframesCloud.ts` or `shotstack.ts`, whichever D5 names.
@@ -214,7 +216,7 @@ The owner answers these. An agent reports the blocked task and does not choose a
 
 | ID | Decision | Blocks |
 | --- | --- | --- |
-| D1 | Veo replacement. Google's Veo documentation says the Veo 3.1 Preview models in the Gemini API were shut down on 22 October 2026, which is today, and recommends Gemini Omni Flash or a GA Veo model. The engine routes `video.cinematic` and `video.budget` to `veo_3_1_fast` and `veo_3_1_lite` through OpenRouter. Its listing shows no status or price on the page I could read, so whether OpenRouter's Veo is still served is unknown. Gemini Omni Flash's listed effective price is about $0.10 a second of 720p video, which Google's page does not say includes audio. Check OpenRouter's `/api/v1/videos/models` before choosing. | M4.1 |
+| D1 | Veo replacement. The owner's 2026-10-23 removal was superseded the same day by the operating brief: no global Veo exclusion, and exclusions are scoped to an endpoint (M4.1). Veo 3.1 is listed on OpenRouter's video endpoint, and no Gemini or Omni video model appears there. Still open: the model the owner wants named in the route table, and its verified price (D20). Google's Veo documentation says the Veo 3.1 Preview models in the Gemini API were shut down on 22 October 2026, and recommends Gemini Omni Flash or a GA Veo model. | M4.1 |
 | D2 | `ENGINE_LICENSED_PROVIDERS`: which providers' outputs are licensed for commercial social use. An empty value licenses none. | M4.5, engine video at Gate |
 | D3 | The HyperFrames price per minute, and the render fallback (Shotstack, or none). | M4.6, M2.3 (engine path) |
 | D4 | The Apify key and plan price. | M5.4 |

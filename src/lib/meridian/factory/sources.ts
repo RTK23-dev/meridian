@@ -23,9 +23,9 @@ export const FACTORY_SOURCES = [
   {
     id: "licensed_sensor_tower",
     label: "Sensor Tower / Pathmatics (Licensed ad intelligence)",
-    implemented: true,
+    implemented: false,
     licensed: true,
-    note: "Enterprise competitor video archive. Not connected until SENSOR_TOWER_API_KEY is configured.",
+    note: "Enterprise competitor video archive. The client is not built in this release, so it stays not connected even when SENSOR_TOWER_API_KEY is set.",
   },
   {
     id: "meta_ad_library",
@@ -165,7 +165,8 @@ export class BulkUploadSourceAdapter implements SourceAdapter {
 
 /**
  * Licensed Provider Adapter: Sensor Tower / Pathmatics.
- * Returns NOT_CONNECTED until SENSOR_TOWER_API_KEY is configured.
+ * Always NOT_CONNECTED in this release. The client is not built, so a saved key is read but no request is made, and a saved key
+ * is never reported as a working connection.
  */
 export class SensorTowerSourceAdapter implements SourceAdapter {
   readonly id = "licensed_sensor_tower";
@@ -179,30 +180,25 @@ export class SensorTowerSourceAdapter implements SourceAdapter {
   async checkConnection(
     env: { SENSOR_TOWER_API_KEY?: string; LICENSED_AD_INTELLIGENCE_KEY?: string } = process.env,
   ): Promise<{ connected: boolean; reason?: string }> {
-    const key = this.getApiKey(env);
-    if (!key) {
+    if (!this.getApiKey(env)) {
       return {
         connected: false,
         reason: "SENSOR_TOWER_API_KEY is not set. Provider remains NOT_CONNECTED.",
       };
     }
-    return { connected: true };
+    return {
+      connected: false,
+      reason: "The Sensor Tower client is not built in this release. A saved key is read, but no request is made, so the provider stays NOT_CONNECTED.",
+    };
   }
 
   async fetchAds(
     _query: { niche?: string; advertiser?: string; limit?: number } = {},
     env: { SENSOR_TOWER_API_KEY?: string; LICENSED_AD_INTELLIGENCE_KEY?: string } = process.env,
   ): Promise<SourceFetchResult> {
+    // No provider request is made from here, whatever key is saved, so this never returns an empty success.
     const check = await this.checkConnection(env);
-    if (!check.connected) {
-      return { status: "NOT_CONNECTED", reason: check.reason || "Provider is not connected." };
-    }
-
-    // When key is configured, query provider API (stubbed with type contract)
-    return {
-      status: "connected",
-      ads: [],
-    };
+    return { status: "NOT_CONNECTED", reason: check.reason || "Provider is not connected." };
   }
 }
 

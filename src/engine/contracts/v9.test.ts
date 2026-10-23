@@ -6,8 +6,8 @@ import test from "node:test";
 import { CONTRACTS_VERSION, ledgerEntrySchema, providerRefSchema, type ProviderRef } from "./index.ts";
 import { ledgerClaudeFixture, ledgerRenderFixture } from "./fixtures/index.ts";
 
-test("the contract set is engine-contracts@9 (the version the v9 note of Bible section 4 records)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@9");
+test("the contract set includes the v9 changes (engine-contracts@9 or later; v10 is pinned in v10.test.ts)", () => {
+  assert.ok(Number(CONTRACTS_VERSION.split("@")[1]) >= 9, `the set is ${CONTRACTS_VERSION}`);
 });
 
 test("an entry written before v9 has no providerRef, and reads as null", () => {

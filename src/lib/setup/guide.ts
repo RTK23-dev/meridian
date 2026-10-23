@@ -71,7 +71,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "media",
     title: "Make images and video",
-    what: "Gemini reads images and video frames and makes Omni video. Hypit runs as a separate process for video. You can also upload media you already have.",
+    what: "Gemini reads images and video frames and makes Omni video. Hypit runs as a separate process for video. The video engine reaches its models through OpenRouter, avatars through HeyGen and Claude through Anthropic, and Deepgram reads speech. Each key is saved for this workspace. You can also upload media you already have.",
     why: "Only needed when Meridian should produce media itself. Uploads cover the rest.",
     required: false,
   },
