@@ -1,8 +1,9 @@
 // The orchestrator's policy for a workspace (migration 0114; owner direction 2026-10-23): the model families switched off, and the measure
 // ceiling for measure mode (D15). The overrun tolerance is retired (D12: a budget is a line), so a stored row that still carries it is read
 // without that key, and its families are kept. Every read and write is scoped to the organization. The stored JSON is validated here on every
-// read and write, and a missing key takes its initial value, so an adjustment is one row update. Browser-safe for the schema and the types: no
-// Node-only imports (the measure options are a type only).
+// read and write. A missing key takes its initial value, so an adjustment is one row update. A stored row that does not validate is unreadable:
+// the read reports it, and planning, runs and edits refuse with its reason. Nothing is reset, and no family is switched on by it. Browser-safe
+// for the schema and the types: no Node-only imports (the measure options are a type only).
 
 import { z } from "zod";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
@@ -34,6 +35,15 @@ export const INITIAL_POLICY: OrchestratorPolicy = {
   measureCeilingUsdPerSecond: INITIAL_MEASURE_CEILING_USD_PER_SECOND,
 };
 
+/** The reason a stored row that does not validate is refused for. Planning, runs and edits give it; the policy read reports it. */
+export const UNREADABLE_POLICY_REASON = "the workspace's orchestrator policy is unreadable; save the policy again";
+
+/** The reason a save over an unreadable row gives when it does not state the model families: the stored families are not known, so none is kept. */
+export const UNREADABLE_POLICY_FAMILIES_REASON = "the workspace's orchestrator policy is unreadable; state the model families when you save it again";
+
+/** A workspace's stored policy as it is read: the policy, or that the row is unreadable, with the reason. An unreadable row is never defaulted. */
+export type PolicyRead = { status: "ok"; policy: OrchestratorPolicy } | { status: "unreadable"; reason: string };
+
 /** The key a row stored before D12 carried. It is retired: it is dropped on read, and nothing else in the row is changed by that. */
 const RETIRED_TOLERANCE_KEY = "budgetTolerance";
 
@@ -41,47 +51,66 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function initialPolicy(): OrchestratorPolicy {
+  return { disabledModelFamilies: [...INITIAL_POLICY.disabledModelFamilies], measureCeilingUsdPerSecond: INITIAL_POLICY.measureCeilingUsdPerSecond };
+}
+
 /**
- * The policy from a stored object. Each missing key takes its initial value, and a retired key is dropped first. A stored object that does
- * not validate is replaced by the initial policy as a whole, so a malformed row never turns a family on. Pure.
+ * The policy from a stored object. The retired key is dropped first, and each missing key takes its initial value. A stored value that is not
+ * an object, or does not validate (a family list that is not a list, a malformed family, a ceiling out of range, an unknown key), is unreadable:
+ * the read gives its reason and no policy, so no family is reset to the initial list and none is switched on. Pure.
  */
-export function policyFrom(stored: unknown): OrchestratorPolicy {
-  const current = isRecord(stored) ? Object.fromEntries(Object.entries(stored).filter(([key]) => key !== RETIRED_TOLERANCE_KEY)) : {};
-  const candidate = { ...INITIAL_POLICY, ...current };
-  const parsed = orchestratorPolicySchema.safeParse(candidate);
-  return parsed.success
-    ? parsed.data
-    : { disabledModelFamilies: [...INITIAL_DISABLED_MODEL_FAMILIES], measureCeilingUsdPerSecond: INITIAL_MEASURE_CEILING_USD_PER_SECOND };
+export function policyFrom(stored: unknown): PolicyRead {
+  if (!isRecord(stored)) return { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
+  const current = Object.fromEntries(Object.entries(stored).filter(([key]) => key !== RETIRED_TOLERANCE_KEY));
+  const parsed = orchestratorPolicySchema.safeParse({ ...INITIAL_POLICY, ...current });
+  return parsed.success ? { status: "ok", policy: parsed.data } : { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
 }
 
-function parseStored(text: string | null | undefined): unknown {
-  if (!text) return null;
-  try {
-    return JSON.parse(text) as unknown;
-  } catch {
-    return null;
-  }
-}
-
-export async function readOrchestratorPolicy(sql: Sql, organizationId: string): Promise<OrchestratorPolicy> {
+/**
+ * The workspace's stored policy as it is read. A workspace with no stored row reads the initial policy: it has never saved one. A row that
+ * is not JSON, or does not validate, is unreadable (policyFrom).
+ */
+export async function readOrchestratorPolicy(sql: Sql, organizationId: string): Promise<PolicyRead> {
   const rows = await sql<{ policy_json: string | null }>`
     select policy::text as policy_json from orchestrator_policies where organization_id = ${organizationId} limit 1
   `;
-  return policyFrom(parseStored(rows[0]?.policy_json));
+  const row = rows[0];
+  if (row === undefined) return { status: "ok", policy: initialPolicy() };
+  let stored: unknown;
+  try {
+    stored = JSON.parse(row.policy_json ?? "") as unknown;
+  } catch {
+    return { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
+  }
+  return policyFrom(stored);
 }
 
 /**
- * Applies a partial change and stores the whole policy. Family ids are normalized (lowercase, no leading ~). A change that does not
- * validate, the measure ceiling included, throws and writes nothing. Returns the stored policy.
+ * The workspace's policy for an action that depends on it: planning, a run, a step edit, the model list. An unreadable row throws its reason
+ * before anything is read from a provider or written, so nothing is planned, run or edited on a family set that cannot be read (fail closed).
+ */
+export async function requireOrchestratorPolicy(sql: Sql, organizationId: string): Promise<OrchestratorPolicy> {
+  const read = await readOrchestratorPolicy(sql, organizationId);
+  if (read.status === "unreadable") throw new Error(read.reason);
+  return read.policy;
+}
+
+/**
+ * Applies a partial change and stores the whole policy. Family ids are normalized (lowercase, no leading ~). A readable row keeps the value of
+ * an absent field. An unreadable row has no values to keep: the save must state the families, and an absent ceiling takes its initial value.
+ * A change that does not validate, the measure ceiling included, throws and writes nothing. Returns the stored policy.
  */
 export async function writeOrchestratorPolicy(
   sql: Sql,
   input: { organizationId: string; actorId: string; patch: { disabledModelFamilies?: string[]; measureCeilingUsdPerSecond?: number } },
 ): Promise<OrchestratorPolicy> {
-  const current = await readOrchestratorPolicy(sql, input.organizationId);
+  const read = await readOrchestratorPolicy(sql, input.organizationId);
   const families = input.patch.disabledModelFamilies?.map(normalizeModelId);
+  if (read.status === "unreadable" && families === undefined) throw new Error(UNREADABLE_POLICY_FAMILIES_REASON);
+  const base = read.status === "ok" ? read.policy : initialPolicy();
   const next = orchestratorPolicySchema.parse({
-    ...current,
+    ...base,
     ...(families !== undefined ? { disabledModelFamilies: families } : {}),
     ...(input.patch.measureCeilingUsdPerSecond !== undefined ? { measureCeilingUsdPerSecond: input.patch.measureCeilingUsdPerSecond } : {}),
   });

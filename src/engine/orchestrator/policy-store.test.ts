@@ -1,20 +1,30 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { INITIAL_POLICY, measureModeFor, orchestratorPolicySchema, policyFrom, readOrchestratorPolicy, writeOrchestratorPolicy } from "./policy-store.ts";
+import {
+  INITIAL_POLICY,
+  UNREADABLE_POLICY_FAMILIES_REASON,
+  UNREADABLE_POLICY_REASON,
+  measureModeFor,
+  orchestratorPolicySchema,
+  policyFrom,
+  readOrchestratorPolicy,
+  requireOrchestratorPolicy,
+  writeOrchestratorPolicy,
+} from "./policy-store.ts";
 
 const ORG_A = "org_policy_a";
 const ORG_B = "org_policy_b";
 const ORG_C = "org_policy_c";
+const ORG_D = "org_policy_d";
+const UNREADABLE = { status: "unreadable", reason: UNREADABLE_POLICY_REASON } as const;
 
 describe("orchestrator policy store (migration 0114; D12 retires the tolerance)", () => {
   let db: TestDatabase;
 
   before(async () => {
     db = await createTestDatabase();
-    await seedWorkspace(db.sql, ORG_A);
-    await seedWorkspace(db.sql, ORG_B);
-    await seedWorkspace(db.sql, ORG_C);
+    for (const organizationId of [ORG_A, ORG_B, ORG_C, ORG_D]) await seedWorkspace(db.sql, organizationId);
   });
 
   after(async () => {
@@ -22,7 +32,7 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
   });
 
   test("a workspace with no stored policy reads the initial values, and no tolerance, because a budget is a line", async () => {
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_A), INITIAL_POLICY);
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_A), { status: "ok", policy: INITIAL_POLICY });
     assert.deepEqual(INITIAL_POLICY.disabledModelFamilies, ["google/veo"]);
     assert.equal("budgetTolerance" in INITIAL_POLICY, false);
   });
@@ -30,7 +40,7 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
   test("turning a family on stores the change, normalized, and reads it back", async () => {
     const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { disabledModelFamilies: [] } });
     assert.deepEqual(stored.disabledModelFamilies, []);
-    assert.deepEqual((await readOrchestratorPolicy(db.sql, ORG_A)).disabledModelFamilies, []);
+    assert.deepEqual((await requireOrchestratorPolicy(db.sql, ORG_A)).disabledModelFamilies, []);
     const again = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { disabledModelFamilies: ["  Google/Veo "] } });
     assert.deepEqual(again.disabledModelFamilies, ["google/veo"]);
   });
@@ -40,7 +50,7 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
       insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
       values (${ORG_C}, ${JSON.stringify({ disabledModelFamilies: ["example/family"], budgetTolerance: { percent: 5, cents: 10 } })}::jsonb, 'user_c', now())
     `;
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { status: "ok", policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 } });
   });
 
   test("a change that does not validate throws and writes nothing", async () => {
@@ -51,7 +61,7 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
 
   test("the measure ceiling starts at 0.50 USD a second, and is stored in the same row as the families", async () => {
     assert.equal(INITIAL_POLICY.measureCeilingUsdPerSecond, 0.5);
-    const families = await readOrchestratorPolicy(db.sql, ORG_A);
+    const families = await requireOrchestratorPolicy(db.sql, ORG_A);
     const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: 1.25 } });
     assert.deepEqual(stored, { ...families, measureCeilingUsdPerSecond: 1.25 }, "the families stay as they were, and the ceiling changes");
     const rows = await db.sql<{ policy_json: string }>`select policy::text as policy_json from orchestrator_policies where organization_id = ${ORG_A}`;
@@ -66,28 +76,58 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
     for (const value of [0.009, 5.01, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
       await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: value } }), `${value} is outside the range`);
     }
-    assert.equal((await readOrchestratorPolicy(db.sql, ORG_A)).measureCeilingUsdPerSecond, 5, "the last value in range stands; the refused ones wrote nothing");
+    assert.equal((await requireOrchestratorPolicy(db.sql, ORG_A)).measureCeilingUsdPerSecond, 5, "the last value in range stands; the refused ones wrote nothing");
   });
 
   test("another workspace never reads a change made in this one", async () => {
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_B), INITIAL_POLICY);
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_B), { status: "ok", policy: INITIAL_POLICY });
+  });
+
+  test("a stored row whose families are malformed is unreadable: the read reports it, and requireOrchestratorPolicy, which planning, runs and edits use, refuses with the reason", async () => {
+    await db.sql`
+      insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
+      values (${ORG_D}, ${JSON.stringify({ disabledModelFamilies: "example/family", measureCeilingUsdPerSecond: 2 })}::jsonb, 'user_d', now())
+    `;
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_D), UNREADABLE, "no policy is read from the row, so no family is reset or switched on");
+    await assert.rejects(requireOrchestratorPolicy(db.sql, ORG_D), { message: UNREADABLE_POLICY_REASON });
+  });
+
+  test("a save over an unreadable row must state the families; with them the row is readable again, and an absent ceiling takes its initial value", async () => {
+    await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_D, actorId: "user_d", patch: { measureCeilingUsdPerSecond: 1 } }), { message: UNREADABLE_POLICY_FAMILIES_REASON });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_D), UNREADABLE, "the refused save wrote nothing");
+    const saved = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_D, actorId: "user_d", patch: { disabledModelFamilies: ["vendor-y"] } });
+    assert.deepEqual(saved, { disabledModelFamilies: ["vendor-y"], measureCeilingUsdPerSecond: 0.5 });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_D), { status: "ok", policy: saved });
   });
 });
 
-test("a stored policy that does not validate is replaced by the initial policy, so a malformed row never turns a family on", () => {
-  assert.deepEqual(policyFrom({ disabledModelFamilies: "example/family" }), INITIAL_POLICY);
-  assert.deepEqual(policyFrom({ disabledModelFamilies: "example/family", budgetTolerance: { percent: 10, cents: 25 } }), INITIAL_POLICY);
-  assert.deepEqual(policyFrom("not an object"), INITIAL_POLICY);
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }).disabledModelFamilies, []);
+test("a stored row whose families are malformed is unreadable with the exact reason: a list that is not a list is refused, not read as empty, and no family is switched on", () => {
+  assert.equal(UNREADABLE_POLICY_REASON, "the workspace's orchestrator policy is unreadable; save the policy again");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: ["vendor-x", "not a family!"], measureCeilingUsdPerSecond: 2 }), UNREADABLE);
+  assert.deepEqual(policyFrom({ disabledModelFamilies: "vendor-x", measureCeilingUsdPerSecond: 2 }), UNREADABLE, "a list that is not a list is unreadable");
+});
+
+test("a stored row whose ceiling is malformed, or that has an unknown key, is unreadable: its families are not reset to the initial list", () => {
+  assert.deepEqual(policyFrom({ disabledModelFamilies: ["vendor-x"], measureCeilingUsdPerSecond: 9 }), UNREADABLE);
+  assert.deepEqual(policyFrom({ disabledModelFamilies: ["vendor-x"], unexpected: true }), UNREADABLE, "an unknown key makes the row unreadable");
+});
+
+test("a stored value that is not an object, or whose families are not a list, is unreadable; an empty list is a list", () => {
+  assert.deepEqual(policyFrom({ disabledModelFamilies: "example/family" }), UNREADABLE);
+  assert.deepEqual(policyFrom({ disabledModelFamilies: "example/family", budgetTolerance: { percent: 10, cents: 25 } }), UNREADABLE);
+  assert.deepEqual(policyFrom({ disabledModelFamilies: null }), UNREADABLE);
+  assert.deepEqual(policyFrom("not an object"), UNREADABLE);
+  assert.deepEqual(policyFrom(["google/veo"]), UNREADABLE);
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } });
 });
 
 test("policyFrom drops the retired budgetTolerance key before it parses, and keeps the families of the row", () => {
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], budgetTolerance: { percent: 10, cents: 25 } }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], budgetTolerance: { percent: 10, cents: 25 } }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } });
   assert.deepEqual(policyFrom({ disabledModelFamilies: ["example/family"], budgetTolerance: { percent: 10, cents: 25 } }), {
-    disabledModelFamilies: ["example/family"],
-    measureCeilingUsdPerSecond: 0.5,
+    status: "ok",
+    policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 },
   });
-  assert.deepEqual(policyFrom({ budgetTolerance: { percent: 10, cents: 25 } }), INITIAL_POLICY, "a row with no families takes the initial families");
+  assert.deepEqual(policyFrom({ budgetTolerance: { percent: 10, cents: 25 } }), { status: "ok", policy: INITIAL_POLICY }, "a row with no families takes the initial families");
 });
 
 test("the measure ceiling is checked by the same strict parse as the families: an unknown key, a missing value or an out-of-range value does not validate", () => {
@@ -95,9 +135,9 @@ test("the measure ceiling is checked by the same strict parse as the families: a
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [] }).success, false, "the parsed policy carries its ceiling");
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.001 }).success, false);
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 5 }).success, true, "the top of the range is in it");
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 9 }), INITIAL_POLICY, "a ceiling out of range makes the stored row malformed");
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 });
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 }, "a missing ceiling takes its initial value");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 9 }), UNREADABLE, "a ceiling out of range makes the stored row unreadable");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 } });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } }, "a missing ceiling takes its initial value");
 });
 
 test("measure mode is off unless it is asked for; an admin's run takes the workspace's ceiling, and anyone else who asks is refused", () => {

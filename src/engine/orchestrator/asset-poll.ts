@@ -10,15 +10,15 @@
 //   nothing, so a settle that is replayed never adds a hold twice. A job still working keeps its hold; its row is otherwise unchanged.
 // - A finished job with a reported bill is stored at that bill. The output replaces the hold, so nothing counts twice. When the clip's length
 //   is known, the bill is measured once for its plan and cache key (orchestrator_cost_measurements).
-// - A finished job with no reported bill is stored at its hold, never at null, and is not measured.
+// - A finished job with no reported bill is stored at its hold, never at null, and is not measured. Its row has a hold; a row without one is below.
 // - A job that failed or is unsettled closes as failed. So does a poll that threw, when its row has a hold. A failed close charges the row's
 //   hold to the plan as a failed event, so the spend counts it (store.ts failedHoldsUsd).
 // - A row closes once. complete and fail change it only while it is waiting: a close that finds it already closed writes nothing (no output,
 //   no measurement, no event) and the poll does not count it. So a failed row's hold is never also a stored bill (D14).
 // - A retry the router refuses because the run's reservation has ended closes the row as failed, with RUN_ENDED_REASON: the retry is a new
 //   paid call, and it needs a new run (D14).
-// - A poll that threw on a row with no recorded hold leaves the row open, and its run keeps refusing: nothing is known about its money until
-//   the provider answers. A definitive answer on such a row closes it with no event, because there is no hold to charge.
+// - A row with no recorded hold closes only with its bill. Every other answer leaves it open, as a poll that threw does: its money is not
+//   known, so its run keeps refusing. A close with no hold would book its money as zero, and an unknown hold is never zero (fail closed).
 // Each change of money runs in one transaction, so a row never closes without its event, and an event is never written twice. A write that
 // throws propagates: the row stays waiting, so its hold stays counted until a later poll settles it.
 //
@@ -131,26 +131,26 @@ async function verdictOf(opts: PollOptions, row: DueAsset): Promise<Verdict> {
     if (polled.state === "pending") return { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS };
     step = (await router.settle(row.job, polled, row.input)).step;
   } catch (error) {
-    // Nothing is known about the job. Its hold is charged as failed, or, with no hold recorded, the row stays open until the provider answers.
-    return row.heldUsd === null ? { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS } : { kind: "failed", reason: reasonOf(error) };
+    // Nothing is known about the job: its hold is charged as failed, or the row stays open when no hold is recorded (closeFailed).
+    return closeFailed(row, reasonOf(error));
   }
   if (step.status === "submitted") {
     // A retry the router submitted: a second paid call. The row takes the new job, and the store adds its hold to the row's total.
     return { kind: "waiting", job: step.job, runAfterMs: step.runAfterMs };
   }
   // A retry the router refused because the run's reservation has ended: no call starts, and a new run is what a retry needs (D14).
-  if (isRunEndedRefusal(step)) return { kind: "failed", reason: RUN_ENDED_REASON };
+  if (isRunEndedRefusal(step)) return closeFailed(row, RUN_ENDED_REASON);
   let output: NodeOutput;
   try {
     // outputOf names the reason for every outcome that is not a finished asset, so the row records why it stopped.
     output = outputOf(step, row.kind);
   } catch (error) {
-    return { kind: "failed", reason: reasonOf(error) };
+    return closeFailed(row, reasonOf(error));
   }
   const bill = reportedUsdOf(output.costUsd);
-  if (bill === null && row.heldUsd === null) {
-    return { kind: "failed", reason: "the step reported no actual cost and no hold is recorded, so nothing is stored" };
-  }
+  // A finished job with no bill is stored at its hold. With no hold recorded there is no figure to store, and its money is not known: the row
+  // stays open, so its run keeps refusing until the money is known (D14). It is not closed as zero.
+  if (bill === null && row.heldUsd === null) return stillOpen(row);
   return {
     kind: "done",
     // The reported bill replaces the hold. With none reported, the output is charged its hold: never null, never zero.
@@ -163,6 +163,19 @@ async function verdictOf(opts: PollOptions, row: DueAsset): Promise<Verdict> {
 /** A bill the provider reported: a finite, non-negative figure. Anything else is no bill at all, never a zero. */
 function reportedUsdOf(value: number | null): number | null {
   return value !== null && Number.isFinite(value) && value >= 0 ? value : null;
+}
+
+/** A row that stays open: it is polled again later, and its hold, if any, stays as it is. */
+function stillOpen(row: DueAsset): Verdict {
+  return { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS };
+}
+
+/**
+ * A close that charges the row's hold as failed (D14). A row with no recorded hold has no money to charge, and its money is not known, so it
+ * stays open rather than closing as zero: an unknown hold is never zero, and its run keeps refusing.
+ */
+function closeFailed(row: DueAsset, reason: string): Verdict {
+  return row.heldUsd === null ? stillOpen(row) : { kind: "failed", reason };
 }
 
 function reasonOf(error: unknown): string {
