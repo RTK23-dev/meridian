@@ -8,6 +8,7 @@ import type { AssetSpec, ModelChoice } from "../contracts/assets.ts";
 import { routes, type RouteTable } from "../config/routes.ts";
 import type { HttpResponse } from "../gateway/types.ts";
 import { parseVideoCatalog, type CatalogRead, type ModelCatalogSource } from "../gateway/catalog.ts";
+import { withModelPolicy } from "../gateway/catalog-policy.ts";
 import { createAssetRouter, type ProduceInput, type RouterSignals } from "./router.ts";
 import { memoryAssetCache, routeCacheKey, type AssetCache } from "./cache.ts";
 import { memoryProviderStats } from "./stats.ts";
@@ -64,10 +65,16 @@ const choice = (modelId: string, source: ModelChoice["source"] = "orchestrator")
   catalogReadAt: READ_AT,
 });
 
-async function harness(options: { script: Record<string, Reply | Reply[]>; catalog?: ModelCatalogSource | null; cache?: AssetCache }) {
+async function harness(options: {
+  script: Record<string, Reply | Reply[]>;
+  catalog?: ModelCatalogSource | null;
+  cache?: AssetCache;
+  table?: RouteTable;
+  disabledFamilies?: readonly string[];
+}) {
   const clock = fakeClock();
   const script = scripted(options.script);
-  const gateway = gatewayFor(script.transport, { routes: table });
+  const gateway = gatewayFor(script.transport, { routes: options.table ?? table });
   const { ledger, reservationId } = await ledgerWithReservation(10);
   const catalog = options.catalog === null ? undefined : (options.catalog ?? catalogSource());
   const router = createAssetRouter({
@@ -81,6 +88,7 @@ async function harness(options: { script: Record<string, Reply | Reply[]>; catal
     videoProfiles: routedProfiles,
     signals,
     ...(catalog === undefined ? {} : { catalog }),
+    ...(options.disabledFamilies === undefined ? {} : { disabledFamilies: options.disabledFamilies }),
     now: clock.now,
     sleep: clock.sleep,
   });
@@ -160,6 +168,36 @@ describe("router with a model choice", () => {
     const fallback = report.decisions[0];
     assert.equal(fallback?.chose, "route table for video.cinematic");
     assert.match(fallback?.reason ?? "", /no longer in the catalog for video\.cinematic/);
+  });
+
+  it("a fallback to the route table never submits to a family the plan's brand switched off, and uses the next target", async () => {
+    // The orchestrator chose a model of a family the brand has switched off. The catalog the router reads is the plan's own (withModelPolicy),
+    // so the choice has left it, and the route table is the fallback. Its first target is of that family and is refused; the next one is used.
+    const KLING_FAMILY = "kwaivgi";
+    const catalog = withModelPolicy(catalogSource(), async () => [KLING_FAMILY]);
+    const h = await harness({
+      table: routesWith("video.cinematic", [{ provider: "openrouter", model: KLING, priceKey: "kling_v3_standard", verified: false }, { provider: "openrouter", model: WAN, priceKey: "wan_2_6", verified: false }], routes.table),
+      disabledFamilies: [KLING_FAMILY],
+      catalog,
+      script: { "POST /api/v1/videos": submitFor({ [WAN]: accepted("job-wan") }), "GET /api/v1/videos/job-wan": completed("job-wan", 0.2) },
+    });
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000, modelChoice: choice(KLING) })));
+    assert.equal(report.outcome.status, "done", JSON.stringify(report.outcome));
+    assert.deepEqual(submittedModels(h.requests), [WAN], "the switched-off target is never submitted, not on the first submit nor on a fallback");
+    assert.equal(report.decisions[0]?.chose, "route table for video.cinematic");
+    assert.equal(report.outcome.status === "done" ? report.outcome.asset.providerId : null, `openrouter:${WAN}`);
+  });
+
+  it("when every target of the route table is of a switched-off family, nothing is submitted and each target's reason says so", async () => {
+    const h = await harness({
+      table: routesWith("video.cinematic", [{ provider: "openrouter", model: KLING, priceKey: "kling_v3_standard", verified: false }, { provider: "openrouter", model: WAN, priceKey: "wan_2_6", verified: false }], routes.table),
+      disabledFamilies: ["kwaivgi", "alibaba"],
+      script: {},
+    });
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 5000 })));
+    assert.equal(report.outcome.status, "unavailable", JSON.stringify(report.outcome));
+    if (report.outcome.status === "unavailable") assert.match(report.outcome.reasons.join("\n"), /switched off by the model policy/);
+    assert.deepEqual(submittedModels(h.requests), [], "no call is sent");
   });
 
   it("falls back when the chosen model no longer fits the call", async () => {

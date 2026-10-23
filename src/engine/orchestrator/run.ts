@@ -18,7 +18,7 @@ import type { CatalogEntry } from "./catalog.ts";
 import type { NodeEvent, OrchestratorPlan } from "./contracts.ts";
 import { runPlan, type Handlers, type RunCache } from "./execute.ts";
 import { openRunBudget, releaseRunBudget, type RunBudget } from "./run-budget.ts";
-import { lineOf } from "./envelope.ts";
+import { lineOf, planAskNote } from "./envelope.ts";
 import { editNode, type NodeChange } from "./stale.ts";
 import { waitingHoldsByNode } from "./holds.ts";
 import type { MeasureOptions } from "./measure.ts";
@@ -226,6 +226,10 @@ export type EditOutcome =
 /**
  * Change one step of a stored plan. The change is applied to a copy, the copy is checked against the catalog, and only a plan that passes
  * replaces the stored one. A refused edit changes nothing.
+ *
+ * The check is the planning check (D15): a video or avatar step with no engine price is accepted with a note that it needs measure mode, and
+ * the run refuses it until a run in measure mode holds it. Every other unpriced step is refused. The notes of the edited plan are stored with it,
+ * as planning stores them: the plan's ask note and the notes of the check.
  */
 export async function editStoredPlan(
   sql: Sql,
@@ -242,10 +246,20 @@ export async function editStoredPlan(
   } catch (error) {
     return { status: "refused", reasons: [error instanceof Error ? error.message : "the edit could not be applied"] };
   }
-  const checked = validatePlan(next, opts.catalog, { textInputTokens: textInputTokensOf(stored.brief), disabledFamilies: opts.disabledFamilies });
+  // The same check as planning (service.ts callAndStore): the line and the category lines only shape the notes, never a refusal.
+  const brief = orchestratorBriefSchema.safeParse(stored.brief);
+  const checked = validatePlan(next, opts.catalog, {
+    textInputTokens: textInputTokensOf(stored.brief),
+    disabledFamilies: opts.disabledFamilies,
+    budgetUsd: lineOf(next.budgetUsd, stored.budgetUsd),
+    ...(brief.success ? { categoryBudgetsUsd: categoryBudgetsOf(brief.data) } : {}),
+    planning: true,
+  });
   if (!checked.ok) return { status: "refused", reasons: checked.reasons };
+  const asked = planAskNote(next.budgetUsd, stored.budgetUsd);
+  const notes = asked === null ? checked.notes : [asked, ...checked.notes];
   // The write is refused by the store when a run has started since the read above, so an edit never clears a run in progress.
-  const saved = await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan);
+  const saved = await updatePlanJson(sql, opts.organizationId, opts.planId, checked.plan, notes);
   if (saved === null) return { status: "refused", reasons: ["the plan is running, so it cannot be edited until the run stops; nothing was changed"] };
   return { status: "edited", plan: checked.plan };
 }
