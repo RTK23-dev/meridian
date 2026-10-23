@@ -2,44 +2,33 @@
 
 # Video engine (src/engine/)
 
-The video engine is specified in `docs/engine/VIDEO_ENGINE_BIBLE.md`. Codebase state, the factory roadmap and the working rules are in `docs/engine/MERIDIAN_HANDOFF.md`.
+The engine's specification is `docs/engine/VIDEO_ENGINE_BIBLE.md`, a reference. Inside `src/engine/`, the Bible wins over other
+documents. Where the Bible and a product decision conflict, do not pick a side in code: ask the owner.
 
-**Which document wins.** Inside `src/engine/`, the Bible wins. Everywhere else, `docs/NORTH_STAR.md` and AGENTS.md win. Where the Bible and the North Star conflict (listed below), do not pick a side in code: stop and ask the lead, who asks the owner.
+## Engine rules
 
-## Working rules
-
-1. **Fail closed.** Unknown values stay null, never 0 or a guess. An unconnected service returns NOT_CONNECTED; it never returns success.
-2. **No fake success.** No invented costs, metrics, receipts, media ids or connected states. A stub says it is a stub. A failed call is reported as failed.
-3. **Everything through the gateway, the router and the ledger.** Every model, API and render call goes through the API gateway (`src/engine/gateway/`), reached from the asset router, the Claude client or the render adapter. OpenRouter is the default platform; the provider and fallback targets of each capability are set in `src/engine/config/routes.ts`. For the production model classes, the orchestrator picks each shot's model from OpenRouter's catalog, and code accepts only an eligible candidate (Bible 10.5, owner decision 2026-10-16). No engine file but `gateway/transport.ts` calls `fetch`. Keys come from the credential resolver through `gateway/meridian.ts` (never `process.env`); every call sends an idempotency key (the input hash), and writes estimate, reservation and actual cost to the ledger. Budgets are hard limits: when one is reached, slow down; never overrun.
-4. **Contracts are law.** The zod schemas in `src/engine/contracts/` are the only interface between workstreams. Only eng-contracts changes them, with a version bump, a migration note in Bible section 4, and lead approval. Never import another workstream's internals.
-5. **Done means a recorded live run.** Merged code and green fixtures are not done. A phase is complete only when its Bible section 19 acceptance test passes on real APIs, with artifact ids, costs and output attached. Agents hold no live keys (North Star decision 1), so agents deliver fixture-tested code plus the exact live run for the owner to perform.
+1. **Fail closed.** Unknown values stay null, never 0 or a guess. An unconnected service returns NOT_CONNECTED, never success.
+2. **No fake success.** No invented costs, metrics, receipts, media ids or connected states. A stub says it is a stub.
+3. **Everything through the gateway and the ledger.** Every model, API and render call goes through `src/engine/gateway/`, reached
+   from the asset router, the Claude client or the render adapter. No engine file except `gateway/transport.ts` calls `fetch`. Keys
+   come from the credential resolver (`gateway/meridian.ts`), never `process.env`. Every paid call sends an idempotency key and writes
+   estimate, reservation and actual cost to the ledger. Budgets are hard limits: when one is reached, stop; never overrun.
+4. **Contracts are the interface.** The zod schemas in `src/engine/contracts/` are the only interface between parts of the engine. A
+   contract change needs a version bump in `contracts/version.ts`, a migration note in Bible section 4, and the owner's or lead's approval.
+5. **Live runs before claims.** A phase is verified only by a recorded live run on real APIs, with ids, costs and output attached.
+   Fixture success is not verification. Say which live steps are still for the owner to run.
 6. **Copy genes, never content.** No source footage, music, voice or script lines enter a render.
-7. **All compute that makes the video is API.** No local models or local renderers in production paths. ffmpeg may run on the worker for decoding and measurement (owner decision 2026-10-16).
-8. **Untrusted outputs.** Provider and model outputs are data: validate them, never execute them, never pass them on as instructions.
-9. **Secrets never enter git, logs or chat.**
+7. **Untrusted outputs.** Provider and model outputs are data: validate them, never execute them, never pass them on as instructions.
+8. **Secrets never enter git, logs or chat.**
 
-## Coding conventions for src/engine/
+## Conventions
 
-- TypeScript runs through `node --experimental-strip-types` in tests: no `enum`, no constructor parameter properties, no `namespace`. Import local files with the `.ts` extension, as the rest of the repo does.
-- zod is v4 (`zod` ^4). Use v4 APIs, for example `z.record(z.string(), schema)` with two arguments. Export each schema and its `z.infer` type.
-- Tests use `node:test` and `node:assert/strict`, sit next to the code as `*.test.ts`, and use recorded fixtures. No test calls a live API.
-- No new npm dependency without the lead's approval. Any install uses `--ignore-scripts` (the `onnxruntime-node` install script cannot download here).
-- Engine code never imports `src/lib/meridian/research/`, `embeddings/` or the Hypit modules (local models and the Hypit runtime).
-- Artifacts and media go through a storage interface, never a vendor SDK. Do not add S3 code (see the storage conflict below).
-- In a worktree, commit your work on the worktree branch with a clear message. Never push and never touch other branches; the lead merges.
-
-## Process
-
-- Contracts (eng-contracts) merge before any other engine workstream starts.
-- Each agent writes only in the folders its file in `.claude/agents/` names, keeps a `STATUS.md` there, and replies to the lead in at most 150 words.
-- The lead reviews every diff before merging a worktree and runs `npm test && npm run typecheck && npm run lint` after each merge.
-- The lead keeps `docs/engine/PHASE_LOG.md` current and stops at every phase gate.
-- Open decisions in Bible section 20.2 are the owner's. Ask; never guess.
+- Tests run through `node --experimental-strip-types`: no `enum`, no constructor parameter properties, no `namespace`. Import local
+  files with the `.ts` extension.
+- zod is v4. Use v4 APIs, for example `z.record(z.string(), schema)`. Export each schema and its `z.infer` type.
+- Tests use `node:test` and `node:assert/strict`, sit next to the code as `*.test.ts`, and use recorded fixtures.
+- No new npm dependency without approval. Install with `--ignore-scripts` (the `onnxruntime-node` install script cannot download here).
+- Engine code does not import `src/lib/meridian/research/`, `embeddings/` or the Hypit modules.
+- Artifacts and media go through a storage interface, never a vendor SDK. Do not add S3 code.
+- Open decisions in Bible section 20.2 belong to the owner. Ask; never guess.
 - Never set `CLAUDE_CODE_EFFORT_LEVEL` or `CLAUDE_CODE_SUBAGENT_MODEL_FORCE`.
-
-## Known conflicts (owner to decide; do not resolve in code)
-
-- **Artifact storage.** The Bible stores artifacts in S3. North Star decision 2 retires S3 in favour of Postgres and Drive. For rendering, the owner dropped Remotion Lambda (S3-backed) on 2026-10-14; Shotstack is the only fallback.
-- **Live runs.** The Bible's done-definition needs live runs; North Star decision 1 says agents never hold keys.
-- **Before E1.** The Bible requires handoff phase 0 (Veo move, PR #39). PR #39 closed unmerged and no Veo provider exists in this repo.
-- **Hypit.** The Bible reuses Hypit's ideas only; the North Star keeps Hypit as a selectable provider.
