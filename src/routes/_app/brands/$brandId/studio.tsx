@@ -155,6 +155,7 @@ function Studio({ brandId }: { brandId: string }) {
         <TabsContent value="direction">
           <DirectionStep
             session={session}
+            brandId={brandId}
             canEdit={canEdit}
             pending={actions.openBrief.isPending}
             opportunities={opportunitiesQuery.data?.opportunities}

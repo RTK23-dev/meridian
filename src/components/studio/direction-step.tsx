@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -40,6 +41,7 @@ export function DirectionReasonField({ id, registration, error }: { id: string; 
 
 type DirectionStepProps = {
   session: StudioData;
+  brandId: string;
   canEdit: boolean;
   pending: boolean;
   opportunities: readonly DirectionCandidate[] | undefined;
@@ -51,7 +53,7 @@ type DirectionStepProps = {
  * Step 1. The recommended direction, the alternatives the stored opportunities show, and the accept action. A person may choose
  * one discovered alternative to brief instead; without a choice the brief is written from the recommendation, as before.
  */
-export function DirectionStep({ session, canEdit, pending, opportunities, opportunitiesFailed, onAccept }: DirectionStepProps) {
+export function DirectionStep({ session, brandId, canEdit, pending, opportunities, opportunitiesFailed, onAccept }: DirectionStepProps) {
   const reasonForm = useForm<DirectionReasonInput>({ resolver: zodResolver(directionReasonSchema), defaultValues: { reason: "" }, mode: "onChange" });
   const reason = reasonForm.watch("reason");
   const reasonDirty = reasonForm.formState.isDirty;
@@ -134,6 +136,11 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
               ? "Add competitor ads you have seen. An empty library is not whitespace."
               : "Stored creatives do not yet show a direction beyond the starting ideas. Nothing was invented."}
           </p>
+          {session.observationCount === 0 ? (
+            <Button asChild variant="secondary" size="md" className="mt-4">
+              <Link to={`/brands/${brandId}/market` as never}>Add competitor ads in Market</Link>
+            </Button>
+          ) : null}
         </Card>
       )}
 
