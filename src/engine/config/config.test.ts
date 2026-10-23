@@ -47,8 +47,8 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 9 (the ledger's providerRef, Bible section 4 v9 note)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@9");
+test("the contract set is at version 10 (the catalog's listed durations, Bible section 4 v10 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@10");
 });
 
 test("the speech targets name no model (the live catalog chooses one, Bible 10.5), and each keeps its price key", () => {
@@ -385,7 +385,6 @@ test("the Bible 10.3 list prices are in the table with their units", () => {
     ["kling_v3_standard", 0.126, "per_second"],
     ["seedance_2_5", 0.1028, "per_second"],
     ["seedance_2_0_mini", 0.0336, "per_second"],
-    ["wan_3_0", 0.0425, "per_second"],
     ["heygen_avatar_iv", 0.05, "per_second"],
     ["seedream_5_flash", 0.018, "per_image"],
     ["seedream_4_5", 0.04, "per_image"],
@@ -397,6 +396,13 @@ test("the Bible 10.3 list prices are in the table with their units", () => {
     assert.equal(priceFor(key).unit, unit, `${key} unit`);
     assert.equal(priceFor(key).source, "list_oct_2026");
   }
+});
+
+test("the two Wan prices are the OpenRouter listing's 1080p rates, read 2026-10-23, not the Bible's list prices", () => {
+  assert.equal(priceFor("wan_3_0").usd, 0.2, "Wan 3.0 at 1080p");
+  assert.equal(priceFor("wan_3_0").source, "openrouter_listing");
+  assert.equal(priceFor("wan_2_6").usd, 0.15, "Wan 2.6 at 1080p, the first-frame rate");
+  assert.equal(priceFor("wan_2_6").source, "openrouter_listing");
 });
 
 test("prices the Bible does not state as a number are null, never a guess", () => {

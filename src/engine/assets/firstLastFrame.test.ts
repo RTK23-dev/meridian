@@ -10,7 +10,7 @@ const KLING = "kwaivgi/kling-v3.0-std";
 const SEED = "bytedance/seedance-2.0";
 const WAN = "alibaba/wan-2.6";
 
-const target = (model: string, priceKey: "kling_v3_standard" | "seedance_2_5" | "wan_3_0") => ({
+const target = (model: string, priceKey: "kling_v3_standard" | "seedance_2_5" | "wan_2_6") => ({
   provider: "openrouter",
   model,
   priceKey,
@@ -24,7 +24,7 @@ const TABLE: RouteTable = {
     [target(KLING, "kling_v3_standard"), target(SEED, "seedance_2_5")],
     routes.table,
   ),
-  "video.budget": { targets: [target(WAN, "wan_3_0")] },
+  "video.budget": { targets: [target(WAN, "wan_2_6")] },
 };
 
 const FRAMES = { first: "https://assets.example.com/first.jpg", last: "https://assets.example.com/last.jpg" };

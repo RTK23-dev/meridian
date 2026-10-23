@@ -34,7 +34,10 @@ const priceEntries = {
 
     // video.budget.
     seedance_2_0_mini: { unit: "per_second", usd: 0.0336, source: LIST },
-    wan_3_0: { unit: "per_second", usd: 0.0425, source: LIST },
+    // Wan 3.0 at 1080p, the rate OpenRouter's public listing shows (read 2026-10-23). The earlier 0.0425 was Wan 2.6's rate.
+    wan_3_0: { unit: "per_second", usd: 0.2, source: "openrouter_listing" },
+    // Wan 2.6 at 1080p, the first-frame (image to video) rate on the same listing: the higher of its two 1080p rates, read 2026-10-23.
+    wan_2_6: { unit: "per_second", usd: 0.15, source: "openrouter_listing" },
 
     // video.i2v_pinned: the price depends on which model passes the first-and-last-frame test in E2.
     i2v_pinned_model: { unit: "per_model", usd: null, source: LIST },

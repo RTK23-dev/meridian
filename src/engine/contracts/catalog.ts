@@ -17,6 +17,11 @@ export type CatalogPriceUnit = z.infer<typeof catalogPriceUnitSchema>;
 export const catalogCapabilitiesSchema = z.object({
   minSeconds: z.number().finite().nonnegative().nullable(),
   maxSeconds: z.number().finite().positive().nullable(),
+  /**
+   * The whole-second durations the catalog lists one by one, sorted: a model may take 5 and 10 s and no others. Null when the catalog
+   * gives only a range, in which case minSeconds and maxSeconds bound the duration and nothing narrower is known.
+   */
+  durationsSeconds: z.array(z.int().positive()).min(1).nullable(),
   aspectRatios: z.array(z.string().min(1)).nullable(),
   resolutions: z.array(z.string().min(1)).nullable(),
   firstFrame: z.boolean().nullable(),
@@ -49,5 +54,14 @@ export const modelCatalogEntrySchema = z
       return minSeconds === null || maxSeconds === null || maxSeconds >= minSeconds;
     },
     { message: "capabilities.maxSeconds must not be below capabilities.minSeconds" },
+  )
+  .refine(
+    (entry) => {
+      const { minSeconds, maxSeconds, durationsSeconds } = entry.capabilities;
+      if (durationsSeconds === null) return true;
+      const increasing = durationsSeconds.every((seconds, index) => index === 0 || seconds > (durationsSeconds[index - 1] as number));
+      return increasing && durationsSeconds[0] === minSeconds && durationsSeconds[durationsSeconds.length - 1] === maxSeconds;
+    },
+    { message: "capabilities.durationsSeconds must increase strictly, from minSeconds to maxSeconds" },
   );
 export type ModelCatalogEntry = z.infer<typeof modelCatalogEntrySchema>;

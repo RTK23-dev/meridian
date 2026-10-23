@@ -27,7 +27,7 @@ const SEED = "bytedance/seedance-2.0";
 const KLING_ID = `openrouter:${KLING}`;
 const WAN_ID = `openrouter:${WAN}`;
 
-const target = (model: string, priceKey: "kling_v3_standard" | "wan_3_0" | "seedance_2_5") => ({
+const target = (model: string, priceKey: "kling_v3_standard" | "wan_2_6" | "seedance_2_5") => ({
   provider: "openrouter",
   model,
   priceKey,
@@ -35,7 +35,7 @@ const target = (model: string, priceKey: "kling_v3_standard" | "wan_3_0" | "seed
 });
 const videoTable: RouteTable = routesWith(
   "video.cinematic",
-  [target(KLING, "kling_v3_standard"), target(WAN, "wan_3_0"), target(SEED, "seedance_2_5")],
+  [target(KLING, "kling_v3_standard"), target(WAN, "wan_2_6"), target(SEED, "seedance_2_5")],
   routes.table,
 );
 const QUALITY: Record<string, number> = { [KLING]: 0.9, [WAN]: 0.5, [SEED]: 0.1 };

@@ -106,7 +106,8 @@ describe("chooseModels", () => {
     assert.equal(requests.length, 1, "one call for the whole request, not one per shot");
     assert.equal(result.roleCalled, true);
 
-    // What the role was shown: the three calls that have candidates, with id, capabilities and price, and nothing for the 12 s shot.
+    // What the role was shown: the two calls that have candidates, with id, capabilities and price. The 6 s clip has none (Kling lists 5 and
+    // 10 s, Wan 2.6 lists 5 s), and nothing is shown for the 12 s shot either.
     const sent = JSON.parse(String(requests[0]?.body)) as { model: string };
     assert.equal(sent.model, "anthropic/claude-haiku-5.5", "model_chooser runs on llm.check");
     const block = textOf(sentMessages(requests[0]?.body)[1]?.content);
@@ -115,7 +116,6 @@ describe("chooseModels", () => {
     assert.deepEqual(calls.map((call) => [call.callId, call.shotId, call.output, call.candidates.map((candidate) => candidate.id)]), [
       ["c1", SHOT_1, "shot", ["kwaivgi/kling-v3.0-std", "alibaba/wan-2.6"]],
       ["c2", SHOT_2, "keyframe", ["bytedance-seed/seedream-4.5", "vendor/text-to-image-flat"]],
-      ["c3", SHOT_2, "clip", ["kwaivgi/kling-v3.0-std"]],
     ]);
 
     assert.ok(result.choices !== null);
@@ -125,15 +125,14 @@ describe("chooseModels", () => {
       [`${SHOT_1}:shot`]: ["alibaba/wan-2.6", "orchestrator"],
       // c2's pick is not a candidate: the first eligible route-table target of image.keyframe (Seedream 4.5).
       [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
-      // c3 has no pick: the first eligible catalog candidate for the clip (Kling, the first of its two).
-      [`${SHOT_2}:clip`]: ["kwaivgi/kling-v3.0-std", "fallback"],
     });
     const choices = result.choices.choices;
     assert.match(choices[1]?.modelChoice.reason ?? "", /not one of this call's eligible candidates/);
     assert.ok(!choices.some((entry) => /Ignore the candidates/.test(entry.modelChoice.reason)), "a refused pick's text is not kept as a reason");
 
-    // One decision per call, each naming its shot; the 12 s shot has no candidate, so no model is chosen for it.
+    // One decision per call, each naming its shot; the 6 s clip and the 12 s shot have no candidate, so no model is chosen for them.
     assert.equal(result.decisions.length, 4);
+    assert.equal(result.decisions[2]?.chose, "no model for video.budget", "the 6 s clip: no listed duration fits it");
     for (const decision of result.decisions) assert.ok(decisionSchema.safeParse(decision).success);
     assert.equal(result.decisions[0]?.by, "director");
     assert.match(result.decisions[3]?.reason ?? "", new RegExp(`^${SHOT_3} shot: no catalog candidate fits this call`));
@@ -155,7 +154,6 @@ describe("chooseModels", () => {
     assert.deepEqual(byCall(result.choices), {
       [`${SHOT_1}:shot`]: ["kwaivgi/kling-v3.0-std", "fallback"],
       [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
-      [`${SHOT_2}:clip`]: ["kwaivgi/kling-v3.0-std", "fallback"],
     });
     assert.match(result.choices.choices[0]?.modelChoice.reason ?? "", /model_chooser call failed/);
   });

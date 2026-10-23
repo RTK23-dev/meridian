@@ -136,6 +136,14 @@ describe("router with a model choice", () => {
     assert.equal(rows[0]?.estimateUsd, 0.7, "5 s at the catalog's 1080p rate $0.14, not the price table's $0.126");
   });
 
+  it("refuses a chosen model for a duration it does not list: it is not sent the call, and the fallback says which durations are listed", async () => {
+    const h = await harness({ script: {} });
+    const report = await h.router.produce(h.input(assetSpec({ durationMs: 6000, modelChoice: choice(KLING) })));
+    assert.equal(report.decisions[0]?.chose, "route table for video.cinematic");
+    assert.match(report.decisions[0]?.reason ?? "", /no longer fits the call \(duration_outside: 6 s is not one of the durations listed \(5, 10 s\)\)/);
+    assert.deepEqual(submittedModels(h.requests), [], "a 6 s call is not sent to a model that lists 5 and 10 s");
+  });
+
   it("falls back to the route table, and records it, when the chosen model has left the catalog", async () => {
     const catalog = catalogSource(catalogEntries.filter((entry) => entry.id !== WAN));
     const h = await harness({

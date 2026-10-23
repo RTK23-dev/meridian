@@ -12,6 +12,7 @@ function entry(id: string, overrides: Partial<ModelCatalogEntry> = {}, caps: Par
     capabilities: {
       minSeconds: 4,
       maxSeconds: 10,
+      durationsSeconds: null,
       aspectRatios: ["9:16"],
       resolutions: ["1080p"],
       firstFrame: true,
@@ -90,6 +91,19 @@ describe("eligibility", () => {
     const fit = eligibleCandidates(need({ firstFrame: true }), [entry("a"), entry("b", {}, { firstFrame: false }), entry("c")]);
     assert.deepEqual(fit.eligible.map((candidate) => candidate.id), ["a", "c"]);
     assert.deepEqual(fit.rejected.map((rejection) => [rejection.id, rejection.reason]), [["b", "first_frame_unsupported"]]);
+  });
+});
+
+describe("listed durations", () => {
+  it("refuses a duration the catalog does not list, even inside the range, and checks a range-only model against the range", () => {
+    const listed = entry("listed", {}, { minSeconds: 5, maxSeconds: 10, durationsSeconds: [5, 10] });
+    const ranged = entry("ranged", {}, { minSeconds: 5, maxSeconds: 10, durationsSeconds: null });
+    const six = need({ durationSeconds: 6 });
+    assert.equal(rejectionOf(six, listed)?.reason, "duration_outside");
+    assert.match(rejectionOf(six, listed)?.detail ?? "", /not one of the durations listed \(5, 10 s\)/);
+    assert.equal(rejectionOf(need({ durationSeconds: 5 }), listed), null);
+    assert.equal(rejectionOf(need({ durationSeconds: 10 }), listed), null);
+    assert.equal(rejectionOf(six, ranged), null, "a model with only a range is checked against the range");
   });
 });
 

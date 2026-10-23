@@ -180,6 +180,11 @@ const cases: Case[] = [
   { name: "catalog entry: an empty sku", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.price.sku = "")) },
   { name: "catalog entry: no model class", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.modelClasses = [])) },
   { name: "catalog entry: a model class the contract does not have", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.modelClasses = ["video.banana"])) },
+  // The listed durations (contract v10): a list that does not run from minSeconds to maxSeconds, repeats, is empty or is not whole.
+  { name: "catalog entry: a duration list that does not end at maxSeconds", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.durationsSeconds = [2, 5])) },
+  { name: "catalog entry: a duration list that repeats a value", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.durationsSeconds = [2, 2, 10])) },
+  { name: "catalog entry: an empty duration list", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.durationsSeconds = [])) },
+  { name: "catalog entry: a duration that is not whole seconds", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.durationsSeconds = [2, 10.5])) },
   { name: "catalog entry: maxSeconds below minSeconds", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.capabilities.minSeconds = 12)) },
   { name: "catalog entry: an empty id", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.id = "")) },
   { name: "catalog entry: readAt is not an ISO time", schema: modelCatalogEntrySchema, value: edit(modelCatalogEntryFixture, (d) => (d.readAt = "yesterday")) },

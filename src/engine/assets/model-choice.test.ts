@@ -13,7 +13,7 @@ function entry(id: string, price: ModelCatalogEntry["price"] = { unit: "per_seco
   return {
     id,
     modelClasses: ["video.cinematic", "video.budget"],
-    capabilities: { minSeconds: 4, maxSeconds: 10, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: null, audio: true },
+    capabilities: { minSeconds: 4, maxSeconds: 10, durationsSeconds: null, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: null, audio: true },
     price,
     readAt: READ_AT,
   };

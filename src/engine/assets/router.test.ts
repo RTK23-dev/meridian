@@ -22,13 +22,13 @@ const SEED = "bytedance/seedance-2.0";
 const KLING_ID = `openrouter:${KLING}`;
 const WAN_ID = `openrouter:${WAN}`;
 
-const target = (model: string, priceKey: "kling_v3_standard" | "wan_3_0" | "seedance_2_5") => ({
+const target = (model: string, priceKey: "kling_v3_standard" | "wan_2_6" | "seedance_2_5") => ({
   provider: "openrouter",
   model,
   priceKey,
   verified: false,
 });
-const VIDEO_TARGETS = [target(KLING, "kling_v3_standard"), target(WAN, "wan_3_0"), target(SEED, "seedance_2_5")];
+const VIDEO_TARGETS = [target(KLING, "kling_v3_standard"), target(WAN, "wan_2_6"), target(SEED, "seedance_2_5")];
 const KLING_TARGET = target(KLING, "kling_v3_standard");
 const videoTable: RouteTable = routesWith("video.cinematic", VIDEO_TARGETS, routes.table);
 

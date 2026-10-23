@@ -180,11 +180,13 @@ export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
       out.dropped.push({ source: "videos", id: model.id, reason: price });
       continue;
     }
-    const durations = [...(model.supported_durations ?? [])].sort((a, b) => a - b);
+    const durations = [...new Set(model.supported_durations ?? [])].sort((a, b) => a - b);
     const frames = model.supported_frame_images;
     const capabilities: CatalogCapabilities = {
       minSeconds: durations.length > 0 ? (durations[0] as number) : null,
       maxSeconds: durations.length > 0 ? (durations[durations.length - 1] as number) : null,
+      // The listing names each duration the model takes, so the list is kept as it is: 6 s is not 5 s or 10 s.
+      durationsSeconds: durations.length > 0 ? durations : null,
       aspectRatios: model.supported_aspect_ratios ?? null,
       resolutions: model.supported_resolutions ?? null,
       firstFrame: frames === undefined ? null : frames.includes("first_frame"),
@@ -248,6 +250,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
       const capabilities: CatalogCapabilities = {
         minSeconds: null,
         maxSeconds: null,
+        durationsSeconds: null,
         aspectRatios: null,
         resolutions: null,
         firstFrame: takesImage,
@@ -262,6 +265,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
     const capabilities: CatalogCapabilities = {
       minSeconds: null,
       maxSeconds: null,
+      durationsSeconds: null,
       aspectRatios: null,
       resolutions: null,
       firstFrame: false,

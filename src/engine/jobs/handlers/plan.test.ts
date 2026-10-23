@@ -237,7 +237,7 @@ function recordedCatalog(): ModelCatalogSource & { reads: number } {
         {
           id: "vendor/short-clip",
           modelClasses: ["video.budget"],
-          capabilities: { minSeconds: 1, maxSeconds: 10, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: 2, audio: false },
+          capabilities: { minSeconds: 1, maxSeconds: 10, durationsSeconds: null, aspectRatios: ["9:16"], resolutions: ["1080p"], firstFrame: true, lastFrame: false, refsMax: 2, audio: false },
           price: { unit: "per_second", usd: 0.03, sku: "per-video-second" },
           readAt: CATALOG_READ_AT,
         },

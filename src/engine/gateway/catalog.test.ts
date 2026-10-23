@@ -38,6 +38,7 @@ describe("catalog parse: GET /videos/models", () => {
     assert.deepEqual(kling?.capabilities, {
       minSeconds: 5,
       maxSeconds: 10,
+      durationsSeconds: [5, 10],
       aspectRatios: ["9:16", "16:9"],
       resolutions: ["720p", "1080p"],
       firstFrame: true,
@@ -48,6 +49,7 @@ describe("catalog parse: GET /videos/models", () => {
     const wan = parsed.entries.find((entry) => entry.id === "alibaba/wan-2.6");
     assert.equal(wan?.capabilities.firstFrame, null, "no supported_frame_images: unknown, not false");
     assert.equal(wan?.capabilities.lastFrame, null);
+    assert.deepEqual(wan?.capabilities.durationsSeconds, [5], "the listing names the one duration Wan 2.6 takes");
   });
 
   it("drops rows without a usable price and malformed rows, each with its reason", () => {

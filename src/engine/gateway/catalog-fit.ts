@@ -81,7 +81,11 @@ export function rejectionOf(need: ModelNeed, entry: ModelCatalogEntry): { reason
   const caps = entry.capabilities;
   if (isTimedClass(need.modelClass)) {
     if (caps.minSeconds === null || caps.maxSeconds === null) return { reason: "duration_unknown", detail: "the catalog does not list its durations" };
-    if (need.durationSeconds < caps.minSeconds || need.durationSeconds > caps.maxSeconds) {
+    if (caps.durationsSeconds !== null) {
+      if (!caps.durationsSeconds.includes(need.durationSeconds)) {
+        return { reason: "duration_outside", detail: `${need.durationSeconds} s is not one of the durations listed (${caps.durationsSeconds.join(", ")} s)` };
+      }
+    } else if (need.durationSeconds < caps.minSeconds || need.durationSeconds > caps.maxSeconds) {
       return { reason: "duration_outside", detail: `${need.durationSeconds} s is outside ${caps.minSeconds} to ${caps.maxSeconds} s` };
     }
     if (caps.aspectRatios === null) return { reason: "aspect_unknown", detail: "the catalog does not list its aspect ratios" };
