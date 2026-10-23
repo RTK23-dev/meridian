@@ -296,9 +296,11 @@ and its test, `prompts/critic_final@1.md`, `jobs/handlers/pre-render-gate.ts` an
 7. **Post-render inputs (render and orchestrator, eng-pipeline / W10).** The render stage must store its `render_integrity` GateResult as a
    `gate_result` artifact and return its slot. The orchestrator's `branchSlots` for `post_render_review` must pass it. Without it, every
    video routes to review at the integrity check (fail closed).
-8. **Missing measurements (W4).** Black-frame detection, overlay detection and OCR of the captions and claims are not media functions yet.
-   Their ports (`measureBlackFrames`, `measureOverlays`, `measureOcr`) are optional. Absent, their checks are not evaluated, so no video
-   passes post-render until W4 supplies them. The loudness, true peak, timeline and frame functions exist and are used.
+8. **Missing measurements (W4).** Black frames and silence are measured by the media functions (`/black`, `/silence`) through the detectors
+   port, and production wires them. Overlays are read by the frame_reader role. OCR of the captions and claims has no source: local OCR is
+   not built, and frame_reader returns no visible text (Bible 11.1), so it cannot supply the text. The OCR port (`measureOcr`) is optional.
+   Absent, its checks are not evaluated, so no video passes post-render until the owner chooses the source of on-screen text (decision 5
+   and the open owner list). The forbidden-term check reads the same text, so it is not evaluated either.
 9. **Render price.** `config/prices.ts` has `render_hyperframes_cloud` with `usd: null`. Until the owner sets it, the render budget check
    fails with "the render price is not in the table".
 10. **Licences and disclosure (no source yet).** `licensedUris` and `disclosures` are ports with no source. Until they are connected, the
