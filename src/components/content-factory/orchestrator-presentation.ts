@@ -5,6 +5,8 @@
 import type { NodeKind, NodeState } from "../../engine/orchestrator/contracts.ts";
 // The category list is the engine's, read from a module that is free of Node-only imports, so the screen and the engine name the same lines.
 import { BUDGET_CATEGORIES, type BudgetCategory } from "../../engine/orchestrator/categories.ts";
+// The engine's reason for an unreadable policy row. The policy read and the saves refuse with it, so the screen matches the same text.
+import { UNREADABLE_POLICY_REASON } from "../../engine/orchestrator/policy-store.ts";
 
 /** A colour role. Each one is a theme token from styles.css, so the light and dark themes both read. */
 export type Accent = "muted" | "info" | "success" | "warning" | "danger" | "accent";
@@ -271,10 +273,26 @@ export function pauseCategoryOf(reason: string | null | undefined): PauseCategor
   return match?.[1] === undefined ? null : (match[1].toLowerCase() as PauseCategory);
 }
 
-/** The heading of the alert for a pause: the total line, or the category's line named the way the run names it ("Copy budget reached, ..."). */
-export function budgetPauseHeading(category: PauseCategory | null): string {
-  if (category === null) return BUDGET_PAUSE_HEADING;
-  return `${category.charAt(0).toUpperCase()}${category.slice(1)} budget reached, project not finished`;
+/** Which line a pause stopped at: the total budget, the workspace month, or one category's line. */
+export type PauseLine = "total" | "month" | PauseCategory;
+
+/** What the alert says for a pause at the workspace month. The month is set in settings, so no approval of the plan clears it. */
+export const MONTH_PAUSE_SENTENCE = "The workspace month is at its budget; raise the monthly budget in settings.";
+
+/**
+ * The line a pause stopped at, read from the pause event's reason, which carries no line field of its own. A month refusal names the workspace
+ * month in its words (budget/reserve.ts), so the month is read first: no approval of the plan clears it. Then a category's opening, and otherwise
+ * the total. Pure.
+ */
+export function pauseLineOf(reason: string | null | undefined): PauseLine {
+  if (/workspace month/i.test(reason ?? "")) return "month";
+  return pauseCategoryOf(reason) ?? "total";
+}
+
+/** The heading of the alert for a pause: the total's or the month's, or a category's named the way the run names it ("Copy budget reached, ..."). */
+export function budgetPauseHeading(line: PauseLine): string {
+  if (line === "total" || line === "month") return BUDGET_PAUSE_HEADING;
+  return `${line.charAt(0).toUpperCase()}${line.slice(1)} budget reached, project not finished`;
 }
 
 /**
@@ -316,10 +334,34 @@ export function actorNameOf(actorId: string, members: ReadonlyArray<{ userId: st
   return member.name.trim() || member.email.trim() || "A workspace member";
 }
 
-/** One approval in words: who approved it, the approved budget, and the budget it came from. */
-export function approvalText(row: { actor: string; previousUsd: number; approvedUsd: number }): string {
+/** The line an approval raised, from the reason its audit row carries ("category copy; ..."). Null for a total approval. Pure. */
+export function approvalCategoryOf(reason: string | null | undefined): PauseCategory | null {
+  const match = new RegExp(`^category (${BUDGET_CATEGORIES.join("|")});`).exec(reason ?? "");
+  return match === null ? null : (match[1] as PauseCategory);
+}
+
+/**
+ * One approval in words: who approved it, the approved budget, and the budget it came from. A category's approval names the category, and its
+ * amounts are that category's line. A total approval names no category.
+ */
+export function approvalText(row: { actor: string; previousUsd: number; approvedUsd: number; category?: PauseCategory | null }): string {
+  if (row.category) return `${row.actor} approved the ${row.category} budget at ${dollars(row.approvedUsd, 2)}, from ${dollars(row.previousUsd, 2)}.`;
   return `${row.actor} approved ${dollars(row.approvedUsd, 2)}, from a budget of ${dollars(row.previousUsd, 2)}.`;
 }
+
+/** The text of an error, in whichever form it arrives. */
+function messageOf(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "";
+}
+
+/** Whether a policy read or save was refused because the stored row cannot be read (policy-store.ts). Pure. */
+export function isUnreadablePolicyError(error: unknown): boolean {
+  return messageOf(error).includes(UNREADABLE_POLICY_REASON);
+}
+
+/** The unreadable-policy reason as the screen says it: a sentence, with its full stop. */
+export const UNREADABLE_POLICY_SENTENCE = `${UNREADABLE_POLICY_REASON.charAt(0).toUpperCase()}${UNREADABLE_POLICY_REASON.slice(1)}.`;
 
 /**
  * The line under the approval amount: what the amount does, or what it must be. The total line's amount must be above the plan's budget. A

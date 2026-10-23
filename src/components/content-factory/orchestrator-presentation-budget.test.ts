@@ -1,10 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { UNREADABLE_POLICY_REASON } from "../../engine/orchestrator/policy-store.ts";
 import {
   BUDGET_PAUSE_HEADING,
   CEILING,
+  MONTH_PAUSE_SENTENCE,
+  UNREADABLE_POLICY_SENTENCE,
   actorNameOf,
+  approvalCategoryOf,
   approvalHint,
   approvalText,
   approvalsNewestFirst,
@@ -14,10 +18,12 @@ import {
   budgetPauseHeading,
   ceilingText,
   familiesFromText,
+  isUnreadablePolicyError,
   measuredAverageText,
   normalizeFamily,
   parseCeiling,
   pauseCategoryOf,
+  pauseLineOf,
   withFamily,
   workspaceFamilyRows,
 } from "./orchestrator-presentation.ts";
@@ -26,6 +32,11 @@ const TOTAL_REASON =
   "budget reached, project not finished: the next step's hold of $0.4000 would take the spend past the $2.0000 budget (committed $1.8000)";
 const COPY_REASON =
   "copy budget reached, project not finished: the next step's hold of $0.2000 would take the spend past the $0.5000 copy budget (committed $0.4000)";
+// The wording a call refused by the workspace month carries (budget/reserve.ts), after the run's own opening (execute.ts).
+const MONTH_REASON =
+  "budget reached, project not finished: the workspace month has committed 40 USD, at or above its 40 USD budget, so no paid call starts";
+const MONTH_PROJECTED_REASON =
+  "budget reached, project not finished: call video would take the workspace month to 41 USD, above its 40 USD budget, so it does not start";
 
 test("the pause alert has the budget heading and the run's own reason, without the heading's opening said twice", () => {
   assert.equal(BUDGET_PAUSE_HEADING, "Budget reached, project not finished");
@@ -43,17 +54,33 @@ test("the pause alert has the budget heading and the run's own reason, without t
   assert.equal(budgetPauseDetail("   "), "No reason was recorded for this pause.", "a blank reason is not shown as a guess");
 });
 
-test("a pause names the line it stopped at, read from the pause event's reason: the total line, or a category", () => {
+test("a pause names the line it stopped at, read from the pause event's reason: the total, the workspace month, or a category", () => {
   assert.equal(pauseCategoryOf(TOTAL_REASON), null);
   assert.equal(pauseCategoryOf(COPY_REASON), "copy");
   assert.equal(pauseCategoryOf("creative budget reached, project not finished: the next step's hold"), "creative");
   assert.equal(pauseCategoryOf("Voice budget reached, project not finished"), "voice", "the match ignores case");
   assert.equal(pauseCategoryOf("the run stopped for another reason"), null);
   assert.equal(pauseCategoryOf(null), null);
-  assert.equal(budgetPauseHeading(null), "Budget reached, project not finished");
+
+  assert.equal(pauseLineOf(TOTAL_REASON), "total");
+  assert.equal(pauseLineOf(COPY_REASON), "copy");
+  assert.equal(pauseLineOf(null), "total", "a pause with no reason is not read as a month or a category");
+  assert.equal(pauseLineOf(MONTH_REASON), "month");
+  assert.equal(pauseLineOf(MONTH_PROJECTED_REASON), "month");
+  assert.equal(pauseLineOf("workspace monthly budget reached: the run is not started"), "month", "the monthly wording is the month too");
+
+  assert.equal(budgetPauseHeading("total"), "Budget reached, project not finished");
+  assert.equal(budgetPauseHeading("month"), "Budget reached, project not finished", "the month pause keeps the budget heading");
   assert.equal(budgetPauseHeading("copy"), "Copy budget reached, project not finished");
   assert.equal(budgetPauseHeading("voice"), "Voice budget reached, project not finished");
-  assert.equal(budgetPauseDetail("creative budget reached, project not finished"), "The run stopped at its budget line.");
+});
+
+test("a month pause says the month is at its budget and to raise the monthly budget in settings, and its reason keeps the run's words", () => {
+  assert.equal(MONTH_PAUSE_SENTENCE, "The workspace month is at its budget; raise the monthly budget in settings.");
+  assert.equal(
+    budgetPauseDetail(MONTH_REASON),
+    "The workspace month has committed 40 USD, at or above its 40 USD budget, so no paid call starts",
+  );
 });
 
 test("the approval line says what the amount does, for the total line and for a category's line", () => {
@@ -85,15 +112,35 @@ test("approvals are listed newest first, a time that cannot be read last, and th
   assert.deepEqual(approvalsNewestFirst([]), []);
 });
 
-test("an approval says who approved it, the approved budget and the budget it came from", () => {
+test("an approval says who approved it and the amounts; a category's approval names its category and its own line", () => {
   assert.equal(
     approvalText({ actor: "Ana Lopez", previousUsd: 1, approvedUsd: 2.5 }),
     "Ana Lopez approved $2.50, from a budget of $1.00.",
+    "a total approval names no category",
   );
+  assert.equal(
+    approvalText({ actor: "Ana Lopez", previousUsd: 0.5, approvedUsd: 0.75, category: "copy" }),
+    "Ana Lopez approved the copy budget at $0.75, from $0.50.",
+  );
+  // The audit row names the category in its reason, because the audit table has no category column (approval.ts).
+  assert.equal(approvalCategoryOf(`category copy; ${COPY_REASON}`), "copy");
+  assert.equal(approvalCategoryOf(`category voice; voice budget reached, project not finished: x`), "voice");
+  assert.equal(approvalCategoryOf(TOTAL_REASON), null);
+  assert.equal(approvalCategoryOf("category other; x"), null);
+  assert.equal(approvalCategoryOf(null), null);
   const members = [{ userId: "user_1", name: "Ana Lopez", email: "ana@example.test" }];
   assert.equal(actorNameOf("user_1", members), "Ana Lopez");
   assert.equal(actorNameOf("user_1", [{ ...members[0], name: "  " }]), "ana@example.test", "the email stands in for a blank name");
   assert.equal(actorNameOf("user_9", members), "A member no longer in this workspace");
+});
+
+test("an unreadable policy row is recognised by the engine's reason, and is said as a sentence", () => {
+  assert.equal(UNREADABLE_POLICY_SENTENCE, "The workspace's orchestrator policy is unreadable; save the policy again.");
+  assert.equal(isUnreadablePolicyError(new Error(UNREADABLE_POLICY_REASON)), true);
+  assert.equal(isUnreadablePolicyError(UNREADABLE_POLICY_REASON), true, "a plain string carries the reason too");
+  assert.equal(isUnreadablePolicyError(new Error("Brand not found.")), false);
+  assert.equal(isUnreadablePolicyError(null), false);
+  assert.equal(isUnreadablePolicyError(undefined), false);
 });
 
 test("the measured average is a measurement, with its clips, and no clip measured is said plainly", () => {

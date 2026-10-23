@@ -7,7 +7,9 @@ import { OrchestratorCanvas } from "./orchestrator-canvas";
 import { OrchestratorComposer } from "./orchestrator-composer";
 import { OrchestratorPolicyPanel } from "./orchestrator-policy-panel";
 import {
+  MONTH_PAUSE_SENTENCE,
   actorNameOf,
+  approvalCategoryOf,
   approvalHint,
   approvalText,
   approvalsNewestFirst,
@@ -17,7 +19,7 @@ import {
   describePlanOutcome,
   measuredAverageText,
   parseBudget,
-  pauseCategoryOf,
+  pauseLineOf,
   type PauseCategory,
 } from "./orchestrator-presentation";
 import { useWorkspace } from "@/components/workspace";
@@ -381,19 +383,32 @@ function BudgetPause(props: {
   onApproved: (message: string) => Promise<void>;
 }) {
   const { brandId, planId, budgetUsd, reason, canAdmin, onApproved } = props;
-  // The category comes from the pause event's reason: the event has no category field of its own.
-  const category = pauseCategoryOf(reason);
-  const line = category === null ? "budget" : `${category} budget`;
+  // The line comes from the pause event's reason: the event has no line field of its own.
+  const line = pauseLineOf(reason);
+  const category = line === "total" || line === "month" ? null : line;
+  const words = category === null ? "budget" : `${category} budget`;
+  // A month pause has no approval: the month is set in settings, so no approval of the plan's budget clears it.
+  if (line === "month") {
+    return (
+      <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-lg border border-warning p-3 text-sm">
+        <h3 id={`pause-${planId}`} className="font-semibold">
+          {budgetPauseHeading(line)}
+        </h3>
+        <p>{MONTH_PAUSE_SENTENCE}</p>
+        <p className="text-fg-muted">{budgetPauseDetail(reason)}</p>
+      </section>
+    );
+  }
   return (
     <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-lg border border-warning p-3 text-sm">
       <h3 id={`pause-${planId}`} className="font-semibold">
-        {budgetPauseHeading(category)}
+        {budgetPauseHeading(line)}
       </h3>
       <p>{budgetPauseDetail(reason)}</p>
       {canAdmin ? (
         <BudgetApproval key={category ?? "total"} brandId={brandId} planId={planId} budgetUsd={budgetUsd} category={category} onApproved={onApproved} />
       ) : (
-        <p className="text-fg-muted">Only a workspace admin can approve a higher {line}.</p>
+        <p className="text-fg-muted">Only a workspace admin can approve a higher {words}.</p>
       )}
     </section>
   );
@@ -424,9 +439,8 @@ function BudgetApproval(props: {
     setSaving(true);
     setProblem(null);
     try {
-      // The category goes next to the amount when the pause names one. A total-line approval sends no category, as before.
-      const request = category === null ? { brandId, planId, budgetUsd: value } : { brandId, planId, budgetUsd: value, category };
-      const outcome = await approveOrchestratorBudget({ data: request });
+      // The category goes next to the amount: null for the total line, which the server reads as a total pause.
+      const outcome = await approveOrchestratorBudget({ data: { brandId, planId, budgetUsd: value, category } });
       if (outcome.status === "refused") setProblem(outcome.reasons.join("; "));
       else await onApproved(`The ${line} is now $${outcome.budgetUsd.toFixed(2)}, up from $${outcome.previousUsd.toFixed(2)}. Run the plan to continue. Approving spent nothing.`);
     } catch (error) {
@@ -484,7 +498,14 @@ function ApprovalList(props: { approvals: Approval[] | null; error: string | nul
         <ol className="flex flex-col gap-1">
           {approvalsNewestFirst(approvals).map((row) => (
             <li key={row.id}>
-              <span>{approvalText({ actor: actorNameOf(row.actorId, members), previousUsd: row.previousUsd, approvedUsd: row.approvedUsd })}</span>{" "}
+              <span>
+                {approvalText({
+                  actor: actorNameOf(row.actorId, members),
+                  previousUsd: row.previousUsd,
+                  approvedUsd: row.approvedUsd,
+                  category: approvalCategoryOf(row.reason),
+                })}
+              </span>{" "}
               <time dateTime={row.createdAt} className="text-fg-muted">
                 {timestampLabel(row.createdAt)}
               </time>

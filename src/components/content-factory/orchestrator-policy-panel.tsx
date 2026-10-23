@@ -7,12 +7,15 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { getBrandPolicyFor, getOrchestratorPolicyFor, saveBrandPolicyFor, saveOrchestratorPolicyFor } from "@/lib/meridian/orchestrator/actions";
 import { hasRole } from "@/lib/meridian/access";
+import { INITIAL_POLICY } from "@/engine/orchestrator/policy-store";
 import {
   CEILING,
+  UNREADABLE_POLICY_SENTENCE,
   brandFamiliesAfter,
   brandFamilyRows,
   ceilingText,
   familiesFromText,
+  isUnreadablePolicyError,
   parseCeiling,
   withFamily,
   workspaceFamilyRows,
@@ -71,7 +74,21 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
             Workspace
           </h3>
           <p className="text-sm text-fg-muted">A switched-off family is not offered to the orchestrator, and a plan that names one is refused.</p>
-          {policy.isError && !policy.data ? <PlainErrorState error={policy.error} onRetry={() => void policy.refetch()} /> : null}
+          {policy.isError && !policy.data && isUnreadablePolicyError(policy.error) ? (
+            <UnreadablePolicy
+              brandId={brandId}
+              canAdmin={canAdmin}
+              message={workspaceMessage}
+              onMessage={setWorkspaceMessage}
+              onSaved={() => {
+                void policy.refetch();
+                void brandPolicy.refetch();
+              }}
+            />
+          ) : null}
+          {policy.isError && !policy.data && !isUnreadablePolicyError(policy.error) ? (
+            <PlainErrorState error={policy.error} onRetry={() => void policy.refetch()} />
+          ) : null}
           {policy.data ? (
             <WorkspacePolicy
               key={JSON.stringify(policy.data.policy)}
@@ -112,7 +129,13 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
                 </SelectInput>
               </Field>
               {brandPolicy.isError && !brandPolicy.data ? (
-                <PlainErrorState error={brandPolicy.error} onRetry={() => void brandPolicy.refetch()} />
+                isUnreadablePolicyError(brandPolicy.error) ? (
+                  <p role="alert" className="text-sm">
+                    {UNREADABLE_POLICY_SENTENCE}
+                  </p>
+                ) : (
+                  <PlainErrorState error={brandPolicy.error} onRetry={() => void brandPolicy.refetch()} />
+                )
               ) : null}
               {brandPolicy.data ? (
                 <BrandFamilies
@@ -134,6 +157,92 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
         </section>
       </div>
     </Card>
+  );
+}
+
+/**
+ * A stored policy row that cannot be read. Planning, runs and edits refuse until the row is saved again, so an admin saves it here, with the
+ * families and the ceiling the row should hold. The form starts from the engine's initial values, since the stored ones cannot be read. A viewer
+ * reads the reason and sees no form.
+ */
+function UnreadablePolicy({
+  brandId,
+  canAdmin,
+  message,
+  onMessage,
+  onSaved,
+}: {
+  brandId: string;
+  canAdmin: boolean;
+  message: string | null;
+  onMessage: (text: string | null) => void;
+  onSaved: () => void;
+}) {
+  const [families, setFamilies] = useState(INITIAL_POLICY.disabledModelFamilies.join(", "));
+  const [ceilingDraft, setCeilingDraft] = useState(String(INITIAL_POLICY.measureCeilingUsdPerSecond));
+  const [saving, setSaving] = useState(false);
+  const ceiling = parseCeiling(ceilingDraft);
+
+  async function replace() {
+    if (ceiling === null) return;
+    setSaving(true);
+    onMessage(null);
+    try {
+      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: familiesFromText(families), measureCeilingUsdPerSecond: ceiling } });
+      onMessage("Saved. The stored policy can be read again, and every run from now on uses these values.");
+      onSaved();
+    } catch (error) {
+      onMessage(error instanceof Error ? error.message : "The policy could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <p role="alert" className="text-sm font-medium">
+        {UNREADABLE_POLICY_SENTENCE}
+      </p>
+      {canAdmin ? (
+        <>
+          <p className="text-sm text-fg-muted">
+            The values below are the engine's initial values, because the stored ones cannot be read. Saving replaces the stored policy with them.
+          </p>
+          <Input
+            id="policy-unreadable-families"
+            label="Model families switched off"
+            hint="Separate several with commas."
+            value={families}
+            onChange={(event) => setFamilies(event.target.value)}
+          />
+          <Input
+            id="policy-unreadable-ceiling"
+            type="number"
+            inputMode="decimal"
+            min={CEILING.min}
+            max={CEILING.max}
+            step="0.01"
+            label="Measure ceiling (USD per second)"
+            className="sm:max-w-40"
+            value={ceilingDraft}
+            onChange={(event) => setCeilingDraft(event.target.value)}
+            error={ceiling === null ? `Enter a ceiling from $${CEILING.min.toFixed(2)} to $${CEILING.max.toFixed(2)} per second.` : undefined}
+          />
+          <div className="flex flex-wrap items-center gap-3">
+            <Button size="sm" onClick={() => void replace()} disabled={saving || ceiling === null}>
+              Replace the stored policy
+            </Button>
+            {message ? (
+              <p role="status" className="text-sm">
+                {message}
+              </p>
+            ) : null}
+          </div>
+        </>
+      ) : (
+        <p className="text-sm text-fg-muted">Only a workspace admin can save the policy again.</p>
+      )}
+    </div>
   );
 }
 
