@@ -2,7 +2,9 @@
 // text steps, creative is the image and video steps, and voice is the speech steps. A brief may set a budget for a category. A category it
 // does not set is the orchestrator's to split under the plan's total. A step that makes no model call has no category. Pure.
 
-import { sumUsd } from "../contracts/index.ts";
+// money.ts, not the contracts index: the index re-exports hash.ts, which needs Node's crypto, and the plan store that uses this module is
+// reached from the browser bundle through the server functions. This module must stay free of Node-only imports.
+import { sumUsd } from "../contracts/money.ts";
 import type { NodeKind } from "./contracts.ts";
 
 export const BUDGET_CATEGORIES = ["copy", "creative", "voice"] as const;
