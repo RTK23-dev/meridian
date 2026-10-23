@@ -1,9 +1,11 @@
 // The orchestrator's policy for a workspace (migration 0114; owner direction 2026-10-23): the model families switched off, and the measure
 // ceiling for measure mode (D15). The overrun tolerance is retired (D12: a budget is a line), so a stored row that still carries it is read
-// without that key, and its families are kept. Every read and write is scoped to the organization. The stored JSON is validated here on every
-// read and write. A missing key takes its initial value, so an adjustment is one row update. A stored row that does not validate is unreadable:
-// the read reports it, and planning, runs and edits refuse with its reason. Nothing is reset, and no family is switched on by it. Browser-safe
-// for the schema and the types: no Node-only imports (the measure options are a type only).
+// without that key, and its other keys are read as they are. Every read and write is scoped to the organization. The stored JSON is validated
+// here on every read and write. The families are required: a row without them, or with malformed ones, is unreadable, and no family is filled
+// in from the initial list (that would switch every family back on). The ceiling applies only to a measure run an admin starts, so a row without
+// it takes the initial ceiling. A workspace with no row reads the initial policy. The read reports an unreadable row, and planning, runs and
+// edits refuse with its reason. Nothing is reset, and no family is switched on by it. Browser-safe for the schema and the types: no Node-only
+// imports (the measure options are a type only).
 
 import { z } from "zod";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
@@ -56,14 +58,16 @@ function initialPolicy(): OrchestratorPolicy {
 }
 
 /**
- * The policy from a stored object. The retired key is dropped first, and each missing key takes its initial value. A stored value that is not
- * an object, or does not validate (a family list that is not a list, a malformed family, a ceiling out of range, an unknown key), is unreadable:
- * the read gives its reason and no policy, so no family is reset to the initial list and none is switched on. Pure.
+ * The policy from a stored object. The retired key is dropped first. The families are required and never filled in: a stored value without
+ * them, or one that does not validate (a family list that is not a list, a malformed family, a ceiling that is present but not a number in
+ * range, an unknown key), is unreadable. A row without the ceiling takes the initial ceiling, because only a measure run reads it. The read
+ * gives its reason and no policy, so no family is reset to the initial list and none is switched on. Pure.
  */
 export function policyFrom(stored: unknown): PolicyRead {
   if (!isRecord(stored)) return { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
   const current = Object.fromEntries(Object.entries(stored).filter(([key]) => key !== RETIRED_TOLERANCE_KEY));
-  const parsed = orchestratorPolicySchema.safeParse({ ...INITIAL_POLICY, ...current });
+  const withCeiling = "measureCeilingUsdPerSecond" in current ? current : { ...current, measureCeilingUsdPerSecond: INITIAL_POLICY.measureCeilingUsdPerSecond };
+  const parsed = orchestratorPolicySchema.safeParse(withCeiling);
   return parsed.success ? { status: "ok", policy: parsed.data } : { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
 }
 

@@ -5,6 +5,7 @@ import { fixture, gatewayFor, json } from "../claude/test/helpers.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog, type CatalogEntry } from "./catalog.ts";
 import type { WorkspaceBudgetSource, WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
+import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
 import { planInputTokensOf, planStoredDraft, type PlanScope } from "./service.ts";
 import { createPlanDraft, getPlan } from "./store.ts";
 import { estimateFromPriceUsd } from "../claude/rates.ts";
@@ -139,6 +140,23 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     assert.equal((await getPlan(db.sql, ORG, "plan_svc_month"))?.status, "refused");
     assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
     assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+  });
+
+  test("a plan call whose hold does not fit the workspace month is refused, though the month is below its budget, and no hold is written (D17)", async () => {
+    await draft(db, "plan_svc_month_fit");
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZB", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZB" };
+    // The month's committed spend is read the way the check reads it. The budget is a sliver above it, so the month is below its line, but
+    // the call's hold is far larger than that sliver and does not fit under the line.
+    const committed = await scopedLedgerStore(db.sql, ORG, ids.reservation).committedForMonth(ORG, NOW.slice(0, 7));
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: committed + 0.0001 }) };
+    const outcome = await planStoredDraft(scope, "plan_svc_month_fit");
+    assert.equal(outcome.status, "refused");
+    if (outcome.status === "refused") {
+      assert.match(outcome.reasons[0] ?? "", /^the plan call's hold of \$[0-9.]+ would take the workspace month past its \$[0-9.]+ budget \(committed \$[0-9.]+\), so the draft is refused before any call$/);
+    }
+    assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
+    assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+    assert.equal((await getPlan(db.sql, ORG, "plan_svc_month_fit"))?.status, "refused");
   });
 
   test("a workspace month that is not known refuses the call before any hold, with the source's reason", async () => {
