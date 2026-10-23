@@ -607,6 +607,10 @@ the chooser had picked the model.
 **Migration.** None. A catalog entry is read and held in memory (`modelCatalogCache`), and a model choice stores its id, source, reason and
 read time, so no stored row holds a catalog entry.
 
+### v11 changes and migration (the budget is a line, contract version `engine-contracts@11`)
+
+Decided by the owner on 2026-10-23 (D12 in `docs/engine/run/DECISIONS_2026-10-23.md`, which supersedes the tolerance of D2). **Lead approval: pending** (the lead records it when it reviews the change). The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. A budget is a line, not a tolerance, and both lines read committed spend: an entry's actual cost, or its hold until it settles. A paid call starts only while the request's committed spend (across all its reservations) is below the request budget and the workspace month's committed spend is below the month budget (`budget/reserve.ts`, `authorizeCall`). A reservation is accepted while its month's committed spend is below the month budget, and a plan above a budget is held with a note. In cap mode a settled bill marks a reservation `exceeded` only when it takes the request or the month to its line; an overrun of the hold alone does not (`budget/reconcile.ts`). The two allowance fields of `BudgetReservation` (`requestAllowanceUsd`, `workspaceMonthAllowanceUsd`) are retired: no reservation written from v11 carries them, and no budget rule reads them. They stay optional, so rows stored before v11 still parse. **Migration:** none. The columns are kept (no column is dropped from `engine_reservations`), and nothing is rewritten.
+
 ## 5. Jobs, queue, artifacts and gates
 
 Work moves between stages only through the queue, and only after a gate passes. A gate failure goes back no further than the failing piece: one shot, one layer, one render.

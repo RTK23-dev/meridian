@@ -1,22 +1,15 @@
 // The workspace monthly budget for estimate_reserve (Bible 14.1 step 2), read from Meridian's Settings (owner decision
 // 2026-10-14: a "Monthly video budget (USD)" per workspace, no default). An unset budget is not connected, so nothing is
-// reserved and the request says why; a made-up amount is never returned.
+// reserved and the request says why; a made-up amount is never returned. A budget is a line (owner direction 2026-10-23, D12):
+// there is no tolerance to read.
 
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { WorkspaceBudgetSource } from "./handlers/estimate-reserve.ts";
-import { INITIAL_BUDGET_TOLERANCE, type BudgetTolerance } from "../budget/tolerance.ts";
-import { readOrchestratorPolicy } from "../orchestrator/policy-store.ts";
 
 export type MonthlyBudgetReader = (organizationId: string) => Promise<number | null>;
 
-/** The workspace's overrun tolerance on its budgets (owner direction 2026-10-23). Production reads it from the orchestrator policy. */
-export type ToleranceReader = (organizationId: string) => Promise<BudgetTolerance>;
-
 /** The source over a reader. Production passes `meridianMonthlyBudgetReader(sql)`; tests pass a fake reader. */
-export function workspaceBudgetFromSettings(
-  read: MonthlyBudgetReader,
-  tolerance: ToleranceReader = async () => INITIAL_BUDGET_TOLERANCE,
-): WorkspaceBudgetSource {
+export function workspaceBudgetFromSettings(read: MonthlyBudgetReader): WorkspaceBudgetSource {
   return {
     async monthBudget({ organizationId }) {
       let usd: number | null;
@@ -31,20 +24,9 @@ export function workspaceBudgetFromSettings(
           reason: "no monthly video budget is set for this workspace; set \"Monthly video budget (USD)\" in Settings",
         };
       }
-      let policy: BudgetTolerance;
-      try {
-        policy = await tolerance(organizationId);
-      } catch {
-        return { status: "not_connected", reason: "the workspace's budget tolerance could not be read, so nothing is reserved" };
-      }
-      return { status: "known", usd, tolerance: policy };
+      return { status: "known", usd };
     },
   };
-}
-
-/** Meridian's tolerance reader: the workspace's overrun tolerance, from its orchestrator policy (migration 0114). */
-export function meridianToleranceReader(sql: Sql): ToleranceReader {
-  return async (organizationId) => (await readOrchestratorPolicy(sql, organizationId)).budgetTolerance;
 }
 
 /** Meridian's own reader (src/lib/meridian/settings/video-budget.ts), loaded only when a budget is read. */

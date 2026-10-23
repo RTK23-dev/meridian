@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EngineError } from "../contracts/index.ts";
+import { budgetReservationSchema, EngineError } from "../contracts/index.ts";
 import { FIXTURE_IDS as ID, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { authorizeCall, reserve, type CallInput, type ReserveInput } from "./reserve.ts";
 import { confirmAbsentCall, releaseReservation, reconcileCall } from "./reconcile.ts";
@@ -25,7 +25,7 @@ function callInput(overrides: Partial<CallInput> = {}): CallInput {
     reservationId: ID.reservation,
     stage: "produce_shot",
     provider: "openrouter",
-    model: "seedance-2.0-mini",
+    model: "fixture-model",
     estimateUsd: 0.2016,
     idempotencyKey: "produce:shot_3:1",
     at: "2026-10-13T09:01:00.000Z",
@@ -124,17 +124,58 @@ test("a cost above the hold raises the reservation to the committed amount and a
   assert.equal(result.alerts[0].scope, "call");
 });
 
-test("cap mode: a verified bill above the reservation makes it exceeded, keeps the bill in the month, and refuses the next call", async () => {
-  const store = await reservedWithOneCall("cap");
-  const result = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
-  assert.equal(result.reservation.state, "exceeded");
-  assert.match(result.reservation.pausedReason ?? "", /no further paid call is authorized/);
+test("cap mode: a bill above the hold alone keeps the reservation reserved, raises the hold, keeps the overrun alert, and the next call starts (D12)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, reserveInput());
+  const first = await authorizeCall(store, callInput({ estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
+  assert.equal(first.status, "authorized");
+  const settled = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.1 });
+  assert.equal(settled.reservation.state, "reserved", "1.10 committed is above the hold but below the 4.00 request budget");
+  assert.equal(settled.reservation.reservedUsd, 1.1, "the hold is raised to the committed amount");
+  assert.ok(settled.alerts.some((alert) => alert.scope === "call"), "the overrun of the hold is kept as an alert");
+  const next = await authorizeCall(store, callInput({ estimateUsd: 0.2, idempotencyKey: "produce:shot_4:1" }));
+  assert.equal(next.status, "authorized", "the request is below its line, so the next call starts");
+});
+
+test("cap mode: a bill that takes the request to its budget marks the reservation exceeded, and the next call is refused (D12)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, reserveInput());
+  await authorizeCall(store, callInput({ estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
+  await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.1 });
+  const second = await authorizeCall(store, callInput({ estimateUsd: 2.9, idempotencyKey: "produce:shot_4:1" }));
+  assert.equal(second.status, "authorized", "1.10 committed is below the 4.00 line");
+  const settled = await reconcileCall(store, { idempotencyKey: "produce:shot_4:1", billedUsd: 2.9 });
+  assert.equal(settled.reservation.state, "exceeded", "the request has committed 4.00 USD, at its budget");
+  assert.match(settled.reservation.pausedReason ?? "", /the request has committed 4 USD, at or above its 4 USD budget/);
   assert.equal((await store.getReservation(ID.reservation))?.state, "exceeded");
-  assert.equal((await store.sumForMonth("ws_fixture", "2026-10")).reservedUsd, 1.2, "an exceeded reservation counts toward the month");
-  const next = await authorizeCall(store, callInput({ idempotencyKey: "produce:shot_4:1" }));
+  const next = await authorizeCall(store, callInput({ estimateUsd: 0.1, idempotencyKey: "produce:shot_5:1" }));
   assert.equal(next.status, "refused");
-  assert.match(next.status === "refused" ? next.reason : "", /exceeded/);
-  assert.equal((await store.listEntries(ID.reservation)).length, 1, "the refused call records nothing");
+  assert.match(next.status === "refused" ? next.reason : "", /the request has committed 4 USD, at or above its 4 USD budget, so no paid call starts/);
+  assert.equal((await store.listEntries(ID.reservation)).length, 2, "the refused call records nothing");
+});
+
+test("cap mode: an exceeded reservation whose request falls back below its line clears the mark, and its calls start again", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, reserveInput());
+  await authorizeCall(store, callInput({ estimateUsd: 2.0, idempotencyKey: "produce:shot_a:1" }));
+  await authorizeCall(store, callInput({ estimateUsd: 2.0, idempotencyKey: "produce:shot_b:1" }));
+  const overBill = await reconcileCall(store, { idempotencyKey: "produce:shot_a:1", billedUsd: 2.5 });
+  assert.equal(overBill.reservation.state, "exceeded", "4.50 committed is past the 4.00 line");
+  const lower = await reconcileCall(store, { idempotencyKey: "produce:shot_b:1", billedUsd: 0.5 });
+  assert.equal(lower.reservation.state, "reserved", "3.00 committed is below the line, so the mark clears");
+  assert.equal(lower.reservation.pausedReason, undefined);
+  const again = await authorizeCall(store, callInput({ estimateUsd: 0.2, idempotencyKey: "produce:shot_c:1" }));
+  assert.equal(again.status, "authorized");
+});
+
+test("warn mode: a settled cost above the hold raises the hold and alerts, and never marks the reservation exceeded, even past the request line", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, reserveInput({ mode: "warn", requestBudgetUsd: 1 }));
+  await authorizeCall(store, callInput({ estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
+  const settled = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
+  assert.equal(settled.reservation.state, "reserved", "warn never marks a reservation exceeded");
+  assert.equal(settled.reservation.reservedUsd, 1.2, "the hold is raised to the committed amount");
+  assert.deepEqual(settled.alerts.map((alert) => alert.scope), ["call", "request"], "the overrun of the hold and of the request budget are alerts");
 });
 
 test("in observe mode a cost above the hold is recorded and the reservation raised, with no alert", async () => {
@@ -167,8 +208,10 @@ test("releasing twice is a no-op the second time, and releasing a paused reserva
   const second = await releaseReservation(store, ID.reservation);
   assert.equal(second.releasedUsd, 0);
 
+  // reserve() holds a plan above its budget as reserved (D12), so the paused state is set here, as a row stored before v11 has it.
   const paused = memoryLedgerStore();
-  await reserve(paused, reserveInput({ requestBudgetUsd: 0.5, reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X" }));
+  const held = await reserve(paused, reserveInput({ requestBudgetUsd: 0.5, reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X" }));
+  await paused.updateReservation(budgetReservationSchema.parse({ ...held.reservation, state: "paused", pausedReason: "paused before v11" }));
   const none = await releaseReservation(paused, "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X");
   assert.equal(none.releasedUsd, 0);
   assert.equal(none.reservation.state, "paused");

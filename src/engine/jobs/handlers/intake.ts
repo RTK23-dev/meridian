@@ -4,9 +4,10 @@
 //
 // Money (Bible 6.1 step 8, E3 lead decision 1). The paid stages after intake (analyze_reference, voice, plan) and the intake
 // classifier run on a pre-flight hold: budgets.fixedPerMasterUsd, reserved by reserveFixed (budget/preflight.ts) once the
-// request's own checks pass. estimate_reserve later raises that same reservation to the plan's estimate. A hold that cap mode
-// pauses, or a workspace month that is not connected, pauses the request with the reason (budgetPause): nothing is called.
-// A request that is rejected releases its hold, so no budget stays held for it.
+// request's own checks pass. estimate_reserve later raises that same reservation to the plan's estimate. A workspace month that is
+// not connected, or a hold that is not accepted (the month's committed spend is at its budget), pauses the request with the reason
+// (budgetPause): nothing is called. A hold above a budget is noted, not paused (D12: calls are gated by their line). A request that
+// is rejected releases its hold, so no budget stays held for it.
 //
 // The classifier (7.3) runs only for the `must` requests, and only after the hold exists, because its call is paid.
 //
@@ -340,7 +341,6 @@ export function createIntakeHandler(ports: IntakePorts): StageHandler {
           workspaceMonthBudgetUsd: month.usd,
           now,
           reservationId,
-          ...(month.tolerance === undefined ? {} : { tolerance: month.tolerance }),
         }),
       );
       if (held.reservation.state !== "reserved") {

@@ -93,3 +93,32 @@ test("sumForMonth adds one workspace's reservations and actuals in one month, le
   assert.deepEqual(await store.sumForMonth("ws_fixture", "2026-11"), { reservedUsd: 0, actualUsd: 0.02 });
   assert.deepEqual(await store.sumForMonth("ws_nobody", "2026-10"), { reservedUsd: 0, actualUsd: 0 });
 });
+
+test("committedForRequest sums one request's committed spend across its reservations: the actual, or the hold until the entry settles", async () => {
+  const store = memoryLedgerStore();
+  await store.createReservation(reservation({ reservationId: ID.reservation }));
+  await store.createReservation(reservation({ reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X" }));
+  await store.appendEntry(row({ entryId: ID.ledgerRender, idempotencyKey: "a", reservedUsd: 0.5 }));
+  await store.appendEntry(
+    row({ entryId: ID.ledgerStt, idempotencyKey: "b", reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X", reservedUsd: 0.3, actualUsd: 0.25 }),
+  );
+  await store.appendEntry(row({ entryId: "led_01J9ZK3M4N5P6Q7R8S9T0V1W3C", idempotencyKey: "c", requestId: "req_other", reservedUsd: 9 }));
+
+  assert.equal(await store.committedForRequest(ID.request), 0.75, "0.50 held plus 0.25 settled, and nothing of the other request");
+  assert.equal(await store.committedForRequest("req_other"), 9);
+  assert.equal(await store.committedForRequest("req_nobody"), 0);
+});
+
+test("committedForMonth sums one workspace's committed spend by the month of each entry: the actual, or the hold until it settles", async () => {
+  const store = memoryLedgerStore();
+  // A reservation made in September whose calls happen in October: the calls are October's spend.
+  await store.createReservation(reservation({ reservationId: ID.reservation, createdAt: "2026-09-30T10:00:00.000Z" }));
+  await store.appendEntry(row({ entryId: ID.ledgerRender, idempotencyKey: "a", reservedUsd: 0.5, at: "2026-10-05T10:00:00.000Z" }));
+  await store.appendEntry(row({ entryId: ID.ledgerStt, idempotencyKey: "b", reservedUsd: 0.3, actualUsd: 0.25, at: "2026-10-06T10:00:00.000Z" }));
+  await store.appendEntry(row({ entryId: "led_01J9ZK3M4N5P6Q7R8S9T0V1W3C", idempotencyKey: "c", reservedUsd: 0.4, at: "2026-09-29T10:00:00.000Z" }));
+  await store.appendEntry(row({ entryId: "led_01J9ZK3M4N5P6Q7R8S9T0V1W3D", idempotencyKey: "d", workspaceId: "ws_other", reservedUsd: 7, at: "2026-10-07T10:00:00.000Z" }));
+
+  assert.equal(await store.committedForMonth("ws_fixture", "2026-10"), 0.75, "the October calls: 0.50 held plus 0.25 settled");
+  assert.equal(await store.committedForMonth("ws_fixture", "2026-09"), 0.4);
+  assert.equal(await store.committedForMonth("ws_nobody", "2026-10"), 0, "another workspace is not counted");
+});

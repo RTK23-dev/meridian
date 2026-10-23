@@ -15,7 +15,7 @@ import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
 import { productionHandlers, type BrandFacts } from "./production.ts";
 import { queueAssetJob } from "./asset-poll.ts";
 import { textChoices, type TextModelChoice } from "./settings.ts";
-import { meridianMonthlyBudgetReader, meridianToleranceReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
+import { meridianMonthlyBudgetReader, workspaceBudgetFromSettings } from "../jobs/workspace-budget.ts";
 
 export type CatalogState =
   | { status: "ok"; catalog: Map<string, CatalogEntry>; takenAt: string; disabledFamilies: readonly string[]; budgetTolerance: BudgetTolerance }
@@ -79,7 +79,7 @@ export async function planDraftFor(sql: Sql, input: { organizationId: string; pl
       budgetTolerance: catalog.budgetTolerance,
       catalogReadAt: catalog.takenAt,
       now: input.now,
-      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql)),
+      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
     },
     input.planId,
   );
@@ -98,7 +98,7 @@ export async function runPlanFor(sql: Sql, input: { organizationId: string; plan
     disabledFamilies: catalog.disabledFamilies,
     budgetTolerance: catalog.budgetTolerance,
     budget: {
-      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql), meridianToleranceReader(sql)),
+      workspaceBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
       now: input.now,
       // The handlers are made from the run's reservation, so every paid call is authorized against it.
       handlersFor: (budget) =>

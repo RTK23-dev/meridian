@@ -68,6 +68,8 @@ function rowToReservation(row: ReservationRow): BudgetReservation {
   };
   if (row.request_budget_usd !== null) reservation.requestBudgetUsd = Number(row.request_budget_usd);
   if (row.month_budget_usd !== null) reservation.workspaceMonthBudgetUsd = Number(row.month_budget_usd);
+  // The allowance columns are retired by D12 (contract v11): written as null from v11, read only for rows stored before it. No budget
+  // rule reads them. The columns are kept (no migration), so the mapping stays optional.
   if (row.request_allowance_usd !== null) reservation.requestAllowanceUsd = Number(row.request_allowance_usd);
   if (row.month_allowance_usd !== null) reservation.workspaceMonthAllowanceUsd = Number(row.month_allowance_usd);
   if (row.paused_reason !== null) reservation.pausedReason = row.paused_reason;
@@ -232,6 +234,24 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
         where organization_id = ${organizationId} and to_char(at at time zone 'UTC', 'YYYY-MM') = ${month}
       `;
       return { reservedUsd: roundUsd(Number(reserved[0]?.total ?? 0)), actualUsd: roundUsd(Number(actual[0]?.total ?? 0)) };
+    },
+
+    // Committed spend (D12): each entry's actual cost, or its hold until it settles. The same rule as committedFor, over the rows.
+    async committedForRequest(requestId) {
+      const rows = await sql<{ total: string | number }>`
+        select coalesce(sum(coalesce(actual_usd, reserved_usd)), 0) as total from engine_ledger
+        where organization_id = ${organizationId} and request_id = ${requestId}
+      `;
+      return roundUsd(Number(rows[0]?.total ?? 0));
+    },
+
+    async committedForMonth(workspaceId, month) {
+      refuseOtherWorkspace(organizationId, workspaceId);
+      const rows = await sql<{ total: string | number }>`
+        select coalesce(sum(coalesce(actual_usd, reserved_usd)), 0) as total from engine_ledger
+        where organization_id = ${organizationId} and to_char(at at time zone 'UTC', 'YYYY-MM') = ${month}
+      `;
+      return roundUsd(Number(rows[0]?.total ?? 0));
     },
   };
 }

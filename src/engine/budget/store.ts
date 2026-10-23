@@ -42,6 +42,16 @@ export interface LedgerStore {
    * Actual total: the actuals of the workspace's entries that happened in the month.
    */
   sumForMonth(workspaceId: string, month: string): Promise<MonthTotals>;
+  /**
+   * The committed spend of one request, across all its reservations (D12): for each of its entries, the actual cost, or the hold until the
+   * entry settles. A remake opens a reservation of its own, so the request's earlier spend is read here, not from one reservation.
+   */
+  committedForRequest(requestId: string): Promise<number>;
+  /**
+   * The committed spend of the workspace's month (D12): for each of its entries that happened in the month ("YYYY-MM"), the actual cost,
+   * or the hold until the entry settles. A hold that a reservation has not spent is not counted.
+   */
+  committedForMonth(workspaceId: string, month: string): Promise<number>;
 }
 
 /** In-memory LedgerStore. Values are copied in and out, so callers cannot change stored state by accident. */
@@ -134,6 +144,18 @@ export function memoryLedgerStore(): LedgerStore {
         reservedUsd: sumUsd(reserved.map((reservation) => reservation.reservedUsd)),
         actualUsd: sumUsd(actual.map((row) => row.actualUsd ?? 0)),
       };
+    },
+
+    async committedForRequest(requestId) {
+      return sumUsd(rows.filter((row) => row.requestId === requestId).map((row) => row.actualUsd ?? row.reservedUsd));
+    },
+
+    async committedForMonth(workspaceId, month) {
+      return sumUsd(
+        rows
+          .filter((row) => row.workspaceId === workspaceId && row.at.startsWith(month))
+          .map((row) => row.actualUsd ?? row.reservedUsd),
+      );
     },
   };
 }

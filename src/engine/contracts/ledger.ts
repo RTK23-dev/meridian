@@ -9,9 +9,11 @@ export const budgetModeSchema = z.enum(BUDGET_MODES);
 export type BudgetMode = z.infer<typeof budgetModeSchema>;
 
 /**
- * reserved: calls may be authorized. paused: no call was authorized, because a cap refused the reservation at creation or an operator
- * paused it. exceeded (contract v6): a verified bill took the reservation above the amount it was authorized for, so no further paid
- * call is authorized and the bill counts toward the month. released: the reservation is closed at what is committed.
+ * reserved: calls may be authorized while their budget lines are below their budgets. paused: no call is authorized. In cap mode a reservation
+ * is paused at creation when its month's committed spend is at or above the month budget (contract v11, D12), and an operator can pause
+ * one. exceeded (contract v11, D12): a verified bill took the request's committed spend, or the month's, to its budget line in cap mode.
+ * No paid call starts while a line is reached; the mark clears when no line is. The bill counts toward the month. An overrun of a hold alone
+ * does not set it. released: the reservation is closed at what is committed.
  */
 export const RESERVATION_STATES = ["reserved", "paused", "exceeded", "released"] as const;
 export const reservationStateSchema = z.enum(RESERVATION_STATES);
@@ -31,6 +33,8 @@ export type BudgetLine = z.infer<typeof budgetLineSchema>;
  * for a released one, the amount actually committed).
  * Contract v6 adds the budgets the reservation was authorized against: the request's budget and the workspace month's budget.
  * A reservation written before v6 has neither, and is checked against its own reservedUsd only.
+ * Contract v11 (D12, a budget is a line) retires the two allowance fields below. No reservation written from v11 carries them, and a
+ * call is gated by the two budgets alone. They stay optional so that rows stored before v11 still parse.
  */
 /** The name the reservation's schema field carries (contract v1). */
 export const BUDGET_RESERVATION_SCHEMA = "meridian.budget_reservation/v1" as const;
@@ -48,9 +52,15 @@ export const budgetReservationSchema = z
     reservedUsd: usdSchema,
     requestBudgetUsd: usdSchema.optional(),
     workspaceMonthBudgetUsd: usdSchema.optional(),
-    /** The request budget plus its overrun tolerance, fixed when the reservation is made (owner direction 2026-10-23). Absent: the budget. */
+    /**
+     * Retired by D12 (contract v11): the request budget plus a tolerance. No reservation written from v11 carries it, and no budget rule
+     * reads it. Optional, so a row stored before v11 still parses.
+     */
     requestAllowanceUsd: usdSchema.optional(),
-    /** The workspace month budget plus its overrun tolerance, fixed when the reservation is made. Absent: the budget. */
+    /**
+     * Retired by D12 (contract v11): the workspace month budget plus a tolerance. Written by nothing from v11 and read by no budget rule.
+     * Optional, so a row stored before v11 still parses.
+     */
     workspaceMonthAllowanceUsd: usdSchema.optional(),
     state: reservationStateSchema,
     pausedReason: z.string().min(1).optional(),
@@ -67,7 +77,7 @@ export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
 /**
  * The Claude roles of Bible 11.1. A Claude call's ledger entry names its role, so cost is traceable per role. A new role is
  * a contract change (a version bump and a Bible section 4 note).
- * `frame_reader` (contract v4) is the Haiku vision role that reads captions, shake and speed ramps from sampled frames, as
+ * `frame_reader` (contract v4) is the vision role that reads captions, shake and speed ramps from sampled frames, as
  * measurements only. It returns no visible text (Bible 1, copy genes never content).
  * `model_chooser` (contract v8) picks each production call's model from the OpenRouter catalog (Bible 10.5). It runs on llm.check.
  * `scriptwriter` (contract v8) writes a request's script from its brief and the analysed reference (Bible 6.x write_script). It runs
