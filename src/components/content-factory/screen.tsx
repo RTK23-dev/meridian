@@ -8,7 +8,8 @@ import { AdminOnlyNotice } from "@/components/ops/ops-shared";
 import { hasRole } from "@/lib/meridian/access";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentFactorySession, getBrandHookHistory, getContentFactorySession, listContentFactorySessions, readContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { createContentFactorySession, getBrandEconomics, getBrandHookHistory, getContentFactorySession, listContentFactorySessions, readContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import type { BrandEconomics } from "@/lib/meridian/content-factory/economics";
 import type { HookHistory } from "@/lib/meridian/content-factory/hook-history";
 import { MAX_TITLE_CHARS, type SessionSummary } from "@/lib/meridian/content-factory/model";
 import { ChatPanel } from "./chat-panel";
@@ -84,11 +85,18 @@ export function ContentFactoryScreen() {
             </SelectInput>
           </div>
           {selected.brandId ? (
-            <HookHistoryCard
-              organizationId={organizationId}
-              brandId={selected.brandId}
-              brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-            />
+            <>
+              <HookHistoryCard
+                organizationId={organizationId}
+                brandId={selected.brandId}
+                brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
+              />
+              <EconomicsCard
+                organizationId={organizationId}
+                brandId={selected.brandId}
+                brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
+              />
+            </>
           ) : null}
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
         </>
@@ -233,6 +241,71 @@ function HookHistoryBody({ history }: { history: HookHistory }) {
           ))}
         </ol>
       )}
+    </div>
+  );
+}
+
+/** A reader's money: the figure as settled, with cents for amounts of a dollar or more and four places below that. */
+function moneyText(value: number): string {
+  return `$${value.toFixed(value < 1 ? 4 : 2)}`;
+}
+
+/**
+ * What one brand's video runs cost, from the engine's ledger. Billed is what a provider's bill settled. A held call is waiting for its bill: it
+ * is shown with its estimate, not counted as spent. The estimate of every call is a planning figure, not spending.
+ */
+function EconomicsCard({ organizationId, brandId, brandName }: { organizationId: string; brandId: string; brandName: string }) {
+  const { user } = useCurrentUserState();
+  const economics = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "economics", organizationId, brandId]),
+    queryFn: () => getBrandEconomics({ data: { organizationId, brandId } }),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Spend on {brandName}&rsquo;s video runs</CardTitle>
+        <CardDescription>Billed is what a provider&rsquo;s bill settled. A held call is still waiting for its bill, so it is not counted as spent.</CardDescription>
+      </CardHeader>
+      {economics.isError && !economics.data ? <PlainErrorState error={economics.error} onRetry={() => void economics.refetch()} /> : null}
+      {economics.isPending ? <p role="status" className="text-sm text-fg-muted">Reading the ledger.</p> : null}
+      {economics.data ? <EconomicsBody economics={economics.data} /> : null}
+    </Card>
+  );
+}
+
+function EconomicsBody({ economics }: { economics: BrandEconomics }) {
+  if (economics.runs === 0) {
+    return <p className="text-sm text-fg-muted">No video run has been made for this brand yet, so nothing has been spent on it.</p>;
+  }
+  const perDelivered =
+    economics.costPerDeliveredUsd === null
+      ? "No video is delivered yet, so there is no cost per delivered video."
+      : economics.costPerDeliveredFinal
+        ? `${moneyText(economics.costPerDeliveredUsd)} per delivered video.`
+        : `${moneyText(economics.costPerDeliveredUsd)} per delivered video so far. A call on a delivered run is still waiting for its bill, so this may change.`;
+  return (
+    <div className="space-y-4">
+      <dl className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <dt className="text-sm text-fg-muted">Billed</dt>
+          <dd className="text-lg font-semibold tabular-nums">{moneyText(economics.billedUsd)}</dd>
+          <dd className="text-xs text-fg-muted">Settled by a provider&rsquo;s bill.</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-fg-muted">Held</dt>
+          <dd className="text-lg font-semibold tabular-nums">{economics.heldCalls} {economics.heldCalls === 1 ? "call" : "calls"}</dd>
+          <dd className="text-xs text-fg-muted">Estimated {moneyText(economics.heldEstimateUsd)}. Not spent yet.</dd>
+        </div>
+        <div>
+          <dt className="text-sm text-fg-muted">Estimated for all runs</dt>
+          <dd className="text-lg font-semibold tabular-nums">{moneyText(economics.estimatedUsd)}</dd>
+          <dd className="text-xs text-fg-muted">A planning figure, not spending.</dd>
+        </div>
+      </dl>
+      <p className="text-sm">{perDelivered}</p>
+      <p className="text-xs text-fg-muted">
+        {economics.delivered} of {economics.runs} {economics.runs === 1 ? "run" : "runs"} delivered.
+      </p>
     </div>
   );
 }

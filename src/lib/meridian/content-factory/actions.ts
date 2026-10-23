@@ -17,7 +17,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, brandHookHistory, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, brandEconomics, brandHookHistory, createSession, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -32,6 +32,12 @@ export const getBrandHookHistory = createServerFn({ method: "POST" })
   .validator((input: unknown) => brandHookInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => brandHookHistory(await getSql(), context.userId, data));
+
+/** What a brand's video runs cost: billed, estimated and held amounts, and the cost per delivered video. Admins of the brand's workspace only. */
+export const getBrandEconomics = createServerFn({ method: "POST" })
+  .validator((input: unknown) => brandHookInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => brandEconomics(await getSql(), context.userId, data));
 
 export const createContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => createSessionInput(input))

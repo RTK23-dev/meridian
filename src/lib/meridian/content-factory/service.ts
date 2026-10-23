@@ -14,6 +14,8 @@
  */
 import { hookHistoryOf, type HookHistory } from "./hook-history.ts";
 import { readStartedHooks } from "./hook-history-store.ts";
+import { economicsOf, type BrandEconomics } from "./economics.ts";
+import { readBrandLedger, readBrandRuns } from "./economics-store.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -585,6 +587,18 @@ export async function brandHookHistory(sql: Sql, userId: string, input: { organi
   await requireWorkspaceAdmin(sql, userId, input.organizationId);
   await requireBrandInWorkspace(sql, input.organizationId, input.brandId);
   return hookHistoryOf(await readStartedHooks(sql, input.organizationId, input.brandId));
+}
+
+/**
+ * What a brand's video runs cost (portfolio economics): billed, estimated and held amounts, and the cost per delivered video with whether
+ * it is final. Admins of the brand's workspace only. It reads the ledger; it estimates no bill.
+ */
+export async function brandEconomics(sql: Sql, userId: string, input: { organizationId: string; brandId: string }): Promise<BrandEconomics> {
+  await requireWorkspaceAdmin(sql, userId, input.organizationId);
+  await requireBrandInWorkspace(sql, input.organizationId, input.brandId);
+  const runs = await readBrandRuns(sql, input.organizationId, input.brandId);
+  const lines = await readBrandLedger(sql, input.organizationId, input.brandId);
+  return economicsOf(runs, lines);
 }
 
 export type ReviseOutcome =
