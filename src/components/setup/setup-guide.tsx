@@ -19,27 +19,27 @@ const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
 ];
 
 const MORE_SOURCES = ["twitter", "linkedin", "pinterest", "tiktok", "instagram", "licensed"];
-const MEDIA_IDS = ["perception", "production", "hypit"];
+const MEDIA_IDS = ["perception", "production", "hypit", "openrouter", "heygen", "anthropic", "deepgram"];
 // The shared button does not shrink, so a long label would widen a phone-width column. This lets it wrap inside the column.
 const ACTION = "max-w-full shrink whitespace-normal text-left";
 
 const STATUS_LABEL: Record<SetupStatus, { text: string; className: string }> = {
-  usable: { text: "Connected", className: "bg-success-soft text-success" },
+  usable: { text: "Configured", className: "bg-success-soft text-success" },
   deployment_shared_default: { text: "Shared by the server", className: "bg-info-soft text-info" },
   unusable: { text: "Key cannot be used", className: "bg-danger-soft text-danger" },
   not_configured: { text: "Not set up", className: "bg-surface-2 text-fg-muted" },
 };
 
-/** This session's Test Connection answers, by row, and the way to record one. Every row list on the page reads the same answers. */
+/** This session's Check key answers, by row, and the way to record one. Every row list on the page reads the same answers. */
 const SetupTests = createContext<{ tests: Record<string, { status: string }>; record: (id: string, answer: { status: string }) => void }>({
   tests: {},
   record: () => {},
 });
 
-const STATE_VALUE: Record<"yes" | "no" | "not_applicable", { text: string; className: string }> = {
+const STATE_VALUE: Record<"yes" | "no" | "not_checked", { text: string; className: string }> = {
   yes: { text: "Yes", className: "text-success" },
   no: { text: "No", className: "text-warning" },
-  not_applicable: { text: "Not applicable", className: "text-fg-muted" },
+  not_checked: { text: "Not checked", className: "text-fg-muted" },
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {

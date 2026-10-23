@@ -61,8 +61,12 @@ function isVideoEngineCategory(category: ProviderCategory): category is VideoEng
   return (VIDEO_ENGINE_CREDENTIAL_CATEGORIES as readonly string[]).includes(category);
 }
 
-/** A connection test's answer. NOT_TESTABLE means the key was read, and no live provider check is made from this screen. */
-export type ConnectionTestStatus = "READY" | "ERROR" | "NOT_CONFIGURED" | "NOT_TESTABLE";
+/**
+ * A connection test's answer. READY means a live provider request succeeded. CONFIGURED means the saved key or configuration was
+ * read and is usable, and no provider was called, so it is never a connectivity claim. NOT_TESTABLE means the key was read, and
+ * this screen does not call the provider for that category.
+ */
+export type ConnectionTestStatus = "READY" | "CONFIGURED" | "ERROR" | "NOT_CONFIGURED" | "NOT_TESTABLE";
 
 /** The name a reviewer sees in a message. It contains no secret. */
 const KEY_LABEL: Record<CredentialCategory, string> = {
@@ -144,7 +148,7 @@ function sourceOf(state: CredentialState): ProviderConfigSummary["source"] {
   return state.source === "workspace" ? "workspace" : "deployment";
 }
 
-/** Only a failure is recorded. READY is never inferred from a usable key, because nothing has been tested yet. */
+/** Only a failure is recorded. A usable key is never recorded as a passed test, because no provider has been called. */
 function lastTestedStatusOf(state: CredentialState): "ERROR" | undefined {
   return state.state === "unusable" ? "ERROR" : undefined;
 }
@@ -501,7 +505,7 @@ export async function removeWorkspaceProviderConfig(
 
 /**
  * Sources has no required key. Public page sources run without one. Meta Ad Library needs a token, and this check looks only
- * at the workspace's own saved token. READY means that token is saved and readable. It never means the live Meta Ad Library
+ * at the workspace's own saved token. CONFIGURED means that token is saved and readable. It never means the live Meta Ad Library
  * answered, because no request is made here. The deployment key is read only when its shared default is opted in.
  */
 async function testSourcesConnection(
@@ -514,7 +518,7 @@ async function testSourcesConnection(
   const resolution = await resolveCredential(sql, organizationId, "meta_ad_library");
   if (resolution.status === "ready") {
     const owner = resolution.source === "workspace" ? "This workspace's saved" : "The deployment's shared";
-    return { status: "READY", message: `${owner} Meta Ad Library key can be read. ${live}`, latencyMs: latencyMs() };
+    return { status: "CONFIGURED", message: `${owner} Meta Ad Library key can be read. ${live}`, latencyMs: latencyMs() };
   }
   return {
     status: resolution.status === "unusable" ? "ERROR" : "NOT_CONFIGURED",
@@ -524,10 +528,11 @@ async function testSourcesConnection(
 }
 
 /**
- * Tests connection for a specific provider category with SSRF protection and live health checks.
+ * Tests connection for a specific provider category with SSRF protection.
  *
- * READY is reported only for a usable credential, by the same resolver the runtime uses. The keyed categories do not call
- * their live provider here, and the message says so. Sources reports READY only for a saved token that can be read.
+ * CONFIGURED is reported for a usable credential, by the same resolver the runtime uses. The keyed categories do not call their
+ * live provider here, and the message says so. READY is reported only where a provider request was made and answered: today that
+ * is the Cyclone device gateway.
  */
 export async function testWorkspaceProviderConnection(
   sql: Sql,
@@ -565,7 +570,7 @@ export async function testWorkspaceProviderConnection(
         const source = state.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
         const extra = input.category === "jev" ? " OpenRouter is deployment-only and was not checked." : "";
         return {
-          status: "READY",
+          status: "CONFIGURED",
           message: `${KEY_LABEL[input.category]} credential is usable (${source}). The live provider was not called by this check.${extra}`,
           latencyMs,
         };
@@ -577,8 +582,8 @@ export async function testWorkspaceProviderConnection(
       const drive = getGoogleDriveAuthStatus();
       const latencyMs = Date.now() - started;
       return {
-        status: drive.configured ? "READY" : "ERROR",
-        message: drive.configured ? "Google Drive OAuth client is configured." : "Google Drive is NOT_CONFIGURED.",
+        status: drive.configured ? "CONFIGURED" : "ERROR",
+        message: drive.configured ? "Google Drive OAuth client is configured. No Google request was made." : "Google Drive is NOT_CONFIGURED.",
         latencyMs,
       };
     }

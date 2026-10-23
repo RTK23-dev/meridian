@@ -207,8 +207,8 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
 }
 
 /**
- * Test Connection for a row that offers it. The server reads the key through the resolver and calls no provider, so the
- * answer is never shown as a pass unless the server says READY.
+ * Check key for a row that offers it. The server reads the key through the resolver and calls no provider, so the answer says
+ * the key is readable (CONFIGURED). It is never shown as a provider connection; only READY would be, and no Setup check returns it.
  */
 export function TestConnection({
   row,
@@ -217,7 +217,7 @@ export function TestConnection({
 }: {
   row: SetupRow;
   organizationId: string;
-  /** Told each answer, so a parent can show the row's Tested state. The answer is kept for this session only. */
+  /** Told each answer, so a parent can show the row's Configured reading. The answer is kept for this session only. */
   onAnswer?: (answer: { status: string }) => void;
 }) {
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
@@ -225,7 +225,7 @@ export function TestConnection({
     mutationKey: ["mutation", "setup.key.test", organizationId, row.id],
     mutationFn: () => testProviderConnection({ data: { organizationId, category: row.id as ProviderCategory } }),
   });
-  const tone = result?.status === "READY" ? "text-success" : result?.status === "NOT_TESTABLE" ? "text-fg-muted" : "text-danger";
+  const tone = result?.status === "CONFIGURED" || result?.status === "READY" ? "text-success" : result?.status === "NOT_TESTABLE" ? "text-fg-muted" : "text-danger";
   return (
     <div className="space-y-2">
       <Button
@@ -246,7 +246,7 @@ export function TestConnection({
           );
         }}
       >
-        {test.isPending ? "Testing..." : "Test Connection"}
+        {test.isPending ? "Checking..." : "Check key"}
         <span className="sr-only"> for {row.label}</span>
       </Button>
       {result ? (
