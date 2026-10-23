@@ -64,3 +64,15 @@ is verified by a live run.
 - Not decided here, for the owner: the engine reads only a per-second USD price at 1080p (`duration_seconds_1080p`). Most of the newest
   video models are priced in cents, per token, per generation or at another resolution, so they are not usable. Mapping those price forms
   changes what the engine prices, so it is the owner's call.
+
+## D11. An approval raises both budgets; the run is started again by hand
+
+- An approval sets the budget the user set and the plan's own budget to the approved amount. The run's target is the lower of the two
+  (`envelope.ts`), so raising one alone would change nothing. The approval is refused unless the plan is paused for an approval and the
+  amount is above the budget the plan has now. Only a workspace admin approves; the server function checks the role.
+- An approval spends nothing. The user starts the run again. The screen shows the reason of the last pause, in the run's own words.
+- The policy's initial values are read from the engine (`INITIAL_POLICY`), not typed into the screen.
+- Not built, and the owner's to decide: a brand-level policy. The direction names a brand; the stored policy is per workspace, keyed by the
+  organization. Precedence between a brand and its workspace needs a decision.
+- Not built: an audit row for each approval. The approval changes the plan's `updated_at` and its budgets only. Where approvals are logged
+  is the owner's decision.

@@ -125,7 +125,30 @@ export function parseBudget(value: string): number | null {
   return Number.isFinite(parsed) && parsed >= BUDGET.min && parsed <= BUDGET.max ? parsed : null;
 }
 
-export type ComposerFields = { brandId: string; title: string; goal: string; format: string; budget: string; storedModel: string | null };
+/** A brief from a format to copy or make, or from the person's own inputs. The mode says which of the two is required. */
+export type ComposerMode = "format" | "own";
+
+export type ComposerFields = {
+  brandId: string;
+  title: string;
+  goal: string;
+  format: string;
+  budget: string;
+  storedModel: string | null;
+  /** Defaults to a format to copy or make. */
+  mode?: ComposerMode;
+  userInputs?: string;
+  /** The optional budgets by category, as typed. Empty is unset: the orchestrator splits that category under the total. */
+  copyBudget?: string;
+  creativeBudget?: string;
+  voiceBudget?: string;
+};
+
+/** A category budget as the composer sends it: unset when empty, otherwise the budget in the same range as the total. */
+export function optionalBudget(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  return parseBudget(value) ?? undefined;
+}
 
 /** What the composer still needs before "Plan the run" can act, in the order the form asks for it. An empty list means it is ready. */
 export function missingFields(fields: ComposerFields): string[] {
@@ -133,8 +156,21 @@ export function missingFields(fields: ComposerFields): string[] {
   if (fields.brandId === "") missing.push("a brand");
   if (fields.title.trim() === "") missing.push("a title");
   if (fields.goal.trim() === "") missing.push("a goal");
-  if (fields.format.trim() === "") missing.push("the format");
+  // A format is required when the person copies one. With their own inputs, the inputs are required instead.
+  if (fields.mode === "own") {
+    if ((fields.userInputs ?? "").trim() === "") missing.push("your inputs");
+  } else if (fields.format.trim() === "") {
+    missing.push("the format");
+  }
   if (parseBudget(fields.budget) === null) missing.push("a budget from $0.01 to $1,000");
+  const categories = [
+    ["copy", fields.copyBudget],
+    ["creative", fields.creativeBudget],
+    ["voice", fields.voiceBudget],
+  ] as const;
+  for (const [name, value] of categories) {
+    if (value !== undefined && value.trim() !== "" && parseBudget(value) === null) missing.push(`a ${name} budget from $0.01 to $1,000, or left empty`);
+  }
   if (fields.storedModel === null) missing.push("an orchestrating model, stored in the Content Factory panel");
   return missing;
 }

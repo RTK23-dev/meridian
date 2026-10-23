@@ -15,7 +15,9 @@ import {
   describePlanOutcome,
   listWords,
   missingFields,
+  optionalBudget,
   parseBudget,
+  type ComposerMode,
   type Notice,
 } from "./orchestrator-presentation";
 
@@ -52,12 +54,16 @@ export function OrchestratorComposer({
   const [userInputs, setUserInputs] = useState("");
   const [brandSummary, setBrandSummary] = useState("");
   const [budget, setBudget] = useState("2");
+  const [mode, setMode] = useState<ComposerMode>("format");
+  const [copyBudget, setCopyBudget] = useState("");
+  const [creativeBudget, setCreativeBudget] = useState("");
+  const [voiceBudget, setVoiceBudget] = useState("");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const { data: workspace } = useWorkspace();
   const canAdmin = hasRole(workspace?.active?.role ?? "viewer", "admin");
 
-  const missing = missingFields({ brandId, title, goal, format, budget, storedModel });
+  const missing = missingFields({ brandId, title, goal, format, budget, storedModel, mode, userInputs, copyBudget, creativeBudget, voiceBudget });
   const budgetValue = parseBudget(budget);
   const budgetInvalid = budget.trim() !== "" && budgetValue === null;
   const brand = brands.find((candidate) => candidate.id === brandId);
@@ -78,6 +84,9 @@ export function OrchestratorComposer({
           userInputs: userInputs.trim(),
           brandSummary: brandSummary.trim(),
           budgetUsd: budgetValue,
+          copyBudgetUsd: optionalBudget(copyBudget),
+          creativeBudgetUsd: optionalBudget(creativeBudget),
+          voiceBudgetUsd: optionalBudget(voiceBudget),
         },
       });
       planId = created.plan.id;
@@ -178,23 +187,40 @@ export function OrchestratorComposer({
           onChange={(event) => setTitle(event.target.value)}
         />
 
+        <fieldset className="flex flex-col gap-2">
+          <legend className="text-sm font-semibold">Start from</legend>
+          <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
+            <label className="inline-flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
+              <input type="radio" name="composer-mode" value="format" checked={mode === "format"} onChange={() => setMode("format")} className="size-4" />
+              A format to copy or make
+            </label>
+            <label className="inline-flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
+              <input type="radio" name="composer-mode" value="own" checked={mode === "own"} onChange={() => setMode("own")} className="size-4" />
+              My own inputs
+            </label>
+          </div>
+        </fieldset>
+
         <div className="grid gap-5 md:grid-cols-2">
           <Textarea
             id="composer-format"
             label="Format to rebuild or make"
-            required
+            required={mode === "format"}
             rows={3}
             maxLength={COMPOSER_LIMITS.format}
             placeholder="For example: 9:16, 20 seconds, three cuts, captions on screen."
+            hint={mode === "own" ? "Optional with your own inputs. Leave it empty to let the inputs decide." : undefined}
             value={format}
             onChange={(event) => setFormat(event.target.value)}
           />
           <Textarea
             id="composer-inputs"
             label="Your inputs"
+            required={mode === "own"}
             rows={3}
             maxLength={COMPOSER_LIMITS.userInputs}
-            placeholder="Copy, offers or notes the video must use. Optional."
+            placeholder="Copy, offers or notes the video must use."
+            hint={mode === "own" ? "Required with your own inputs." : "Optional."}
             value={userInputs}
             onChange={(event) => setUserInputs(event.target.value)}
           />
@@ -252,6 +278,22 @@ export function OrchestratorComposer({
           </section>
         </div>
 
+        <section aria-labelledby="composer-categories-heading" className="flex flex-col gap-3">
+          <div className="flex flex-col gap-1">
+            <h3 id="composer-categories-heading" className="text-sm font-semibold">
+              Budget by category (optional)
+            </h3>
+            <p className="text-xs text-fg-muted">
+              A category you set is the most its steps may cost. A category you leave empty is split by the orchestrator under the total budget.
+            </p>
+          </div>
+          <div className="grid gap-5 sm:grid-cols-3">
+            <CategoryBudget id="composer-copy-budget" label="Copy (USD)" hint="Analysis and script steps." value={copyBudget} onChange={setCopyBudget} />
+            <CategoryBudget id="composer-creative-budget" label="Creative (USD)" hint="Visual, video and avatar steps." value={creativeBudget} onChange={setCreativeBudget} />
+            <CategoryBudget id="composer-voice-budget" label="Voice (USD)" hint="Voice steps." value={voiceBudget} onChange={setVoiceBudget} />
+          </div>
+        </section>
+
         <section aria-labelledby="composer-later-heading" className="flex flex-col gap-2">
           <h3 id="composer-later-heading" className="text-sm font-semibold">
             Not connected yet
@@ -300,6 +342,39 @@ export function OrchestratorComposer({
         </Button>
       </div>
     </form>
+  );
+}
+
+/** One category budget. Empty is unset; a value must be in the same range as the total. */
+function CategoryBudget({
+  id,
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  hint: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const invalid = value.trim() !== "" && parseBudget(value) === null;
+  return (
+    <Input
+      id={id}
+      label={label}
+      type="number"
+      inputMode="decimal"
+      min={0.01}
+      max={1000}
+      step="0.01"
+      placeholder="Unset"
+      hint={hint}
+      error={invalid ? "Enter a budget from $0.01 to $1,000, or leave it empty." : undefined}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    />
   );
 }
 

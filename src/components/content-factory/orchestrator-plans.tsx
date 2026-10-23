@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import type { NodeEvent, OrchestratorPlan } from "@/engine/orchestrator/contracts";
 import { OrchestratorCanvas } from "./orchestrator-canvas";
 import { OrchestratorComposer } from "./orchestrator-composer";
-import { describePlanOutcome } from "./orchestrator-presentation";
+import { OrchestratorPolicyPanel } from "./orchestrator-policy-panel";
+import { describePlanOutcome, parseBudget } from "./orchestrator-presentation";
 import { useWorkspace } from "@/components/workspace";
 import {
+  approveOrchestratorBudget,
   editOrchestratorStep,
   getBrandOrchestratorModel,
   getOrchestratorPlan,
@@ -257,6 +259,20 @@ export function OrchestratorPlans() {
                   </div>
                 ) : null}
                 {detail.events.length > 0 ? <p className="text-xs text-fg-muted">The last run recorded {detail.events.length} events.</p> : null}
+                {detail.plan.status === "paused" ? (
+                  <BudgetApproval
+                    brandId={brandId}
+                    planId={detail.plan.id}
+                    budgetUsd={detail.plan.budgetUsd}
+                    pauseReason={pauseReasonOf(detail.events)}
+                    canAdmin={canAdmin}
+                    onApproved={async (message) => {
+                      setMessage(message);
+                      await refresh();
+                      await open(detail.plan.id);
+                    }}
+                  />
+                ) : null}
                 <div className="flex flex-wrap gap-2">
                   {detail.plan.status === "draft" || detail.plan.status === "refused" ? (
                     <Button size="sm" onClick={() => plan(detail.plan.id)} disabled={busy || !canAdmin} aria-describedby={canAdmin ? undefined : "plans-role"}>
@@ -274,7 +290,85 @@ export function OrchestratorPlans() {
           </div>
         )}
       </section>
+      {brandId !== "" ? <OrchestratorPolicyPanel brandId={brandId} /> : null}
     </div>
+  );
+}
+
+/** The reason the latest pause gives, in the run's own words. */
+function pauseReasonOf(events: Array<{ state: string; reason: string | null }>): string | null {
+  return events.filter((event) => event.state === "paused").at(-1)?.reason ?? null;
+}
+
+/**
+ * A paused plan waits for an approval of its budget. An admin approves a higher amount, and the run is then started again by hand: the
+ * approval spends nothing. The server checks the same rule: the approved amount must be above the budget the plan has now.
+ */
+function BudgetApproval(props: {
+  brandId: string;
+  planId: string;
+  budgetUsd: number;
+  pauseReason: string | null;
+  canAdmin: boolean;
+  onApproved: (message: string) => Promise<void>;
+}) {
+  const { brandId, planId, budgetUsd, pauseReason, canAdmin, onApproved } = props;
+  const [amount, setAmount] = useState(budgetUsd.toFixed(2));
+  const [saving, setSaving] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const value = parseBudget(amount);
+  const higher = value !== null && value > budgetUsd;
+
+  async function approve() {
+    if (value === null || !higher) return;
+    setSaving(true);
+    setProblem(null);
+    try {
+      const outcome = await approveOrchestratorBudget({ data: { brandId, planId, budgetUsd: value } });
+      if (outcome.status === "refused") setProblem(outcome.reasons.join("; "));
+      else await onApproved(`The budget is now $${outcome.budgetUsd.toFixed(2)}, up from $${outcome.previousUsd.toFixed(2)}. Run the plan to continue. Approving spent nothing.`);
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : "The budget could not be approved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section aria-labelledby={`approval-${planId}`} className="flex flex-col gap-2 rounded-lg border border-warning p-3 text-sm">
+      <h3 id={`approval-${planId}`} className="font-semibold">
+        Paused for an approval
+      </h3>
+      <p className="text-fg-muted">{pauseReason ?? "The next step would take the spend past the budget and its tolerance."}</p>
+      <div className="flex flex-wrap items-end gap-2">
+        <Input
+          id={`approval-amount-${planId}`}
+          label="Approved budget (USD)"
+          type="number"
+          inputMode="decimal"
+          min={0.01}
+          max={1000}
+          step="0.01"
+          className="sm:max-w-40"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          error={value === null ? "Enter a budget from $0.01 to $1,000." : undefined}
+        />
+        <Button size="sm" onClick={() => void approve()} disabled={saving || !canAdmin || !higher} aria-describedby={canAdmin ? undefined : "plans-role"}>
+          Approve this budget
+        </Button>
+      </div>
+      <p className="text-xs text-fg-muted">
+        {higher && value !== null
+          ? `Approving $${value.toFixed(2)} raises the budget from $${budgetUsd.toFixed(2)}.`
+          : `The run is held to $${budgetUsd.toFixed(2)} and its tolerance. The approved budget must be above it.`}
+      </p>
+      {problem ? (
+        <p role="alert" className="text-danger">
+          {problem}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

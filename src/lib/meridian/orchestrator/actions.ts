@@ -12,6 +12,8 @@ import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
 import { editPlanStepFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
+import { approvePlanBudget } from "@/engine/orchestrator/approval";
+import { INITIAL_POLICY, readOrchestratorPolicy, writeOrchestratorPolicy } from "@/engine/orchestrator/policy-store";
 import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
@@ -111,6 +113,9 @@ export const getOrchestratorPlan = createServerFn({ method: "POST" })
     return { plan: summaryOf(plan), events };
   });
 
+/** The format of a brief made from the person's own inputs, when no format is given. The brief still states what is to be made. */
+const OWN_INPUTS_FORMAT = "A short branded video made from the inputs below.";
+
 export const createOrchestratorDraft = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
@@ -121,7 +126,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       brandId: text(body.brandId, 80, "Brand", true),
       title: text(body.title, 120, "Title", true),
       goal: text(body.goal, 2000, "Goal", true),
-      format: text(body.format, 4000, "Format", true),
+      format: text(body.format, 4000, "Format"),
       userInputs: text(body.userInputs, 4000, "Your inputs"),
       brandSummary: text(body.brandSummary, 2000, "Brand summary"),
       budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
@@ -134,12 +139,13 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "admin");
+    if (data.format === "" && data.userInputs === "") throw new Error("Give the format to rebuild or make, or your own inputs.");
     const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
     if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
     // A category the user leaves unset is absent from the brief (JSON drops it), so the orchestrator splits that category (categories.ts).
     const brief = {
       goal: data.goal,
-      format: data.format,
+      format: data.format === "" ? OWN_INPUTS_FORMAT : data.format,
       userInputs: data.userInputs,
       brand: { name: brandName, summary: data.brandSummary },
       budgetUsd: data.budgetUsd,
@@ -232,6 +238,66 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
   });
 
 /** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
+/** The workspace's budget tolerance and switched-off model families, with the initial values. Any member of the brand's workspace reads it. */
+export const getOrchestratorPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
+    return { policy: await readOrchestratorPolicy(sql, organizationId), initial: INITIAL_POLICY };
+  });
+
+/** Save the policy. Only a workspace admin changes it. An absent field keeps its value; the engine's schema checks every value it is given. */
+export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const tolerance = body.budgetTolerance === undefined ? undefined : objectInput(body.budgetTolerance);
+    const families = Array.isArray(body.disabledModelFamilies) ? body.disabledModelFamilies.map((family) => text(family, 200, "Model family")) : undefined;
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      disabledModelFamilies: families === undefined ? undefined : families.filter((family) => family !== ""),
+      budgetTolerance:
+        tolerance === undefined
+          ? undefined
+          : { percent: number(tolerance.percent, "Tolerance percent", 0, 100), cents: number(tolerance.cents, "Tolerance cents", 0, 10000) },
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const policy = await writeOrchestratorPolicy(sql, {
+      organizationId,
+      actorId: context.userId,
+      patch: { disabledModelFamilies: data.disabledModelFamilies, budgetTolerance: data.budgetTolerance },
+    });
+    return { policy };
+  });
+
+/** Approve a paused plan's budget: the amount the person approves becomes the budget the run is held to. Only a workspace admin approves. */
+export const approveOrchestratorBudget = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      planId: text(body.planId, 80, "Plan", true),
+      budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
+    const outcome = await approvePlanBudget(sql, { organizationId, planId: data.planId, budgetUsd: data.budgetUsd });
+    if (outcome.status === "not_found") throw new Error("Plan not found.");
+    if (outcome.status === "refused") return { status: "refused" as const, reasons: outcome.reasons };
+    const stored = await getPlan(sql, organizationId, data.planId);
+    return {
+      status: "approved" as const,
+      previousUsd: outcome.previousUsd,
+      budgetUsd: outcome.budgetUsd,
+      plan: stored === null ? null : summaryOf(stored),
+    };
+  });
+
 export const getOrchestratorModelSetting = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ organizationId: text(objectInput(input).organizationId, 80, "Workspace", true) }))
   .middleware([authMiddleware])
