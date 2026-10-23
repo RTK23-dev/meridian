@@ -9,8 +9,8 @@ export const budgetModeSchema = z.enum(BUDGET_MODES);
 export type BudgetMode = z.infer<typeof budgetModeSchema>;
 
 /**
- * reserved: calls may be authorized while their budget lines are below their budgets. paused: no call is authorized. In cap mode a reservation
- * is paused at creation when its month's committed spend is at or above the month budget (contract v11, D12), and an operator can pause
+ * reserved: calls may be authorized while their budget lines are below their budgets and their own holds fit under them (D17). paused: no call
+ * is authorized. A reservation is never paused at creation, whatever its month's committed spend (contract v11, D12, D17), and an operator can pause
  * one. exceeded (contract v11, D12): a verified bill took the request's committed spend, or the month's, to its budget line in cap mode.
  * No paid call starts while a line is reached; the mark clears when no line is. The bill counts toward the month. An overrun of a hold alone
  * does not set it. released: the reservation is closed at what is committed.

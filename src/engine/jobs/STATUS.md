@@ -10,8 +10,9 @@ The budget call sites of the brief path follow `budget/STATUS.md`, which has the
 - `handlers/estimate-reserve.ts`: `extendForPlan` takes no tolerance. The `paused` outcome is gone: a raise above a budget is written with a
   note, and the stage passes its gate. `WorkspaceMonthBudget.tolerance?` is kept as an optional, never-set field, because the orchestrator
   still reads it (accepted; `budget/STATUS.md`, change list).
-- `handlers/intake.ts`: a pre-flight hold above a budget is held with a note, not paused. A hold that is not accepted (the month's committed
-  spend is at its budget), and a workspace month that is not connected, pause the request (`budgetPause`).
+- `handlers/intake.ts`: a pre-flight hold above a budget is held with a note, not paused. A workspace month that is not connected or not
+  usable, and a pre-flight hold that is not in the reserved state, pause the request (`budgetPause`). A paused hold is never revived: a new
+  attempt gets a new id. A month at its budget does not pause intake; its paid calls are refused one by one (D17).
 - `sql-ledger-store.ts`: no migration. The two allowance columns stay. The mapping was already optional, and a reservation written from v11
   stores `null` in them; a comment says so. `sql-ledger-store.test.ts` reads back a row with the columns set and a row without them.
 - Round 2 (committed spend): `sql-ledger-store.ts` implements `committedForRequest(requestId)` and `committedForMonth(workspaceId, month)`
