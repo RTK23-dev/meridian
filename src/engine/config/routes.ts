@@ -93,11 +93,11 @@ export const routes = {
     lipsync: { targets: [], note: "The lip-sync vendor is chosen in E2." },
 
     // Speech-to-text (owner decision 2026-10-16, Bible 10.3, 20.2): Deepgram pre-recorded /v1/listen with word timestamps, called
-    // directly rather than through OpenRouter. The gateway does not list the deepgram provider or its credential yet, so the route is
-    // not connected until the gateway does (gateway/providers.ts and gateway/meridian.ts).
+    // directly rather than through OpenRouter. The gateway lists the deepgram provider (gateway/providers.ts) and its credential
+    // (gateway/meridian.ts). Without a Deepgram key the route returns NOT_CONNECTED and sends nothing.
     stt: {
       targets: [{ provider: "deepgram", model: "nova-3", priceKey: "deepgram_nova3_prerecorded", verified: false }],
-      note: "Deepgram is not yet a gateway provider: the stt route stays NOT_CONNECTED until gateway/providers.ts lists it.",
+      note: "Deepgram is a gateway provider. Its target is unverified until a live run: no live call has been made from this table.",
     },
     // Stock video (Bible 10.3), in priority order. "videos" names the endpoint family, not a model.
     stock: {

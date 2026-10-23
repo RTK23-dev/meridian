@@ -26,6 +26,15 @@ describe("gateway routing", () => {
     assert.deepEqual(gateway.routes("video.budget").map((route) => route.model), []);
   });
 
+  it("sends the stt route to Deepgram, and sends nothing without a Deepgram key", async () => {
+    const { transport, requests } = recorded([]);
+    const gateway = createGateway({ transport, credentials: staticKeys({ openrouter: "sk-or-test" }) });
+    assert.equal(gateway.route("stt").provider.id, "deepgram", "the route names the provider the table lists");
+    const result = await gateway.call({ provider: "deepgram", organizationId: "org_1", method: "POST", path: "/v1/listen" });
+    assert.equal(result.status, "not_connected");
+    assert.equal(requests.length, 0, "a call with no key is refused before any request is made");
+  });
+
   it("a chosen model keeps the table's provider, carries the chosen id, and has no table price", () => {
     const gateway = createGateway({ transport: recorded([]).transport, credentials: staticKeys({}) });
     const route = gateway.chosen("video.cinematic", "kwaivgi/kling-v3.0-std");

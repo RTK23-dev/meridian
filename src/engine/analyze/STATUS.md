@@ -187,8 +187,8 @@ Results on this branch are in the report to the lead.
 ## Blockers and decisions for the lead
 
 1. **Speech-to-text vendor: decided (Deepgram nova-3, owner decision 2026-10-16), not verified live.** The stt route is listed in
-   `gateway/providers.ts`. Its note in `config/routes.ts` still says the route stays NOT_CONNECTED until the gateway lists Deepgram; that note
-   is stale (an eng-contracts change). Brief requests detect the language (round 2).
+   `gateway/providers.ts`, and its note in `config/routes.ts` now says so (the stale "not yet a gateway provider" note is corrected). The
+   route is unverified until a live run. Brief requests detect the language (round 2).
 2. **Captions: answered by `frame_reader` (eng-detectors).** `frame_reader` is in `CLAUDE_ROLES` (contracts@4). The role and its
    aggregation are built (see "frame_reader" above). Open: the jobs wiring (`analysisReadings`), and the owner's live run that checks
    the captions against hand labels. The highlight is a single-frame proxy (decision 1 above).
