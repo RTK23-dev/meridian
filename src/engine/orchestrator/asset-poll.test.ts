@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
+import { authorizeCall } from "../budget/reserve.ts";
+import { releaseReservation } from "../budget/reconcile.ts";
+import { memoryLedgerStore } from "../budget/store.ts";
 import type { AssetJob } from "../assets/job.ts";
 import type { AsyncAssetRouter, ProduceInput } from "../assets/router.ts";
+import { EngineError } from "../contracts/errors.ts";
+import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts/index.ts";
+import { newId } from "../contracts/ids.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { waitingHoldsByNode } from "./holds.ts";
-import { ASSET_POLL_AGAIN_MS, pollAssetJobs, queueAssetJob, sqlAssetPollStore, type AssetPollStore, type DueAsset } from "./asset-poll.ts";
+import { ASSET_POLL_AGAIN_MS, RUN_ENDED_REASON, pollAssetJobs, queueAssetJob, sqlAssetPollStore, type AssetPollStore, type DueAsset } from "./asset-poll.ts";
 import { createPlanDraft, failedHoldsByNode, failedHoldsUsd, listPlanEvents, listStepOutputs } from "./store.ts";
 
 const JOB = { idempotencyKey: "job-1", jobRef: "provider-job-1" } as unknown as AssetJob;
@@ -49,11 +55,13 @@ function fakeStore(due: DueAsset[]) {
       writes.outputs.push({ planId: r.planId, cacheKey: r.cacheKey, body: output.body, costUsd: output.costUsd, category: output.category });
       writes.finished.push({ id: r.id, status: "done", result });
       if (measured !== null) writes.measured.push({ cacheKey: r.cacheKey, ...measured });
+      return true;
     },
     async fail(r, reason) {
       // As the database store does: a row with a recorded hold charges it as a failed event; a row with none writes no event.
       if (r.heldUsd !== null) writes.charged.push({ id: r.id, hold: r.heldUsd });
       writes.finished.push({ id: r.id, status: "failed", result: reason });
+      return true;
     },
   };
   return { store, writes };
@@ -185,6 +193,34 @@ describe("the poll over recorded answers", () => {
     assert.deepEqual(writes.rescheduled, [{ id: "row-1", job: JOB, runAfterMs: ASSET_POLL_AGAIN_MS }]);
     assert.equal(writes.finished.length, 0);
     assert.equal(writes.charged.length, 0);
+  });
+
+  test("a retry the router refuses because its run's reservation is released closes the row as failed, charges its hold, and names the new run", async () => {
+    // The router's answer when the retry is refused: its reasons name the refusal the budget gave (budget/reserve.ts).
+    const refused = { status: "unavailable", reasons: ["openrouter:video: rate_limit: 429", "openrouter:video: reservation res_1 is released; no call is made"] };
+    const { store, writes } = fakeStore([row()]);
+    const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: refused })) });
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.deepEqual(writes.finished, [{ id: "row-1", status: "failed", result: RUN_ENDED_REASON }]);
+    assert.deepEqual(writes.charged, [{ id: "row-1", hold: 0.8 }], "the job's hold is charged once, as a failed hold");
+    assert.equal(writes.outputs.length, 0);
+  });
+
+  test("a refusal for another reason keeps the router's own reason: only a released run's refusal names the new run", async () => {
+    const refused = { status: "refused", reasons: ["openrouter:video: the request has committed 5 USD, at or above its 5 USD budget, so no paid call starts"] };
+    const { store, writes } = fakeStore([row()]);
+    await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: refused })) });
+    assert.match(writes.finished[0]?.result ?? "", /the budget refused this video/);
+    assert.notEqual(writes.finished[0]?.result, RUN_ENDED_REASON);
+  });
+
+  test("a close that writes nothing, because another poll closed the row first, is not counted in the report", async () => {
+    const { store } = fakeStore([row()]);
+    const closedElsewhere: AssetPollStore = { ...store, async complete() { return false; }, async fail() { return false; } };
+    const done = await pollAssetJobs({ store: closedElsewhere, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: DONE_WITH_BILL })) });
+    assert.deepEqual(done, { polled: 1, done: 0, failed: 0, waiting: 0 }, "a completed close that wrote nothing is not counted");
+    const failed = await pollAssetJobs({ store: closedElsewhere, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: null, pollThrows: true })) });
+    assert.deepEqual(failed, { polled: 1, done: 0, failed: 0, waiting: 0 }, "a failed close that wrote nothing is not counted");
   });
 });
 
@@ -374,5 +410,102 @@ describe("the poll on the database: holds, bills, measurements and organizations
     await assert.rejects(sqlAssetPollStore(db.sql, mine.org).fail(foreign, "closed from the wrong workspace"), /not in this organization/);
     assert.equal((await rowOf(theirs.org, key)).status, "waiting", "the other workspace's row is unchanged");
     assert.equal(await failedHoldsUsd(db.sql, theirs.org, theirs.plan), 0);
+  });
+
+  test("REPRO 1 (store): a row closed as failed is not closed again by a completing settle: its hold counts once, and no bill is stored", async () => {
+    const { org, plan } = await workspace("closed-twice");
+    const key = await queued(org, plan, { seconds: 8, hold: 0.8 });
+    const store = sqlAssetPollStore(db.sql, org);
+    const [row] = await store.due(10);
+    assert.ok(row, "the row is due");
+    const failed = await store.fail(row, "the poll threw");
+    const lateCompleted = await store.complete(row, { outputHash: "h", costUsd: 0.4, body: "engine/x.mp4", category: "creative" }, "stored", { seconds: 8, actualUsd: 0.4 });
+    const found = await rowOf(org, key);
+    assert.equal(found.status, "failed", "the first close stands");
+    assert.equal(found.result, "the poll threw", "the first close's reason stands");
+    assert.equal((await listStepOutputs(db.sql, org, plan)).get(key), undefined, "no bill is stored for a row that failed");
+    assert.deepEqual(await measurementsOf(org, plan, key), [], "nothing is measured");
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 0.8, "the hold counts once, as the failed hold");
+    assert.equal(failed, true, "the first close wrote the row");
+    assert.equal(lateCompleted, false, "the completing settle wrote nothing");
+  });
+
+  test("REPRO 2 (poll): a settle that finishes after its row was closed as failed changes nothing: the hold counts once, and the report counts no close", async () => {
+    const { org, plan } = await workspace("settle-after-close");
+    const key = await queued(org, plan, { seconds: 8, hold: 0.8 });
+    const store = sqlAssetPollStore(db.sql, org);
+    // Settler A claims the row. Its claim then lapses, as a claim does after two minutes, so another poll can take the row.
+    const [claimedByA] = await store.due(10);
+    assert.ok(claimedByA, "settler A claims the row");
+    await db.sql`update orchestrator_asset_jobs set next_poll_at = now() - interval '1 minute' where organization_id = ${org}`;
+    // Settler B's settle loses its claim to a retryable conflict, so the poll closes the row as failed and its hold is charged.
+    const conflicted = {
+      async pollOnce() {
+        return { state: "done", uri: "x", actualUsd: 0.4 };
+      },
+      async settle() {
+        throw new EngineError("conflict", `job ${JOB.idempotencyKey} is being settled by another run; it is retried`, { stage: "orchestrator_video", retryable: true });
+      },
+    } as unknown as AsyncAssetRouter;
+    assert.deepEqual(await pollWith(org, conflicted), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    // Settler A finishes now with the bill. The row is no longer waiting, so nothing is stored and the report counts no close.
+    const settlesLate: AssetPollStore = { ...store, async due() { return [claimedByA]; } };
+    const lateReport = await pollAssetJobs({ store: settlesLate, organizationId: org, routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: DONE_WITH_BILL })) });
+    assert.equal((await rowOf(org, key)).status, "failed", "the failed close stands");
+    assert.equal((await listStepOutputs(db.sql, org, plan)).get(key), undefined, "the late bill is not stored");
+    assert.deepEqual(await measurementsOf(org, plan, key), [], "the late bill is not measured");
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 0.8, "the hold counts once");
+    assert.deepEqual(lateReport, { polled: 1, done: 0, failed: 0, waiting: 0 }, "the report counts no close");
+  });
+
+  test("a row completed by one poll is not failed by another: its bill stands, and no failed event is written", async () => {
+    const { org, plan } = await workspace("done-then-failed");
+    const key = await queued(org, plan, { seconds: 8, hold: 0.8 });
+    const store = sqlAssetPollStore(db.sql, org);
+    const [row] = await store.due(10);
+    assert.ok(row, "the row is due");
+    const completed = await store.complete(row, { outputHash: "h", costUsd: 0.4, body: "engine/x.mp4", category: "creative" }, "stored", { seconds: 8, actualUsd: 0.4 });
+    const lateFailed = await store.fail(row, "the poll threw");
+    assert.equal((await rowOf(org, key)).status, "done", "the first close stands");
+    assert.equal((await listStepOutputs(db.sql, org, plan)).get(key)?.costUsd, 0.4, "the bill stands");
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 0, "no failed event is written for a row that was completed");
+    assert.equal(completed, true, "the first close wrote the row");
+    assert.equal(lateFailed, false, "the failing close wrote nothing");
+  });
+
+  test("REPRO 4 (budget) through the poll: a retry refused because its run's reservation was released closes the row as failed, charges its hold, and names the new run", async () => {
+    const { org, plan } = await workspace("run-ended");
+    const key = await queued(org, plan, { seconds: 8, hold: 0.8 });
+    // The run's reservation is released when the run ends. A retry of the queued job is then refused by the budget (budget/reserve.ts).
+    const ledger = memoryLedgerStore();
+    const reservationId = newId("res_");
+    await ledger.createReservation(
+      budgetReservationSchema.parse({
+        schema: BUDGET_RESERVATION_SCHEMA,
+        reservationId,
+        requestId: newId("req_"),
+        workspaceId: org,
+        mode: "cap",
+        lines: [{ stage: "orchestrator_run", estimateUsd: 1 }],
+        estimateUsd: 1,
+        redoAllowanceUsd: 0,
+        reservedUsd: 1,
+        requestBudgetUsd: 5,
+        workspaceMonthBudgetUsd: 100,
+        state: "reserved",
+        createdAt: "2026-10-23T10:00:00.000Z",
+      }),
+    );
+    await releaseReservation(ledger, reservationId);
+    const retry = await authorizeCall(ledger, { reservationId, stage: "orchestrator_video", provider: "openrouter", model: "vendor/video-model", estimateUsd: 0.8, idempotencyKey: "job-1|attempt2", at: "2026-10-23T10:20:00.000Z" });
+    assert.equal(retry.status, "refused");
+    // The router's answer to the poll: the refusal of the retry is among its reasons, and nothing is submitted.
+    const answer = { status: "unavailable", reasons: ["openrouter:video: rate_limit: 429 Too Many Requests", `openrouter:video: ${retry.status === "refused" ? retry.reason : ""}`] };
+    assert.deepEqual(await pollWith(org, fakeRouter({ poll: { state: "failed", error: { kind: "rate_limit", retryable: true, message: "429" } }, settle: answer })), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.equal((await rowOf(org, key)).status, "failed");
+    assert.equal((await rowOf(org, key)).result, RUN_ENDED_REASON);
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 0.8, "the job's hold is charged once");
+    const events = await listPlanEvents(db.sql, org, plan, 0);
+    assert.deepEqual(events.map((e) => [e.nodeId, e.state, e.costUsd, e.reason]), [["clip", "failed", 0.8, RUN_ENDED_REASON]]);
   });
 });

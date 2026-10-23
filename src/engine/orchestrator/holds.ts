@@ -5,6 +5,8 @@
 // - waitingHoldsByNode: the holds of the plan's waiting jobs, summed by step. A waiting job with no recorded hold is listed as unrecorded: it
 //   is never counted as zero, and its run refuses until the poll settles it.
 // - openQueuedJob: whether the plan has a waiting job for a cache key. A re-run then reports the step queued and submits nothing.
+// - jobStatusOf: the status of the plan's job for a cache key. A job the poll closed as failed keeps its hold as a failed hold, so a re-run
+//   refuses to submit it again (D14).
 // - recordCostMeasurement and measuredAverageUsdPerSecond: a measurement is one reported bill for a clip, with its length. It is written only
 //   for a reported actual cost, never for an estimate. The average is shown; it never sets a hold.
 //
@@ -46,6 +48,26 @@ export async function openQueuedJob(sql: Sql, organizationId: string, planId: st
     limit 1
   `;
   return rows.length > 0;
+}
+
+/** The status of a plan's job for a cache key: waiting, failed, done, or none (see jobStatusOf). */
+export type JobStatus = "waiting" | "failed" | "done" | "none";
+
+/**
+ * The status of the plan's job for a cache key. waiting: the poll has not closed it. failed: the poll closed it failed, and its hold is counted
+ * as a failed hold, so the step is not submitted again (D14). done: its output is stored. none: the plan has no job for the key. A key with
+ * more than one job reports the first of these that applies, in that order. Another plan or organization reads as none.
+ */
+export async function jobStatusOf(sql: Sql, organizationId: string, planId: string, cacheKey: string): Promise<JobStatus> {
+  const rows = await sql<Record<string, unknown>>`
+    select status from orchestrator_asset_jobs
+    where organization_id = ${organizationId} and plan_id = ${planId} and cache_key = ${cacheKey}
+  `;
+  const statuses = new Set(rows.map((row) => String(row.status)));
+  if (statuses.has("waiting")) return "waiting";
+  if (statuses.has("failed")) return "failed";
+  if (statuses.has("done")) return "done";
+  return "none";
 }
 
 /** One reported bill for a clip: its plan, its cache key, its kind, its length in seconds and the bill the provider reported. */

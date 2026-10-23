@@ -12,7 +12,8 @@
 //   run of the plan reuses it. A video step names its model class in params.model_class (planner prompt v2 asks for it). An avatar step
 //   reads its presenter image (a visual step) and its voice steps. Without a durable poll connected, neither step is connected.
 //   A queued job keeps its hold until the poll settles it (D14): a step with a job still waiting for its cache key reports queued and submits
-//   nothing. A step with no engine price runs only in measure mode (D15), held to the ceiling times its length; otherwise it is refused.
+//   nothing. A job the poll closed as failed is refused, not submitted again: its hold is already counted (D14). A step with no engine price
+//   runs only in measure mode (D15), held to the ceiling times its length; otherwise it is refused.
 //
 // Not connected, and so reported as not_connected by the executor because they have no handler: edit, compose and render. The engine's
 // edit and render stages run inside a production request, on its artifacts (EDL, voice timings, kit inputs). A plan step carries none of
@@ -32,7 +33,7 @@ import { CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, ty
 import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceOutcome } from "../assets/router.ts";
 import type { AssetJob } from "../assets/job.ts";
-import { openQueuedJob } from "./holds.ts";
+import { jobStatusOf, openQueuedJob } from "./holds.ts";
 import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 
 export const ANALYSIS_MAX_TOKENS = 1200;
@@ -413,8 +414,9 @@ function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler 
  * an outcome, handled as the inline steps handle theirs.
  *
  * The money of the step (D14, D15). A job already waiting for this cache key has its hold counted, so the step reports queued and nothing
- * is submitted. Otherwise the step must have a hold: its engine estimate, or in measure mode its ceiling times its length. A step with no
- * hold does not run. The accepted job is queued with its hold, which the poll keeps counted until it settles the job.
+ * is submitted. A job the poll closed as failed has its hold counted as a failed hold, so it is not submitted again either: the step is
+ * refused, and it runs again only once it is edited. Otherwise the step must have a hold: its engine estimate, or in measure mode its ceiling
+ * times its length. A step with no hold does not run. The accepted job is queued with its hold, which the poll keeps counted until it settles it.
  */
 function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHandler {
   return async ({ node, key, upstream, upstreamKinds }): Promise<NodeOutput> => {
@@ -425,6 +427,9 @@ function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHa
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
     if (deps.sql !== undefined && (await openQueuedJob(deps.sql, deps.organizationId, deps.planId, key))) {
       throw new StepQueuedError(`the ${kind} is still queued at its provider. Its hold is already counted, so nothing is submitted; run the plan again once its poll has settled it.`);
+    }
+    if (deps.sql !== undefined && (await jobStatusOf(deps.sql, deps.organizationId, deps.planId, key)) === "failed") {
+      throw new CallRefusedError("this job failed earlier and its hold is already counted, so it is not paid again; edit the step to run it again");
     }
     const hold = holdUsdOf(node, deps.measure ?? null);
     if (hold === null) throw new CallRefusedError(`the ${kind} step has no price and measure mode is off, so nothing is submitted`);
