@@ -12,9 +12,10 @@ documents. Where the Bible and a product decision conflict, do not pick a side i
 3. **Everything through the gateway and the ledger.** Every model, API and render call goes through `src/engine/gateway/`, reached
    from the asset router, the Claude client or the render adapter. No engine file except `gateway/transport.ts` calls `fetch`. Keys
    come from the credential resolver (`gateway/meridian.ts`), never `process.env`. Every paid call sends an idempotency key and writes
-   estimate, reservation and actual cost to the ledger. Budgets are soft limits (owner direction 2026-10-23, decision D2 in
-   `docs/engine/run/DECISIONS_2026-10-23.md`): each has a tolerance, the larger of a percentage and a number of cents. Work proceeds
-   within the target plus the tolerance (the allowance); beyond it the run pauses for an approval. A small overrun is never a refusal.
+   estimate, reservation and actual cost to the ledger. Budgets are lines (owner direction 2026-10-23, decision D12 in
+   `docs/engine/run/DECISIONS_2026-10-23.md`): a paid step starts only while the committed spend is below its budget. A call already in
+   flight finishes, so the spend can pass the line by that call; no step starts after it. When the line is reached before the project is
+   finished, the project pauses until an admin raises the budget, and the pause and the approval are recorded.
 4. **Contracts are the interface.** The zod schemas in `src/engine/contracts/` are the only interface between parts of the engine. A
    contract change needs a version bump in `contracts/version.ts`, a migration note in Bible section 4, and the owner's or lead's approval.
 5. **Live runs before claims.** A phase is verified only by a recorded live run on real APIs, with ids, costs and output attached.
