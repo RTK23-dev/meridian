@@ -40,8 +40,8 @@ const HOLD_ID = fixtureId("res_", 78);
 const NOW = "2026-10-16T10:00:00.000Z";
 const READ_AT = "2026-10-16T09:59:00.000Z";
 const PALETTE = ["#1a2b3c", "#ffffff", "#f5a623"];
-/** The orchestrator's pick: not in the route table (which routes Kling first), listed in the recorded catalog with 6 s at 1080p. */
-const CHOSEN = "google/veo-3.1-lite";
+/** The orchestrator's pick, listed in the recorded catalog with 5 s at 1080p at $0.14 per second: the generated shot is 5 s. */
+const CHOSEN = "kwaivgi/kling-v3.0-std";
 
 const GENERATED_SHOT = fixtureId("shot_", 1);
 const STOCK_SHOT = fixtureId("shot_", 2);
@@ -66,7 +66,7 @@ function plan(): ScenePlan {
       shotId: GENERATED_SHOT,
       beatId: "b3",
       startMs: 0,
-      endMs: 6000,
+      endMs: 5000,
       visualType: "cinematic",
       layer: "base",
       source: { kind: "generate", modelClass: "video.cinematic", prompt: "Slow push-in on a clean kitchen counter, soft window light, no text in frame.", refs: [], takes: 1 },
@@ -74,14 +74,14 @@ function plan(): ScenePlan {
     {
       shotId: STOCK_SHOT,
       beatId: "b4",
-      startMs: 6000,
-      endMs: 14000,
+      startMs: 5000,
+      endMs: 13000,
       visualType: "stock_footage",
       layer: "cutaway",
       source: { kind: "stock", query: "kitchen counter blender", minMs: 4000 },
     },
   ];
-  return { schema: "meridian.scene_plan/v1", planId: "plan_choice_fixture", requestId: REQUEST_ID, videoDnaId: FIXTURE_IDS.dna, voiceTrackId: "vt_choice_fixture", shots, estimatedUsd: 0.3, decisions: [] };
+  return { schema: "meridian.scene_plan/v1", planId: "plan_choice_fixture", requestId: REQUEST_ID, videoDnaId: FIXTURE_IDS.dna, voiceTrackId: "vt_choice_fixture", shots, estimatedUsd: 0.7, decisions: [] };
 }
 
 function summaryOf(shot: ShotSpec): ShotSummary {
@@ -125,7 +125,7 @@ function chatReply(request: HttpRequest) {
         {
           index: 0,
           finish_reason: "stop",
-          message: { role: "assistant", content: JSON.stringify({ picks: [{ callId: "c1", modelId: CHOSEN, reason: "A 6 s cinematic push-in: the cheapest candidate that lists 6 s at 1080p." }] }) },
+          message: { role: "assistant", content: JSON.stringify({ picks: [{ callId: "c1", modelId: CHOSEN, reason: "A 5 s cinematic push-in: this candidate lists 5 s at 1080p." }] }) },
         },
       ],
       usage: { prompt_tokens: 1800, completion_tokens: 60, cost: 0.0021 },
@@ -286,7 +286,7 @@ test("a request's calls carry the orchestrator's model choice from the plan to t
   });
 
   const objects = fakeObjects();
-  const media = fakeMedia({ probe: (bytes) => probeOf({ durationMs: bytes.byteLength === MP4_STOCK_BYTES.byteLength ? 8000 : 6000 }) });
+  const media = fakeMedia({ probe: (bytes) => probeOf({ durationMs: bytes.byteLength === MP4_STOCK_BYTES.byteLength ? 8000 : 5000 }) });
   const runtime = runtimeFor({ gateway, catalog, objects, media });
 
   assert.equal(await runQueued(db.sql, runtime, "engine.estimate_reserve"), 1);
@@ -313,7 +313,7 @@ test("a request's calls carry the orchestrator's model choice from the plan to t
   const inputs = produceJobs.map((row) => (typeof row.payload === "string" ? JSON.parse(row.payload) : row.payload) as { inputArtifactIds: string[] });
   assert.ok(inputs.every((payload) => payload.inputArtifactIds.includes(choicesArtifact.artifactId)), "each produce job names the model_choices artifact");
 
-  // The call went to the chosen model, not to the route table's Kling.
+  // The call went to the chosen model.
   const submits = requests.filter((sent) => sent.method === "POST" && sent.url.endsWith("/api/v1/videos"));
   assert.equal(submits.length, 1);
   assert.equal((JSON.parse(String(submits[0]?.body)) as { model: string; duration: number }).model, CHOSEN);
@@ -337,7 +337,7 @@ test("a request's calls carry the orchestrator's model choice from the plan to t
   const produced = ledger.filter((row) => row.stage === "produce_shot");
   assert.equal(produced.length, 1);
   assert.equal(produced[0]?.model, CHOSEN);
-  assert.equal(Number(produced[0]?.estimate_usd), 0.3, "6 s at the catalog's $0.05 per second");
+  assert.equal(Number(produced[0]?.estimate_usd), 0.7, "5 s at the catalog's $0.14 per second at 1080p");
   assert.equal(Number(produced[0]?.actual_usd), 0.29);
   assert.equal(produced[0]?.settlement, "billed");
 
@@ -348,7 +348,7 @@ test("a request's calls carry the orchestrator's model choice from the plan to t
   assert.ok(planBody.decisions.some((decision) => decision.chose === `openrouter:${CHOSEN}` && decision.by === "director" && decision.reason.startsWith(`${GENERATED_SHOT} shot: `)));
   const decisions = await db.sql<{ chose: string; reason: string }>`select chose, reason from engine_decisions where organization_id = ${ORG}`;
   assert.ok(
-    decisions.some((row) => row.chose === `openrouter:${CHOSEN}` && /orchestrator choice/.test(row.reason) && /catalog price \$0\.05 per_second/.test(row.reason)),
+    decisions.some((row) => row.chose === `openrouter:${CHOSEN}` && /orchestrator choice/.test(row.reason) && /catalog price \$0\.14 per_second \(per-video-second-1080p\)/.test(row.reason)),
     "the produced shot's decisions name the choice and its catalog price",
   );
   assert.equal(catalog.reads >= 2, true, "the catalog is read for the choice and checked again by the router");

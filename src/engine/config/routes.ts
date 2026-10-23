@@ -61,13 +61,12 @@ export const routes = {
     "video.cinematic": {
       targets: [
         openrouter(null, "kling_v3_standard"),
-        openrouter(null, "veo_3_1_fast"),
         openrouter(null, "seedance_2_5"),
       ],
       note: "Model ids come from the live catalog (Bible 10.5), not from this table.",
     },
     "video.budget": {
-      targets: [openrouter(null, "seedance_2_0_mini"), openrouter(null, "wan_3_0"), openrouter(null, "veo_3_1_lite")],
+      targets: [openrouter(null, "seedance_2_0_mini"), openrouter(null, "wan_3_0")],
       note: "Model ids come from the live catalog (Bible 10.5), not from this table.",
     },
     "video.i2v_pinned": {

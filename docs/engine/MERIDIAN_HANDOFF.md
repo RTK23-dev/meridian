@@ -194,6 +194,7 @@ Take the lowest-numbered unfinished task in the earliest open phase. A phase is 
 
 - [ ] **0.1 Veo** — move the production Veo provider off the preview model to a current Veo model through OpenRouter (Veo 3.1 Fast or Lite). **Deadline 22 October.**
   _Status 2026-10-15: not done. No production Veo provider exists in this repo (CLAUDE.md). The engine's route table lists `google/veo-3.1-lite` through OpenRouter as an unverified target (`src/engine/config/routes.ts`)._
+  _Status 2026-10-23: owner decision, Veo removed from the engine (`routes.ts`, `prices.ts`, `retired-models.ts`); the live catalog chooses each video model. The box stays open until the owner confirms the replacement._
 - [ ] **0.2 Merge #39** after one live smoke call per provider (Gemini, OpenAI, TypeSafe, OpenRouter, Higgsfield, Nano Banana) with real keys.
   _Status 2026-10-15: not done. CLAUDE.md records PR #39 as closed unmerged, but the merge commit is in this branch's history. See the contradictions above._
 - [ ] **0.3 Instagram publishing** — replace the Instagram organic adapter with the Content Publishing API, including trial reels, on one owned test account.

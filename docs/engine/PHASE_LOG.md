@@ -837,3 +837,36 @@ attaches credentials only when the URL is on the provider's own host (`onHost`, 
 gap is that the URL is not checked against public addresses, and the connection is not pinned. The Factory's artifact downloader does both
 (`production/artifact-finalizer.ts`). The fix is to share that download with the engine through a neutral module. The change is an eng-pipeline
 change, so it is recorded in the plan (M1.3) and not made here.
+
+## 2026-10-23: Veo 3.1 removed from the engine
+
+The owner asked why Veo 3.1 was still in the engine after the move to the latest models, and asked for it to be removed and replaced with the
+latest model.
+
+**Who added it, and why.** Veo 3.1 had been removed once already: commit `4639ebd` on 11 October, "Remove Google Veo", took out the adapter.
+The Bible's provider registry (section 10.3, from the owner's upload of 13 October) still names Veo 3.1 Fast and Lite for the cinematic and
+budget classes. The engine build copied those names back into the route and price tables on 13 and 14 October (`c96fce8`, E1 wave A; `a61a340`,
+the API gateway). Commit `55154f8` on 21 October removed the fixed model ids from the route table but left the Veo price keys in `prices.ts`. So
+the engine kept naming Veo after its adapter was gone. I found no owner decision in the log to keep it in the tables.
+
+**What changed.**
+- `src/engine/config/routes.ts`: `video.cinematic` and `video.budget` name no Veo model. Their targets are null, so the live catalog chooses (Bible 10.5).
+- `src/engine/config/prices.ts`: `veo_3_1_fast` and `veo_3_1_lite` removed.
+- `src/engine/config/retired-models.ts` (new): the three Veo ids. `parseVideoCatalog` drops them from every catalog read, with the reason recorded.
+- Tests: pinned price lists, the recorded listing counts (5 entries, 6 drops), candidate lists and test routes moved from Veo to Kling, Wan 2.6 or
+  Seedance. The first-and-last-frame test keeps its accepted and rejected cases, both on Kling. The recorded fixtures still hold Veo rows: they are
+  recordings and were not edited.
+- Docs: Bible 10.3 and the note before E1 (dated amendment), `CONTENT_FACTORY_PLAN.md` (M4.1 and D1), `MERIDIAN_HANDOFF.md` (task 0.1 status).
+  `CLAUDE.md` line 44 still says no Veo provider exists in this repository. That remains true, and the file belongs to the owner, so it is unchanged.
+
+**Replacement.** No model is named in the route table, so no replacement price was written. The recorded listing offers Kling v3.0 Standard, Wan 2.6
+and Seedance 2.0 (no price listed). A fixed route target needs its price verified first (D20), and the owner chooses the model.
+
+**Open, found while testing.**
+- The catalog keeps a video model's durations as a minimum and a maximum. Kling lists 5 and 10 s only, so a 6 s call passes the fit check and
+  the provider refuses it as invalid input. `model-choice-pipeline.test.ts` hit this with a 6 s shot and was set to 5 s. The fix changes the
+  catalog's capability shape, so it needs eng-contracts and the lead.
+- The price key `wan_3_0` ($0.0425 a second) matches the recorded listing's price for `alibaba/wan-2.6`, not a Wan 3.0 listing. The owner should say which model the key is for.
+
+Checks: `npm run typecheck` exit 0; `eslint` on the changed TypeScript files exit 0; `src/engine` 3,198 of 3,198 pass across 264 files
+(`NODE_ENV=development node --test`), and the factory and config tests that import engine config pass.

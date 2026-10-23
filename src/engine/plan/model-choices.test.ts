@@ -113,9 +113,9 @@ describe("chooseModels", () => {
     assert.match(block, /<untrusted-data name="calls">/);
     const calls = JSON.parse(block.split("\n")[2] ?? "[]") as Array<{ callId: string; shotId: string; output: string; candidates: Array<{ id: string; price: unknown }> }>;
     assert.deepEqual(calls.map((call) => [call.callId, call.shotId, call.output, call.candidates.map((candidate) => candidate.id)]), [
-      ["c1", SHOT_1, "shot", ["kwaivgi/kling-v3.0-std", "google/veo-3.1-lite", "alibaba/wan-2.6"]],
+      ["c1", SHOT_1, "shot", ["kwaivgi/kling-v3.0-std", "alibaba/wan-2.6"]],
       ["c2", SHOT_2, "keyframe", ["bytedance-seed/seedream-4.5", "vendor/text-to-image-flat"]],
-      ["c3", SHOT_2, "clip", ["kwaivgi/kling-v3.0-std", "google/veo-3.1-lite"]],
+      ["c3", SHOT_2, "clip", ["kwaivgi/kling-v3.0-std"]],
     ]);
 
     assert.ok(result.choices !== null);

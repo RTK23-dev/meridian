@@ -22,12 +22,12 @@ import type { Gateway } from "../gateway/gateway.ts";
 import type { LedgerRow } from "../budget/store.ts";
 
 const KLING = "kwaivgi/kling-v3.0-std";
-const VEO = "google/veo-3.1";
+const WAN = "alibaba/wan-2.6";
 const SEED = "bytedance/seedance-2.0";
 const KLING_ID = `openrouter:${KLING}`;
-const VEO_ID = `openrouter:${VEO}`;
+const WAN_ID = `openrouter:${WAN}`;
 
-const target = (model: string, priceKey: "kling_v3_standard" | "veo_3_1_fast" | "seedance_2_5") => ({
+const target = (model: string, priceKey: "kling_v3_standard" | "wan_3_0" | "seedance_2_5") => ({
   provider: "openrouter",
   model,
   priceKey,
@@ -35,10 +35,10 @@ const target = (model: string, priceKey: "kling_v3_standard" | "veo_3_1_fast" | 
 });
 const videoTable: RouteTable = routesWith(
   "video.cinematic",
-  [target(KLING, "kling_v3_standard"), target(VEO, "veo_3_1_fast"), target(SEED, "seedance_2_5")],
+  [target(KLING, "kling_v3_standard"), target(WAN, "wan_3_0"), target(SEED, "seedance_2_5")],
   routes.table,
 );
-const QUALITY: Record<string, number> = { [KLING]: 0.9, [VEO]: 0.5, [SEED]: 0.1 };
+const QUALITY: Record<string, number> = { [KLING]: 0.9, [WAN]: 0.5, [SEED]: 0.1 };
 const signals: RouterSignals = { qualityScore: (route) => QUALITY[route.model] ?? null, passRate: () => null };
 const profiles = videoProfilesFromListing(fixture("video-models.json")).profiles;
 
@@ -199,8 +199,8 @@ describe("submit returns a job and settle finishes it", () => {
   it("a failed job with a bill settles to the next target: the failed submit is settled at its bill, and the next target is submitted", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
-        "GET /api/v1/videos/job-veo": completed("job-veo", 0.4),
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [WAN]: [accepted("job-wan")] }),
+        "GET /api/v1/videos/job-wan": completed("job-wan", 0.4),
       },
     });
     const spec = assetSpec();
@@ -215,7 +215,7 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal(next.step.status, "submitted");
     if (next.step.status !== "submitted") return;
     const job = next.step.job;
-    assert.equal(job.providerId, VEO_ID, "the next target is submitted");
+    assert.equal(job.providerId, WAN_ID, "the next target is submitted");
     assert.equal(job.targetIndex, 1);
     assert.equal(job.submitNumber, 2, "the submit counter runs across targets");
     assert.equal(job.attemptOnTarget, 1, "a new target starts at its first attempt");
@@ -226,19 +226,19 @@ describe("submit returns a job and settle finishes it", () => {
       [[KLING_ID, "provider_failure"]],
       "the failure is one attempt, recorded",
     );
-    const fallback = next.decisions.find((decision) => decision.chose === VEO_ID);
+    const fallback = next.decisions.find((decision) => decision.chose === WAN_ID);
     assert.match(fallback?.reason ?? "", /fell back from openrouter:kwaivgi\/kling-v3\.0-std after/);
 
     const kling = await h.ledger.getEntryByKey(first.step.job.idempotencyKey);
     assert.equal(kling?.actualUsd, 0.25, "the failed submit is settled at the provider's bill");
     assert.equal(kling?.settlement, "billed");
     assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the failed target gives its slot back");
-    assert.equal(await h.buckets.inFlight(VEO_ID), 1, "the next target holds one");
+    assert.equal(await h.buckets.inFlight(WAN_ID), 1, "the next target holds one");
 
     const done = await h.router.settle(job, await pollFor(h, job), input);
     assert.equal(done.step.status, "done");
     if (done.step.status === "done") {
-      assert.equal(done.step.asset.providerId, VEO_ID);
+      assert.equal(done.step.asset.providerId, WAN_ID);
       assert.equal(done.step.asset.costUsd, 0.4);
     }
   });
@@ -318,7 +318,7 @@ describe("settling is idempotent and single-flight", () => {
 
   it("a timed-out job with no bill is unsettled: it is not retried and the next target does not run", async () => {
     const h = await harness({
-      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }) },
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [WAN]: [accepted("job-wan")] }) },
     });
     const spec = assetSpec();
     const input = h.input(spec);
@@ -329,7 +329,7 @@ describe("settling is idempotent and single-flight", () => {
     assert.equal(next.step.status, "unsettled", "a polled job with no bill stays unsettled: the provider may have billed it");
     if (next.step.status === "unsettled") assert.equal(next.step.providerId, KLING_ID);
     assert.equal(posts(h.requests, KLING), 1, "no retry on the timed-out target");
-    assert.equal(posts(h.requests, VEO), 0, "no submit to the next target");
+    assert.equal(posts(h.requests, WAN), 0, "no submit to the next target");
     assert.deepEqual(
       next.attempts.map((attempt) => [attempt.providerId, attempt.errorKind]),
       [[KLING_ID, "timeout"]],
@@ -346,7 +346,7 @@ describe("a submit answer with no job id is a failed submit", () => {
   it("an answer with no job id is ambiguous: the submit stays unsettled, and no next target is submitted", async () => {
     const h = await harness({
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [json(200, { status: "pending" })], [VEO]: [accepted("job-veo")] }),
+        "POST /api/v1/videos": submitFor({ [KLING]: [json(200, { status: "pending" })], [WAN]: [accepted("job-wan")] }),
       },
     });
     const spec = assetSpec();
@@ -354,9 +354,9 @@ describe("a submit answer with no job id is a failed submit", () => {
     assert.equal(submitted.step.status, "unsettled", "the provider may have billed a job it did not name");
     if (submitted.step.status === "unsettled") assert.equal(submitted.step.providerId, KLING_ID);
     assert.equal(submitted.attempts[0]?.errorKind, "unknown");
-    assert.equal(posts(h.requests, VEO), 0, "no submit to the next target");
+    assert.equal(posts(h.requests, WAN), 0, "no submit to the next target");
     assert.equal(await h.buckets.inFlight(KLING_ID), 0, "the target gives its slot back");
-    assert.equal(await h.buckets.inFlight(VEO_ID), 0);
+    assert.equal(await h.buckets.inFlight(WAN_ID), 0);
     const kling = await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID));
     assert.equal(kling?.actualUsd, undefined, "no estimate is booked as the actual");
     assert.equal(kling?.settlement, undefined);
@@ -366,7 +366,7 @@ describe("a submit answer with no job id is a failed submit", () => {
 describe("settle refuses what it must not settle", () => {
   it("a planner refusal with its bill settles to failed with no next target, and the submit is settled at that bill", async () => {
     const h = await harness({
-      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }) },
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [WAN]: [accepted("job-wan")] }) },
     });
     const input = h.input(assetSpec());
     const first = await h.router.submit(input);
@@ -476,7 +476,7 @@ describe("the take is downloaded and checked through the gateway when takes are 
     const h = await harness({
       takes: true,
       script: {
-        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [VEO]: [accepted("job-veo")] }),
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-kling")], [WAN]: [accepted("job-wan")] }),
         "GET /api/v1/videos/job-kling": completed("job-kling", 0.6125),
         [CONTENT("job-kling")]: raw(200, new Uint8Array(8192).fill(0x41)),
       },
@@ -486,7 +486,7 @@ describe("the take is downloaded and checked through the gateway when takes are 
     if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
     const next = await h.router.settle(first.step.job, await pollFor(h, first.step.job), input);
     assert.equal(next.step.status, "submitted");
-    if (next.step.status === "submitted") assert.equal(next.step.job.providerId, VEO_ID);
+    if (next.step.status === "submitted") assert.equal(next.step.job.providerId, WAN_ID);
     assert.equal(h.media.objects.size, 0, "nothing that failed the checks is stored");
     assert.equal(next.attempts[0]?.errorKind, "unknown", "the failed take is a non-retryable failure of its target");
     assert.equal(next.attempts[0]?.outcome, "provider_failure");

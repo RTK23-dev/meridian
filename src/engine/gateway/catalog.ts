@@ -27,6 +27,7 @@
 
 import { z } from "zod";
 import { adapters } from "../config/adapters.ts";
+import { RETIRED_MODEL_IDS } from "../config/retired-models.ts";
 import { EngineError } from "../contracts/errors.ts";
 import { modelCatalogEntrySchema, type CatalogCapabilities, type CatalogPrice, type ModelCatalogEntry } from "../contracts/catalog.ts";
 import type { ModelClass } from "../contracts/plan.ts";
@@ -169,6 +170,11 @@ export function parseVideoCatalog(body: unknown, readAt: string): Parsed {
       continue;
     }
     const model = row.data;
+    const retired = RETIRED_MODEL_IDS[model.id];
+    if (retired !== undefined) {
+      out.dropped.push({ source: "videos", id: model.id, reason: retired });
+      continue;
+    }
     const price = videoPrice(model.pricing_skus);
     if (typeof price === "string") {
       out.dropped.push({ source: "videos", id: model.id, reason: price });

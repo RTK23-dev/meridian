@@ -6,7 +6,7 @@ import { noEligibleVideoModel, videoProfileLoader } from "./video-profiles.ts";
 
 const LISTING = "GET /api/v1/videos/models";
 const KLING = "kwaivgi/kling-v3.0-std";
-const VEO_LITE = "google/veo-3.1-lite";
+const BUDGET = "vendor/budget-clip";
 
 test("a listing yields a profile for each video model it names; a model it does not name is simply absent", async () => {
   const script = scripted({ [LISTING]: json(200, fixture("video-models.json")) });
@@ -14,7 +14,7 @@ test("a listing yields a profile for each video model it names; a model it does 
   const profiles = await loader.loadVideoProfiles("org_1");
   assert.deepEqual(profiles.get(KLING)?.durations, [5, 10]);
   assert.equal(profiles.get(KLING)?.capabilities.firstFrame, true);
-  assert.equal(profiles.get(VEO_LITE), undefined, "the recorded listing does not name the budget model, and nothing is guessed for it");
+  assert.equal(profiles.get(BUDGET), undefined, "the recorded listing does not name the budget model, and nothing is guessed for it");
   assert.deepEqual(loader.gapsFor("org_1").map((gap) => gap.model), ["broken/entry"], "the one entry of the recording that does not parse is the only gap");
   assert.equal(script.requests.length, 1, "one listing read, through the gateway");
 });
@@ -62,11 +62,11 @@ test("a listing with no data array is a failed read, not an empty catalogue", as
 });
 
 test("an entry the listing names but that has no supported durations is left out with that reason", async () => {
-  const listing = { data: [{ id: KLING }, { id: VEO_LITE, supported_durations: [5] }] };
+  const listing = { data: [{ id: KLING }, { id: BUDGET, supported_durations: [5] }] };
   const script = scripted({ [LISTING]: json(200, listing) });
   const loader = videoProfileLoader({ gateway: gatewayFor(script.transport) });
   const profiles = await loader.loadVideoProfiles("org_1");
-  assert.equal(profiles.has(VEO_LITE), true);
+  assert.equal(profiles.has(BUDGET), true);
   assert.equal(profiles.has(KLING), false);
   assert.deepEqual(loader.gapsFor("org_1"), [{ model: KLING, reason: `GET /videos/models lists ${KLING}, but no supported durations` }]);
 });

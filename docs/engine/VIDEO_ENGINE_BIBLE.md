@@ -984,12 +984,12 @@ Adapted from OpenMontage's selector. For each eligible adapter (capabilities sat
 
 The highest score wins unless its concurrency bucket is full, in which case the next one is used. Every choice is a `Decision` on the shot.
 
-### 10.3 Provider registry (initial, October 2026 list prices)
+### 10.3 Provider registry (initial, October 2026 list prices; Veo 3.1 removed 2026-10-23)
 
 | Model class | Providers in priority order | Price |
 | --- | --- | --- |
-| `video.cinematic` | Kling v3.0 Standard; Veo 3.1 Fast; Seedance 2.5 (all via OpenRouter) | $0.126 / $0.10 / $0.1028 per s |
-| `video.budget` | Seedance 2.0 Mini; Wan 3.0; Veo 3.1 Lite | $0.0336 / $0.0425 / $0.05 per s |
+| `video.cinematic` | Kling v3.0 Standard; Seedance 2.5 (all via OpenRouter; the live catalog chooses, Bible 10.5) | $0.126 / $0.1028 per s |
+| `video.budget` | Seedance 2.0 Mini; Wan 3.0 | $0.0336 / $0.0425 per s |
 | `video.i2v_pinned` | Only models that pass the first-and-last-frame test (E2 task); Kling first | per model |
 | `avatar` | HeyGen Avatar IV via OpenRouter | $0.05 per s |
 | `image.keyframe` | Seedream 5.0 Flash; Seedream 4.5 | $0.018 / $0.04 per image |
@@ -1392,7 +1392,7 @@ Fourteen workstreams, each owning modules and contracts with clear boundaries, s
 
 Six phases. A phase is complete only when every acceptance test passes in a **recorded live run** on real APIs, with artifacts and costs attached to the phase PR. Phases overlap: workstreams start the next phase's work on fixtures while integration finishes.
 
-**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39.
+**Before E1:** the [Meridian handoff](https://claude.ai/code/artifact/73d4edea-b38b-4c83-9b82-bf8c6ecc2a57)'s phase 0 must be done or in progress, especially moving Veo off the preview model before 22 October 2026 and merging PR #39. **Amended 2026-10-23 (owner decision):** Veo 3.1 is removed from the engine rather than moved. The route table names no video model, the live catalog chooses each one (Bible 10.5), and the retired Veo ids are dropped from every catalog read (`src/engine/config/retired-models.ts`).
 
 ### E1 Skeleton (waves 0–1)
 

@@ -383,11 +383,9 @@ test("the Bible 14.2 fixed cost of a master is about $0.52", () => {
 test("the Bible 10.3 list prices are in the table with their units", () => {
   const expected: [PriceKey, number, string][] = [
     ["kling_v3_standard", 0.126, "per_second"],
-    ["veo_3_1_fast", 0.1, "per_second"],
     ["seedance_2_5", 0.1028, "per_second"],
     ["seedance_2_0_mini", 0.0336, "per_second"],
     ["wan_3_0", 0.0425, "per_second"],
-    ["veo_3_1_lite", 0.05, "per_second"],
     ["heygen_avatar_iv", 0.05, "per_second"],
     ["seedream_5_flash", 0.018, "per_image"],
     ["seedream_4_5", 0.04, "per_image"],

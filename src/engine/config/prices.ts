@@ -30,13 +30,11 @@ const LIST = "list_oct_2026" as const;
 const priceEntries = {
     // video.cinematic, in priority order (10.3).
     kling_v3_standard: { unit: "per_second", usd: 0.126, source: LIST },
-    veo_3_1_fast: { unit: "per_second", usd: 0.1, source: LIST },
     seedance_2_5: { unit: "per_second", usd: 0.1028, source: LIST },
 
     // video.budget.
     seedance_2_0_mini: { unit: "per_second", usd: 0.0336, source: LIST },
     wan_3_0: { unit: "per_second", usd: 0.0425, source: LIST },
-    veo_3_1_lite: { unit: "per_second", usd: 0.05, source: LIST },
 
     // video.i2v_pinned: the price depends on which model passes the first-and-last-frame test in E2.
     i2v_pinned_model: { unit: "per_model", usd: null, source: LIST },

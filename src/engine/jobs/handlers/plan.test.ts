@@ -252,8 +252,8 @@ function recordedCatalog(): ModelCatalogSource & { reads: number } {
 }
 
 /**
- * A model_chooser answer: c1 picks the one candidate, c2 picks an id that is no candidate, and the rest get no pick. The route table's
- * video.budget fallback (Veo 3.1 Lite, 4 to 8 s) fits no 1.5 s clip, so those calls take the first eligible catalog candidate.
+ * A model_chooser answer: c1 picks the one candidate, c2 picks an id that is no candidate, and the rest get no pick. The recorded models
+ * take 5 s or more, so none fits a 1.5 s clip: those calls take the first eligible catalog candidate.
  */
 const chooserAnswer = json(200, {
   id: "gen-plan-chooser",

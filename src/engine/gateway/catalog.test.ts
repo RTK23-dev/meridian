@@ -22,7 +22,6 @@ describe("catalog parse: GET /videos/models", () => {
       parsed.entries.map((entry) => [entry.id, entry.price.usd, entry.price.sku]),
       [
         ["kwaivgi/kling-v3.0-std", 0.14, "per-video-second-1080p"],
-        ["google/veo-3.1-lite", 0.05, "per-video-second"],
         ["alibaba/wan-2.6", 0.0425, "per-video-second-1080p"],
       ],
     );
@@ -57,8 +56,9 @@ describe("catalog parse: GET /videos/models", () => {
     assert.match(reasons.get("vendor/free-preview") ?? "", /no positive per-second price/);
     assert.match(reasons.get("vendor/per-video-only") ?? "", /no positive per-second price/);
     assert.match(reasons.get("broken/entry") ?? "", /does not match the listing shape/);
+    assert.match(reasons.get("google/veo-3.1-lite") ?? "", /retired by owner decision/, "a retired model is dropped with its reason");
     assert.equal(parsed.dropped.filter((drop) => drop.id === null).length, 1, "the row that is not an object is dropped with no id");
-    assert.equal(parsed.dropped.length, 5);
+    assert.equal(parsed.dropped.length, 6, "five as before, and the retired Veo 3.1 Lite row");
   });
 
   it("treats a body with no data array as a failed listing", () => {
@@ -110,7 +110,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.equal(read.catalog.readAt, READ_AT);
     assert.deepEqual(read.catalog.failed, []);
-    assert.equal(read.catalog.entries.length, 6, "3 video, 2 image, 1 speech");
+    assert.equal(read.catalog.entries.length, 5, "2 video (Veo 3.1 Lite is retired), 2 image, 1 speech");
     assert.notEqual(read.catalog.videoListing, null, "the video listing is kept for the video adapters' profiles");
     assert.deepEqual(
       transport.requests.map((request) => `${request.method} ${request.url}`),
