@@ -5,19 +5,11 @@ import { hasRole, isRole } from "@/lib/meridian/access";
 import { auditCsv } from "@/lib/meridian/exports/csv";
 import { NOTIFICATION_KINDS, resolveNotificationPreferences, type NotificationKind } from "@/lib/meridian/notifications/preferences";
 import { isoTimestamp } from "@/lib/meridian/observability/timestamps";
+import { countAuditRows, selectAuditRows, type AuditFilters } from "./audit-query.ts";
 
 const AUDIT_PAGE_SIZE = 50;
 const AUDIT_EXPORT_LIMIT = 5_000;
 
-type AuditFilters = {
-  organizationId: string;
-  actor: string;
-  action: string;
-  brandId: string;
-  from: string;
-  to: string;
-  page: number;
-};
 
 function auditFilterInput(input: unknown): AuditFilters {
   const value = input && typeof input === "object" ? input as Record<string, unknown> : {};
@@ -43,37 +35,6 @@ async function auditAccess(sql: Sql, userId: string, filters: AuditFilters): Pro
     const brand = await sql<{ id: string }>`select id from brands where id = ${filters.brandId} and organization_id = ${filters.organizationId} limit 1`;
     if (!brand[0]) throw new Error("That brand is not available in this workspace.");
   }
-}
-
-async function selectAuditRows(sql: Sql, f: AuditFilters, limit: number, offset: number): Promise<Record<string, unknown>[]> {
-  return sql<Record<string, unknown>>`
-    select a.id, a.actor_id, coalesce(u.name, '') as actor_name, a.action, a.brand_id,
-      coalesce(b.name, '') as brand_name, a.object_type, a.object_id, a.metadata, a.created_at
-    from audit_log a
-    left join "user" u on u.id = a.actor_id
-    left join brands b on b.id = a.brand_id and b.organization_id = a.organization_id
-    where a.organization_id = ${f.organizationId}
-      and (${f.actor} = '' or a.actor_id ilike '%' || ${f.actor} || '%' or coalesce(u.name, '') ilike '%' || ${f.actor} || '%')
-      and (${f.action} = '' or a.action ilike '%' || ${f.action} || '%')
-      and (${f.brandId} = '' or a.brand_id = ${f.brandId})
-      and (${f.from} = '' or a.created_at >= ${f.from}::date)
-      and (${f.to} = '' or a.created_at < (${f.to}::date + interval '1 day'))
-    order by a.created_at desc, a.id desc
-    limit ${limit} offset ${offset}
-  `;
-}
-
-async function countAuditRows(sql: Sql, f: AuditFilters): Promise<number> {
-  const rows = await sql<{ count: unknown }>`
-    select count(*) as count from audit_log a left join "user" u on u.id = a.actor_id
-    where a.organization_id = ${f.organizationId}
-      and (${f.actor} = '' or a.actor_id ilike '%' || ${f.actor} || '%' or coalesce(u.name, '') ilike '%' || ${f.actor} || '%')
-      and (${f.action} = '' or a.action ilike '%' || ${f.action} || '%')
-      and (${f.brandId} = '' or a.brand_id = ${f.brandId})
-      and (${f.from} = '' or a.created_at >= ${f.from}::date)
-      and (${f.to} = '' or a.created_at < (${f.to}::date + interval '1 day'))
-  `;
-  return Number(rows[0]?.count ?? 0);
 }
 
 function toAuditEntry(row: Record<string, unknown>) {
