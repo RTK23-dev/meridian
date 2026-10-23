@@ -76,7 +76,10 @@ export const TAKE_HEIGHT = 1920;
 /** A hint is a rule-style name written by this code. Anything else is dropped before it reaches a prompt (Bible 1). */
 const HINT_PATTERN = /^[a-z0-9_.:-]{1,64}$/;
 
-/** What the router (or another generator) reports for one generate call. Every case is a fact about the call. */
+/**
+ * What the router (or another generator) reports for one generate call. Every case is a fact about the call. billedUsd on a failure is the
+ * bill the provider charged the attempt before it stopped (D12, D14): the ledger charges it, and the hold of the attempt keeps it.
+ */
 export type ShotProduction =
   | {
       status: "done";
@@ -90,13 +93,13 @@ export type ShotProduction =
     }
   /** The router submitted the call. job is the router's asset job: the poller carries it, and settle receives it back. */
   | { status: "submitted"; providerId: string; jobRef: string; submittedAt: string; job: AssetJob; runAfterMs: number; decisions: Decision[] }
-  | { status: "failed"; providerId: string; error: ProviderError; decisions: Decision[] }
-  | { status: "refused"; reasons: string[]; decisions: Decision[] }
-  | { status: "queued"; reasons: string[] }
-  | { status: "unavailable"; reasons: string[]; decisions: Decision[] }
+  | { status: "failed"; providerId: string; error: ProviderError; decisions: Decision[]; billedUsd?: number }
+  | { status: "refused"; reasons: string[]; decisions: Decision[]; billedUsd?: number }
+  | { status: "queued"; reasons: string[]; billedUsd?: number }
+  | { status: "unavailable"; reasons: string[]; decisions: Decision[]; billedUsd?: number }
   | { status: "not_connected"; reasons: string[] }
-  | { status: "duplicate"; providerId: string; ledgerEntryId: string }
-  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; decisions: Decision[] };
+  | { status: "duplicate"; providerId: string; ledgerEntryId: string; billedUsd?: number }
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; decisions: Decision[]; billedUsd?: number };
 
 export type GenerateInput = {
   sql: Sql;
@@ -155,20 +158,64 @@ export function productionFromReport(report: ProduceReport): ShotProduction {
         decisions,
       };
     case "failed":
-      return { status: "failed", providerId: outcome.providerId, error: outcome.error, decisions };
+      return { status: "failed", providerId: outcome.providerId, error: outcome.error, decisions, ...carriedBill(outcome.billedUsd) };
     case "refused":
-      return { status: "refused", reasons: outcome.reasons, decisions };
+      return { status: "refused", reasons: outcome.reasons, decisions, ...carriedBill(outcome.billedUsd) };
     case "queued":
-      return { status: "queued", reasons: outcome.reasons };
+      return { status: "queued", reasons: outcome.reasons, ...carriedBill(outcome.billedUsd) };
     case "duplicate":
-      return { status: "duplicate", providerId: outcome.providerId, ledgerEntryId: outcome.ledgerEntryId };
+      return { status: "duplicate", providerId: outcome.providerId, ledgerEntryId: outcome.ledgerEntryId, ...carriedBill(outcome.billedUsd) };
     case "not_connected":
       return { status: "not_connected", reasons: outcome.reasons };
     case "unavailable":
-      return { status: "unavailable", reasons: outcome.reasons, decisions };
+      return { status: "unavailable", reasons: outcome.reasons, decisions, ...carriedBill(outcome.billedUsd) };
     case "unsettled":
-      return { status: "unsettled", providerId: outcome.providerId, idempotencyKey: outcome.idempotencyKey, ledgerEntryId: outcome.ledgerEntryId, reason: outcome.reason, decisions };
+      return {
+        status: "unsettled",
+        providerId: outcome.providerId,
+        idempotencyKey: outcome.idempotencyKey,
+        ledgerEntryId: outcome.ledgerEntryId,
+        reason: outcome.reason,
+        decisions,
+        ...carriedBill(outcome.billedUsd),
+      };
   }
+}
+
+/** The bill a failure carries into its ShotProduction: none when the provider billed nothing, so an unbilled failure keeps its shape. */
+function carriedBill(billedUsd: number | undefined): { billedUsd?: number } {
+  return billedUsd === undefined || billedUsd === 0 ? {} : { billedUsd };
+}
+
+/**
+ * The bill of a failed attempt, checked: undefined when the attempt was not billed. A bill that is not a finite, positive figure is refused
+ * with an internal error, so the attempt is never held as if it were free: an unknown bill is not zero (fail closed).
+ */
+function usableBillOf(billedUsd: number | undefined): number | undefined {
+  if (billedUsd === undefined || billedUsd === 0) return undefined;
+  if (!(Number.isFinite(billedUsd) && billedUsd > 0)) {
+    throw new EngineError("internal", "a failed attempt reported a bill that is not a usable amount, so its hold is not written", { stage: "produce_shot" });
+  }
+  return billedUsd;
+}
+
+/**
+ * The decisions a failed attempt's hold keeps: its own, and the bill the provider charged it. A stage output has no cost field, so the bill is
+ * written as a router decision. The ledger charges it already (the router settles each submit to its bill), so committed spend counts it.
+ */
+function decisionsWithBill(decisions: Decision[], billedUsd: number | undefined, providerId: string | undefined, at: string): Decision[] {
+  const bill = usableBillOf(billedUsd);
+  if (bill === undefined) return decisions;
+  return [
+    ...decisions,
+    { at, chose: providerId ?? "the attempt", alternatives: [], reason: `billed $${bill.toFixed(4)} before it stopped; the bill is charged on the request's ledger`, by: "scorer" },
+  ];
+}
+
+/** The note a stop that throws carries about its bill, so the error keeps the amount (the ledger charges it). */
+function billNoteOf(billedUsd: number | undefined): string {
+  const bill = usableBillOf(billedUsd);
+  return bill === undefined ? "" : ` (the attempt was billed $${bill.toFixed(4)}, charged on the ledger)`;
 }
 
 /** The router's input for one generated take (the stage is the budget stage name). */
@@ -443,24 +490,36 @@ async function fromProduction(
       return { made, decisions: production.decisions };
     }
     case "refused":
-      return { made: { kind: "hold", hold: { kind: "budget", reason: joined(production.reasons) } }, decisions: production.decisions };
+      return {
+        made: { kind: "hold", hold: { kind: "budget", reason: joined(production.reasons) } },
+        decisions: decisionsWithBill(production.decisions, production.billedUsd, undefined, new Date(clock()).toISOString()),
+      };
     case "failed": {
       const errorKind = refusalKind(production.error);
-      return { made: { kind: "hold", hold: { kind: "refused", errorKind, hint: errorKind } }, decisions: production.decisions };
+      return {
+        made: { kind: "hold", hold: { kind: "refused", errorKind, hint: errorKind } },
+        decisions: decisionsWithBill(production.decisions, production.billedUsd, production.providerId, new Date(clock()).toISOString()),
+      };
     }
     case "unavailable":
-      throw new EngineError("provider", `no target produced ${shot.shotId}: ${joined(production.reasons)}`, { retryable: true, stage: "produce_shot" });
+      throw new EngineError("provider", `no target produced ${shot.shotId}: ${joined(production.reasons)}${billNoteOf(production.billedUsd)}`, {
+        retryable: true,
+        stage: "produce_shot",
+      });
     case "queued":
-      throw new EngineError("provider", `${shot.shotId} waits for a provider slot: ${joined(production.reasons)}`, { retryable: true, stage: "produce_shot" });
+      throw new EngineError("provider", `${shot.shotId} waits for a provider slot: ${joined(production.reasons)}${billNoteOf(production.billedUsd)}`, {
+        retryable: true,
+        stage: "produce_shot",
+      });
     case "not_connected":
       throw new EngineError("config", `${shot.shotId} has no connected provider: ${joined(production.reasons)}`, { retryable: false, stage: "produce_shot" });
     case "unsettled":
-      throw new EngineError("conflict", `${shot.shotId} waits for a submit to be settled, so no further paid call is made: ${production.reason}`, {
+      throw new EngineError("conflict", `${shot.shotId} waits for a submit to be settled, so no further paid call is made: ${production.reason}${billNoteOf(production.billedUsd)}`, {
         retryable: false,
         stage: "produce_shot",
       });
     case "duplicate":
-      throw new EngineError("conflict", `the call for ${shot.shotId} was already authorized and its asset is not held here`, {
+      throw new EngineError("conflict", `the call for ${shot.shotId} was already authorized and its asset is not held here${billNoteOf(production.billedUsd)}`, {
         retryable: false,
         stage: "produce_shot",
       });
