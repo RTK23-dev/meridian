@@ -230,7 +230,9 @@ export function OrchestratorComposer({
             <h3 id="composer-model-heading" className="text-sm font-semibold">
               Orchestrating model
             </h3>
-            {storedModelError !== null ? (
+            {brandId === "" ? (
+              <p className="text-sm text-fg-muted">Create a brand first. Each brand's plans use the orchestrating model stored for it.</p>
+            ) : storedModelError !== null ? (
               <p className="text-sm text-danger">The stored model could not be read: {storedModelError}</p>
             ) : storedModel === null ? (
               <p className="text-sm text-warning">No model is stored for this workspace yet.</p>

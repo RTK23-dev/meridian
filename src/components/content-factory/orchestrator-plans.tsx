@@ -103,6 +103,12 @@ export function OrchestratorPlans() {
     setSelectedId(null);
     setDetail(null);
     refresh().catch((error: unknown) => setMessage(error instanceof Error ? error.message : "The plans could not be read."));
+    // No brand yet: there is no stored model to read, so no request is made. The composer says a brand is needed.
+    if (brandId === "") {
+      setStoredModel(null);
+      setStoredModelError(null);
+      return;
+    }
     getBrandOrchestratorModel({ data: { brandId } })
       .then((stored) => {
         setStoredModel(stored.orchestratorModel);
