@@ -23,7 +23,6 @@ import {
 } from "../../contracts/index.ts";
 import { extendReservation } from "../../budget/preflight.ts";
 import type { ChosenCallPrices } from "../../budget/estimate.ts";
-import type { BudgetTolerance } from "../../budget/tolerance.ts";
 import { modelChoicesSchema } from "../../contracts/model-choices.ts";
 import type { CatalogRead, ModelCatalogSource } from "../../gateway/catalog.ts";
 import { chosenCallPricesOf } from "../../plan/model-choices.ts";
@@ -99,11 +98,10 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
 }
 
 /**
- * The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount; "not_connected" the reason.
- * `tolerance` is transitional (D12): the brief path never sets it. The orchestrator still reads it (orchestrator/run-budget.ts and
- * service.ts), and the orchestrator change removes this field.
+ * The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount; "not_connected" the reason. A budget is
+ * a line (D12): the answer carries no tolerance.
  */
-export type WorkspaceMonthBudget = { status: "known"; usd: number; tolerance?: BudgetTolerance } | { status: "not_connected"; reason: string };
+export type WorkspaceMonthBudget = { status: "known"; usd: number } | { status: "not_connected"; reason: string };
 
 export type WorkspaceBudgetScope = { organizationId: string; requestId: string; now: string };
 

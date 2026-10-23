@@ -2,14 +2,16 @@
 // its own workspace rows, and the fixtures are the engine's contract fixtures. Nothing reads a key: the credential sources are scripted.
 
 import assert from "node:assert/strict";
-import { after, test } from "node:test";
-import { productionRequestFixture } from "../contracts/fixtures/index.ts";
+import { after, before, describe, test } from "node:test";
+import { FIXTURE_IDS, productionRequestFixture } from "../contracts/fixtures/index.ts";
 import { EngineError, newId, type ProductionRequest } from "../contracts/index.ts";
 import type { WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
 import { readArtifact } from "../jobs/artifact-store.ts";
 import { ENGINE_STAGES } from "../jobs/registry.ts";
 import type { EngineRuntime, StageHandler } from "../jobs/types.ts";
 import type { CredentialLookup } from "../gateway/types.ts";
+import { chainWorld, drain, startChainRequest } from "../ops/test/chain.ts";
+import { sqlLedgerStore } from "../jobs/sql-ledger-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import {
   engineReadiness,
@@ -18,6 +20,7 @@ import {
   openEngineReviewItems,
   engineRequestFeed,
   pauseEngineSpend,
+  quoteEngineShotRemake,
   remakeEngineShot,
   requestProblems,
   reservationState,
@@ -251,4 +254,66 @@ test("the feed of a video that has not been delivered reads revision 0 and no sh
   assert.ok(feed);
   assert.equal(feed?.revision, 0);
   assert.deepEqual(feed?.shots, []);
+});
+
+describe("a remake's quote on a delivered video: the month is held to the line the reservation makes (D17)", () => {
+  const QUOTE_ORG = "org_api_quote";
+  const QUOTE_BRAND = "brand_api_quote";
+  const QUOTE_NOW = "2026-10-18T10:00:00.000Z";
+  let quoteDb: TestDatabase;
+  let requestId = "";
+  let shot = "";
+
+  before(async () => {
+    quoteDb = await createTestDatabase();
+    await seedWorkspace(quoteDb.sql, QUOTE_ORG, QUOTE_BRAND);
+    const world = await chainWorld(quoteDb.sql, QUOTE_ORG);
+    const started = await startChainRequest(world, { slot: 6, brandId: QUOTE_BRAND, formatId: "fmt_api_quote", priority: "normal", variantCount: 0 });
+    await drain(quoteDb.sql, world.runtime, QUOTE_ORG);
+    requestId = started.requestId;
+    const ids = world.requests.get(requestId)?.ids;
+    assert.ok(ids, "the chain world holds the request's ids");
+    shot = ids.id(FIXTURE_IDS.shot1);
+    assert.equal((await engineRequestStatus(quoteDb.sql, QUOTE_ORG, requestId))?.status, "delivered");
+  });
+
+  after(async () => {
+    await quoteDb.close();
+  });
+
+  test("a month with room for the remake quotes it as fitting; a month a sliver above its spend, or at its line, does not fit, and the quote reserves nothing", async () => {
+    const sql = quoteDb.sql;
+    const reservationsOf = async (): Promise<number> => {
+      const [row] = await sql<{ n: number }>`select count(*)::int as n from engine_reservations where request_id = ${requestId}`;
+      return row?.n ?? 0;
+    };
+    const reservedBefore = await reservationsOf();
+    // The month's committed spend, read the way the quote reads it.
+    const committed = await sqlLedgerStore(sql, QUOTE_ORG).committedForMonth(QUOTE_ORG, QUOTE_NOW.slice(0, 7));
+    const quoteWith = (usd: number) =>
+      quoteEngineShotRemake(sql, { organizationId: QUOTE_ORG, requestId, shotId: shot, now: QUOTE_NOW }, { monthBudget: { monthBudget: async () => ({ status: "known", usd }) } });
+
+    const roomy = await quoteWith(committed + 1000);
+    assert.equal(roomy.status, "quoted", roomy.status === "refused" ? roomy.reasons.join("; ") : "");
+    if (roomy.status === "quoted") assert.deepEqual([roomy.fits, roomy.reasons], [true, []], roomy.reasons.join("; "));
+
+    // The month is below its line, but the remake's hold is larger than the sliver that is left under it.
+    const tight = await quoteWith(committed + 0.0001);
+    assert.equal(tight.status, "quoted", tight.status === "refused" ? tight.reasons.join("; ") : "");
+    if (tight.status === "quoted") {
+      assert.ok(tight.reservedUsd > 0.0001, "the remake's hold is larger than the sliver above the spend");
+      assert.equal(tight.fits, false);
+      assert.match(tight.reasons.join("; "), /^the remake would take the workspace month to \$[0-9.]+, above its \$[0-9.]+ budget$/);
+    }
+
+    // A month at its line refuses the remake, as a call at its line is refused (D17).
+    const atLine = await quoteWith(committed);
+    assert.equal(atLine.status, "quoted", atLine.status === "refused" ? atLine.reasons.join("; ") : "");
+    if (atLine.status === "quoted") {
+      assert.equal(atLine.fits, false);
+      assert.match(atLine.reasons.join("; "), /^the workspace month has committed \$[0-9.]+, at or above its \$[0-9.]+ budget, so the remake does not start$/);
+    }
+
+    assert.equal(await reservationsOf(), reservedBefore, "a quote reserves nothing");
+  });
 });

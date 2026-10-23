@@ -10,8 +10,8 @@
 //    more than the user set) is stored with a ready plan, never as a refusal.
 //
 // A budget is a line (owner direction 2026-10-23, D12, D17). Nothing is committed at planning, so the planning call's hold must fit the user's
-// budget, or the draft is refused before any call. The month check reads what the month has committed: the call starts only while that is
-// below the month budget.
+// budget, or the draft is refused before any call. The workspace month is held to the same rule: its committed spend must be below its
+// budget, and that spend plus the hold must not be above it.
 //
 // The catalog, the gateway and the workspace's monthly budget source are passed in. In production the catalog is read through the gateway;
 // without a connected key it is NOT_CONNECTED and nothing here is called. Without a known monthly budget, nothing is held.
@@ -84,8 +84,7 @@ function refusal(scope: PlanScope, stored: StoredPlan, reasons: string[]): Promi
 
 /**
  * Every check before the call. It stores nothing. The hold is the call's estimate, rounded up to four decimals, for the call and its one
- * retry. The hold must fit the user's budget (D17). The month must be below its budget, and the hold must be a valid reservation before
- * anything is written.
+ * retry. The hold must fit the user's budget and the workspace month's (D17). The hold must be a valid reservation before anything is written.
  */
 async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Attempt): Promise<Checked> {
   const brief = orchestratorBriefSchema.safeParse(stored.brief);
@@ -122,13 +121,19 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
     );
   }
 
-  // The workspace month: the call starts only while the month's committed spend is below its budget (run-budget.ts uses the same rule).
+  // The workspace month (D17): the month's committed spend must be below its budget, and the planning hold must fit within it, as a run's
+  // reservation does (budget/reserve.ts). Nothing is committed at planning, so the hold is what the call would add to the month.
   const month = await scope.workspaceBudget.monthBudget({ organizationId: scope.organizationId, requestId: attempt.requestId, now: attempt.createdAt });
   if (month.status !== "known") return noCall(month.reason);
   const monthCommittedUsd = await attempt.ledger.committedForMonth(scope.organizationId, attempt.createdAt.slice(0, 7));
   if (!startsBelowLine(monthCommittedUsd, month.usd)) {
     return noCall(
       `workspace monthly budget reached: $${monthCommittedUsd.toFixed(4)} is committed against the $${month.usd.toFixed(4)} budget, so no call is made`,
+    );
+  }
+  if (positionOfLine(sumUsd([monthCommittedUsd, heldUsd]), month.usd) !== "within_budget") {
+    return noCall(
+      `the plan call's hold of $${heldUsd.toFixed(4)} would take the workspace month past its $${month.usd.toFixed(4)} budget (committed $${monthCommittedUsd.toFixed(4)}), so the draft is refused before any call`,
     );
   }
 

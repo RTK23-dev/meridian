@@ -45,6 +45,7 @@ import { routes } from "../config/routes.ts";
 import { budgets } from "../config/budgets.ts";
 import { committedFor, reserve } from "../budget/reserve.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
+import { positionOfLine, startsBelowLine } from "../budget/line.ts";
 import { estimatePlan, type ChosenCallPrices } from "../budget/estimate.ts";
 import { shotSpecSchema, shotSourceSchema, type ShotSource, type VisualType } from "../contracts/plan.ts";
 import { shotSummaryOf } from "../jobs/handlers/plan.ts";
@@ -749,12 +750,17 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
     if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
       reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);
     }
-    // The month's committed spend, as reserve() reads it (D12): holds that are not yet spent do not count against the month.
+    // The month's committed spend, as reserve() reads it (D12): the settled cost of the month's calls, and the holds of calls not yet settled.
+    // The month is held to the rule reserve() applies (D17): it must be below its line, and the remake's hold must fit within it.
     const monthCommittedUsd = await withWorkspaceLedger(sql, input.organizationId, (store) =>
       store.committedForMonth(input.organizationId, input.now.slice(0, 7)),
     );
     const monthUsd = sumUsd([monthCommittedUsd, estimate.reservedUsd]);
-    if (monthUsd > context.month.usd) reasons.push(`the remake would take the workspace month over its $${context.month.usd.toFixed(4)} budget`);
+    if (!startsBelowLine(monthCommittedUsd, context.month.usd)) {
+      reasons.push(`the workspace month has committed $${monthCommittedUsd.toFixed(4)}, at or above its $${context.month.usd.toFixed(4)} budget, so the remake does not start`);
+    } else if (positionOfLine(monthUsd, context.month.usd) === "over_budget") {
+      reasons.push(`the remake would take the workspace month to $${monthUsd.toFixed(4)}, above its $${context.month.usd.toFixed(4)} budget`);
+    }
     return {
       status: "quoted",
       revision: context.revision,
