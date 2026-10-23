@@ -8,6 +8,7 @@
 
 import {
   EngineError,
+  scenePlanSchema,
   validatedRequestSchema,
   videoDnaSchema,
   voiceTrackSchema,
@@ -18,7 +19,7 @@ import {
 } from "../../contracts/index.ts";
 import type { RoleDeps } from "../../claude/client.ts";
 import { classifyVisualRequests, visualRequestsOf } from "../../plan/classify.ts";
-import { planScene, type PlanKitBodies } from "../../plan/build.ts";
+import { planScene, replanDowngrade, type PlanKitBodies } from "../../plan/build.ts";
 import { check, gateResult } from "../../review/gates/common.ts";
 import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-store.ts";
 import type { StageContext, StageHandler, StageRunResult, ShotSummary } from "../types.ts";
@@ -123,13 +124,109 @@ async function inputArtifacts(ctx: StageContext): Promise<StoredArtifact[]> {
   return stored;
 }
 
+/**
+ * A replan of one shot, named by the orchestrator's directive (Bible 5.3). Only the downgrade is built: it reads the plan it changes and the
+ * plan's inputs, classifies the requests again (the journal reuses the answers already paid for), and replans the named shot. A rewrite is
+ * not built, so it is refused as not implemented, never as a success. A replan that cannot be built writes no plan and says why in its gate.
+ */
+async function runDirectiveReplan(ctx: StageContext, ports: PlanPorts): Promise<StageRunResult> {
+  const directive = ctx.payload.details.directive;
+  if (directive !== "downgrade") throw notImplementedError(`the ${String(directive)} replan is not built (plan/STATUS.md)`, ctx.stage);
+  const shotId = ctx.payload.details.shotId;
+  if (typeof shotId !== "string" || shotId.length === 0) {
+    throw new EngineError("invalid_input", "a downgrade replan names the shot it changes", { stage: ctx.stage });
+  }
+  const planStored = await readInputOfType(ctx, "scene_plan");
+  const validatedStored = await readInputOfType(ctx, "validated_request");
+  const dnaStored = await readInputOfType(ctx, "video_dna");
+  const voiceStored = await readInputOfType(ctx, "voice_track");
+  const planParsed = scenePlanSchema.safeParse(planStored.envelope.body);
+  const validatedParsed = validatedRequestSchema.safeParse(validatedStored.envelope.body);
+  const dnaParsed = videoDnaSchema.safeParse(dnaStored.envelope.body);
+  const voiceParsed = voiceTrackSchema.safeParse(voiceStored.envelope.body);
+  if (!planParsed.success || !validatedParsed.success || !dnaParsed.success || !voiceParsed.success) {
+    throw new EngineError("invalid_input", "the replan's input artifacts do not parse", { stage: ctx.stage });
+  }
+  const reservationId = ctx.payload.budgetReservationId;
+  if (reservationId === null) {
+    throw new EngineError("invalid_input", "the replan may make a paid planner call, so it needs its budget reservation; no call is made", {
+      stage: ctx.stage,
+    });
+  }
+  const validated: ValidatedRequest = validatedParsed.data;
+  const request = validated.request;
+  const written = writtenScriptOf(await inputArtifacts(ctx), ctx.requestId);
+  const script = scriptOf(request, written);
+  const kits = await ports.loadKits({ organizationId: ctx.organizationId, request });
+  const bodies: PlanKitBodies = {
+    ...(kits.styleKit === undefined ? {} : { styleKit: kits.styleKit }),
+    ...(kits.persona === undefined ? {} : { persona: kits.persona }),
+    ...(kits.productKit === undefined ? {} : { productKit: kits.productKit }),
+    characters: [...kits.characters],
+  };
+  const deps = ports.roleDeps({ organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId });
+  const attempt = attemptOf(ctx.payload.attempt);
+
+  const classified = await classifyVisualRequests(deps, {
+    requestId: ctx.requestId,
+    workspaceId: ctx.organizationId,
+    reservationId,
+    attempt,
+    signal: ctx.signal,
+    requests: visualRequestsOf(request),
+  });
+  if (classified.status === "not_classified") {
+    const gate: GateResult = gateResult("plan", ctx.requestId, [check("requests_classified", false, { detail: classified.reason })], [shotId]);
+    return { kind: "done", output: { stage: "plan", subjectId: ctx.subjectId, artifacts: {}, gate, shots: [] } };
+  }
+
+  const replanned = await replanDowngrade({
+    requestId: ctx.requestId,
+    workspaceId: ctx.organizationId,
+    reservationId,
+    attempt,
+    signal: ctx.signal,
+    request,
+    script,
+    validated,
+    voice: voiceParsed.data,
+    dna: dnaParsed.data,
+    kits: bodies,
+    classifications: classified.classifications,
+    deps,
+    previous: planParsed.data,
+    shotId,
+  });
+  const artifacts: Record<string, string> = {};
+  if (replanned.plan !== null) {
+    const newPlan = await writeArtifact(ctx.sql, {
+      organizationId: ctx.organizationId,
+      requestId: ctx.requestId,
+      stage: ctx.stage,
+      type: "scene_plan",
+      body: replanned.plan,
+      parentIds: [planStored.envelope.artifactId, validatedStored.envelope.artifactId, dnaStored.envelope.artifactId, voiceStored.envelope.artifactId],
+      createdAt: new Date().toISOString(),
+    });
+    artifacts.plan = newPlan.artifactId;
+  }
+  return {
+    kind: "done",
+    output: {
+      stage: "plan",
+      subjectId: ctx.subjectId,
+      artifacts,
+      gate: replanned.gate,
+      shots: replanned.shot === null ? [] : [shotSummaryOf(replanned.shot)],
+    },
+  };
+}
+
 /** The plan stage. Pass the ports the worker wires. Missing kits and missing reservations fail closed (see the file header). */
 export function createPlanHandler(ports: PlanPorts): StageHandler {
   return {
     async run(ctx: StageContext): Promise<StageRunResult> {
-      if (ctx.payload.details.directive !== undefined) {
-        throw notImplementedError("the downgrade replan is not built in E3 (plan/STATUS.md)", ctx.stage);
-      }
+      if (ctx.payload.details.directive !== undefined) return runDirectiveReplan(ctx, ports);
       const validatedStored = await readInputOfType(ctx, "validated_request");
       const dnaStored = await readInputOfType(ctx, "video_dna");
       const voiceStored = await readInputOfType(ctx, "voice_track");

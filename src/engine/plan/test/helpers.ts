@@ -37,6 +37,19 @@ export function recordedAnswer(name: string): HttpResponse {
   return json(200, JSON.parse(readFileSync(join(FIXTURES, `${name}.json`), "utf8")) as unknown);
 }
 
+/**
+ * The recorded planner answer, cut to the shots a call asks about. The planner answers only the shots it was asked for, so a
+ * one-shot call (a downgrade replan) gets a one-shot answer; the full fixture would be refused as unexpected shots.
+ */
+export function recordedPlannerAnswerFor(shotIds: readonly string[]): HttpResponse {
+  const fixture = JSON.parse(readFileSync(join(FIXTURES, "openrouter-planner-ok.json"), "utf8")) as {
+    choices: { message: { content: string } }[];
+  };
+  const answer = JSON.parse(fixture.choices[0]!.message.content) as { shots: { shotId: string }[] };
+  const cut = { shots: answer.shots.filter((shot) => shotIds.includes(shot.shotId)) };
+  return json(200, { ...fixture, choices: [{ ...fixture.choices[0], message: { ...fixture.choices[0]!.message, content: JSON.stringify(cut) } }] });
+}
+
 /** The request with its budget replaced (the fixture's own budget is $4). */
 export function requestWithBudget(budgetUsd: number): ProductionRequest {
   return { ...productionRequestFixture, constraints: { ...productionRequestFixture.constraints, budgetUsd } };

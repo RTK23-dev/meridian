@@ -35,14 +35,14 @@ import { checkPlan } from "../review/gates/plan.ts";
 import type { VisualClassification } from "../review/gates/request.ts";
 import { alignmentDecisions, alignShots, DEFAULT_SHOT_LENGTH, timedWordsOfShot, type AlignOutput, type ShotLengthLimits } from "./align.ts";
 import { rigSheetOf } from "./character.ts";
-import { planTotals } from "./cost.ts";
+import { planTotals, shotCost, type PlanLine } from "./cost.ts";
 import { applyDirectorCheck, runDirectorCheck, type DirectorChoice } from "./director.ts";
 import { kitRejection, mustAllowedTypes, productPixelRejection } from "./filter.ts";
 import { planKitsOf } from "./minimum.ts";
 import { directorTaskOf, needsPrompt, needsQuery, plannerTaskOf } from "./prompts.ts";
 import { heroUriOf, productImageUris } from "./product.ts";
 import { buildSource, componentBuildRefusals, emphasisIn, type WordSpan } from "./sources.ts";
-import { DOWNGRADE_TO } from "./tables.ts";
+import { DOWNGRADE_TO, isGeneratedType } from "./tables.ts";
 import type { ScriptBody } from "../script/resolve.ts";
 import type { PlanKits, ShotInput } from "./types.ts";
 import { decideVisuals, type ShotChoice, type VisualDecisionResult } from "./visual.ts";
@@ -237,20 +237,11 @@ async function runDirector(
  * Build the plan of one request (6.4). Returns a gate on every path; see the file header. Throws EngineError only for an input the
  * plan cannot read (a voice that does not tile, a request with no classification): those are data errors of the caller.
  */
-export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits = DEFAULT_SHOT_LENGTH): Promise<PlanSceneOutcome> {
-  const requestId = input.request.requestId;
-  const calls: RoleCall[] = [];
-  const alerts: BudgetAlert[] = [];
-  const kitChecks = [kitMatchCheck(input.validated, input.kits)];
-  const style = input.kits.styleKit;
-  if (style === undefined) {
-    return unbuilt(requestId, [...kitChecks, check("style_kit_loaded", false, { detail: "the style kit did not load, so the plan has no style" })], [], calls, alerts);
-  }
-
-  // Steps 1 and 2 (6.4): align the beats to the reference and split them into shots.
-  const aligned: AlignOutput = alignShots(
+/** The deterministic alignment of the beats to the reference and the voice (6.4 steps 1 and 2). No call is made. */
+function alignmentFor(input: PlanSceneInput, limits: ShotLengthLimits): AlignOutput {
+  return alignShots(
     {
-      requestId,
+      requestId: input.requestId,
       beats: input.script.beats.map((beat) => ({ beatId: beat.beatId, role: beat.role, emphasis: beat.emphasis })),
       visualRequests: input.request.visualRequests,
       classifications: input.classifications,
@@ -269,6 +260,49 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
     },
     limits,
   );
+}
+
+/**
+ * Rule 6 at build time (7.2): the component types this shot's own words, timings, kits and sheet cannot draw are refused, so the
+ * filter never offers them. The same refusals serve the first plan and a downgrade replan.
+ */
+function withComponentRefusals(
+  shot: ShotInput,
+  text: ShotText,
+  input: PlanSceneInput,
+  productKit: ProductKit | undefined,
+  rigSheet: CharacterSheet | undefined,
+): ShotInput {
+  const built = componentBuildRefusals({
+    shot: {
+      shotId: shot.shotId,
+      durationMs: shot.endMs - shot.startMs,
+      beatRole: shot.beatRole,
+      showsProduct: shot.flags.showsProduct,
+      words: text.words,
+      emphasis: text.emphasis,
+      spans: text.spans,
+    },
+    ...(input.kits.persona === undefined ? {} : { persona: input.kits.persona }),
+    ...(productKit === undefined ? {} : { productKit }),
+    ...(rigSheet === undefined ? {} : { character: rigSheet }),
+    claimIds: input.request.product?.claimIds ?? [],
+  });
+  return { ...shot, refusals: { ...shot.refusals, ...built } };
+}
+
+export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits = DEFAULT_SHOT_LENGTH): Promise<PlanSceneOutcome> {
+  const requestId = input.request.requestId;
+  const calls: RoleCall[] = [];
+  const alerts: BudgetAlert[] = [];
+  const kitChecks = [kitMatchCheck(input.validated, input.kits)];
+  const style = input.kits.styleKit;
+  if (style === undefined) {
+    return unbuilt(requestId, [...kitChecks, check("style_kit_loaded", false, { detail: "the style kit did not load, so the plan has no style" })], [], calls, alerts);
+  }
+
+  // Steps 1 and 2 (6.4): align the beats to the reference and split them into shots.
+  const aligned: AlignOutput = alignmentFor(input, limits);
   const productKit = input.kits.productKit;
   const hero = productKit === undefined ? null : heroUriOf(productKit);
   const planKits = planKitsOf(input.kits);
@@ -281,22 +315,7 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
   const refusableShots: ShotInput[] = aligned.shots.map((shot) => {
     const text = textsById.get(shot.shotId);
     if (text === undefined) throw new EngineError("internal", `shot ${shot.shotId} has no text`);
-    const built = componentBuildRefusals({
-      shot: {
-        shotId: shot.shotId,
-        durationMs: shot.endMs - shot.startMs,
-        beatRole: shot.beatRole,
-        showsProduct: shot.flags.showsProduct,
-        words: text.words,
-        emphasis: text.emphasis,
-        spans: text.spans,
-      },
-      ...(input.kits.persona === undefined ? {} : { persona: input.kits.persona }),
-      ...(productKit === undefined ? {} : { productKit }),
-      ...(rigSheet === undefined ? {} : { character: rigSheet }),
-      claimIds: input.request.product?.claimIds ?? [],
-    });
-    return { ...shot, refusals: { ...shot.refusals, ...built } };
+    return withComponentRefusals(shot, text, input, productKit, rigSheet);
   });
   const shotsById = new Map(refusableShots.map((shot) => [shot.shotId, shot]));
 
@@ -478,4 +497,178 @@ export async function planScene(input: PlanSceneInput, limits: ShotLengthLimits 
   ];
   const gate = gateResult("plan", plan.planId, [...handlerChecks, ...gated.checks], gated.failingShotIds ?? []);
   return { gate, plan, calls, alerts };
+}
+
+/** One downgrade replan (Bible 5.3): the plan it changes, and the one generated shot the directive names. */
+export type DowngradeReplanInput = PlanSceneInput & { previous: ScenePlan; shotId: string };
+
+export type DowngradeReplanOutcome = {
+  /** Passes only when the named shot is rebuilt and the plan gate passes with it, within the plan's estimate (12.1). */
+  gate: GateResult;
+  /** The replanned plan, or null when the shot could not be replanned. A replanned plan may still fail its gate, and is then kept for review. */
+  plan: ScenePlan | null;
+  /** The replanned shot, or null when none was built. */
+  shot: ShotSpec | null;
+  calls: RoleCall[];
+  alerts: BudgetAlert[];
+};
+
+function replanRefused(requestId: string, shotId: string, reason: string, calls: RoleCall[], alerts: BudgetAlert[]): DowngradeReplanOutcome {
+  return {
+    gate: gateResult("plan", requestId, [check("downgrade_built", false, { detail: reason })], [shotId]),
+    plan: null,
+    shot: null,
+    calls,
+    alerts,
+  };
+}
+
+/**
+ * A downgrade replan (Bible 5.3, 7.1). A generated shot whose take could not be made moves to the first target of its 7.1 chain that the
+ * shot can take now. Only that shot changes: every other shot, its source and the voice stay as the previous plan has them. The target is
+ * chosen by the same rules as a first plan (downgradeFor). A target that needs written text gets one planner call, for this shot only;
+ * a component or a zero-cost target gets none. The shot is repriced, and the plan gate runs on the whole new plan. The replan keeps the
+ * plan's estimate: a downgrade that costs more than the estimate fails the gate and is not written as passing.
+ */
+export async function replanDowngrade(input: DowngradeReplanInput, limits: ShotLengthLimits = DEFAULT_SHOT_LENGTH): Promise<DowngradeReplanOutcome> {
+  const requestId = input.request.requestId;
+  const calls: RoleCall[] = [];
+  const alerts: BudgetAlert[] = [];
+  const shotId = input.shotId;
+  const named = input.previous.shots.find((shot) => shot.shotId === shotId);
+  if (named === undefined) return replanRefused(requestId, shotId, `shot ${shotId} is not in the plan`, calls, alerts);
+  if (DOWNGRADE_TO[named.visualType].length === 0) {
+    return replanRefused(requestId, shotId, `${shotId} is ${named.visualType}, which names no downgrade target in 7.1`, calls, alerts);
+  }
+  const style = input.kits.styleKit;
+  if (style === undefined) return replanRefused(requestId, shotId, "the style kit did not load, so the replan has no style", calls, alerts);
+
+  const aligned = alignmentFor(input, limits);
+  const alignedShot = aligned.shots.find((shot) => shot.shotId === shotId);
+  if (alignedShot === undefined) return replanRefused(requestId, shotId, `the reference no longer aligns ${shotId}`, calls, alerts);
+  const productKit = input.kits.productKit;
+  const hero = productKit === undefined ? null : heroUriOf(productKit);
+  const rigSheet = rigSheetOf(input.kits.characters);
+  const planKits = planKitsOf(input.kits);
+  const text = shotText(alignedShot, input);
+  const refusable = withComponentRefusals(alignedShot, text, input, productKit, rigSheet);
+  const target = downgradeFor(named.visualType, refusable, planKits);
+  if (target === undefined) {
+    return replanRefused(requestId, shotId, `no target of the 7.1 chain for ${named.visualType} is open to ${shotId} now`, calls, alerts);
+  }
+
+  const durationMs = named.endMs - named.startMs;
+  // A target that needs written text gets one planner call for this shot, with the same answer shape as the first plan.
+  const prompt = needsPrompt([{ generated: isGeneratedType(target) }]);
+  const query = needsQuery([target]);
+  let written: { prompt?: string; query?: string } = {};
+  if (prompt || query) {
+    const answer = await runPlanner(
+      input,
+      [
+        {
+          shotId,
+          durationMs,
+          beatRole: refusable.beatRole,
+          wants: refusable.requests.map((request) => request.want),
+          candidates: [target],
+          prompt,
+          query,
+          showsProduct: refusable.flags.showsProduct,
+          pinnedFrame: refusable.flags.showsProduct && hero !== null,
+        },
+      ],
+      style,
+    );
+    calls.push(...answer.calls);
+    alerts.push(...answer.alerts);
+    if (answer.answer === null) return replanRefused(requestId, shotId, answer.reason, calls, alerts);
+    const entry = answer.answer.shots.find((item) => item.shotId === shotId);
+    if (prompt && entry?.prompt === undefined) return replanRefused(requestId, shotId, `the planner wrote no prompt for ${shotId}`, calls, alerts);
+    if (query && entry?.query === undefined) return replanRefused(requestId, shotId, `the planner wrote no query for ${shotId}`, calls, alerts);
+    written = {
+      ...(entry?.prompt === undefined ? {} : { prompt: entry.prompt }),
+      ...(entry?.query === undefined ? {} : { query: entry.query }),
+    };
+  }
+
+  const result = buildSource({
+    visualType: target,
+    shot: {
+      shotId,
+      durationMs,
+      beatRole: refusable.beatRole,
+      showsProduct: refusable.flags.showsProduct,
+      words: text.words,
+      emphasis: text.emphasis,
+      spans: text.spans,
+    },
+    ...(written.prompt === undefined ? {} : { prompt: written.prompt }),
+    ...(written.query === undefined ? {} : { query: written.query }),
+    ...(input.kits.persona === undefined ? {} : { persona: input.kits.persona }),
+    ...(productKit === undefined ? {} : { productKit }),
+    ...(rigSheet === undefined ? {} : { character: rigSheet }),
+    claimIds: input.request.product?.claimIds ?? [],
+  });
+  if (!result.ok) return replanRefused(requestId, shotId, `${shotId} (${target}): ${result.reason}`, calls, alerts);
+
+  const next = downgradeFor(target, refusable, planKits);
+  const replacement: ShotSpec = {
+    shotId,
+    beatId: named.beatId,
+    startMs: named.startMs,
+    endMs: named.endMs,
+    visualType: target,
+    layer: result.built.layer,
+    source: result.built.source,
+    ...(named.mustSatisfy === undefined ? {} : { mustSatisfy: named.mustSatisfy }),
+    ...(next === undefined ? {} : { downgradeTo: next }),
+  };
+  const shots = input.previous.shots.map((shot) => (shot.shotId === shotId ? replacement : shot));
+
+  // Reprice every shot from the price table. A shot with no known price fails closed, as the first plan does.
+  const lines: PlanLine[] = [];
+  for (const shot of shots) {
+    const cost = shotCost(shot.visualType, shot.endMs - shot.startMs);
+    if (!cost.known) return replanRefused(requestId, shot.shotId, `${shot.shotId} (${shot.visualType}) has no known price: ${cost.reason}`, calls, alerts);
+    lines.push({ baseUsd: cost.baseUsd, generated: cost.generated });
+  }
+  const totals = planTotals(lines);
+  const decision: Decision = {
+    at: `shot:${shotId}`,
+    chose: target,
+    alternatives: [],
+    reason: `Downgrade replan: ${named.visualType} could not be made, so ${shotId} moves to ${target}, the first target of its 7.1 chain it can take now.`,
+    by: "scorer",
+  };
+  const plan: ScenePlan = {
+    ...input.previous,
+    planId: planIdFor(requestId, shots),
+    shots,
+    estimatedUsd: totals.shotsUsd,
+    decisions: [...input.previous.decisions, decision],
+  };
+
+  const alignedById = new Map(aligned.shots.map((shot) => [shot.shotId, shot]));
+  const gated = checkPlan({
+    plan,
+    voice: input.voice,
+    request: input.request,
+    classifications: input.classifications,
+    productImageUris: productKit === undefined ? undefined : productImageUris(productKit),
+    productBeatIds: [...new Set(plan.shots.filter((shot) => alignedById.get(shot.shotId)?.flags.showsProduct === true).map((shot) => shot.beatId))],
+  });
+  const withinEstimate = totals.shotsUsd <= input.previous.estimatedUsd;
+  const handlerChecks: GateCheck[] = [
+    check("downgrade_built", true, {
+      detail: `${shotId}: ${named.visualType} to ${target}; ${calls.length} planner call(s) for this shot`,
+    }),
+    check("replan_within_estimate", withinEstimate, {
+      value: totals.shotsUsd,
+      limit: input.previous.estimatedUsd,
+      detail: withinEstimate ? "the replanned shots cost no more than the plan's estimate" : "the downgrade costs more than the plan's estimate",
+    }),
+  ];
+  const gate = gateResult("plan", plan.planId, [...handlerChecks, ...gated.checks], gated.failingShotIds ?? []);
+  return { gate, plan, shot: replacement, calls, alerts };
 }
