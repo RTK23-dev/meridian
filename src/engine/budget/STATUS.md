@@ -3,7 +3,7 @@
 ## The budget is a line (D12, contract v11; owner direction 2026-10-23)
 
 Branch `feat/budget-line-engine`. Round 1 is `9408cb71` on `6862bb52`; round 2 (committed-spend lines, and `exceeded` only at a line)
-follows it. Committed, not pushed; the lead merges.
+follows it, and round 3 (a paid call starts only if its own hold fits the line, D17) follows that. Committed, not pushed; the lead merges.
 
 **Change list.**
 
@@ -41,8 +41,29 @@ follows it. Committed, not pushed; the lead merges.
   - Resolved from round 1 and moved here: the month line counts committed spend, not reserved holds (round 1, decision 1); `exceeded`
     only at a line (round 1, decision 2); `WorkspaceMonthBudget.tolerance?` stays optional and unset, because the orchestrator reads it
     (round 1, decision 3, accepted).
+- **Round 3: a paid call starts only if its own hold fits the line (D17, owner decision 2026-10-23).**
+  - `reserve.ts`, `authorizeCall` (cap mode): a call is refused when, before it, the request's or the month's committed spend is at or
+    above its budget (round 2), or when that committed spend plus the call's estimate is above the budget. The second test is
+    `positionOfLine`, with the same epsilon as `startsBelowLine` (`line.ts`, unchanged). A call at a line is refused even with a zero
+    estimate. The reason names the line the call is at, or the hold that would take it past, one for each budget. A refused call records
+    nothing and holds nothing.
+  - Kept: a fitting call's overrun raise and its alert; a bill above a fitting hold raises the hold and returns its alerts (`reconcile.ts`
+    is unchanged); the fail-closed refusal for a reservation with no budget; warn and observe.
+  - `reserve.ts` and `preflight.ts`: a reservation is never paused at a line. `reserve()` and `reserveFixed` store it `reserved`, with the
+    notes, whatever the month's committed spend. This supersedes round 2's pause. `monthNotAcceptedReason` is removed. `paused` stays for
+    an operator's pause (`pauseEngineSpend`) and for rows stored before v11.
+  - `reserve.ts`: the hold raised before `appendEntry` is removed. The hold is raised once, after the entry is written.
+  - Bible v11 note and `budget/README.md`: the fit rule, and no pause at a line.
 
-**Tests.** Budget folder: 154 (round 1: 147; before the change: 143), all pass. Round 2: `reserve.test.ts` 34 (was 32), `reconcile.test.ts` 18
+**Tests.** Round 3: budget folder 159 (round 2: 154), all pass. `reserve.test.ts` 38 (was 34): four tests added for D17 (a fitting call
+starts; a hold past the request line is refused with nothing committed; a call at the request line is refused with a zero estimate; the
+month line), and the pause, crossing, remake and month tests rewritten. `reconcile.test.ts` 19 (was 18): a bill above a fitting hold. Rewritten
+to D17: two of five in `tolerance-admission.test.ts`, the pause test in `preflight.test.ts` (of 32), two of eleven in
+`jobs/sql-ledger-store.test.ts`, and the earlier call in `render/hyperframesCloud.test.ts`, which now fills the 0.001 line exactly. The two
+named tests pass: `render/shotstack.test.ts` "is refused by the budget before any request, as HyperFrames is" and
+`orchestrator/production.test.ts` "a call past the request budget is not made" (both failed on round 2). All 281 `src/engine` test files:
+3326 tests, all pass. `npm run typecheck` passes, and `npx eslint` passes on the budget folder and the changed test files. The full `npm
+test` was not run. Round 2: `reserve.test.ts` 34 (was 32), `reconcile.test.ts` 18
 (was 15), `store.test.ts` 8 (was 6), `jobs/sql-ledger-store.test.ts` 11 (was 9); `preflight.test.ts` 32 and `variants/reserve.test.ts` 10
 are rewritten for committed spend. `tolerance-admission.test.ts` 5 (its name is kept because no file is deleted). `contracts/v11.test.ts` 5
 (new). The wider run (budget, jobs, contracts, config, gateway, assets, variants, render, media speech-to-text, api index, deliver, voice;
@@ -51,20 +72,20 @@ test` was not run; the lead runs it at merge.
 
 **Decisions for the lead (still open).**
 
-1. **A remake is accepted while its request is at its budget.** The acceptance rule reads only the month, as the brief asked. A remake's
+1. **Resolved by D17: a remake is accepted while its request is at its budget.** The acceptance rule reads only the month, as the brief asked. A remake's
    reservation is therefore accepted when its request has already reached the request budget; its calls are then refused at the line. Say
-   if `reserve()` should also pause on the request line.
+   It is not paused: D17 says a reservation is accepted with a note, and only calls are gated. Its first call is refused at the line.
 2. **The orchestrator still compares holds with the month budget.** `orchestrator/run-budget.ts:59` and `orchestrator/service.ts:115` read
    `sumForMonth`. They are outside this change. The orchestrator change must move them to `committedForMonth`.
 3. **Variants still refuse a raise past a budget.** `variants/reserve.ts` refuses a raise whose reservation total passes the request budget,
-   and one whose month passes its budget. D12 would make that a note. This is pre-existing, and it is not changed here.
+   and one whose month passes its budget. Under D17 a hold that does not fit is refused before any request, so the refusal fits D17; whether a raise should be a note instead is the lead's decision. It is not changed here.
 
 **Doubts and bugs.**
 
-- `reserve.ts`, cap-mode `authorizeCall`: the hold is raised before `appendEntry` and again after it. If the append finds a duplicate key
-  (a race), the hold stays raised with no entry. Pre-existing; left as it was.
-- `api/index.ts:402-404` (remake): the `state !== "reserved"` guard refuses a remake whose reservation was paused for its month, with that
-  reason. The file is on the leave-alone list (redo allowance), so the guard itself is unchanged.
+- Fixed in round 3: `reserve.ts`, cap-mode `authorizeCall`, raised the hold before `appendEntry` as well as after it. A duplicate key found
+  by the append would have left the hold raised with no entry. Only the raise after the append remains.
+- `api/index.ts` (remake): the `state !== "reserved"` guard refuses a paused reservation. Since round 3 no month line pauses one, so the guard
+  is reached only by an operator's pause. The file is on the leave-alone list (redo allowance), so the guard itself is unchanged.
 - An `exceeded` reservation whose line has cleared authorizes its calls at once, but keeps the `exceeded` state until a later settlement
   on that reservation clears it. The state is a record; the lines decide the calls.
 - `jobs/handlers/intake.ts` still rejects a request whose budget is below the fixed lines (`budget_covers_fixed_lines`, $0.52). That is a
@@ -74,8 +95,15 @@ test` was not run; the lead runs it at merge.
   before production volume. `committedForMonth` uses the `(organization_id, at)` index only as far as the `to_char` expression lets it,
   as `sumForMonth` already does.
 - A reservation paused before v11 stays paused, with no migration: `authorizeCall` refuses it.
-- D12's own open items, unchanged: a single step larger than the remaining budget still starts (the non-strict reading, as D12 writes
-  it); two reservations in one month can each start a call at the same moment, because the month is read under the reservation lock only.
+- `contracts/ledger.ts:12-13` still says a reservation is paused at creation when its month is at its line. That is a contract comment,
+  and eng-contracts owns the contract (a version bump), so it is not edited here. The lead decides.
+- `jobs/STATUS.md:13-14` says a hold not accepted because the month is at its budget pauses the request. That file is outside this
+  folder and is not edited; it is stale for D17.
+- `exceeded` still carries a `pausedReason`, because the contract requires a reason for it. It does not pause: calls are decided by the
+  lines. Say if `exceeded` should be removed.
+- Resolved by D17: a single step larger than the remaining budget no longer starts; its hold must fit. Still open from D12: two
+  reservations in one month can each start a call at the same moment, because the month is read under the reservation lock only. D17
+  records that overshoot as a note.
 - Still carrying tolerance, outside this change: `orchestrator/{envelope,service,run-budget,run,policy-store,validate,api}.ts` (use
   `tolerance.ts`); `src/components/content-factory/orchestrator-policy-panel.tsx` (shows and edits it); `src/lib/meridian/orchestrator/actions.ts`
   (accepts it); `src/engine/prompts/orchestrator_plan@3.md:19` and `src/engine/claude/roles/orchestrator_plan.ts:45` (describe it). None is
@@ -83,7 +111,7 @@ test` was not run; the lead runs it at merge.
 
 **Quality: 4 of 5.** Both lines read committed spend, `exceeded` marks only a line, and each rule is tested at its boundary, including the remake
 and the database paths. It is not 5 because the orchestrator still compares holds with the month budget (outside this change), the remake
-acceptance question is open, and the lines are read under a per-reservation lock, so two reservations can race.
+acceptance question is resolved by D17, and the lines are read under a per-reservation lock, so two reservations can race.
 
 ## Bill reads of held calls are tracked and bounded (contract v9, migration 0112)
 

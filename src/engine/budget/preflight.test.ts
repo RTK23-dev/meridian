@@ -136,16 +136,22 @@ test("a pre-flight hold over the request budget is recorded silently in observe 
   assert.deepEqual(result.alerts, []);
 });
 
-test("a pre-flight hold that starts once its month's committed spend has reached the month budget is paused, with the reason", async () => {
+test("a pre-flight hold that starts once its month's committed spend has reached the month budget is accepted with a note, not paused; its first call is refused at the line (D17)", async () => {
   const store = memoryLedgerStore();
   await reserveFixed(store, fixedInput({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 0.8 }));
   // The first hold's analysis call commits 0.80 USD in the month, so the month is at its budget.
   const analysis = await authorizeCall(store, analysisCall(ID.reservation, 0.8, "analyze:req_fixture:1"));
   assert.equal(analysis.status, "authorized");
   const second = await reserveFixed(store, fixedInput({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 0.8 }));
-  assert.equal(second.reservation.state, "paused");
-  assert.match(second.reservation.pausedReason ?? "", /the workspace month has committed 0.8 USD, at or above its 0.8 USD budget/);
+  assert.equal(second.reservation.state, "reserved", "a pre-flight hold is never paused at a line: its paid calls are gated by the line (D17)");
+  assert.equal(second.reservation.pausedReason, undefined);
+  assert.ok(second.alerts.some((alert) => alert.scope === "workspace_month"), "the hold sits above the month's line, and that is noted");
   assert.deepEqual(await store.getReservation(SECOND_RESERVATION), second.reservation);
+  const refused = await authorizeCall(store, analysisCall(SECOND_RESERVATION, 0.01, "analyze:req_fixture:2"));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /the workspace month has committed 0.8 USD, at or above its 0.8 USD budget, so no paid call starts/);
+  assert.equal((await store.listEntries(SECOND_RESERVATION)).length, 0, "the refused call holds nothing");
 });
 
 test("a month whose committed spend is exactly at its budget draws no note for a hold that exactly fills it", async () => {

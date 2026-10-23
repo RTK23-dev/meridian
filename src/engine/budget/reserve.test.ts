@@ -86,15 +86,21 @@ test("a plan whose estimate exceeds the workspace month budget is accepted with 
   assert.equal(first.status, "authorized", "nothing is committed yet, so the first call starts");
 });
 
-test("a reservation that starts once its month's committed spend has reached the month budget is paused, with the reason", async () => {
+test("a reservation that starts once its month's committed spend has reached the month budget is accepted with a note, not paused; its first call is refused at the line (D17)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
   const first = await authorizeCall(store, call({ estimateUsd: 1, idempotencyKey: "produce:shot_1:1" }));
   assert.equal(first.status, "authorized");
   const next = await reserve(store, input({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 1 }));
-  assert.equal(next.reservation.state, "paused");
-  assert.match(next.reservation.pausedReason ?? "", /the workspace month has committed 1 USD, at or above its 1 USD budget, so the reservation is not accepted/);
-  assert.equal((await store.getReservation(SECOND_RESERVATION))?.state, "paused");
+  assert.equal(next.reservation.state, "reserved", "a reservation is never paused at a line: its calls are gated by the line");
+  assert.equal(next.reservation.pausedReason, undefined);
+  assert.ok(next.alerts.some((alert) => alert.scope === "workspace_month"), "the plan that sits above the month's line is noted");
+  const refused = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION, estimateUsd: 0.01, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /the workspace month has committed 1 USD, at or above its 1 USD budget, so no paid call starts/);
+  assert.equal((await store.getReservation(SECOND_RESERVATION))?.state, "reserved");
+  assert.equal((await store.listEntries(SECOND_RESERVATION)).length, 0, "the refused call holds nothing");
 });
 
 test("both budgets exceeded give a note each, and the reservation is still reserved", async () => {
@@ -173,16 +179,17 @@ test("cap authorizes a call over its hold while below the line, raises the hold,
   assert.ok(authorized.alerts.some((alert) => alert.scope === "call"), "the overrun of the hold is recorded, not hidden");
 });
 
-test("a call that starts below the request budget finishes even if it takes the request past it, and the overshoot is recorded", async () => {
+test("a call whose hold would take the request past its budget is refused, though the request has committed less than its budget (D17)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
   assert.equal((await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_1:1" }))).status, "authorized");
   const crossing = await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_2:1" }));
-  assert.equal(crossing.status, "authorized", "0.90 committed is below the 1.00 line, so the call starts");
-  if (crossing.status !== "authorized") return;
-  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, 1.8, "the hold is raised to what the call takes it to");
-  assert.ok(crossing.alerts.some((alert) => alert.scope === "request"), "the overshoot of the request budget is recorded");
-  assert.equal((await store.listEntries(ID.reservation)).length, 2);
+  assert.equal(crossing.status, "refused", "0.90 is committed, below the 1.00 line, but this call's hold would take the request to 1.80");
+  if (crossing.status !== "refused") return;
+  assert.match(crossing.reason, /call produce_shot would take the request to 1.8 USD, above its 1 USD budget, so it does not start/);
+  assert.ok(crossing.alerts.some((alert) => alert.scope === "request"), "the overshoot the call would cause is returned as a note");
+  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, RESERVED, "the refused call raises no hold");
+  assert.equal((await store.listEntries(ID.reservation)).length, 1, "only the first call is recorded");
 });
 
 test("a call is refused once the request's committed amount reaches its budget, and records nothing", async () => {
@@ -196,17 +203,17 @@ test("a call is refused once the request's committed amount reaches its budget, 
   assert.equal((await store.listEntries(ID.reservation)).length, 1, "only the first call is recorded");
 });
 
-test("a remake's reservation sees the request's committed spend across its reservations (D12)", async () => {
+test("a remake's reservation sees the request's committed spend across its reservations (D12, D17)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
-  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_1:1" }))).status, "authorized");
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.5, idempotencyKey: "produce:shot_1:1" }))).status, "authorized");
   // A remake opens a reservation of its own for the same request.
   await reserve(store, input({ reservationId: SECOND_RESERVATION, requestBudgetUsd: 1 }));
-  const first = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION, estimateUsd: 0.2, idempotencyKey: "produce:shot_2:1" }));
-  assert.equal(first.status, "authorized", "the request has committed 0.9 USD, below its 1 USD budget");
-  const second = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION, estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
-  assert.equal(second.status, "refused", "the request has committed 1.1 USD across its reservations, though this one holds 0.2 USD");
-  if (second.status === "refused") assert.match(second.reason, /the request has committed 1.1 USD, at or above its 1 USD budget/);
+  const fills = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION, estimateUsd: 0.5, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(fills.status, "authorized", "the request has committed 0.5 USD, and this call's 0.5 USD fills its 1 USD budget exactly");
+  const atLine = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION, estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
+  assert.equal(atLine.status, "refused", "the request has committed 1 USD across its reservations, though this one holds only 0.5 USD");
+  if (atLine.status === "refused") assert.match(atLine.reason, /the request has committed 1 USD, at or above its 1 USD budget/);
   assert.equal((await store.listEntries(SECOND_RESERVATION)).length, 1);
 });
 
@@ -225,13 +232,61 @@ test("the workspace month's committed spend is read against its budget at the bo
   assert.equal((await store.listEntries(SECOND_RESERVATION)).length, 0);
 });
 
-test("a call that starts below the month budget may take the month past it, and the next call in that month is refused", async () => {
+test("a call that exactly fills the month budget starts, and the next call in that month is refused at the line (D17)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
   const first = await authorizeCall(store, call({ estimateUsd: 1, idempotencyKey: "produce:shot_1:1" }));
-  assert.equal(first.status, "authorized", "the month has committed nothing, below the 1.00 line");
+  assert.equal(first.status, "authorized", "the month has committed nothing, and this call's 1.00 USD fills its line exactly");
   const second = await authorizeCall(store, call({ estimateUsd: 0.01, idempotencyKey: "produce:shot_2:1" }));
   assert.equal(second.status, "refused", "the month now has committed 1.00 USD, at its budget");
+});
+
+test("a call whose hold fits under both budgets starts, with no note (D17)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1, workspaceMonthBudgetUsd: 1 }));
+  const fits = await authorizeCall(store, call({ estimateUsd: 0.6 }));
+  assert.equal(fits.status, "authorized");
+  if (fits.status !== "authorized") return;
+  assert.deepEqual(fits.alerts, [], "0.60 is below both lines, and the hold is inside the reservation");
+  assert.equal((await store.listEntries(ID.reservation)).length, 1);
+});
+
+test("a call whose hold would take the request past its budget is refused, even when nothing is committed (D17)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
+  const refused = await authorizeCall(store, call({ estimateUsd: 1.5 }));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /call produce_shot would take the request to 1.5 USD, above its 1 USD budget, so it does not start/);
+  assert.ok(refused.alerts.some((alert) => alert.scope === "request"), "the overshoot the call would cause is returned as a note");
+  assert.equal((await store.listEntries(ID.reservation)).length, 0, "a refused call holds nothing");
+  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, RESERVED, "the hold is unchanged");
+});
+
+test("a call at the request line is refused even with a zero estimate (D17)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 1 }))).status, "authorized", "1.00 fills the line exactly, so it starts");
+  const atLine = await authorizeCall(store, call({ estimateUsd: 0, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(atLine.status, "refused");
+  if (atLine.status !== "refused") return;
+  assert.match(atLine.reason, /the request has committed 1 USD, at or above its 1 USD budget, so no paid call starts/);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1, "only the first call is recorded");
+});
+
+test("the workspace month line: a hold that would take the month past it is refused, and a zero-estimate call at the line is refused (D17)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
+  const over = await authorizeCall(store, call({ estimateUsd: 1.5 }));
+  assert.equal(over.status, "refused", "nothing is committed, but the hold would take the month to 1.50 USD");
+  if (over.status !== "refused") return;
+  assert.match(over.reason, /call produce_shot would take the workspace month to 1.5 USD, above its 1 USD budget, so it does not start/);
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 1, idempotencyKey: "produce:shot_2:1" }))).status, "authorized", "1.00 fills the month line exactly");
+  const atLine = await authorizeCall(store, call({ estimateUsd: 0, idempotencyKey: "produce:shot_3:1" }));
+  assert.equal(atLine.status, "refused");
+  if (atLine.status !== "refused") return;
+  assert.match(atLine.reason, /the workspace month has committed 1 USD, at or above its 1 USD budget, so no paid call starts/);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1, "only the call that fits is recorded");
 });
 
 test("a reservation that records no budget refuses an overrun of its hold in cap mode, and allows a call inside it (fail closed)", async () => {

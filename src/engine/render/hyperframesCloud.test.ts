@@ -409,17 +409,17 @@ describe("renderComposition: budget, idempotency, integrity", () => {
 
   it("makes no request and writes no entry when the budget line refuses the render", async () => {
     const { ledger, reservationId } = await reservedLedger(0.001);
-    // A paid call committed past the 0.001 USD line: the render starts at the line, so the budget refuses it (D12).
+    // A paid call that fills the 0.001 USD line exactly: the render starts at the line, so the budget refuses it (D12, D17).
     const earlier = await authorizeCall(ledger, {
       reservationId,
       stage: "produce_shot",
       provider: "openrouter",
       model: "fixture-model",
-      estimateUsd: 0.002,
-      idempotencyKey: "earlier-call-past-the-line",
+      estimateUsd: 0.001,
+      idempotencyKey: "earlier-call-at-the-line",
       at: "2026-10-13T09:00:30.000Z",
     });
-    assert.equal(earlier.status, "authorized", "the earlier call started below the line");
+    assert.equal(earlier.status, "authorized", "the earlier call's hold fits the 0.001 USD line exactly, so it starts");
     const { transport, seen } = scripted([]);
     await assert.rejects(
       renderComposition(renderRequest(reservationId), deps(transport, ledger)),

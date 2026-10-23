@@ -16,7 +16,7 @@ function input(overrides: Partial<ReserveInput> = {}): ReserveInput {
 }
 
 function call(overrides: Partial<CallInput> = {}): CallInput {
-  return { reservationId: ID.reservation, stage: "produce_shot", provider: "openrouter", model: "seedance-2.0-mini", estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1", at: "2026-10-13T09:01:00.000Z", ...overrides };
+  return { reservationId: ID.reservation, stage: "produce_shot", provider: "openrouter", model: "fixture-model", estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1", at: "2026-10-13T09:01:00.000Z", ...overrides };
 }
 
 test("a plan one cent above the request budget is held with a note, and its calls are gated by the line", async () => {
@@ -27,28 +27,28 @@ test("a plan one cent above the request budget is held with a note, and its call
   assert.equal((await authorizeCall(store, call({ estimateUsd: 0.2 }))).status, "authorized", "0.00 committed is below the line, so the call starts");
 });
 
-test("a call starts below the request budget and is refused at it, for a plan that is above the budget", async () => {
+test("a call starts only if its hold fits under the request budget, for a plan that is above the budget (D17)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 0.5 }));
-  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.2, idempotencyKey: "produce:shot_1:1" }))).status, "authorized");
-  const second = await authorizeCall(store, call({ estimateUsd: 0.4, idempotencyKey: "produce:shot_2:1" }));
-  assert.equal(second.status, "authorized", "0.20 committed is below the 0.50 line, so the call starts");
-  if (second.status === "authorized") {
-    assert.ok(second.alerts.some((alert) => alert.scope === "request"), "the call takes the request past its budget, and that is recorded");
-  }
-  const refused = await authorizeCall(store, call({ estimateUsd: 0.2, idempotencyKey: "produce:shot_3:1" }));
-  assert.equal(refused.status, "refused", "0.60 committed is at or past the 0.50 line");
-  assert.equal((await store.listEntries(ID.reservation)).length, 2, "the refused call records nothing");
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.2, idempotencyKey: "produce:shot_1:1" }))).status, "authorized", "0.20 more fits under the 0.50 line");
+  const over = await authorizeCall(store, call({ estimateUsd: 0.4, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(over.status, "refused", "0.20 is committed, below the 0.50 line, but 0.40 more would take the request to 0.60");
+  const fills = await authorizeCall(store, call({ estimateUsd: 0.3, idempotencyKey: "produce:shot_3:1" }));
+  assert.equal(fills.status, "authorized", "0.30 more fills the 0.50 line exactly");
+  const atLine = await authorizeCall(store, call({ estimateUsd: 0, idempotencyKey: "produce:shot_4:1" }));
+  assert.equal(atLine.status, "refused", "0.50 is committed, at the line, so even a zero-estimate call is refused");
+  assert.equal((await store.listEntries(ID.reservation)).length, 2, "the refused calls record nothing");
 });
 
-test("a row stored with the retired allowance fields keeps its line at the budget: the allowance does not widen it", async () => {
+test("a row stored with the retired allowance fields keeps its line at the budget: the allowance does not widen it (D17)", async () => {
   const store = memoryLedgerStore();
   const reserved = await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
   // A row written before contract v11 carries its allowance: the budget of 1.00 plus a tolerance of 0.25.
   await store.updateReservation({ ...reserved.reservation, requestAllowanceUsd: 1.25 });
-  assert.equal((await authorizeCall(store, call({ estimateUsd: 1.1 }))).status, "authorized", "0.00 committed is below the 1.00 line");
-  const refused = await authorizeCall(store, call({ estimateUsd: 0.1, idempotencyKey: "produce:shot_4:1" }));
-  assert.equal(refused.status, "refused", "1.10 committed is past the 1.00 line, although it is inside the old allowance of 1.25");
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 1.1 }))).status, "refused", "a hold of 1.10 would take the request past the 1.00 line, though the old allowance was 1.25");
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_4:1" }))).status, "authorized", "0.90 fits under the 1.00 line");
+  const refused = await authorizeCall(store, call({ estimateUsd: 0.2, idempotencyKey: "produce:shot_5:1" }));
+  assert.equal(refused.status, "refused", "0.90 committed and 0.20 more is 1.10, past the 1.00 line, although inside the old allowance of 1.25");
 });
 
 test("the pre-flight hold above a budget is held with a note, not paused, at intake", async () => {
