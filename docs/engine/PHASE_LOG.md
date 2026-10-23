@@ -845,7 +845,7 @@ budgets (`budget/tolerance.ts`: the larger of a percentage and cents; reservatio
 budgets (copy, creative, voice; migration 0116); B4 the model brief (`prompts/model_brief@1.md`), the candidates the engine can price, and
 `orchestrator_plan@3`; B5 the composer's category budgets and own-inputs mode, the approval of a paused plan's budget, and the policy
 panel, with a browser check that found and fixed a Node-only import in the client bundle; B6 documents (CLAUDE.md rule 3, the handoff's
-rule 7, Bible 14.1, the factory's autonomy table); B7 gates.
+rule 7, Bible 14.1, the factory's autonomy table); B7 gates. On the final tree: `npm test` passes (script tests 160 of 160; source tests 6138, of which 6097 pass, 0 fail and 41 skipped as environment-gated), typecheck and build pass, and lint has 0 errors and four warnings that predate this run.
 
 Not done, or open: a queued asset's estimate is held only for its own run, so an allowance can be passed by a queued asset until its poll
 settles it (a gap for the total and each category; the fix needs the estimate on the asset job row). The brand-level policy the direction

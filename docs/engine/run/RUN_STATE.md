@@ -124,3 +124,11 @@ Governing plan: `REPLAN_2026-10-23.md`. Decisions: `DECISIONS_2026-10-23.md`. Br
   - Checked in the browser: the composer shows the "Start from" choice and the category budgets; "My own inputs" makes the format optional and the inputs required; the policy panel shows the initial values (10 percent, 25 cents, Veo off); a save shows "Saved", persists across a reload, and was put back to 10.
   - Screenshots in `docs/feature-screens/` (`orchestrator-composer` and `orchestrator-policy`, before and after, desktop and phone), with a section in the folder's README. The before side is the base `19223045`, run as a detached checkout that was removed afterwards.
   - Not checked: a plan's approval block (a paused plan needs the orchestrator's call, which needs a provider key); a live plan or run; the server path of the approval from the browser (its engine path is tested in `approval.test.ts`).
+- 2026-10-23. B6 documents and B7 final gates.
+  - B6: CLAUDE.md rule 3, the handoff's rule 7, Bible 14.1 (the reserve step and the cap mode), and the factory's autonomy table now say soft limits with a tolerance and an approval beyond the allowance. The phase log and the roadmap record the run. The 2026-10-20 plan is left as written. Commit `26947cf9`.
+  - Final gates, on the tree of `26947cf9` (no file changed after the full run started):
+    - `npm test`: script tests 160 of 160 pass. Source tests 6138, of which 6097 pass, 0 fail and 41 skipped as environment-gated. Exit 0.
+    - `npm run typecheck`: exit 0.
+    - `npm run lint`: 0 errors. Four warnings, in `market/intelligence-whitespace.tsx`, `page-commands.tsx` and `studio/direction-step.tsx`, none of them in a file this run changed.
+    - `npm run build`: exit 0. The migrate step skips with no `DATABASE_URL`; the PGlite fallback migrates itself.
+  - Not run, and why: a live run and a live planning call, since no provider key is set in this environment.
