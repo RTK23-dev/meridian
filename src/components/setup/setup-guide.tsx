@@ -3,7 +3,7 @@ import { CircleCheck, CircleDashed, Circle } from "lucide-react";
 import type { ReactNode } from "react";
 import { Button, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
-import { KeyForm } from "@/components/settings/setup-panel";
+import { KeyForm, TestConnection } from "@/components/settings/setup-panel";
 import { setupRows, type SetupEngines, type SetupInput, type SetupRow, type SetupStatus } from "@/components/settings/setup-model";
 import { hasRole } from "@/lib/meridian/access";
 import { useDecisionEnginesQuery, useProviderSettingsQuery } from "@/lib/query/hooks";
@@ -277,6 +277,7 @@ function RowList({
                 </div>
               </details>
             ) : null}
+            {row.testable && canAdmin ? <TestConnection row={row} organizationId={organizationId} /> : null}
           </div>
         );
       })}

@@ -210,7 +210,7 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
  * Test Connection for a row that offers it. The server reads the key through the resolver and calls no provider, so the
  * answer is never shown as a pass unless the server says READY.
  */
-function TestConnection({ row, organizationId }: { row: SetupRow; organizationId: string }) {
+export function TestConnection({ row, organizationId }: { row: SetupRow; organizationId: string }) {
   const [result, setResult] = useState<{ status: string; message: string } | null>(null);
   const test = useScopedMutation({
     mutationKey: ["mutation", "setup.key.test", organizationId, row.id],
