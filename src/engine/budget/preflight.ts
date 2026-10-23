@@ -5,8 +5,9 @@
 // estimate_reserve then raises that same reservation to the full plan estimate, plus the redo allowance: extendReservation.
 // The fixed lines stay inside the plan's lines, because the plan's lines include them.
 //
-// Both steps check the request budget and the workspace month. In cap mode, either one that would be exceeded pauses the
-// request instead of failing it. A reservation is never lowered below what it has committed.
+// Both steps note a hold that is above the request budget or the workspace month. A note is never a refusal: a budget is a line
+// (owner direction 2026-10-23, D12), and a call starts only while its line is below the budget (reserve.ts, authorizeCall).
+// A reservation is never lowered below what it has committed.
 
 import { z } from "zod";
 import {
@@ -24,8 +25,7 @@ import {
   type ScenePlan,
 } from "../contracts/index.ts";
 import { estimatePlan, fixedBudgetLines, type ChosenCallPrices } from "./estimate.ts";
-import { committedFor, type BudgetAlert, type ReserveResult } from "./reserve.ts";
-import { allowanceUsd, INITIAL_BUDGET_TOLERANCE, type BudgetTolerance } from "./tolerance.ts";
+import { committedFor, overBudgetNote, type BudgetAlert, type ReserveResult } from "./reserve.ts";
 import type { LedgerStore } from "./store.ts";
 
 const RESERVE_FIXED_STAGE = "intake";
@@ -58,10 +58,10 @@ function modeIn(value: unknown, stage: string): BudgetMode {
   return parsed.data;
 }
 
-type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string; tolerance: BudgetTolerance };
-type LimitsInput = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string; tolerance?: BudgetTolerance };
+type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string };
+type LimitsInput = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string };
 
-/** The two budgets, the time and the overrun tolerance, checked. `now` decides the workspace month, as in reserve(). */
+/** The two budgets and the time, checked. `now` decides the workspace month, as in reserve(). */
 function limitsIn(input: LimitsInput, stage: string): Limits {
   const request = usdSchema.safeParse(input.requestBudgetUsd);
   if (!request.success) throw invalid("requestBudgetUsd must be a USD amount, finite, >= 0, at most 4 decimals", stage);
@@ -69,37 +69,18 @@ function limitsIn(input: LimitsInput, stage: string): Limits {
   if (!month.success) throw invalid("workspaceMonthBudgetUsd must be a USD amount, finite, >= 0, at most 4 decimals", stage);
   const time = z.iso.datetime().safeParse(input.now);
   if (!time.success) throw invalid("now must be an ISO time", stage);
-  return { requestBudgetUsd: request.data, workspaceMonthBudgetUsd: month.data, now: time.data, tolerance: input.tolerance ?? INITIAL_BUDGET_TOLERANCE };
+  return { requestBudgetUsd: request.data, workspaceMonthBudgetUsd: month.data, now: time.data };
 }
 
 /**
- * The overruns of a reservation that would hold `holdUsd` for the request and bring the workspace month to `monthUsd`.
- * The messages match reserve() so that the reasons read the same wherever they appear.
+ * The notes of a hold that is above a budget (D12): an alert for each budget it is above. A note is never a refusal. The messages match
+ * reserve() so that the notes read the same wherever they appear.
  */
-function limitReasons(limits: Limits, holdUsd: number, monthUsd: number): { reasons: string[]; alerts: BudgetAlert[] } {
-  const requestAllowance = allowanceUsd(limits.requestBudgetUsd, limits.tolerance);
-  const monthAllowance = allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance);
-  const reasons: string[] = [];
+function budgetNotesOf(limits: Limits, holdUsd: number, monthUsd: number): BudgetAlert[] {
   const alerts: BudgetAlert[] = [];
-  // An alert marks an overrun of the budget itself. A reason (which pauses cap mode) needs an overrun past the allowance.
-  if (holdUsd > limits.requestBudgetUsd) {
-    const message = `request budget ${limits.requestBudgetUsd} USD is below the reservation of ${holdUsd} USD`;
-    if (holdUsd > requestAllowance) reasons.push(`${message}, past its allowance of ${requestAllowance} USD (the budget plus its tolerance)`);
-    alerts.push({ kind: "overrun", scope: "request", limitUsd: limits.requestBudgetUsd, committedUsd: holdUsd, message });
-  }
-  if (monthUsd > limits.workspaceMonthBudgetUsd) {
-    const message = `workspace monthly budget ${limits.workspaceMonthBudgetUsd} USD would be exceeded: ${monthUsd} USD committed`;
-    if (monthUsd > monthAllowance) reasons.push(`${message}, past its allowance of ${monthAllowance} USD (the budget plus its tolerance)`);
-    reasons.push(message);
-    alerts.push({
-      kind: "overrun",
-      scope: "workspace_month",
-      limitUsd: limits.workspaceMonthBudgetUsd,
-      committedUsd: monthUsd,
-      message,
-    });
-  }
-  return { reasons, alerts };
+  if (holdUsd > limits.requestBudgetUsd) alerts.push(overBudgetNote("request", holdUsd, limits.requestBudgetUsd));
+  if (monthUsd > limits.workspaceMonthBudgetUsd) alerts.push(overBudgetNote("workspace_month", monthUsd, limits.workspaceMonthBudgetUsd));
+  return alerts;
 }
 
 export type ReserveFixedInput = {
@@ -114,17 +95,14 @@ export type ReserveFixedInput = {
   now: string;
   /** Pass an id to make the call idempotent: a second call with the same id returns the first reservation. */
   reservationId?: string;
-  /** The overrun tolerance on both budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
-  tolerance?: BudgetTolerance;
 };
 
 /**
  * The pre-flight hold (intake). It holds the fixed per-master lines only (budgets.fixedPerMasterUsd, 14.2), with no redo
- * allowance and no shot lines. It is checked against the request budget and the workspace month.
- * - cap: a hold that would exceed either is stored as paused, with the reasons. A paused hold holds nothing.
- * - warn: it is held and an overrun alert is returned.
- * - observe: it is held and recorded; no alert.
- * Idempotent on reservationId: a repeated call returns the stored reservation and stores nothing.
+ * allowance and no shot lines. A hold above a budget is held with a note (D12): calls are gated by their line, not by the hold.
+ * - cap and warn: it is held and the notes are returned.
+ * - observe: it is held and recorded; no note.
+ * Idempotent on reservationId: a repeated call returns the stored reservation and stores nothing new.
  */
 export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput): Promise<ReserveResult> {
   const stage = RESERVE_FIXED_STAGE;
@@ -144,8 +122,7 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
   const lines = fixedBudgetLines();
   const fixedUsd = sumUsd(lines.map((line) => line.estimateUsd));
   const totals = await store.sumForMonth(workspaceId, limits.now.slice(0, 7));
-  const { reasons, alerts } = limitReasons(limits, fixedUsd, sumUsd([totals.reservedUsd, fixedUsd]));
-  const paused = mode === "cap" && reasons.length > 0;
+  const alerts = budgetNotesOf(limits, fixedUsd, sumUsd([totals.reservedUsd, fixedUsd]));
 
   const reservation: BudgetReservation = budgetReservationSchema.parse({
     schema: "meridian.budget_reservation/v1",
@@ -159,10 +136,7 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
     reservedUsd: fixedUsd,
     requestBudgetUsd: limits.requestBudgetUsd,
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
-    requestAllowanceUsd: allowanceUsd(limits.requestBudgetUsd, limits.tolerance),
-    workspaceMonthAllowanceUsd: allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance),
-    state: paused ? "paused" : "reserved",
-    ...(paused ? { pausedReason: reasons.join("; ") } : {}),
+    state: "reserved",
     createdAt: limits.now,
   });
   await store.createReservation(reservation);
@@ -180,15 +154,11 @@ export type ExtendReservationInput = {
   now: string;
   /** The catalog prices of the calls whose model the orchestrator chose (Bible 10.5). Absent: every call is priced from the price table. */
   chosenPrices?: ChosenCallPrices;
-  /** The overrun tolerance on both budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
-  tolerance?: BudgetTolerance;
 };
 
 export type ExtendResult =
-  /** The hold is the plan's estimate (or it was already). `changed` is false when nothing was written. */
+  /** The hold is the plan's estimate (or it was already). `changed` is false when nothing was written. A hold above a budget is noted. */
   | { status: "extended"; reservation: BudgetReservation; changed: boolean; alerts: BudgetAlert[] }
-  /** Cap mode and a budget would be exceeded. Nothing is written: the reservation keeps its current hold and state. */
-  | { status: "paused"; reservation: BudgetReservation; reasons: string[]; alerts: BudgetAlert[] }
   /** The reservation cannot be extended: it is not reserved, it is from another month, or the plan is below the commitment. */
   | { status: "refused"; reservation: BudgetReservation; reason: string };
 
@@ -198,8 +168,7 @@ export type ExtendResult =
  * - The hold is never lowered: it is the larger of the plan's amount and what it holds already.
  * - A plan amount below what the reservation has committed is refused. The plan does not cover what was already spent.
  * - A reservation that is paused or released is refused: it holds nothing and is not revived here.
- * - In cap mode, a raise that would exceed the request budget or the workspace month pauses (nothing is written). In warn mode
- *   it is written with an overrun alert. In observe mode it is written silently.
+ * - A hold above a budget is written with a note (D12). Calls are gated by their line, not by the hold.
  * - An unknown price or an invalid plan throws before anything is read or stored.
  * Idempotent: extending again with the same plan writes nothing.
  */
@@ -252,18 +221,12 @@ export async function extendReservation(store: LedgerStore, input: ExtendReserva
     reservedUsd: holdUsd,
     requestBudgetUsd: limits.requestBudgetUsd,
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
-    requestAllowanceUsd: allowanceUsd(limits.requestBudgetUsd, limits.tolerance),
-    workspaceMonthAllowanceUsd: allowanceUsd(limits.workspaceMonthBudgetUsd, limits.tolerance),
   });
 
   // The month total already includes this reservation at its current hold. Swap that for the new hold.
   const totals = await store.sumForMonth(current.workspaceId, month);
   const otherReservationsUsd = roundUsd(Math.max(0, totals.reservedUsd - current.reservedUsd));
-  const { reasons, alerts } = limitReasons(limits, holdUsd, sumUsd([otherReservationsUsd, holdUsd]));
-
-  if (current.mode === "cap" && reasons.length > 0) {
-    return { status: "paused", reservation: current, reasons, alerts };
-  }
+  const alerts = budgetNotesOf(limits, holdUsd, sumUsd([otherReservationsUsd, holdUsd]));
 
   const changed = canonicalJson(next) !== canonicalJson(current);
   if (changed) {

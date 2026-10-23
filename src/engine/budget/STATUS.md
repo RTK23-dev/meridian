@@ -1,5 +1,70 @@
 # STATUS
 
+## The budget is a line (D12, contract v11; owner direction 2026-10-23)
+
+Branch `feat/budget-line-engine`, from `run/orchestrator-budgets-2026-10-23` (6862bb52). Committed, not pushed; the lead merges.
+
+- **`reserve.ts`.** `reserve()` has no tolerance input. A plan above a budget is held with a note (`overBudgetNote`, scope `request` or
+  `workspace_month`), never paused. `authorizeCall`, cap mode: a call is refused only when, before it, the reservation's `committedFor`
+  is at or above its request budget, or the month's reserved total (`sumForMonth`) is at or above its month budget, or when the
+  reservation records no budget and the call overruns its hold (fail closed). Both tests use `startsBelowLine` from `line.ts`. A call that
+  starts raises its hold to what it takes it to and returns its overrun as alerts. In cap mode that is new: before, only warn returned
+  them. Observe still returns none.
+- **`preflight.ts`.** `reserveFixed` and `extendReservation` hold above a budget with notes. `ExtendResult` loses its `paused` variant,
+  since nothing is refused for its size. Neither writes the allowance fields. `limitReasons` is replaced by `budgetNotesOf`.
+- **`estimate.ts`.** No change: it never had a tolerance. The quote's `fits` (`api/index.ts`) already compares with the strict budget, so
+  it already means "within the budget".
+- **`tolerance.ts`.** Not edited, not deleted. The orchestrator still imports it. `tolerance.test.ts` is unchanged.
+- **Contract v11.** `contracts/ledger.ts`: the two allowance fields were already optional; their comments now say D12 retired them.
+  `version.ts` is `engine-contracts@11`. Bible section 4 has the v11 note, with lead approval pending. `contracts/STATUS.md` is not
+  updated, because it belongs to eng-contracts.
+- **Jobs and the orchestrator's two lines.** See `jobs/STATUS.md`.
+
+**Tests.** Budget folder: 147 (was 143), all pass. `reserve.test.ts` 32 (was 26), `tolerance-admission.test.ts` 5 (was 7; rewritten in
+place, and its name kept because no file is deleted), `contracts/v11.test.ts` 5 (new). The wider run (budget, jobs, contracts, config,
+gateway, assets, variants, render, media speech-to-text, api index, deliver, voice; 122 files) passes 1512 (was 1502). `npm run typecheck`
+passes, and `npx eslint` passes on the 24 changed files. The full `npm test` was not run; the lead runs it at merge.
+
+**Decisions for the lead (not resolved in code).**
+
+1. **The month line counts holds.** `authorizeCall` reads the month's reserved total from `sumForMonth`, the figure `reserve()` has always
+   used. Every open plan counts at its full hold, so a plan whose estimate reaches the month budget refuses its first call, though nothing
+   is committed (`reserve.test.ts`, "a call is refused once the workspace month holds its budget"). D12 counts committed spend: settled,
+   plus the holds of calls in flight or failed. A committed month total needs a new `LedgerStore` method and a query in
+   `jobs/sql-ledger-store.ts`. The brief did not list either, so neither is built.
+2. **`exceeded` stops calls below the line.** `reconcile.ts:129-137` (`settleAndCheck`): in cap mode a verified bill that takes committed
+   above the reservation's hold sets `state: "exceeded"`. `authorizeCall` then refuses every later call on that state (`reserve.ts`, the
+   `state !== "reserved"` check). Reproduced in a scratch script: a hold of 0.9595, a call of 0.20 authorized, a bill of 1.10 that sets
+   `exceeded`, and the next call (committed 1.10, budget 4.00) is refused as "is exceeded". That breaks "refused only at the line". Not
+   changed: reconcile is not in the list, and `exceeded` is a contract v6 state with its own meaning (`contracts/ledger.ts`).
+3. **A field is kept for the orchestrator.** `WorkspaceMonthBudget.tolerance?` (`jobs/handlers/estimate-reserve.ts`) stays optional and is
+   never set by the brief path. `orchestrator/run-budget.ts:56` and `orchestrator/service.ts:117` read it. Removing it breaks the
+   orchestrator's typecheck, which is outside this change. Those reads get the value the envelope already carries from the same policy row,
+   so behaviour is unchanged. The orchestrator change removes the field.
+
+**Doubts and bugs.**
+
+- `reserve.ts`, cap-mode `authorizeCall`: the hold is raised before `appendEntry` and again after it. If the append finds a duplicate key
+  (a race), the hold stays raised with no entry. Pre-existing; left as it was.
+- `api/index.ts:402-404` (remake): the `state !== "reserved"` guard can no longer refuse for a budget. The file is on the leave-alone list
+  (redo allowance), so it is unchanged.
+- The request line is per reservation: `committedFor` counts one reservation. A remake opens its own reservation (`api/index.ts:392`),
+  whose committed amount starts at zero, so a request's spend is not checked across its reservations. `reserve()` did not check the total
+  before this change either.
+- `jobs/handlers/intake.ts` still rejects a request whose budget is below the fixed lines (`budget_covers_fixed_lines`, $0.52). That is a
+  request minimum, not a hold, so it is kept. Say if it should become a note.
+- A reservation paused before v11 stays paused, with no migration: `authorizeCall` refuses it.
+- D12's own open items, unchanged: a single step larger than the remaining budget still starts (the non-strict reading, as D12 writes
+  it); two reservations in one month can each start a call at the same moment, because the month is read under the reservation lock only.
+- Still carrying tolerance, outside this change: `orchestrator/{envelope,service,run-budget,run,policy-store,validate,api}.ts` (use
+  `tolerance.ts`); `src/components/content-factory/orchestrator-policy-panel.tsx` (shows and edits it); `src/lib/meridian/orchestrator/actions.ts`
+  (accepts it); `src/engine/prompts/orchestrator_plan@3.md:19` and `src/engine/claude/roles/orchestrator_plan.ts:45` (describe it). None is
+  changed.
+
+**Quality: 3 of 5.** The line is built, tested at each boundary, and the code is smaller than before. Two items conflict with the rule as
+written (`exceeded`, and the month measure), and the kept field departs from "remove the tolerance". The lead needs to decide all three
+before merge.
+
 ## Bill reads of held calls are tracked and bounded (contract v9, migration 0112)
 
 Fixes the strain: `reconcileHolds` used to read every held call's bill on every run, forever, and rows with no providerRef filled the

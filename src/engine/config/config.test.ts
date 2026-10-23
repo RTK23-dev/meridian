@@ -47,8 +47,8 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 10 (the catalog's listed durations, Bible section 4 v10 note)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@10");
+test("the contract set is at version 11 (the budget line, Bible section 4 v11 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@11");
 });
 
 test("the speech targets name no model (the live catalog chooses one, Bible 10.5), and each keeps its price key", () => {

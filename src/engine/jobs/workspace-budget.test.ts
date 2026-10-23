@@ -4,18 +4,15 @@ import { workspaceBudgetFromSettings } from "./workspace-budget.ts";
 
 const scope = { organizationId: "org_1", requestId: "req_1", now: "2026-10-14T20:00:00.000Z" };
 
-test("a budget set in Settings is known, with the overrun tolerance the workspace policy gives", async () => {
-  const source = workspaceBudgetFromSettings(async () => 250, async () => ({ percent: 5, cents: 10 }));
-  assert.deepEqual(await source.monthBudget(scope), { status: "known", usd: 250, tolerance: { percent: 5, cents: 10 } });
+test("a budget set in Settings is known, as a line with no tolerance (D12)", async () => {
+  const source = workspaceBudgetFromSettings(async () => 250);
+  assert.deepEqual(await source.monthBudget(scope), { status: "known", usd: 250 });
 });
 
-test("with no tolerance reader, the initial tolerance is used, and a failed tolerance read is not connected", async () => {
-  assert.deepEqual(await workspaceBudgetFromSettings(async () => 250).monthBudget(scope), {
-    status: "known",
-    usd: 250,
-    tolerance: { percent: 10, cents: 25 },
-  });
-  const failed = await workspaceBudgetFromSettings(async () => 250, async () => { throw new Error("no policy row"); }).monthBudget(scope);
+test("a read that fails is not connected, and nothing is reserved", async () => {
+  const failed = await workspaceBudgetFromSettings(async () => {
+    throw new Error("no policy row");
+  }).monthBudget(scope);
   assert.equal(failed.status, "not_connected");
 });
 

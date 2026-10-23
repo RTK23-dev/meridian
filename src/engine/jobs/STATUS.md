@@ -1,5 +1,24 @@
 # STATUS: engine jobs and orchestration (W2)
 
+## The budget is a line (D12, contract v11; branch `feat/budget-line-engine`)
+
+The budget call sites of the brief path follow `budget/STATUS.md`, which has the decisions and the open items.
+
+- `workspace-budget.ts`: `workspaceBudgetFromSettings(read)` takes one argument. `ToleranceReader` and `meridianToleranceReader` are
+  removed, and so is the import of the orchestrator policy reader that only the tolerance used. `monthBudget` returns `{ status: "known", usd }`.
+- `runtime.ts`: the production source is built from the monthly reader alone.
+- `handlers/estimate-reserve.ts`: `extendForPlan` takes no tolerance. The `paused` outcome is gone: a raise above a budget is written with a
+  note, and the stage passes its gate. `WorkspaceMonthBudget.tolerance?` is kept as an optional, never-set field, because the orchestrator
+  still reads it (`budget/STATUS.md`, decision 3).
+- `handlers/intake.ts`: a pre-flight hold above a budget is held with a note, not paused. A workspace month that is not connected, or a
+  refused hold, still pauses the request (`budgetPause`).
+- `sql-ledger-store.ts`: no migration. The two allowance columns stay. The mapping was already optional, and a reservation written from v11
+  stores `null` in them; a comment says so. `sql-ledger-store.test.ts` reads back a row with the columns set and a row without them.
+- `orchestrator/api.ts`: only the import and the two `workspaceBudgetFromSettings` calls, as the brief allowed.
+- Tests: the over-budget cases in `handlers/intake.test.ts`, `estimate-reserve.test.ts`, `estimate-chosen.test.ts` and
+  `estimate-chosen-stage.test.ts` assert a note and a pass, not a pause or a refusal. `workspace-budget.test.ts` (5) drops the tolerance
+  reader cases. `sql-ledger-store.test.ts` (9, was 8) asserts the line and adds the mapping test.
+
 ## Call telemetry (migration 0112; branch `telemetry-capture-agent`, 2026-10-22)
 
 - `call-telemetry-sql.ts` (new): the telemetry store for a budget transaction. It writes one `engine_call_telemetry` row under a savepoint,

@@ -161,7 +161,7 @@ test("without a catalog the same plan is priced from the price table, and the ot
   assert.notEqual(line?.provider, `openrouter:${MODEL}`, "no catalog: the price table prices the call");
 });
 
-test("in cap mode a chosen total above the request budget refuses the stage with the reason, and returns no reservation id", async () => {
+test("in cap mode a chosen total above the request budget is held with a note: the gate passes, and calls are gated by the line (D12)", async () => {
   const hold = fixtureId("res_", 815);
   await holdAs(hold, 1);
   const plan = planFixture();
@@ -172,10 +172,8 @@ test("in cap mode a chosen total above the request budget refuses the stage with
   const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, catalog: catalogOf(50) });
   const result = await handler.run(stageContext([planId, requestId, choicesId], hold));
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate output");
-  assert.equal(result.output.gate.pass, false);
-  assert.equal(result.output.budgetReservationId, null, "no reservation id: the orchestrator pauses on budget and nothing runs");
-  assert.match(result.output.gate.checks.find((item) => item.rule === "reservation_succeeded")?.detail ?? "", /request budget 1 USD is below the reservation/);
-  assert.match(result.output.gate.checks.find((item) => item.rule === "reservation_succeeded")?.detail ?? "", /priced at the chosen model's catalog price/);
+  assert.equal(result.output.gate.pass, true, "a chosen total above the budget is held, not refused");
+  assert.equal(result.output.budgetReservationId, hold, "the reservation id is returned");
   const row = await db.sql<{ reserved_usd: unknown }>`select reserved_usd from engine_reservations where organization_id = ${WS} and id = ${hold}`;
-  assert.ok(Number(row[0]?.reserved_usd) < 1, "the hold keeps its pre-flight amount");
+  assert.ok(Number(row[0]?.reserved_usd) > 1, "the hold is the chosen total, above the 1 USD budget");
 });

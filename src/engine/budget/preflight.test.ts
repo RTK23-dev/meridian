@@ -15,8 +15,6 @@ import { authorizeCall } from "./reserve.ts";
 import { memoryLedgerStore, type LedgerStore } from "./store.ts";
 
 const NOW = "2026-10-13T09:00:00.000Z";
-/** No tolerance: these cases test the exact budget boundary. The tolerance cases are in tolerance-admission.test.ts. */
-const STRICT = { percent: 0, cents: 0 };
 const WORKSPACE = "ws_fixture";
 const SECOND_RESERVATION = "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X";
 const THIRD_RESERVATION = "res_01J9ZK3M4N5P6Q7R8S9T0V1W3Y";
@@ -35,7 +33,6 @@ function fixedInput(overrides: Partial<ReserveFixedInput> = {}): ReserveFixedInp
     workspaceMonthBudgetUsd: 100,
     now: NOW,
     reservationId: ID.reservation,
-    tolerance: STRICT,
     ...overrides,
   };
 }
@@ -47,7 +44,6 @@ function extendInput(overrides: Partial<ExtendReservationInput> = {}): ExtendRes
     requestBudgetUsd: 4,
     workspaceMonthBudgetUsd: 100,
     now: NOW,
-    tolerance: STRICT,
     ...overrides,
   };
 }
@@ -100,14 +96,15 @@ test("the pre-flight hold fits: it holds the fixed per-master lines only, at the
   budgetReservationSchema.parse(result.reservation);
 });
 
-test("a pre-flight hold over the request budget pauses in cap mode, names the reason, and holds nothing", async () => {
+test("a pre-flight hold over the request budget is held with a note, not paused: calls are gated by their line (D12)", async () => {
   const store = memoryLedgerStore();
   const result = await reserveFixed(store, fixedInput({ requestBudgetUsd: 0.4 }));
-  assert.equal(result.reservation.state, "paused");
-  assert.match(result.reservation.pausedReason ?? "", /request budget 0.4 USD is below the reservation of 0.52 USD/);
-  assert.equal(result.reservation.reservedUsd, FIXED, "a paused hold says what it would hold");
+  assert.equal(result.reservation.state, "reserved");
+  assert.equal(result.reservation.pausedReason, undefined);
+  assert.equal(result.reservation.reservedUsd, FIXED);
   assert.equal(result.alerts[0]?.scope, "request");
-  assert.deepEqual(await store.sumForMonth(WORKSPACE, "2026-10"), { reservedUsd: 0, actualUsd: 0 });
+  assert.match(result.alerts[0]?.message ?? "", /the request would hold 0.52 USD, above its 0.4 USD budget/);
+  assert.equal((await store.sumForMonth(WORKSPACE, "2026-10")).reservedUsd, FIXED, "the hold counts in the month");
 });
 
 test("a pre-flight hold over the request budget is held with an alert in warn mode", async () => {
@@ -126,20 +123,22 @@ test("a pre-flight hold over the request budget is recorded silently in observe 
   assert.deepEqual(result.alerts, []);
 });
 
-test("a pre-flight hold that takes the workspace month over its budget pauses in cap mode, with the monthly reason", async () => {
+test("a pre-flight hold that takes the workspace month over its budget is held with a monthly note, not paused", async () => {
   const store = memoryLedgerStore();
   await reserveFixed(store, fixedInput({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 0.8 }));
   const second = await reserveFixed(store, fixedInput({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 0.8 }));
-  assert.equal(second.reservation.state, "paused");
-  assert.match(second.reservation.pausedReason ?? "", /workspace monthly budget 0.8 USD would be exceeded: 1.04 USD committed/);
+  assert.equal(second.reservation.state, "reserved");
+  assert.equal(second.reservation.pausedReason, undefined);
+  assert.match(second.alerts[0]?.message ?? "", /the workspace month would hold 1.04 USD, above its 0.8 USD budget/);
   assert.equal(second.alerts[0]?.scope, "workspace_month");
 });
 
-test("a month that fits exactly at its budget is not over it", async () => {
+test("a month that fits exactly at its budget is not over it, and draws no note", async () => {
   const store = memoryLedgerStore();
   await reserveFixed(store, fixedInput({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1.04 }));
   const second = await reserveFixed(store, fixedInput({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 1.04 }));
   assert.equal(second.reservation.state, "reserved");
+  assert.deepEqual(second.alerts, []);
 });
 
 test("holds from an earlier month do not count against this month", async () => {
@@ -151,13 +150,13 @@ test("holds from an earlier month do not count against this month", async () => 
     workspaceMonthBudgetUsd: FIXED,
   }));
   assert.equal(october.reservation.state, "reserved");
+  assert.deepEqual(october.alerts, []);
 });
 
-test("both budgets exceeded give both reasons", async () => {
+test("both budgets exceeded give a note each, and the hold is still reserved", async () => {
   const store = memoryLedgerStore();
   const result = await reserveFixed(store, fixedInput({ requestBudgetUsd: 0.4, workspaceMonthBudgetUsd: 0.4 }));
-  assert.equal(result.reservation.state, "paused");
-  assert.match(result.reservation.pausedReason ?? "", /request budget.*; workspace monthly budget/);
+  assert.equal(result.reservation.state, "reserved");
   assert.equal(result.alerts.length, 2);
 });
 
@@ -242,17 +241,18 @@ test("an all-code plan extends the hold to the fixed amount, with no redo allowa
   assert.equal(result.reservation.redoAllowanceUsd, 0);
 });
 
-test("a request over budget pauses the extension in cap mode: nothing is written and the hold stays as it was", async () => {
+test("a request over budget extends with a note: the hold is written, and calls are gated by their line (D12)", async () => {
   const store = memoryLedgerStore();
-  const before = await reserveFixed(store, fixedInput());
+  await reserveFixed(store, fixedInput());
   const counted = countingWrites(store);
   const result = await extendReservation(counted.store, extendInput({ requestBudgetUsd: 0.9 }));
-  assert.equal(result.status, "paused");
-  if (result.status !== "paused") return;
-  assert.match(result.reasons[0] ?? "", /request budget 0.9 USD is below the reservation of 0.9595 USD/);
-  assert.equal(result.reservation.reservedUsd, FIXED);
-  assert.equal(counted.writes(), 0);
-  assert.deepEqual(await store.getReservation(ID.reservation), before.reservation);
+  assert.equal(result.status, "extended");
+  if (result.status !== "extended") return;
+  assert.equal(result.alerts[0]?.scope, "request");
+  assert.match(result.alerts[0]?.message ?? "", /the request would hold 0.9595 USD, above its 0.9 USD budget/);
+  assert.equal(result.reservation.reservedUsd, PLAN_RESERVED);
+  assert.equal(counted.writes(), 1, "the raised hold is written");
+  assert.deepEqual(await store.getReservation(ID.reservation), result.reservation);
 });
 
 test("a request over budget is extended with an alert in warn mode", async () => {
@@ -265,14 +265,15 @@ test("a request over budget is extended with an alert in warn mode", async () =>
   assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, PLAN_RESERVED);
 });
 
-test("a workspace month over budget pauses the extension in cap mode, with the monthly reason", async () => {
+test("a workspace month over budget extends with a monthly note, and the hold is written", async () => {
   const store = memoryLedgerStore();
   await reserveFixed(store, fixedInput());
   const result = await extendReservation(store, extendInput({ workspaceMonthBudgetUsd: 0.9 }));
-  assert.equal(result.status, "paused");
-  if (result.status !== "paused") return;
-  assert.match(result.reasons.join("; "), /workspace monthly budget 0.9 USD would be exceeded: 0.9595 USD committed/);
-  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, FIXED);
+  assert.equal(result.status, "extended");
+  if (result.status !== "extended") return;
+  assert.equal(result.alerts[0]?.scope, "workspace_month");
+  assert.match(result.alerts[0]?.message ?? "", /the workspace month would hold 0.9595 USD, above its 0.9 USD budget/);
+  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, PLAN_RESERVED);
 });
 
 test("the month check counts the other holds of the month, and fits exactly at its budget", async () => {
@@ -282,15 +283,16 @@ test("the month check counts the other holds of the month, and fits exactly at i
   await reserveFixed(fits, fixedInput({ reservationId: SECOND_RESERVATION }));
   const exact = await extendReservation(fits, extendInput({ workspaceMonthBudgetUsd: 1.4795 }));
   assert.equal(exact.status, "extended");
+  if (exact.status === "extended") assert.deepEqual(exact.alerts, []);
 
   const over = memoryLedgerStore();
   await reserveFixed(over, fixedInput());
   await reserveFixed(over, fixedInput({ reservationId: SECOND_RESERVATION }));
-  const paused = await extendReservation(over, extendInput({ workspaceMonthBudgetUsd: 1.4794 }));
-  assert.equal(paused.status, "paused");
-  if (paused.status !== "paused") return;
-  assert.match(paused.reasons.join("; "), /workspace monthly budget 1.4794 USD/);
-  assert.equal((await over.getReservation(ID.reservation))?.reservedUsd, FIXED, "the other hold is not counted twice");
+  const noted = await extendReservation(over, extendInput({ workspaceMonthBudgetUsd: 1.4794 }));
+  assert.equal(noted.status, "extended");
+  if (noted.status !== "extended") return;
+  assert.match(noted.alerts[0]?.message ?? "", /the workspace month would hold 1.4795 USD, above its 1.4794 USD budget/);
+  assert.equal((await over.getReservation(ID.reservation))?.reservedUsd, PLAN_RESERVED, "the other hold is not counted twice");
 });
 
 test("a month over budget is extended with an alert in warn mode and recorded silently in observe mode", async () => {
@@ -382,9 +384,10 @@ test("the hold is never lowered below what it already holds, even when the plan 
   assert.deepEqual(result.reservation.lines, estimatePlan(componentsOnly()).lines, "the lines are the plan's");
 });
 
-test("a paused pre-flight hold is refused: it holds nothing and the plan does not revive it", async () => {
+test("a paused pre-flight hold, stored before v11, is refused: it holds nothing and the plan does not revive it", async () => {
   const store = memoryLedgerStore();
-  await reserveFixed(store, fixedInput({ requestBudgetUsd: 0.4 }));
+  const held = await reserveFixed(store, fixedInput());
+  await store.updateReservation(budgetReservationSchema.parse({ ...held.reservation, state: "paused", pausedReason: "paused before v11" }));
   const before = await store.getReservation(ID.reservation);
   const result = await extendReservation(store, extendInput());
   assert.equal(result.status, "refused");

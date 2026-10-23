@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EngineError } from "../contracts/index.ts";
+import { budgetReservationSchema, EngineError } from "../contracts/index.ts";
 import { FIXTURE_IDS as ID, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { authorizeCall, reserve, type CallInput, type ReserveInput } from "./reserve.ts";
 import { confirmAbsentCall, releaseReservation, reconcileCall } from "./reconcile.ts";
@@ -167,8 +167,10 @@ test("releasing twice is a no-op the second time, and releasing a paused reserva
   const second = await releaseReservation(store, ID.reservation);
   assert.equal(second.releasedUsd, 0);
 
+  // reserve() holds a plan above its budget as reserved (D12), so the paused state is set here, as a row stored before v11 has it.
   const paused = memoryLedgerStore();
-  await reserve(paused, reserveInput({ requestBudgetUsd: 0.5, reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X" }));
+  const held = await reserve(paused, reserveInput({ requestBudgetUsd: 0.5, reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X" }));
+  await paused.updateReservation(budgetReservationSchema.parse({ ...held.reservation, state: "paused", pausedReason: "paused before v11" }));
   const none = await releaseReservation(paused, "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X");
   assert.equal(none.releasedUsd, 0);
   assert.equal(none.reservation.state, "paused");

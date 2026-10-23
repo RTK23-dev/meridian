@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EngineError, type BudgetMode, type ScenePlan } from "../contracts/index.ts";
+import { budgetReservationSchema, EngineError, type BudgetMode, type ScenePlan } from "../contracts/index.ts";
 import { FIXTURE_IDS as ID, scenePlanFixture } from "../contracts/fixtures/index.ts";
 import { UnknownPriceError } from "./estimate.ts";
 import { authorizeCall, reserve, type CallInput, type ReserveInput } from "./reserve.ts";
@@ -8,8 +8,7 @@ import { memoryLedgerStore, type LedgerStore } from "./store.ts";
 
 const NOW = "2026-10-13T09:00:00.000Z";
 const RESERVED = 0.9595; // scenePlanFixture: estimate 0.8716 + redo allowance 0.0879
-/** No tolerance: these cases test the exact budget boundary. The tolerance cases are in tolerance-admission.test.ts. */
-const STRICT = { percent: 0, cents: 0 };
+const SECOND_RESERVATION = "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X";
 
 function input(overrides: Partial<ReserveInput> = {}): ReserveInput {
   return {
@@ -20,7 +19,6 @@ function input(overrides: Partial<ReserveInput> = {}): ReserveInput {
     requestBudgetUsd: 4,
     workspaceMonthBudgetUsd: 100,
     now: NOW,
-    tolerance: STRICT,
     ...overrides,
   };
 }
@@ -49,6 +47,15 @@ test("a reservation inside both budgets is reserved, with the plan's estimate pl
   assert.deepEqual(await store.getReservation(ID.reservation), result.reservation);
 });
 
+test("reserve writes no allowance fields: a budget is a line, not a tolerance (D12, contract v11)", async () => {
+  const store = memoryLedgerStore();
+  const result = await reserve(store, input({ reservationId: ID.reservation }));
+  assert.equal("requestAllowanceUsd" in result.reservation, false);
+  assert.equal("workspaceMonthAllowanceUsd" in result.reservation, false);
+  assert.equal(result.reservation.requestBudgetUsd, 4);
+  assert.equal(result.reservation.workspaceMonthBudgetUsd, 100);
+});
+
 test("reserving again with the same reservation id returns the first reservation and stores nothing new", async () => {
   const store = memoryLedgerStore();
   const first = await reserve(store, input({ reservationId: ID.reservation }));
@@ -58,45 +65,56 @@ test("reserving again with the same reservation id returns the first reservation
   assert.equal(again.reservation.state, "reserved");
 });
 
-test("a request whose reservation exceeds its budget is paused with a reason, not an exception", async () => {
+test("a plan above the request budget is held with a note, not paused: the budget is a line (D12)", async () => {
   const store = memoryLedgerStore();
   const result = await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 0.5 }));
-  assert.equal(result.reservation.state, "paused");
-  assert.match(result.reservation.pausedReason ?? "", /request budget 0.5 USD/);
-  assert.equal(result.reservation.reservedUsd, RESERVED, "a paused reservation says what it would hold");
-  assert.equal((await store.getReservation(ID.reservation))?.state, "paused");
+  assert.equal(result.reservation.state, "reserved");
+  assert.equal(result.reservation.pausedReason, undefined);
+  assert.equal(result.reservation.reservedUsd, RESERVED, "the hold is the plan's estimate");
+  assert.equal(result.alerts.length, 1);
+  assert.equal(result.alerts[0]?.scope, "request");
+  assert.match(result.alerts[0]?.message ?? "", /the request would hold 0.9595 USD, above its 0.5 USD budget/);
 });
 
-test("a workspace whose month would be exceeded is paused with the monthly reason", async () => {
+test("a plan that takes the workspace month over its budget is held with a monthly note, not paused", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
-  const second = await reserve(store, input({ reservationId: "res_01J9ZK3M4N5P6Q7R8S9T0V1W2X", workspaceMonthBudgetUsd: 1 }));
-  assert.equal(second.reservation.state, "paused");
-  assert.match(second.reservation.pausedReason ?? "", /workspace monthly budget 1 USD/);
+  const second = await reserve(store, input({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 1 }));
+  assert.equal(second.reservation.state, "reserved");
+  assert.equal(second.reservation.pausedReason, undefined);
+  assert.equal(second.alerts[0]?.scope, "workspace_month");
+  assert.match(second.alerts[0]?.message ?? "", /the workspace month would hold 1.919 USD, above its 1 USD budget/);
 });
 
-test("both budgets exceeded in one reservation give both reasons", async () => {
+test("both budgets exceeded give a note each, and the reservation is still reserved", async () => {
   const store = memoryLedgerStore();
   const result = await reserve(store, input({ requestBudgetUsd: 0.5, workspaceMonthBudgetUsd: 0.5 }));
-  assert.equal(result.reservation.state, "paused");
-  assert.match(result.reservation.pausedReason ?? "", /request budget.*; workspace monthly budget/);
+  assert.equal(result.reservation.state, "reserved");
+  assert.deepEqual(
+    result.alerts.map((alert) => alert.scope),
+    ["request", "workspace_month"],
+  );
 });
 
-test("paused reservations do not count against the workspace month", async () => {
+test("a paused reservation, stored before contract v11, holds nothing against the month", async () => {
   const store = memoryLedgerStore();
-  await reserve(store, input({ requestBudgetUsd: 0.5 }));
+  const first = await reserve(store, input({ reservationId: ID.reservation }));
+  await store.updateReservation(budgetReservationSchema.parse({ ...first.reservation, state: "paused", pausedReason: "paused before v11" }));
+  assert.deepEqual(await store.sumForMonth("ws_fixture", "2026-10"), { reservedUsd: 0, actualUsd: 0 });
   const next = await reserve(store, input({ workspaceMonthBudgetUsd: RESERVED }));
-  assert.equal(next.reservation.state, "reserved");
+  assert.deepEqual(next.alerts, [], "the paused hold does not count against the month");
 });
 
-test("reservations from an earlier month do not count against this month", async () => {
+test("reservations from an earlier month do not hold against this month's line", async () => {
   const store = memoryLedgerStore();
-  await reserve(store, input({ now: "2026-09-30T23:00:00.000Z" }));
-  const october = await reserve(store, input({ now: "2026-10-01T01:00:00.000Z", workspaceMonthBudgetUsd: RESERVED }));
-  assert.equal(october.reservation.state, "reserved");
+  await reserve(store, input({ now: "2026-09-30T23:00:00.000Z", reservationId: ID.reservation }));
+  const october = await reserve(store, input({ now: "2026-10-01T01:00:00.000Z", workspaceMonthBudgetUsd: 1, reservationId: SECOND_RESERVATION }));
+  assert.deepEqual(october.alerts, [], "September's hold is not in October");
+  const shot = await authorizeCall(store, call({ reservationId: SECOND_RESERVATION }));
+  assert.equal(shot.status, "authorized", "October holds 0.9595 against a 1.00 line, so its call starts");
 });
 
-test("warn mode records an over-budget reservation as reserved and returns an overrun alert", async () => {
+test("warn mode records an over-budget reservation as reserved and returns a note", async () => {
   const store = memoryLedgerStore();
   const result = await reserve(store, input({ mode: "warn", requestBudgetUsd: 0.5 }));
   assert.equal(result.reservation.state, "reserved");
@@ -125,25 +143,89 @@ test("an unknown price stops the reservation with a typed error, and nothing is 
   assert.deepEqual(await store.sumForMonth("ws_fixture", "2026-10"), { reservedUsd: 0, actualUsd: 0 });
 });
 
-test("cap authorizes a call over its hold while it stays inside the allowances, and raises the hold to what the call takes it to", async () => {
+test("cap authorizes a call over its hold while below the line, raises the hold, and returns the overrun as an alert", async () => {
   const store = memoryLedgerStore();
   await reserve(store, input({ reservationId: ID.reservation }));
   const authorized = await authorizeCall(store, call({ estimateUsd: RESERVED + 0.01 }));
   assert.equal(authorized.status, "authorized");
-  const held = await store.getReservation(ID.reservation);
-  assert.equal(held?.reservedUsd, RESERVED + 0.01);
+  if (authorized.status !== "authorized") return;
+  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, RESERVED + 0.01);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1);
+  assert.ok(authorized.alerts.some((alert) => alert.scope === "call"), "the overrun of the hold is recorded, not hidden");
+});
+
+test("a call that starts below the request budget finishes even if it takes the request past it, and the overshoot is recorded", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
+  assert.equal((await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_1:1" }))).status, "authorized");
+  const crossing = await authorizeCall(store, call({ estimateUsd: 0.9, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(crossing.status, "authorized", "0.90 committed is below the 1.00 line, so the call starts");
+  if (crossing.status !== "authorized") return;
+  assert.equal((await store.getReservation(ID.reservation))?.reservedUsd, 1.8, "the hold is raised to what the call takes it to");
+  assert.ok(crossing.alerts.some((alert) => alert.scope === "request"), "the overshoot of the request budget is recorded");
+  assert.equal((await store.listEntries(ID.reservation)).length, 2);
+});
+
+test("a call is refused once the request's committed amount reaches its budget, and records nothing", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 1 }));
+  await authorizeCall(store, call({ estimateUsd: 1, idempotencyKey: "produce:shot_1:1" }));
+  const refused = await authorizeCall(store, call({ estimateUsd: 0.2, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /the request has committed 1 USD, at or above its 1 USD budget, so no paid call starts/);
+  assert.equal((await store.listEntries(ID.reservation)).length, 1, "only the first call is recorded");
+});
+
+test("a call is refused once the workspace month holds its budget, before the call", async () => {
+  // The month's amount is the reserved total the store gives for the month (sumForMonth), as reserve() counts it.
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
+  await reserve(store, input({ reservationId: SECOND_RESERVATION, workspaceMonthBudgetUsd: 1 }));
+  const refused = await authorizeCall(store, call({ estimateUsd: 0.01 }));
+  assert.equal(refused.status, "refused");
+  if (refused.status !== "refused") return;
+  assert.match(refused.reason, /the workspace month holds 1.919 USD, at or above its 1 USD budget, so no paid call starts/);
+  assert.deepEqual(await store.listEntries(ID.reservation), []);
+});
+
+test("a call that starts below the month budget may take the month past it, and the next call in that month is refused", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, input({ reservationId: ID.reservation, workspaceMonthBudgetUsd: 1 }));
+  const first = await authorizeCall(store, call({ estimateUsd: 1, idempotencyKey: "produce:shot_1:1" }));
+  assert.equal(first.status, "authorized", "the month holds 0.9595 USD, below the 1.00 line");
+  const second = await authorizeCall(store, call({ estimateUsd: 0.01, idempotencyKey: "produce:shot_2:1" }));
+  assert.equal(second.status, "refused", "the month now holds 1.00 USD, at its budget");
+});
+
+test("a reservation that records no budget refuses an overrun of its hold in cap mode, and allows a call inside it (fail closed)", async () => {
+  const store = memoryLedgerStore();
+  const reserved = await reserve(store, input({ reservationId: ID.reservation }));
+  const unbudgeted: Record<string, unknown> = { ...reserved.reservation };
+  delete unbudgeted.requestBudgetUsd;
+  delete unbudgeted.workspaceMonthBudgetUsd;
+  await store.updateReservation(budgetReservationSchema.parse(unbudgeted));
+
+  const inside = await authorizeCall(store, call({ estimateUsd: RESERVED }));
+  assert.equal(inside.status, "authorized", "a call that stays inside the hold is authorized");
+  const over = await authorizeCall(store, call({ estimateUsd: 0.1, idempotencyKey: "produce:shot_9:1" }));
+  assert.equal(over.status, "refused");
+  if (over.status !== "refused") return;
+  assert.match(over.reason, /records no budget to measure the call against/);
   assert.equal((await store.listEntries(ID.reservation)).length, 1);
 });
 
-test("cap refuses a call that would take the request over its budget, names the request, and records nothing", async () => {
+test("in warn mode a reservation with no budget authorizes its overrun with an alert", async () => {
   const store = memoryLedgerStore();
-  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: RESERVED }));
-  const refused = await authorizeCall(store, call({ estimateUsd: 1 }));
-  assert.equal(refused.status, "refused");
-  if (refused.status !== "refused") return;
-  assert.match(refused.reason, /take the request to 1 USD, above its 0.9595 USD budget/);
-  assert.ok(refused.alerts.some((alert) => alert.scope === "request"), "the request budget is one of the refused scopes");
-  assert.deepEqual(await store.listEntries(ID.reservation), []);
+  const reserved = await reserve(store, input({ reservationId: ID.reservation, mode: "warn" }));
+  const unbudgeted: Record<string, unknown> = { ...reserved.reservation };
+  delete unbudgeted.requestBudgetUsd;
+  delete unbudgeted.workspaceMonthBudgetUsd;
+  await store.updateReservation(budgetReservationSchema.parse(unbudgeted));
+  const result = await authorizeCall(store, call({ estimateUsd: 1 }));
+  assert.equal(result.status, "authorized");
+  if (result.status !== "authorized") return;
+  assert.equal(result.alerts.length, 1);
 });
 
 test("an authorized call is recorded with its estimate and its hold, and the reservation is unchanged", async () => {
@@ -200,7 +282,8 @@ test("two concurrent calls with the same key produce one entry and one bill", as
 
 test("a call against a paused reservation is refused, and a call against a missing one is an error", async () => {
   const store = memoryLedgerStore();
-  await reserve(store, input({ reservationId: ID.reservation, requestBudgetUsd: 0.5 }));
+  const reserved = await reserve(store, input({ reservationId: ID.reservation }));
+  await store.updateReservation(budgetReservationSchema.parse({ ...reserved.reservation, state: "paused", pausedReason: "paused before v11" }));
   const refused = await authorizeCall(store, call());
   assert.equal(refused.status, "refused");
   assert.match(refused.status === "refused" ? refused.reason : "", /paused/);
