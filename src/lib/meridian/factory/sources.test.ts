@@ -72,7 +72,7 @@ invalid-url-line,No Url,Ignore me,,
   assert.deepEqual(csvAds[1]?.platforms, ["tiktok"]);
 });
 
-test("Sources: Sensor Tower adapter returns NOT_CONNECTED until key is configured", async () => {
+test("Sources: Sensor Tower adapter stays NOT_CONNECTED, even with a key, while its client is not built", async () => {
   const adapter = new SensorTowerSourceAdapter();
 
   // When key is missing:
@@ -80,9 +80,11 @@ test("Sources: Sensor Tower adapter returns NOT_CONNECTED until key is configure
   assert.equal(disconnected.status, "NOT_CONNECTED");
   assert.match((disconnected as { reason: string }).reason, /SENSOR_TOWER_API_KEY is not set/);
 
-  // When key is set:
-  const connected = await adapter.fetchAds({}, { SENSOR_TOWER_API_KEY: "st_live_key_123" });
-  assert.equal(connected.status, "connected");
+  // When key is set: no request is made and no empty success is returned.
+  const keyed = await adapter.fetchAds({}, { SENSOR_TOWER_API_KEY: "st_live_key_123" });
+  assert.equal(keyed.status, "NOT_CONNECTED");
+  assert.match((keyed as { reason: string }).reason, /client is not built/);
+  assert.equal((await adapter.checkConnection({ SENSOR_TOWER_API_KEY: "st_live_key_123" })).connected, false);
 });
 
 test("Timelines: daily re-check job updates days_running and recalculates Winner Score", async () => {
