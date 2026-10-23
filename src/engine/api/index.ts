@@ -747,14 +747,21 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
     const picked = await pickedRemake(sql, context, replaced, input.modelId ?? null);
     const estimate = estimatePlan({ ...picked.plan, shots: [picked.shot] }, picked.chosenPrices ?? new Map());
     const reasons: string[] = [];
-    if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
-      reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);
+    // The request's committed spend counts every reservation of the request, as reserve() reads it (D12): an earlier reservation's spend is not
+    // left out. The request is held to the rule its calls are (D17): it must be below its budget, and the remake's hold must fit within it.
+    // The month is read the same way: the settled cost of its calls, and the holds of calls not yet settled.
+    const { requestCommittedUsd, monthCommittedUsd } = await withWorkspaceLedger(sql, input.organizationId, async (store) => ({
+      requestCommittedUsd: await store.committedForRequest(input.requestId),
+      monthCommittedUsd: await store.committedForMonth(input.organizationId, input.now.slice(0, 7)),
+    }));
+    const requestBudgetUsd = context.request.constraints.budgetUsd;
+    const requestUsd = sumUsd([requestCommittedUsd, estimate.reservedUsd]);
+    if (!startsBelowLine(requestCommittedUsd, requestBudgetUsd)) {
+      reasons.push(`the request has committed $${requestCommittedUsd.toFixed(4)}, at or above its $${requestBudgetUsd.toFixed(4)} budget, so the remake does not start`);
+    } else if (positionOfLine(requestUsd, requestBudgetUsd) === "over_budget") {
+      reasons.push(`the remake would take the request to $${requestUsd.toFixed(4)}, above its $${requestBudgetUsd.toFixed(4)} budget`);
     }
-    // The month's committed spend, as reserve() reads it (D12): the settled cost of the month's calls, and the holds of calls not yet settled.
     // The month is held to the rule reserve() applies (D17): it must be below its line, and the remake's hold must fit within it.
-    const monthCommittedUsd = await withWorkspaceLedger(sql, input.organizationId, (store) =>
-      store.committedForMonth(input.organizationId, input.now.slice(0, 7)),
-    );
     const monthUsd = sumUsd([monthCommittedUsd, estimate.reservedUsd]);
     if (!startsBelowLine(monthCommittedUsd, context.month.usd)) {
       reasons.push(`the workspace month has committed $${monthCommittedUsd.toFixed(4)}, at or above its $${context.month.usd.toFixed(4)} budget, so the remake does not start`);

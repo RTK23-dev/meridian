@@ -4,9 +4,10 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { FIXTURE_IDS, productionRequestFixture } from "../contracts/fixtures/index.ts";
-import { EngineError, newId, type ProductionRequest } from "../contracts/index.ts";
+import { EngineError, newId, productionRequestSchema, type ProductionRequest } from "../contracts/index.ts";
 import type { WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
 import { readArtifact } from "../jobs/artifact-store.ts";
+import { readEngineRequest } from "../jobs/orchestrator-sql.ts";
 import { ENGINE_STAGES } from "../jobs/registry.ts";
 import type { EngineRuntime, StageHandler } from "../jobs/types.ts";
 import type { CredentialLookup } from "../gateway/types.ts";
@@ -263,6 +264,11 @@ describe("a remake's quote on a delivered video: the month is held to the line t
   let quoteDb: TestDatabase;
   let requestId = "";
   let shot = "";
+  let firstReservationId = "";
+  const reservationsOf = async (): Promise<number> => {
+    const [row] = await quoteDb.sql<{ n: number }>`select count(*)::int as n from engine_reservations where request_id = ${requestId}`;
+    return row?.n ?? 0;
+  };
 
   before(async () => {
     quoteDb = await createTestDatabase();
@@ -271,6 +277,7 @@ describe("a remake's quote on a delivered video: the month is held to the line t
     const started = await startChainRequest(world, { slot: 6, brandId: QUOTE_BRAND, formatId: "fmt_api_quote", priority: "normal", variantCount: 0 });
     await drain(quoteDb.sql, world.runtime, QUOTE_ORG);
     requestId = started.requestId;
+    firstReservationId = started.reservationId;
     const ids = world.requests.get(requestId)?.ids;
     assert.ok(ids, "the chain world holds the request's ids");
     shot = ids.id(FIXTURE_IDS.shot1);
@@ -283,10 +290,6 @@ describe("a remake's quote on a delivered video: the month is held to the line t
 
   test("a month with room for the remake quotes it as fitting; a month a sliver above its spend, or at its line, does not fit, and the quote reserves nothing", async () => {
     const sql = quoteDb.sql;
-    const reservationsOf = async (): Promise<number> => {
-      const [row] = await sql<{ n: number }>`select count(*)::int as n from engine_reservations where request_id = ${requestId}`;
-      return row?.n ?? 0;
-    };
     const reservedBefore = await reservationsOf();
     // The month's committed spend, read the way the quote reads it.
     const committed = await sqlLedgerStore(sql, QUOTE_ORG).committedForMonth(QUOTE_ORG, QUOTE_NOW.slice(0, 7));
@@ -314,6 +317,37 @@ describe("a remake's quote on a delivered video: the month is held to the line t
       assert.match(atLine.reasons.join("; "), /^the workspace month has committed \$[0-9.]+, at or above its \$[0-9.]+ budget, so the remake does not start$/);
     }
 
+    assert.equal(await reservationsOf(), reservedBefore, "a quote reserves nothing");
+  });
+
+  test("a second remake whose request's first reservation already spent the whole budget is quoted as not fitting, though its own hold fits alone; nothing is reserved", async () => {
+    const sql = quoteDb.sql;
+    const ledger = sqlLedgerStore(sql, QUOTE_ORG);
+    const stored = await readEngineRequest(sql, QUOTE_ORG, requestId);
+    const requestArtifactId = stored?.state.artifacts.request;
+    assert.ok(requestArtifactId, "the request's record is stored");
+    const requestRecord = productionRequestSchema.parse((await readArtifact(sql, { organizationId: QUOTE_ORG, artifactId: requestArtifactId })).envelope.body);
+    const budgetUsd = requestRecord.constraints.budgetUsd;
+
+    // The first reservation settles at what the request has left, so the request has spent its whole budget across its reservations.
+    const spentBefore = await ledger.committedForRequest(requestId);
+    const left = Math.round((budgetUsd - spentBefore) * 10000) / 10000;
+    assert.ok(left > 0, `the request has budget left to spend: it has spent $${spentBefore} of $${budgetUsd}`);
+    await sql`
+      insert into engine_ledger (id, organization_id, request_id, reservation_id, stage, provider, model, estimate_usd, reserved_usd, actual_usd, settlement, idempotency_key, at)
+      values (${newId("led_")}, ${QUOTE_ORG}, ${requestId}, ${firstReservationId}, 'produce_shot', 'fixture', 'fixture', ${left}, ${left}, ${left}, 'billed', ${`request-fill-${requestId}`}, ${QUOTE_NOW})
+    `;
+    assert.ok((await ledger.committedForRequest(requestId)) >= budgetUsd - 1e-9, "the first reservation has spent the request's budget");
+
+    // The second remake's own hold fits the request's budget on its own, so only the spend the first reservation already made refuses it.
+    const reservedBefore = await reservationsOf();
+    const second = await quoteEngineShotRemake(sql, { organizationId: QUOTE_ORG, requestId, shotId: shot, now: QUOTE_NOW }, { monthBudget: { monthBudget: async () => ({ status: "known", usd: 1_000_000 }) } });
+    assert.equal(second.status, "quoted", second.status === "refused" ? second.reasons.join("; ") : "");
+    if (second.status === "quoted") {
+      assert.ok(second.reservedUsd <= budgetUsd, "the remake's own hold is within the request's budget");
+      assert.equal(second.fits, false);
+      assert.match(second.reasons.join("; "), /^the request has committed \$[0-9.]+, at or above its \$[0-9.]+ budget, so the remake does not start$/);
+    }
     assert.equal(await reservationsOf(), reservedBefore, "a quote reserves nothing");
   });
 });
