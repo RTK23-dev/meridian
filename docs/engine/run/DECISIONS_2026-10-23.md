@@ -11,6 +11,8 @@ is verified by a live run.
 
 ## D2. Budgets are soft limits with a tolerance
 
+Superseded by D12 on the same day: the percent and cents tolerance is removed, and a budget is a line.
+
 - Overrun tolerance: the larger of `percent` of the target and `cents`. Initial values: 10 percent and 25 cents. A workspace policy value.
 - Within target plus tolerance (the allowance), work proceeds. Beyond the allowance, the run pauses and asks for approval. Nothing is
   refused for a small overrun. This replaces the exact cap in the executor, the planning call, the run reservation, the month
@@ -74,5 +76,66 @@ is verified by a live run.
 - The policy's initial values are read from the engine (`INITIAL_POLICY`), not typed into the screen.
 - Not built, and the owner's to decide: a brand-level policy. The direction names a brand; the stored policy is per workspace, keyed by the
   organization. Precedence between a brand and its workspace needs a decision.
-- Not built: an audit row for each approval. The approval changes the plan's `updated_at` and its budgets only. Where approvals are logged
-  is the owner's decision.
+- Not built at the time: an audit row for each approval. The approval changes the plan's `updated_at` and its budgets only. D13 builds
+  the audit row; where approvals are logged was the owner's decision, and it is now recorded there.
+
+## D12. The budget is a line, not a tolerance (owner direction 2026-10-23; supersedes D2)
+
+- A budget is a line. There is no percentage, no cents and no tolerance anywhere in the engine or on the screens.
+- A paid step may start only while the committed spend is below its budget. Committed spend is the settled cost of the finished steps,
+  plus the holds of calls in flight or queued, plus the holds of paid calls that failed. A failed call's hold counts as spent: fail closed.
+- A call already in flight when the line is crossed finishes. Its cost may take the spend past the line; the overshoot is recorded, never
+  hidden. No new paid step starts after the line.
+- When the line is reached before the project is finished, the project pauses with the reason "budget reached, project not finished"
+  (for a category: "<category> budget reached, project not finished"). The pause is an event of the plan. Every viewer sees the reason;
+  the approval control is shown to admins only.
+- The planning call is a paid call and follows the same rule. Nothing is committed at planning time, so it starts.
+- A plan whose estimate is above the budget is accepted with a note that the run stops at the budget line. It is not refused.
+- The brief path (`budget/reserve.ts`) follows the same rule. A call starts only while the committed amount of its request is below the
+  request budget, and the committed amount of its workspace month is below the month budget. The reservation's allowance fields are no
+  longer written; they stay optional for stored rows (a contract change, recorded in Bible section 4).
+- A stored policy row may still carry `budgetTolerance`. It is read without that key, and nothing else in the row changes, so removing the
+  key never resets the workspace's disabled model families.
+- "The orchestrator is alerted" is read as the pause event and the orchestrator screen's alert. A new operations alert kind
+  (`src/engine/ops/alerts.ts`) is not built; it can be added on the owner's word.
+- Open for the owner: a single step whose estimate is larger than the remaining budget still starts while the line is not reached, so the
+  overshoot can be that step's whole estimate. The stricter reading (start only if the estimate fits) is a one-line change.
+- Open for the owner: two runs in one workspace can each start a call below the line at the same moment, so the overshoot can be one call
+  per concurrent run.
+
+## D13. Every budget approval is recorded (owner direction 2026-10-23; migration 0118)
+
+- Migration 0118 adds `orchestrator_budget_approvals`: the plan, the actor, the previous budget, the approved budget, the pause reason at
+  the time, and the time.
+- The row is written in the same statement as the plan's budget update, so an approval without its record cannot happen.
+- The plan shows its approvals, newest first.
+- The brief path has no approval flow today. An approval added there is audited the same way.
+
+## D14. A queued asset counts until it settles (fixes the queued-video gap; migration 0117)
+
+- A video or avatar job the provider accepted is queued. Its hold is stored on its row (`orchestrator_asset_jobs.estimate_usd`), and
+  committed spend includes the holds of waiting jobs in every later run of the plan, not only in the run that queued them.
+- When the job settles, its output is charged its actual cost when the provider reports one, and its hold otherwise. The output replaces
+  the hold, so nothing counts twice.
+- When the job fails, its hold stays counted as a failed hold. Fail closed.
+- A re-run while the job waits reports the step as queued and submits nothing. Before this change it failed the step with "already made".
+- A waiting job with no recorded hold refuses the run until the poll settles it. Unknown is never zero.
+- Before this change, a settled job whose provider reported no actual cost was stored with a null cost, and the spend counted it as zero.
+
+## D15. Measure mode for unpriced video (owner direction 2026-10-23, for the first live test; migration 0117)
+
+- An admin may start a run in measure mode. In measure mode a video or avatar step whose model has no engine price may run.
+- Its hold is a per-second ceiling times its length in seconds (`params.seconds`). The ceiling is a workspace policy value,
+  `measureCeilingUsdPerSecond`, with the initial value 0.50 USD per second, adjustable.
+- The actual cost is the provider's reported bill (the ledger's reconciled cost). When none is reported, the hold is charged.
+- The average cost per second is computed from reported actual costs only, stored in `orchestrator_cost_measurements` (migration 0117).
+  It is shown. It never sets a hold: there is no prediction.
+- Other steps without a price still fail closed. Cents-per-second prices stay deferred, as the owner said.
+
+## D16. A brand's policy may only switch model families off (owner direction 2026-10-23; migration 0119)
+
+- The workspace policy is the one global set: the disabled model families and the measure ceiling.
+- A brand override adds families to the disabled set. A brand cannot switch on a family the workspace has switched off. The effective
+  set is the union of the two.
+- A plan records its brand (`orchestrator_plans.brand_id`). A plan with no brand uses the workspace set alone.
+- Veo stays off by the initial value (D1), and no brand can turn it on.
