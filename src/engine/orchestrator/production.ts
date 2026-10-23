@@ -383,7 +383,11 @@ export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
   }
 }
 
-function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voiceId: string | null): ProduceInput {
+/**
+ * The router's input for a step. A measured clip names its measure hold, so the ledger holds the money the plan holds (D15); a priced step
+ * names none.
+ */
+function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voiceId: string | null, measureHoldUsd: number | null): ProduceInput {
   return {
     spec,
     workspaceId: deps.organizationId,
@@ -392,6 +396,7 @@ function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voi
     stage: `orchestrator_${kind}`,
     voiceId,
     voiceProvider: null,
+    ...(measureHoldUsd === null ? {} : { measureHoldUsd }),
   };
 }
 
@@ -403,7 +408,7 @@ function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler 
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
     const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
     const voiceId = kind === "voice" ? requireText(node, "voice") : null;
-    const report = await router.produce(routedInput(deps, spec, kind, voiceId));
+    const report = await router.produce(routedInput(deps, spec, kind, voiceId, null));
     return outputOf(report.outcome, kind);
   };
 }
@@ -434,7 +439,9 @@ function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHa
     const hold = holdUsdOf(node, deps.measure ?? null);
     if (hold === null) throw new CallRefusedError(`the ${kind} step has no price and measure mode is off, so nothing is submitted`);
     const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
-    const input = routedInput(deps, spec, kind, null);
+    // A measured clip has no engine estimate, so its hold is the measure hold, and the router's ledger holds that same amount (D15).
+    const measureHoldUsd = node.estimateUsd === null ? hold : null;
+    const input = routedInput(deps, spec, kind, null, measureHoldUsd);
     const report = await router.submit(input);
     if (report.step.status === "submitted") {
       await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs, hold, seconds: secondsOf(node) });

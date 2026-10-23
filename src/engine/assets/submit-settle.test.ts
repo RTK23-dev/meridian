@@ -219,6 +219,7 @@ describe("submit returns a job and settle finishes it", () => {
     const job = next.step.job;
     assert.equal(job.providerId, WAN_ID, "the next target is submitted");
     assert.equal(job.targetIndex, 1);
+    assert.equal(job.earlierTargetsBilledUsd, 0.25, "the failed target's bill travels with the next target's job");
     assert.equal(job.submitNumber, 2, "the submit counter runs across targets");
     assert.equal(job.attemptOnTarget, 1, "a new target starts at its first attempt");
     assert.equal(job.carry.exhausted.length, 1, "the failed target is carried for the final reason");
@@ -241,8 +242,15 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal(done.step.status, "done");
     if (done.step.status === "done") {
       assert.equal(done.step.asset.providerId, WAN_ID);
-      assert.equal(done.step.asset.costUsd, 0.4);
+      // The asset costs every bill it made: the failed submit (0.25) and the winning submit (0.4).
+      assert.equal(done.step.asset.costUsd, 0.65, "the failed submit's bill is part of the cost, not dropped");
+      assert.equal((await h.cache.get(WORKSPACE, assetCacheKey(spec, WAN_ID)))?.costUsd, 0.65, "the cache records the same cost");
     }
+    assert.deepEqual(
+      (await h.ledger.listEntries(h.reservationId)).map((row) => row.actualUsd),
+      [0.25, 0.4],
+      "the ledger holds each bill, and their sum is the asset's cost",
+    );
   });
 
   it("a rate-limited job is billed for its first submit, retries on the same target with a new key, and its cost is the sum of its bills", async () => {
@@ -279,6 +287,38 @@ describe("submit returns a job and settle finishes it", () => {
     assert.equal(done.step.asset.costUsd, 1.2425, "the first refused submit (0.63) and the billed retry (0.6125)");
     assert.equal(done.step.asset.submits, 2);
     assert.equal(done.step.asset.ledgerEntryId, (await h.ledger.getEntryByKey(job1.idempotencyKey))?.entryId, "the asset names its first entry");
+  });
+
+  it("a target billed on a rate-limited job whose retries are refused is part of the asset's cost when the next target settles", async () => {
+    const h = await harness({
+      script: {
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first"), json(429, {}), json(429, {})], [WAN]: [accepted("job-second")] }),
+        "GET /api/v1/videos/job-second": completed("job-second", 0.4),
+      },
+    });
+    const spec = assetSpec();
+    const input = h.input(spec);
+    const first = await h.router.submit(input);
+    if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
+
+    // The first job was billed 0.63 before its poll reported a rate limit. Both retries are refused before a job exists, so the target is
+    // exhausted and the next target is submitted, carrying the 0.63.
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
+    const next = await h.router.settle(first.step.job, limited, input);
+    assert.equal(next.step.status, "submitted");
+    if (next.step.status !== "submitted") return;
+    assert.equal(next.step.job.providerId, WAN_ID);
+    assert.equal(next.step.job.earlierTargetsBilledUsd, 0.63);
+
+    const done = await h.router.settle(next.step.job, await pollFor(h, next.step.job), input);
+    assert.equal(done.step.status, "done");
+    if (done.step.status !== "done") return;
+    assert.equal(done.step.asset.costUsd, 1.03, "the billed first target (0.63) and the billed next target (0.4)");
+    assert.deepEqual(
+      (await h.ledger.listEntries(h.reservationId)).map((row) => row.actualUsd),
+      [0.63, 0, 0, 0.4],
+      "the first target's bill, its two refused retries (0 each), and the next target's bill",
+    );
   });
 });
 
@@ -498,5 +538,109 @@ describe("the take is downloaded and checked through the gateway when takes are 
 describe("the default settings carry the Bible values", () => {
   it("the attempts per target come from thresholds.jobs.maxAttempts", () => {
     assert.equal(defaultRouterSettings().maxAttempts, 3);
+  });
+});
+
+describe("a measured clip holds the plan's measure hold (D15)", () => {
+  it("a retry of a measured clip is held at the measure hold too: the settle carries the input the submit was made with", async () => {
+    const h = await harness({
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first"), accepted("job-retry")] }) },
+    });
+    const spec = assetSpec();
+    const input = h.input(spec, { measureHoldUsd: 2.5 });
+    const first = await h.router.submit(input);
+    if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
+    const retry = await h.router.settle(first.step.job, limited, input);
+    assert.equal(retry.step.status, "submitted");
+    const retried = await h.ledger.getEntryByKey(`${assetCacheKey(spec, KLING_ID)}|attempt2`);
+    assert.equal(retried?.reservedUsd, 2.5, "the retry is held at the plan's measure hold, not the route's price");
+    assert.equal(retried?.estimateUsd, 2.5);
+  });
+
+  it("a measure hold that is not a positive amount is refused before any call or ledger row", async () => {
+    for (const measureHoldUsd of [0, -1, Number.NaN]) {
+      const h = await harness({ script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }) } });
+      const spec = assetSpec();
+      await assert.rejects(
+        h.router.submit(h.input(spec, { measureHoldUsd })),
+        (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+      );
+      assert.equal(posts(h.requests), 0, "nothing is sent");
+      assert.equal(await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)), null, "nothing is authorized");
+    }
+  });
+});
+
+/** The family of a model: its vendor prefix, which is how the policy names a family (config/model-policy.ts). */
+const familyOf = (model: string): string => `${model.split("/")[0] ?? model}/`;
+
+/** A router over the same gateway, ledger and stores, built at settle time with the families in force then, as the poller builds one (D16). */
+function settlingRouter(h: Harness, disabledFamilies: readonly string[]): AsyncAssetRouter {
+  return createAssetRouter({
+    gateway: h.gateway,
+    ledger: h.ledger,
+    cache: h.cache,
+    stats: h.stats,
+    breakers: h.breakers,
+    buckets: h.buckets,
+    media: h.media,
+    videoProfiles: profiles,
+    signals,
+    disabledFamilies,
+    now: h.clock.now,
+    sleep: h.clock.sleep,
+  });
+}
+
+describe("a family switched off while a job is in flight is not used by a submit made at settle time (D16)", () => {
+  it("a fallback skips a target of a family switched off after the submit, and submits the next allowed target", async () => {
+    const h = await harness({
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")], [WAN]: [accepted("job-second")], [SEED]: [accepted("job-third")] }) },
+    });
+    const input = h.input(assetSpec());
+    const first = await h.router.submit(input);
+    if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
+
+    // The second target's family is switched off while the first job is in flight: the settle runs with the families in force now.
+    const failed: ProviderPoll = { state: "failed", error: { kind: "unknown", retryable: false, message: "the model stopped" }, actualUsd: 0.25 };
+    const next = await settlingRouter(h, [familyOf(WAN)]).settle(first.step.job, failed, input);
+    assert.equal(next.step.status, "submitted");
+    if (next.step.status !== "submitted") return;
+    assert.equal(next.step.job.providerId, `openrouter:${SEED}`, "the next allowed target is submitted");
+    assert.equal(posts(h.requests, WAN), 0, "the switched-off target is never submitted");
+    assert.match(next.step.job.carry.excluded.join("\n"), /switched off by the model policy/, "the skipped target is named in the carry");
+  });
+
+  it("a rate-limited submit is not retried on a family switched off after the submit, and the next allowed target is submitted", async () => {
+    const h = await harness({
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")], [WAN]: [accepted("job-second")] }) },
+    });
+    const input = h.input(assetSpec());
+    const first = await h.router.submit(input);
+    if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
+
+    // The first target's family is switched off while its job is in flight: its rate-limited submit gets no retry, and the next target is used.
+    const limited: ProviderPoll = { state: "failed", error: { kind: "rate_limit", retryable: true, message: "slow down" }, actualUsd: 0.63 };
+    const next = await settlingRouter(h, [familyOf(KLING)]).settle(first.step.job, limited, input);
+    assert.equal(next.step.status, "submitted");
+    if (next.step.status !== "submitted") return;
+    assert.equal(next.step.job.providerId, WAN_ID, "the next allowed target is submitted");
+    assert.equal(posts(h.requests, KLING), 1, "no retry is sent to the switched-off target");
+    assert.match(next.step.job.carry.excluded.join("\n"), /not retried/, "the skipped retry is named in the carry");
+  });
+
+  it("a job in flight whose family was switched off is still settled: its poll is not refused, and its bill is recorded", async () => {
+    const h = await harness({
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }), "GET /api/v1/videos/job-first": completed("job-first", 0.6125) },
+    });
+    const spec = assetSpec();
+    const input = h.input(spec);
+    const first = await h.router.submit(input);
+    if (first.step.status !== "submitted") assert.fail("the first submit should be sent");
+
+    const done = await settlingRouter(h, [familyOf(KLING)]).settle(first.step.job, await pollFor(h, first.step.job), input);
+    assert.equal(done.step.status, "done", "a job already in flight is not refused");
+    if (done.step.status === "done") assert.equal(done.step.asset.costUsd, 0.6125, "its bill is recorded");
   });
 });
