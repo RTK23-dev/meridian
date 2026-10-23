@@ -13,7 +13,7 @@ documents. Where the Bible and a product decision conflict, do not pick a side i
    from the asset router, the Claude client or the render adapter. No engine file except `gateway/transport.ts` calls `fetch`. Keys
    come from the credential resolver (`gateway/meridian.ts`), never `process.env`. Every paid call sends an idempotency key and writes
    estimate, reservation and actual cost to the ledger. Budgets are lines (owner direction 2026-10-23, decision D12 in
-   `docs/engine/run/DECISIONS_2026-10-23.md`): a paid step starts only while the committed spend is below its budget. A call already in
+   `docs/engine/run/DECISIONS_2026-10-23.md`): a paid step starts only while the committed spend is below its budget, and its own hold fits within it (D17). A call already in
    flight finishes, so the spend can pass the line by that call; no step starts after it. When the line is reached before the project is
    finished, the project pauses until an admin raises the budget, and the pause and the approval are recorded.
 4. **Contracts are the interface.** The zod schemas in `src/engine/contracts/` are the only interface between parts of the engine. A

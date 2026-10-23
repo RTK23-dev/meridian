@@ -113,7 +113,7 @@ Superseded by D12 on the same day: the percent and cents tolerance is removed, a
 
 ## D14. A queued asset counts until it settles (fixes the queued-video gap; migration 0117)
 
-- A video or avatar job the provider accepted is queued. Its hold is stored on its row (`orchestrator_asset_jobs.estimate_usd`), and
+- A video or avatar job the provider accepted is queued. Its hold is stored on its row (`orchestrator_asset_jobs.held_usd`, the row's total, and `hold_usd`, one submit), and
   committed spend includes the holds of waiting jobs in every later run of the plan, not only in the run that queued them.
 - When the job settles, its output is charged its actual cost when the provider reports one, and its hold otherwise. The output replaces
   the hold, so nothing counts twice.
@@ -151,3 +151,12 @@ Superseded by D12 on the same day: the percent and cents tolerance is removed, a
 - The planning call follows the same rule: its hold must fit the budget, or the draft is refused before any call.
 - A plan whose estimate is above its budget is still accepted with a note. The run stops at the first step that does not fit.
 - Reservations are still accepted when they are above a budget, with a note. The calls are what the line gates.
+
+## D18. Choices made after the independent reviews (the lead's choices; to be confirmed by the owner)
+
+- An approval at a category pause (copy, creative or voice) raises that category's line in the stored brief, in the same statement as the plan update and the audit row. The audit reason records the category. An approval does not clear a pause at the workspace month line: the month budget is set in settings, not on the plan, and the alert says so.
+- A stored orchestrator policy that does not parse refuses planning, runs, edits and the model list, with the reason to save the policy again. No family is reset or switched on by a malformed row.
+- A plan run excludes the switched-off families on every route it builds, the fallbacks included. The first-and-last-frame route requires the families a run passes. A settle-time fallback or a retry rechecks them. An in-flight poll or settle is never refused for this.
+- A failed queued job is charged its hold, and a re-run does not resubmit it. A retry the router refuses because its run has ended closes the job as failed, with the reason that a retry needs a new run.
+- A measured clip's ledger hold is the plan's measure hold. A route with no listed price is kept for a measured clip, so measure mode can reach an unpriced video.
+- Open for the owner: the retry after a settle conflict, which closes the job as failed and drops the other settle's bill; the consolidated CLAUDE.md question; and the default-off model family (D1) against main's operating brief (owner item 4 in RUN_STATE).

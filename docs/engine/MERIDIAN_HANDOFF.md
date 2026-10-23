@@ -292,7 +292,7 @@ The 10 October honesty pass removed fake receipts and invented numbers from this
 4. **Every model, API and render call goes through the router and the credential resolver.** Never read an API key from the environment directly.
 5. **Every call writes its cost** to the ledger with stage, page, concept and video id.
 6. **Every paid job sends an idempotency key** (the input hash), so a retry never bills twice.
-7. **Respect budgets.** The Director's per-master ceiling and each page's monthly budget are lines (owner direction 2026-10-23, decision D12). A paid step starts only while the committed spend is below the line; a call already in flight finishes, and nothing starts after it. When the line is reached before the work is finished, the request pauses until an admin raises the budget, and the approval is recorded.
+7. **Respect budgets.** The Director's per-master ceiling and each page's monthly budget are lines (owner direction 2026-10-23, decision D12). A paid step starts only while the committed spend is below the line, and its own hold fits within it (D17); a call already in flight finishes, and nothing starts after it. When the line is reached before the work is finished, the request pauses until an admin raises the budget, and the approval is recorded.
 8. **Secrets never enter git, logs or chat.** An OpenRouter key was exposed in a screenshot during planning; confirm it has been rotated before using OpenRouter.
 
 **Data and content**
