@@ -17,6 +17,8 @@ export type StoredPlan = {
   brief: unknown;
   orchestratorModel: string;
   budgetUsd: number;
+  /** The brand the plan was made for, or null for a plan with no brand (migration 0119). A plan with no brand uses the workspace set alone. */
+  brandId: string | null;
   status: PlanStatus;
   plan: OrchestratorPlan | null;
   reasons: string[];
@@ -45,6 +47,7 @@ function planOf(row: Row): StoredPlan {
     brief: JSON.parse(String(row.brief_json)),
     orchestratorModel: String(row.orchestrator_model),
     budgetUsd: Number(row.budget_usd),
+    brandId: row.brand_id === null || row.brand_id === undefined ? null : String(row.brand_id),
     status: String(row.status) as PlanStatus,
     plan,
     reasons: JSON.parse(String(row.reasons_json)) as string[],
@@ -54,14 +57,17 @@ function planOf(row: Row): StoredPlan {
   };
 }
 
-/** A new draft: the user has chosen the orchestrating model and the brief, and nothing has been planned yet. */
+/**
+ * A new draft: the user has chosen the orchestrating model and the brief, and nothing has been planned yet. The brand is recorded when the
+ * plan has one (migration 0119); a plan made without a brand stores null.
+ */
 export async function createPlanDraft(
   sql: Sql,
-  input: { id: string; organizationId: string; title: string; brief: unknown; orchestratorModel: string; budgetUsd: number },
+  input: { id: string; organizationId: string; title: string; brief: unknown; orchestratorModel: string; budgetUsd: number; brandId?: string | null },
 ): Promise<StoredPlan> {
   await sql`
-    insert into orchestrator_plans (id, organization_id, title, brief, orchestrator_model, budget_usd, status)
-    values (${input.id}, ${input.organizationId}, ${input.title}, ${JSON.stringify(input.brief)}::jsonb, ${input.orchestratorModel}, ${input.budgetUsd}, 'draft')
+    insert into orchestrator_plans (id, organization_id, title, brief, orchestrator_model, budget_usd, status, brand_id)
+    values (${input.id}, ${input.organizationId}, ${input.title}, ${JSON.stringify(input.brief)}::jsonb, ${input.orchestratorModel}, ${input.budgetUsd}, 'draft', ${input.brandId ?? null})
   `;
   const found = await getPlan(sql, input.organizationId, input.id);
   if (found === null) throw new Error("the plan was not stored");
@@ -125,7 +131,7 @@ export async function releasePlanning(sql: Sql, organizationId: string, planId: 
 export async function getPlan(sql: Sql, organizationId: string, id: string): Promise<StoredPlan | null> {
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
-      reasons::text as reasons_json, catalog_read_at, created_at, updated_at
+      reasons::text as reasons_json, catalog_read_at, created_at, updated_at, brand_id
     from orchestrator_plans where id = ${id} and organization_id = ${organizationId}
   `) as Row[];
   const row = rows[0];
@@ -136,7 +142,7 @@ export async function listPlans(sql: Sql, organizationId: string, limit: number)
   const bounded = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
-      reasons::text as reasons_json, catalog_read_at, created_at, updated_at
+      reasons::text as reasons_json, catalog_read_at, created_at, updated_at, brand_id
     from orchestrator_plans where organization_id = ${organizationId}
     order by created_at desc, id desc limit ${bounded}
   `) as Row[];
