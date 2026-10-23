@@ -4,13 +4,14 @@ import { z } from "zod";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts/index.ts";
 import { newId } from "../contracts/ids.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
+import type { AsyncAssetRouter } from "../assets/router.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import type { NodeKind, PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, type NodeHandler } from "./execute.ts";
+import { ORCHESTRATOR_PLAN_VERSION, type NodeEvent, type NodeKind, type OrchestratorPlan, type PlanNode } from "./contracts.ts";
+import { CallRefusedError, NotConnectedError, StepQueuedError, runPlan, type NodeHandler } from "./execute.ts";
 import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps, type QueuedAsset } from "./production.ts";
-import { queueAssetJob } from "./asset-poll.ts";
-import { createPlanDraft } from "./store.ts";
+import { pollAssetJobs, queueAssetJob, sqlAssetPollStore } from "./asset-poll.ts";
+import { appendPlanEvents, createPlanDraft, failedHoldsUsd } from "./store.ts";
 
 const ORG = "org_production_a";
 const CREATED = "2026-10-22T10:00:00.000Z";
@@ -394,6 +395,61 @@ describe("production handlers: a queued clip waits once, and measure mode holds 
     assert.equal(counted.submits, 1, "the re-run submits nothing: its hold is already counted");
     const [count] = await db.sql<{ n: unknown }>`select count(*) as n from orchestrator_asset_jobs where organization_id = ${org}`;
     assert.equal(Number(count?.n), 1, "one waiting job, not two");
+  });
+
+  test("REPRO 5 (re-run): a job the poll closed as failed is not submitted again: its step is refused, and its hold counts once", async () => {
+    const org = "org_queued_failed_rerun";
+    const planId = "plan_queued_failed_rerun";
+    await planIn(org, planId);
+    const counted = { submits: 0 };
+    // The first submit is accepted. A submit under the same key is answered unsettled, as the router answers a key whose first submit is unsettled.
+    const router = {
+      produce: async () => {
+        throw new Error("a queued clip is never produced inline");
+      },
+      submit: async () => {
+        counted.submits += 1;
+        const step =
+          counted.submits === 1
+            ? SUBMITTED_STEP
+            : { status: "unsettled", providerId: "openrouter:video", idempotencyKey: SUBMITTED_JOB.idempotencyKey, ledgerEntryId: "led_1", reason: "a submit under the key is unsettled" };
+        return { step, decisions: [], alerts: [], attempts: [] } as never;
+      },
+    } as unknown as NonNullable<ProductionDeps["router"]>;
+    const deps = depsWith(await ledgerWith(1), { organizationId: org, planId, sql: db.sql, router, queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry) });
+    const plan: OrchestratorPlan = { version: ORCHESTRATOR_PLAN_VERSION, orchestrator: { provider: "openrouter", id: "vendor/orchestrator-model" }, budgetUsd: 5, nodes: [clip({ estimateUsd: 0.4 })] };
+    const runOnce = async (): Promise<NodeEvent[]> => {
+      const events: NodeEvent[] = [];
+      await runPlan({ plan, order: ["clip"], handlers: productionHandlers(deps), cache: new Map(), emit: (event) => events.push(event), spentUsd: 0, allowanceUsd: 5 });
+      return events;
+    };
+
+    // Run 1: the provider accepts the clip, which is queued with its hold of 0.40.
+    await appendPlanEvents(db.sql, org, planId, await runOnce());
+    assert.equal(counted.submits, 1);
+
+    // The poll: the provider fails the job. Its row closes as failed, and its hold is charged as a failed hold.
+    await db.sql`update orchestrator_asset_jobs set next_poll_at = now() - interval '1 minute' where organization_id = ${org}`;
+    const failing = {
+      async pollOnce() {
+        return { state: "failed", error: { kind: "server", retryable: false, message: "the job failed at the provider" } };
+      },
+      async settle(_job: unknown, polled: { error: unknown }) {
+        return { step: { status: "failed", providerId: "openrouter:video", error: polled.error }, decisions: [], alerts: [], attempts: [] };
+      },
+    } as unknown as AsyncAssetRouter;
+    assert.deepEqual(await pollAssetJobs({ store: sqlAssetPollStore(db.sql, org), organizationId: org, routerFor: () => failing }), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.equal(await failedHoldsUsd(db.sql, org, planId), 0.4);
+
+    // Run 2 (a re-run): the failed job is not submitted again. The step is refused before any submit, so nothing is charged a second time.
+    const second = await runOnce();
+    await appendPlanEvents(db.sql, org, planId, second);
+    const again = second.filter((event) => event.nodeId === "clip").at(-1);
+    assert.equal(counted.submits, 1, "the re-run submits nothing: the failed job is not paid again");
+    assert.equal(again?.state, "failed");
+    assert.equal(again?.costUsd, null, "the refusal charges nothing: the job's hold is already counted");
+    assert.match(again?.reason ?? "", /this job failed earlier and its hold is already counted, so it is not paid again; edit the step to run it again/);
+    assert.equal(await failedHoldsUsd(db.sql, org, planId), 0.4, "the job's hold is counted once");
   });
 
   test("a job waiting in another plan does not block this plan's step", async () => {

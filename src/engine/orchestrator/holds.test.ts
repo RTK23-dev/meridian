@@ -4,7 +4,7 @@ import type { AssetJob } from "../assets/job.ts";
 import type { ProduceInput } from "../assets/router.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { queueAssetJob } from "./asset-poll.ts";
-import { measuredAverageUsdPerSecond, openQueuedJob, recordCostMeasurement, waitingHoldsByNode } from "./holds.ts";
+import { jobStatusOf, measuredAverageUsdPerSecond, openQueuedJob, recordCostMeasurement, waitingHoldsByNode } from "./holds.ts";
 import { createPlanDraft } from "./store.ts";
 
 const INPUT = { spec: { shotId: "shot_0a", modelClass: "video.budget" }, requestId: "req_1", reservationId: "res_1" } as unknown as ProduceInput;
@@ -77,6 +77,29 @@ describe("queued holds, measured costs and their organization scope (D14, D15, m
     assert.equal(await openQueuedJob(db.sql, org, planId, "key-open-missing"), false, "another step's key is not open");
     await db.sql`update orchestrator_asset_jobs set status = 'done' where organization_id = ${org} and cache_key = 'key-open-1'`;
     assert.equal(await openQueuedJob(db.sql, org, planId, "key-open-1"), false, "a settled job is no longer open");
+  });
+
+  test("a job's status for its cache key is waiting, failed, done, or none; another plan or organization reads as none (D14)", async () => {
+    const org = "org_holds_status";
+    const planId = await plan(org, "plan_holds_status");
+    const otherPlan = await plan(org, "plan_holds_status_other");
+    assert.equal(await jobStatusOf(db.sql, org, planId, "key-status-none"), "none", "the plan has no job for the key");
+
+    await queue(org, planId, "video-a", "key-status-waiting", 0.5);
+    await queue(org, planId, "video-a", "key-status-failed", 0.5);
+    await queue(org, planId, "video-a", "key-status-done", 0.5);
+    await db.sql`update orchestrator_asset_jobs set status = 'failed' where organization_id = ${org} and cache_key = 'key-status-failed'`;
+    await db.sql`update orchestrator_asset_jobs set status = 'done' where organization_id = ${org} and cache_key = 'key-status-done'`;
+    assert.equal(await jobStatusOf(db.sql, org, planId, "key-status-waiting"), "waiting");
+    assert.equal(await jobStatusOf(db.sql, org, planId, "key-status-failed"), "failed");
+    assert.equal(await jobStatusOf(db.sql, org, planId, "key-status-done"), "done");
+    assert.equal(await jobStatusOf(db.sql, org, otherPlan, "key-status-failed"), "none", "another plan's job is not this plan's");
+
+    await seedWorkspace(db.sql, "org_holds_status_theirs");
+    assert.equal(await jobStatusOf(db.sql, "org_holds_status_theirs", planId, "key-status-failed"), "none", "another organization reads as none");
+
+    await queue(org, planId, "video-a", "key-status-failed", 0.5);
+    assert.equal(await jobStatusOf(db.sql, org, planId, "key-status-failed"), "waiting", "a key with a waiting job reports waiting first");
   });
 
   test("the measured average is null until a clip is measured, then the reported cost per second; a waiting job adds nothing", async () => {

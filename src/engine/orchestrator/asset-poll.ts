@@ -13,6 +13,10 @@
 // - A finished job with no reported bill is stored at its hold, never at null, and is not measured.
 // - A job that failed or is unsettled closes as failed. So does a poll that threw, when its row has a hold. A failed close charges the row's
 //   hold to the plan as a failed event, so the spend counts it (store.ts failedHoldsUsd).
+// - A row closes once. complete and fail change it only while it is waiting: a close that finds it already closed writes nothing (no output,
+//   no measurement, no event) and the poll does not count it. So a failed row's hold is never also a stored bill (D14).
+// - A retry the router refuses because the run's reservation has ended closes the row as failed, with RUN_ENDED_REASON: the retry is a new
+//   paid call, and it needs a new run (D14).
 // - A poll that threw on a row with no recorded hold leaves the row open, and its run keeps refusing: nothing is known about its money until
 //   the provider answers. A definitive answer on such a row closes it with no event, because there is no hold to charge.
 // Each change of money runs in one transaction, so a row never closes without its event, and an event is never written twice. A write that
@@ -35,6 +39,15 @@ export const ASSET_POLL_AGAIN_MS = 30_000;
 
 /** The most a failure reason is kept as: the row's result, and the reason of the failed event that charges its hold. */
 const REASON_MAX = 500;
+
+/** The reason a job is closed as failed when its retry is refused because its run has ended (D14): a retry needs a new run. */
+export const RUN_ENDED_REASON = "a retry needs a new run; the run that queued this job has ended";
+
+/**
+ * The refusal the budget gives a call on a released reservation: "reservation <id> is released; no call is made" (budget/reserve.ts). The router
+ * carries it in its reasons. The match is on that text, so a change to the budget's wording needs this pattern changed with it.
+ */
+const RUN_ENDED_REFUSAL = /reservation \S+ is released; no call is made/;
 
 /** A due row: the job the provider holds, its input, the step it settles, and what it holds. */
 export type DueAsset = {
@@ -64,10 +77,16 @@ export type AssetPollStore = {
    * same job, still working, adds nothing.
    */
   reschedule(id: string, change: { job: AssetJob; runAfterMs: number }): Promise<void>;
-  /** Stores the output and closes the row done, with its measurement when there is one, in one transaction. */
-  complete(row: DueAsset, output: StoredStepOutput, result: string, measured: MeasuredBill | null): Promise<void>;
-  /** Closes the row failed. A row with a hold charges it to its plan as a failed event, in the same transaction. */
-  fail(row: DueAsset, reason: string): Promise<void>;
+  /**
+   * Stores the output and closes the row done, with its measurement when there is one, in one transaction. Returns false, and writes nothing,
+   * when the row is no longer waiting: another poll closed it first.
+   */
+  complete(row: DueAsset, output: StoredStepOutput, result: string, measured: MeasuredBill | null): Promise<boolean>;
+  /**
+   * Closes the row failed. A row with a hold charges it to its plan as a failed event, in the same transaction. Returns false, and writes
+   * nothing, when the row is no longer waiting: another poll closed it first.
+   */
+  fail(row: DueAsset, reason: string): Promise<boolean>;
 };
 
 export type AssetPollReport = { polled: number; done: number; failed: number; waiting: number };
@@ -94,10 +113,9 @@ export async function pollAssetJobs(opts: PollOptions): Promise<AssetPollReport>
       await opts.store.reschedule(row.id, { job: verdict.job, runAfterMs: verdict.runAfterMs });
       report.waiting += 1;
     } else if (verdict.kind === "done") {
-      await opts.store.complete(row, verdict.output, verdict.result, verdict.measured);
-      report.done += 1;
-    } else {
-      await opts.store.fail(row, verdict.reason);
+      // A row another poll closed first is not counted: its close wrote nothing.
+      if (await opts.store.complete(row, verdict.output, verdict.result, verdict.measured)) report.done += 1;
+    } else if (await opts.store.fail(row, verdict.reason)) {
       report.failed += 1;
     }
   }
@@ -120,6 +138,8 @@ async function verdictOf(opts: PollOptions, row: DueAsset): Promise<Verdict> {
     // A retry the router submitted: a second paid call. The row takes the new job, and the store adds its hold to the row's total.
     return { kind: "waiting", job: step.job, runAfterMs: step.runAfterMs };
   }
+  // A retry the router refused because the run's reservation has ended: no call starts, and a new run is what a retry needs (D14).
+  if (isRunEndedRefusal(step)) return { kind: "failed", reason: RUN_ENDED_REASON };
   let output: NodeOutput;
   try {
     // outputOf names the reason for every outcome that is not a finished asset, so the row records why it stopped.
@@ -147,6 +167,12 @@ function reportedUsdOf(value: number | null): number | null {
 
 function reasonOf(error: unknown): string {
   return (error instanceof Error ? error.message : "the poll failed").slice(0, REASON_MAX);
+}
+
+/** Whether the router refused the job's retry, or its fallback, because the run's reservation is released. The router names the refusal in its reasons. */
+function isRunEndedRefusal(step: AssetStep): boolean {
+  if (step.status !== "refused" && step.status !== "unavailable") return false;
+  return step.reasons.some((reason) => RUN_ENDED_REFUSAL.test(reason));
 }
 
 /** Records one accepted submit so the poller settles it. The row's poll is due after the provider's own first wait, and its hold counts from now. */
@@ -178,6 +204,22 @@ function numberOrNull(value: unknown): number | null {
 async function inTransaction<T>(sql: Sql, fn: (tx: Sql) => Promise<T>): Promise<T> {
   if (!sql.begin) throw new Error("This database connection cannot run a transaction, so the operation was not started.");
   return sql.begin(fn);
+}
+
+/**
+ * Closes a row, inside the caller's transaction, only while it is waiting (D14). Returns false when the row is no longer waiting: another poll
+ * closed it, so the caller writes nothing for it. Throws when the row is not in this organization.
+ */
+async function closeWaiting(tx: Sql, organizationId: string, id: string, status: "done" | "failed", result: string): Promise<boolean> {
+  const closed = await tx`
+    update orchestrator_asset_jobs set status = ${status}, result = ${result}, updated_at = now()
+    where id = ${id} and organization_id = ${organizationId} and status = 'waiting'
+    returning id
+  `;
+  if (closed.length > 0) return true;
+  const present = await tx`select id from orchestrator_asset_jobs where id = ${id} and organization_id = ${organizationId}`;
+  if (present.length === 0) throw new Error("the job is not in this organization, so it is not closed");
+  return false;
 }
 
 /** The poll's store over the database, for one workspace. A due row is claimed by pushing its next poll out before it is read. */
@@ -222,7 +264,9 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
       `;
     },
     async complete(row, output, result, measured) {
-      await inTransaction(sql, async (tx) => {
+      return inTransaction(sql, async (tx) => {
+        // The row closes first. A row that is no longer waiting was closed by another poll, and nothing else is written for it.
+        if (!(await closeWaiting(tx, organizationId, row.id, "done", result))) return false;
         if (!(await putStepOutput(tx, organizationId, row.planId, row.cacheKey, output))) {
           throw new Error("the plan is not in this organization, so the step's output is not stored");
         }
@@ -235,24 +279,20 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
             actualUsd: measured.actualUsd,
           });
         }
-        await tx`
-          update orchestrator_asset_jobs set status = 'done', result = ${result}, updated_at = now()
-          where id = ${row.id} and organization_id = ${organizationId}
-        `;
+        return true;
       });
     },
     async fail(row, reason) {
-      await inTransaction(sql, async (tx) => {
+      return inTransaction(sql, async (tx) => {
+        // The row closes first. A row that is no longer waiting was closed by another poll, so its hold is not charged a second time.
+        if (!(await closeWaiting(tx, organizationId, row.id, "failed", reason))) return false;
         if (row.heldUsd !== null) {
           const recorded = await appendPlanEvents(tx, organizationId, row.planId, [
             { nodeId: row.stepId, state: "failed", outputHash: null, costUsd: row.heldUsd, reason },
           ]);
           if (!recorded) throw new Error("the plan is not in this organization, so its failed hold is not recorded");
         }
-        await tx`
-          update orchestrator_asset_jobs set status = 'failed', result = ${reason}, updated_at = now()
-          where id = ${row.id} and organization_id = ${organizationId}
-        `;
+        return true;
       });
     },
   };
