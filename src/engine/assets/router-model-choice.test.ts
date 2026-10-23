@@ -237,6 +237,26 @@ describe("router with a model choice", () => {
     assert.equal(row?.actualUsd, 0.31, "the bill replaces the hold");
   });
 
+  it("a measured clip whose chosen model is priced per token falls back to the route table, and its unpriced target is kept at the measure hold", async () => {
+    // A video call is estimated only from a per-second price, so the choice is not used (Bible 10.5). The route table's only target has no price
+    // key, so the engine cannot price it: a measured clip keeps it and holds it at the plan's hold (D15).
+    const perToken = catalogEntries.map((entry) => (entry.id === WAN ? { ...entry, price: { ...entry.price, unit: "per_token" as const } } : entry));
+    const unpriced = routesWith("video.cinematic", [{ provider: "openrouter", model: KLING, priceKey: null, verified: false }], routes.table);
+    const h = await harness({
+      table: unpriced,
+      catalog: catalogSource(perToken),
+      script: { "POST /api/v1/videos": submitFor({ [KLING]: accepted("job-first") }), "GET /api/v1/videos/job-first": completed("job-first", 0.31) },
+    });
+    const spec = assetSpec({ durationMs: 5000, modelChoice: choice(WAN) });
+    const report = await h.router.produce({ ...h.input(spec), measureHoldUsd: 2.5 });
+    assert.equal(report.outcome.status, "done", JSON.stringify(report.outcome));
+    assert.deepEqual(submittedModels(h.requests), [KLING], "the route table's target is called");
+    assert.match(report.decisions[0]?.reason ?? "", /price_unit/, "the choice is not used, and the reason says why");
+    const [row] = await h.ledger.listEntries(h.reservationId);
+    assert.equal(row?.estimateUsd, 2.5, "the measure hold: the route has no price the engine can read");
+    assert.equal(row?.actualUsd, 0.31, "the bill replaces the hold");
+  });
+
   it("keeps two models' assets apart in the cache: the provider id names the chosen model", async () => {
     const cache = memoryAssetCache();
     const h = await harness({

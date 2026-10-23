@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { assetCacheKey, type AssetSpec } from "../contracts/assets.ts";
+import { EngineError } from "../contracts/errors.ts";
 import { newId } from "../contracts/ids.ts";
 import { routes, type RouteTable } from "../config/routes.ts";
 import type { HttpResponse } from "../gateway/types.ts";
@@ -513,6 +514,52 @@ describe("a measured clip holds the plan's measure hold on the ledger (D15)", ()
     const report = await h.router.produce(h.input(spec));
     assert.equal(report.outcome.status, "done");
     assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.estimateUsd, 0.63, "five seconds at the price table's rate");
+  });
+
+  it("a measured clip keeps a route with no engine price: it is submitted, and the ledger holds the measure hold", async () => {
+    // The route names no price key, so the engine cannot price it. The call is kept because it is measured (D15), and held at the plan's hold.
+    const unpriced = routesWith("video.cinematic", [{ provider: "openrouter", model: KLING, priceKey: null, verified: false }], routes.table);
+    const h = await harness({ table: unpriced, script: { "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }) } });
+    const spec = assetSpec();
+    // Five seconds at a 0.50 a second ceiling.
+    const submitted = await h.router.submit({ ...h.input(spec), measureHoldUsd: 2.5 });
+    assert.equal(submitted.step.status, "submitted", JSON.stringify(submitted.step));
+    assert.equal(posts(h.requests), 1, "the unpriced route is submitted");
+    if (submitted.step.status === "submitted") assert.equal(submitted.step.job.targets[0]?.estimateUsd, 2.5, "the route is held at the measure hold");
+    assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.reservedUsd, 2.5, "the ledger holds the plan's measure hold");
+  });
+
+  it("without a measure hold a route with no engine price is excluded and never sent to, while a priced route keeps its own price", async () => {
+    const mixed = routesWith(
+      "video.cinematic",
+      [
+        { provider: "openrouter", model: WAN, priceKey: null, verified: false },
+        { provider: "openrouter", model: KLING, priceKey: "kling_v3_standard", verified: false },
+      ],
+      routes.table,
+    );
+    const h = await harness({
+      table: mixed,
+      script: {
+        "POST /api/v1/videos": submitFor({ [KLING]: [accepted("job-first")] }),
+        "GET /api/v1/videos/job-first": completed("job-first", 0.6125),
+      },
+    });
+    const spec = assetSpec();
+    const report = await h.router.produce(h.input(spec));
+    assert.equal(report.outcome.status, "done", JSON.stringify(report.outcome));
+    assert.equal(h.requests.filter((request) => request.method === "POST" && String(request.body).includes(WAN)).length, 0, "the unpriced route is never sent to");
+    assert.match(report.decisions[0]?.reason ?? "", /this route has no price key/, "the exclusion is recorded with its reason");
+    assert.equal((await h.ledger.getEntryByKey(assetCacheKey(spec, KLING_ID)))?.estimateUsd, 0.63, "the priced route keeps its own price: five seconds at the price table's rate");
+  });
+
+  it("a measure hold on a class that is not video or avatar is refused before any route is read, and nothing is sent", async () => {
+    const h = await harness({ script: {} });
+    await assert.rejects(
+      h.router.submit({ ...h.input(assetSpec({ modelClass: "image.keyframe", durationMs: 1000 })), measureHoldUsd: 2.5 }),
+      (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    );
+    assert.equal(h.requests.length, 0, "nothing is sent");
   });
 });
 
