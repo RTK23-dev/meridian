@@ -271,7 +271,7 @@ export async function loadSession(sql: Sql, organizationId: string, brandId: str
     exploration: exploration
       ? { label: exploration.label, angle: exploration.angle, reason: exploration.reason }
       : null,
-    whitespace: whitespace.map((item) => ({ underused: item.underused, overused: item.overused, whyTest: item.whyTest })),
+    whitespace: whitespace.map((item) => ({ id: item.id, underused: item.underused, overused: item.overused, whyTest: item.whyTest })),
     briefs: briefs.map(briefOf),
     brief: briefs[0] ? briefOf(briefs[0]) : null,
     variants: assets.map((row) => {

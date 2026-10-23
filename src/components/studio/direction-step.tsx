@@ -185,7 +185,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
           <h2 className="text-section font-semibold">Semantic clusters</h2>
           <p className="mt-2 text-sm text-fg-muted">{session.semantic.note}</p>
           <ul className="mt-3 space-y-2 text-sm">
-            {session.semantic.clusters.map((cluster) => <li key={cluster.label}>{cluster.summary}</li>)}
+            {session.semantic.clusters.map((cluster) => <li key={cluster.id}>{cluster.summary}</li>)}
           </ul>
         </Card>
       ) : (
@@ -196,7 +196,7 @@ export function DirectionStep({ session, canEdit, pending, opportunities, opport
         <Card>
           <h2 className="text-section font-semibold">Whitespace in the stored set</h2>
           <ul className="mt-3 space-y-2 text-sm">
-            {session.whitespace.map((item) => <li key={item.underused}>{item.whyTest}</li>)}
+            {session.whitespace.map((item) => <li key={item.id}>{item.whyTest}</li>)}
           </ul>
         </Card>
       ) : null}
