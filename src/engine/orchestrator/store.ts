@@ -183,12 +183,17 @@ export async function listPlanEvents(sql: Sql, organizationId: string, planId: s
 }
 
 /**
- * Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's, or when
- * it is running: an edit never clears a run in progress, and nothing is written.
+ * Replace a plan's checked plan (after an edit that the engine has checked), and its notes when the edit gives new ones. Without `reasons`
+ * the stored notes are kept. Returns null when the plan is not the organization's, or when it is running: an edit never clears a run in
+ * progress, and nothing is written.
  */
-export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan): Promise<StoredPlan | null> {
+export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan, reasons?: string[]): Promise<StoredPlan | null> {
   const rows = (await sql`
-    update orchestrator_plans set plan = ${JSON.stringify(plan)}::jsonb, status = 'ready', updated_at = now()
+    update orchestrator_plans
+    set plan = ${JSON.stringify(plan)}::jsonb,
+        reasons = coalesce(${reasons === undefined ? null : JSON.stringify(reasons)}::jsonb, reasons),
+        status = 'ready',
+        updated_at = now()
     where id = ${id} and organization_id = ${organizationId} and status <> 'running'
     returning id
   `) as Row[];

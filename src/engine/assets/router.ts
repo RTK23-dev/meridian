@@ -35,6 +35,7 @@ import type { ModelClass } from "../contracts/plan.ts";
 import { thresholds } from "../config/thresholds.ts";
 import type { BudgetAlert } from "../budget/reserve.ts";
 import type { Gateway, ResolvedRoute } from "../gateway/gateway.ts";
+import { isDisabledModel } from "../config/model-policy.ts";
 import { gatewayDownloader, type MediaDownloader } from "../gateway/download.ts";
 import type { LockableLedger } from "../gateway/paid.ts";
 import { type MediaStore, type RoutedAdapter } from "./adapter.ts";
@@ -157,6 +158,12 @@ export type RouterDeps = {
    * decision that says so.
    */
   catalog?: ModelCatalogSource;
+  /**
+   * The model families this router must not submit to: the workspace's switched-off families, with a plan's brand families added (D16).
+   * A route-table target, the route table being the fallback when a chosen model is not used, of one of them is excluded with that reason,
+   * before any adapter is built, so no fallback can reach it. Absent: no family is excluded here. A poll or a settle is never refused by it.
+   */
+  disabledFamilies?: readonly string[];
   signals?: RouterSignals;
   settings?: Partial<RouterSettings>;
   /** Epoch milliseconds. Injected so that tests control time. */
@@ -724,6 +731,11 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     const notConnected: string[] = [];
     const excluded: string[] = [];
     for (const [priority, route] of routes.entries()) {
+      // A target of a family this router switches off is not a candidate, so neither the first submit nor a fallback can reach it.
+      if (deps.disabledFamilies !== undefined && isDisabledModel(route.model, deps.disabledFamilies)) {
+        excluded.push(`${route.provider.id}:${route.model}: switched off by the model policy`);
+        continue;
+      }
       const built =
         chosen === null
           ? adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, videoProfiles, input.voiceProvider)

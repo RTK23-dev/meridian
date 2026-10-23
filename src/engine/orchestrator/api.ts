@@ -13,7 +13,7 @@ import type { CatalogEntry } from "./catalog.ts";
 import type { NodeChange } from "./stale.ts";
 import { editStoredPlan, runStoredPlan, type EditOutcome, type RunOutcome } from "./run.ts";
 import { effectiveDisabledFamilies, readBrandPolicy } from "./brand-policy.ts";
-import { readOrchestratorPolicy } from "./policy-store.ts";
+import { requireOrchestratorPolicy } from "./policy-store.ts";
 import { isDisabledModel } from "../config/model-policy.ts";
 import { readOrchestratorCatalog } from "./live-catalog.ts";
 import { planStoredDraft, type PlanDraftOutcome } from "./service.ts";
@@ -69,10 +69,11 @@ async function runtimeFor(sql: Sql, deps: ApiDeps) {
 
 /**
  * The families a plan is held to (D16): the workspace's switched-off families, with the brand's added when the plan records a brand. A plan
- * with no brand uses the workspace's alone. A plan that is not the organization's has no brand here, so the workspace's alone.
+ * with no brand uses the workspace's alone. A plan that is not the organization's has no brand here, so the workspace's alone. A workspace
+ * whose stored policy is unreadable throws its reason here, before any catalog read or call: planning, runs and edits refuse with it.
  */
 export async function disabledFamiliesFor(sql: Sql, organizationId: string, planId: string): Promise<string[]> {
-  const workspace = await readOrchestratorPolicy(sql, organizationId);
+  const workspace = await requireOrchestratorPolicy(sql, organizationId);
   const plan = await getPlan(sql, organizationId, planId);
   const brandFamilies = plan?.brandId ? await readBrandPolicy(sql, organizationId, plan.brandId) : [];
   return effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies);
@@ -80,7 +81,7 @@ export async function disabledFamiliesFor(sql: Sql, organizationId: string, plan
 
 /** The text models the orchestrator may plan with, read from the live catalog. Without a connected key the read is not_connected. */
 export async function textModelsFor(sql: Sql, input: { organizationId: string; now: () => string }, deps: ApiDeps = {}): Promise<TextModelsState> {
-  const policy = await readOrchestratorPolicy(sql, input.organizationId);
+  const policy = await requireOrchestratorPolicy(sql, input.organizationId);
   const catalog = await catalogFor(sql, input.organizationId, input.now, policy.disabledModelFamilies, deps);
   if (catalog.status !== "ok") return catalog;
   return { status: "ok", models: textChoices(catalog.catalog) };
@@ -173,7 +174,10 @@ export async function runPlanFor(
           },
           brand: (brandId) => readBrandFacts(sql, input.organizationId, brandId),
           // The run's own asset router: a visual or voice step is made on the run's reservation, like a shot is. None without a reservation.
-          router: reserved ? composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId }) : undefined,
+          // The router refuses and filters by this plan's families: the workspace's, with the brand's added (D16). A plan with no brand has the workspace's.
+          router: reserved
+            ? composition.assetRouter?.({ organizationId: input.organizationId, requestId: budget.requestId, reservationId: budget.reservationId, disabledFamilies })
+            : undefined,
           // A video or avatar the provider accepts is queued here, and the asset poll (engine.asset_poll) settles it.
           queueAsset: reserved ? (entry) => queueAssetJob(sql, input.organizationId, entry) : undefined,
           sql,

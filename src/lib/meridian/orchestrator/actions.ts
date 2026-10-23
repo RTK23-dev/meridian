@@ -7,15 +7,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertRole, hasRole, isRole, type Role } from "@/lib/meridian/access";
+import type { Role } from "@/lib/meridian/access";
 import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
-import { editPlanStepFor, measuredAverageFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
+import { editPlanStepFor, planDraftFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
-import { approvePlanBudget, listBudgetApprovals } from "@/engine/orchestrator/approval";
-import { INITIAL_POLICY, MEASURE_CEILING_RANGE, measureModeFor, readOrchestratorPolicy, writeOrchestratorPolicy } from "@/engine/orchestrator/policy-store";
-import { effectiveDisabledFamilies, planBrandRefusal, readBrandPolicy, writeBrandPolicy } from "@/engine/orchestrator/brand-policy";
+import { MEASURE_CEILING_RANGE } from "@/engine/orchestrator/policy-store";
+import { planBrandRefusal } from "@/engine/orchestrator/brand-policy";
 import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
+import {
+  approveBudgetAs,
+  brandAccessFor,
+  listApprovalsAs,
+  measuredAverageAs,
+  readBrandPolicyAs,
+  readWorkspacePolicyAs,
+  runPlanAs,
+  saveBrandPolicyAs,
+  saveWorkspacePolicyAs,
+} from "./operations.ts";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
 
@@ -47,21 +57,11 @@ function optionalBudget(value: unknown, label: string): number | undefined {
   return number(value, label, 0.01, 1000);
 }
 
-/** The brand's organization and the caller's role in it, checked against the minimum the action needs. */
+/** The brand's organization and the caller's role in it, checked against the minimum the action needs (operations.ts brandAccessFor). */
 async function requireBrand(userId: string, brandId: string, minimum: Role) {
   const sql = await getSql();
-  const rows = await sql<{ organization_id: string; name: string }>`
-    select organization_id, name from brands where id = ${brandId} and deleted_at is null limit 1
-  `;
-  const brand = rows[0];
-  if (!brand) throw new Error("Brand not found.");
-  const members = await sql<{ role: string }>`
-    select role from memberships where user_id = ${userId} and organization_id = ${brand.organization_id} limit 1
-  `;
-  const role = members[0]?.role;
-  if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
-  assertRole(role, minimum);
-  return { sql, organizationId: brand.organization_id, brandName: brand.name, now: () => new Date().toISOString(), role };
+  const access = await brandAccessFor(sql, userId, brandId, minimum);
+  return { sql, organizationId: access.organizationId, brandName: access.brandName, now: () => new Date().toISOString(), role: access.role };
 }
 
 /** A plan as the screens show it: its status, its reasons and its steps, without the stored JSON strings. */
@@ -204,15 +204,12 @@ export const runOrchestratorPlan = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now, role } = await requireBrand(context.userId, data.brandId, "admin");
-    const mode = measureModeFor(await readOrchestratorPolicy(sql, organizationId), { measure: data.measure, admin: hasRole(role, "admin") });
-    if (mode.status === "refused") throw new Error(mode.reason);
-    const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now, measure: mode.measure });
+    // The admin's check, the measure decision and the run are in operations.ts runPlanAs.
+    const { outcome, stored } = await runPlanAs(await getSql(), context.userId, data);
     if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
     if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
     if (outcome.status === "not_found") throw new Error("Plan not found.");
     if (outcome.status === "not_runnable") return { status: "not_runnable", reasons: outcome.reasons };
-    const stored = await getPlan(sql, organizationId, data.planId);
     if (!("spentUsd" in outcome)) throw new Error("The run did not finish.");
     return { status: outcome.status, spentUsd: outcome.spentUsd, plan: stored ? summaryOf(stored) : null };
   });
@@ -254,15 +251,11 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
     return { status: "edited", plan: after ? summaryOf(after) : null };
   });
 
-/** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
 /** The workspace's switched-off model families, with the initial values. Any member of the brand's workspace reads it. */
 export const getOrchestratorPolicyFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
-    return { policy: await readOrchestratorPolicy(sql, organizationId), initial: INITIAL_POLICY };
-  });
+  .handler(async ({ context, data }) => readWorkspacePolicyAs(await getSql(), context.userId, data));
 
 /** Save the policy. Only a workspace admin changes it. An absent field keeps its value; the engine's schema checks every value it is given. */
 export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
@@ -281,15 +274,7 @@ export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
     };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
-    const policy = await writeOrchestratorPolicy(sql, {
-      organizationId,
-      actorId: context.userId,
-      patch: { disabledModelFamilies: data.disabledModelFamilies, measureCeilingUsdPerSecond: data.measureCeilingUsdPerSecond },
-    });
-    return { policy };
-  });
+  .handler(async ({ context, data }) => saveWorkspacePolicyAs(await getSql(), context.userId, data));
 
 /** Approve a paused plan's budget: the amount the person approves becomes the budget the run is held to. Only a workspace admin approves. */
 export const approveOrchestratorBudget = createServerFn({ method: "POST" })
@@ -303,11 +288,9 @@ export const approveOrchestratorBudget = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
-    const outcome = await approvePlanBudget(sql, { organizationId, planId: data.planId, budgetUsd: data.budgetUsd, actorId: context.userId });
+    const { outcome, stored } = await approveBudgetAs(await getSql(), context.userId, data);
     if (outcome.status === "not_found") throw new Error("Plan not found.");
     if (outcome.status === "refused") return { status: "refused" as const, reasons: outcome.reasons };
-    const stored = await getPlan(sql, organizationId, data.planId);
     return {
       status: "approved" as const,
       previousUsd: outcome.previousUsd,
@@ -316,6 +299,7 @@ export const approveOrchestratorBudget = createServerFn({ method: "POST" })
     };
   });
 
+/** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
 export const getOrchestratorModelSetting = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ organizationId: text(objectInput(input).organizationId, 80, "Workspace", true) }))
   .middleware([authMiddleware])
@@ -382,12 +366,7 @@ export const listBudgetApprovalsFor = createServerFn({ method: "POST" })
     return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
-    const plan = await getPlan(sql, organizationId, data.planId);
-    if (plan === null) throw new Error("Plan not found.");
-    return { approvals: await listBudgetApprovals(sql, organizationId, data.planId, 50) };
-  });
+  .handler(async ({ context, data }) => listApprovalsAs(await getSql(), context.userId, data));
 
 /**
  * The model families the brand switches off, the workspace's, and the set a plan of this brand is held to (decision D16). Any member of the
@@ -396,16 +375,7 @@ export const listBudgetApprovalsFor = createServerFn({ method: "POST" })
 export const getBrandPolicyFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
-    const workspace = await readOrchestratorPolicy(sql, organizationId);
-    const brandFamilies = await readBrandPolicy(sql, organizationId, data.brandId);
-    return {
-      brandFamilies,
-      workspaceFamilies: workspace.disabledModelFamilies,
-      effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies),
-    };
-  });
+  .handler(async ({ context, data }) => readBrandPolicyAs(await getSql(), context.userId, data));
 
 /**
  * Save the model families the brand switches off. Only a workspace admin changes it. A brand may only add families: the workspace's stay off,
@@ -421,21 +391,7 @@ export const saveBrandPolicyFor = createServerFn({ method: "POST" })
     };
   })
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "admin");
-    const brandFamilies = await writeBrandPolicy(sql, {
-      organizationId,
-      brandId: data.brandId,
-      actorId: context.userId,
-      disabledModelFamilies: data.disabledModelFamilies,
-    });
-    const workspace = await readOrchestratorPolicy(sql, organizationId);
-    return {
-      brandFamilies,
-      workspaceFamilies: workspace.disabledModelFamilies,
-      effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies),
-    };
-  });
+  .handler(async ({ context, data }) => saveBrandPolicyAs(await getSql(), context.userId, data));
 
 /**
  * The measured average cost per second of the workspace's clips (D15): the reported bills over their lengths. It is shown, never used to set a
@@ -444,7 +400,4 @@ export const saveBrandPolicyFor = createServerFn({ method: "POST" })
 export const getMeasuredAverageFor = createServerFn({ method: "POST" })
   .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "viewer");
-    return measuredAverageFor(sql, organizationId);
-  });
+  .handler(async ({ context, data }) => measuredAverageAs(await getSql(), context.userId, data));

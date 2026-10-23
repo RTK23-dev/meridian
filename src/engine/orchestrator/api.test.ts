@@ -3,7 +3,7 @@ import { after, before, describe, test } from "node:test";
 import { readFileSync } from "node:fs";
 import { gatewayFor, json } from "../claude/test/helpers.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { disabledFamiliesFor, editPlanStepFor, measuredAverageFor, planDraftFor, runPlanFor } from "./api.ts";
+import { disabledFamiliesFor, editPlanStepFor, measuredAverageFor, planDraftFor, runPlanFor, textModelsFor } from "./api.ts";
 import { writeBrandPolicy } from "./brand-policy.ts";
 import { orchestratorPlanSchema, type OrchestratorPlan } from "./contracts.ts";
 import { recordCostMeasurement } from "./holds.ts";
@@ -104,6 +104,38 @@ describe("the switched-off families of a plan, at each entry point (D16): the wo
     assert.equal(outcome.status, "not_runnable");
     if (outcome.status === "not_runnable") assert.match(outcome.reasons.join("\n"), /step shot_1: .+ is switched off by the workspace's model policy/);
     assert.equal((await getPlan(db.sql, ORG, "plan_brand"))?.status, "ready", "a refused run leaves the plan ready");
+  });
+});
+
+describe("a workspace whose stored policy is unreadable: planning, runs, edits and the model list refuse with its reason, and nothing is written", () => {
+  let db: TestDatabase;
+  const ORG_BROKEN = "org_api_unreadable";
+  const REASON = { message: "the workspace's orchestrator policy is unreadable; save the policy again" };
+
+  before(async () => {
+    db = await createTestDatabase();
+    await seedWorkspace(db.sql, ORG_BROKEN);
+    // The families are a string, not a list: the row does not validate, so it is unreadable and no family is read from it.
+    await db.sql`
+      insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
+      values (${ORG_BROKEN}, ${JSON.stringify({ disabledModelFamilies: "zeta-vendor" })}::jsonb, 'user_admin_b', now())
+    `;
+    await createPlanDraft(db.sql, { id: "plan_broken", organizationId: ORG_BROKEN, title: "Plan", brief: BRIEF, orchestratorModel: sample.orchestrator.id, budgetUsd: 10 });
+    await recordPlanOutcome(db.sql, { id: "plan_broken", organizationId: ORG_BROKEN, plan: sample, reasons: [], catalogReadAt: null });
+  });
+
+  after(async () => {
+    await db.close();
+  });
+
+  test("planning, a run, a step edit and the model list each refuse with the reason before any call, and the plan is unchanged", async () => {
+    const deps = { gateway: gatewayFor(listingReplies()).gateway };
+    const planBefore = await getPlan(db.sql, ORG_BROKEN, "plan_broken");
+    await assert.rejects(planDraftFor(db.sql, { organizationId: ORG_BROKEN, planId: "plan_broken", now: () => NOW }, deps), REASON);
+    await assert.rejects(runPlanFor(db.sql, { organizationId: ORG_BROKEN, planId: "plan_broken", now: () => NOW, measure: null }, deps), REASON);
+    await assert.rejects(editPlanStepFor(db.sql, { organizationId: ORG_BROKEN, planId: "plan_broken", nodeId: "hero_still", change: { params: { aspect: "1:1" } }, now: () => NOW }, deps), REASON);
+    await assert.rejects(textModelsFor(db.sql, { organizationId: ORG_BROKEN, now: () => NOW }, deps), REASON);
+    assert.deepEqual(await getPlan(db.sql, ORG_BROKEN, "plan_broken"), planBefore, "a refused call writes nothing");
   });
 });
 

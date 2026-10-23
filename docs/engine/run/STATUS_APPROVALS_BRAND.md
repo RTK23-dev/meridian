@@ -42,17 +42,18 @@ Branch `feat/orchestrator-approvals-brand`. Not pushed. The lead merges.
 - `api.test.ts` (new, 10): the families at each entry point. A brand's family reaches the editor, the planner's catalog and the runner, and no other organization's brand or workspace family does. The averages: null with none, the ratio with clips, organization-scoped.
 - `measure-plan.test.ts` (new, 3): a draft with an unpriced video step is stored with a note. The run refuses it without measure mode, and completes it with measure mode at the ceiling. Another unpriced step is still refused at planning.
 - `validate-planning.test.ts` (new, 3): the planning note, the run refusal, the other refusals, and the measured hold.
-- `policy-store.test.ts`: two expectations updated for the new key. Added: the ceiling's start value, its range, the strict parse, the single row, and the measure decision.
+- `policy-store.test.ts`: the ceiling's start value, its range, the strict parse, the single row, and the measure decision. A malformed row is unreadable, with its reason, and switches no family on. A missing key takes its initial value. A save over an unreadable row must state the families.
+- `operations.test.ts` (new, 9): the role and tenancy of each orchestrator operation in `actions.ts`, against a migrated database, including an unreadable policy row.
 - `brand-policy.test.ts`: `planBrandRefusal`.
-- Orchestrator suite (`src/engine/orchestrator/*.test.ts`): 284 run, 283 pass, 1 fail (`production.test.ts:159`, which predates this branch).
+- Orchestrator suite (`src/engine/orchestrator/*.test.ts`): 301 run, 301 pass. Budget 159/159, render 77/77, assets 149/149, jobs 314/314, `operations.test.ts` 9/9. `npm run typecheck`: pass. `eslint` on the changed files: pass.
 - `npm run typecheck`: pass. `npx eslint` on the changed files: pass.
 - Not tested: the server functions in `actions.ts`. The file imports `@/` aliases, which the test runner cannot resolve. The rules they call are tested in the engine.
 
 ## Open
 
-1. `jobs/runtime.ts:559-570`: the asset router reads only the workspace's families. If a route falls back to another model at call time, a family the brand switched off could be chosen. Not verified in a live run. Fixing it needs `runtime.ts`, which is outside this change.
-2. `run.ts` `editStoredPlan` validates without planning, so an edit cannot set an unpriced video step. Planning accepts such a step with a note. The lead decides.
+1. Factory shot and voice jobs (`jobs/runtime.ts`, `shotGeneratorOf` and the voice router) route without the workspace's families, so a route-table fallback there can reach a switched-off family. A plan run's router is filtered (`router.ts`, `api.ts`). A settle-time fallback reuses the targets carried from submit, and the poll router has no families, so a family switched off while a job is in flight is not excluded. Fixing both needs the families on the factory and poll routers. Not verified in a live run.
+2. Resolved: an unpriced video or avatar edit is stored with a note, and refused at run time without measure mode (`run.ts`, `measure-edit.test.ts`).
 3. `api.ts` `textModelsFor` (line 82) gives the composer the workspace's families, not the brand's. The planner still refuses a model the brand switched off.
-4. `policy-store.ts:48-56` `policyFrom`: a malformed row replaces the whole policy, families included, with the initial list. The initial list can lack a family the workspace had switched off, which is a fail-open. This predates the wave. The strict parse is kept, as asked. The new ceiling makes one more value reachable.
+4. Resolved: a malformed policy row is unreadable. Planning, runs, edits and the model list refuse with "the workspace's orchestrator policy is unreadable; save the policy again", and no family is reset or switched on. The read reports the row as unreadable. The policy panel (`orchestrator-policy-panel.tsx`) would show that reason as an error, but it has no form to save the policy again. That needs a UI change, which is outside this change.
 5. `brand_id` has no foreign key and no organization check in the database (`migrations/0119`). The server functions check it with `requireBrand`.
 6. Migrations 0118 and 0119 are on this branch. Another branch with the same numbers will trip the numbering test.
