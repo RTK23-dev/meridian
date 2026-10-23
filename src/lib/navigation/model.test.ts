@@ -1,9 +1,18 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  ALERT_LIST_LIMIT, APP_NAME, bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, isForbiddenError,
+  ALERT_LIST_LIMIT, APP_NAME, AREA_GUIDE, bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, isForbiddenError,
   nextStep, paletteScreens, resolveLastBrand, SETTINGS_SCREEN_LINKS, sidebarGroups, switcherMode, unreadAlertLabel,
 } from "./model.ts";
+
+test("the brand overview's area guide links only to screens the sidebar lists, so it cannot point at a missing screen", () => {
+  const listed = new Set(sidebarGroups({ brandId: "brand-1", reviewCount: 0 }).flatMap((group) => group.items.map((item) => item.to)));
+  for (const area of AREA_GUIDE) {
+    assert.equal(listed.has(`/brands/brand-1/${area.path}`), true, `${area.id} is in the sidebar`);
+    assert.notEqual(area.what.trim(), "", `${area.id} says what it is for`);
+  }
+  assert.equal(new Set(AREA_GUIDE.map((area) => area.path)).size, AREA_GUIDE.length, "each screen is listed once");
+});
 
 test("brandIdFromPath reads the brand from brand paths and never from /brands/new", () => {
   assert.equal(brandIdFromPath("/brands/brand-1"), "brand-1");

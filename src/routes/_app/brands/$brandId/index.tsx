@@ -8,6 +8,7 @@ import { useBrandQuery, useMachineQuery, useOpportunitiesQuery, useReviewsQuery 
 import { missingItems, nextBestAction, pipelineStages } from "@/components/brand-overview/pipeline";
 import { PipelineStepper } from "@/components/brand-overview/pipeline-stepper";
 import { NextActionCard } from "@/components/brand-overview/next-action-card";
+import { WhereThingsLive } from "@/components/brand-overview/where-things-live";
 import { MissingChecklist } from "@/components/brand-overview/missing-checklist";
 import { BrandDetailsCard } from "@/components/brand-overview/brand-details-card";
 import { DangerZone } from "@/components/brand-overview/danger-zone";
@@ -76,6 +77,8 @@ function BrandHome({ brandId }: { brandId: string }) {
           />
         ) : <Skeleton variant="card" />}
       </div>
+
+      <WhereThingsLive brandId={brandId} />
 
       {openOpportunities.length || openReviews.length ? (
         <div className="grid gap-4 lg:grid-cols-2">

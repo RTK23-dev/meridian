@@ -107,6 +107,20 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
 }
 
 /**
+ * Where each kind of work lives on a brand, in words a new person can use. The brand overview shows this list. Each path is a screen
+ * the sidebar lists, and a test keeps it that way. Direct creation is Studio; the research-led runs are the Factory.
+ */
+export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
+  { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
+  { id: "opportunities", label: "Opportunities", path: "opportunities", what: "Directions ranked from your stored evidence. Open one to see its evidence and decide." },
+  { id: "studio", label: "Studio: direct creation", path: "studio", what: "Write a brief from an accepted direction, generate variants, review them, and queue them to publish." },
+  { id: "factory", label: "Factory: research-led runs", path: "factory", what: "Runs that move from research through grading, production, gates and approval. Its Production tab shows the job queue." },
+  { id: "library", label: "Library", path: "library", what: "The creatives and outputs this brand has stored." },
+  { id: "reviews", label: "Reviews", path: "reviews", what: "Decisions waiting for a person, such as a brief or a variant." },
+  { id: "learning", label: "Learning", path: "learning", what: "What your recorded results have taught the next brief." },
+];
+
+/**
  * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Opportunities, Studio, Reviews,
  * Library, Learning, Calibration, then back to Opportunities. The brand overview is not listed: its own next-action card
  * names the next step from stored data, so a second link would contradict it.
