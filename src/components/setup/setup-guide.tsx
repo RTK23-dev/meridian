@@ -121,50 +121,50 @@ export function SetupGuide() {
 
   return (
     <SetupTests.Provider value={{ tests: testAnswers, record: recordTest }}>
-    <div className="space-y-10">
-      <PageHeader
-        title="Set up Meridian"
-        description="Create a brand, then choose a decision engine and save its key. The other connections are on this page. Each one shows what it needs and saves it here."
-        breadcrumbs={[{ label: "Overview", to: "/" }]}
-      />
+      <div className="space-y-10">
+        <PageHeader
+          title="Set up Meridian"
+          description="Create a brand, then choose a decision engine and save its key. The other connections are on this page. Each one shows what it needs and saves it here."
+          breadcrumbs={[{ label: "Overview", to: "/" }]}
+        />
 
-      <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div className="min-w-0 space-y-1">
-            <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
-            <p className="text-sm text-fg-muted">{summary.headline}</p>
+        <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div className="min-w-0 space-y-1">
+              <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
+              <p className="text-sm text-fg-muted">{summary.headline}</p>
+            </div>
+            {next ? (
+              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-md bg-accent px-4 text-center text-sm font-semibold text-accent-fg transition hover:brightness-110">
+                Go to: {next.title}
+              </a>
+            ) : null}
           </div>
-          {next ? (
-            <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-md bg-accent px-4 text-center text-sm font-semibold text-accent-fg transition hover:brightness-110">
-              Go to: {next.title}
-            </a>
-          ) : null}
-        </div>
-        <div
-          role="progressbar"
-          aria-label="Required setup steps"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={percent}
-          className="mt-5 h-2 overflow-hidden rounded-full bg-surface-2"
-        >
-          <div className="h-full rounded-full bg-fg transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
-        </div>
-        {!canAdmin ? <p className="mt-4 text-sm text-fg-muted">Only a workspace admin can save keys or choose the engine. Everyone can read these states.</p> : null}
-      </section>
+          <div
+            role="progressbar"
+            aria-label="Required setup steps"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={percent}
+            className="mt-5 h-2 overflow-hidden rounded-full bg-surface-2"
+          >
+            <div className="h-full rounded-full bg-fg transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
+          </div>
+          {!canAdmin ? <p className="mt-4 text-sm text-fg-muted">Only a workspace admin can save keys or choose the engine. Everyone can read these states.</p> : null}
+        </section>
 
-      <ol className="space-y-5">
-        {steps.map((step, index) => (
-          <SetupStep key={step.id} step={step} index={index} body={body(step)} />
-        ))}
-      </ol>
+        <ol className="space-y-5">
+          {steps.map((step, index) => (
+            <SetupStep key={step.id} step={step} index={index} body={body(step)} />
+          ))}
+        </ol>
 
-      <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
-        <h2 id="setup-advanced" className="font-semibold text-fg">Every provider in one list</h2>
-        <p className="mt-1 text-sm text-fg-muted">The same keys, states and reasons, with the server variables for each row, are on Settings → General.</p>
-        <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
-      </section>
-    </div>
+        <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
+          <h2 id="setup-advanced" className="font-semibold text-fg">Every provider in one list</h2>
+          <p className="mt-1 text-sm text-fg-muted">The same keys, states and reasons, with the server variables for each row, are on Settings → General.</p>
+          <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
+        </section>
+      </div>
     </SetupTests.Provider>
   );
 }
