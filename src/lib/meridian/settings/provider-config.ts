@@ -594,7 +594,16 @@ export async function testWorkspaceProviderConnection(
       let gatewayUrl = process.env.CYCLONE_GATEWAY_URL || "http://127.0.0.1:4000";
       if (rows[0]) {
         const creds = await retrieveVaultCredential(sql, input.organizationId, rows[0].id);
-        if (creds?.customFields?.gatewayUrl) gatewayUrl = String(creds.customFields.gatewayUrl);
+        if (creds?.customFields?.gatewayUrl) {
+          // A gateway URL saved by a workspace is tenant input, so it must be a public http(s) address. Otherwise a saved value
+          // could point this server at an internal host. The operator's CYCLONE_GATEWAY_URL is trusted and is not checked here.
+          const saved = String(creds.customFields.gatewayUrl);
+          const issue = publicUrlIssue(saved);
+          if (issue) {
+            return { status: "ERROR", message: `The workspace's saved Cyclone gateway URL is not allowed. ${issue} No request was made.`, latencyMs: Date.now() - started };
+          }
+          gatewayUrl = saved;
+        }
       }
 
       const res = await fetch(`${gatewayUrl}/v1/device/status`, { signal: AbortSignal.timeout(3000) });

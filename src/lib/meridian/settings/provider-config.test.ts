@@ -282,6 +282,32 @@ for (const { name, sql } of backends) {
     });
   });
 
+  test(`[${name}] Cyclone: a gateway URL saved by a workspace must be a public address, and no request is made for an internal one`, async () => {
+    const internal = await studioTenant(sql, "test-cyclone-internal");
+    await storeVaultCredential(sql, internal.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "http://169.254.169.254/" } });
+    const publicGateway = await studioTenant(sql, "test-cyclone-public");
+    await storeVaultCredential(sql, publicGateway.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "https://gateway.example.com" } });
+
+    const realFetch = globalThis.fetch;
+    const requested: string[] = [];
+    globalThis.fetch = (async (input: unknown) => {
+      requested.push(String(input));
+      return new Response("", { status: 200 });
+    }) as typeof fetch;
+    try {
+      const refused = await testWorkspaceProviderConnection(sql, { organizationId: internal.organizationId, category: "cyclone" });
+      assert.equal(refused.status, "ERROR");
+      assert.match(refused.message, /not allowed/, "the saved internal address is refused");
+      assert.deepEqual(requested, [], "no request is made to a refused address");
+
+      const allowed = await testWorkspaceProviderConnection(sql, { organizationId: publicGateway.organizationId, category: "cyclone" });
+      assert.equal(allowed.status, "READY", "a public https gateway that answers is ready");
+      assert.deepEqual(requested, ["https://gateway.example.com/v1/device/status"]);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   test(`[${name}] perception: PERCEPTION_PROVIDER=none turns it off in the summary and in Test Connection, even with a saved key`, async () => {
     const tenant = await studioTenant(sql, "perception-off");
     await withEnv({ PERCEPTION_PROVIDER: "none", PERCEPTION_SHARED_DEFAULT: "gemini", MERIDIAN_GEMINI_API_KEY: DEPLOYMENT_GEMINI }, async () => {
