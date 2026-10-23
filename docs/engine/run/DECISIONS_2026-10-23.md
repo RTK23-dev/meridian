@@ -139,3 +139,15 @@ Superseded by D12 on the same day: the percent and cents tolerance is removed, a
   set is the union of the two.
 - A plan records its brand (`orchestrator_plans.brand_id`). A plan with no brand uses the workspace set alone.
 - Veo stays off by the initial value (D1), and no brand can turn it on.
+
+## D17. A paid step starts only if its own hold fits the line (owner decision 2026-10-23; resolves the open question in D12)
+
+- A paid step starts only while the committed spend is below its line and its own hold fits within it: committed spend plus the step's
+  hold is not above the line. A step whose hold does not fit is refused before any request is made, and nothing is held for it.
+- This applies to the request line, the workspace month line and a category line. A call at the line is refused even with a zero estimate.
+- The overshoot therefore comes only from two sources: a bill above its estimate, or two calls running at the same time. Both are recorded.
+- A run stops before the first step that does not fit. The pause reads "budget reached, project not finished: the next step's hold of $H
+  would take the spend past the $L budget (committed $S)". Steps before it still run.
+- The planning call follows the same rule: its hold must fit the budget, or the draft is refused before any call.
+- A plan whose estimate is above its budget is still accepted with a note. The run stops at the first step that does not fit.
+- Reservations are still accepted when they are above a budget, with a note. The calls are what the line gates.
