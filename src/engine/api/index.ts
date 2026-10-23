@@ -749,8 +749,11 @@ export async function quoteEngineShotRemake(sql: Sql, input: Omit<RemakeInput, "
     if (estimate.reservedUsd > context.request.constraints.budgetUsd) {
       reasons.push(`the remake would take the request over its $${context.request.constraints.budgetUsd.toFixed(4)} budget`);
     }
-    const totals = await withWorkspaceLedger(sql, input.organizationId, (store) => store.sumForMonth(input.organizationId, input.now.slice(0, 7)));
-    const monthUsd = sumUsd([totals.reservedUsd, estimate.reservedUsd]);
+    // The month's committed spend, as reserve() reads it (D12): holds that are not yet spent do not count against the month.
+    const monthCommittedUsd = await withWorkspaceLedger(sql, input.organizationId, (store) =>
+      store.committedForMonth(input.organizationId, input.now.slice(0, 7)),
+    );
+    const monthUsd = sumUsd([monthCommittedUsd, estimate.reservedUsd]);
     if (monthUsd > context.month.usd) reasons.push(`the remake would take the workspace month over its $${context.month.usd.toFixed(4)} budget`);
     return {
       status: "quoted",

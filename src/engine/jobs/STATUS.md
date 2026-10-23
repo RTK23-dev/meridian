@@ -9,15 +9,19 @@ The budget call sites of the brief path follow `budget/STATUS.md`, which has the
 - `runtime.ts`: the production source is built from the monthly reader alone.
 - `handlers/estimate-reserve.ts`: `extendForPlan` takes no tolerance. The `paused` outcome is gone: a raise above a budget is written with a
   note, and the stage passes its gate. `WorkspaceMonthBudget.tolerance?` is kept as an optional, never-set field, because the orchestrator
-  still reads it (`budget/STATUS.md`, decision 3).
-- `handlers/intake.ts`: a pre-flight hold above a budget is held with a note, not paused. A workspace month that is not connected, or a
-  refused hold, still pauses the request (`budgetPause`).
+  still reads it (accepted; `budget/STATUS.md`, change list).
+- `handlers/intake.ts`: a pre-flight hold above a budget is held with a note, not paused. A hold that is not accepted (the month's committed
+  spend is at its budget), and a workspace month that is not connected, pause the request (`budgetPause`).
 - `sql-ledger-store.ts`: no migration. The two allowance columns stay. The mapping was already optional, and a reservation written from v11
   stores `null` in them; a comment says so. `sql-ledger-store.test.ts` reads back a row with the columns set and a row without them.
+- Round 2 (committed spend): `sql-ledger-store.ts` implements `committedForRequest(requestId)` and `committedForMonth(workspaceId, month)`
+  over `engine_ledger`: each row's actual cost, or its hold until it settles, summed by request, or by the month of each row's `at`. The
+  month method refuses another workspace, as `sumForMonth` does. `handlers/estimate-reserve.ts` and `intake.ts` need no change for it.
+  `sql-ledger-store.test.ts` covers both totals, and a remake's second reservation refused at the request line, on the database.
 - `orchestrator/api.ts`: only the import and the two `workspaceBudgetFromSettings` calls, as the brief allowed.
 - Tests: the over-budget cases in `handlers/intake.test.ts`, `estimate-reserve.test.ts`, `estimate-chosen.test.ts` and
   `estimate-chosen-stage.test.ts` assert a note and a pass, not a pause or a refusal. `workspace-budget.test.ts` (5) drops the tolerance
-  reader cases. `sql-ledger-store.test.ts` (9, was 8) asserts the line and adds the mapping test.
+  reader cases. `sql-ledger-store.test.ts` (11, was 8) asserts the line, adds the mapping test and the two committed totals.
 
 ## Call telemetry (migration 0112; branch `telemetry-capture-agent`, 2026-10-22)
 
@@ -810,7 +814,7 @@ request. `client.test.ts` now expects the request in the key. Lead: this changes
    the generated call against the activity page, the Critic's ledger rows and role-call rows, and the verdicts. Expected and honest
    result: the take gate escalates the similarity checks (no scorer vendor, Bible 20.2) and the flicker, black-frame and motion checks
    (no media functions yet). Record that as the result. Do not record it as a pass.
-4. `video.cinematic` (Kling) is `verified: false` in `config/routes.ts`. Run `verifyRoutes` and set it (lead, after the W5 live run).
+4. `video.cinematic` (a vendor model) is `verified: false` in `config/routes.ts`. Run `verifyRoutes` and set it (lead, after the W5 live run).
 
 ## Blockers and decisions for the lead
 

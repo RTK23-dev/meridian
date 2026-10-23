@@ -5,8 +5,9 @@
 // estimate_reserve then raises that same reservation to the full plan estimate, plus the redo allowance: extendReservation.
 // The fixed lines stay inside the plan's lines, because the plan's lines include them.
 //
-// Both steps note a hold that is above the request budget or the workspace month. A note is never a refusal: a budget is a line
-// (owner direction 2026-10-23, D12), and a call starts only while its line is below the budget (reserve.ts, authorizeCall).
+// Both steps read the request's committed spend and the workspace month's committed spend (owner direction 2026-10-23, D12). A
+// reservation that starts while its month's committed spend is at or above the month budget is not accepted (paused, cap mode). A hold
+// above a budget is noted, never refused: a call starts only while its line is below the budget (reserve.ts, authorizeCall).
 // A reservation is never lowered below what it has committed.
 
 import { z } from "zod";
@@ -25,7 +26,8 @@ import {
   type ScenePlan,
 } from "../contracts/index.ts";
 import { estimatePlan, fixedBudgetLines, type ChosenCallPrices } from "./estimate.ts";
-import { committedFor, overBudgetNote, type BudgetAlert, type ReserveResult } from "./reserve.ts";
+import { committedFor, holdNotes, monthNotAcceptedReason, type BudgetAlert, type ReserveResult } from "./reserve.ts";
+import { startsBelowLine } from "./line.ts";
 import type { LedgerStore } from "./store.ts";
 
 const RESERVE_FIXED_STAGE = "intake";
@@ -72,17 +74,6 @@ function limitsIn(input: LimitsInput, stage: string): Limits {
   return { requestBudgetUsd: request.data, workspaceMonthBudgetUsd: month.data, now: time.data };
 }
 
-/**
- * The notes of a hold that is above a budget (D12): an alert for each budget it is above. A note is never a refusal. The messages match
- * reserve() so that the notes read the same wherever they appear.
- */
-function budgetNotesOf(limits: Limits, holdUsd: number, monthUsd: number): BudgetAlert[] {
-  const alerts: BudgetAlert[] = [];
-  if (holdUsd > limits.requestBudgetUsd) alerts.push(overBudgetNote("request", holdUsd, limits.requestBudgetUsd));
-  if (monthUsd > limits.workspaceMonthBudgetUsd) alerts.push(overBudgetNote("workspace_month", monthUsd, limits.workspaceMonthBudgetUsd));
-  return alerts;
-}
-
 export type ReserveFixedInput = {
   requestId: string;
   workspaceId: string;
@@ -99,9 +90,9 @@ export type ReserveFixedInput = {
 
 /**
  * The pre-flight hold (intake). It holds the fixed per-master lines only (budgets.fixedPerMasterUsd, 14.2), with no redo
- * allowance and no shot lines. A hold above a budget is held with a note (D12): calls are gated by their line, not by the hold.
- * - cap and warn: it is held and the notes are returned.
- * - observe: it is held and recorded; no note.
+ * allowance and no shot lines.
+ * - cap: accepted as reserved while the month's committed spend is below its budget; otherwise paused, with the reason.
+ * - cap and warn: a note for each budget the hold is above (D12). Observe records no note.
  * Idempotent on reservationId: a repeated call returns the stored reservation and stores nothing new.
  */
 export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput): Promise<ReserveResult> {
@@ -121,8 +112,16 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
 
   const lines = fixedBudgetLines();
   const fixedUsd = sumUsd(lines.map((line) => line.estimateUsd));
-  const totals = await store.sumForMonth(workspaceId, limits.now.slice(0, 7));
-  const alerts = budgetNotesOf(limits, fixedUsd, sumUsd([totals.reservedUsd, fixedUsd]));
+  const monthCommittedUsd = await store.committedForMonth(workspaceId, limits.now.slice(0, 7));
+  const requestCommittedUsd = await store.committedForRequest(requestId);
+  const alerts = holdNotes({
+    requestCommittedUsd,
+    requestBudgetUsd: limits.requestBudgetUsd,
+    monthCommittedUsd,
+    workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
+    plannedUsd: fixedUsd,
+  });
+  const paused = mode === "cap" && !startsBelowLine(monthCommittedUsd, limits.workspaceMonthBudgetUsd);
 
   const reservation: BudgetReservation = budgetReservationSchema.parse({
     schema: "meridian.budget_reservation/v1",
@@ -136,7 +135,8 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
     reservedUsd: fixedUsd,
     requestBudgetUsd: limits.requestBudgetUsd,
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
-    state: "reserved",
+    state: paused ? "paused" : "reserved",
+    ...(paused ? { pausedReason: monthNotAcceptedReason(monthCommittedUsd, limits.workspaceMonthBudgetUsd) } : {}),
     createdAt: limits.now,
   });
   await store.createReservation(reservation);
@@ -192,8 +192,8 @@ export async function extendReservation(store: LedgerStore, input: ExtendReserva
     };
   }
 
-  // The hold is counted in the month it was made (ledger store, sumForMonth). Extending it in another month would put
-  // the new amount in a month whose budget was never checked, so that is refused and a new reservation is needed.
+  // The hold is dated by the month it was made. Extending it in another month would put the new amount in a month whose budget was
+  // never checked, so that is refused and a new reservation is needed.
   const month = limits.now.slice(0, 7);
   if (month !== current.createdAt.slice(0, 7)) {
     return {
@@ -223,10 +223,16 @@ export async function extendReservation(store: LedgerStore, input: ExtendReserva
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
   });
 
-  // The month total already includes this reservation at its current hold. Swap that for the new hold.
-  const totals = await store.sumForMonth(current.workspaceId, month);
-  const otherReservationsUsd = roundUsd(Math.max(0, totals.reservedUsd - current.reservedUsd));
-  const alerts = budgetNotesOf(limits, holdUsd, sumUsd([otherReservationsUsd, holdUsd]));
+  // The committed spend already includes this reservation's calls, so the spend the hold still adds is the hold less that spend.
+  const monthCommittedUsd = await store.committedForMonth(current.workspaceId, month);
+  const requestCommittedUsd = await store.committedForRequest(current.requestId);
+  const alerts = holdNotes({
+    requestCommittedUsd,
+    requestBudgetUsd: limits.requestBudgetUsd,
+    monthCommittedUsd,
+    workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
+    plannedUsd: roundUsd(Math.max(0, holdUsd - committedUsd)),
+  });
 
   const changed = canonicalJson(next) !== canonicalJson(current);
   if (changed) {

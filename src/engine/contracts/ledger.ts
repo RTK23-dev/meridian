@@ -9,10 +9,11 @@ export const budgetModeSchema = z.enum(BUDGET_MODES);
 export type BudgetMode = z.infer<typeof budgetModeSchema>;
 
 /**
- * reserved: calls may be authorized. paused: no call is authorized, because an operator paused it or a reservation written before contract
- * v11 was paused by a budget rule (v11 reserves at creation whatever the size, D12). exceeded (contract v6): a verified bill took the
- * reservation above the amount it was authorized for, so no further paid call is authorized and the bill counts toward the month.
- * released: the reservation is closed at what is committed.
+ * reserved: calls may be authorized while their budget lines are below their budgets. paused: no call is authorized. In cap mode a reservation
+ * is paused at creation when its month's committed spend is at or above the month budget (contract v11, D12), and an operator can pause
+ * one. exceeded (contract v11, D12): a verified bill took the request's committed spend, or the month's, to its budget line in cap mode.
+ * No paid call starts while a line is reached; the mark clears when no line is. The bill counts toward the month. An overrun of a hold alone
+ * does not set it. released: the reservation is closed at what is committed.
  */
 export const RESERVATION_STATES = ["reserved", "paused", "exceeded", "released"] as const;
 export const reservationStateSchema = z.enum(RESERVATION_STATES);
@@ -76,7 +77,7 @@ export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
 /**
  * The Claude roles of Bible 11.1. A Claude call's ledger entry names its role, so cost is traceable per role. A new role is
  * a contract change (a version bump and a Bible section 4 note).
- * `frame_reader` (contract v4) is the Haiku vision role that reads captions, shake and speed ramps from sampled frames, as
+ * `frame_reader` (contract v4) is the vision role that reads captions, shake and speed ramps from sampled frames, as
  * measurements only. It returns no visible text (Bible 1, copy genes never content).
  * `model_chooser` (contract v8) picks each production call's model from the OpenRouter catalog (Bible 10.5). It runs on llm.check.
  * `scriptwriter` (contract v8) writes a request's script from its brief and the analysed reference (Bible 6.x write_script). It runs

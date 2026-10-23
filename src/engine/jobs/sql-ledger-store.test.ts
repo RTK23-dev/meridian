@@ -49,7 +49,7 @@ function callInput(reservationId: string, overrides: Partial<CallInput> = {}): C
     reservationId,
     stage: "produce_shot",
     provider: "openrouter",
-    model: "seedance-2.0-mini",
+    model: "fixture-model",
     estimateUsd: 0.2016,
     idempotencyKey: `produce:${fixtureId("shot_", 3)}:1`,
     at: "2026-10-13T09:01:00.000Z",
@@ -210,4 +210,58 @@ test("a store refuses a reservation or entry that belongs to another workspace, 
     withReservationLedger(db.sql, "ws_elsewhere", reserved.reservation.reservationId, async () => "never"),
     (error: unknown) => error instanceof EngineError && error.kind === "not_found",
   );
+});
+
+test("committedForRequest and committedForMonth read the committed spend from the database: the actual, or the hold, by request and by month", async () => {
+  const { organizationId, requestId } = await workspace(22);
+  const first = await withWorkspaceLedger(db.sql, organizationId, (store) => reserve(store, reserveInput(organizationId, requestId)));
+  const firstId = first.reservation.reservationId;
+  const authorized = await withReservationLedger(db.sql, organizationId, firstId, (store) =>
+    authorizeCall(store, callInput(firstId, { estimateUsd: 0.2, idempotencyKey: "sql-committed-1" })),
+  );
+  assert.equal(authorized.status, "authorized");
+  await withReservationLedger(db.sql, organizationId, firstId, (store) => reconcileCall(store, { idempotencyKey: "sql-committed-1", billedUsd: 0.15 }));
+  // A second reservation of the same request, with one call held.
+  const second = await withWorkspaceLedger(db.sql, organizationId, (store) =>
+    reserve(store, reserveInput(organizationId, requestId, { reservationId: fixtureId("res_", 740) })),
+  );
+  const secondId = second.reservation.reservationId;
+  await withReservationLedger(db.sql, organizationId, secondId, (store) =>
+    authorizeCall(store, callInput(secondId, { estimateUsd: 0.3, idempotencyKey: "sql-committed-2", at: "2026-10-13T09:05:00.000Z", entryId: fixtureId("led_", 740) })),
+  );
+
+  const requestTotal = await withWorkspaceLedger(db.sql, organizationId, (store) => store.committedForRequest(requestId));
+  assert.equal(requestTotal, 0.45, "0.15 settled plus 0.30 held, across both reservations of the request");
+  assert.equal(await withWorkspaceLedger(db.sql, organizationId, (store) => store.committedForRequest("req_nobody")), 0);
+  const october = await withWorkspaceLedger(db.sql, organizationId, (store) => store.committedForMonth(organizationId, "2026-10"));
+  assert.equal(october, 0.45);
+  assert.equal(await withWorkspaceLedger(db.sql, organizationId, (store) => store.committedForMonth(organizationId, "2026-11")), 0);
+  await assert.rejects(
+    withWorkspaceLedger(db.sql, organizationId, (store) => store.committedForMonth("ws_ledger_other", "2026-10")),
+    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    "a store cannot read another workspace's committed month",
+  );
+});
+
+test("a remake's reservation sees the request's spend on the database: a call on the second reservation is refused at the request line", async () => {
+  const { organizationId, requestId } = await workspace(23);
+  const first = await withWorkspaceLedger(db.sql, organizationId, (store) => reserve(store, reserveInput(organizationId, requestId, { requestBudgetUsd: 1 })));
+  const firstId = first.reservation.reservationId;
+  const committed = await withReservationLedger(db.sql, organizationId, firstId, (store) =>
+    authorizeCall(store, callInput(firstId, { estimateUsd: 0.9, idempotencyKey: "sql-remake-1", entryId: fixtureId("led_", 741) })),
+  );
+  assert.equal(committed.status, "authorized");
+  const second = await withWorkspaceLedger(db.sql, organizationId, (store) =>
+    reserve(store, reserveInput(organizationId, requestId, { requestBudgetUsd: 1, reservationId: fixtureId("res_", 741) })),
+  );
+  const secondId = second.reservation.reservationId;
+  const starts = await withReservationLedger(db.sql, organizationId, secondId, (store) =>
+    authorizeCall(store, callInput(secondId, { estimateUsd: 0.2, idempotencyKey: "sql-remake-2", entryId: fixtureId("led_", 742) })),
+  );
+  assert.equal(starts.status, "authorized", "the request has committed 0.90 USD, below its 1 USD budget");
+  const refused = await withReservationLedger(db.sql, organizationId, secondId, (store) =>
+    authorizeCall(store, callInput(secondId, { estimateUsd: 0.2, idempotencyKey: "sql-remake-3", entryId: fixtureId("led_", 743) })),
+  );
+  assert.equal(refused.status, "refused", "the request has committed 1.10 USD across its reservations");
+  if (refused.status === "refused") assert.match(refused.reason, /the request has committed 1.1 USD, at or above its 1 USD budget/);
 });

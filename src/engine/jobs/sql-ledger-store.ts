@@ -235,6 +235,24 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
       `;
       return { reservedUsd: roundUsd(Number(reserved[0]?.total ?? 0)), actualUsd: roundUsd(Number(actual[0]?.total ?? 0)) };
     },
+
+    // Committed spend (D12): each entry's actual cost, or its hold until it settles. The same rule as committedFor, over the rows.
+    async committedForRequest(requestId) {
+      const rows = await sql<{ total: string | number }>`
+        select coalesce(sum(coalesce(actual_usd, reserved_usd)), 0) as total from engine_ledger
+        where organization_id = ${organizationId} and request_id = ${requestId}
+      `;
+      return roundUsd(Number(rows[0]?.total ?? 0));
+    },
+
+    async committedForMonth(workspaceId, month) {
+      refuseOtherWorkspace(organizationId, workspaceId);
+      const rows = await sql<{ total: string | number }>`
+        select coalesce(sum(coalesce(actual_usd, reserved_usd)), 0) as total from engine_ledger
+        where organization_id = ${organizationId} and to_char(at at time zone 'UTC', 'YYYY-MM') = ${month}
+      `;
+      return roundUsd(Number(rows[0]?.total ?? 0));
+    },
   };
 }
 
