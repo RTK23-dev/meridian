@@ -10,7 +10,7 @@ import { orchestratorPlanSchema, type OrchestratorPlan } from "../../../engine/o
 import { recordCostMeasurement } from "../../../engine/orchestrator/holds.ts";
 import { ORCHESTRATOR_LISTINGS } from "../../../engine/orchestrator/live-catalog.ts";
 import { readOrchestratorPolicy, requireOrchestratorPolicy } from "../../../engine/orchestrator/policy-store.ts";
-import { createPlanDraft, getPlan, recordPlanOutcome, setPlanStatus } from "../../../engine/orchestrator/store.ts";
+import { appendPlanEvents, createPlanDraft, getPlan, recordPlanOutcome, setPlanStatus } from "../../../engine/orchestrator/store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import {
   approveBudgetAs,
@@ -184,5 +184,35 @@ describe("the orchestrator's server functions: the role and the tenancy of each 
     const saved = await saveWorkspacePolicyAs(db.sql, OTHER_ADMIN, { brandId: OTHER_BRAND, disabledModelFamilies: ["vendor-o"], measureCeilingUsdPerSecond: 4 });
     assert.deepEqual(saved.policy, { disabledModelFamilies: ["vendor-o"], measureCeilingUsdPerSecond: 4 });
     assert.deepEqual((await readWorkspacePolicyAs(db.sql, OTHER_ADMIN, { brandId: OTHER_BRAND })).policy, saved.policy, "the saved policy is read back");
+  });
+
+  /** A plan paused at the given reason, as a run leaves it: the reason is its last paused event, and the plan reads as paused. */
+  async function pausedAt(planId: string, brief: Record<string, unknown>, reason: string): Promise<void> {
+    await createPlanDraft(db.sql, { id: planId, organizationId: ORG, title: planId, brief, orchestratorModel: sample.orchestrator.id, budgetUsd: 10, brandId: BRAND });
+    await recordPlanOutcome(db.sql, { id: planId, organizationId: ORG, plan: sample, reasons: [], catalogReadAt: null });
+    await appendPlanEvents(db.sql, ORG, planId, [{ nodeId: "script", state: "paused", outputHash: null, costUsd: null, reason }]);
+    await setPlanStatus(db.sql, ORG, planId, "paused");
+  }
+
+  test("a category approval through the operations layer raises that category's line, and its audit row names the category", async () => {
+    await pausedAt("plan_ops_copy", { ...BRIEF, copyBudgetUsd: 0.05 }, "copy budget reached, project not finished: the next step's hold of $0.1000 would take the spend past the $0.0500 copy budget (committed $0.0200)");
+    const approved = await approveBudgetAs(db.sql, ADMIN, { brandId: BRAND, planId: "plan_ops_copy", budgetUsd: 0.5, category: "copy" });
+    assert.equal(approved.outcome.status, "approved", "the category approval is not dropped on its way to the engine");
+    assert.equal((approved.stored?.brief as { copyBudgetUsd?: number } | undefined)?.copyBudgetUsd, 0.5, "the copy line is raised");
+    assert.equal(approved.stored?.budgetUsd, 10, "the total is not raised");
+    const { approvals } = await listApprovalsAs(db.sql, VIEWER, { brandId: BRAND, planId: "plan_ops_copy" });
+    assert.equal(approvals.length, 1);
+    assert.equal(approvals[0]?.previousUsd, 0.05);
+    assert.equal(approvals[0]?.approvedUsd, 0.5);
+    assert.match(approvals[0]?.reason ?? "", /^category copy; copy budget reached/);
+  });
+
+  test("a total approval at a workspace month pause is refused with the reason to raise the monthly budget in settings, and changes nothing", async () => {
+    await pausedAt("plan_ops_month", BRIEF, "budget reached, project not finished: the workspace month has committed 5 USD, at or above its 5 USD budget, so no paid call starts");
+    const before = await getPlan(db.sql, ORG, "plan_ops_month");
+    const refused = await approveBudgetAs(db.sql, ADMIN, { brandId: BRAND, planId: "plan_ops_month", budgetUsd: 20 });
+    assert.deepEqual(refused.outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget in settings"] });
+    assert.deepEqual(await getPlan(db.sql, ORG, "plan_ops_month"), before, "the plan is exactly as it was: its status, budgets and brief");
+    assert.deepEqual((await listApprovalsAs(db.sql, VIEWER, { brandId: BRAND, planId: "plan_ops_month" })).approvals, [], "a refused approval records nothing");
   });
 });

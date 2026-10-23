@@ -25,7 +25,7 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema, sumUsd, type BudgetReservation } from "../contracts/index.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
-import { positionOfLine, roundUpUsd, startsBelowLine } from "../budget/line.ts";
+import { positionOfLine, startsBelowLine } from "../budget/line.ts";
 import { newId } from "../contracts/ids.ts";
 import type { RoleDeps } from "../claude/client.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
@@ -66,8 +66,11 @@ type Ledger = ReturnType<typeof scopedLedgerStore>;
 /** The ids, the time and the ledger of one planning attempt, minted before any check. */
 type Attempt = { requestId: string; reservationId: string; createdAt: string; ledger: Ledger };
 
-/** The checks before the call: the brief and the reservation it can run on, or the reasons it cannot run. */
-type Checked = { ok: true; brief: PlannerBrief; reservation: BudgetReservation } | { ok: false; reasons: string[] };
+/**
+ * The checks before the call: the brief and the reservation it can run on, or the reasons it cannot run. `inputTokens` is the count the hold
+ * is sized from; the call is held for that same count (planWithRole), so the check and the hold cannot disagree.
+ */
+type Checked = { ok: true; brief: PlannerBrief; reservation: BudgetReservation; inputTokens: number } | { ok: false; reasons: string[] };
 
 function noCall(reason: string): Checked {
   return { ok: false, reasons: [reason] };
@@ -104,9 +107,10 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
 
   // The client allows one retry of an answer that fails its contract, and the retry is a second paid call. The hold covers both.
   // The plan call's input is the planner's prompt: the brief, and the catalog it is shown. The hold is sized from both (review 2026-10-22, item 2),
-  // so a full catalog is not held as if it were the fixed 8000 tokens it once was. The output is the planner's own maximum.
+  // so a full catalog is not held as if it were the fixed 8000 tokens it once was. The output is the planner's own maximum. The call is held
+  // for this same count and price (planWithRole, estimateFromPriceUsd), so the hold equals this check (review 2026-10-23, defect 6).
   const inputTokens = planInputTokensOf(scope.catalog, brief.data);
-  const estimateUsd = roundUpUsd(estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output }));
+  const estimateUsd = estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output });
   const redoUsd = estimateUsd;
   const heldUsd = sumUsd([estimateUsd, redoUsd]);
 
@@ -148,7 +152,7 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
     const detail = reservation.error.issues[0]?.message ?? "the amounts are not valid";
     return noCall(`the hold does not match the reservation contract, so no call is made: ${detail}`);
   }
-  return { ok: true, brief: { ...brief.data }, reservation: reservation.data };
+  return { ok: true, brief: { ...brief.data }, reservation: reservation.data, inputTokens };
 }
 
 /**
@@ -193,6 +197,8 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
       brief: checked.brief,
       catalog: scope.catalog,
       disabledFamilies: scope.disabledFamilies,
+      // The call is held for the count the check sized (checkPlanCall), so the hold and the check use the same tokens.
+      estimateTokens: { input: checked.inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output },
     });
   } finally {
     await releaseReservation(attempt.ledger, reservationId).catch(() => undefined);

@@ -13,6 +13,7 @@ import { hasPriceBasis, textInputTokensOf, validatePlan, KIND_CATALOG } from "./
 import { BUDGET_CATEGORIES, categoryBudgetsOf } from "./categories.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { RoleAnswerError } from "../claude/errors.ts";
+import type { TokenCount } from "../claude/rates.ts";
 import { orchestratorPlan, ORCHESTRATOR_MAX_CANDIDATES_PER_KIND, type OrchestratorPlanInput } from "../claude/roles/orchestrator_plan.ts";
 
 /** What the user gave the run: the format to rebuild or make, their inputs, and Meridian's brand and product context. */
@@ -156,9 +157,18 @@ export type RoleCallScope = {
  * The plan written by the user's chosen model, through the Claude client (orchestrator_plan role): reserved, budgeted and on the ledger.
  * Fail closed. The chosen model must be a live text model with a per-token price in the catalog, or no call is made. A refused call, a
  * failed call, an answer that does not match the plan contract, and a plan the engine refuses all give no plan, with the reasons.
+ *
+ * The call is held for `estimateTokens` when the caller sized it (service.ts sizes the catalog and the brief, and checks the hold against the
+ * budget with that same count). Absent: the role's own estimate.
  */
 export async function planWithRole(
-  opts: RoleCallScope & { orchestrator: ModelRef; brief: PlannerBrief; catalog: Map<string, CatalogEntry>; disabledFamilies?: readonly string[] },
+  opts: RoleCallScope & {
+    orchestrator: ModelRef;
+    brief: PlannerBrief;
+    catalog: Map<string, CatalogEntry>;
+    disabledFamilies?: readonly string[];
+    estimateTokens?: TokenCount;
+  },
 ): Promise<PlanOutcome> {
   const id = opts.orchestrator.id;
   const entry = opts.catalog.get(id);
@@ -185,6 +195,7 @@ export async function planWithRole(
       signal: opts.signal,
       input,
       chosenModel: { modelId: id, price: { promptUsdPerToken, completionUsdPerToken } },
+      estimateTokens: opts.estimateTokens,
     });
   } catch (error) {
     if (error instanceof RoleAnswerError) return { ok: false, reasons: ["the orchestrating model's answer did not match the plan contract"] };

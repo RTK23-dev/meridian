@@ -5,6 +5,7 @@
 import { assertRole, hasRole, isRole, type Role } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { approvePlanBudget, listBudgetApprovals, type ApprovalOutcome, type BudgetApproval } from "../../../engine/orchestrator/approval.ts";
+import type { BudgetCategory } from "../../../engine/orchestrator/categories.ts";
 import { measuredAverageFor, runPlanFor, type ApiDeps, type CatalogState } from "../../../engine/orchestrator/api.ts";
 import { effectiveDisabledFamilies, readBrandPolicy, writeBrandPolicy } from "../../../engine/orchestrator/brand-policy.ts";
 import { INITIAL_POLICY, measureModeFor, requireOrchestratorPolicy, writeOrchestratorPolicy, type OrchestratorPolicy } from "../../../engine/orchestrator/policy-store.ts";
@@ -81,14 +82,18 @@ export async function saveBrandPolicyAs(sql: Sql, userId: string, input: { brand
   return { brandFamilies, workspaceFamilies: workspace.disabledModelFamilies, effectiveFamilies: effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies) };
 }
 
-/** Approves a paused plan's budget. Only a workspace admin approves; the approval is recorded with the signed-in user (D13). */
+/**
+ * Approves a paused plan's line. Only a workspace admin approves; the approval is recorded with the signed-in user (D13). A category pause is
+ * approved with its category (D3, D12): that category's line is raised and the total is not. The category is forwarded as it is given.
+ */
 export async function approveBudgetAs(
   sql: Sql,
   userId: string,
-  input: { brandId: string; planId: string; budgetUsd: number },
+  input: { brandId: string; planId: string; budgetUsd: number; category?: BudgetCategory | null },
 ): Promise<{ outcome: ApprovalOutcome; stored: StoredPlan | null }> {
   const access = await brandAccessFor(sql, userId, input.brandId, "admin");
-  const outcome = await approvePlanBudget(sql, { organizationId: access.organizationId, planId: input.planId, budgetUsd: input.budgetUsd, actorId: userId });
+  const category = input.category ?? undefined;
+  const outcome = await approvePlanBudget(sql, { organizationId: access.organizationId, planId: input.planId, budgetUsd: input.budgetUsd, actorId: userId, category });
   return { outcome, stored: outcome.status === "approved" ? await getPlan(sql, access.organizationId, input.planId) : null };
 }
 

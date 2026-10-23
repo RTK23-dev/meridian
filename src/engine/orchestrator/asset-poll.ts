@@ -17,6 +17,9 @@
 //   no measurement, no event) and the poll does not count it. So a failed row's hold is never also a stored bill (D14).
 // - A retry the router refuses because the run's reservation has ended closes the row as failed, with RUN_ENDED_REASON: the retry is a new
 //   paid call, and it needs a new run (D14).
+// - Each poll reads the plan's families now (D16): the workspace's, with the plan's brand's added. The router that polls and settles the row is
+//   built with them, so a family switched off after the job was queued is not used by its settle-time fallback. A row whose families cannot be
+//   read stays open, and no router is asked about it.
 // - A row with no recorded hold closes only with its bill. Every other answer leaves it open, as a poll that threw does: its money is not
 //   known, so its run keeps refusing. A close with no hold would book its money as zero, and an unknown hold is never zero (fail closed).
 // Each change of money runs in one transaction, so a row never closes without its event, and an event is never written twice. A write that
@@ -29,10 +32,12 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { AssetJob } from "../assets/job.ts";
 import type { AssetStep, AsyncAssetRouter, ProduceInput } from "../assets/router.ts";
 import { categoryOf } from "./categories.ts";
+import { effectiveDisabledFamilies, readBrandPolicy } from "./brand-policy.ts";
 import type { NodeOutput } from "./execute.ts";
 import { recordCostMeasurement } from "./holds.ts";
 import { outputOf, type QueuedAsset } from "./production.ts";
-import { appendPlanEvents, putStepOutput, type StoredStepOutput } from "./store.ts";
+import { requireOrchestratorPolicy } from "./policy-store.ts";
+import { appendPlanEvents, getPlan, putStepOutput, type StoredStepOutput } from "./store.ts";
 
 /** How long a still-working job waits before it is polled again. */
 export const ASSET_POLL_AGAIN_MS = 30_000;
@@ -87,6 +92,12 @@ export type AssetPollStore = {
    * nothing, when the row is no longer waiting: another poll closed it first.
    */
   fail(row: DueAsset, reason: string): Promise<boolean>;
+  /**
+   * The model families the plan's router must not use, read now (D16): the workspace's switched-off families, with the plan's brand's families
+   * added when the plan has a brand. It throws when they cannot be read. It is read at every poll, so a family switched off after the job was
+   * queued is switched off for the settle of that job too.
+   */
+  disabledFamiliesOf(planId: string): Promise<readonly string[]>;
 };
 
 export type AssetPollReport = { polled: number; done: number; failed: number; waiting: number };
@@ -94,7 +105,8 @@ export type AssetPollReport = { polled: number; done: number; failed: number; wa
 type PollOptions = {
   store: AssetPollStore;
   organizationId: string;
-  routerFor: (scope: { organizationId: string; requestId: string; reservationId: string }) => AsyncAssetRouter;
+  /** The router of one row: built on the row's request and reservation, and on the families the poll read for its plan. */
+  routerFor: (scope: { organizationId: string; requestId: string; reservationId: string; disabledFamilies: readonly string[] }) => AsyncAssetRouter;
   limit?: number;
 };
 
@@ -124,9 +136,17 @@ export async function pollAssetJobs(opts: PollOptions): Promise<AssetPollReport>
 
 /** The poll's decision for one row. A provider that does not answer is a decision too: it never escapes as an exception. */
 async function verdictOf(opts: PollOptions, row: DueAsset): Promise<Verdict> {
+  // The families are read at this poll (D16), so a family switched off after the job was queued is not used by its settle either. When they
+  // cannot be read, no router is asked about the job: it stays open until they can be read (fail closed).
+  let disabledFamilies: readonly string[];
+  try {
+    disabledFamilies = await opts.store.disabledFamiliesOf(row.planId);
+  } catch {
+    return stillOpen(row);
+  }
   let step: AssetStep;
   try {
-    const router = opts.routerFor({ organizationId: opts.organizationId, requestId: row.requestId, reservationId: row.reservationId });
+    const router = opts.routerFor({ organizationId: opts.organizationId, requestId: row.requestId, reservationId: row.reservationId, disabledFamilies });
     const polled = await router.pollOnce(row.job, row.input);
     if (polled.state === "pending") return { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS };
     step = (await router.settle(row.job, polled, row.input)).step;
@@ -307,6 +327,15 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
         }
         return true;
       });
+    },
+    async disabledFamiliesOf(planId) {
+      // The same rule as a run's families (api.ts disabledFamiliesFor, D16), read now: the workspace's, and the plan's brand's when it has one.
+      // An unreadable workspace policy throws, and so does a plan that is not the organization's: neither is guessed at.
+      const workspace = await requireOrchestratorPolicy(sql, organizationId);
+      const plan = await getPlan(sql, organizationId, planId);
+      if (plan === null) throw new Error("the plan is not in this organization, so its switched-off families are not read");
+      const brandFamilies = plan.brandId === null ? [] : await readBrandPolicy(sql, organizationId, plan.brandId);
+      return effectiveDisabledFamilies(workspace.disabledModelFamilies, brandFamilies);
     },
   };
 }

@@ -5,8 +5,9 @@ import { fixture, gatewayFor, json } from "../claude/test/helpers.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog, type CatalogEntry } from "./catalog.ts";
 import type { WorkspaceBudgetSource, WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
-import { planStoredDraft, type PlanScope } from "./service.ts";
+import { planInputTokensOf, planStoredDraft, type PlanScope } from "./service.ts";
 import { createPlanDraft, getPlan } from "./store.ts";
+import { estimateFromPriceUsd } from "../claude/rates.ts";
 
 const ORG = "org_svc_a";
 const OTHER = "org_svc_b";
@@ -174,5 +175,35 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     const stored = await getPlan(db.sql, ORG, "plan_svc_cheap");
     assert.ok(stored?.status === "ready" || stored?.status === "refused", `the plan is ${stored?.status}, not planning`);
     assert.equal(await holdCount(db, ids.reservation), 1, "the hold is written, with a valid reservation shape");
+  });
+
+  test("the planning call is held for the count its check sized: the reviewer's fixture is 54,062 input tokens, and the check and the hold are that same amount", async () => {
+    // The reviewer's fixture: this brief and this catalog size the call at 54,062 input tokens (the role's own estimate is 8,000).
+    const fixtureBrief = {
+      goal: "A short branded video",
+      format: "a hook, a product shot, a call to action",
+      userInputs: "",
+      brand: { name: "Example", summary: "plain" },
+      budgetUsd: 1,
+    };
+    assert.equal(planInputTokensOf(catalog, fixtureBrief), 54062, "the check sizes the fixture's call at 54,062 input tokens");
+    await createPlanDraft(db.sql, { id: "plan_svc_sized", organizationId: ORG, title: "sized", brief: fixtureBrief, orchestratorModel: HAIKU, budgetUsd: 1 });
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZA", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZA" };
+    const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_sized");
+    assert.equal(outcome.status, "ready", "the sized call is held within the user's budget, so it is made");
+
+    const entry = catalog.get(HAIKU);
+    if (entry === undefined) throw new Error("haiku must be in the recorded catalog");
+    const { promptUsdPerToken, completionUsdPerToken } = entry.pricing;
+    if (promptUsdPerToken === null || completionUsdPerToken === null) throw new Error("haiku must have a per-token price");
+    const sizedUsd = estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: 54062, output: 4000 });
+    const roleOnlyUsd = estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: 8000, output: 4000 });
+    assert.ok(sizedUsd > roleOnlyUsd, "the sized call costs more than the role's fixed estimate, so holding the role's would undercount it");
+
+    // The check's estimate (the reservation) and the call's hold (its ledger entry) are the same sized amount.
+    const reservations = (await db.sql`select estimate_usd from engine_reservations where id = ${ids.reservation}`) as Array<{ estimate_usd: unknown }>;
+    assert.equal(Number(reservations[0]?.estimate_usd), sizedUsd, "the check sizes the hold from 54,062 input tokens");
+    const ledger = (await db.sql`select estimate_usd from engine_ledger where reservation_id = ${ids.reservation}`) as Array<{ estimate_usd: unknown }>;
+    assert.deepEqual(ledger.map((row) => Number(row.estimate_usd)), [sizedUsd], "the call is held at the check's amount, not at the role's 8,000-token estimate");
   });
 });

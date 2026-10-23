@@ -20,7 +20,7 @@ import { StructuredOutputError, structuredChat, type ChatMessage, type ChatUsage
 import { loadPrompt } from "../prompts/load.ts";
 import { RoleAnswerError } from "./errors.ts";
 import { type JournalEntry, type RoleCall, type RoleCallJournal } from "./journal.ts";
-import { estimateClaudeUsd, estimateFromPriceUsd } from "./rates.ts";
+import { estimateClaudeUsd, estimateFromPriceUsd, type TokenCount } from "./rates.ts";
 import type { RoleDefinition } from "./role.ts";
 
 export type { JournalEntry, RoleCall, RoleCallJournal } from "./journal.ts";
@@ -59,6 +59,12 @@ export type RoleRequest<Input> = {
    * the reservation is priced from its live price, not from the fixed rate table. Without it the route table decides, as before.
    */
   chosenModel?: { modelId: string; price: { promptUsdPerToken: number; completionUsdPerToken: number } };
+  /**
+   * The tokens the call is held for, when the caller has sized its input. The planning call sizes its catalog and brief (orchestrator/service.ts),
+   * and its hold is that same count, so the hold and the check cannot disagree. The hold is the larger of this and the role's own estimate,
+   * so a caller can raise a hold but never lower it. Absent: the role's own estimate.
+   */
+  estimateTokens?: TokenCount;
 };
 
 type OutcomeBase = {
@@ -113,6 +119,17 @@ type CallContext<Input, Answer> = {
 
 function invalid(name: string, stage: string): EngineError {
   return new EngineError("invalid_input", `${name} is not valid for a role call`, { stage });
+}
+
+/**
+ * The tokens a call is held for: the role's own estimate, or the caller's sizing of the call when that is larger (RoleRequest.estimateTokens).
+ * A caller can raise a hold, never lower it. A sizing that is not whole, non-negative token counts is refused before any hold is taken.
+ */
+function heldTokensOf(roleEstimate: TokenCount, sized: TokenCount | undefined, stage: string): TokenCount {
+  if (sized === undefined) return roleEstimate;
+  const whole = (value: number): boolean => Number.isInteger(value) && value >= 0;
+  if (!whole(sized.input) || !whole(sized.output)) throw invalid("estimateTokens (it must be whole, non-negative token counts)", stage);
+  return { input: Math.max(roleEstimate.input, sized.input), output: Math.max(roleEstimate.output, sized.output) };
 }
 
 function requireId(prefix: "req_" | "res_", value: string, name: string, stage: string): string {
@@ -325,6 +342,8 @@ export async function runRole<Input, Answer>(
     );
   }
 
+  // The hold's tokens: the role's estimate, or the caller's sizing when it is larger. Checked before any hold is taken.
+  const tokens = heldTokensOf(role.estimateTokens, request.estimateTokens, stage);
   const prompt = loadPrompt(role.prompt);
   const ctx: CallContext<Input, Answer> = {
     requestId,
@@ -335,9 +354,7 @@ export async function runRole<Input, Answer>(
     route,
     promptVersion: prompt.id,
     estimateUsd:
-      request.chosenModel === undefined
-        ? estimateClaudeUsd(route.model, role.estimateTokens)
-        : estimateFromPriceUsd(request.chosenModel.price, role.estimateTokens),
+      request.chosenModel === undefined ? estimateClaudeUsd(route.model, tokens) : estimateFromPriceUsd(request.chosenModel.price, tokens),
     input,
     answer: role.answer(input),
     attempt,
