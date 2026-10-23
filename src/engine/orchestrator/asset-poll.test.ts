@@ -126,14 +126,29 @@ describe("the poll over recorded answers", () => {
     assert.deepEqual(writes.measured, [], "a hold is an estimate, so it is never measured");
   });
 
-  test("a finished job with no reported bill and no recorded hold closes as failed, and stores nothing", async () => {
+  test("a finished job with no reported bill and no recorded hold stays open: its money is unknown, so it is never closed as zero", async () => {
     const noBill = { status: "done", asset: { ...(DONE_WITH_BILL.asset as object), costUsd: null } };
     const { store, writes } = fakeStore([row({ heldUsd: null })]);
     const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: noBill })) });
-    assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
-    assert.equal(writes.outputs.length, 0);
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 0, waiting: 1 });
+    assert.deepEqual(writes.rescheduled, [{ id: "row-1", job: JOB, runAfterMs: ASSET_POLL_AGAIN_MS }]);
+    assert.equal(writes.outputs.length, 0, "nothing is stored: there is no bill and no hold to store");
+    assert.equal(writes.finished.length, 0, "the row is not closed");
     assert.equal(writes.charged.length, 0, "no hold was recorded, so there is no failed event to write");
-    assert.match(writes.finished[0]?.result ?? "", /nothing is stored/);
+  });
+
+  test("a row with no recorded hold that the provider answers as failed, refused or unsettled stays open, and a released run's refusal too", async () => {
+    const refused = { status: "failed", providerId: "openrouter:video", error: { kind: "content_policy", retryable: false, message: "policy" } };
+    const unsettled = { status: "unsettled", providerId: "openrouter:video", idempotencyKey: "job-1", ledgerEntryId: "e1", reason: "a server error with no job id" };
+    const runEnded = { status: "unavailable", reasons: ["openrouter:video: reservation res_1 is released; no call is made"] };
+    for (const settle of [refused, unsettled, runEnded]) {
+      const { store, writes } = fakeStore([row({ heldUsd: null })]);
+      const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle })) });
+      assert.deepEqual(report, { polled: 1, done: 0, failed: 0, waiting: 1 }, JSON.stringify(settle));
+      assert.equal(writes.finished.length, 0, "the row is not closed, so its unknown money is not closed as zero");
+      assert.equal(writes.charged.length, 0);
+      assert.equal(writes.outputs.length, 0);
+    }
   });
 
   test("a retry the router submits again replaces the row's job and waits for its own first poll", async () => {
@@ -336,15 +351,17 @@ describe("the poll on the database: holds, bills, measurements and organizations
     assert.equal((await rowOf(org, key)).status, "done");
   });
 
-  test("a finished row with no reported bill and no recorded hold closes as failed, stores nothing, and writes no event", async () => {
+  test("a finished row with no reported bill and no recorded hold stays waiting: nothing is stored, no event is written, and its run keeps refusing", async () => {
     const { org, plan } = await workspace("legacy-done");
     const key = await legacyRow(org, plan, "legacy-clip");
     const noBill = { status: "done", asset: { ...(DONE_WITH_BILL.asset as object), costUsd: null } };
     const report = await pollWith(org, fakeRouter({ poll: { state: "done", uri: "x" }, settle: noBill }));
-    assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 0, waiting: 1 });
     assert.equal((await listStepOutputs(db.sql, org, plan)).get(key), undefined);
-    assert.equal((await rowOf(org, key)).status, "failed");
+    assert.equal((await rowOf(org, key)).status, "waiting", "the unknown money is not closed as zero");
+    assert.deepEqual(await listPlanEvents(db.sql, org, plan, 0), [], "no event is written");
     assert.equal(await failedHoldsUsd(db.sql, org, plan), 0);
+    assert.deepEqual((await waitingHoldsByNode(db.sql, org, plan)).unrecorded, ["legacy-clip"], "its run keeps refusing");
   });
 
   test("a poll that throws closes a row with a hold as failed, and its hold counts in failedHoldsUsd", async () => {

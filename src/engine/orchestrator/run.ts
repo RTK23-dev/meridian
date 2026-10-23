@@ -6,6 +6,7 @@
 //   their providers (D14). A waiting job with no recorded hold refuses the run until the poll settles it.
 // - a run whose spend is already at the line opens no reservation: it pauses at its first paid step.
 // - otherwise the run takes a reservation for what the line leaves (run-budget.ts), and its handlers are made from it.
+// - each step's output is stored as the step completes (execute.ts onOutput), so a billed cost is kept even when a later step fails.
 //
 // The handlers are passed in. Without a handler for a kind, its steps report not_connected and nothing is called. Measure mode (D15) is
 // passed to the validation, the executor and the handlers; it is off unless the caller passes it.
@@ -33,8 +34,7 @@ import {
   updatePlanJson,
 } from "./store.ts";
 import { textInputTokensOf, validatePlan } from "./validate.ts";
-import { categoryBudgetsOf, categoryOf, categorySpentOf, type BudgetCategory } from "./categories.ts";
-import { cacheKeys } from "./dirty.ts";
+import { categoryBudgetsOf, categorySpentOf } from "./categories.ts";
 import { orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
 
 export type RunOutcome =
@@ -158,7 +158,6 @@ export async function runStoredPlan(
     }
 
     const cache: RunCache = new Map(persisted);
-    const before = new Set(cache.keys());
     const events: NodeEvent[] = [];
     const result = await runPlan({
       plan: checked.plan,
@@ -172,25 +171,18 @@ export async function runStoredPlan(
       queued: new Set(waiting.byNode.keys()),
       measure,
       emit: (event) => events.push(event),
-    });
-
-    // A new output keeps the category of its step, so a later run totals each category from the stored outputs.
-    const keys = cacheKeys(checked.plan, checked.order);
-    const categoryOfKey = new Map<string, BudgetCategory | null>();
-    for (const node of checked.plan.nodes) {
-      const key = keys.get(node.id);
-      if (key !== undefined) categoryOfKey.set(key, categoryOf(node.kind));
-    }
-    for (const [key, output] of cache) {
-      if (!before.has(key)) {
-        await putStepOutput(sql, opts.organizationId, opts.planId, key, {
+      // Each output is stored as its step completes, so a billed step's cost survives a failure later in the run (D12). The category is the
+      // step's own, so a later run totals each category from the stored outputs.
+      onOutput: async (output) => {
+        const stored = await putStepOutput(sql, opts.organizationId, opts.planId, output.cacheKey, {
           outputHash: output.outputHash,
           costUsd: output.costUsd,
-          body: output.body ?? null,
-          category: categoryOfKey.get(key) ?? null,
+          body: output.body,
+          category: output.category,
         });
-      }
-    }
+        if (!stored) throw new Error("the plan is not in this organization, so the step's output is not stored");
+      },
+    });
     await appendPlanEvents(sql, opts.organizationId, opts.planId, events);
 
     const runStatus = result.status === "complete" ? "complete" : result.status === "paused" ? "paused" : "incomplete";

@@ -280,10 +280,14 @@ export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
 export const approveOrchestratorBudget = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
+    // A category pause is approved with its category (D3, D12): copy, creative or voice. Absent, empty or null is a total pause.
+    const named = body.category === undefined || body.category === null || body.category === "" ? null : body.category;
+    if (named !== null && named !== "copy" && named !== "creative" && named !== "voice") throw new Error("Category must be copy, creative or voice.");
     return {
       brandId: text(body.brandId, 80, "Brand", true),
       planId: text(body.planId, 80, "Plan", true),
       budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+      category: named as "copy" | "creative" | "voice" | null,
     };
   })
   .middleware([authMiddleware])
