@@ -27,7 +27,7 @@ function copyStepsInRunOrder(): Array<{ id: string; estimateUsd: number }> {
   return steps;
 }
 
-/** Stand-in handlers for every kind. Each call is recorded by step id, and no cost is reported, so a step is charged its estimate. */
+/** Stand-in handlers for every kind. Each call is recorded by step id, and no cost is reported, so a step is charged its hold. */
 function standIn(calls: string[]): Handlers {
   const handlers: Record<string, NodeHandler> = {};
   for (const kind of NODE_KINDS) {
@@ -39,7 +39,7 @@ function standIn(calls: string[]): Handlers {
   return handlers as Handlers;
 }
 
-describe("the copy budget in the brief, checked by the run (owner direction 2026-10-23, D3)", () => {
+describe("the copy budget in the brief, checked by the run (owner direction 2026-10-23, D3, D12)", () => {
   let db: TestDatabase;
 
   before(async () => {
@@ -51,7 +51,7 @@ describe("the copy budget in the brief, checked by the run (owner direction 2026
     await db.close();
   });
 
-  /** A stored, ready plan whose brief sets a copy budget, or leaves it unset. The brief is valid, as planning stores it. */
+  /** A stored, ready plan whose brief sets a copy budget (a line), or leaves it unset. The brief is valid, as planning stores it. */
   async function storedPlan(id: string, copyBudgetUsd?: number): Promise<void> {
     const brief = {
       goal: "A short branded video",
@@ -65,13 +65,13 @@ describe("the copy budget in the brief, checked by the run (owner direction 2026
     await recordPlanOutcome(db.sql, { id, organizationId: ORG, plan: sample, reasons: [], catalogReadAt: null });
   }
 
-  test("a copy budget pauses the run at the copy step that would pass it, and the stored copy output keeps its category", async () => {
+  test("a copy line pauses the run at the copy step that starts at it, and the stored copy output keeps its category", async () => {
     const [first, second] = copyStepsInRunOrder();
     if (first === undefined || second === undefined) throw new Error("the sample plan has two copy steps");
-    // The budget covers the first copy step and half of the second, so the second would pass it. The tolerance is zero for this check.
-    await storedPlan("plan_copy_pause", first.estimateUsd + second.estimateUsd / 2);
+    // The copy line is the first copy step's estimate: it starts below the line, and the second starts at it.
+    await storedPlan("plan_copy_pause", first.estimateUsd);
     const calls: string[] = [];
-    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_pause", catalog, budgetTolerance: { percent: 0, cents: 0 }, handlers: standIn(calls) });
+    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_pause", catalog, handlers: standIn(calls) });
 
     assert.equal(outcome.status, "paused");
     assert.ok(calls.includes(first.id), "the first copy step runs");
@@ -79,7 +79,7 @@ describe("the copy budget in the brief, checked by the run (owner direction 2026
     const events = await listPlanEvents(db.sql, ORG, "plan_copy_pause", 0);
     const pause = events.filter((event) => event.state === "paused").at(-1);
     assert.equal(pause?.nodeId, second.id);
-    assert.match(pause?.reason ?? "", /next copy step/);
+    assert.match(pause?.reason ?? "", /^copy budget reached, project not finished/);
 
     const outputs = (await db.sql`select category from orchestrator_step_outputs where plan_id = ${"plan_copy_pause"}`) as Array<{ category: string | null }>;
     assert.equal(outputs.filter((row) => row.category === "copy").length, 1, "the first copy step's output is stored in the copy category");
@@ -88,11 +88,11 @@ describe("the copy budget in the brief, checked by the run (owner direction 2026
   test("a re-run counts the copy money the first run stored, so it pauses again without calling the step", async () => {
     const [first, second] = copyStepsInRunOrder();
     if (first === undefined || second === undefined) throw new Error("the sample plan has two copy steps");
-    await storedPlan("plan_copy_rerun", first.estimateUsd + second.estimateUsd / 2);
-    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_rerun", catalog, budgetTolerance: { percent: 0, cents: 0 }, handlers: standIn([]) });
+    await storedPlan("plan_copy_rerun", first.estimateUsd);
+    await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_rerun", catalog, handlers: standIn([]) });
 
     const calls: string[] = [];
-    const again = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_rerun", catalog, budgetTolerance: { percent: 0, cents: 0 }, handlers: standIn(calls) });
+    const again = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_rerun", catalog, handlers: standIn(calls) });
     assert.equal(again.status, "paused");
     assert.ok(!calls.includes(second.id), "the second copy step is not called on the re-run either");
     assert.ok(!calls.includes(first.id), "the first copy step is reused from its stored output");
@@ -100,7 +100,7 @@ describe("the copy budget in the brief, checked by the run (owner direction 2026
 
   test("a plan whose brief sets no copy budget is held by the total alone: its copy steps are delegated", async () => {
     await storedPlan("plan_copy_delegated");
-    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_delegated", catalog, budgetTolerance: { percent: 0, cents: 0 }, handlers: standIn([]) });
+    const outcome = await runStoredPlan(db.sql, { organizationId: ORG, planId: "plan_copy_delegated", catalog, handlers: standIn([]) });
     assert.equal(outcome.status, "complete");
   });
 

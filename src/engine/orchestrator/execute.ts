@@ -1,15 +1,21 @@
 // Runs a validated plan one step at a time, in order, and reports each step as it changes. Fail closed:
-// - a step with no handler for its kind is `not_connected`: it does not run and returns no output;
-// - a step whose handler throws is `failed`, and every step that reads it is `skipped`;
-// - a step whose estimate would take the run past its allowance (the budget plus its tolerance) is never started: the run `paused` there,
-//   waiting for an approval, and nothing else runs. A small overrun inside the tolerance is never a pause.
-// - a category the brief budgets (copy, creative, voice) is held to its own allowance as well, once the total has been checked (categories.ts).
+// - a paid step starts only while the committed spend is below the plan's line and its own hold fits within it (D12, D17; budget/line.ts).
+//   A call already in flight finishes, and its cost may take the spend past the line: that overshoot is recorded, never hidden. A hold that
+//   does not fit pauses the run before its call; nothing after the paused step starts, and the steps before it still run.
+// - a category the brief budgets (copy, creative, voice) has its own line, checked after the total, with the same two checks (categories.ts).
+// - a paid step's hold is its engine estimate, or in measure mode its ceiling (measure.ts, D15). A paid step with no hold does not run.
+// - a step whose job is already waiting at its provider (D14) reports `queued`: nothing is submitted, and it adds no spend, because its hold
+//   is already in the run's starting spend.
+// - a step with no handler for its kind is `not_connected`: it does not run and returns no output.
+// - a step whose handler throws is `failed`, and every step that reads it is `skipped`.
 // Cache hits are reported as `cache_hit` and cost nothing. The handlers are injected, so this file calls no provider.
 
 import { contentHash } from "../contracts/hash.ts";
+import { positionOfLine, startsBelowLine } from "../budget/line.ts";
 import type { NodeEvent, NodeKind, NodeState, OrchestratorPlan, PlanNode } from "./contracts.ts";
 import { cacheKeys } from "./dirty.ts";
 import { categoryOf, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
+import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 import { KIND_CATALOG } from "./validate.ts";
 
 /**
@@ -20,7 +26,7 @@ export type NodeOutput = { outputHash: string; costUsd: number | null; body?: st
 
 /**
  * Thrown by a handler whose provider is not connected, before any call is made and before any money is held. The step reports
- * not_connected and nothing is charged. Any other error is a failure, and a paid step's estimate is held for it.
+ * not_connected and nothing is charged. Any other error is a failure, and a paid step's hold is held for it.
  */
 export class NotConnectedError extends Error {
   constructor(reason: string) {
@@ -42,7 +48,7 @@ export class CallRefusedError extends Error {
 
 /**
  * Thrown by a handler whose asset the provider accepted but has not finished. The step is queued: its poll is durable (asset jobs), and a
- * later run finds the stored output. The estimate is held for this run so it cannot overrun, and nothing is stored yet.
+ * later run finds the stored output. The step's hold is counted for this run so it cannot overrun, and nothing is stored yet.
  */
 export class StepQueuedError extends Error {
   constructor(reason: string) {
@@ -69,12 +75,27 @@ export type RunCache = Map<string, NodeOutput>;
 
 export type RunResult = {
   status: "complete" | "paused" | "incomplete";
-  /** What the run has spent. A step that reports no actual cost is charged its estimate, so the run never assumes a free call. */
+  /** What the run has spent. A step that reports no actual cost is charged its hold, so the run never assumes a free call. */
   spentUsd: number;
   outputs: Map<string, string>;
 };
 
 const REASON_MAX = 300;
+
+/** The reason of a step whose job is still waiting at its provider (D14): its hold is already counted, so nothing is submitted. */
+function queuedReason(kind: NodeKind): string {
+  return `the ${kind} is still queued at its provider; its hold is already counted, so nothing is submitted; run the plan again once its poll has settled it`;
+}
+
+/**
+ * Why a paid step may not start against one line (D12, D17): the committed spend is at or past the line, or the step's own hold would take
+ * the committed spend past it. Null when the step may start. The text is the pause's reason; a category line names its category in it.
+ */
+function blockOf(committedUsd: number, holdUsd: number, lineUsd: number, category: BudgetCategory | null): string | null {
+  if (startsBelowLine(committedUsd, lineUsd) && positionOfLine(committedUsd + holdUsd, lineUsd) === "within_budget") return null;
+  const name = category === null ? "" : `${category} `;
+  return `${name}budget reached, project not finished: the next step's hold of $${holdUsd.toFixed(4)} would take the spend past the $${lineUsd.toFixed(4)} ${name}budget (committed $${committedUsd.toFixed(4)})`;
+}
 
 export async function runPlan(opts: {
   plan: OrchestratorPlan;
@@ -82,19 +103,25 @@ export async function runPlan(opts: {
   handlers: Handlers;
   cache: RunCache;
   emit: (event: NodeEvent) => void;
-  /** What earlier runs of this plan have spent. */
+  /** What earlier runs of this plan committed: the stored outputs, the failed holds and the waiting holds (run.ts). */
   spentUsd?: number;
-  /** The most the run may spend: the envelope's allowance, the budget plus its tolerance. Absent: the plan's own budget. */
-  allowanceUsd?: number;
-  /** The most each category may spend in all: its budget plus its tolerance (envelope.ts). A category not listed has no allowance of its own. */
-  categoryAllowanceUsd?: CategoryAmounts;
-  /** What earlier runs of this plan have spent in each category (categories.ts categorySpentOf). */
+  /** The plan's line: the lower of its budget and the budget the user set (envelope.ts lineOf). Absent: the plan's own budget. */
+  lineUsd?: number;
+  /** The line of each category the brief sets (categories.ts categoryBudgetsOf). A category not listed has no line of its own. */
+  categoryLinesUsd?: CategoryAmounts;
+  /** What earlier runs committed in each category (categories.ts categorySpentOf). */
   categorySpentUsd?: CategoryAmounts;
+  /** The steps with a job waiting at their provider (holds.ts waitingHoldsByNode). They report queued, submit nothing and add no spend. */
+  queued?: ReadonlySet<string>;
+  /** Measure mode (D15). Absent or null: off. */
+  measure?: MeasureOptions | null;
 }): Promise<RunResult> {
   const { plan, order, handlers, cache, emit } = opts;
-  const allowance = opts.allowanceUsd ?? plan.budgetUsd;
-  const categoryAllowance: CategoryAmounts = opts.categoryAllowanceUsd ?? {};
+  const line = opts.lineUsd ?? plan.budgetUsd;
+  const categoryLines: CategoryAmounts = opts.categoryLinesUsd ?? {};
   const categorySpent: CategoryAmounts = { ...opts.categorySpentUsd };
+  const queued: ReadonlySet<string> = opts.queued ?? new Set<string>();
+  const measure = opts.measure ?? null;
   const byId = new Map(plan.nodes.map((node) => [node.id, node]));
   const keys = cacheKeys(plan, order);
   const states = new Map<string, NodeState>();
@@ -137,43 +164,47 @@ export async function runPlan(opts: {
       continue;
     }
 
+    // A job already waiting at its provider (D14): its hold is in the starting spend, so the step submits nothing and adds nothing. It
+    // is not held by the line, because it spends nothing now.
+    if (queued.has(id)) {
+      set(id, "queued", null, null, queuedReason(node.kind));
+      continue;
+    }
+
+    const category = categoryOf(node.kind);
+    const paidKind = KIND_CATALOG[node.kind] !== undefined;
+    // A paid step's hold: its engine estimate, or in measure mode its ceiling (D15). Null when neither applies: the step does not run.
+    const hold = paidKind ? holdUsdOf(node, measure) : null;
+    if (paidKind && hold === null) {
+      set(id, "failed", null, null, `the step has no price, and measure mode ${measure === null ? "is off" : "does not hold it"}, so it did not run`);
+      continue;
+    }
+
+    // The lines (D12, D17). A paid step starts only while the committed spend is below its line and its own hold fits within it. The total
+    // is checked first, then the step's category line. The check runs before the handler, so a line reached before the run pauses at its
+    // first paid step whatever is wired. A step that does not fit pauses the run before its call, and nothing after it starts.
+    if (paidKind && hold !== null) {
+      const totalBlock = blockOf(spent, hold, line, null);
+      if (totalBlock !== null) {
+        set(id, "paused", null, null, totalBlock);
+        paused = true;
+        break;
+      }
+      const categoryLine = category === null ? undefined : categoryLines[category];
+      if (category !== null && categoryLine !== undefined) {
+        const categoryBlock = blockOf(categorySpent[category] ?? 0, hold, categoryLine, category);
+        if (categoryBlock !== null) {
+          set(id, "paused", null, null, categoryBlock);
+          paused = true;
+          break;
+        }
+      }
+    }
+
     const handler = handlers[node.kind];
     if (handler === undefined) {
       set(id, "not_connected", null, null, `no handler for ${node.kind} steps; the step did not run and has no output`);
       continue;
-    }
-
-    const paidKind = KIND_CATALOG[node.kind] !== undefined;
-    const estimate = node.estimateUsd ?? 0;
-    if (paidKind && node.estimateUsd === null) {
-      set(id, "failed", null, null, "no cost estimate, so the step did not run");
-      continue;
-    }
-    if (spent + estimate > allowance + 1e-9) {
-      set(
-        id,
-        "paused",
-        null,
-        null,
-        `the next step would take spend to $${(spent + estimate).toFixed(4)}, past the $${allowance.toFixed(4)} allowance (the budget plus its tolerance); the run waits for an approval`,
-      );
-      paused = true;
-      break;
-    }
-
-    const category = categoryOf(node.kind);
-    const categoryLimit = category === null ? undefined : categoryAllowance[category];
-    if (category !== null && categoryLimit !== undefined && (categorySpent[category] ?? 0) + estimate > categoryLimit + 1e-9) {
-      const next = (categorySpent[category] ?? 0) + estimate;
-      set(
-        id,
-        "paused",
-        null,
-        null,
-        `the next ${category} step would take ${category} spend to $${next.toFixed(4)}, past the $${categoryLimit.toFixed(4)} allowance for ${category} steps (the ${category} budget plus its tolerance); the run waits for an approval`,
-      );
-      paused = true;
-      break;
     }
 
     set(id, "running", null, null, null);
@@ -185,7 +216,7 @@ export async function runPlan(opts: {
         if (kind !== undefined) upstreamKinds.set(dep, kind);
       }
       const output = await handler({ node, key, upstream, upstreamKinds });
-      // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the estimate is
+      // A handler's reported cost is data: it must be a finite number, not negative. Null means no actual cost was reported, so the hold is
       // charged. Anything else fails the step, and nothing is added to the spend or kept as output.
       const reported = output.costUsd ?? null;
       if (reported !== null && !(Number.isFinite(reported) && reported >= 0)) {
@@ -193,7 +224,7 @@ export async function runPlan(opts: {
         continue;
       }
       // A paid step keeps its charged cost on the stored output, so a later run can total the plan's spend from its stored outputs alone.
-      const charged = paidKind ? (reported ?? estimate) : reported;
+      const charged = paidKind ? (reported ?? hold ?? 0) : reported;
       const body = output.body ?? null;
       cache.set(key, { outputHash: output.outputHash, costUsd: charged, body });
       outputs.set(id, output.outputHash);
@@ -206,20 +237,20 @@ export async function runPlan(opts: {
         set(id, "not_connected", null, null, error.message);
         continue;
       }
-      // Accepted by the provider, not finished: queued. The estimate is held for this run; the stored output comes when the poll settles it.
+      // Accepted by the provider, not finished: queued. The hold is counted for this run; the stored output comes when the poll settles it.
       if (error instanceof StepQueuedError) {
-        if (paidKind) addSpend(category, estimate);
+        if (paidKind && hold !== null) addSpend(category, hold);
         set(id, "queued", null, null, error.message);
         continue;
       }
-      // A refusal before any call: the step fails, and no estimate is held, because nothing was committed.
+      // A refusal before any call: the step fails, and no hold is kept, because nothing was committed.
       if (error instanceof CallRefusedError) {
         set(id, "failed", null, null, error.message);
         continue;
       }
-      // A paid step's estimate is held even though its call threw: the provider may have billed the call before the error. The held amount
-      // is recorded on the failed event, so a later run counts it in the plan's spend.
-      const held = paidKind ? estimate : null;
+      // A paid step's hold is kept even though its call threw: the provider may have billed the call before the error. The held amount is
+      // recorded on the failed event, so a later run counts it in the plan's spend.
+      const held = paidKind ? hold : null;
       if (held !== null) addSpend(category, held);
       const message = error instanceof Error ? error.message : "the step failed";
       set(id, "failed", null, held, message.slice(0, REASON_MAX));

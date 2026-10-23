@@ -40,9 +40,10 @@ export function categoryBudgetsOf(brief: { copyBudgetUsd?: number; creativeBudge
 }
 
 /**
- * What a plan has spent in each category: the stored outputs, each with the category of its step, and the failed holds of its steps. A hold
- * takes its step's category, which is fixed for the step (an edit changes a step's model and params, never its kind). A hold for a step
- * that is not in the plan, or for a step with no category, is not in any category; it is still in the plan's total.
+ * What a plan has spent in each category: the stored outputs, each with the category of its step, and the holds of its steps: the failed
+ * holds and the holds of the jobs still waiting at their providers (run.ts merges them by step). A hold takes its step's category, which is
+ * fixed for the step (an edit changes a step's model and params, never its kind). A hold for a step that is not in the plan, or for a step
+ * with no category, is not in any category; it is still in the plan's total.
  */
 export function categorySpentOf(
   nodes: ReadonlyArray<{ id: string; kind: NodeKind }>,

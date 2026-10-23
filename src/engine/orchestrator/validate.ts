@@ -6,11 +6,11 @@
 // model has no usable price in the listing, or whose parameters do not give a basis for the price, does not run.
 
 import { isDisabledModel } from "../config/model-policy.ts";
-import type { BudgetPosition } from "../budget/tolerance.ts";
-import { envelopeOf, positionOf, type BudgetEnvelope } from "./envelope.ts";
-import { BUDGET_CATEGORIES, categoryOf, type BudgetCategory } from "./categories.ts";
+import { positionOfLine, type BudgetPosition } from "../budget/line.ts";
+import { BUDGET_CATEGORIES, categoryOf, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import type { NodeKind, OrchestratorPlan, PlanNode } from "./contracts.ts";
+import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 
 /** The catalog kind a step's model must be. A step whose kind is not listed here makes no model call and must have no model. */
 export const KIND_CATALOG: Partial<Record<NodeKind, CatalogKind>> = {
@@ -34,14 +34,18 @@ export const PRICING_LIMITS = {
   charactersPerSpeechToken: 3,
 } as const;
 
-/** The plan's money against its envelope (envelope.ts). A plan past the allowance is still checked; the run waits for an approval there. */
-export type BudgetView = { estimateUsd: number; targetUsd: number; allowanceUsd: number; position: BudgetPosition };
+/** The plan's money against its line (D12, envelope.ts lineOf). A plan above its line is still a plan: the run stops at the line. */
+export type BudgetView = { estimateUsd: number; budgetUsd: number; position: BudgetPosition };
 
 /** One category's money against its own envelope, for each category the brief sets (categories.ts). */
 export type CategoryView = BudgetView & { category: BudgetCategory };
 
+/**
+ * A checked plan. `notes` say what is accepted with a note rather than refused: an estimate above its line (the run stops at the first step
+ * that does not fit, D17). A plan that is over its line is still a plan.
+ */
 export type ValidationResult =
-  | { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView; categories: CategoryView[] }
+  | { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView; categories: CategoryView[]; notes: string[] }
   | { ok: false; reasons: string[] };
 
 /** A model id that is an alias (a ~ id, or one with "latest" in it) is not pinned: the same id can mean a different model next week. */
@@ -88,7 +92,12 @@ export function priceStep(node: PlanNode, entry: CatalogEntry, options: Validate
       if (typeof seconds !== "number" || !(seconds > 0) || seconds > PRICING_LIMITS.maxSeconds) {
         return { reason: `step ${node.id}: params.seconds must be a number from 0 to ${PRICING_LIMITS.maxSeconds}` };
       }
-      if (price.usdPerSecond1080p === null) return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing` };
+      if (price.usdPerSecond1080p === null) {
+        // Measure mode (D15): the hold is the ceiling times the length. The plan's own estimate is advisory and is not read here.
+        const measured = holdUsdOf({ ...node, estimateUsd: null }, options.measure ?? null);
+        if (measured === null) return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing` };
+        return { usd: measured };
+      }
       return { usd: price.usdPerSecond1080p * seconds };
     }
     case "visual": {
@@ -138,10 +147,12 @@ export type ValidateOptions = {
   textInputTokens?: number;
   /** The model families the workspace has switched off (owner direction 2026-10-23). A model of one is refused with that reason, not as unlisted. */
   disabledFamilies?: readonly string[];
-  /** The run's envelope (owner direction 2026-10-23). Absent: the plan's own budget is the target, with the initial tolerance. */
-  budget?: BudgetEnvelope;
-  /** The envelope of each category the brief sets (envelope.ts categoryEnvelopesOf). A category without one has no check of its own. */
-  categories?: Partial<Record<BudgetCategory, BudgetEnvelope>>;
+  /** The plan's line (D12): the lower of its budget and the budget the user set. Absent: the plan's own budget. */
+  budgetUsd?: number;
+  /** The line of each category the brief sets (categories.ts categoryBudgetsOf). A category without one has no check of its own. */
+  categoryBudgetsUsd?: CategoryAmounts;
+  /** Measure mode (D15): a video or avatar step with no engine price is held to its ceiling and may run. Absent or null: off. */
+  measure?: MeasureOptions | null;
 };
 
 /**
@@ -221,27 +232,33 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
     costs.set(node.id, priced.usd);
   }
 
-  // The plan's money is checked against its envelope: the position says whether it sits within the target, within the tolerance, or past the
-  // allowance. A plan past the allowance is still a plan. The run waits for an approval at the step that would pass the allowance.
+  // The plan's money is placed against its line: within it, or over it. A plan over its line is still a plan, and the run stops at the line
+  // (execute.ts). A measured step's hold is part of the estimate (D15).
   const paidTotal = [...costs.values()].reduce((sum, usd) => sum + usd, 0);
-  const envelope = options.budget ?? envelopeOf(plan.budgetUsd, plan.budgetUsd);
-  const budget: BudgetView = { estimateUsd: paidTotal, targetUsd: envelope.targetUsd, allowanceUsd: envelope.allowanceUsd, position: positionOf(paidTotal, envelope) };
+  const lineUsd = options.budgetUsd ?? plan.budgetUsd;
+  const budget: BudgetView = { estimateUsd: paidTotal, budgetUsd: lineUsd, position: positionOfLine(paidTotal, lineUsd) };
 
-  // Each category the brief sets is summed from its own steps and placed against its own envelope. The same rule as the total: past the
-  // allowance is still a plan, and the run waits for an approval at the step that would pass it (execute.ts).
+  // Each category the brief sets is summed from its own steps and placed against its own line. The same rule as the total.
   const categories: CategoryView[] = [];
   for (const category of BUDGET_CATEGORIES) {
-    const categoryEnvelope = options.categories?.[category];
-    if (categoryEnvelope === undefined) continue;
+    const categoryLine = options.categoryBudgetsUsd?.[category];
+    if (categoryLine === undefined) continue;
     let estimateUsd = 0;
     for (const node of plan.nodes) if (categoryOf(node.kind) === category) estimateUsd += costs.get(node.id) ?? 0;
-    categories.push({
-      category,
-      estimateUsd,
-      targetUsd: categoryEnvelope.targetUsd,
-      allowanceUsd: categoryEnvelope.allowanceUsd,
-      position: positionOf(estimateUsd, categoryEnvelope),
-    });
+    categories.push({ category, estimateUsd, budgetUsd: categoryLine, position: positionOfLine(estimateUsd, categoryLine) });
+  }
+
+  // A plan or a category whose estimate is above its line is accepted with a note (D17). The run stops at the first step that does not fit.
+  const notes: string[] = [];
+  if (budget.position === "over_budget") {
+    notes.push(`the plan's estimate of $${paidTotal.toFixed(4)} is above its $${lineUsd.toFixed(4)} budget; the run stops at the first step that does not fit`);
+  }
+  for (const view of categories) {
+    if (view.position === "over_budget") {
+      notes.push(
+        `the ${view.category} steps' estimate of $${view.estimateUsd.toFixed(4)} is above their $${view.budgetUsd.toFixed(4)} ${view.category} budget; the run stops at the first ${view.category} step that does not fit`,
+      );
+    }
   }
 
   const order = topologicalOrder(plan.nodes);
@@ -250,7 +267,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   if (reasons.length > 0 || order === null) return { ok: false, reasons };
 
   const priced = plan.nodes.map((node) => ({ ...node, estimateUsd: costs.get(node.id) ?? null }));
-  return { ok: true, order, plan: { ...plan, nodes: priced }, budget, categories };
+  return { ok: true, order, plan: { ...plan, nodes: priced }, budget, categories, notes };
 }
 
 /** The steps a plan's steps need, for the message a reviewer reads. Pure. */

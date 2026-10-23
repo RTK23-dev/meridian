@@ -1,12 +1,17 @@
 // Plans a stored draft: the user's chosen model writes the plan, through the Claude client, on a budget hold of its own. The steps are:
 // 1. Every check runs before the plan is claimed, and writes nothing: the brief must match its contract, the chosen model must be a live text
-//    model with a per-token price, the hold must fit the plan's budget and the workspace month, and the hold must be a valid reservation.
+//    model with a per-token price, the workspace month must be below its budget, and the hold must be a valid reservation.
 //    A failed check refuses the plan with the reason, and no call is made.
 // 2. The plan is claimed for planning in one conditional update, so two requests cannot both call the model. From the claim on, a throw puts
 //    the plan back to the status it had.
 // 3. The hold is taken on the ledger, under the plan's own request id, and the call (planWithRole) is journaled and budgeted like every role
-//    call. Its answer is checked against the live catalog, and its budget against the budget the user set.
-// 4. The outcome is stored: ready with the checked plan, or refused with the reasons.
+//    call. Its answer is checked against the live catalog.
+// 4. The outcome is stored: ready with the checked plan, or refused with the reasons. A note (an estimate above its line, a plan that asks for
+//    more than the user set) is stored with a ready plan, never as a refusal.
+//
+// A budget is a line (owner direction 2026-10-23, D12, D17). Nothing is committed at planning, so the planning call's hold must fit the user's
+// budget, or the draft is refused before any call. The month check reads what the month has committed: the call starts only while that is
+// below the month budget.
 //
 // The catalog, the gateway and the workspace's monthly budget source are passed in. In production the catalog is read through the gateway;
 // without a connected key it is NOT_CONNECTED and nothing here is called. Without a known monthly budget, nothing is held.
@@ -14,11 +19,12 @@
 import { estimateFromPriceUsd } from "../claude/rates.ts";
 import { MODEL_BRIEF_PROMPT, ORCHESTRATOR_PLAN_ESTIMATE_TOKENS, orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
 import { loadPrompt } from "../prompts/load.ts";
-import { textInputTokensOf } from "./validate.ts";
+import { textInputTokensOf, validatePlan } from "./validate.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema, sumUsd, type BudgetReservation } from "../contracts/index.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
+import { positionOfLine, roundUpUsd, startsBelowLine } from "../budget/line.ts";
 import { newId } from "../contracts/ids.ts";
 import type { RoleDeps } from "../claude/client.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
@@ -26,9 +32,10 @@ import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts
 import { sqlRoleCallJournal } from "../jobs/role-call-store.ts";
 import type { CatalogEntry } from "./catalog.ts";
 import type { OrchestratorPlan } from "./contracts.ts";
+import { categoryBudgetsOf } from "./categories.ts";
+import { lineOf, planAskNote } from "./envelope.ts";
 import { planWithRole, type PlannerBrief } from "./planner.ts";
 import { claimForPlanning, getPlan, recordPlanOutcome, releasePlanning, type StoredPlan } from "./store.ts";
-import { allowanceUsd, INITIAL_BUDGET_TOLERANCE, mayStart, type BudgetTolerance } from "../budget/tolerance.ts";
 
 export type PlanScope = {
   sql: Sql;
@@ -37,8 +44,6 @@ export type PlanScope = {
   catalog: Map<string, CatalogEntry>;
   /** The model families the workspace has switched off. The catalog above has none of them; a plan naming one is refused with that reason. */
   disabledFamilies?: readonly string[];
-  /** The overrun tolerance on the budgets (owner direction 2026-10-23). Absent: the initial tolerance. */
-  budgetTolerance?: BudgetTolerance;
   /** When the catalog was read. It is stored with the plan. */
   catalogReadAt: string | null;
   /** The clock, as an ISO time. */
@@ -63,11 +68,6 @@ type Attempt = { requestId: string; reservationId: string; createdAt: string; le
 /** The checks before the call: the brief and the reservation it can run on, or the reasons it cannot run. */
 type Checked = { ok: true; brief: PlannerBrief; reservation: BudgetReservation } | { ok: false; reasons: string[] };
 
-/** Rounds a computed USD amount up to four decimals, the precision a reservation carries (contracts/money.ts). */
-function roundUpUsd(value: number): number {
-  return Math.ceil(value * 10000) / 10000;
-}
-
 function noCall(reason: string): Checked {
   return { ok: false, reasons: [reason] };
 }
@@ -80,8 +80,8 @@ function refusal(scope: PlanScope, stored: StoredPlan, reasons: string[]): Promi
 
 /**
  * Every check before the call. It stores nothing. The hold is the call's estimate, rounded up to four decimals, for the call and its one
- * retry. It must fit the plan's budget and the workspace month (the month's reserved total plus this hold, as reserve() checks it), and it
- * must be a valid reservation before anything is written.
+ * retry. The hold must fit the user's budget (D17). The month must be below its budget, and the hold must be a valid reservation before
+ * anything is written.
  */
 async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Attempt): Promise<Checked> {
   const brief = orchestratorBriefSchema.safeParse(stored.brief);
@@ -102,24 +102,26 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
   const estimateUsd = roundUpUsd(estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: inputTokens, output: ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.output }));
   const redoUsd = estimateUsd;
   const heldUsd = sumUsd([estimateUsd, redoUsd]);
-  // The planning call is held against the budget the user set and its tolerance (owner direction 2026-10-23). A hold past the allowance waits.
-  const tolerance = scope.budgetTolerance ?? INITIAL_BUDGET_TOLERANCE;
-  if (!mayStart(0, heldUsd, stored.budgetUsd, tolerance)) {
+
+  // The planning call follows the same rule (D17): its hold must fit the budget, or the draft is refused before any call. Nothing is committed
+  // at planning, so the spend is zero. The budget is the user's: the plan's own budget is not known until the call answers.
+  if (!startsBelowLine(0, stored.budgetUsd) || positionOfLine(heldUsd, stored.budgetUsd) !== "within_budget") {
     return noCall(
-      `the plan call and its one retry are estimated at $${heldUsd.toFixed(4)}, past the $${allowanceUsd(stored.budgetUsd, tolerance).toFixed(4)} allowance of the $${stored.budgetUsd.toFixed(4)} budget, so no call is made until the budget is raised`,
+      `the plan call's hold of $${heldUsd.toFixed(4)} would take the spend past the $${stored.budgetUsd.toFixed(4)} budget (committed $0.0000), so the draft is refused before any call`,
     );
   }
 
+  // The workspace month: the call starts only while the month's committed spend is below its budget (run-budget.ts uses the same rule).
   const month = await scope.workspaceBudget.monthBudget({ organizationId: scope.organizationId, requestId: attempt.requestId, now: attempt.createdAt });
   if (month.status !== "known") return noCall(month.reason);
-  const totals = await attempt.ledger.sumForMonth(scope.organizationId, attempt.createdAt.slice(0, 7));
-  const committedUsd = sumUsd([totals.reservedUsd, heldUsd]);
-  const monthAllowance = allowanceUsd(month.usd, month.tolerance ?? tolerance);
-  const reasons: string[] = [];
-  if (committedUsd > monthAllowance) {
-    reasons.push(`workspace monthly budget ${month.usd} USD (allowance ${monthAllowance} USD, the budget plus its tolerance) would be exceeded: ${committedUsd} USD committed`);
+  const monthCommittedUsd = await attempt.ledger.committedForMonth(scope.organizationId, attempt.createdAt.slice(0, 7));
+  if (!startsBelowLine(monthCommittedUsd, month.usd)) {
+    return noCall(
+      `workspace monthly budget reached: $${monthCommittedUsd.toFixed(4)} is committed against the $${month.usd.toFixed(4)} budget, so no call is made`,
+    );
   }
 
+  // No allowance fields: the request line is the plan's budget, and the month line is the workspace month's budget (contract v11).
   const reservation = budgetReservationSchema.safeParse({
     schema: BUDGET_RESERVATION_SCHEMA,
     reservationId: attempt.reservationId,
@@ -132,16 +134,13 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
     reservedUsd: heldUsd,
     requestBudgetUsd: stored.budgetUsd,
     workspaceMonthBudgetUsd: month.usd,
-    requestAllowanceUsd: allowanceUsd(stored.budgetUsd, tolerance),
-    workspaceMonthAllowanceUsd: monthAllowance,
     state: "reserved",
     createdAt: attempt.createdAt,
   });
   if (!reservation.success) {
     const detail = reservation.error.issues[0]?.message ?? "the amounts are not valid";
-    return { ok: false, reasons: [...reasons, `the hold does not match the reservation contract, so no call is made: ${detail}`] };
+    return noCall(`the hold does not match the reservation contract, so no call is made: ${detail}`);
   }
-  if (reasons.length > 0) return { ok: false, reasons };
   return { ok: true, brief: { ...brief.data }, reservation: reservation.data };
 }
 
@@ -197,13 +196,22 @@ async function callAndStore(scope: PlanScope, stored: StoredPlan, checked: Extra
     where organization_id = ${scope.organizationId} and id = ${requestId}
   `;
   if (!outcome.ok) return refusal(scope, stored, outcome.reasons);
-  // A plan that asks for more than the user set is stored as ready: the run is held to the user's budget and its tolerance (envelope.ts).
 
+  // A ready plan is stored with its notes (D17, envelope.ts): an estimate above its line, and a plan that asks for more than the user set. The
+  // notes come from the same check the run makes, with the line the run will hold the plan to.
+  const noted = validatePlan(outcome.plan, scope.catalog, {
+    textInputTokens: textInputTokensOf(stored.brief),
+    disabledFamilies: scope.disabledFamilies,
+    budgetUsd: lineOf(outcome.plan.budgetUsd, stored.budgetUsd),
+    categoryBudgetsUsd: categoryBudgetsOf(checked.brief),
+  });
+  if (!noted.ok) return refusal(scope, stored, noted.reasons);
+  const asked = planAskNote(outcome.plan.budgetUsd, stored.budgetUsd);
   const ready = await recordPlanOutcome(scope.sql, {
     id: stored.id,
     organizationId: scope.organizationId,
     plan: outcome.plan,
-    reasons: [],
+    reasons: asked === null ? noted.notes : [asked, ...noted.notes],
     catalogReadAt: scope.catalogReadAt,
   });
   return { status: "ready", stored: ready ?? stored, plan: outcome.plan };

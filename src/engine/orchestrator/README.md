@@ -7,10 +7,13 @@ re-runs only the steps a change touches.
 Read in this order: `contracts.ts` (what a plan is), `validate.ts` (what is refused and why), `dirty.ts` (what a change re-runs),
 `execute.ts` (how a run goes, including pause and not-connected), `layout.ts` and `replay.ts` (what the canvas draws).
 
-Money is a soft limit (owner direction 2026-10-23). The plan's total has a target (the lower of the plan's budget and the budget the user set)
-and an allowance (the target plus its tolerance, `budget/tolerance.ts`). A brief may also set a copy, a creative or a voice budget
-(`categories.ts`): copy is the text steps, creative the image and video steps, voice the speech steps. A category the brief leaves unset is
-split by the orchestrator under the total. A run pauses for an approval at the step that would pass the total's allowance or its category's
-allowance; it never fails for a small overrun. A stored output keeps its category, so a later run totals each category from what is stored.
+Money is a line (owner direction 2026-10-23, decision D12). The plan's total has one line: the lower of the plan's budget and the budget the
+user set (`envelope.ts`). A brief may also set a copy, a creative or a voice budget (`categories.ts`), and each is a line of its own: copy is
+the text steps, creative the image and video steps, voice the speech steps. A category the brief leaves unset is split by the orchestrator
+under the total. A paid step starts only while the committed spend is below its line and its own hold fits within it (D17, `budget/line.ts`).
+A step whose hold does not fit pauses the run before its call, and the project waits until an admin raises the budget. A call already in
+flight finishes, so a bill above its estimate may take the spend past the line, and the overshoot is recorded. A plan whose estimate is above
+its line is still accepted, with a note. A queued job's hold counts until its poll settles it (D14). A stored output keeps its
+category, so a later run totals each category from what is stored.
 
 Nothing here calls a provider. Handlers are passed in, and the gateway (`../gateway`) makes every call when they are wired.

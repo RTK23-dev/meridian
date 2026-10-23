@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { loadCatalog } from "./catalog.ts";
 import { orchestratorPlanSchema, type OrchestratorPlan } from "./contracts.ts";
-import { topologicalOrder, validatePlan } from "./validate.ts";
+import { priceStep, topologicalOrder, validatePlan } from "./validate.ts";
 
 const sample = JSON.parse(readFileSync(new URL("./fixtures/sample-plan.json", import.meta.url), "utf8"));
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;
@@ -74,15 +74,60 @@ test("a paid step with no usable seconds does not run: the engine has no price b
   if (!result.ok) assert.match(result.reasons.join("\n"), /step shot_1: params\.seconds must be a number from 0 to 60/);
 });
 
-test("a plan whose estimate is past its allowance is still checked, and its position says it needs an approval", () => {
+test("a plan whose estimate is past its line is still checked: it is accepted, and its position says it is over its budget", () => {
   const plan = planWith((p) => (p.budgetUsd = 0.5));
   const result = validatePlan(plan, catalog);
-  assert.equal(result.ok, true, "a plan past the allowance is a plan: the run waits at the step that passes it, it is not refused here");
+  assert.equal(result.ok, true, "a plan past its line is a plan: the run stops at the line, it is not refused here");
   if (!result.ok) return;
-  assert.equal(result.budget.targetUsd, 0.5);
-  assert.equal(result.budget.allowanceUsd, 0.75, "the $0.50 budget plus the 25-cent floor");
+  assert.equal(result.budget.budgetUsd, 0.5);
   assert.ok(Math.abs(result.budget.estimateUsd - 1.0846) < 0.0001, "the estimate is the sum of the paid steps");
-  assert.equal(result.budget.position, "needs_approval");
+  assert.equal(result.budget.position, "over_budget");
+  assert.equal("allowanceUsd" in result.budget, false, "a budget is a line: a plan has no allowance (D12)");
+});
+
+test("the line given to the validator is the one the plan is placed against, and over it is a note, not a refusal", () => {
+  const plan = planWith(() => {});
+  // The sample plan estimates about $1.08, so a line of $1.00 is below it: the plan is accepted, over its line, with a note (D17).
+  const result = validatePlan(plan, catalog, { budgetUsd: 1 });
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.budget.budgetUsd, 1);
+  assert.equal(result.budget.position, "over_budget");
+  assert.equal(result.notes.length, 1);
+  assert.match(result.notes[0] ?? "", /^the plan's estimate of \$1\.0846 is above its \$1\.0000 budget; the run stops at the first step that does not fit$/);
+});
+
+test("an unpriced video step is refused unless measure mode holds it, and a measured step is held to its ceiling, not to the plan's own figure", () => {
+  const unpriced = [...catalog.values()].find((entry) => entry.kind === "video" && entry.pricing.usdPerSecond1080p === null);
+  if (unpriced === undefined) throw new Error("the recorded catalog lists a video model with no per-second price");
+  const unpricedId = unpriced.id;
+  // The plan's own figure for the step is advisory: a figure of $0.001 must not set its hold.
+  const plan = planWith((p) => {
+    step(p, "shot_1").model = { provider: "openrouter", id: unpricedId };
+    step(p, "shot_1").estimateUsd = 0.001;
+  });
+
+  const refused = validatePlan(plan, catalog);
+  assert.equal(refused.ok, false);
+  if (!refused.ok) assert.match(refused.reasons.join("\n"), /step shot_1: .+ has no per-second price in the listing/);
+
+  const measured = validatePlan(plan, catalog, { measure: { ceilingUsdPerSecond: 0.5 } });
+  assert.equal(measured.ok, true, "measure mode holds the step, so it may run");
+  if (!measured.ok) return;
+  assert.equal(measured.plan.nodes.find((node) => node.id === "shot_1")?.estimateUsd, 2.5, "five seconds at the $0.50 ceiling");
+  const priced = validatePlan(planWith(() => {}), catalog);
+  if (!priced.ok) throw new Error("the sample plan must validate");
+  const priceOfShot = priced.plan.nodes.find((node) => node.id === "shot_1")?.estimateUsd ?? 0;
+  assert.ok(Math.abs(measured.budget.estimateUsd - (priced.budget.estimateUsd - priceOfShot + 2.5)) < 1e-9, "the measured hold is part of the plan's estimate");
+});
+
+test("an avatar step on an unpriced video model is priced by the same ceiling as a video step, and refused without measure mode", () => {
+  const unpriced = [...catalog.values()].find((entry) => entry.kind === "video" && entry.pricing.usdPerSecond1080p === null);
+  if (unpriced === undefined) throw new Error("the recorded catalog lists a video model with no per-second price");
+  const avatar = { id: "presenter", kind: "avatar", title: "presenter", why: "a test step", dependsOn: [], model: { provider: "openrouter", id: unpriced.id }, params: { seconds: 4 }, estimateUsd: null };
+  const node = avatar as unknown as Parameters<typeof priceStep>[0];
+  assert.deepEqual(priceStep(node, unpriced, { measure: { ceilingUsdPerSecond: 0.5 } }), { usd: 2 }, "four seconds at the $0.50 ceiling");
+  assert.match(JSON.stringify(priceStep(node, unpriced)), /has no per-second price in the listing/);
 });
 
 test("a cycle is refused and no order is given", () => {

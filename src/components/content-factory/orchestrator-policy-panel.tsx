@@ -14,9 +14,8 @@ const VEO_FAMILY = "google/veo";
 type PolicyData = Awaited<ReturnType<typeof getOrchestratorPolicyFor>>;
 
 /**
- * The workspace's budget tolerance and the model families the orchestrator may not use (owner direction 2026-10-23). A budget is a safe limit:
- * a run may go past it by the larger of the percentage and the cents, and past that it waits for an approval. Every value is adjustable here.
- * A viewer reads the values; only a workspace admin saves them.
+ * The model families the orchestrator may not use in this workspace (owner direction 2026-10-23). A switched-off family is not offered to
+ * the orchestrator, and a plan that names one is refused. A viewer reads the values; only a workspace admin saves them.
  */
 export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
   const { user, isPending } = useCurrentUserState();
@@ -33,8 +32,8 @@ export function OrchestratorPolicyPanel({ brandId }: { brandId: string }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Budget tolerance and model policy</CardTitle>
-        <CardDescription>The values every orchestrated run in this workspace uses. A budget is a safe limit, not a hard one.</CardDescription>
+        <CardTitle>Model policy</CardTitle>
+        <CardDescription>The model families the orchestrator may not use. The values every orchestrated run in this workspace uses.</CardDescription>
       </CardHeader>
       {policy.isError && !policy.data ? <PlainErrorState error={policy.error} onRetry={() => void policy.refetch()} /> : null}
       {policy.data ? (
@@ -72,16 +71,10 @@ function PolicyForm({
   onSaved: () => void;
 }) {
   const { policy, initial } = data;
-  const [percent, setPercent] = useState(String(policy.budgetTolerance.percent));
-  const [cents, setCents] = useState(String(policy.budgetTolerance.cents));
   const [veoOff, setVeoOff] = useState(policy.disabledModelFamilies.includes(VEO_FAMILY));
   const [others, setOthers] = useState(policy.disabledModelFamilies.filter((family) => family !== VEO_FAMILY).join(", "));
   const [saving, setSaving] = useState(false);
 
-  const percentValue = Number(percent);
-  const centsValue = Number(cents);
-  const percentValid = percent.trim() !== "" && Number.isFinite(percentValue) && percentValue >= 0 && percentValue <= 100;
-  const centsValid = cents.trim() !== "" && Number.isFinite(centsValue) && centsValue >= 0 && centsValue <= 10000;
   const families = [
     ...new Set([
       ...(veoOff ? [VEO_FAMILY] : []),
@@ -93,11 +86,10 @@ function PolicyForm({
   ];
 
   async function save() {
-    if (!percentValid || !centsValid) return;
     setSaving(true);
     onMessage(null);
     try {
-      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: families, budgetTolerance: { percent: percentValue, cents: centsValue } } });
+      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: families } });
       onMessage("Saved. Every run that starts from now on uses these values.");
       onSaved();
     } catch (error) {
@@ -118,37 +110,8 @@ function PolicyForm({
       className="flex flex-col gap-4 p-4 sm:p-6"
     >
       <p className="text-sm text-fg-muted">
-        Initial values: a tolerance of {initial.budgetTolerance.percent} percent or {initial.budgetTolerance.cents} cents, whichever is larger,
-        and Veo ({VEO_FAMILY}) {initialVeo}.
+        Initial values: Veo ({VEO_FAMILY}) {initialVeo}.
       </p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Input
-          id="policy-percent"
-          label="Tolerance, percent of the budget"
-          type="number"
-          inputMode="decimal"
-          min={0}
-          max={100}
-          step="0.1"
-          disabled={!canAdmin}
-          value={percent}
-          onChange={(event) => setPercent(event.target.value)}
-          error={percentValid || !canAdmin ? undefined : "Enter a percentage from 0 to 100."}
-        />
-        <Input
-          id="policy-cents"
-          label="Tolerance, cents"
-          type="number"
-          inputMode="decimal"
-          min={0}
-          max={10000}
-          step="1"
-          disabled={!canAdmin}
-          value={cents}
-          onChange={(event) => setCents(event.target.value)}
-          error={centsValid || !canAdmin ? undefined : "Enter a whole number of cents from 0 to 10,000."}
-        />
-      </div>
       <label className="inline-flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
         <input type="checkbox" checked={veoOff} disabled={!canAdmin} onChange={(event) => setVeoOff(event.target.checked)} className="size-4" />
         Switch off Veo ({VEO_FAMILY}). Unchecked, the orchestrator may choose Veo again.
@@ -162,7 +125,7 @@ function PolicyForm({
         onChange={(event) => setOthers(event.target.value)}
       />
       <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" type="submit" disabled={saving || !canAdmin || !percentValid || !centsValid} aria-describedby={canAdmin ? undefined : "policy-role"}>
+        <Button size="sm" type="submit" disabled={saving || !canAdmin} aria-describedby={canAdmin ? undefined : "policy-role"}>
           Save the policy
         </Button>
         {canAdmin ? null : (

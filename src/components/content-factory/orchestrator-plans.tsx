@@ -339,7 +339,7 @@ function BudgetApproval(props: {
       <h3 id={`approval-${planId}`} className="font-semibold">
         Paused for an approval
       </h3>
-      <p className="text-fg-muted">{pauseReason ?? "The next step would take the spend past the budget and its tolerance."}</p>
+      <p className="text-fg-muted">{pauseReason ?? "The next paid step's hold would take the committed spend past the budget, so the run waits for an approval."}</p>
       <div className="flex flex-wrap items-end gap-2">
         <Input
           id={`approval-amount-${planId}`}
@@ -361,7 +361,7 @@ function BudgetApproval(props: {
       <p className="text-xs text-fg-muted">
         {higher && value !== null
           ? `Approving $${value.toFixed(2)} raises the budget from $${budgetUsd.toFixed(2)}.`
-          : `The run is held to $${budgetUsd.toFixed(2)} and its tolerance. The approved budget must be above it.`}
+          : `The run stops at the budget line of $${budgetUsd.toFixed(2)}. The approved budget must be above it.`}
       </p>
       {problem ? (
         <p role="alert" className="text-danger">
