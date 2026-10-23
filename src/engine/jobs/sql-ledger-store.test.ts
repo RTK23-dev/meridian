@@ -87,19 +87,20 @@ test("a reservation inside both budgets is reserved; a call is booked once; a du
   assert.equal(ledgerEntrySchema.safeParse(entries[0]).success, true, "the stored entry reads back as the LedgerEntry contract");
 });
 
-test("a call that starts below the request budget may take the reservation above its amount; the next call at the line is refused (D12)", async () => {
+test("a call whose hold would take the request past its budget is refused on the database, and a call that fills the line exactly starts (D12, D17)", async () => {
   const { organizationId, requestId } = await workspace(3);
   const reserved = await withWorkspaceLedger(db.sql, organizationId, (store) => reserve(store, reserveInput(organizationId, requestId)));
   const id = reserved.reservation.reservationId;
   const big = await withReservationLedger(db.sql, organizationId, id, (store) => authorizeCall(store, callInput(id, { estimateUsd: 5, idempotencyKey: "too-big" })));
-  assert.equal(big.status, "authorized", "nothing is committed, so the call is below the 4 USD line");
-  if (big.status === "authorized") assert.ok(big.alerts.some((alert) => alert.scope === "call"), "the overshoot of the hold is recorded");
+  assert.equal(big.status, "refused", "a 5 USD hold does not fit under the 4 USD line, though nothing is committed");
+  const fits = await withReservationLedger(db.sql, organizationId, id, (store) => authorizeCall(store, callInput(id, { estimateUsd: 4, idempotencyKey: "fits-exactly" })));
+  assert.equal(fits.status, "authorized", "a 4 USD hold fills the 4 USD line exactly");
   const stored = await withReservationLedger(db.sql, organizationId, id, (store) => store.getReservation(id));
-  assert.equal(stored?.reservedUsd, 5, "the hold is raised to what the call takes it to");
-  const refused = await withReservationLedger(db.sql, organizationId, id, (store) => authorizeCall(store, callInput(id, { idempotencyKey: "after-the-line" })));
-  assert.equal(refused.status, "refused", "5 USD committed is past the 4 USD line");
+  assert.equal(stored?.reservedUsd, 4, "the hold is raised to what the call takes it to");
+  const refused = await withReservationLedger(db.sql, organizationId, id, (store) => authorizeCall(store, callInput(id, { estimateUsd: 0, idempotencyKey: "after-the-line" })));
+  assert.equal(refused.status, "refused", "4 USD committed is at the 4 USD line, so even a zero-estimate call is refused");
   const entries = await withReservationLedger(db.sql, organizationId, id, (store) => store.listEntries(id));
-  assert.equal(entries.length, 1, "only the call that started is recorded");
+  assert.equal(entries.length, 1, "only the call that fits is recorded; the refused calls record nothing");
 });
 
 test("a call on a paused reservation is refused, and no entry is written", async () => {
@@ -243,25 +244,25 @@ test("committedForRequest and committedForMonth read the committed spend from th
   );
 });
 
-test("a remake's reservation sees the request's spend on the database: a call on the second reservation is refused at the request line", async () => {
+test("a remake's reservation sees the request's spend on the database: a call on the second reservation is refused at the request line (D17)", async () => {
   const { organizationId, requestId } = await workspace(23);
   const first = await withWorkspaceLedger(db.sql, organizationId, (store) => reserve(store, reserveInput(organizationId, requestId, { requestBudgetUsd: 1 })));
   const firstId = first.reservation.reservationId;
   const committed = await withReservationLedger(db.sql, organizationId, firstId, (store) =>
-    authorizeCall(store, callInput(firstId, { estimateUsd: 0.9, idempotencyKey: "sql-remake-1", entryId: fixtureId("led_", 741) })),
+    authorizeCall(store, callInput(firstId, { estimateUsd: 0.5, idempotencyKey: "sql-remake-1", entryId: fixtureId("led_", 741) })),
   );
   assert.equal(committed.status, "authorized");
   const second = await withWorkspaceLedger(db.sql, organizationId, (store) =>
     reserve(store, reserveInput(organizationId, requestId, { requestBudgetUsd: 1, reservationId: fixtureId("res_", 741) })),
   );
   const secondId = second.reservation.reservationId;
-  const starts = await withReservationLedger(db.sql, organizationId, secondId, (store) =>
-    authorizeCall(store, callInput(secondId, { estimateUsd: 0.2, idempotencyKey: "sql-remake-2", entryId: fixtureId("led_", 742) })),
+  const fills = await withReservationLedger(db.sql, organizationId, secondId, (store) =>
+    authorizeCall(store, callInput(secondId, { estimateUsd: 0.5, idempotencyKey: "sql-remake-2", entryId: fixtureId("led_", 742) })),
   );
-  assert.equal(starts.status, "authorized", "the request has committed 0.90 USD, below its 1 USD budget");
+  assert.equal(fills.status, "authorized", "the request has committed 0.50 USD, and this call's 0.50 USD fills its 1 USD budget exactly");
   const refused = await withReservationLedger(db.sql, organizationId, secondId, (store) =>
     authorizeCall(store, callInput(secondId, { estimateUsd: 0.2, idempotencyKey: "sql-remake-3", entryId: fixtureId("led_", 743) })),
   );
-  assert.equal(refused.status, "refused", "the request has committed 1.10 USD across its reservations");
-  if (refused.status === "refused") assert.match(refused.reason, /the request has committed 1.1 USD, at or above its 1 USD budget/);
+  assert.equal(refused.status, "refused", "the request has committed 1.00 USD across its reservations, at its line");
+  if (refused.status === "refused") assert.match(refused.reason, /the request has committed 1 USD, at or above its 1 USD budget/);
 });

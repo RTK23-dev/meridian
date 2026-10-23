@@ -5,10 +5,9 @@
 // estimate_reserve then raises that same reservation to the full plan estimate, plus the redo allowance: extendReservation.
 // The fixed lines stay inside the plan's lines, because the plan's lines include them.
 //
-// Both steps read the request's committed spend and the workspace month's committed spend (owner direction 2026-10-23, D12). A
-// reservation that starts while its month's committed spend is at or above the month budget is not accepted (paused, cap mode). A hold
-// above a budget is noted, never refused: a call starts only while its line is below the budget (reserve.ts, authorizeCall).
-// A reservation is never lowered below what it has committed.
+// Both steps read the request's committed spend and the workspace month's committed spend (owner direction 2026-10-23, D12). A hold is
+// accepted with a note for each budget it is above, never paused or refused: a paid call starts only while its line is below the budget
+// and its own hold fits under it (reserve.ts, authorizeCall, D17). A reservation is never lowered below what it has committed.
 
 import { z } from "zod";
 import {
@@ -26,8 +25,7 @@ import {
   type ScenePlan,
 } from "../contracts/index.ts";
 import { estimatePlan, fixedBudgetLines, type ChosenCallPrices } from "./estimate.ts";
-import { committedFor, holdNotes, monthNotAcceptedReason, type BudgetAlert, type ReserveResult } from "./reserve.ts";
-import { startsBelowLine } from "./line.ts";
+import { committedFor, holdNotes, type BudgetAlert, type ReserveResult } from "./reserve.ts";
 import type { LedgerStore } from "./store.ts";
 
 const RESERVE_FIXED_STAGE = "intake";
@@ -91,7 +89,7 @@ export type ReserveFixedInput = {
 /**
  * The pre-flight hold (intake). It holds the fixed per-master lines only (budgets.fixedPerMasterUsd, 14.2), with no redo
  * allowance and no shot lines.
- * - cap: accepted as reserved while the month's committed spend is below its budget; otherwise paused, with the reason.
+ * - cap: accepted as reserved, never paused: a paid call is gated by its line (D17).
  * - cap and warn: a note for each budget the hold is above (D12). Observe records no note.
  * Idempotent on reservationId: a repeated call returns the stored reservation and stores nothing new.
  */
@@ -121,8 +119,6 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
     plannedUsd: fixedUsd,
   });
-  const paused = mode === "cap" && !startsBelowLine(monthCommittedUsd, limits.workspaceMonthBudgetUsd);
-
   const reservation: BudgetReservation = budgetReservationSchema.parse({
     schema: "meridian.budget_reservation/v1",
     reservationId: reservationId ?? newId("res_"),
@@ -135,8 +131,7 @@ export async function reserveFixed(store: LedgerStore, input: ReserveFixedInput)
     reservedUsd: fixedUsd,
     requestBudgetUsd: limits.requestBudgetUsd,
     workspaceMonthBudgetUsd: limits.workspaceMonthBudgetUsd,
-    state: paused ? "paused" : "reserved",
-    ...(paused ? { pausedReason: monthNotAcceptedReason(monthCommittedUsd, limits.workspaceMonthBudgetUsd) } : {}),
+    state: "reserved",
     createdAt: limits.now,
   });
   await store.createReservation(reservation);

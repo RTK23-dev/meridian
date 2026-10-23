@@ -137,6 +137,20 @@ test("cap mode: a bill above the hold alone keeps the reservation reserved, rais
   assert.equal(next.status, "authorized", "the request is below its line, so the next call starts");
 });
 
+test("cap mode: a bill above a call's fitting hold still raises the hold and returns its alerts; a bill that reaches the line marks the reservation exceeded (D17)", async () => {
+  const store = memoryLedgerStore();
+  await reserve(store, reserveInput({ requestBudgetUsd: 1 }));
+  const fits = await authorizeCall(store, callInput({ estimateUsd: 0.9, idempotencyKey: "produce:shot_3:1" }));
+  assert.equal(fits.status, "authorized", "0.90 fits under the 1.00 line");
+  const settled = await reconcileCall(store, { idempotencyKey: "produce:shot_3:1", billedUsd: 1.2 });
+  assert.equal(settled.reservation.reservedUsd, 1.2, "the hold is raised to the bill");
+  assert.ok(settled.alerts.some((alert) => alert.scope === "call"), "the bill is above the call's hold, and that is an alert");
+  assert.ok(settled.alerts.some((alert) => alert.scope === "request"), "the bill takes the request past its 1.00 USD budget, and that is an alert");
+  assert.equal(settled.reservation.state, "exceeded", "the request has committed 1.20 USD, past its line");
+  const next = await authorizeCall(store, callInput({ estimateUsd: 0, idempotencyKey: "produce:shot_4:1" }));
+  assert.equal(next.status, "refused", "a call at the line is refused, even with a zero estimate");
+});
+
 test("cap mode: a bill that takes the request to its budget marks the reservation exceeded, and the next call is refused (D12)", async () => {
   const store = memoryLedgerStore();
   await reserve(store, reserveInput());

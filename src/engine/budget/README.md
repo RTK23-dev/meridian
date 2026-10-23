@@ -35,8 +35,8 @@ exists yet. The decision, by the lead:
   does it. The reservation's lines become the plan's lines, and the fixed lines stay inside them (the plan includes them).
 - **Both steps** note a hold that is above the request budget (`constraints.budgetUsd`) or the workspace month. In **cap** mode
   the note does not refuse the hold (D12): each call is gated by its line (see the budget line section below).
-- **Acceptance.** In cap mode a reservation starts only while its month's committed spend is below the month budget. Otherwise
-  `reserve` and `reserveFixed` store it **paused**, with the reason.
+- **Acceptance.** A reservation is always accepted (D17): `reserve` and `reserveFixed` store it reserved, with a note for each budget
+  its hold is above. No line pauses a reservation; the paid calls are gated by the lines.
 
 Rules for the two functions (tested in `preflight.test.ts`):
 
@@ -60,7 +60,7 @@ Rules for the two functions (tested in `preflight.test.ts`):
 | --- | --- | --- | --- |
 | `observe` | Reserved, no alert | Authorized, no alert | Recorded, no alert |
 | `warn` | Reserved, overrun alert | Authorized, overrun alert | Recorded, alert |
-| `cap` | Reserved, with a note; paused when the month's committed spend is at its budget | Authorized with an alert below the request and month lines; refused at a line, nothing recorded | Recorded; the reservation is raised, and marked `exceeded` only at a line |
+| `cap` | Reserved, with a note for each budget the hold is above | Authorized only below both lines and when its hold fits under both (D17); refused otherwise, nothing recorded | Recorded; the reservation is raised, and marked `exceeded` only at a line |
 
 Production runs in `cap`. The pre-flight hold and its extension follow the same table.
 
@@ -100,15 +100,17 @@ A budget is a line, not a tolerance. The brief path has no percentage and no cen
 starts only while the spend is below the line (`startsBelowLine`). Both lines read **committed spend**: each entry's actual cost, or
 its hold until it settles. A reservation's hold is not spent until its calls are made, so it is not counted.
 
-- **A call starts only below both lines.** In cap mode, `authorizeCall` refuses a call when, before it, the request's committed
-  spend (`committedForRequest`, across every reservation of the request) is at or above the request budget, or the workspace month's
-  committed spend (`committedForMonth`, the calls dated in the month of this call) is at or above the month budget. A reservation
-  with no budget has no line: in cap mode an overrun of its hold is refused (fail closed).
-- **A call that starts finishes.** It may take its reservation above its hold. The hold is raised to what the call takes it to, and
-  the overshoot of each budget is returned as an alert, so it is recorded, not hidden.
+- **A call starts only below both lines, and only if its hold fits under both (D17).** In cap mode, `authorizeCall` refuses a call
+  when, before it, the request's committed spend (`committedForRequest`, across every reservation of the request) is at or above the
+  request budget, or the workspace month's committed spend (`committedForMonth`, the calls dated in the month of this call) is at or
+  above the month budget. It also refuses a call whose hold would take either total past its budget, even with nothing committed. A
+  call at a line is refused even with a zero estimate. A reservation with no budget has no line: in cap mode an overrun of its hold is
+  refused (fail closed).
+- **A call that starts fits.** It may take its reservation above its hold: the hold is raised to what the call takes it to, and the
+  overrun of the hold is returned as an alert. A bill above its estimate can still take a line; the next call is then refused.
 - **A plan above a budget is held with a note.** `reserve`, `reserveFixed` and `extendReservation` note a plan whose committed spend
-  would be above a budget. Only the month's committed spend stops a reservation from starting (it is paused). A plan whose estimate
-  is above the month budget is accepted while nothing is committed, and its first call starts.
+  would be above a budget. No line pauses a reservation. A plan whose estimate is above the month budget is accepted, and its first
+  call starts only if the call's own hold fits (D17).
 - **Exceeded only at a line.** A settled bill marks the reservation `exceeded` in cap mode only when it takes the request or the month
   to its line (`reconcile.ts`). An overrun of the hold alone raises the hold, and the reservation stays reserved. The mark clears when a
   later settlement takes both lines back below their budgets. Authorization decides by the lines, so an `exceeded` reservation whose
