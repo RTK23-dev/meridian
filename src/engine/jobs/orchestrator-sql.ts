@@ -6,7 +6,7 @@ import { randomUUID } from "node:crypto";
 import { EngineError } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { advance, ORCHESTRATOR_STATE_SCHEMA, type EngineEffect, type OrchestratorState } from "./orchestrator.ts";
-import { isEngineStage, type EngineStage } from "./registry.ts";
+import { ENGINE_MAINTENANCE_JOBS, isEngineStage, type EngineStage } from "./registry.ts";
 import type { RequestPriority } from "./settings.ts";
 import type { EngineEvent, QueuedJob } from "./types.ts";
 import type { GoldMetrics } from "../review/gold.ts";
@@ -249,14 +249,17 @@ async function queueJobs(tx: Sql, brandId: string | null, jobs: QueuedJob[], tri
 export type DeadJobOutcome = { jobId: string; outcome: "applied" | "duplicate" | "refused"; message: string };
 
 /**
- * Records engine jobs that Meridian marked dead without calling the engine (for example a lease that expired after the last
- * attempt). Each is applied once, under its dedupe key. A refusal is reported, not hidden.
+ * Records one workspace's engine jobs that Meridian marked dead without calling the engine (for example a lease that expired after the
+ * last attempt). Each is applied once, under its dedupe key. A refusal is reported, not hidden. Maintenance jobs are not listed: they have
+ * no request to pause, and a dead one listed here would take a slot from the stage dead letters every sweep.
  */
-export async function recordDeadEngineJobs(sql: Sql, limit = 50): Promise<DeadJobOutcome[]> {
+export async function recordDeadEngineJobs(sql: Sql, organizationId: string, limit = 50): Promise<DeadJobOutcome[]> {
   // A job already recorded under its dedupe key (by the dispatcher or an earlier sweep) is not listed again.
   const rows = await sql<{ id: string; organization_id: string; payload: string; last_error: string }>`
     select j.id, j.organization_id, j.payload, j.last_error from jobs j
-    where j.job_type like 'engine.%' and j.status = 'dead'
+    where j.organization_id = ${organizationId}
+      and j.job_type like 'engine.%' and j.status = 'dead'
+      and j.job_type not in (${ENGINE_MAINTENANCE_JOBS.reconcile_holds}, ${ENGINE_MAINTENANCE_JOBS.asset_poll}, ${ENGINE_MAINTENANCE_JOBS.dead_letters})
       and not exists (
         select 1 from engine_events e
         where e.organization_id = j.organization_id and e.dedupe_key = 'dead:' || j.id

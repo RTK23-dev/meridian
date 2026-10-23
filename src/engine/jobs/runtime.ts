@@ -104,6 +104,7 @@ import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import { listRoleCalls } from "./role-call-store.ts";
 import { pollAssetJobs, sqlAssetPollStore } from "../orchestrator/asset-poll.ts";
+import { recordDeadEngineJobs, type DeadJobOutcome } from "./orchestrator-sql.ts";
 
 /** The stages built in other workstreams (W6: analyze_reference and voice; W10: render). Registered only when given. */
 export type ExternalStageHandlers = Partial<Record<"analyze_reference" | "voice" | "render", StageHandler>>;
@@ -419,6 +420,18 @@ export function createEngineRuntime(composition: EngineComposition): EngineRunti
       },
     };
   }
+  // The dead-letter sweep (engine.dead_letters): records the workspace's engine jobs that Meridian marked dead without the engine (a
+  // lease that expired after the last attempt) as dead letters on their stage, which pauses the request (Bible 15.5). It needs no port.
+  runtime.jobs = {
+    ...runtime.jobs,
+    dead_letters: {
+      run: async (ctx) => {
+        const outcomes = await recordDeadEngineJobs(ctx.sql, ctx.organizationId);
+        const count = (outcome: DeadJobOutcome["outcome"]) => outcomes.filter((item) => item.outcome === outcome).length;
+        return `dead:applied=${count("applied")},duplicate=${count("duplicate")},refused=${count("refused")}`;
+      },
+    },
+  };
   const kits = kitPorts(composition.sql);
   const roles = rolesFor(composition);
 

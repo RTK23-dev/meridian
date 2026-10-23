@@ -39,7 +39,12 @@ export const ENGINE_POLL_JOB_TYPE = "engine.poll" as const;
  * Each is one job type on Meridian's queue. A workspace schedules one with a job_schedules row (jobs/STATUS.md, "Scheduling").
  */
 // asset_poll: settles the orchestrator's queued video and avatar submits when their provider has finished (orchestrator_asset_jobs).
-export const ENGINE_MAINTENANCE_JOBS = { reconcile_holds: "engine.reconcile_holds", asset_poll: "engine.asset_poll" } as const;
+// dead_letters: records the engine jobs Meridian marked dead without calling the engine, as dead letters on their stage (orchestrator-sql).
+export const ENGINE_MAINTENANCE_JOBS = {
+  reconcile_holds: "engine.reconcile_holds",
+  asset_poll: "engine.asset_poll",
+  dead_letters: "engine.dead_letters",
+} as const;
 export type EngineMaintenanceJob = keyof typeof ENGINE_MAINTENANCE_JOBS;
 
 /** The maintenance job a job type names, or null when it names none. */

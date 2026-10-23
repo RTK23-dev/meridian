@@ -231,7 +231,7 @@ test("a dead engine job that the engine never saw is recorded once by the sweep,
   const { organizationId, requestId } = await newRequest(9);
   const intakeJob = await jobIdOf(db.sql, organizationId, "engine.intake");
   await db.sql`update jobs set status = 'dead', last_error = 'Lease expired before the worker finished.' where id = ${intakeJob}`;
-  const first = await recordDeadEngineJobs(db.sql);
+  const first = await recordDeadEngineJobs(db.sql, organizationId);
   const outcome = first.find((item) => item.jobId === intakeJob);
   assert.equal(outcome?.outcome, "applied");
   const read = await readEngineRequest(db.sql, organizationId, requestId);
@@ -239,7 +239,7 @@ test("a dead engine job that the engine never saw is recorded once by the sweep,
   assert.equal(read?.state.pause?.kind, "dead_letter");
   const pauseRow = await db.sql<{ pause_reason: string }>`select pause_reason from engine_requests where id = ${requestId}`;
   assert.match(pauseRow[0]?.pause_reason ?? "", /Lease expired/);
-  const second = await recordDeadEngineJobs(db.sql);
+  const second = await recordDeadEngineJobs(db.sql, organizationId);
   assert.equal(second.find((item) => item.jobId === intakeJob), undefined, "a recorded job is not listed as new work again");
 });
 

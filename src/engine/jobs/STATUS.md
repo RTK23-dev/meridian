@@ -1006,8 +1006,11 @@ contracts, config and budget). Covers `src/engine/jobs/`, `migrations/0077_engin
 - **`dispatch` branch in `execute.ts`.** One `if` block after `readPayload`. It uses a lazy `import()` (the same pattern as the
   factory branch) so engine modules do not load for other jobs. The path is `../../../engine/jobs/dispatch.ts`.
 - **Orchestrator SQL in its own file.** `orchestrator-sql.ts` holds the I/O, so `orchestrator.ts` stays pure (Bible 17.2).
-- **Dead engine jobs need a sweeper.** Meridian's `tickSqlJobs` marks a lease-expired engine job dead without calling the
-  engine. `recordDeadEngineJobs` records those, but nothing calls it yet. W14 or the scheduler must.
+- **Dead engine jobs are swept.** Meridian's `tickSqlJobs` marks a lease-expired engine job dead without calling the engine.
+  The `engine.dead_letters` maintenance job (`runtime.jobs.dead_letters`) calls `recordDeadEngineJobs` for its own workspace,
+  and the scheduler inserts one row per organization every 5 minutes (`dead_letters:<organization id>`). It returns
+  `dead:applied=<n>,duplicate=<n>,refused=<n>`. Maintenance job types are excluded from the sweep. A stage job whose payload
+  names no request is listed each sweep as refused, so the count shows it until someone fixes the payload.
 - **Provider calls after a dead poll.** If a poll job dies and the stage is resumed, the produce job submits again. That
   may bill twice if the first provider job is still running. W5 must make submit idempotent under the ledger key and cancel
   on timeout (`ProviderAdapter.cancel`).

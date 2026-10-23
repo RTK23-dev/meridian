@@ -38,6 +38,16 @@ async function tick() {
      )
      on conflict (id) do nothing`,
   );
+  // One dead-letter sweep per workspace: it records the engine jobs Meridian marked dead without the engine, so their requests pause.
+  await pool.query(
+    `insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled, payload)
+     select 'dead_letters:' || o.id, o.id, null, 'engine.dead_letters', 300, now(), true, '{}'
+     from organizations o
+     where not exists (
+       select 1 from job_schedules existing where existing.id = 'dead_letters:' || o.id
+     )
+     on conflict (id) do nothing`,
+  );
   const due = await pool.query<{
     id: string;
     organization_id: string;
