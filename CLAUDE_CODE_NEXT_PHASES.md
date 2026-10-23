@@ -1,0 +1,23 @@
+You are Claude Code working in RTK23-dev/meridian. Work autonomously toward the complete product outcome, not one isolated cleanup. Use the existing AGENTS.md and CLAUDE.md as working rules; inspect concrete code only as needed. Do not turn old docs into the task queue.
+
+PRODUCT OUTCOME
+Meridian should be an accessible, easy-to-navigate research-and-content product. A new user should understand what Meridian does, how to set up a workspace correctly, what is connected/ready, and the next useful action. The Content Factory supports both research-led creation and direct content/video creation, sharing brands, evidence, plans, assets, runs, reviews, publishing receipts, measurements and learning. Keep existing working code and integrations; do not create a parallel pipeline. The backend must genuinely research, produce and track content; the UI must accurately represent real state.
+
+PRIORITIES
+1. Audit current implementation and recent commits across overview/navigation/setup, Content Factory/research, direct creation/video engine, shared data, backend gaps, accessibility and reliability. Classify what is implemented, partial, missing and broken from code/tests—not docs alone.
+2. Improve interface usability: less cramped, clear hierarchy and spacing, simpler navigation, responsive layout, accessible contrast/focus/keyboard/reduced motion. Setup is a guided path with clear selected/connected/ready states, explanations and a next action. Empty workspaces guide; active workspaces show meaningful real activity.
+3. Make Content Factory coherent: research-led and direct creation both use shared domain objects/services. Provide an understandable visual pipeline, queue/run state, useful output library and run details. Build actual research-to-plan-to-generation/review paths; show accurate blocked/failed/unavailable states. Do not focus on billing UI; retain necessary safeguards and truthful cost records.
+4. Complete backend capabilities in the existing architecture: research/evidence, creative planning, generation, review/rights/quality gates, approval, publishing, measurement and learning. Prioritize by end-to-end user value and dependencies. Never claim a capability is live without evidence. Use provider catalogs/capabilities for model selection; do not globally blacklist Veo or assume a replacement model/provider without checking the configured endpoint.
+5. Maintain production reliability and security while product work proceeds. Treat real PostgreSQL/provider verification, idempotency/retries/recovery, tenant/role boundaries, publishing receipts, cost correctness, observability and deployment readiness as explicit gaps to close when relevant.
+
+CONTINUOUS WORK LOOP
+Keep working without waiting for the user to type “continue.” Start with a concise prioritized backlog from the audit, each task with user-visible outcome and acceptance criteria. Choose the highest-value unblocked task, trace its implementation, make a coherent change, run focused validation, inspect the diff, update task status, then immediately select the next unblocked task. Continue across tasks until a genuine owner decision, access blocker or session/usage boundary. If blocked, record the exact blocker and continue independent work. Do not stop after writing a plan or making a tiny cosmetic edit. Work in meaningful slices and leave the repository coherent.
+
+VALIDATION
+Use the narrowest relevant tests while iterating; run changed-file lint and focused tests after a coherent slice. Broaden checks for shared contracts, auth/tenancy, security, migrations, orchestration and publishing. Run full CI/build at an integration checkpoint, not after every edit. Do not rerun passing suites without a reason. Report actual commands and results; never claim unrun checks passed. For UI, verify the real page in browser where available and check accessibility.
+
+DECISION RULE
+Resolve implementation details from code and observed behavior. Ask the owner only for consequential product/provider/legal decisions that cannot be inferred safely. Keep billing out of the feature focus. Do not invent data, connected states, metrics, costs, live results or receipts. Do not add dependencies without approval. Keep changes focused but continue to the next task after each slice.
+
+START NOW
+Inspect current git state and recent commits; audit current UI and Content Factory/backend; produce the prioritized backlog, then immediately implement the top unblocked task. Continue the loop automatically. At each checkpoint briefly report changed files, user-visible impact, tests actually run, blockers and next task—then keep working.
