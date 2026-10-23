@@ -28,7 +28,7 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] sources Test Connection is READY only for a saved, readable Meta Ad Library token, and never claims a live call`, async () => {
+  test(`[${name}] sources Test Connection is CONFIGURED only for a saved, readable Meta Ad Library token, and never claims a live call`, async () => {
     const tenant = await studioTenant(sql, `sources-saved-${name}`);
     await saveWorkspaceProviderConfig(sql, {
       organizationId: tenant.organizationId,
@@ -38,7 +38,7 @@ for (const { name, sql } of backends) {
     });
     await withEnv({}, async () => {
       const result = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "sources" });
-      assert.equal(result.status, "READY");
+      assert.equal(result.status, "CONFIGURED");
       assert.match(result.message, LIVE_NOT_CALLED);
       assert.equal(result.message.includes(SAVED_TOKEN), false, "the message never carries the token");
     });
@@ -69,11 +69,11 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] a deployment META_AD_LIBRARY_TOKEN is READY only with its opt-in, and the message says it is the shared default`, async () => {
+  test(`[${name}] a deployment META_AD_LIBRARY_TOKEN is CONFIGURED only with its opt-in, and the message says it is the shared default`, async () => {
     const tenant = await studioTenant(sql, `sources-shared-${name}`);
     await withEnv({ META_AD_LIBRARY_TOKEN: "deployment-meta-token-9999", META_AD_LIBRARY_SHARED_DEFAULT: "deployment" }, async () => {
       const result = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "sources" });
-      assert.equal(result.status, "READY");
+      assert.equal(result.status, "CONFIGURED");
       assert.match(result.message, /shared/);
       assert.equal(result.message.includes("deployment-meta-token-9999"), false);
     });

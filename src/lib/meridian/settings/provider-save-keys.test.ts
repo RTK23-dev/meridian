@@ -249,14 +249,14 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] Test Connection for a keyed category is READY only with a usable key, and says the live provider was not called`, async () => {
+  test(`[${name}] Test Connection for a keyed category is CONFIGURED only with a usable key, and says the live provider was not called`, async () => {
     const tenant = await studioTenant(sql, `keyed-test-${name}`);
     await withEnv({}, async () => {
       const before = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "openai" });
       assert.notEqual(before.status, "READY");
       await saveWorkspaceProviderConfig(sql, { organizationId: tenant.organizationId, actorId: tenant.userId, category: "openai", credentials: { apiKey: "openai-test-key-1313" } });
       const after = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "openai" });
-      assert.equal(after.status, "READY");
+      assert.equal(after.status, "CONFIGURED");
       assert.match(after.message, /not called/);
       assert.equal(after.message.includes("openai-test-key-1313"), false);
     });
