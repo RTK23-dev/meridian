@@ -12,7 +12,8 @@
 // without a connected key it is NOT_CONNECTED and nothing here is called. Without a known monthly budget, nothing is held.
 
 import { estimateFromPriceUsd } from "../claude/rates.ts";
-import { ORCHESTRATOR_PLAN_ESTIMATE_TOKENS, orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
+import { MODEL_BRIEF_PROMPT, ORCHESTRATOR_PLAN_ESTIMATE_TOKENS, orchestratorBriefSchema } from "../claude/roles/orchestrator_plan.ts";
+import { loadPrompt } from "../prompts/load.ts";
 import { textInputTokensOf } from "./validate.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { Gateway } from "../gateway/gateway.ts";
@@ -150,7 +151,9 @@ async function checkPlanCall(scope: PlanScope, stored: StoredPlan, attempt: Atte
  */
 export function planInputTokensOf(catalog: Map<string, CatalogEntry>, brief: unknown): number {
   const catalogTokens = Math.ceil(JSON.stringify([...catalog.values()]).length / 3);
-  return Math.min(PRICING_LIMIT_INPUT, Math.max(ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.input, catalogTokens + textInputTokensOf(brief)));
+  // The model brief is sent with every plan call (orchestrator_plan.ts), so its size is part of the hold.
+  const briefTokens = Math.ceil(loadPrompt(MODEL_BRIEF_PROMPT).text.length / 3);
+  return Math.min(PRICING_LIMIT_INPUT, Math.max(ORCHESTRATOR_PLAN_ESTIMATE_TOKENS.input, catalogTokens + textInputTokensOf(brief) + briefTokens));
 }
 
 const PRICING_LIMIT_INPUT = 200_000;

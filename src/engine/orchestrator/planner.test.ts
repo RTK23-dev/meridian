@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { loadCatalog } from "./catalog.ts";
+import { loadCatalog, type CatalogEntry } from "./catalog.ts";
 import { examplePlanRaw } from "./fixtures/example-plan.ts";
 import { buildPlannerPrompt, candidatesFor, extractJsonObject, planWithModel, planWithRole, type ModelCall, type PlannerBrief } from "./planner.ts";
 import { deps, fixture, gatewayFor, json, ledgerWith, REQUEST_ID, RESERVATION_ID, WORKSPACE } from "../claude/test/helpers.ts";
@@ -130,6 +130,33 @@ describe("planWithRole (the chosen model writes the plan through the Claude clie
     const outcome = await planWithRole({ ...scope, deps: deps(gateway, ledger), orchestrator: haiku, brief, catalog });
     assert.equal(outcome.ok, false);
     if (!outcome.ok) assert.match(outcome.reasons[0] ?? "", /^the orchestrating model did not answer: /);
+  });
+
+  test("the orchestrator is shown only the candidates the engine can price for their kind", () => {
+    const entry = (id: string, kind: CatalogEntry["kind"], pricing: Partial<CatalogEntry["pricing"]>): [string, CatalogEntry] => [
+      id,
+      {
+        id,
+        name: id,
+        kind,
+        input_modalities: null,
+        output_modalities: null,
+        pricing: { promptUsdPerToken: null, completionUsdPerToken: null, imageUsd: null, usdPerSecond1080p: null, ...pricing },
+      },
+    ];
+    const listed = new Map<string, CatalogEntry>([
+      entry("vendor/text-priced", "text", { promptUsdPerToken: 1e-6, completionUsdPerToken: 2e-6 }),
+      entry("vendor/text-unpriced", "text", { promptUsdPerToken: 1e-6 }),
+      entry("vendor/image-priced", "image", { imageUsd: 0.01 }),
+      entry("vendor/image-unpriced", "image", {}),
+      entry("vendor/video-priced", "video", { usdPerSecond1080p: 0.2 }),
+      entry("vendor/video-unpriced", "video", { imageUsd: 0.01 }),
+      entry("vendor/speech-priced", "speech", { promptUsdPerToken: 1e-5 }),
+    ]);
+    assert.deepEqual(
+      candidatesFor(listed).map((candidate) => candidate.id),
+      ["vendor/text-priced", "vendor/image-priced", "vendor/video-priced", "vendor/speech-priced"],
+    );
   });
 
   test("caps the candidates at 40 per kind, in catalog order", () => {

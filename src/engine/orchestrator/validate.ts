@@ -144,6 +144,26 @@ export type ValidateOptions = {
   categories?: Partial<Record<BudgetCategory, BudgetEnvelope>>;
 };
 
+/**
+ * Whether the engine can price a step of the entry's kind from the listing: the same fields priceStep reads. A model the listing does not
+ * price is not offered as a candidate, because a step that uses it is refused.
+ */
+export function hasPriceBasis(entry: CatalogEntry): boolean {
+  const { pricing } = entry;
+  switch (entry.kind) {
+    case "text":
+      return pricing.promptUsdPerToken !== null && pricing.completionUsdPerToken !== null;
+    case "speech":
+      return pricing.promptUsdPerToken !== null;
+    case "image":
+      return pricing.imageUsd !== null;
+    case "video":
+      return pricing.usdPerSecond1080p !== null;
+    default:
+      return false;
+  }
+}
+
 /** Why a model id is not a candidate: switched off by the workspace's policy, or not in the live catalog. */
 export function listingReason(id: string, disabledFamilies: readonly string[]): string {
   return isDisabledModel(id, disabledFamilies) ? `${id} is switched off by the workspace's model policy` : `${id} is not in the live catalog`;

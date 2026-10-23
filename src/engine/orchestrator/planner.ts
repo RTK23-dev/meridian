@@ -9,7 +9,7 @@
 
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import { orchestratorPlanSchema, type ModelRef, type OrchestratorPlan } from "./contracts.ts";
-import { textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
+import { hasPriceBasis, textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
 import { BUDGET_CATEGORIES, categoryBudgetsOf } from "./categories.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { RoleAnswerError } from "../claude/errors.ts";
@@ -126,11 +126,15 @@ export async function planWithModel(opts: {
   return { ok: true, plan: checked.plan, order: checked.order };
 }
 
-/** The live candidates the orchestrator may choose from: up to the per-kind cap of each kind, in the catalog's order. */
+/**
+ * The live candidates the orchestrator may choose from: up to the per-kind cap of each kind, in the catalog's order. Only a model the engine
+ * can price for its kind is a candidate: a step that uses an unpriced model is refused, so it is not offered.
+ */
 export function candidatesFor(catalog: Map<string, CatalogEntry>): Array<{ id: string; name: string; kind: CatalogKind }> {
   const taken = new Map<CatalogKind, number>();
   const out: Array<{ id: string; name: string; kind: CatalogKind }> = [];
   for (const entry of catalog.values()) {
+    if (!hasPriceBasis(entry)) continue;
     const count = taken.get(entry.kind) ?? 0;
     if (count >= ORCHESTRATOR_MAX_CANDIDATES_PER_KIND) continue;
     taken.set(entry.kind, count + 1);

@@ -51,3 +51,16 @@ is verified by a live run.
 - The planning call is not in any category. It is the orchestrator's own call, held against the total as before.
 - A plan past a category's allowance is still a plan. The run pauses at the step that would pass it, as it does for the total. The total
   is checked first, so a step that passes both reports the total.
+
+## D10. The model brief is a reference the repository holds; the candidates are priced-only
+
+- The model brief (`src/engine/prompts/model_brief@1.md`) is read as reference text in the plan's user message, not in the system prompt.
+  Its id is named in that text, so each call says which brief it read. This file does not use D9, which the 2026-10-22 run uses for another decision.
+- A candidate is a model the engine can price for its kind (`hasPriceBasis` in `validate.ts`: per token for text and speech, per image,
+  per second at 1080p for video). A model the listing does not price is not offered, because a step that uses it is refused.
+- A quality note is a dated, named source or the word unverified. Sourced rows come first in each class, then the rest newest first. The
+  sources are marked secondary or vendor claim where they are.
+- The planning hold counts the brief's size (`planInputTokensOf`), because the brief is sent with every plan call.
+- Not decided here, for the owner: the engine reads only a per-second USD price at 1080p (`duration_seconds_1080p`). Most of the newest
+  video models are priced in cents, per token, per generation or at another resolution, so they are not usable. Mapping those price forms
+  changes what the engine prices, so it is the owner's call.

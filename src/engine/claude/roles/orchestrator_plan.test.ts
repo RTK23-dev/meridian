@@ -64,4 +64,13 @@ describe("orchestrator_plan role", () => {
     assert.match(text, /<untrusted-data name="brief">/);
     assert.match(text, /<untrusted-data name="candidates">/);
   });
+
+  it("sends the model brief as reference text, ahead of the untrusted blocks, so the candidates still decide what exists", () => {
+    const texts = orchestratorUserContent(input).map((part) => (part.type === "text" ? part.text : ""));
+    const brief = texts.findIndex((text) => text.includes("# model_brief@1"));
+    const untrusted = texts.findIndex((text) => text.includes('<untrusted-data name="brief">'));
+    assert.ok(brief !== -1, "the model brief is in the user message");
+    assert.ok(brief < untrusted, "the model brief comes before the brief block");
+    assert.match(texts[brief] ?? "", /The candidates decide what exists\./);
+  });
 });
