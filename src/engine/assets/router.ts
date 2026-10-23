@@ -284,7 +284,10 @@ type Candidate = {
   priority: number;
   route: ResolvedRoute;
   adapter: RoutedAdapter;
+  /** The route's own price, or for a route with no known price (a measured clip only) the measure hold it is held at. */
   estimateUsd: number;
+  /** False when the route has no price the engine can read. Its cost is then unknown to the scorer, which compares known prices only. */
+  priceKnown: boolean;
   cacheKey: string;
 };
 
@@ -349,17 +352,28 @@ function outcomeFor(error: ProviderError | null): AttemptOutcome {
 }
 
 /**
- * The amount the ledger holds for one submit of a target. A priced step holds the router's own price for the target. A measured clip (D15)
- * holds the plan's measure hold, so the ledger holds the money the plan holds. A measure hold that is not a positive amount is refused before
- * anything is authorized: a zero hold would be a free call.
+ * The measure hold the input names (D15), checked: a positive USD amount, on a video or avatar class, which are the classes the orchestrator
+ * measures. Undefined when the input names none, so the call is priced by its routes. Anything else is refused before any route is read or
+ * authorized: a zero hold would be a free call, and a hold on another class is not a measured clip.
  */
-function ledgerHoldOf(input: ProduceInput, target: AssetTarget): number {
+function measureHoldOf(input: ProduceInput): number | undefined {
   const measured = input.measureHoldUsd;
-  if (measured === undefined) return target.estimateUsd;
-  if (!Number.isFinite(measured) || measured <= 0) {
-    throw new EngineError("invalid_input", `the measure hold must be a positive USD amount, got ${String(measured)}`, { stage: input.stage });
+  if (measured === undefined) return undefined;
+  const timed = input.spec.modelClass.startsWith("video.") || input.spec.modelClass === "avatar";
+  if (!timed || !Number.isFinite(measured) || measured <= 0) {
+    throw new EngineError("invalid_input", `a measure hold must be a positive USD amount on a video or avatar call, got ${String(measured)} for ${input.spec.modelClass}`, {
+      stage: input.stage,
+    });
   }
   return measured;
+}
+
+/**
+ * The amount the ledger holds for one submit of a target. A priced call holds the router's own price for the target. A measured clip (D15)
+ * holds the plan's measure hold on every target, so the ledger holds the money the plan holds, including on a route with no engine price.
+ */
+function ledgerHoldOf(input: ProduceInput, target: AssetTarget): number {
+  return measureHoldOf(input) ?? target.estimateUsd;
 }
 
 function sleepFor(ms: number): Promise<void> {
@@ -746,6 +760,8 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
   async function submit(input: ProduceInput): Promise<StepReport> {
     const session = newSession();
     const { spec, workspaceId } = input;
+    // A measure hold is checked before any route is read: a call that names an invalid hold sends and holds nothing (D15).
+    const measureHold = measureHoldOf(input);
 
     // 0. A model the orchestrator chose (Bible 10.5) is the only target, priced from the catalog. A choice that cannot be used, or no
     // choice, routes by the route table as before.
@@ -801,29 +817,40 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         excluded.push(`${adapter.id}: ${gap}`);
         continue;
       }
+      // The route's own price. A route the engine cannot price is kept only for a measured clip (D15): it is held at the measure hold, and its
+      // cost stays unknown to the scorer, never zero or a guess. Without a measure hold it is excluded, as before.
       let estimateUsd: number;
+      let priceKnown = true;
       try {
         estimateUsd = adapter.price(spec).estimateUsd;
       } catch (error) {
         if (error instanceof EngineError && error.kind === "unknown_price") {
-          excluded.push(`${adapter.id}: ${error.message}`);
-          continue;
+          if (measureHold === undefined) {
+            excluded.push(`${adapter.id}: ${error.message}`);
+            continue;
+          }
+          estimateUsd = measureHold;
+          priceKnown = false;
+        } else {
+          throw error;
         }
-        throw error;
       }
       const open = await openBreaker(deps.breakers, adapter.id, now());
       if (open !== null) {
         excluded.push(`${adapter.id}: circuit open until ${new Date(open.openUntilMs).toISOString()}`);
         continue;
       }
-      candidates.push({ priority, route, adapter, estimateUsd, cacheKey: routeCacheKey(spec, adapter.id, input) });
+      candidates.push({ priority, route, adapter, estimateUsd, priceKnown, cacheKey: routeCacheKey(spec, adapter.id, input) });
       if (chosen !== null && spec.modelChoice !== null) {
         const price = chosen.entry.price;
+        const priceNote = priceKnown
+          ? `estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`
+          : `no price the engine can estimate ($${price.usd} ${price.unit}), so held at the measure hold $${estimateUsd} (D15)`;
         session.decisions.push({
           at: at(),
           chose: adapter.id,
           alternatives: [],
-          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt} (${spec.modelChoice.reason}), still listed in the read at ${chosen.entry.readAt}; estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`,
+          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt} (${spec.modelChoice.reason}), still listed in the read at ${chosen.entry.readAt}; ${priceNote}`,
           by: spec.modelChoice.source === "orchestrator" ? "director" : "scorer",
         });
       }
@@ -839,7 +866,10 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     for (const candidate of candidates) {
       recordsById.set(candidate.adapter.id, await deps.stats.since(candidate.adapter.id, windowStart));
     }
-    const costs = costEfficiencyValues(candidates.map((candidate) => ({ id: candidate.adapter.id, usd: candidate.estimateUsd })));
+    // Only known prices are compared. A route with no known price has an unknown cost, which the score leaves out, never a zero or a hold (score.ts).
+    const costs = costEfficiencyValues(
+      candidates.filter((candidate) => candidate.priceKnown).map((candidate) => ({ id: candidate.adapter.id, usd: candidate.estimateUsd })),
+    );
     const latencies = latencyValues(
       candidates.map((candidate) => ({ id: candidate.adapter.id, ms: medianLatencyMs(recordsById.get(candidate.adapter.id) ?? []) })),
     );
