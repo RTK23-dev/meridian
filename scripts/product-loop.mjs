@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 
 const base = process.env.PRODUCT_BASE_URL ?? "http://127.0.0.1:8080";
 const stamp = Date.now();
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.MERIDIAN_SMOKE_CHROMIUM || undefined });
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
 const page = await context.newPage();
 page.setDefaultTimeout(30000);
