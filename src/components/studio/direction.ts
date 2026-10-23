@@ -25,6 +25,14 @@ export function alternativeDirections<T extends DirectionCandidate>(candidates: 
     .slice(0, ALTERNATIVE_LIMIT);
 }
 
+/**
+ * Whether a person can choose this direction to brief. The server accepts only a discovered opportunity that is still open
+ * (studio/brief-open.server.ts), so a starting idea is shown for comparison and never offered as a brief.
+ */
+export function briefableDirection(candidate: DirectionCandidate): boolean {
+  return candidate.source === "discovered" && candidate.status === "open";
+}
+
 /** The source as a person reads it. A starting idea is an idea to test, and the screen must not call it a finding. */
 export function directionSourceLabel(source: string): string {
   return source === "discovered" ? "Discovered from stored evidence" : IDEA_TO_TEST.badge;

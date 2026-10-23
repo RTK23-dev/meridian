@@ -159,7 +159,7 @@ function Studio({ brandId }: { brandId: string }) {
             pending={actions.openBrief.isPending}
             opportunities={opportunitiesQuery.data?.opportunities}
             opportunitiesFailed={opportunitiesQuery.isError}
-            onAccept={(reason) => actions.openBrief.mutateAsync({ forceNew: false, reason })}
+            onAccept={(reason, opportunityId) => actions.openBrief.mutateAsync({ forceNew: false, reason, opportunityId })}
           />
         </TabsContent>
 

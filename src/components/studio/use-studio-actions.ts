@@ -32,7 +32,8 @@ export function useStudioActions(brandId: string) {
 
   const openBrief = useScopedMutation({
     mutationKey: studioKey("brief"),
-    mutationFn: (vars: { forceNew: boolean; reason: string }) => openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason } }),
+    mutationFn: (vars: { forceNew: boolean; reason: string; opportunityId?: string }) =>
+      openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason, opportunityId: vars.opportunityId } }),
     invalidate: () => [qk.studio(brandId), qk.opportunities(brandId)],
     success: (vars) => (vars.forceNew ? "Next brief written." : "Brief written from the accepted direction."),
   });
