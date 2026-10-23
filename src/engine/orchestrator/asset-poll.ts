@@ -11,8 +11,9 @@
 // - A finished job with a reported bill is stored at that bill. The output replaces the hold, so nothing counts twice. When the clip's length
 //   is known, the bill is measured once for its plan and cache key (orchestrator_cost_measurements).
 // - A finished job with no reported bill is stored at its hold, never at null, and is not measured. Its row has a hold; a row without one is below.
-// - A job that failed or is unsettled closes as failed. So does a poll that threw, when its row has a hold. A failed close charges the row's
-//   hold to the plan as a failed event, so the spend counts it (store.ts failedHoldsUsd).
+// - A job that failed or is unsettled closes as failed. So does a poll that threw, when its row has a hold or a reported bill. A failed close
+//   charges the plan a failed event (chargeOf): the row's holds, with the last submit charged its bill where the provider reported one above its
+//   hold, so a bill above the hold is not dropped. A zero or missing bill charges the holds (store.ts failedHoldsUsd).
 // - A row closes once. complete and fail change it only while it is waiting: a close that finds it already closed writes nothing (no output,
 //   no measurement, no event) and the poll does not count it. So a failed row's hold is never also a stored bill (D14).
 // - A retry the router refuses because the run's reservation has ended closes the row as failed, with RUN_ENDED_REASON: the retry is a new
@@ -31,6 +32,7 @@
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { AssetJob } from "../assets/job.ts";
 import type { AssetStep, AsyncAssetRouter, ProduceInput } from "../assets/router.ts";
+import { roundUsd, sumUsd } from "../contracts/money.ts";
 import { categoryOf } from "./categories.ts";
 import { effectiveDisabledFamilies, readBrandPolicy } from "./brand-policy.ts";
 import type { NodeOutput } from "./execute.ts";
@@ -65,8 +67,10 @@ export type DueAsset = {
   kind: "video" | "avatar";
   input: ProduceInput;
   job: AssetJob;
-  /** The row's hold in total (held_usd). Null when none was recorded: the row is unrecorded, and its money is unknown. */
+  /** The row's hold in total (held_usd): one hold per submit, so a retried job holds more than once. Null when none was recorded (unknown money). */
   heldUsd: number | null;
+  /** The hold of one submit (hold_usd), the same for every submit of the row. Null with heldUsd. */
+  holdUsd: number | null;
   /** The clip's length in seconds (seconds), or null when none was recorded. A clip with no length is not measured. */
   seconds: number | null;
 };
@@ -78,20 +82,20 @@ export type AssetPollStore = {
   /** The rows due now, claimed for this poll so another poll does not take them too. */
   due(limit: number): Promise<DueAsset[]>;
   /**
-   * A row that stays open: its job and when to poll it next. A new job (a retry the router submitted) adds its hold to the row's total; the
-   * same job, still working, adds nothing.
+   * A row that stays open: its job and when to poll it next. A new job (a retry the router submitted) adds its hold to the row's total, and the
+   * failed submit's excess over its hold (overshootUsd, zero when none); the same job, still working, adds nothing.
    */
-  reschedule(id: string, change: { job: AssetJob; runAfterMs: number }): Promise<void>;
+  reschedule(id: string, change: { job: AssetJob; runAfterMs: number; overshootUsd: number }): Promise<void>;
   /**
    * Stores the output and closes the row done, with its measurement when there is one, in one transaction. Returns false, and writes nothing,
    * when the row is no longer waiting: another poll closed it first.
    */
   complete(row: DueAsset, output: StoredStepOutput, result: string, measured: MeasuredBill | null): Promise<boolean>;
   /**
-   * Closes the row failed. A row with a hold charges it to its plan as a failed event, in the same transaction. Returns false, and writes
+   * Closes the row failed, and charges its plan chargeUsd as a failed event, in the same transaction (chargeOf). Returns false, and writes
    * nothing, when the row is no longer waiting: another poll closed it first.
    */
-  fail(row: DueAsset, reason: string): Promise<boolean>;
+  fail(row: DueAsset, reason: string, chargeUsd: number): Promise<boolean>;
   /**
    * The model families the plan's router must not use, read now (D16): the workspace's switched-off families, with the plan's brand's families
    * added when the plan has a brand. It throws when they cannot be read. It is read at every poll, so a family switched off after the job was
@@ -112,9 +116,9 @@ type PollOptions = {
 
 /** What one poll decided for its row. */
 type Verdict =
-  | { kind: "waiting"; job: AssetJob; runAfterMs: number }
+  | { kind: "waiting"; job: AssetJob; runAfterMs: number; overshootUsd?: number }
   | { kind: "done"; output: StoredStepOutput; result: string; measured: MeasuredBill | null }
-  | { kind: "failed"; reason: string };
+  | { kind: "failed"; reason: string; chargeUsd: number };
 
 export async function pollAssetJobs(opts: PollOptions): Promise<AssetPollReport> {
   const report: AssetPollReport = { polled: 0, done: 0, failed: 0, waiting: 0 };
@@ -122,12 +126,12 @@ export async function pollAssetJobs(opts: PollOptions): Promise<AssetPollReport>
     report.polled += 1;
     const verdict = await verdictOf(opts, row);
     if (verdict.kind === "waiting") {
-      await opts.store.reschedule(row.id, { job: verdict.job, runAfterMs: verdict.runAfterMs });
+      await opts.store.reschedule(row.id, { job: verdict.job, runAfterMs: verdict.runAfterMs, overshootUsd: verdict.overshootUsd ?? 0 });
       report.waiting += 1;
     } else if (verdict.kind === "done") {
       // A row another poll closed first is not counted: its close wrote nothing.
       if (await opts.store.complete(row, verdict.output, verdict.result, verdict.measured)) report.done += 1;
-    } else if (await opts.store.fail(row, verdict.reason)) {
+    } else if (await opts.store.fail(row, verdict.reason, verdict.chargeUsd)) {
       report.failed += 1;
     }
   }
@@ -145,27 +149,31 @@ async function verdictOf(opts: PollOptions, row: DueAsset): Promise<Verdict> {
     return stillOpen(row);
   }
   let step: AssetStep;
+  // The bill the provider reported for this submit, when its poll reports one above zero: what a failed close is charged (chargeOf).
+  let billUsd: number | null = null;
   try {
     const router = opts.routerFor({ organizationId: opts.organizationId, requestId: row.requestId, reservationId: row.reservationId, disabledFamilies });
     const polled = await router.pollOnce(row.job, row.input);
     if (polled.state === "pending") return { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS };
+    billUsd = billOf(polled.actualUsd);
     step = (await router.settle(row.job, polled, row.input)).step;
   } catch (error) {
-    // Nothing is known about the job: its hold is charged as failed, or the row stays open when no hold is recorded (closeFailed).
-    return closeFailed(row, reasonOf(error));
+    // Nothing is known about the job beyond its bill, if one came: the row is charged its holds, or stays open when there is nothing to charge.
+    return closeFailed(row, reasonOf(error), billUsd);
   }
   if (step.status === "submitted") {
-    // A retry the router submitted: a second paid call. The row takes the new job, and the store adds its hold to the row's total.
-    return { kind: "waiting", job: step.job, runAfterMs: step.runAfterMs };
+    // A retry the router submitted: a second paid call. The row takes the new job and one hold for it. The failed submit's bill, when it is above
+    // its hold, is taken on too, so that submit is counted at its bill, not its hold.
+    return { kind: "waiting", job: step.job, runAfterMs: step.runAfterMs, overshootUsd: overshootOf(row, billUsd) };
   }
   // A retry the router refused because the run's reservation has ended: no call starts, and a new run is what a retry needs (D14).
-  if (isRunEndedRefusal(step)) return closeFailed(row, RUN_ENDED_REASON);
+  if (isRunEndedRefusal(step)) return closeFailed(row, RUN_ENDED_REASON, billUsd);
   let output: NodeOutput;
   try {
     // outputOf names the reason for every outcome that is not a finished asset, so the row records why it stopped.
     output = outputOf(step, row.kind);
   } catch (error) {
-    return closeFailed(row, reasonOf(error));
+    return closeFailed(row, reasonOf(error), billUsd);
   }
   const bill = reportedUsdOf(output.costUsd);
   // A finished job with no bill is stored at its hold. With no hold recorded there is no figure to store, and its money is not known: the row
@@ -190,12 +198,38 @@ function stillOpen(row: DueAsset): Verdict {
   return { kind: "waiting", job: row.job, runAfterMs: ASSET_POLL_AGAIN_MS };
 }
 
+/** The bill the provider reported for a submit: a figure above zero. Zero or no figure is no bill, so the holds are charged instead. */
+function billOf(actualUsd: number | undefined): number | null {
+  return typeof actualUsd === "number" && Number.isFinite(actualUsd) && actualUsd > 0 ? actualUsd : null;
+}
+
 /**
- * A close that charges the row's hold as failed (D14). A row with no recorded hold has no money to charge, and its money is not known, so it
- * stays open rather than closing as zero: an unknown hold is never zero, and its run keeps refusing.
+ * What a row is charged when it closes failed (D14). Each submit holds one hold, and the row's total is their sum. The last submit is charged the
+ * larger of its hold and its bill when a bill was reported, so a bill above the hold is not dropped. The submits before it keep their holds, or
+ * their bills where those were taken on when they were retried (overshootOf). With no bill the holds stand. Null when neither is known.
  */
-function closeFailed(row: DueAsset, reason: string): Verdict {
-  return row.heldUsd === null ? stillOpen(row) : { kind: "failed", reason };
+function chargeOf(row: DueAsset, billUsd: number | null): number | null {
+  if (billUsd === null) return row.heldUsd;
+  if (row.heldUsd === null || row.holdUsd === null) return billUsd;
+  return sumUsd([Math.max(0, row.heldUsd - row.holdUsd), Math.max(row.holdUsd, billUsd)]);
+}
+
+/**
+ * The part of a retried submit's bill above its hold, which the row takes on when the retry is recorded (reschedule). Zero when the bill is not
+ * above the hold, or either figure is unknown.
+ */
+function overshootOf(row: DueAsset, billUsd: number | null): number {
+  if (billUsd === null || row.holdUsd === null || billUsd <= row.holdUsd) return 0;
+  return roundUsd(billUsd - row.holdUsd);
+}
+
+/**
+ * A close that charges the row failed (D14). A row with no recorded hold and no bill has nothing known to charge, and its money is not known, so
+ * it stays open rather than closing as zero: an unknown hold is never zero, and its run keeps refusing.
+ */
+function closeFailed(row: DueAsset, reason: string, billUsd: number | null): Verdict {
+  const chargeUsd = chargeOf(row, billUsd);
+  return chargeUsd === null ? stillOpen(row) : { kind: "failed", reason, chargeUsd };
 }
 
 function reasonOf(error: unknown): string {
@@ -269,7 +303,7 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
           limit ${limit}
           for update skip locked
         )
-        returning id, plan_id, step_id, request_id, reservation_id, cache_key, kind, input, job, held_usd, seconds
+        returning id, plan_id, step_id, request_id, reservation_id, cache_key, kind, input, job, held_usd, hold_usd, seconds
       `;
       return rows.map((row) => ({
         id: String(row.id),
@@ -282,16 +316,19 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
         input: jsonOf<ProduceInput>(row.input),
         job: jsonOf<AssetJob>(row.job),
         heldUsd: numberOrNull(row.held_usd),
+        holdUsd: numberOrNull(row.hold_usd),
         seconds: numberOrNull(row.seconds),
       }));
     },
     async reschedule(id, change) {
       const delaySecs = Math.max(1, Math.ceil(change.runAfterMs / 1000));
-      // The hold total grows by one hold only when the job is new: the stored job is compared before it is replaced.
+      // The hold total grows by one hold, and by the failed submit's excess over its hold, only when the job is new: the stored job is compared
+      // before it is replaced.
       await sql`
         update orchestrator_asset_jobs
         set job = ${JSON.stringify(change.job)}::jsonb,
-          held_usd = case when job->>'idempotencyKey' = ${change.job.idempotencyKey} then held_usd else held_usd + hold_usd end,
+          held_usd = case when job->>'idempotencyKey' = ${change.job.idempotencyKey} then held_usd
+            else held_usd + hold_usd + ${change.overshootUsd}::numeric end,
           next_poll_at = now() + make_interval(secs => ${delaySecs}), updated_at = now()
         where id = ${id} and organization_id = ${organizationId}
       `;
@@ -315,16 +352,14 @@ export function sqlAssetPollStore(sql: Sql, organizationId: string): AssetPollSt
         return true;
       });
     },
-    async fail(row, reason) {
+    async fail(row, reason, chargeUsd) {
       return inTransaction(sql, async (tx) => {
-        // The row closes first. A row that is no longer waiting was closed by another poll, so its hold is not charged a second time.
+        // The row closes first. A row that is no longer waiting was closed by another poll, so its money is not charged a second time.
         if (!(await closeWaiting(tx, organizationId, row.id, "failed", reason))) return false;
-        if (row.heldUsd !== null) {
-          const recorded = await appendPlanEvents(tx, organizationId, row.planId, [
-            { nodeId: row.stepId, state: "failed", outputHash: null, costUsd: row.heldUsd, reason },
-          ]);
-          if (!recorded) throw new Error("the plan is not in this organization, so its failed hold is not recorded");
-        }
+        const recorded = await appendPlanEvents(tx, organizationId, row.planId, [
+          { nodeId: row.stepId, state: "failed", outputHash: null, costUsd: chargeUsd, reason },
+        ]);
+        if (!recorded) throw new Error("the plan is not in this organization, so its failed charge is not recorded");
         return true;
       });
     },

@@ -32,6 +32,7 @@ function row(overrides: Partial<DueAsset> = {}): DueAsset {
     input: INPUT,
     job: JOB,
     heldUsd: 0.8,
+    holdUsd: 0.8,
     seconds: null,
     ...overrides,
   };
@@ -44,7 +45,8 @@ function fakeStore(due: DueAsset[], families: string[] = []) {
     finished: [] as Array<{ id: string; status: string; result: string }>,
     outputs: [] as Array<{ planId: string; cacheKey: string; body: string | null; costUsd: number | null; category: string | null }>,
     measured: [] as Array<{ cacheKey: string; seconds: number; actualUsd: number }>,
-    charged: [] as Array<{ id: string; hold: number | null }>,
+    charged: [] as Array<{ id: string; usd: number }>,
+    overshoots: [] as Array<{ id: string; usd: number }>,
   };
   const store: AssetPollStore = {
     async due() {
@@ -52,6 +54,7 @@ function fakeStore(due: DueAsset[], families: string[] = []) {
     },
     async reschedule(id, change) {
       writes.rescheduled.push({ id, job: change.job, runAfterMs: change.runAfterMs });
+      if (change.overshootUsd > 0) writes.overshoots.push({ id, usd: change.overshootUsd });
     },
     async complete(r, output, result, measured) {
       writes.outputs.push({ planId: r.planId, cacheKey: r.cacheKey, body: output.body, costUsd: output.costUsd, category: output.category });
@@ -59,9 +62,9 @@ function fakeStore(due: DueAsset[], families: string[] = []) {
       if (measured !== null) writes.measured.push({ cacheKey: r.cacheKey, ...measured });
       return true;
     },
-    async fail(r, reason) {
-      // As the database store does: a row with a recorded hold charges it as a failed event; a row with none writes no event.
-      if (r.heldUsd !== null) writes.charged.push({ id: r.id, hold: r.heldUsd });
+    async fail(r, reason, chargeUsd) {
+      // The charge the poll decided, as the database store writes it: one failed event for it.
+      writes.charged.push({ id: r.id, usd: chargeUsd });
       writes.finished.push({ id: r.id, status: "failed", result: reason });
       return true;
     },
@@ -174,7 +177,7 @@ describe("the poll over recorded answers", () => {
     assert.equal(writes.outputs.length, 0);
     assert.equal(writes.finished[0]?.status, "failed");
     assert.match(writes.finished[0]?.result ?? "", /refused the request/);
-    assert.deepEqual(writes.charged, [{ id: "row-1", hold: 0.8 }]);
+    assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.8 }]);
   });
 
   test("an unsettled submit names the operator, charges its hold, and never stores an output", async () => {
@@ -183,7 +186,7 @@ describe("the poll over recorded answers", () => {
     await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: unsettled })) });
     assert.equal(writes.outputs.length, 0);
     assert.match(writes.finished[0]?.result ?? "", /operator settles it/);
-    assert.deepEqual(writes.charged, [{ id: "row-1", hold: 0.8 }], "the submit may have been billed, so its hold stays counted");
+    assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.8 }], "the submit may have been billed, so its hold stays counted");
   });
 
   test("a poll that throws closes a row with a hold as failed, charging the hold; the other rows still poll", async () => {
@@ -202,7 +205,7 @@ describe("the poll over recorded answers", () => {
     const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(router) });
     assert.deepEqual(report, { polled: 2, done: 0, failed: 1, waiting: 1 });
     assert.deepEqual(writes.finished, [{ id: "row-a", status: "failed", result: "the provider was not reachable" }]);
-    assert.deepEqual(writes.charged, [{ id: "row-a", hold: 0.8 }]);
+    assert.deepEqual(writes.charged, [{ id: "row-a", usd: 0.8 }]);
     assert.equal(writes.rescheduled[0]?.id, "row-b");
   });
 
@@ -223,7 +226,7 @@ describe("the poll over recorded answers", () => {
     const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(fakeRouter({ poll: { state: "done", uri: "x" }, settle: refused })) });
     assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
     assert.deepEqual(writes.finished, [{ id: "row-1", status: "failed", result: RUN_ENDED_REASON }]);
-    assert.deepEqual(writes.charged, [{ id: "row-1", hold: 0.8 }], "the job's hold is charged once, as a failed hold");
+    assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.8 }], "the job's hold is charged once, as a failed hold");
     assert.equal(writes.outputs.length, 0);
   });
 
@@ -304,6 +307,42 @@ describe("the poll over recorded answers", () => {
     assert.deepEqual(writes.rescheduled, [{ id: "row-1", job: JOB, runAfterMs: ASSET_POLL_AGAIN_MS }]);
     assert.equal(writes.finished.length, 0, "the row is not closed");
     assert.equal(writes.charged.length, 0, "its hold is not charged");
+  });
+
+  /** A failed poll that reports its bill, and the settle that says the job failed: what a queued job does when it bills and then fails. */
+  const failedWithBill = (actualUsd: number | undefined) =>
+    fakeRouter({
+      poll: { state: "failed", error: { kind: "server", retryable: false, message: "the generation failed" }, actualUsd },
+      settle: { status: "failed", providerId: "openrouter:video", error: { kind: "server", retryable: false, message: "the generation failed" } },
+    });
+
+  test("a queued job that bills 0.80 and then fails with a hold of 0.40 is recorded at 0.80: the bill above the hold is charged", async () => {
+    const { store, writes } = fakeStore([row({ heldUsd: 0.4, holdUsd: 0.4 })]);
+    const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(failedWithBill(0.8)) });
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.8 }], "the bill is above the hold, so it is charged, not the hold");
+  });
+
+  test("a failed job whose bill is below its hold, zero, or not reported is charged its hold", async () => {
+    for (const actualUsd of [0.2, 0, undefined]) {
+      const { store, writes } = fakeStore([row({ heldUsd: 0.4, holdUsd: 0.4 })]);
+      await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(failedWithBill(actualUsd)) });
+      assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.4 }], `a bill of ${String(actualUsd)} is charged the hold`);
+    }
+  });
+
+  test("a retry the budget refuses on a line charges nothing for the refused call: the job that ran is charged its hold once, and no hold is added", async () => {
+    const { store, writes } = fakeStore([row({ heldUsd: 0.4, holdUsd: 0.4 })]);
+    const retryRefused = fakeRouter({
+      poll: { state: "failed", error: { kind: "server", retryable: true, message: "503" } },
+      settle: { status: "refused", reasons: ["openrouter:video: the workspace month has committed 5 USD, at or above its 5 USD budget, so no paid call starts"] },
+    });
+    const report = await pollAssetJobs({ store, organizationId: "org_1", routerFor: routerFor(retryRefused) });
+    assert.deepEqual(report, { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.deepEqual(writes.charged, [{ id: "row-1", usd: 0.4 }], "the job that ran is charged its hold once");
+    assert.equal(writes.rescheduled.length, 0, "the refused retry records no job, so it adds no hold");
+    assert.equal(writes.overshoots.length, 0);
+    assert.match(writes.finished[0]?.result ?? "", /the budget refused this video/);
   });
 });
 
@@ -492,7 +531,7 @@ describe("the poll on the database: holds, bills, measurements and organizations
 
     const [foreign] = await sqlAssetPollStore(db.sql, theirs.org).due(10);
     assert.ok(foreign, "the other workspace sees its own row");
-    await assert.rejects(sqlAssetPollStore(db.sql, mine.org).fail(foreign, "closed from the wrong workspace"), /not in this organization/);
+    await assert.rejects(sqlAssetPollStore(db.sql, mine.org).fail(foreign, "closed from the wrong workspace", 0.8), /not in this organization/);
     assert.equal((await rowOf(theirs.org, key)).status, "waiting", "the other workspace's row is unchanged");
     assert.equal(await failedHoldsUsd(db.sql, theirs.org, theirs.plan), 0);
   });
@@ -503,7 +542,7 @@ describe("the poll on the database: holds, bills, measurements and organizations
     const store = sqlAssetPollStore(db.sql, org);
     const [row] = await store.due(10);
     assert.ok(row, "the row is due");
-    const failed = await store.fail(row, "the poll threw");
+    const failed = await store.fail(row, "the poll threw", 0.8);
     const lateCompleted = await store.complete(row, { outputHash: "h", costUsd: 0.4, body: "engine/x.mp4", category: "creative" }, "stored", { seconds: 8, actualUsd: 0.4 });
     const found = await rowOf(org, key);
     assert.equal(found.status, "failed", "the first close stands");
@@ -550,7 +589,7 @@ describe("the poll on the database: holds, bills, measurements and organizations
     const [row] = await store.due(10);
     assert.ok(row, "the row is due");
     const completed = await store.complete(row, { outputHash: "h", costUsd: 0.4, body: "engine/x.mp4", category: "creative" }, "stored", { seconds: 8, actualUsd: 0.4 });
-    const lateFailed = await store.fail(row, "the poll threw");
+    const lateFailed = await store.fail(row, "the poll threw", 0.8);
     assert.equal((await rowOf(org, key)).status, "done", "the first close stands");
     assert.equal((await listStepOutputs(db.sql, org, plan)).get(key)?.costUsd, 0.4, "the bill stands");
     assert.equal(await failedHoldsUsd(db.sql, org, plan), 0, "no failed event is written for a row that was completed");
@@ -609,5 +648,40 @@ describe("the poll on the database: holds, bills, measurements and organizations
     await writeOrchestratorPolicy(db.sql, { organizationId: org, actorId: "user_poll", patch: { disabledModelFamilies: ["vendor-w", "vendor-z"] } });
     assert.deepEqual([...(await store.disabledFamiliesOf("plan_poll_brand"))], ["vendor-b", "vendor-w", "vendor-z"], "a family switched off after the job was queued is read at the next poll");
     await assert.rejects(store.disabledFamiliesOf("plan_poll_not_here"), /not in this organization/, "a plan that is not the organization's has no families read for it");
+  });
+
+  test("a queued job that bills 0.80 and then fails with a hold of 0.40 is recorded at 0.80 on the plan, and the spend counts it", async () => {
+    const { org, plan } = await workspace("bill-over-hold");
+    const key = await queued(org, plan, { stepId: "clip", hold: 0.4 });
+    const billedFailure = fakeRouter({
+      poll: { state: "failed", error: { kind: "server", retryable: false, message: "the generation failed" }, actualUsd: 0.8 },
+      settle: { status: "failed", providerId: "openrouter:video", error: { kind: "server", retryable: false, message: "the generation failed" } },
+    });
+    assert.deepEqual(await pollWith(org, billedFailure), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.equal((await rowOf(org, key)).status, "failed");
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 0.8, "the bill is the failed charge, not the 0.40 hold");
+    const events = await listPlanEvents(db.sql, org, plan, 0);
+    assert.deepEqual(events.map((e) => [e.nodeId, e.state, e.costUsd]), [["clip", "failed", 0.8]]);
+  });
+
+  test("a retried job charges its first submit's bill above that submit's hold, and its last submit's bill over its hold", async () => {
+    const { org, plan } = await workspace("retry-bills");
+    const key = await queued(org, plan, { stepId: "clip", hold: 0.4 });
+    // The first submit bills 0.80 and fails retryably: the retry takes its own hold (0.40) and the first submit's excess over its hold (0.40).
+    const firstFailed = fakeRouter({
+      poll: { state: "failed", error: { kind: "server", retryable: true, message: "503" }, actualUsd: 0.8 },
+      settle: { status: "submitted", job: NEXT_JOB, runAfterMs: 15_000 },
+    });
+    await pollWith(org, firstFailed);
+    assert.equal(Number((await rowOf(org, key)).held_usd ?? 0), 1.2, "the row holds both submits, and the first at its bill");
+
+    await db.sql`update orchestrator_asset_jobs set next_poll_at = now() - interval '1 minute' where cache_key = ${key}`;
+    // The last submit bills 0.30 and fails for good: it is charged its hold, the larger of hold and bill. Total: 0.80 + 0.40.
+    const lastFailed = fakeRouter({
+      poll: { state: "failed", error: { kind: "server", retryable: false, message: "the generation failed" }, actualUsd: 0.3 },
+      settle: { status: "failed", providerId: "openrouter:video", error: { kind: "server", retryable: false, message: "the generation failed" } },
+    });
+    assert.deepEqual(await pollWith(org, lastFailed), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.equal(await failedHoldsUsd(db.sql, org, plan), 1.2, "both submits are counted at what they cost, not at their holds");
   });
 });
