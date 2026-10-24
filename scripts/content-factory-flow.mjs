@@ -1,4 +1,4 @@
-// Browser flow for the Content Factory page (review phase 4). It signs in with an account from the environment, checks that the page
+// Browser flow for the Content page (review phase 4). It signs in with an account from the environment, checks that the page
 // tells the truth about what is connected, creates a session, and checks that planning is refused rather than shown as done. It writes a
 // screenshot of each step. Nothing here calls a provider: the flow stops at the honest states the page shows without keys.
 //
@@ -44,7 +44,7 @@ try {
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle", timeout: 90000 });
   await settleAnimations(page);
   const main = (await page.locator("main").innerText()).replace(/\s+/g, " ");
-  check("shows the Content Factory page", main.includes("Content Factory"));
+  check("shows the Content page", main.includes("Make, review, publish and learn"));
   await page.screenshot({ path: checkedOutputPath(resolve(outDir, "01-page.png"), [outDir], "screenshot") });
 
   // The page must not say the live catalog is connected when no key is saved. The words it uses for the absent key are the check.

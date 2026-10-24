@@ -61,7 +61,7 @@ export function HoldBanner({ brandId }: { brandId: string }) {
   return <section aria-labelledby="opportunity-hold-title" className="space-y-1 border-l-2 border-warning pl-4">
     <h2 id="opportunity-hold-title" className="font-semibold">On hold: clear under Reviews</h2>
     <p className="mt-1 text-sm text-muted">A human review decision is blocking these opportunities from moving to a brief.</p>
-    <Link className="mt-2 inline-flex min-h-11 items-center font-semibold underline underline-offset-4" to="/brands/$brandId/reviews" params={{ brandId }}>Open the review queue</Link>
+    <Link className="mt-2 inline-flex min-h-11 items-center font-semibold underline underline-offset-4" to="/brands/$brandId/content" params={{ brandId }} search={{ section: "review" }}>Open the review queue</Link>
   </section>;
 }
 

@@ -65,7 +65,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
             <h3 className="text-lg capitalize">{opportunity.unsaturatedAngle.replace(/_/g, " ")}</h3>
           </div>
           <Button size="sm" variant="secondary" className="h-9 text-xs" asChild>
-            <Link to="/brands/$brandId/studio" params={{ brandId }}>Create brief <ArrowUpRight aria-hidden="true" className="ml-1 size-3.5" /></Link>
+            <Link to="/brands/$brandId/content" params={{ brandId }} search={{ section: "create", preset: "studio" }}>Create brief <ArrowUpRight aria-hidden="true" className="ml-1 size-3.5" /></Link>
           </Button>
         </div>
 
