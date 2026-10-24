@@ -4,6 +4,16 @@ What is still open. An item is finished only when it is verified. A path that ne
 
 The product loop, and how to run it, is in the [README](../README.md) and [PRODUCT.md](PRODUCT.md). This file is the open work, not a session log.
 
+## Repurposing a delivered video: open now
+
+The workflow is described in [FACTORY.md](FACTORY.md#repurposing-a-delivered-video). Everything in it is built and tested on recorded fakes. These are open:
+
+- **Live checks** of the Meta upload, paused ad and Facebook post, and of the Facebook insights read. Each needs an owner-authorised test account, a Page, and the permissions named in PROVIDERS.md.
+- **Reconciling an uncertain Facebook post** by searching the Page's videos. Until then a second post needs an explicit confirmation after the Page is checked by hand.
+- **Scheduled measurement** of repurposed variations. The read is an admin action today.
+- **Visual brand-fit judgement** from the rendered frames. The decision check reads treatment names, and it is advisory until a calibrated engine exists.
+- **Rendering.** Variations are not rendered until the HyperFrames price and billing are verified (`src/engine/render/STATUS.md`).
+
 ## Video engine and Factory: open now
 
 Sources: the newest entries of [engine/PHASE_LOG.md](engine/PHASE_LOG.md), the open items in

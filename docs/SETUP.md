@@ -104,7 +104,7 @@ node scripts/hypit-bridge.mjs
 `HYPIT_API_TOKEN` is required on every address, loopback included. Without it the bridge refuses to start, because a page open in the
 operator's browser can reach a loopback port. Every request must carry the token as a Bearer header, and a request with an `Origin` header (a
 browser page) is refused. Set `HYPIT_BRIDGE_HOST` only to the address other machines should reach. In Meridian's environment set `HYPIT_BASE_URL` to the bridge's URL and `HYPIT_API_TOKEN` to the same token.
-The bridge keeps its jobs in memory, so a restart loses them. The production router's `hypit` entry is not connected to this handoff
+The bridge keeps its jobs in memory, so a restart loses them. Each CLI or ffprobe call is stopped after `HYPIT_CHILD_TIMEOUT_MS` (30 minutes by default). Its job then fails, and says nothing was exported. The production router's `hypit` entry is not connected to this handoff
 and refuses every job with `NOT_CONNECTED`, so no production run selects Hypit yet. A multi-tenant runtime and a cost figure for
 Hypit are not built or verified. Owner action: run one live job with the real CLI and record the job id, the artifact bytes and the
 provider bill, if any.

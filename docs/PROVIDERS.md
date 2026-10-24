@@ -106,7 +106,7 @@ itself. See [SOURCING_SIDECAR.md](SOURCING_SIDECAR.md).
 
 Regular posts go through a connected account, saved per brand on Connected accounts with its platform account ID and an access token.
 
-- **Facebook Page** and **Instagram**: a token for the Page or account, saved on the brand's account. Instagram needs a public https
+- **Facebook Page** and **Instagram**: a token for the Page or account, saved on the brand's account. A repurposed variation can also be posted to one Facebook Page, by an admin's explicit action, and its metrics read on request. Both use this connection. The token must be able to publish to the Page and to read its video insights; this build has not verified those permissions against a live Page, so the first real post is an owner check (FACTORY.md, "Repurposing a delivered video"). Instagram needs a public https
   route for the media (see the roadmap).
 - **YouTube Shorts**: a token that grants the upload scope (`https://www.googleapis.com/auth/youtube.upload`). A token that declares
   scopes without it is not connected, and the reason says so.

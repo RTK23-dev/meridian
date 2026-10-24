@@ -483,6 +483,34 @@ this page makes one video with the video engine. It is admin only.
   "Make the video" starts a new request. A video that is still running cannot be revised.
 - **Not built yet.** Avatar and lip-sync shots (no vendor chosen, so those shots stay not connected). Image pixels are not read; a header that names a size is recorded, and a header that does not leaves the size unknown. The narration and speech-to-text bills are unverified live.
 
+## Repurposing a delivered video
+
+A delivered Content Factory video can be repurposed into child cuts. Each variation applies a deterministic visual treatment to the delivered master,
+and the master cut is never changed. The steps, each a separate action:
+
+1. **Plan.** The variations are planned under the master's request. A variation is rendered only when the renderer is connected and its render price is
+   verified. Until then each variation is recorded as not priced, with the reason, and nothing is rendered. Rendering is off in production (see
+   `src/engine/render/STATUS.md`).
+2. **Review.** An admin approves or rejects a rendered variation. An approval needs a valid rights record for every file the cut was made from, and
+   the approval is for that exact video. A rejection needs a reason.
+3. **Decision checks (advisory).** The plan and each rendered variation are judged by the decision engine. Each check has a state: `not_consulted`,
+   `not_configured`, `failed`, `uncalibrated`, `review_required`, `approved` or `rejected`. Only `approved` and `rejected` are verdicts, and those
+   need a calibrated threshold. An uncalibrated answer is never an approval or a rejection. The check reads treatment names, not the rendered pixels,
+   so it is not a visual brand-fit judgement. A calibrated rejection of a plan stops it; nothing else does.
+4. **Library.** A reviewed, rights-cleared variation becomes one derived creative with its own asset. The asset points at the variation's stored video,
+   so no file is copied. The creative is linked to its variation, and the link is made once.
+5. **Upload to the ad account.** The rendered video is uploaded to the brand's saved Meta ad account, and the upload is recorded by Meta's video id.
+6. **Paused Meta ad.** One paused ad per variation and ad account, inside an ad set the admin chose and confirmed a second time, under a Page saved for the
+   brand. Meridian sends nothing that activates it. A paused ad is not delivery.
+7. **Facebook Page post.** An explicit action posts the variation to one Facebook Page the workspace connected, as an organic video. It is recorded as an
+   organic post. Approval, upload, rendering, measurement and the paused ad never post it.
+8. **Measurement.** Read this run's Facebook metrics: an admin action that reads each published post and stores each observed reading once. A metric the
+   Page did not report is stored as unknown, never as zero, and a reading that is not observed stores nothing and keeps its reason.
+
+What is stored for each step is a receipt, and only a receipt from Meta or Facebook is a result. An uncertain step (a lost reply, a server error, an attempt
+that expired) is kept as uncertain. Meridian never repeats an uncertain Meta create or Facebook post on its own. A paused ad that Meta reports
+as anything but PAUSED is shown as it is, and Meridian does not change it.
+
 ## Not built yet
 
 Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is still open, and the live gaps, are listed here and in
@@ -494,6 +522,10 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
 - Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. The image asks the claim question before a provider is called. A rejection skips that image. An uncalibrated answer, or a brand with no stored claims, does not block it and is not a pass. A Factory video with an empty hook skips that variant. The run records each skip. If nothing is produced, the run stops with those reasons. Another preflight refusal still stops the run.
 - Learning is rechecked on the measurement cadence while a run is waiting at its learn step. The Check learning button still checks immediately.
+- Repurposing: a visual brand-fit judgement from the rendered frames (no calibrated visual evaluation exists; the variant check reads treatment names only).
+- Repurposing: reconciliation of an uncertain Facebook post by searching the Page's videos. A second post needs an explicit confirmation after the Page is checked by hand.
+- Repurposing: scheduled measurement. The metrics read runs when an admin asks for it, not on the measurement cadence.
+- Repurposing: live checks of the Meta and Facebook calls. Every one is covered on recorded fakes; none has run against a real account.
 - Cross-surface proposals are stored when a learned win on one surface matches a concept the run can make. The other surface's pick weight is not changed. The proposal says which attribute won, and which surface it is proposed for.
 - A re-grade writes the new grade on `ad_timelines` and keeps the grade it replaced in `ad_timeline_grades`. The copy is not updated. A stored grade is not rewritten when a calibration report changes. A new run grades the ad again.
 - Organic outcomes are one observation per telemetry row. A later measurement of the same post is stored on its own day. Running the same sync again does not add a second copy of that row.
