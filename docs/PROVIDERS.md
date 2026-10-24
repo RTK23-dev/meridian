@@ -14,7 +14,7 @@ section 1, for the rules.
 | Gemini perception | Reading images and video | Perception | Google key aliases in `config/resolver.ts`, with `PERCEPTION_SHARED_DEFAULT=gemini` | Not configured |
 | Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
 | Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
-| Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
+| Hypit | Video runtime (the Hypit handoff; see SETUP.md) | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. The production route refuses with `NOT_CONNECTED`. The handoff needs `HYPIT_BASE_URL` pointing at a bridge you run |
 | Shopify | Order webhooks, for sales attribution (see below) | Shopify | `SHOPIFY_WEBHOOK_SECRET`, with `SHOPIFY_SHARED_DEFAULT=deployment` | Not configured. Orders are refused with `NOT_CONNECTED` (503) and nothing is stored |
 | Apify | Instagram volume discovery for Factory Gather (see below) | Apify | `APIFY_TOKEN`, with `APIFY_SHARED_DEFAULT=deployment` | Not configured. No Apify request is sent |
 
