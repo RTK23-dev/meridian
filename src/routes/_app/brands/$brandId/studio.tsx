@@ -134,7 +134,7 @@ function Studio({ brandId }: { brandId: string }) {
           <h1 className="page-title">Make the next ads from evidence</h1>
         </div>
         <p className="max-w-md text-sm text-fg-muted">
-          {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; <Term id="hypit" /> renders approved briefs. Media appears only after a provider stores bytes.
+          {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; a connected video provider renders approved briefs (<Term id="hypit" /> is not connected). Media appears only after a provider stores bytes.
         </p>
       </div>
 
