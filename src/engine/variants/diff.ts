@@ -43,6 +43,11 @@ export function diffEdl(master: EditDecisionList, variant: EditDecisionList): Ed
   const topKeys = new Set([...Object.keys(master), ...Object.keys(variant)]);
   for (const key of [...topKeys].sort()) {
     if (IDENTITY_FIELDS.has(key) || key === "tracks" || key === "audio" || key === "effects") continue;
+    // A repurposed cut's visual treatment is its own surface, so only a repurpose may change it (checkRepurposeControl).
+    if (key === "visual") {
+      if (!same(master.visual, variant.visual)) add("treatment", "visual");
+      continue;
+    }
     if (!same((master as Record<string, unknown>)[key], (variant as Record<string, unknown>)[key])) add(`other:${key}`, key);
   }
 
@@ -86,6 +91,16 @@ export function diffEdl(master: EditDecisionList, variant: EditDecisionList): Ed
 
 /** The result of checking a variant's changes against its attribute's control. */
 export type ControlCheck = { pass: boolean; violations: string[] };
+
+/**
+ * A repurposed cut changes its visual treatment and nothing else (contract v11): every change must be the `treatment` surface, and it must
+ * exist. A repurpose that moves a caption, the timing or the voice is refused, because a treatment is not allowed to change the words or the clock.
+ */
+export function checkRepurposeControl(changes: readonly EdlChange[]): ControlCheck {
+  const violations = changes.filter((change) => change.surface !== "treatment").map((change) => `${change.surface} (${change.path})`);
+  if (changes.length === 0) violations.push("no treatment changed, so the repurposed cut is the master and is not built");
+  return { pass: violations.length === 0, violations };
+}
 
 /**
  * The surfaces each attribute may change. caption and music change one surface and nothing else. product changes the takes of the

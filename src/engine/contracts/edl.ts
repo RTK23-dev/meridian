@@ -10,6 +10,38 @@ export type EdlLayer = z.infer<typeof edlLayerSchema>;
 
 export const EFFECT_KINDS = ["punch_in", "shake", "speed_ramp", "flash"] as const;
 
+/**
+ * The whole-frame looks a repurposed cut may use. The compiler owns each look's colour, blend mode and opacity (compose/compiler.ts), so a look
+ * is a preset name, never free CSS.
+ */
+export const LOOK_PRESETS = ["warm", "cool", "faded", "mono"] as const;
+export type LookPreset = (typeof LOOK_PRESETS)[number];
+
+/**
+ * The visual treatments of a repurposed cut (contract v11). They change the footage only: the base, cutaway and presenter clips take the
+ * mirror and the framing, and the look, grain and vignette are drawn over the footage and under the graphics and captions. Each number is
+ * bounded here, so the compiler never receives a value outside the range a repurpose may use. A cut without treatments has no `visual`.
+ */
+export const visualTreatmentSchema = z
+  .object({
+    version: z.literal(1),
+    look: z.object({ preset: z.enum(LOOK_PRESETS), strength: z.number().min(0).max(1) }).strict().optional(),
+    framing: z
+      .object({
+        zoom: z.number().min(1).max(1.12),
+        rotationDeg: z.number().min(-2).max(2),
+        offsetXPct: z.number().min(-3).max(3),
+        offsetYPct: z.number().min(-3).max(3),
+      })
+      .strict()
+      .optional(),
+    mirror: z.boolean().optional(),
+    grain: z.object({ strength: z.number().min(0).max(1) }).strict().optional(),
+    vignette: z.object({ strength: z.number().min(0).max(1) }).strict().optional(),
+  })
+  .strict();
+export type VisualTreatment = z.infer<typeof visualTreatmentSchema>;
+
 export const audioClipBaseSchema = z.object({
   uri: z.string().min(1),
   startMs: msSchema,
@@ -75,6 +107,8 @@ export const edlSchema = z.object({
       params: z.record(z.string(), z.number().finite()),
     }),
   ),
+  // The visual treatments of a repurposed cut (contract v11). Absent on every other cut, so an earlier EDL parses unchanged.
+  visual: visualTreatmentSchema.optional(),
   seed: z.int().nonnegative().max(0xffffffff),
 });
 export type EditDecisionList = z.infer<typeof edlSchema>;

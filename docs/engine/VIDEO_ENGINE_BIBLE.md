@@ -588,6 +588,26 @@ a workspace. No row is rewritten.
 `speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
 records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
 
+### v11 changes and migration (visual treatments of a repurposed cut, contract version `engine-contracts@11`)
+
+Requested by the owner in the repurpose assignment (2026-10-24), which asks for a versioned contract change where the EDL cannot express the
+treatments. **Lead approval: to be recorded by the lead when it reviews the change.** The set version is `CONTRACTS_VERSION` in
+`src/engine/contracts/version.ts`. The change is additive: `edlSchema` gains an optional `visual` field, and no field is removed or changes
+its meaning. An EDL without `visual` parses and compiles exactly as before.
+
+**What `visual` holds (`visualTreatmentSchema`, `src/engine/contracts/edl.ts`).** A look (one of four presets, with a strength from 0 to 1),
+a framing (zoom 1 to 1.12, rotation within plus or minus 2 degrees, offsets within plus or minus 3 per cent), a mirror flag, grain (strength 0
+to 1) and a vignette (strength 0 to 1). Every number is bounded in the schema. A look is a preset name: the compiler owns each preset's colour,
+blend mode and opacity.
+
+**What the compiler does with it (`src/engine/compose/compiler.ts`).** The framing and the mirror apply to the base, cutaway and presenter
+media clips only, as a CSS transform on each clip. The look, grain and vignette are overlays over the footage, placed under the graphics,
+captions and stickers. Captions, graphics and stickers are never transformed or mirrored. A component clip on a footage layer keeps its own
+rendering: the treatments apply to media clips only.
+
+**Why.** The composition had four effect kinds (punch in, shake, speed ramp and flash), so a colour look, grain, a vignette, a mirror or a
+framing could not be expressed. Those treatments are deterministic and need no model call, so they are a cut's property, not a generation.
+
 ### v10 changes and migration (listed durations, contract version `engine-contracts@10`)
 
 Requested by the owner on 2026-10-23, to fix a duration finding of the video model review. **Lead approval: pending** (the lead records it
