@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
-import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd, listContentFactoryRepurposeFacebookPages, publishContentFactoryRepurposeToFacebook } from "@/lib/meridian/content-factory/actions";
+import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd, listContentFactoryRepurposeFacebookPages, measureContentFactoryRepurposeRun, publishContentFactoryRepurposeToFacebook } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
 import type { CreatePausedAdOutcome, PausedAdChoices } from "@/lib/meridian/content-factory/repurpose-paused-ad";
@@ -617,6 +617,18 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
       setBusy(false);
     }
   }
+  async function measure() {
+    setBusy(true);
+    try {
+      const result = await measureContentFactoryRepurposeRun({ data: { sessionId, runId } });
+      const reasons = result.reasons.slice(0, 2).join(" ");
+      setNote(`Read this run from Facebook: ${result.organicRows} new observation(s), ${result.duplicates} already stored, ${result.notReported} not reported.${reasons ? ` ${reasons}` : ""}`);
+    } catch (error) {
+      setNote(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function publish() {
     setBusy(true);
     try {
@@ -636,9 +648,14 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
       <p className="text-sm text-muted">
         Publish this video to a Facebook Page as an organic post. Approval, upload and the paused ad never publish it: only this action does.
       </p>
-      <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void load()}>
-        Load Facebook Pages
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void load()}>
+          Load Facebook Pages
+        </Button>
+        <Button type="button" variant="ghost" loading={busy} disabled={busy} onClick={() => void measure()}>
+          Read this run&apos;s Facebook metrics
+        </Button>
+      </div>
       {pages?.connectedReason ? <p role="status" className="text-sm text-muted">{pages.connectedReason}</p> : null}
       {pages && pages.pages.length === 0 ? <p role="status" className="text-sm text-muted">No Facebook Page is saved for this brand. Save one on Connected accounts first.</p> : null}
       {pages && pages.pages.length > 0 ? (

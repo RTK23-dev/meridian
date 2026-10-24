@@ -32,6 +32,7 @@ import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
 import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
 import { createRepurposedPausedAd, listPausedAdChoices } from "./repurpose-paused-ad.ts";
 import { listRepurposeFacebookPages, loadRepurposedMedia, publishRepurposedVariantToFacebookPage } from "./repurpose-organic.ts";
+import { measureRepurposeRun } from "../measurement/repurpose-pull.ts";
 import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
@@ -241,6 +242,15 @@ export const listContentFactoryRepurposeFacebookPages = createServerFn({ method:
  * Publishes one reviewed, rights-cleared variation to one Facebook Page, once. An admin's explicit action: it is never a side effect of
  * approval, upload, rendering or measurement. A lost reply is not sent again without a confirmation. Admins only.
  */
+/**
+ * Reads the published variations of one repurpose run from Facebook, and stores each real observation once. Admins only. Approval,
+ * publishing and rendering never read metrics: only this action does.
+ */
+export const measureContentFactoryRepurposeRun = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeRunInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => measureRepurposeRun(await getSql(), context.userId, data));
+
 export const publishContentFactoryRepurposeToFacebook = createServerFn({ method: "POST" })
   .validator((input: unknown) => repurposeOrganicInput(input))
   .middleware([authMiddleware])
