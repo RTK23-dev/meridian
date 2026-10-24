@@ -9,6 +9,7 @@ import {
   messageInput,
   repurposeInput,
   repurposeOutputInput,
+  repurposeOrganicInput,
   pausedAdChoicesInput,
   pausedAdInput,
   repurposeReviewInput,
@@ -30,6 +31,7 @@ import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
 import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
 import { createRepurposedPausedAd, listPausedAdChoices } from "./repurpose-paused-ad.ts";
+import { listRepurposeFacebookPages, loadRepurposedMedia, publishRepurposedVariantToFacebookPage } from "./repurpose-organic.ts";
 import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
@@ -226,6 +228,28 @@ export const uploadContentFactoryRepurposeVariant = createServerFn({ method: "PO
   .validator((input: unknown) => repurposeOutputInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => uploadRepurposeVariantToMeta(await getSql(), context.userId, data, { env: process.env }));
+
+/**
+ * The Facebook Pages a variation can be published to, and the Page this workspace's connection publishes as. Read only. Admins only.
+ */
+export const listContentFactoryRepurposeFacebookPages = createServerFn({ method: "POST" })
+  .validator((input: unknown) => pausedAdChoicesInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => listRepurposeFacebookPages(await getSql(), context.userId, data));
+
+/**
+ * Publishes one reviewed, rights-cleared variation to one Facebook Page, once. An admin's explicit action: it is never a side effect of
+ * approval, upload, rendering or measurement. A lost reply is not sent again without a confirmation. Admins only.
+ */
+export const publishContentFactoryRepurposeToFacebook = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOrganicInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return publishRepurposedVariantToFacebookPage(sql, context.userId, data, {
+      loadMedia: (storageKey, organizationId, brandId) => loadRepurposedMedia(sql, storageKey, organizationId, brandId),
+    });
+  });
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))

@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
-import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd } from "@/lib/meridian/content-factory/actions";
+import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd, listContentFactoryRepurposeFacebookPages, publishContentFactoryRepurposeToFacebook } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
 import type { CreatePausedAdOutcome, PausedAdChoices } from "@/lib/meridian/content-factory/repurpose-paused-ad";
+import type { OrganicPublishOutcome } from "@/lib/meridian/content-factory/repurpose-organic";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
 import {
   CATEGORY_LABELS,
@@ -279,6 +280,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <UploadToMeta sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <PausedAd sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
+                      {variation.status === "rendered" ? <OrganicPost sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendering" ? <CheckRenderer sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? (
                         <ReviewVariation
@@ -570,6 +572,108 @@ function CheckRenderer({ sessionId, runId, variantKey }: { sessionId: string; ru
         Check with the renderer
       </Button>
       {report !== null ? <p role="status" className="text-sm text-muted">{report}</p> : null}
+    </div>
+  );
+}
+
+type FacebookPages = { pages: { id: string; name: string }[]; connectedPageId: string | null; connectedReason: string | null };
+
+/** The outcome of an organic publish, in words. Only a published post names a post, and an uncertain one says what to check before a retry. */
+function organicMessage(outcome: OrganicPublishOutcome): string {
+  switch (outcome.status) {
+    case "published":
+      return "Published to the Facebook Page as an organic post. Its measurements count only when Meta reports them.";
+    case "already_published":
+      return "This variation was already published to this Page. Nothing was posted again.";
+    case "in_progress":
+    case "blocked":
+    case "refused":
+      return outcome.reason;
+    case "uncertain":
+      return `${outcome.reason} Check the Page in Facebook before you post again.`;
+  }
+}
+
+/**
+ * Publishes this rendered variation to one Facebook Page as an organic video post. It is a separate, explicit action: approval, upload and
+ * the paused ad never publish. The Page is the person's choice, and the server requires it to be the Page this workspace connected.
+ */
+function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runId: string; variantKey: string }) {
+  const [pages, setPages] = useState<FacebookPages | null>(null);
+  const [pageId, setPageId] = useState("");
+  const [title, setTitle] = useState("");
+  const [caption, setCaption] = useState("");
+  const [confirmRetry, setConfirmRetry] = useState(false);
+  const [offerRetry, setOfferRetry] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function load() {
+    setBusy(true);
+    try {
+      setPages(await listContentFactoryRepurposeFacebookPages({ data: { sessionId } }));
+    } catch (error) {
+      setNote(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function publish() {
+    setBusy(true);
+    try {
+      const outcome = await publishContentFactoryRepurposeToFacebook({ data: { sessionId, runId, variantKey, pageId, title, caption, confirmRetry } });
+      setOfferRetry(outcome.status === "uncertain");
+      setConfirmRetry(false);
+      setNote(organicMessage(outcome));
+    } catch (error) {
+      setNote(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  const ready = pageId !== "" && (!offerRetry || confirmRetry);
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <p className="text-sm text-muted">
+        Publish this video to a Facebook Page as an organic post. Approval, upload and the paused ad never publish it: only this action does.
+      </p>
+      <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void load()}>
+        Load Facebook Pages
+      </Button>
+      {pages?.connectedReason ? <p role="status" className="text-sm text-muted">{pages.connectedReason}</p> : null}
+      {pages && pages.pages.length === 0 ? <p role="status" className="text-sm text-muted">No Facebook Page is saved for this brand. Save one on Connected accounts first.</p> : null}
+      {pages && pages.pages.length > 0 ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            Facebook Page
+            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
+              <option value="">Choose a Page</option>
+              {pages.pages.map((page) => (
+                <option key={page.id} value={page.id}>{page.name}{page.id === pages.connectedPageId ? " (connected)" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            Title
+            <Input value={title} maxLength={255} onChange={(event) => setTitle(event.target.value)} />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            Caption
+            <textarea className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" rows={3} maxLength={2200} value={caption} onChange={(event) => setCaption(event.target.value)} />
+          </label>
+          {offerRetry ? (
+            <label className="flex items-center gap-2 text-sm sm:col-span-2">
+              <input type="checkbox" checked={confirmRetry} onChange={(event) => setConfirmRetry(event.target.checked)} />
+              I checked this Page in Facebook, and I want to post this video again.
+            </label>
+          ) : null}
+          <div className="sm:col-span-2">
+            <Button type="button" loading={busy} disabled={busy || !ready} onClick={() => void publish()}>
+              Publish to this Facebook Page
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {note !== null ? <p role="status" className="text-sm text-muted">{note}</p> : null}
     </div>
   );
 }

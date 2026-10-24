@@ -82,6 +82,32 @@ export function repurposeOutputInput(input: unknown): { sessionId: string; runId
   return { sessionId: idOf(body.sessionId, "session"), runId: idOf(body.runId, "run"), variantKey: idOf(body.variantKey, "variation") };
 }
 
+/** A request to publish one repurposed variation to a Facebook Page. The Page, caption and title are the person's choices, checked on the server. */
+export function repurposeOrganicInput(input: unknown): {
+  sessionId: string;
+  runId: string;
+  variantKey: string;
+  pageId: string;
+  caption: string;
+  title: string;
+  confirmRetry: boolean;
+} {
+  const body = fields(input);
+  const caption = typeof body.caption === "string" ? body.caption.trim() : "";
+  const title = typeof body.title === "string" ? body.title.trim() : "";
+  if (caption.length > 2200) throw new Error("The caption is longer than 2200 characters.");
+  if (title.length > 255) throw new Error("The title is longer than 255 characters.");
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    runId: idOf(body.runId, "run"),
+    variantKey: idOf(body.variantKey, "variation"),
+    pageId: text(body.pageId),
+    caption,
+    title,
+    confirmRetry: body.confirmRetry === true,
+  };
+}
+
 /** A repurpose request: the session, and the settings as the person chose them. The settings are validated by the repurpose contract, not here. */
 export function repurposeInput(input: unknown): { sessionId: string; settings: unknown } {
   const body = fields(input);

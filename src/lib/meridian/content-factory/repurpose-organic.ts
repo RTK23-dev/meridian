@@ -16,6 +16,7 @@ import { resolveOrganicConnection } from "../distribution/connection.ts";
 import type { OrganicConnection } from "../distribution/types.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { linkRepurposedVariantCreative, repurposedVariantSource, type RepurposedVariantSource } from "./repurpose-creative.ts";
+import { sessionAccess } from "./service.ts";
 
 /** A claim that has not been finished for this long is an attempt whose outcome is unknown. */
 export const ORGANIC_LEASE_MS = 10 * 60 * 1000;
@@ -314,4 +315,42 @@ export async function publishRepurposedVariantToFacebookPage(
     },
     { store: sqlOrganicStore(sql), transport: options.transport ?? liveTransport(), now: options.now },
   );
+}
+
+/** The stored bytes of a variation's video, read the way the library's own publish reads them (asset-response.ts and the artifact drive). */
+export async function loadRepurposedMedia(
+  sql: Sql,
+  storageKey: string,
+  organizationId: string,
+  brandId: string,
+): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
+  const { loadStoredSource } = await import("../storage/asset-response.ts");
+  const { defaultArtifactDrive } = await import("../storage/artifact-drive.ts");
+  const stored = await loadStoredSource(sql, async () => defaultArtifactDrive(), { storageKey, organizationId, brandId });
+  return stored && stored.bytes.byteLength > 0 ? { bytes: stored.bytes, mimeType: stored.mimeType } : null;
+}
+
+/**
+ * The Facebook Pages a variation can be published to: the Pages saved for the brand, and the one Page the workspace's connection publishes
+ * as, if one is connected. Read only. Admins only.
+ */
+export async function listRepurposeFacebookPages(
+  sql: Sql,
+  userId: string,
+  input: { sessionId: string },
+): Promise<{ pages: { id: string; name: string }[]; connectedPageId: string | null; connectedReason: string | null }> {
+  const session = await sessionAccess(sql, userId, input.sessionId);
+  if (!session.brand_id) return { pages: [], connectedPageId: null, connectedReason: "This session has no brand." };
+  const pages = await sql<{ external_account_id: string; name: string }>`
+    select external_account_id, name from platform_accounts
+    where organization_id = ${session.organization_id} and brand_id = ${session.brand_id} and account_type = 'social_page'
+      and external_account_id is not null and external_account_id <> ''
+    order by name asc
+  `;
+  const connection = await resolveOrganicConnection(sql, { organizationId: session.organization_id, brandId: session.brand_id, platform: "facebook", purpose: "read" });
+  return {
+    pages: pages.map((row) => ({ id: row.external_account_id, name: row.name })),
+    connectedPageId: connection.connected ? connection.accountId : null,
+    connectedReason: connection.connected ? null : connection.reason,
+  };
 }
