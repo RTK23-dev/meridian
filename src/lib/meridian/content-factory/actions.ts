@@ -7,6 +7,7 @@ import {
   createSessionInput,
   opportunityBriefInput,
   messageInput,
+  repurposeInput,
   remakeShotInput,
   clipInput,
   reviseDirectionInput,
@@ -19,6 +20,7 @@ import {
   workspaceInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
+import { repurposePreview, startRepurpose } from "./repurpose.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
@@ -142,6 +144,21 @@ export const createContentFactoryBriefFromOpportunity = createServerFn({ method:
   .validator((input: unknown) => opportunityBriefInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => briefFromOpportunity(await getSql(), context.userId, data));
+
+/** The variations a repurpose choice resolves to on a delivered video. Nothing is stored. Admins only. */
+export const previewContentFactoryRepurpose = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => repurposePreview(await getSql(), context.userId, data));
+
+/**
+ * Plans the repurposed variations of a delivered video, as child cuts. Idempotent. A variation is rendered only when the render price is
+ * verified and the renderer is connected; otherwise it is recorded with its reason. Admins only.
+ */
+export const startContentFactoryRepurpose = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => startRepurpose(await getSql(), context.userId, data));
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))

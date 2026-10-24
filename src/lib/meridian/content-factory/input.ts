@@ -58,6 +58,12 @@ export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
 
+/** A repurpose request: the session, and the settings as the person chose them. The settings are validated by the repurpose contract, not here. */
+export function repurposeInput(input: unknown): { sessionId: string; settings: unknown } {
+  const body = fields(input);
+  return { sessionId: idOf(body.sessionId, "session"), settings: body.settings };
+}
+
 /** The reviewer's model for a shot's remake, by its catalog id. Empty: the orchestrator's choice. A name that is not an id is refused. */
 export function modelIdOf(value: unknown): string | null {
   if (value === undefined || value === null) return null;

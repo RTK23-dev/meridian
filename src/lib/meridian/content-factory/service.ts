@@ -174,7 +174,7 @@ export async function requireWorkspaceAdmin(sql: Sql, userId: string, organizati
 }
 
 /** The session and its workspace, read in one statement with the caller's role. Unknown and foreign sessions get the same refusal. */
-async function sessionAccess(sql: Sql, userId: string, sessionId: string): Promise<SessionRow> {
+export async function sessionAccess(sql: Sql, userId: string, sessionId: string): Promise<SessionRow> {
   const rows = await sql.query<SessionRow & { role: string | null }>(
     `select ${SESSION_COLUMNS}, m.role
      from content_factory_sessions s
