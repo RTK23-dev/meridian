@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Input } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -31,6 +31,16 @@ const STATE_VARIANT: Record<BatchItemState, "neutral" | "info" | "success" | "wa
 
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
+/** The most a batch budget may be, in dollars. The server holds the same limit. */
+const BATCH_BUDGET_MAX = 100_000;
+
+/** A budget the server will accept: a positive amount in dollars, up to the limit. Empty is not a budget. */
+function budgetOf(text: string): number | null {
+  if (text.trim() === "") return null;
+  const value = Number(text);
+  return Number.isFinite(value) && value > 0 && value <= BATCH_BUDGET_MAX ? value : null;
+}
+
 /**
  * Batches of this brand's draft videos (prompt 15). A batch starts its videos in order under one budget: a start the engine refuses is kept
  * on its video and the batch goes on, and a start that would pass the budget stops the batch. Each video shows its own state, read from the
@@ -46,6 +56,7 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [itemError, setItemError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const batches = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batches", brandId]),
@@ -66,14 +77,14 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
     setFormError(null);
     setNotice(null);
     try {
-      const made = await createContentBatch({
-        data: { brandId, title: name, budgetUsd: budget.trim() === "" ? Number.NaN : Number(budget), sessionIds: chosen },
-      });
+      const made = await createContentBatch({ data: { brandId, title: name, budgetUsd: budgetOf(budget) ?? Number.NaN, sessionIds: chosen } });
       setSelectedId(made.id);
       setName("");
       setBudget("");
       setChosen([]);
       await batches.refetch();
+      // The videos in the batch are no longer free drafts, so the video list the other cards read is stale.
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "The batch could not be made. Nothing was changed.");
     } finally {
@@ -89,9 +100,11 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
     try {
       const outcome = await startContentBatch({ data: { batchId: selectedId } });
       const parts = [`Started ${outcome.started} ${outcome.started === 1 ? "video" : "videos"}.`];
+      if (outcome.started === 0 && outcome.refused === 0) parts.push("No video in this batch is a draft, so nothing was started.");
       if (outcome.refused > 0) parts.push(`${outcome.refused} ${outcome.refused === 1 ? "was" : "were"} refused and stay draft, with the reason on each.`);
       if (outcome.stoppedAtBudget) parts.push("The batch stopped at its budget, so the videos after it were not started.");
       await detail.refetch();
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
       setNotice(parts.join(" "));
     } catch (error) {
       setItemError(error instanceof Error ? error.message : "The batch could not be started. Nothing more was started.");
@@ -117,8 +130,10 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
   }
 
   const items = detail.data?.items ?? [];
-  const canStart = items.some((item) => item.state === "ready" || item.state === "blocked");
-  const canMake = !busy && name.trim().length > 0 && chosen.length > 0;
+  // Start takes only the drafts in the batch. A started video is never started again, so it does not enable the button.
+  const canStart = items.some((item) => item.draft);
+  const budgetValue = budgetOf(budget);
+  const canMake = !busy && name.trim().length > 0 && chosen.length > 0 && budgetValue !== null;
 
   return (
     <Card>
@@ -159,13 +174,15 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
             min="0"
             step="0.01"
             label="Batch budget (USD)"
-            hint="A hard limit on what the batch's videos may commit. Leave it empty only if you do not want a batch."
+            hint={`Required. The most the batch's videos may commit together, up to $${BATCH_BUDGET_MAX.toLocaleString("en-US")}.`}
             value={budget}
             onChange={(event) => setBudget(event.target.value)}
           />
         </fieldset>
         {formError !== null ? <p role="alert" className="text-sm text-danger">{formError}</p> : null}
-        <Button type="submit" disabled={!canMake}>Make the batch</Button>
+        {budgetValue === null && budget.trim() !== "" ? <p className="text-sm text-danger">{`Enter a budget above $0 and up to $${BATCH_BUDGET_MAX.toLocaleString("en-US")}.`}</p> : null}
+        <Button type="submit" disabled={!canMake} aria-describedby={canMake ? undefined : "batch-make-reason"}>Make the batch</Button>
+        {canMake ? null : <p id="batch-make-reason" className="text-sm text-fg-muted">{budgetValue === null ? "Enter a batch budget to make the batch." : name.trim().length === 0 ? "Give the batch a name to make it." : "Choose at least one draft video for the batch."}</p>}
       </form>
 
       {batches.isError && !batches.data ? <div className="mt-4"><PlainErrorState error={batches.error} onRetry={() => void batches.refetch()} /></div> : null}
@@ -175,7 +192,7 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
           <ul className="mt-2 flex flex-wrap gap-2">
             {batches.data.map((batch) => (
               <li key={batch.id}>
-                <Button type="button" size="sm" variant="secondary" aria-pressed={selectedId === batch.id} onClick={() => { setSelectedId(batch.id); setNotice(null); setItemError(null); }}>
+                                <Button type="button" size="sm" variant="secondary" className="max-w-full whitespace-normal break-words text-left" aria-pressed={selectedId === batch.id} onClick={() => { setSelectedId(batch.id); setNotice(null); setItemError(null); }}>
                   {batch.title} · {batch.itemCount} {batch.itemCount === 1 ? "video" : "videos"}
                 </Button>
               </li>
@@ -210,7 +227,7 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
             ))}
           </ol>
           <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
-          {!canStart ? <p className="text-sm text-fg-muted">Nothing in this batch is waiting to start.</p> : null}
+          {!canStart ? <p className="text-sm text-fg-muted">Nothing in this batch is a draft, so there is nothing to start.</p> : null}
         </section>
       ) : null}
       {notice !== null ? <p role="status" className="mt-3 text-sm">{notice}</p> : null}

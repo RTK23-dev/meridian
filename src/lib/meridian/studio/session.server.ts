@@ -49,7 +49,8 @@ import { resolveActiveEngine } from "../decisions/selection.ts";
 import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { isAutomationLevel } from "../brain.ts";
-import { brandAutomationDefault, studioAutonomyOfAutomation } from "../factory/run-settings.ts";
+import { brandAutomationDefault, parseStoredSettings, studioAutonomyOfAutomation } from "../factory/run-settings.ts";
+import { resolveStudioRunPolicy } from "./run-policy.ts";
 
 function answerValue(raw: unknown): string {
   if (typeof raw !== "string" || !raw) return "";
@@ -355,10 +356,15 @@ export async function getStudioSession(userId: string, data: { brandId: string }
 }
 
 /**
- * The autonomy a Studio plan starts from when the person does not choose one. It is the brand's automation default: its saved run
- * defaults, else its brain's automation level. Studio and the Factory therefore start from the same setting.
+ * The brand's Studio run policy. The autonomy a plan starts from is the brand's automation default: its saved run defaults, else its
+ * brain's automation level, so Studio and the Factory start from the same setting. The ceiling is the brand's saved total spend cap
+ * (run defaults caps.totalCents), or null when the brand has not set one. No plan may ask for more than the ceiling.
  */
-export async function studioAutonomyDefault(sql: Sql, organizationId: string, brandId: string): Promise<AutonomyMode> {
+export async function studioBrandRunPolicy(
+  sql: Sql,
+  organizationId: string,
+  brandId: string,
+): Promise<{ autonomy: AutonomyMode; ceilingUsd: number | null }> {
   const rows = await sql<{ run_defaults: string | null; automation_level: string | null }>`
     select b.run_defaults, bb.automation_level
     from brands b
@@ -368,7 +374,14 @@ export async function studioAutonomyDefault(sql: Sql, organizationId: string, br
   `;
   const row = rows[0];
   const brainLevel = row?.automation_level && isAutomationLevel(row.automation_level) ? row.automation_level : "manual";
-  return studioAutonomyOfAutomation(brandAutomationDefault({ runDefaults: row?.run_defaults, brainLevel }));
+  const autonomy = studioAutonomyOfAutomation(brandAutomationDefault({ runDefaults: row?.run_defaults, brainLevel }));
+  const totalCents = parseStoredSettings(row?.run_defaults)?.caps.totalCents ?? 0;
+  return { autonomy, ceilingUsd: totalCents > 0 ? totalCents / 100 : null };
+}
+
+/** The autonomy a Studio plan starts from when the person does not choose one. See studioBrandRunPolicy. */
+export async function studioAutonomyDefault(sql: Sql, organizationId: string, brandId: string): Promise<AutonomyMode> {
+  return (await studioBrandRunPolicy(sql, organizationId, brandId)).autonomy;
 }
 
 export { writeJudgment } from "./image-qc.server.ts";
@@ -511,7 +524,19 @@ export async function generateStudioVariants(
         data.mode === "research_only" ? "research_only" :
         "auto_choose"
       );
-    const autonomy: AutonomyMode = data.autonomy || (await studioAutonomyDefault(sql, access.organizationId, data.brandId));
+    // The autonomy and the spend cap are checked against the brand's policy and the caller's role. A request cannot choose a more
+    // automatic run or a larger cap than the brand allows (security review, finding 1).
+    const brandPolicy = await studioBrandRunPolicy(sql, access.organizationId, data.brandId);
+    const run = resolveStudioRunPolicy({
+      role: access.role,
+      requestedAutonomy: data.autonomy,
+      brandAutonomy: brandPolicy.autonomy,
+      ceilingUsd: brandPolicy.ceilingUsd,
+      requestedMaxSpendUsd: data.maxSpendUsd,
+    });
+    if (!run.ok) throw new Error(run.problem);
+    const autonomy: AutonomyMode = run.autonomy;
+    const maxSpendUsd = run.maxSpendUsd;
 
     // Load the JEV decision this brief was produced under and gate it before any plan is written
     // or any provider is called. A null decision id or a missing row is refused, never skipped (M2).
@@ -560,7 +585,7 @@ export async function generateStudioVariants(
       },
       jevJudgments: jevBundle,
       constraints: {
-        maxSpendUsd: data.maxSpendUsd,
+        maxSpendUsd,
       },
     });
 
@@ -570,7 +595,7 @@ export async function generateStudioVariants(
       organizationId: access.organizationId,
       brandId: data.brandId,
       briefId: data.briefId,
-      maxSpendUsd: data.maxSpendUsd,
+      maxSpendUsd,
     });
 
     // Handle JEV Abstention: never fabricate an unverified AI recommendation (P0-A)

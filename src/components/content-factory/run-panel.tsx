@@ -103,7 +103,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-start-reason" : undefined} onClick={() => void start()}>Make the video</Button>
-        {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Complete the items above first." : "Connect the engine first."}</p> : null}
+        {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first."}</p> : null}
       </div>
       {refusal || lastRefusal.length > 0 ? (
         <div role="status" className="mt-4 space-y-1 text-sm">
@@ -280,6 +280,11 @@ function DeliveryApproval({ sessionId }: { sessionId: string }) {
       <h3 id="cf-approval" className="text-sm font-semibold">Approval of this video</h3>
       <p className="text-sm">{stateSentence(state)}</p>
       {delivered ? null : <p className="text-sm text-fg-muted">The engine has not delivered the current video, so it cannot be decided yet.</p>}
+      {delivered && view.rightsMissing.length > 0 ? (
+        <p role="status" className="text-sm text-danger">
+          Approval is blocked: no valid rights record covers {view.rightsMissing.join(", ")}. Add one under Content standards for this brand, then approve.
+        </p>
+      ) : null}
       {delivered && rejecting ? (
         <form
           className="space-y-2"
@@ -307,7 +312,7 @@ function DeliveryApproval({ sessionId }: { sessionId: string }) {
       ) : null}
       {delivered && !rejecting ? (
         <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" disabled={busy || state.status === "approved"} onClick={() => void decide("approved", "")}>Approve this video</Button>
+          <Button variant="secondary" disabled={busy || state.status === "approved" || view.rightsMissing.length > 0} onClick={() => void decide("approved", "")}>Approve this video</Button>
           <Button variant="quiet" disabled={busy || state.status === "rejected"} onClick={() => { setRejecting(true); setActionError(null); }}>Reject this video</Button>
         </div>
       ) : null}

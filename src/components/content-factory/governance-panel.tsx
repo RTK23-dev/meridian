@@ -203,7 +203,7 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
             <ul className="divide-y divide-border text-sm">
               {data.rights.map((record) => (
                 <li key={record.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
-                  <div className="min-w-0 space-y-1">
+                  <div className="min-w-0 space-y-1 break-words">
                     <p className="font-semibold">{record.subject}</p>
                     <p className="text-fg-muted">Held by {record.holder}. Permits: {record.permittedUse}{record.validUntil ? `. Until ${record.validUntil}` : ". No end date"}{record.attachmentName ? `. Covers ${record.attachmentName}` : ""}.</p>
                   </div>
@@ -212,7 +212,18 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
                       {record.revokedAt !== null ? "Revoked" : record.valid ? "Valid" : "Ended"}
                     </Badge>
                     {record.revokedAt === null ? (
-                      <Button type="button" variant="quiet" size="sm" disabled={busy} onClick={() => void run(() => revokeRights({ data: { brandId, recordId: record.id } }), "Rights record revoked.")}>
+                      <Button
+                        type="button"
+                        variant="quiet"
+                        size="sm"
+                        disabled={busy}
+                        onClick={() => {
+                          // Revoking blocks the approval of every video made from this file, and a revocation cannot be undone here.
+                          const covers = record.attachmentName ?? "this material";
+                          const message = `Revoking blocks approval of the videos made from ${covers}. A revoked record cannot be restored. Add a new record instead. Revoke it?`;
+                          if (window.confirm(message)) void run(() => revokeRights({ data: { brandId, recordId: record.id } }), "Rights record revoked.");
+                        }}
+                      >
                         Revoke<span className="sr-only"> {record.subject}</span>
                       </Button>
                     ) : null}
@@ -240,13 +251,14 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
               <Input id="rights-until" type="date" label="Valid until" hint="Optional. Leave empty for no end date." value={rightsUntil} onChange={(event) => setRightsUntil(event.target.value)} />
               <div className="space-y-1.5 sm:col-span-2">
                 <label htmlFor="rights-file" className="block text-sm font-semibold">Stored file it covers</label>
+                <p className="text-sm text-fg-muted">A record covers one stored file. A record with no file does not clear an approval, so choose the file.</p>
                 <SelectInput id="rights-file" value={rightsFile} onChange={(event) => setRightsFile(event.target.value)}>
-                  <option value="">No stored file (general rights)</option>
+                  <option value="">Choose a stored file</option>
                   {data.files.map((file) => <option key={file.id} value={file.id}>{file.fileName} · {file.sessionTitle}</option>)}
                 </SelectInput>
               </div>
               <div className="sm:col-span-2">
-                <Button type="submit" variant="secondary" disabled={busy || rightsSubject.trim().length === 0 || rightsHolder.trim().length === 0 || rightsUse.trim().length === 0}>Add rights record</Button>
+                <Button type="submit" variant="secondary" disabled={busy || rightsFile.length === 0 || rightsSubject.trim().length === 0 || rightsHolder.trim().length === 0 || rightsUse.trim().length === 0}>Add rights record</Button>
               </div>
             </form>
           </section>

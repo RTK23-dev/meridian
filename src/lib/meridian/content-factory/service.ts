@@ -17,7 +17,8 @@ import { readStartedHooks } from "./hook-history-store.ts";
 import { economicsOf, type BrandEconomics } from "./economics.ts";
 import { readBrandLedger, readBrandRuns } from "./economics-store.ts";
 import { approvalProblem, approvalStateFor, isApprovalDecision, publishStateOf, type ApprovalRecord, type ApprovalState, type PublishState } from "./approval.ts";
-import { rightsGate, type FileReference, type RightsRecordFacts } from "./governance.ts";
+import { coveringRightsRecordIds, rightsGate, type FileReference, type RightsRecordFacts } from "./governance.ts";
+import { deliveredManifestOf } from "./manifest.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -366,6 +367,9 @@ export async function saveSettings(sql: Sql, userId: string, input: SettingsInpu
   let brandId = row.brand_id;
   if (input.brandId !== undefined && input.brandId !== row.brand_id) {
     if (input.brandId !== null) await requireBrandInWorkspace(sql, row.organization_id, input.brandId);
+    // A video in a batch is checked and budgeted against its batch's brand. Moving it to another brand would split the two (security review).
+    const batched = await sql<{ batch_id: string }>`select batch_id from content_factory_batch_items where session_id = ${row.id} limit 1`;
+    if (batched.length > 0) throw new Error("This video is in a batch under its brand, so the brand cannot change. Start a new video for another brand.");
     const files = await sql<{ n: number }>`
       select count(*)::int as n from content_factory_attachments where session_id = ${row.id} and organization_id = ${row.organization_id} and kind = 'file'
     `;
@@ -616,6 +620,12 @@ export type DeliveredLink =
 export async function deliveredMasterLink(sql: Sql, userId: string, input: { sessionId: string }, signer?: MediaLinkSigner): Promise<DeliveredLink> {
   const row = await sessionAccess(sql, userId, input.sessionId);
   if (row.status !== "started" || row.engine_request_id === null) return { status: "not_ready", reason: "This session has no video yet." };
+  // A download is an export of the video, so the rights gate applies to it as it does to an approval (AGENTS.md rule 8). A file the video was
+  // made from with no valid rights record blocks the link.
+  const gate = rightsGate(await storedFilesOf(sql, row.organization_id, row.id), await rightsRecordsOf(sql, row.organization_id, row.brand_id), todayIso());
+  if (!gate.ok) {
+    return { status: "not_ready", reason: `No valid rights record covers ${gate.missing.join(", ")}, so the video cannot be downloaded. Add the rights under Content standards.` };
+  }
   let master: Awaited<ReturnType<typeof engineDeliveredMaster>>;
   try {
     master = await engineDeliveredMaster(sql, row.organization_id, row.engine_request_id);
@@ -642,24 +652,34 @@ export type DeliveryApproval = {
   state: ApprovalState;
   /** Every decision made on the session, oldest first. Each names the video it was made on. Rows are never edited. */
   history: ApprovalRecord[];
+  /** The stored files of the video that have no valid rights record. An approval is blocked while this is not empty. */
+  rightsMissing: string[];
   publish: PublishState;
 };
 
 async function approvalRecords(sql: Sql, organizationId: string, sessionId: string): Promise<ApprovalRecord[]> {
-  const rows = await sql<{ engine_request_id: string; decision: string; reason: string; actor_id: string; created_at: unknown }>`
-    select engine_request_id, decision, reason, actor_id, created_at from content_factory_approvals
+  const rows = await sql<{ engine_request_id: string; manifest_id: string | null; decision: string; reason: string; actor_id: string; created_at: unknown; rights_record_ids: unknown }>`
+    select engine_request_id, manifest_id, decision, reason, actor_id, created_at, rights_record_ids from content_factory_approvals
     where organization_id = ${organizationId} and session_id = ${sessionId}
     order by created_at asc
   `;
   return rows.flatMap((row) => (isApprovalDecision(row.decision)
-    ? [{ engineRequestId: row.engine_request_id, decision: row.decision, reason: row.reason, actorId: row.actor_id, createdAt: iso(row.created_at) }]
+    ? [{
+      engineRequestId: row.engine_request_id,
+      manifestId: row.manifest_id,
+      decision: row.decision,
+      reason: row.reason,
+      actorId: row.actor_id,
+      createdAt: iso(row.created_at),
+      rightsRecordIds: idListOf(row.rights_record_ids),
+    }]
     : []));
 }
 
-async function requestDelivered(sql: Sql, organizationId: string, requestId: string | null): Promise<boolean> {
-  if (requestId === null) return false;
-  const rows = await sql<{ status: string }>`select status from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1`;
-  return rows[0]?.status === "delivered";
+/** A list of record ids as stored in a jsonb column. A value that is not a list of text reads as no ids. */
+function idListOf(value: unknown): string[] {
+  const parsed = typeof value === "string" ? (JSON.parse(value) as unknown) : value;
+  return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
 }
 
 function todayIso(): string {
@@ -682,11 +702,12 @@ async function storedFilesOf(sql: Sql, organizationId: string, sessionId: string
 /** The rights records of a brand that name a stored file. A record with an end date, or a revocation, is read as it stands. */
 async function rightsRecordsOf(sql: Sql, organizationId: string, brandId: string | null): Promise<RightsRecordFacts[]> {
   if (brandId === null) return [];
-  const rows = await sql<{ attachment_id: string | null; valid_until: unknown; revoked_at: unknown }>`
-    select attachment_id, valid_until, revoked_at from rights_records
+  const rows = await sql<{ id: string; attachment_id: string | null; valid_until: unknown; revoked_at: unknown }>`
+    select id, attachment_id, valid_until, revoked_at from rights_records
     where organization_id = ${organizationId} and brand_id = ${brandId} and attachment_id is not null
   `;
   return rows.map((row) => ({
+    id: row.id,
     attachmentId: row.attachment_id,
     validUntil: row.valid_until === null || row.valid_until === undefined ? null : dateString(row.valid_until),
     revoked: row.revoked_at !== null && row.revoked_at !== undefined,
@@ -698,11 +719,14 @@ export async function deliveryApprovalOf(sql: Sql, userId: string, input: { sess
   const row = await sessionAccess(sql, userId, input.sessionId);
   const history = await approvalRecords(sql, row.organization_id, row.id);
   const requestId = row.engine_request_id;
+  const manifestId = await deliveredManifestOf(sql, row.organization_id, requestId);
+  const rights = rightsGate(await storedFilesOf(sql, row.organization_id, row.id), await rightsRecordsOf(sql, row.organization_id, row.brand_id), todayIso());
   return {
     requestId,
-    delivered: await requestDelivered(sql, row.organization_id, requestId),
-    state: requestId === null ? { status: "not_decided" } : approvalStateFor(history, requestId),
+    delivered: manifestId !== null,
+    state: requestId === null ? { status: "not_decided" } : approvalStateFor(history, requestId, manifestId),
     history,
+    rightsMissing: rights.ok ? [] : rights.missing,
     publish: publishStateOf(),
   };
 }
@@ -724,22 +748,27 @@ export async function recordDeliveryApproval(sql: Sql, userId: string, input: { 
     }
     // The session row is locked, so two decisions on one video cannot both pass the check below.
     await tx`select id from content_factory_sessions where id = ${row.id} for update`;
-    if (!(await requestDelivered(tx, row.organization_id, row.engine_request_id))) {
+    const manifestId = await deliveredManifestOf(tx, row.organization_id, row.engine_request_id);
+    if (manifestId === null) {
       throw new Error("The engine has not delivered this video yet, so there is nothing to approve or reject.");
     }
-    const current = approvalStateFor(await approvalRecords(tx, row.organization_id, row.id), row.engine_request_id);
+    const current = approvalStateFor(await approvalRecords(tx, row.organization_id, row.id), row.engine_request_id, manifestId);
     if (current.status === input.decision) throw new Error(`This video is already ${input.decision}.`);
     // The rights gate blocks an approval until every file the video was made from has a valid rights record (governance.ts). A rejection
-    // is not gated: a video that should not go out is always allowed to be turned down.
+    // is not gated: a video that should not go out is always allowed to be turned down. An approval names the records it relied on.
+    let rightsRecordIds: string[] = [];
     if (input.decision === "approved") {
-      const gate = rightsGate(await storedFilesOf(tx, row.organization_id, row.id), await rightsRecordsOf(tx, row.organization_id, row.brand_id), todayIso());
+      const files = await storedFilesOf(tx, row.organization_id, row.id);
+      const records = await rightsRecordsOf(tx, row.organization_id, row.brand_id);
+      const gate = rightsGate(files, records, todayIso());
       if (!gate.ok) {
-        throw new Error(`The approval is blocked: no valid rights record covers ${gate.missing.join(", ")}. Add the rights under Content governance, then approve.`);
+        throw new Error(`The approval is blocked: no valid rights record covers ${gate.missing.join(", ")}. Add the rights under Content standards, then approve.`);
       }
+      rightsRecordIds = coveringRightsRecordIds(files, records, todayIso());
     }
     await tx`
-      insert into content_factory_approvals (id, organization_id, brand_id, session_id, engine_request_id, decision, reason, actor_id)
-      values (${randomUUID()}, ${row.organization_id}, ${row.brand_id}, ${row.id}, ${row.engine_request_id}, ${input.decision}, ${reason}, ${userId})
+      insert into content_factory_approvals (id, organization_id, brand_id, session_id, engine_request_id, manifest_id, decision, reason, actor_id, rights_record_ids)
+      values (${randomUUID()}, ${row.organization_id}, ${row.brand_id}, ${row.id}, ${row.engine_request_id}, ${manifestId}, ${input.decision}, ${reason}, ${userId}, ${JSON.stringify(rightsRecordIds)}::jsonb)
     `;
     await audit(tx, {
       organizationId: row.organization_id,
@@ -747,7 +776,7 @@ export async function recordDeliveryApproval(sql: Sql, userId: string, input: { 
       actorId: userId,
       action: `content_factory.video_${input.decision}`,
       objectId: row.id,
-      metadata: { engineRequestId: row.engine_request_id },
+      metadata: { engineRequestId: row.engine_request_id, manifestId, rightsRecordCount: String(rightsRecordIds.length) },
     });
   });
   return deliveryApprovalOf(sql, userId, { sessionId: input.sessionId });

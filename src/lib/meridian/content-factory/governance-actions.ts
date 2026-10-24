@@ -34,7 +34,8 @@ function brandIdOf(input: unknown): string {
 
 function numberOrNullOf(value: unknown): number | null {
   if (value === null || value === undefined || value === "") return null;
-  const number = typeof value === "number" ? value : Number(value);
+  // Only a number or a numeric text is read as a number. Anything else (a boolean, an object) is refused as not a number, never coerced to 1 or 0.
+  const number = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN;
   return Number.isFinite(number) ? number : Number.NaN;
 }
 

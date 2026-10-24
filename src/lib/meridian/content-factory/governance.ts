@@ -41,14 +41,29 @@ export function pillarMix(
   pillars: ReadonlyArray<{ id: string; name: string; targetShare: number | null }>,
   videos: ReadonlyArray<{ pillarId: string | null; started: boolean }>,
 ): PillarMixRow[] {
-  const started = videos.filter((video) => video.started);
-  const total = started.length;
+  const counts = new Map<string | null, number>();
+  for (const video of videos) {
+    if (video.started) counts.set(video.pillarId, (counts.get(video.pillarId) ?? 0) + 1);
+  }
+  return pillarMixOfCounts(pillars, [...counts].map(([pillarId, started]) => ({ pillarId, started })));
+}
+
+/**
+ * The same mix from counts of started videos per pillar. The counts are read in the database over every video of the brand, so a brand with
+ * many videos is not cut to the rows a screen lists.
+ */
+export function pillarMixOfCounts(
+  pillars: ReadonlyArray<{ id: string; name: string; targetShare: number | null }>,
+  counts: ReadonlyArray<{ pillarId: string | null; started: number }>,
+): PillarMixRow[] {
+  const total = counts.reduce((sum, row) => sum + row.started, 0);
   const share = (count: number): number | null => (total === 0 ? null : round1((count / total) * 100));
+  const countOf = (pillarId: string | null): number => counts.filter((row) => row.pillarId === pillarId).reduce((sum, row) => sum + row.started, 0);
   const rows: PillarMixRow[] = pillars.map((pillar) => {
-    const count = started.filter((video) => video.pillarId === pillar.id).length;
+    const count = countOf(pillar.id);
     return { pillarId: pillar.id, name: pillar.name, targetShare: pillar.targetShare, started: count, sharePercent: share(count) };
   });
-  const unassigned = started.filter((video) => video.pillarId === null).length;
+  const unassigned = countOf(null);
   if (unassigned > 0 || rows.length === 0) {
     rows.push({ pillarId: null, name: "Not in a pillar", targetShare: null, started: unassigned, sharePercent: share(unassigned) });
   }
@@ -135,8 +150,13 @@ export function rightsProblem(input: RightsInput, today: string): string | null 
   return null;
 }
 
-export type RightsRecordFacts = { attachmentId: string | null; validUntil: string | null; revoked: boolean };
+export type RightsRecordFacts = { id: string; attachmentId: string | null; validUntil: string | null; revoked: boolean };
 export type FileReference = { attachmentId: string; fileName: string };
+
+/** A record that names the file, has not been revoked, and has not ended on the given day. */
+function coversFile(record: RightsRecordFacts, file: FileReference, today: string): boolean {
+  return record.attachmentId === file.attachmentId && !record.revoked && (record.validUntil === null || record.validUntil >= today);
+}
 
 /**
  * The rights gate of an approval. Every stored file a video was made from needs a rights record that names that file, has not been revoked,
@@ -147,10 +167,19 @@ export function rightsGate(
   records: readonly RightsRecordFacts[],
   today: string,
 ): { ok: true } | { ok: false; missing: string[] } {
-  const missing = files
-    .filter((file) => !records.some((record) => record.attachmentId === file.attachmentId && !record.revoked && (record.validUntil === null || record.validUntil >= today)))
-    .map((file) => file.fileName);
+  const missing = files.filter((file) => !records.some((record) => coversFile(record, file, today))).map((file) => file.fileName);
   return missing.length === 0 ? { ok: true } : { ok: false, missing };
+}
+
+/**
+ * The rights record that covers each file, for an approval to name. Only meaningful once rightsGate has passed: a file with no covering record
+ * contributes nothing.
+ */
+export function coveringRightsRecordIds(files: readonly FileReference[], records: readonly RightsRecordFacts[], today: string): string[] {
+  return files.flatMap((file) => {
+    const record = records.find((candidate) => coversFile(candidate, file, today));
+    return record ? [record.id] : [];
+  });
 }
 
 function round1(value: number): number {

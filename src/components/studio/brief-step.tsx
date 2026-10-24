@@ -112,8 +112,8 @@ function FrameEditForm({ frame, pending, onSave }: { frame: BriefFrame; pending:
   return (
     <form className="space-y-4" onSubmit={form.handleSubmit(save)} noValidate>
       <UnsavedChangesGuard dirty={dirty} />
-      <Input id="frame-platform" label="Platform" hint="Where the video will run, for example Instagram Reels." maxLength={PLATFORM_MAX} {...form.register("platform")} />
-      <Input id="frame-budget" type="number" min="0" step="0.01" label="Budget (USD)" hint="Leave empty if no budget is set." {...form.register("budget")} />
+      <Input id="frame-platform" label="Platform note" hint="Where the video is meant to run, for example Instagram Reels. A note only: it does not change the video's settings." maxLength={PLATFORM_MAX} {...form.register("platform")} />
+      <Input id="frame-budget" type="number" min="0" step="0.01" label="Budget note (USD)" hint="A note only: it does not limit spend. The spend cap is set when the video is generated. Leave empty if no budget is noted." {...form.register("budget")} />
       <Textarea id="frame-references" label="Visual references" hint="One per line, up to 10." {...form.register("visualReferences")} />
       <Textarea id="frame-criteria" label="Success criteria" hint="What a result must show to count as a win." maxLength={SUCCESS_MAX} {...form.register("successCriteria")} />
       {problem ? <p role="alert" className="text-small text-danger">{problem}</p> : null}
@@ -148,9 +148,9 @@ function BriefFrameSection({ brief, canEdit, pending, onSave }: { brief: StudioB
       ) : (
         <>
           <dl className="divide-y divide-border text-sm">
-            <FrameReadRow label="Platform" text={frameFieldText(frame.platform)} source={frame.platform.source} />
+            <FrameReadRow label="Platform note" text={frameFieldText(frame.platform)} source={frame.platform.source} />
             <FrameReadRow
-              label="Budget"
+              label="Budget note"
               text={frame.budgetUsd.value === null ? "Not set" : budgetFormat.format(frame.budgetUsd.value)}
               source={frame.budgetUsd.source}
             />
@@ -177,13 +177,20 @@ export function BriefStep({ brandId, session, brief, previous, canEdit, changed,
         <BriefReviewPanel key={item.id} brandId={brandId} briefId={item.id} title={item.title} role={session.role} />
       ))}
 
+      {!brief ? (
+        <Card>
+          <h2 className="text-section font-semibold">Brief</h2>
+          <p className="mt-1 text-sm text-fg-muted">No brief yet. Accept a direction in step 1 to write one.</p>
+        </Card>
+      ) : null}
+
       {brief ? (
         <>
           <Card>
             <h2 className="text-section font-semibold">Brief</h2>
             <p className="mt-1 text-sm text-fg-muted">{brief.title}</p>
             {changed ? <p className="mt-2 text-sm font-semibold">These findings changed the next recommendation.</p> : null}
-            <p className="mt-2 text-sm text-fg-muted">The copy of a stored brief is not editable on this screen. Write the next brief to get a new copy. Its frame can be changed while the brief is ready.</p>
+            <p className="mt-2 text-sm text-fg-muted">The copy of a stored brief is not editable on this screen. {brief.status === "ready" ? "To get a new copy, accept another direction in step 1." : "Write the next brief to get a new copy."} Its frame can be changed while the brief is ready.</p>
 
             <div className="mt-4 grid gap-5 md:grid-cols-2">
               <Section title="Objective">{brief.why[0] ?? "Not stored."}</Section>

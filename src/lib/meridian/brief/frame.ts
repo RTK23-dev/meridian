@@ -34,6 +34,10 @@ export const BUDGET_MAX_USD = 100_000;
 
 const notSet = <T>(): FrameField<T> => ({ value: null, source: "not set" });
 
+function roundCents(value: number): number {
+  return Math.round(value * 100) / 100;
+}
+
 function textOrNull(value: string | undefined): string | null {
   const trimmed = (value ?? "").trim();
   return trimmed.length === 0 ? null : trimmed;
@@ -70,7 +74,10 @@ export function frameEditProblem(edit: FrameEdit): string | null {
     return `The platform is longer than ${PLATFORM_MAX} characters.`;
   }
   if (edit.budgetUsd !== undefined && edit.budgetUsd !== null) {
-    if (!Number.isFinite(edit.budgetUsd) || edit.budgetUsd <= 0) return "The budget must be a positive amount in dollars, or empty.";
+    // The budget is stored to the cent, so the check is on the stored value: an amount that rounds to zero would save and then read back as not set.
+    if (!Number.isFinite(edit.budgetUsd) || roundCents(edit.budgetUsd) <= 0) {
+      return "The budget must be a positive amount in dollars, at least one cent, or empty.";
+    }
     if (edit.budgetUsd > BUDGET_MAX_USD) return `The budget is more than ${BUDGET_MAX_USD.toLocaleString("en-US")} dollars. Check the figure.`;
   }
   if (edit.visualReferences !== undefined && edit.visualReferences !== null) {
@@ -96,7 +103,7 @@ export function applyFrameEdit(frame: BriefFrame, edit: FrameEdit): BriefFrame {
     next.platform = value === null ? notSet() : { value, source: "person" };
   }
   if (edit.budgetUsd !== undefined) {
-    next.budgetUsd = edit.budgetUsd === null ? notSet() : { value: Math.round(edit.budgetUsd * 100) / 100, source: "person" };
+    next.budgetUsd = edit.budgetUsd === null ? notSet() : { value: roundCents(edit.budgetUsd), source: "person" };
   }
   if (edit.visualReferences !== undefined) {
     const items = (edit.visualReferences ?? []).map((item) => item.trim()).filter((item) => item.length > 0);

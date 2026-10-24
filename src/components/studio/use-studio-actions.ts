@@ -36,7 +36,8 @@ export function useStudioActions(brandId: string) {
     mutationKey: studioKey("brief"),
     mutationFn: (vars: { forceNew: boolean; reason: string; opportunityId?: string }) =>
       openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason, opportunityId: vars.opportunityId } }),
-    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId)],
+    // Accepting a direction settles the idea's review hold, so the reviews and the overview count are refreshed too.
+    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId), qk.reviews(brandId), qk.machine(brandId)],
     success: (vars) => (vars.forceNew ? "Next brief written." : "Brief written from the accepted direction."),
   });
 

@@ -11,7 +11,7 @@ import { rankOpportunities } from "./engine.ts";
 
 /** Replace open opportunities from stored evidence. Does not learn and does not call a provider. */
 import { priorIdeaFor, priorIdeasByFingerprint } from "./triage-memory.ts";
-import { readPriorIdeas } from "./triage-memory-store.ts";
+import { readPriorIdeas, readReopenedIdeas } from "./triage-memory-store.ts";
 
 /**
  * Ranks a brand's open ideas. An idea the person declined, or held (saved, deferred, or sent for more research), is never put back as new.
@@ -44,9 +44,13 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
   // The open set is replaced as one unit. The deletes and the reinsertion share one transaction, so a failure part way
   // leaves the previous open set in place (contract section 7).
   await withTransaction(sql, async (tx) => {
+    // The brand row is locked, so two replacements cannot both read the same open set and both insert one (review finding).
+    await tx`select id from brands where id = ${brandId} for update`;
+    // An open idea a person has decided on (and reopened) keeps its history: it is not deleted here.
     const open = await tx<{ id: string }>`
-      select id from opportunities
-      where brand_id = ${brandId} and organization_id = ${organizationId} and status = 'open'
+      select o.id from opportunities o
+      where o.brand_id = ${brandId} and o.organization_id = ${organizationId} and o.status = 'open'
+        and not exists (select 1 from opportunity_direction_decisions d where d.opportunity_id = o.id)
     `;
     for (const row of open) {
       await tx`delete from reviews where opportunity_id = ${row.id} and status = 'open'`;
@@ -54,7 +58,8 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
     }
     // An idea a person declined, or already explored, is not put back as new. It is counted, not written.
     const prior = await readPriorIdeas(tx, organizationId, brandId);
-    const priorByKey = priorIdeasByFingerprint(options.keepExplored ? prior.filter((idea) => idea.outcome !== "explored") : prior);
+    const reopened = await readReopenedIdeas(tx, organizationId, brandId);
+    const priorByKey = priorIdeasByFingerprint(options.keepExplored ? [...prior.filter((idea) => idea.outcome !== "explored"), ...reopened] : [...prior, ...reopened]);
     for (const draft of drafts) {
       if (priorIdeaFor(draft, priorByKey) !== null) continue;
       written += 1;

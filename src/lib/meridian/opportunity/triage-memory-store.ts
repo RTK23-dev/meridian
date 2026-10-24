@@ -4,6 +4,30 @@
 import type { Sql } from "../learning/store.ts";
 import type { PriorIdea } from "./triage-memory.ts";
 
+/**
+ * Open ideas a person has decided on and then reopened. They keep their history, so a replacement of the open set does not delete them, and
+ * a fresh draft of the same idea is not added beside them. For that purpose they count as set aside.
+ */
+export async function readReopenedIdeas(sql: Sql, organizationId: string, brandId: string): Promise<PriorIdea[]> {
+  const rows = await sql<{ id: string; label: string; hypothesis_id: string; product_id: string | null; angle: string; format: string }>`
+    select o.id, o.label, o.hypothesis_id, o.product_id, o.angle, o.format
+    from opportunities o
+    where o.organization_id = ${organizationId} and o.brand_id = ${brandId} and o.status = 'open'
+      and exists (select 1 from opportunity_direction_decisions d where d.opportunity_id = o.id and d.organization_id = o.organization_id)
+  `;
+  return rows.map((row) => ({
+    opportunityId: row.id,
+    label: row.label,
+    hypothesisId: row.hypothesis_id,
+    productId: row.product_id,
+    angle: row.angle,
+    format: row.format,
+    outcome: "held",
+    reason: null,
+    decidedAt: null,
+  }));
+}
+
 export async function readPriorIdeas(sql: Sql, organizationId: string, brandId: string): Promise<PriorIdea[]> {
   const rows = await sql<{
     id: string;

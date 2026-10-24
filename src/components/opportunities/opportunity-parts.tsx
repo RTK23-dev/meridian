@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Bookmark, CalendarClock, CircleDashed, Clock, FileText, Info, Layers, Sparkles, XCircle, CheckCircle2, SearchCheck, type LucideIcon } from "lucide-react";
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger, Textarea } from "@/components/ui";
+import { Badge, Button, Popover, PopoverContent, PopoverTrigger, Textarea, errorText } from "@/components/ui";
 import { directionReasonProblem } from "@/lib/meridian/opportunity/direction-reason";
 import { isHeldStatus, triageActionsFor, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { statusLabel } from "@/lib/copy";
-import { CATEGORY_LEGEND, barPercent, canDismiss, categoryLabel, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
+import { CATEGORY_LEGEND, barPercent, canDismiss, categoryLabel, isHeld, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
 
 /** A value that is not stored. It is always written out, never drawn as an empty bar or a zero. */
 export function UnknownValue() {
@@ -85,7 +85,7 @@ export function CategoryFilter({ value, onChange }: { value: OpportunityCategory
 }
 
 const TRIAGE_LABEL: Record<TriageAction, string> = {
-  decline: "Decline this idea",
+  decline: "Decline",
   save: "Save for later",
   defer: "Defer",
   request_research: "Request more research",
@@ -95,19 +95,20 @@ const TRIAGE_LABEL: Record<TriageAction, string> = {
 /** Studio and triage are member actions. Viewers see the state and nothing they cannot change. */
 export function OpportunityActions({ brandId, item, canEdit, triaging, onTriage }: {
   brandId: string;
-  item: Pick<OpportunityRow, "id" | "label" | "status">;
+  item: Pick<OpportunityRow, "id" | "label" | "status" | "decision">;
   canEdit: boolean;
   triaging: boolean;
   onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
 }) {
   if (!canEdit) return <span className="text-sm text-muted">Read-only for viewers.</span>;
   const actions = triageActionsFor(item.status);
-  // Studio cannot select a held idea from here, so a held idea offers reopen only.
-  const studio = canDismiss(item.status) && !isHeldStatus(item.status);
+  // Studio does not select this idea: it writes its own recommended direction. So no link is offered for a held idea (set aside, or with a
+  // review open on it), which Studio would not take.
+  const studio = canDismiss(item.status) && !isHeldStatus(item.status) && !isHeld(item);
   if (!studio && actions.length === 0) return null;
   return <>
     {studio ? <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg">
-      Open in Studio<span className="sr-only"> for {item.label}</span>
+      Open Studio<span className="sr-only"> (its recommended direction, not {item.label})</span>
     </Link> : null}
     {actions.length > 0 ? <TriageControl item={item} actions={actions} triaging={triaging} onTriage={onTriage} /> : null}
   </>;
@@ -115,8 +116,8 @@ export function OpportunityActions({ brandId, item, canEdit, triaging, onTriage 
 
 /**
  * Decides an open or accepted idea with a reason: declines it, saves it, defers it, sends it for more research, or reopens a held one. The
- * reason is required and is kept with the decision: it is what keeps a declined or held idea out of the next refresh. A failed save keeps
- * what was written, so the person can send it again.
+ * reason is required and is kept with the decision. A refusal from the server is shown here, inside the panel, and the reason stays written,
+ * so the person can send it again. Focus moves with the control: into the reason when it opens, back to Decide when it closes.
  */
 function TriageControl({ item, actions, triaging, onTriage }: {
   item: Pick<OpportunityRow, "id" | "label">;
@@ -126,33 +127,48 @@ function TriageControl({ item, actions, triaging, onTriage }: {
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
+  const [failure, setFailure] = useState<string | null>(null);
+  const decideRef = useRef<HTMLButtonElement>(null);
+  const reasonRef = useRef<HTMLTextAreaElement>(null);
+  const wasOpen = useRef(false);
   const problem = reason.trim().length === 0 ? null : directionReasonProblem(reason);
   const onlyReopen = actions.length === 1 && actions[0] === "reopen";
+  const declines = actions.includes("decline");
+  useEffect(() => {
+    if (open) reasonRef.current?.focus();
+    else if (wasOpen.current) decideRef.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
   if (!open) {
-    return <Button type="button" variant="quiet" disabled={triaging} onClick={() => setOpen(true)}>{onlyReopen ? "Reopen" : "Decide"}<span className="sr-only"> {item.label}</span></Button>;
+    return <Button ref={decideRef} type="button" variant="quiet" disabled={triaging} onClick={() => setOpen(true)}>{onlyReopen ? "Reopen" : "Decide"}<span className="sr-only"> {item.label}</span></Button>;
   }
   function choose(action: TriageAction) {
     if (directionReasonProblem(reason) !== null) return;
+    setFailure(null);
     void onTriage(item.id, action, reason.trim()).then(
       () => {
         setOpen(false);
         setReason("");
       },
-      () => undefined,
+      (error: unknown) => setFailure(`${errorText(error)} The reason is still written, so you can send it again.`),
     );
   }
   return (
     <div role="group" aria-label={`Decide on ${item.label}`} className="flex w-full flex-col gap-2">
       <Textarea
+        ref={reasonRef}
         label={`Why decide on ${item.label}?`}
         value={reason}
         onChange={(event) => setReason(event.target.value)}
         hint={onlyReopen
           ? "Say what changed since this idea was set aside. The reason stays on record."
-          : "Say why. The reason stays on record. A declined or held idea stays out of the next refresh."}
+          : declines
+            ? "Declining is final on this screen. The idea will not come back on a later scoring, and it cannot be reopened here. The reason stays on record."
+            : "Say why. The reason stays on record. A set-aside idea stays out of the list until it is reopened."}
         error={problem ?? undefined}
         rows={3}
       />
+      {failure !== null ? <p role="alert" className="text-sm text-danger">{failure}</p> : null}
       <div className="flex flex-wrap gap-2">
         {actions.map((action) => (
           <Button

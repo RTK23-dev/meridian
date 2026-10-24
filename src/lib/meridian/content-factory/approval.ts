@@ -13,10 +13,14 @@ export const APPROVAL_NOTE_MAX = 500;
 
 export type ApprovalRecord = {
   engineRequestId: string;
+  /** The delivered manifest the decision was made on. Null for a record written before manifests were kept, which never counts as decided. */
+  manifestId: string | null;
   decision: ApprovalDecision;
   reason: string;
   actorId: string;
   createdAt: string;
+  /** The rights records the rights gate relied on for an approval. Empty for a rejection. */
+  rightsRecordIds: string[];
 };
 
 export type ApprovalState =
@@ -38,9 +42,14 @@ export function approvalProblem(input: { decision: string; reason: string }): st
   return null;
 }
 
-/** The state of one delivered video: the latest decision made on its request, or not decided. Records are in the order they were made. */
-export function approvalStateFor(records: readonly ApprovalRecord[], engineRequestId: string): ApprovalState {
-  const latest = records.filter((record) => record.engineRequestId === engineRequestId).at(-1);
+/**
+ * The state of one delivered video: the latest decision made on its request and its current manifest, or not decided. A video that is not
+ * delivered (manifest null) is not decided, whatever was decided before. Records are in the order they were made.
+ */
+export function approvalStateFor(records: readonly ApprovalRecord[], engineRequestId: string, manifestId: string | null): ApprovalState {
+  const latest = manifestId === null
+    ? undefined
+    : records.filter((record) => record.engineRequestId === engineRequestId && record.manifestId === manifestId).at(-1);
   if (!latest) return { status: "not_decided" };
   return { status: latest.decision, decidedAt: latest.createdAt, actorId: latest.actorId, reason: latest.reason };
 }

@@ -48,13 +48,15 @@ test("the rules are pure: a rejection needs its reason, the latest decision is t
   assert.match(approvalProblem({ decision: "maybe", reason: "" }) ?? "", /Choose approve or reject/);
 
   const records: ApprovalRecord[] = [
-    { engineRequestId: "req_a", decision: "approved", reason: "", actorId: "u1", createdAt: "2026-10-01T00:00:00.000Z" },
-    { engineRequestId: "req_a", decision: "rejected", reason: "Too slow to start.", actorId: "u2", createdAt: "2026-10-02T00:00:00.000Z" },
-    { engineRequestId: "req_b", decision: "approved", reason: "", actorId: "u1", createdAt: "2026-10-03T00:00:00.000Z" },
+    { engineRequestId: "req_a", manifestId: "vid_1", decision: "approved", reason: "", actorId: "u1", createdAt: "2026-10-01T00:00:00.000Z", rightsRecordIds: ["rr_1"] },
+    { engineRequestId: "req_a", manifestId: "vid_1", decision: "rejected", reason: "Too slow to start.", actorId: "u2", createdAt: "2026-10-02T00:00:00.000Z", rightsRecordIds: [] },
+    { engineRequestId: "req_b", manifestId: "vid_2", decision: "approved", reason: "", actorId: "u1", createdAt: "2026-10-03T00:00:00.000Z", rightsRecordIds: [] },
   ];
-  assert.equal(approvalStateFor(records, "req_a").status, "rejected", "the later decision on the same video is the state");
-  assert.equal(approvalStateFor(records, "req_b").status, "approved");
-  assert.equal(approvalStateFor(records, "req_c").status, "not_decided", "a video with no decision is not decided");
+  assert.equal(approvalStateFor(records, "req_a", "vid_1").status, "rejected", "the later decision on the same video is the state");
+  assert.equal(approvalStateFor(records, "req_b", "vid_2").status, "approved");
+  assert.equal(approvalStateFor(records, "req_c", "vid_3").status, "not_decided", "a video with no decision is not decided");
+  assert.equal(approvalStateFor(records, "req_a", "vid_2").status, "not_decided", "a remade video has a new manifest, so an earlier decision does not carry over");
+  assert.equal(approvalStateFor(records, "req_a", null).status, "not_decided", "a video that is not delivered is not decided");
   assert.equal(publishStateOf().status, "not_connected");
 });
 

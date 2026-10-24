@@ -5,11 +5,12 @@
 import { randomUUID } from "node:crypto";
 import { requireBrand } from "../brand-membership.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
+import { deliveredManifestOf } from "./manifest.ts";
 import {
   cadenceProblem,
   cadenceStatus,
   criteriaProblem,
-  pillarMix,
+  pillarMixOfCounts,
   pillarProblem,
   rightsProblem,
   scoresProblem,
@@ -18,8 +19,6 @@ import {
   type PillarMixRow,
   type RubricCriterion,
 } from "./governance.ts";
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -95,19 +94,28 @@ export async function governanceOf(sql: Sql, userId: string, input: { brandId: s
     where r.brand_id = ${input.brandId} and r.organization_id = ${access.organizationId}
     order by r.created_at desc limit 200
   `;
+  // The newest files first, so a brand with many stored files still offers the recent ones a rights record is needed for.
   const files = await sql<{ id: string; file_name: string | null; session_title: string }>`
     select a.id, a.file_name, s.title as session_title from content_factory_attachments a
     join content_factory_sessions s on s.id = a.session_id
     where s.brand_id = ${input.brandId} and a.organization_id = ${access.organizationId} and a.kind = 'file'
-    order by a.id desc limit 100
+    order by a.created_at desc limit 100
   `;
   const now = today();
-  const weekAgo = Date.now() - 7 * DAY_MS;
-  const startedVideos = videos.filter((video) => video.started_at !== null && new Date(isoOf(video.started_at)).getTime() >= weekAgo);
-  const cadence = cadenceStatus(cadenceRows[0]?.videos_per_week ?? null, startedVideos.length);
-  const mix = pillarMix(
+  // The cadence and the mix are counted in the database over every video of the brand, not over the rows this screen lists (limit above).
+  const [weekCount] = await sql<{ n: number }>`
+    select count(*)::int as n from content_factory_sessions
+    where brand_id = ${input.brandId} and organization_id = ${access.organizationId} and started_at is not null and started_at >= now() - interval '7 days'
+  `;
+  const mixCounts = await sql<{ pillar_id: string | null; started: number }>`
+    select pillar_id, count(*)::int as started from content_factory_sessions
+    where brand_id = ${input.brandId} and organization_id = ${access.organizationId} and status = 'started'
+    group by pillar_id
+  `;
+  const cadence = cadenceStatus(cadenceRows[0]?.videos_per_week ?? null, Number(weekCount?.n ?? 0));
+  const mix = pillarMixOfCounts(
     pillars.map((pillar) => ({ id: pillar.id, name: pillar.name, targetShare: pillar.target_share === null ? null : Number(pillar.target_share) })),
-    videos.map((video) => ({ pillarId: video.pillar_id, started: video.status === "started" })),
+    mixCounts.map((row) => ({ pillarId: row.pillar_id, started: Number(row.started) })),
   );
   return {
     brandId: input.brandId,
@@ -135,26 +143,38 @@ export async function governanceOf(sql: Sql, userId: string, input: { brandId: s
   };
 }
 
+/** A unique-constraint violation, the only database error that means "already exists". Any other error is reported as it is. */
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === "object" && error !== null && (error as { code?: unknown }).code === "23505";
+}
+
 export async function createPillar(sql: Sql, userId: string, input: { brandId: string; name: string; targetShare: number | null }): Promise<{ id: string }> {
   const access = await requireBrand(sql, userId, input.brandId, "admin");
-  const existing = await sql<{ target_share: string | number | null }>`
-    select target_share from content_pillars where brand_id = ${input.brandId} and organization_id = ${access.organizationId}
-  `;
-  const problem = pillarProblem(
-    { name: input.name, targetShare: input.targetShare },
-    existing.flatMap((row) => (row.target_share === null ? [] : [Number(row.target_share)])),
-  );
-  if (problem) throw new Error(problem);
+  // A target share is stored to two decimal places, so a finer one would be saved as a different share (0.004 as 0.00).
+  if (input.targetShare !== null && Math.abs(input.targetShare * 100 - Math.round(input.targetShare * 100)) > 1e-6) {
+    throw new Error("A target share has at most two decimal places.");
+  }
   const id = randomUUID();
   const name = input.name.trim();
   return withTransaction(sql, async (tx) => {
+    // The brand row is locked for the check and the insert, so two pillars cannot both pass the share total below.
+    await tx`select id from brands where id = ${input.brandId} for update`;
+    const existing = await tx<{ target_share: string | number | null }>`
+      select target_share from content_pillars where brand_id = ${input.brandId} and organization_id = ${access.organizationId}
+    `;
+    const problem = pillarProblem(
+      { name: input.name, targetShare: input.targetShare },
+      existing.flatMap((row) => (row.target_share === null ? [] : [Number(row.target_share)])),
+    );
+    if (problem) throw new Error(problem);
     try {
       await tx`
         insert into content_pillars (id, organization_id, brand_id, name, target_share, created_by)
         values (${id}, ${access.organizationId}, ${input.brandId}, ${name}, ${input.targetShare}, ${userId})
       `;
-    } catch {
-      throw new Error(`A pillar named "${name}" already exists for this brand.`);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new Error(`A pillar named "${name}" already exists for this brand.`);
+      throw error;
     }
     await auditGovernance(tx, { organizationId: access.organizationId, brandId: input.brandId, actorId: userId, action: "content_governance.pillar_created", objectId: id, metadata: { name } });
     return { id };
@@ -231,8 +251,9 @@ export async function createRubric(sql: Sql, userId: string, input: { brandId: s
         insert into quality_rubrics (id, organization_id, brand_id, name, criteria, created_by)
         values (${id}, ${access.organizationId}, ${input.brandId}, ${name}, ${JSON.stringify(criteria)}, ${userId})
       `;
-    } catch {
-      throw new Error(`A rubric named "${name}" already exists for this brand.`);
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new Error(`A rubric named "${name}" already exists for this brand.`);
+      throw error;
     }
     await auditGovernance(tx, { organizationId: access.organizationId, brandId: input.brandId, actorId: userId, action: "content_governance.rubric_created", objectId: id, metadata: { name } });
     return { id };
@@ -257,27 +278,26 @@ export async function videoScoreOf(sql: Sql, userId: string, input: { sessionId:
   const rubrics = await sql<{ id: string; name: string; criteria: string }>`
     select id, name, criteria from quality_rubrics where brand_id = ${session.brand_id} and organization_id = ${access.organizationId} order by name asc
   `;
-  const delivered = await requestDelivered(sql, access.organizationId, session.engine_request_id);
-  const [score] = await sql<{ rubric_id: string; rubric_name: string; total: number; scores: string; scored_by: string; created_at: unknown }>`
+  const manifestId = await deliveredManifestOf(sql, access.organizationId, session.engine_request_id);
+  // A score belongs to the delivered manifest it was made on. A revised video is a new manifest, so an earlier score is not shown as its score.
+  const scoreRows = manifestId === null || session.engine_request_id === null
+    ? []
+    : await sql<{ rubric_id: string; rubric_name: string; total: number; scores: string; scored_by: string; created_at: unknown }>`
     select s.rubric_id, r.name as rubric_name, s.total, s.scores, s.scored_by, s.created_at
     from quality_scores s join quality_rubrics r on r.id = s.rubric_id
     where s.session_id = ${input.sessionId} and s.organization_id = ${access.organizationId}
+      and s.engine_request_id = ${session.engine_request_id} and s.manifest_id = ${manifestId}
     order by s.created_at desc limit 1
   `;
+  const score = scoreRows[0];
   return {
     requestId: session.engine_request_id,
-    delivered,
+    delivered: manifestId !== null,
     rubrics: rubrics.map((rubric) => ({ id: rubric.id, name: rubric.name, criteria: criteriaOf(rubric.criteria) })),
     latest: score
       ? { rubricId: score.rubric_id, rubricName: score.rubric_name, total: Number(score.total), scores: JSON.parse(score.scores) as Record<string, number>, scoredBy: score.scored_by, createdAt: isoOf(score.created_at) }
       : null,
   };
-}
-
-async function requestDelivered(sql: Sql, organizationId: string, requestId: string | null): Promise<boolean> {
-  if (requestId === null) return false;
-  const rows = await sql<{ status: string }>`select status from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1`;
-  return rows[0]?.status === "delivered";
 }
 
 /**
@@ -292,7 +312,8 @@ export async function scoreVideo(sql: Sql, userId: string, input: { sessionId: s
   const brandId = session.brand_id;
   const access = await requireBrand(sql, userId, brandId, "admin");
   if (access.organizationId !== session.organization_id) throw new Error("That video is not found.");
-  if (!(await requestDelivered(sql, access.organizationId, session.engine_request_id)) || session.engine_request_id === null) {
+  const manifestId = await deliveredManifestOf(sql, access.organizationId, session.engine_request_id);
+  if (manifestId === null || session.engine_request_id === null) {
     throw new Error("The engine has not delivered this video yet, so there is nothing to score.");
   }
   const [rubric] = await sql<{ id: string; criteria: string }>`
@@ -306,8 +327,8 @@ export async function scoreVideo(sql: Sql, userId: string, input: { sessionId: s
   const requestId = session.engine_request_id;
   await withTransaction(sql, async (tx) => {
     await tx`
-      insert into quality_scores (id, organization_id, brand_id, session_id, engine_request_id, rubric_id, scores, total, scored_by)
-      values (${randomUUID()}, ${access.organizationId}, ${brandId}, ${input.sessionId}, ${requestId}, ${rubric.id}, ${JSON.stringify(input.scores)}, ${total}, ${userId})
+      insert into quality_scores (id, organization_id, brand_id, session_id, engine_request_id, manifest_id, rubric_id, scores, total, scored_by)
+      values (${randomUUID()}, ${access.organizationId}, ${brandId}, ${input.sessionId}, ${requestId}, ${manifestId}, ${rubric.id}, ${JSON.stringify(input.scores)}, ${total}, ${userId})
     `;
     await auditGovernance(tx, {
       organizationId: access.organizationId,
@@ -315,7 +336,7 @@ export async function scoreVideo(sql: Sql, userId: string, input: { sessionId: s
       actorId: userId,
       action: "content_governance.video_scored",
       objectId: input.sessionId,
-      metadata: { engineRequestId: requestId, total: String(total) },
+      metadata: { engineRequestId: requestId, manifestId, total: String(total) },
     });
   });
   return videoScoreOf(sql, userId, { sessionId: input.sessionId });

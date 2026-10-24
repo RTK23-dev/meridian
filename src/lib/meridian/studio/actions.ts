@@ -33,6 +33,8 @@ export const openStudioBrief = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
+    // Accepting a direction runs the brief gate, a model call, so it shares the model limit with the other Studio generation actions.
+    await enforceNamedLimit("model", context.userId);
     const [{ getSql }, api, session] = await Promise.all([
       import("../../db.ts"),
       import("./brief-open.server.ts"),
@@ -52,13 +54,28 @@ import type { FrameEdit } from "../brief/frame.ts";
 export const updateStudioBriefFrame = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    // A field sent as null returns to not set. Any other type is refused, never turned into a clear (review finding, frame edits).
     const edit: FrameEdit = {};
-    if ("platform" in body) edit.platform = typeof body.platform === "string" ? body.platform : null;
-    if ("budgetUsd" in body) edit.budgetUsd = typeof body.budgetUsd === "number" ? body.budgetUsd : null;
-    if ("visualReferences" in body) {
-      edit.visualReferences = Array.isArray(body.visualReferences) ? body.visualReferences.filter((item): item is string => typeof item === "string") : null;
+    if ("platform" in body) {
+      if (body.platform !== null && typeof body.platform !== "string") throw new Error("The platform must be text.");
+      edit.platform = body.platform;
     }
-    if ("successCriteria" in body) edit.successCriteria = typeof body.successCriteria === "string" ? body.successCriteria : null;
+    if ("budgetUsd" in body) {
+      if (body.budgetUsd !== null && (typeof body.budgetUsd !== "number" || !Number.isFinite(body.budgetUsd))) {
+        throw new Error("The budget must be a number of dollars.");
+      }
+      edit.budgetUsd = body.budgetUsd;
+    }
+    if ("visualReferences" in body) {
+      if (body.visualReferences !== null && !Array.isArray(body.visualReferences)) throw new Error("The visual references must be a list.");
+      edit.visualReferences = Array.isArray(body.visualReferences)
+        ? body.visualReferences.filter((item): item is string => typeof item === "string")
+        : null;
+    }
+    if ("successCriteria" in body) {
+      if (body.successCriteria !== null && typeof body.successCriteria !== "string") throw new Error("The success criteria must be text.");
+      edit.successCriteria = body.successCriteria;
+    }
     return { brandId: clip(body.brandId), briefId: clip(body.briefId), edit };
   })
   .middleware([authMiddleware])

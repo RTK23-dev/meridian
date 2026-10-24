@@ -544,7 +544,12 @@ export function useTriageOpportunity(brandId: string) {
     mutationKey: ["mutation", "opportunity.triage", brandId],
     mutationFn: ({ opportunityId, action, reason }: { opportunityId: string; action: TriageAction; reason: string }) =>
       triageOpportunity({ data: { brandId, opportunityId, action, reason } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    // A decision also settles or reopens the idea's review, and Studio reads the direction, so those views are refreshed with the list.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.machine(brandId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.studio(brandId)) });
+    },
   });
 }
 
@@ -554,12 +559,9 @@ export function useDismissOpportunities(brandId: string) {
   const key = userScopedQueryKey(userId, qk.opportunities(brandId));
   return useMutation({
     mutationKey: ["mutation", "opportunity.dismiss", brandId],
-    mutationFn: async (opportunityIds: string[]) => {
-      for (const opportunityId of opportunityIds) {
-        await dismissOpportunity({ data: { brandId, opportunityId } });
-      }
-    },
-    onMutate: async (opportunityIds) => {
+    mutationFn: ({ opportunityIds, reason }: { opportunityIds: string[]; reason: string }) =>
+      dismissOpportunity({ data: { brandId, opportunityIds, reason } }),
+    onMutate: async ({ opportunityIds }) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<OpportunitiesData>(key);
       queryClient.setQueryData<OpportunitiesData>(key, (current) => markOpportunitiesDismissed(current, opportunityIds));
@@ -569,8 +571,11 @@ export function useDismissOpportunities(brandId: string) {
       if (context?.previous) queryClient.setQueryData(key, context.previous);
       toast.error(errorText(error));
     },
-    onSuccess: (_data, opportunityIds) => {
-      toast.success(opportunityIds.length === 1 ? "Opportunity dismissed." : `${opportunityIds.length} opportunities dismissed.`);
+    onSuccess: (result) => {
+      const declined = result.declined.length;
+      toast.success(declined === 1 ? "Idea declined." : `${declined} ideas declined.`);
+      // An idea the server would not decline keeps its row. Its reason is shown, so the person can see why it stayed.
+      if (result.skipped.length > 0) toast.error(`${result.skipped.length} could not be declined: ${result.skipped[0]?.reason ?? ""}`);
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: key });

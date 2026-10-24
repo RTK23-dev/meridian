@@ -25,6 +25,8 @@ export type BatchItemSummary = {
   reason: string;
   retryable: boolean;
   attempts: number;
+  /** Whether the video is still a draft. Only a draft is started by a batch start. */
+  draft: boolean;
 };
 
 export type BatchSummary = {
@@ -103,6 +105,7 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       reason: view.reason,
       retryable: view.retryable,
       attempts: view.attempts,
+      draft: item.session_status === "draft",
     };
   }));
   return {
@@ -204,11 +207,29 @@ export async function createBatch(sql: Sql, userId: string, input: { brandId: st
 }
 
 /**
+ * Takes the batch row's lock for the rest of the transaction. Every start and retry of a batch runs under it, so two requests cannot each
+ * read the same committed spend and both spend the same budget (security review, finding 5).
+ */
+async function lockBatch(tx: Sql, batchId: string): Promise<void> {
+  await tx`select id from content_factory_batches where id = ${batchId} for update`;
+}
+
+/**
  * Starts the batch's draft items in order, each under the batch budget. A start the engine refuses is stored on its item and the batch goes
  * on with the rest. A start that would take the committed spend past the budget stops the batch: that video and the ones after it stay
- * draft, with the reason, and nothing more is started.
+ * draft, with the reason, and nothing more is started. The whole start is one transaction under the batch lock, so a start that fails
+ * part way leaves no half-started batch behind.
  */
 export async function startBatch(sql: Sql, userId: string, input: { batchId: string }, ports?: StartPorts): Promise<BatchStartOutcome> {
+  const { batch } = await loadBatch(sql, input.batchId);
+  await requireBrand(sql, userId, batch.brand_id, "admin");
+  return withTransaction(sql, async (tx) => {
+    await lockBatch(tx, input.batchId);
+    return startBatchLocked(tx, userId, input, ports);
+  });
+}
+
+async function startBatchLocked(sql: Sql, userId: string, input: { batchId: string }, ports?: StartPorts): Promise<BatchStartOutcome> {
   const { batch, items } = await loadBatch(sql, input.batchId);
   await requireBrand(sql, userId, batch.brand_id, "admin");
   const budget = Number(batch.budget_usd);
@@ -254,6 +275,15 @@ export async function startBatch(sql: Sql, userId: string, input: { batchId: str
  * committed spend past the budget; the failed attempt's budget is still counted, so the check is conservative. Its siblings are not changed.
  */
 export async function retryBatchItem(sql: Sql, userId: string, input: { batchId: string; sessionId: string }, ports?: StartPorts): Promise<BatchSummary> {
+  const { batch } = await loadBatch(sql, input.batchId);
+  await requireBrand(sql, userId, batch.brand_id, "admin");
+  return withTransaction(sql, async (tx) => {
+    await lockBatch(tx, input.batchId);
+    return retryBatchItemLocked(tx, userId, input, ports);
+  });
+}
+
+async function retryBatchItemLocked(sql: Sql, userId: string, input: { batchId: string; sessionId: string }, ports?: StartPorts): Promise<BatchSummary> {
   const { batch, items } = await loadBatch(sql, input.batchId);
   await requireBrand(sql, userId, batch.brand_id, "admin");
   const item = items.find((candidate) => candidate.session_id === input.sessionId);

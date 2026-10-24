@@ -38,7 +38,11 @@ export function QualityScore({ sessionId }: { sessionId: string }) {
   async function save() {
     if (rubric === null) return;
     const scores: Record<string, number> = {};
-    for (const criterion of rubric.criteria) scores[criterion.name] = Number(values[criterion.name] ?? "");
+    // A blank box is not a score: it is sent as not a number, so the server names the criterion instead of reading it as 0.
+    for (const criterion of rubric.criteria) {
+      const raw = (values[criterion.name] ?? "").trim();
+      scores[criterion.name] = raw === "" ? Number.NaN : Number(raw);
+    }
     setBusy(true);
     setProblem(null);
     try {
