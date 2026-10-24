@@ -35,7 +35,6 @@ export {
 export {
   CATALOG_SOURCES,
   CATALOG_VIDEO_CLASSES,
-  VIDEO_SECOND_SKUS,
   modelCatalogCache,
   parseModelsCatalog,
   parseVideoCatalog,

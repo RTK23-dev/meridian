@@ -201,3 +201,53 @@ describe("modelCatalogCache", () => {
     assert.equal(transport.requests.length, 6, "one read for org_1, one for org_2");
   });
 });
+
+describe("catalog parse: GET /videos/models, as the live listing answered on 2026-10-24", () => {
+  const live = parseVideoCatalog(fixture("openrouter-catalog-videos-live"), READ_AT);
+  const priced = (id: string) => live.entries.find((entry) => entry.id === id);
+
+  it("keeps 24 of the 30 listed rows and drops the six that have no per-second price", () => {
+    assert.equal(live.entries.length, 24);
+    assert.deepEqual(
+      live.dropped.map((drop) => drop.id).sort(),
+      [
+        "black-forest-labs/flux-video-upscale",
+        "bytedance/seedance-1-5-pro",
+        "bytedance/seedance-2.0",
+        "bytedance/seedance-2.0-fast",
+        "bytedance/seedance-2.0-mini",
+        "bytedance/seedance-2.5",
+      ],
+    );
+    for (const drop of live.dropped) assert.match(drop.reason, /no positive per-second price/);
+  });
+
+  it("reads a per-token row as not priced per second: the engine cannot know its tokens before a call", () => {
+    assert.equal(priced("bytedance/seedance-2.0"), undefined);
+    const drop = live.dropped.find((item) => item.id === "bytedance/seedance-2.0");
+    assert.match(drop?.reason ?? "", /no positive per-second price/);
+  });
+
+  it("converts a cents SKU to dollars, and prices a row at its highest per-second SKU", () => {
+    // Published $0.12 a second: the listing gives 12 cents.
+    assert.deepEqual([priced("runway/gen-4.5")?.price.usd, priced("runway/gen-4.5")?.price.sku], [0.12, "cents_per_second_output"]);
+    // Published $0.168 a second with audio. The listing's other SKU for this model is $0.112 without it, and the higher one is kept.
+    assert.deepEqual([priced("kwaivgi/kling-v3.0-pro")?.price.usd, priced("kwaivgi/kling-v3.0-pro")?.price.sku], [0.168, "duration_seconds_with_audio"]);
+    // Four-k is the highest rate Veo lists, so a reservation at its price cannot run short at a lower resolution.
+    assert.deepEqual([priced("google/veo-3.1")?.price.usd, priced("google/veo-3.1")?.price.sku], [0.6, "duration_seconds_with_audio_4k"]);
+  });
+
+  it("reads a field the listing sends as null as not stated, not as a broken row", () => {
+    const grok = priced("x-ai/grok-imagine-video-1.5-lite");
+    assert.ok(grok, "a row with a null generate_audio is kept");
+    assert.equal(grok.capabilities.audio, null, "an unstated audio flag stays unknown");
+    const edit = priced("black-forest-labs/flux-video-edit");
+    assert.ok(edit, "a row with null durations is kept");
+    assert.equal(edit.capabilities.durationsSeconds, null, "unstated durations stay unknown");
+    assert.equal(edit.capabilities.firstFrame, null, "unstated frame support stays unknown");
+  });
+
+  it("every kept row is a catalog entry the contract accepts", () => {
+    for (const entry of live.entries) assert.doesNotThrow(() => modelCatalogEntrySchema.parse(entry), entry.id);
+  });
+});
