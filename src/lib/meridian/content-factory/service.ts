@@ -532,7 +532,8 @@ async function buildFor(sql: Sql, row: SessionRow, messages: Message[]) {
 }
 
 async function readinessOf(sql: Sql, organizationId: string, ports: ContentFactoryPorts): Promise<EngineReadiness> {
-  return engineReadiness(organizationId, ports.readiness ?? (await productionReadinessPorts(sql)), { variantCount: 0 });
+  // A session's reference video is analysed from its transcript, so speech-to-text must be connected for every Content Factory run.
+  return engineReadiness(organizationId, ports.readiness ?? (await productionReadinessPorts(sql)), { variantCount: 0, speech: true });
 }
 
 export type StartOutcome =

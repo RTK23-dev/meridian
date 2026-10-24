@@ -996,6 +996,11 @@ export type EngineReadinessPorts = {
   credentials: CredentialSource;
   /** The runtime the worker runs engine jobs with. A stage without a handler cannot run. */
   runtime: Pick<EngineRuntime, "handlers">;
+  /**
+   * Why a shot cannot be made or stored in this workspace (the media functions, Drive), or null when it can. Production passes the shot
+   * connection the shot stages check before any paid call; without it the storage is not checked here.
+   */
+  shotConnection?: (organizationId: string) => Promise<string | null>;
 };
 
 export type EngineReadiness = { status: "ready" } | { status: "not_connected"; reasons: string[] };
@@ -1010,7 +1015,11 @@ export function stagesNeeded(variantCount: number): EngineStage[] {
  * video budget, when the OpenRouter key (every model route, OpenRouter is the default platform) or a render key (HeyGen
  * HyperFrames, or the Shotstack fallback) is not connected, or when a stage has no handler in the runtime. Nothing is called.
  */
-export async function engineReadiness(organizationId: string, ports: EngineReadinessPorts, options: { variantCount?: number; now?: string } = {}): Promise<EngineReadiness> {
+export async function engineReadiness(
+  organizationId: string,
+  ports: EngineReadinessPorts,
+  options: { variantCount?: number; now?: string; speech?: boolean } = {},
+): Promise<EngineReadiness> {
   const reasons: string[] = [];
   const now = options.now ?? new Date().toISOString();
   const month = await ports.monthBudget.monthBudget({ organizationId, requestId: "", now }).catch(() => ({
@@ -1029,6 +1038,17 @@ export async function engineReadiness(organizationId: string, ports: EngineReadi
     reasons.push(`Render: neither HyperFrames (HeyGen) nor Shotstack is connected. ${heygen.reason}`);
   }
 
+  // A shot is made and stored in the workspace's media functions and Drive, which the shot stages check only when they run. Checked here as well,
+  // so a run is not queued where its first shot would be held for a reason the start could have named (review: truthful run states).
+  if (ports.shotConnection !== undefined) {
+    const storage = await ports.shotConnection(organizationId).catch(() => "the media functions or the workspace's Drive could not be checked");
+    if (storage !== null) reasons.push(`Media and storage: ${storage}`);
+  }
+  // A reference video is analysed from its transcript, so a run with a reference needs speech-to-text (Deepgram) connected.
+  if (options.speech === true) {
+    const speech = await lookup("deepgram");
+    if (speech.status !== "ready") reasons.push(`Speech-to-text (Deepgram): ${speech.reason}`);
+  }
   const missing = stagesNeeded(options.variantCount ?? 0).filter((stage) => ports.runtime.handlers[stage] === undefined);
   if (missing.length > 0) reasons.push(`Engine stages with no handler in this deployment: ${missing.join(", ")}.`);
   return reasons.length === 0 ? { status: "ready" } : { status: "not_connected", reasons };
@@ -1471,7 +1491,7 @@ export async function engineRequestFeed(sql: Sql, organizationId: string, reques
 
 /** The production readiness ports: Meridian's Settings, its credential resolver and the worker's engine runtime. */
 export async function productionReadinessPorts(sql: Sql): Promise<EngineReadinessPorts> {
-  const [{ workspaceBudgetFromSettings, meridianMonthlyBudgetReader }, { meridianCredentialSource }, { productionEngineRuntime }] = await Promise.all([
+  const [{ workspaceBudgetFromSettings, meridianMonthlyBudgetReader }, { meridianCredentialSource }, { productionComposition, productionEngineRuntime }] = await Promise.all([
     import("../jobs/workspace-budget.ts"),
     import("../gateway/meridian.ts"),
     import("../jobs/runtime.ts"),
@@ -1480,5 +1500,7 @@ export async function productionReadinessPorts(sql: Sql): Promise<EngineReadines
     monthBudget: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)),
     credentials: meridianCredentialSource(),
     runtime: productionEngineRuntime(sql),
+    // The same shot connection the shot stages check (media functions, Drive). The composition builds no connection; it only reads the deployment.
+    shotConnection: productionComposition(sql).shotPorts?.shotConnection,
   };
 }
