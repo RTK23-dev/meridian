@@ -266,6 +266,10 @@ describe("direct creation, from a Content Factory session to the engine's first 
     assert.deepEqual(JSON.parse(copy[0]?.parent_ids ?? "[]"), [storedDnaArtifactId], "the copy names the stored analysis as its parent");
     assert.equal(copy[0]?.content_hash, original[0]?.content_hash, "the copy has the stored content hash");
     assert.ok(transport.requests.every((request) => !request.url.includes("deepgram")), "no speech-to-text call is sent on this path");
+    const analysisSpend = await db.sql<{ n: number }>`
+      select count(*)::int as n from engine_ledger where organization_id = ${WS} and request_id = ${requestId} and stage = 'analyze_reference'
+    `;
+    assert.equal(analysisSpend[0]?.n ?? 0, 0, "no analysis is reserved or charged for a cache hit");
   });
 
   test("the production runtime registers a handler for every stage a request needs, so readiness is not met by a stub", () => {
