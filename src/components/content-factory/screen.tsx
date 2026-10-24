@@ -32,7 +32,7 @@ const contentFactoryKeys = {
 
 type BrandOption = { id: string; name: string };
 
-export function ContentFactoryScreen({ initialSessionId = null }: { initialSessionId?: string | null } = {}) {
+export function ContentFactoryScreen({ initialSessionId = null, embedded = false }: { initialSessionId?: string | null; embedded?: boolean } = {}) {
   const { data: workspace } = useWorkspace();
   const { user, isPending } = useCurrentUserState();
   const organizationId = workspace?.active?.id ?? "";
@@ -50,22 +50,25 @@ export function ContentFactoryScreen({ initialSessionId = null }: { initialSessi
   const selected = list.find((item) => item.id === selectedId) ?? list[0] ?? null;
 
   if (!workspace?.active) return null;
-  const header = (
+  // Inside the content page the page header belongs to the page, so the screen shows only its own New session button.
+  const newSession = canAdmin && list.length > 0 ? <Button size="md" leftIcon={<Plus aria-hidden="true" className="size-4" />} onClick={() => setCreating((open) => !open)}>New session</Button> : null;
+  const header = embedded ? null : (
     <PageHeader
-      title="Content Factory"
+      title="Content"
       description="Start a video from any idea. Chat with instructions, attach a reference video, images, text and records from other Meridian pages, then ask for the video. Each decision the engine makes appears in the Decisions panel as it happens."
-      actions={canAdmin && list.length > 0 ? <Button size="md" leftIcon={<Plus aria-hidden="true" className="size-4" />} onClick={() => setCreating((open) => !open)}>New session</Button> : null}
+      actions={newSession}
     />
   );
   if (!canAdmin) {
-    return <div className="space-y-6">{header}<AdminOnlyNotice screen="Content Factory" role={role} /></div>;
+    return <div className="space-y-6">{header}<AdminOnlyNotice screen="Content" role={role} /></div>;
   }
   if (sessions.isError && !sessions.data) return <div>{header}<PlainErrorState error={sessions.error} onRetry={() => void sessions.refetch()} /></div>;
-  if (!sessions.data) return <ScreenSkeleton label="Loading Content Factory sessions" shape="cards" />;
+  if (!sessions.data) return <ScreenSkeleton label="Loading Content sessions" shape="cards" />;
 
   return (
     <div className="space-y-6">
       {header}
+      {embedded && newSession ? <div className="flex justify-end">{newSession}</div> : null}
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"

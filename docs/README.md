@@ -19,8 +19,9 @@ Starting a new chat about Meridian? Open [LAUNCHPAD.md](LAUNCHPAD.md) first: it 
 | Document | Read it for |
 | --- | --- |
 | [PRODUCT.md](PRODUCT.md) | The workflow from brand brain to publishing and learning |
-| [FACTORY.md](FACTORY.md) | The Content Factory pipeline, the `/content-factory` page, run settings, approvals, spend caps, grading, publishing and sleep mode |
+| [FACTORY.md](FACTORY.md) | The Content Factory pipeline, the Content page at `/content-factory`, run settings, approvals, spend caps, grading, publishing and sleep mode |
 | [CONTENT_FACTORY_PLAN.md](CONTENT_FACTORY_PLAN.md) | The Content Factory execution plan: milestones, tasks with their files and acceptance tests, and the owner decisions that block them |
+| [CONTENT_PAGE.md](CONTENT_PAGE.md) | The one Content page for each brand: its sections, URL state, presets, redirects, checks and the next steps |
 | [DECISIONS.md](DECISIONS.md) | Decision engines, the policy gate, approval and calibration |
 | [NORTH_STAR.md](NORTH_STAR.md) | The product direction and the owner's decisions. Start here before changing direction |
 | [ROADMAP.md](ROADMAP.md) | What is still open, including every live run that still needs a server credential |

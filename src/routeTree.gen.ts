@@ -45,6 +45,7 @@ import { Route as AppBrandsBrandIdIndexRouteImport } from './routes/_app/brands/
 import { Route as AppBrandsBrandIdAccountsRouteImport } from './routes/_app/brands/$brandId/accounts'
 import { Route as AppBrandsBrandIdBrainRouteImport } from './routes/_app/brands/$brandId/brain'
 import { Route as AppBrandsBrandIdCalibrationRouteImport } from './routes/_app/brands/$brandId/calibration'
+import { Route as AppBrandsBrandIdContentRouteImport } from './routes/_app/brands/$brandId/content'
 import { Route as AppBrandsBrandIdFactoryRouteImport } from './routes/_app/brands/$brandId/factory'
 import { Route as AppBrandsBrandIdIntelligenceRouteImport } from './routes/_app/brands/$brandId/intelligence'
 import { Route as AppBrandsBrandIdLearningRouteImport } from './routes/_app/brands/$brandId/learning'
@@ -237,6 +238,11 @@ const AppBrandsBrandIdCalibrationRoute =
     path: '/brands/$brandId/calibration',
     getParentRoute: () => AppRoute,
   } as any)
+const AppBrandsBrandIdContentRoute = AppBrandsBrandIdContentRouteImport.update({
+  id: '/brands/$brandId/content',
+  path: '/brands/$brandId/content',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppBrandsBrandIdFactoryRoute = AppBrandsBrandIdFactoryRouteImport.update({
   id: '/brands/$brandId/factory',
   path: '/brands/$brandId/factory',
@@ -327,6 +333,7 @@ export interface FileRoutesByFullPath {
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
+  '/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
   '/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -374,6 +381,7 @@ export interface FileRoutesByTo {
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
+  '/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
   '/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -423,6 +431,7 @@ export interface FileRoutesById {
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/_app/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/_app/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
+  '/_app/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
   '/_app/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/_app/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/_app/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -472,6 +481,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
+    | '/brands/$brandId/content'
     | '/brands/$brandId/factory'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -519,6 +529,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
+    | '/brands/$brandId/content'
     | '/brands/$brandId/factory'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -567,6 +578,7 @@ export interface FileRouteTypes {
     | '/_app/brands/$brandId/accounts'
     | '/_app/brands/$brandId/brain'
     | '/_app/brands/$brandId/calibration'
+    | '/_app/brands/$brandId/content'
     | '/_app/brands/$brandId/factory'
     | '/_app/brands/$brandId/intelligence'
     | '/_app/brands/$brandId/learning'
@@ -853,6 +865,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrandsBrandIdCalibrationRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/brands/$brandId/content': {
+      id: '/_app/brands/$brandId/content'
+      path: '/brands/$brandId/content'
+      fullPath: '/brands/$brandId/content'
+      preLoaderRoute: typeof AppBrandsBrandIdContentRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/brands/$brandId/factory': {
       id: '/_app/brands/$brandId/factory'
       path: '/brands/$brandId/factory'
@@ -946,6 +965,7 @@ interface AppRouteChildren {
   AppBrandsBrandIdAccountsRoute: typeof AppBrandsBrandIdAccountsRoute
   AppBrandsBrandIdBrainRoute: typeof AppBrandsBrandIdBrainRoute
   AppBrandsBrandIdCalibrationRoute: typeof AppBrandsBrandIdCalibrationRoute
+  AppBrandsBrandIdContentRoute: typeof AppBrandsBrandIdContentRoute
   AppBrandsBrandIdFactoryRoute: typeof AppBrandsBrandIdFactoryRoute
   AppBrandsBrandIdIntelligenceRoute: typeof AppBrandsBrandIdIntelligenceRoute
   AppBrandsBrandIdLearningRoute: typeof AppBrandsBrandIdLearningRoute
@@ -979,6 +999,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBrandsBrandIdAccountsRoute: AppBrandsBrandIdAccountsRoute,
   AppBrandsBrandIdBrainRoute: AppBrandsBrandIdBrainRoute,
   AppBrandsBrandIdCalibrationRoute: AppBrandsBrandIdCalibrationRoute,
+  AppBrandsBrandIdContentRoute: AppBrandsBrandIdContentRoute,
   AppBrandsBrandIdFactoryRoute: AppBrandsBrandIdFactoryRoute,
   AppBrandsBrandIdIntelligenceRoute: AppBrandsBrandIdIntelligenceRoute,
   AppBrandsBrandIdLearningRoute: AppBrandsBrandIdLearningRoute,

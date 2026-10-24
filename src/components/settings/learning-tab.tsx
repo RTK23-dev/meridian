@@ -77,7 +77,7 @@ function LearningRow({ brand }: { brand: BrandSummary }) {
           <h3 className="font-semibold text-fg">{brand.name}</h3>
           <p className="text-sm text-fg-muted">{learning.data.patterns.length} stored pattern{learning.data.patterns.length === 1 ? "" : "s"} for this brand and shared with it.</p>
         </div>
-        <Button asChild variant="quiet" size="md"><Link to="/brands/$brandId/learning" params={{ brandId: brand.id }}>Open learning</Link></Button>
+        <Button asChild variant="quiet" size="md"><Link to="/brands/$brandId/content" params={{ brandId: brand.id }} search={{ section: "results" }}>Open learning</Link></Button>
       </div>
       {/* The label row is 44 px tall, so the words and the switch share one large touch target on mobile. */}
       <div className="[&_label]:flex [&_label]:min-h-11 [&_label]:items-center">

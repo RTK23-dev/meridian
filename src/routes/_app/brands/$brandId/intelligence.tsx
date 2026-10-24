@@ -336,7 +336,7 @@ function Intelligence({ brandId }: { brandId: string }) {
               reason="JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested."
               action={
                 <Button asChild>
-                  <Link to="/brands/$brandId/accounts" params={{ brandId }}>
+                  <Link to="/brands/$brandId/content" params={{ brandId }} search={{ section: "publish" }}>
                     Connect {platform} account &rarr;
                   </Link>
                 </Button>
