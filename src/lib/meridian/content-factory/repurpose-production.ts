@@ -8,6 +8,7 @@ import { productionComposition } from "../../../engine/jobs/runtime.ts";
 import { validatedRequestSchema } from "../../../engine/contracts/index.ts";
 import type { Sql } from "../learning/store.ts";
 import type { RepurposeRenderPort } from "./repurpose.ts";
+import type { RenderStatusPoll } from "./repurpose-status.ts";
 import { engineRepurposeRenderPort } from "./repurpose-render.ts";
 
 /** The request budget of the engine request, from its validated plan. Null when the plan does not set one. */
@@ -37,4 +38,22 @@ export function productionRepurposeRenderPort(sql: Sql): RepurposeRenderPort | u
     },
     now: () => new Date().toISOString(),
   });
+}
+
+/**
+ * The renderer's status for a repurposed cut's call, through the engine's HyperFrames adapter under the cut's own scope. Without a
+ * connected renderer it refuses, and the check reports that it could not ask.
+ */
+export function productionRepurposeStatusPoll(sql: Sql): RenderStatusPoll {
+  return async (scope, renderId) => {
+    const composition = productionComposition(sql);
+    if (composition.render === undefined) throw new Error("the cloud renderer is not connected");
+    const rows = await sql<{ state: string }>`select state from engine_requests where id = ${scope.requestId} and organization_id = ${scope.organizationId} limit 1`;
+    const state = JSON.parse(rows[0]?.state ?? "{}") as { artifacts?: Record<string, string> };
+    const validatedArtifactId = state.artifacts?.validated;
+    if (validatedArtifactId === undefined) throw new Error("the engine request has no validated plan");
+    const validated = validatedRequestSchema.parse((await readArtifact(sql, { organizationId: scope.organizationId, artifactId: validatedArtifactId })).envelope.body);
+    const deps = composition.render.hyperframes({ organizationId: scope.organizationId, requestId: scope.requestId, reservationId: scope.reservationId, validated });
+    return deps.adapter.poll(renderId);
+  };
 }

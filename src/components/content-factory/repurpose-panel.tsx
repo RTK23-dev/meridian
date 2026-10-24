@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
-import { getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
+import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
@@ -270,6 +270,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
+                      {variation.status === "rendering" ? <CheckRenderer sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? (
                         <ReviewVariation
                           sessionId={sessionId}
@@ -374,3 +375,27 @@ function ReviewVariation({
   );
 }
 
+/** Asks the renderer what it reports for an interrupted cut. It settles nothing and retries nothing: the cut stays in rendering. */
+function CheckRenderer({ sessionId, runId, variantKey }: { sessionId: string; runId: string; variantKey: string }) {
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<string | null>(null);
+  async function check() {
+    setBusy(true);
+    try {
+      const outcome = await checkContentFactoryRepurposeRender({ data: { sessionId, runId, variantKey } });
+      setReport(outcome.reason);
+    } catch (error) {
+      setReport(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <Button type="button" variant="quiet" loading={busy} disabled={busy} onClick={() => void check()}>
+        Check with the renderer
+      </Button>
+      {report !== null ? <p role="status" className="text-sm text-muted">{report}</p> : null}
+    </div>
+  );
+}

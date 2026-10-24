@@ -25,7 +25,8 @@ import {
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
-import { productionRepurposeRenderPort } from "./repurpose-production.ts";
+import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
+import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
@@ -180,6 +181,15 @@ export const reviewContentFactoryRepurposeVariant = createServerFn({ method: "PO
   .validator((input: unknown) => repurposeReviewInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => recordRepurposeReview(await getSql(), context.userId, data));
+
+/** What the renderer reports for an interrupted repurposed cut. Read-only: it settles and retries nothing. Admins only. */
+export const checkContentFactoryRepurposeRender = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOutputInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return checkInterruptedRepurposeRender(sql, context.userId, data, productionRepurposeStatusPoll(sql));
+  });
 
 /** A short-lived link to a rendered variation's video. Admins only. Nothing is signed for a variation that was not rendered. */
 export const getContentFactoryRepurposeOutput = createServerFn({ method: "POST" })
