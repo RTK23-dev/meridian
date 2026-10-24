@@ -271,6 +271,31 @@ export async function recordOpportunityDirection(
   });
 }
 
+/**
+ * Declines an opportunity from the Opportunities screen. The reason is required (at least the direction reason's length) and is kept with
+ * the decision, so a refresh keeps the idea out (triage-memory.ts). It goes through recordOpportunityDirection, the same decision path the
+ * Studio uses.
+ */
+export const declineOpportunity = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: clip(body.brandId, 80, "Brand", true), opportunityId: clip(body.opportunityId, 80, "Opportunity", true), reason: clip(body.reason, 2000, "Reason", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    return recordOpportunityDirection(sql, {
+      organizationId: access.organizationId,
+      brandId: data.brandId,
+      opportunityId: data.opportunityId,
+      actorId: context.userId,
+      actorRole: access.role,
+      action: "decline",
+      reason: data.reason,
+    });
+  });
+
 export const dismissOpportunity = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);

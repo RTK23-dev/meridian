@@ -15,8 +15,8 @@ type SheetProps = {
   position: number | null;
   brandId: string;
   canEdit: boolean;
-  dismissing: boolean;
-  onDismiss: (id: string) => void;
+  declining: boolean;
+  onDecline: (id: string, reason: string) => Promise<unknown>;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -30,7 +30,7 @@ export function OpportunitySheet(props: SheetProps) {
   </Sheet>;
 }
 
-function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDismiss, onOpenChange }: SheetProps & { item: OpportunityRow }) {
+function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecline, onOpenChange }: SheetProps & { item: OpportunityRow }) {
   const dimensions = scoreDimensions(item);
   const probability = jevProbability(item);
   const reasons = whyNotFacts(item);
@@ -112,7 +112,7 @@ function OpportunityDetail({ item, position, brandId, canEdit, dismissing, onDis
       <section aria-labelledby="opportunity-actions" className="space-y-2">
         <h3 id="opportunity-actions" className="font-semibold">Actions</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} dismissing={dismissing} onDismiss={onDismiss} />
+          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} declining={declining} onDecline={onDecline} />
         </div>
         {canEdit && canDismiss(item.status) ? <p className="text-sm text-muted">Studio opens its own recommended direction. It cannot select this opportunity from here yet.</p> : null}
         <Button type="button" variant="quiet" size="sm" onClick={() => onOpenChange(false)}>Close details</Button>

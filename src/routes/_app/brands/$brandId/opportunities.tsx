@@ -5,7 +5,7 @@ import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { refreshOpportunities } from "@/lib/meridian/machine";
-import { useDismissOpportunities, useOpportunitiesQuery, usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
+import { useDeclineOpportunity, useDismissOpportunities, useOpportunitiesQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { usePageCommands } from "@/components/page-commands";
@@ -72,7 +72,7 @@ function Opportunities({ brandId }: { brandId: string }) {
     onSuccess: (result) => setNote(copy.opportunities.rankedNote(result.count)),
   });
   const dismiss = useDismissOpportunities(brandId);
-  const dismissingIds = usePendingVariables<string[]>(["mutation", "opportunity.dismiss", brandId]).flat();
+  const decline = useDeclineOpportunity(brandId);
   const canEdit = hasRole(role, "member");
   // The palette runs the same scoring mutation as the button, and only for roles that see the button.
   usePageCommands(canEdit ? [{ id: "score-opportunities", label: copy.opportunities.rankAction, run: () => { void refresh.mutateAsync().catch(() => undefined); } }] : []);
@@ -152,6 +152,7 @@ function Opportunities({ brandId }: { brandId: string }) {
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {refresh.error ? <PlainErrorNotice error={refresh.error} /> : null}
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
+      {decline.error ? <PlainErrorNotice error={decline.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
         <EmptyState
@@ -193,8 +194,8 @@ function Opportunities({ brandId }: { brandId: string }) {
               onSelectedChange={setSelected}
               onSelectAll={setSelectedAll}
               onOpen={setOpenId}
-              dismissingIds={dismissingIds}
-              onDismiss={(id) => void dismiss.mutateAsync([id]).catch(() => undefined)}
+              declining={decline.isPending}
+              onDecline={(id, reason) => decline.mutateAsync({ opportunityId: id, reason })}
             />
           )}
           <OpportunitySheet
@@ -202,8 +203,8 @@ function Opportunities({ brandId }: { brandId: string }) {
             position={selectedPosition}
             brandId={brandId}
             canEdit={canEdit}
-            dismissing={selectedOpportunity ? dismissingIds.includes(selectedOpportunity.id) : false}
-            onDismiss={(id) => void dismiss.mutateAsync([id]).then(() => setOpenId(null), () => undefined)}
+            declining={decline.isPending}
+            onDecline={(id, reason) => decline.mutateAsync({ opportunityId: id, reason }).then(() => setOpenId(null))}
             onOpenChange={(open) => { if (!open) setOpenId(null); }}
           />
         </>

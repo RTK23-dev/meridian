@@ -33,6 +33,7 @@ import { getNotificationPreferences } from "@/lib/meridian/observability/actions
 import { qk, userScopedQueryKey } from "./keys";
 import { ACTIVE_POLL_MS, jobDetailRefetchInterval, jobsRefetchInterval } from "./polling";
 import { markAlertAcknowledged, markOpportunitiesDismissed, markReviewResolved } from "./optimistic";
+import { declineOpportunity } from "@/lib/meridian/opportunity/actions";
 
 /** The user and whether the session has resolved. Queries stay disabled until both are known. */
 function useSession() {
@@ -533,6 +534,18 @@ export function useResolveReview(brandId: string) {
 }
 
 /** Dismiss one or more opportunities. Rows show as dismissed at once and roll back if the server refuses. */
+/** Declines one opportunity with its reason. The list is refreshed when the decision is saved; a failure keeps the reason the person wrote. */
+export function useDeclineOpportunity(brandId: string) {
+  const queryClient = useQueryClient();
+  const { userId } = useSession();
+  const key = userScopedQueryKey(userId, qk.opportunities(brandId));
+  return useMutation({
+    mutationKey: ["mutation", "opportunity.decline", brandId],
+    mutationFn: ({ opportunityId, reason }: { opportunityId: string; reason: string }) => declineOpportunity({ data: { brandId, opportunityId, reason } }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+  });
+}
+
 export function useDismissOpportunities(brandId: string) {
   const queryClient = useQueryClient();
   const { userId } = useSession();

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CircleDashed, Clock, FileText, Info, Layers, Sparkles, XCircle, CheckCircle2, type LucideIcon } from "lucide-react";
-import { Badge, Button, Popover, PopoverContent, PopoverTrigger } from "@/components/ui";
+import { Badge, Button, Popover, PopoverContent, PopoverTrigger, Textarea } from "@/components/ui";
+import { directionReasonProblem } from "@/lib/meridian/opportunity/direction-reason";
 import { statusLabel } from "@/lib/copy";
 import { CATEGORY_LEGEND, barPercent, canDismiss, categoryLabel, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
 
@@ -79,12 +81,12 @@ export function CategoryFilter({ value, onChange }: { value: OpportunityCategory
 }
 
 /** Studio and dismiss are member actions. Viewers see the state and nothing they cannot change. */
-export function OpportunityActions({ brandId, item, canEdit, dismissing, onDismiss }: {
+export function OpportunityActions({ brandId, item, canEdit, declining, onDecline }: {
   brandId: string;
   item: Pick<OpportunityRow, "id" | "label" | "status">;
   canEdit: boolean;
-  dismissing: boolean;
-  onDismiss: (id: string) => void;
+  declining: boolean;
+  onDecline: (id: string, reason: string) => Promise<unknown>;
 }) {
   if (!canEdit) return <span className="text-sm text-muted">Read-only for viewers.</span>;
   if (!canDismiss(item.status)) return null;
@@ -92,6 +94,52 @@ export function OpportunityActions({ brandId, item, canEdit, dismissing, onDismi
     <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg">
       Open in Studio<span className="sr-only"> for {item.label}</span>
     </Link>
-    <Button type="button" variant="quiet" disabled={dismissing} onClick={() => onDismiss(item.id)}>Dismiss<span className="sr-only"> {item.label}</span></Button>
+    <DeclineControl item={item} declining={declining} onDecline={onDecline} />
   </>;
+}
+
+/**
+ * Declines an opportunity with the reason. The reason is required and is kept with the decision: it is what keeps the idea out of the next
+ * refresh. A failed save keeps what was written, so the person can send it again.
+ */
+function DeclineControl({ item, declining, onDecline }: {
+  item: Pick<OpportunityRow, "id" | "label">;
+  declining: boolean;
+  onDecline: (id: string, reason: string) => Promise<unknown>;
+}) {
+  const [open, setOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const problem = reason.trim().length === 0 ? null : directionReasonProblem(reason);
+  if (!open) {
+    return <Button type="button" variant="quiet" disabled={declining} onClick={() => setOpen(true)}>Decline<span className="sr-only"> {item.label}</span></Button>;
+  }
+  return (
+    <form
+      className="flex w-full flex-col gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (directionReasonProblem(reason) !== null) return;
+        void onDecline(item.id, reason.trim()).then(
+          () => {
+            setOpen(false);
+            setReason("");
+          },
+          () => undefined,
+        );
+      }}
+    >
+      <Textarea
+        label={`Why decline ${item.label}?`}
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        hint="Say what this idea gets wrong for this brand. The reason stays on record, and the idea is kept out of the next refresh."
+        error={problem ?? undefined}
+        rows={3}
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" disabled={declining || reason.trim().length === 0 || problem !== null}>Decline this idea</Button>
+        <Button type="button" variant="quiet" disabled={declining} onClick={() => setOpen(false)}>Keep it open</Button>
+      </div>
+    </form>
+  );
 }

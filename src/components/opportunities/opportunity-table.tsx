@@ -17,13 +17,13 @@ type TableProps = {
   onSelectedChange: (id: string, selected: boolean) => void;
   onSelectAll: (ids: string[], selected: boolean) => void;
   onOpen: (id: string) => void;
-  dismissingIds: string[];
-  onDismiss: (id: string) => void;
+  declining: boolean;
+  onDecline: (id: string, reason: string) => Promise<unknown>;
 };
 
 /** Table from md (768px) up, one card per opportunity below it. Both read the same rows and state. */
 export function OpportunityTable(props: TableProps) {
-  const { rows, positions, brandId, canEdit, sortKey, sortDirection, onSort, selectedIds, onSelectedChange, onSelectAll, onOpen, dismissingIds, onDismiss } = props;
+  const { rows, positions, brandId, canEdit, sortKey, sortDirection, onSort, selectedIds, onSelectedChange, onSelectAll, onOpen, declining, onDecline } = props;
   const selectableIds = rows.filter((item) => canEdit && isBulkSelectable(item.status)).map((item) => item.id);
   const selectedVisible = selectableIds.filter((id) => selectedIds.includes(id));
   const allSelected = selectableIds.length > 0 && selectedVisible.length === selectableIds.length;
@@ -62,7 +62,7 @@ export function OpportunityTable(props: TableProps) {
               <td className="px-3 py-3"><ScoreValue value={finiteOrNull(item.risk)} /></td>
               <td className="px-3 py-3"><div className="flex flex-wrap items-center gap-2">
                 <Button type="button" size="sm" variant="secondary" onClick={() => onOpen(item.id)}>Details<span className="sr-only"> for {item.label}</span></Button>
-                <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} dismissing={dismissingIds.includes(item.id)} onDismiss={onDismiss} />
+                <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} declining={declining} onDecline={onDecline} />
               </div></td>
             </tr>;
           })}
@@ -92,7 +92,7 @@ export function OpportunityTable(props: TableProps) {
           </label> : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="secondary" onClick={() => onOpen(item.id)}>Details<span className="sr-only"> for {item.label}</span></Button>
-            <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} dismissing={dismissingIds.includes(item.id)} onDismiss={onDismiss} />
+            <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} declining={declining} onDecline={onDecline} />
           </div>
         </li>;
       })}

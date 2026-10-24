@@ -12,7 +12,7 @@ import { readPriorIdeas } from "./triage-memory-store.ts";
 
 // The refresh action imports modules that use the "@/" alias, so the alias hook is registered before it is loaded.
 enableAppAliases();
-const { refreshOpportunitiesFor } = await import("./actions.ts");
+const { refreshOpportunitiesFor, recordOpportunityDirection } = await import("./actions.ts");
 
 const WS = "org_triage";
 const BRAND = "brand_triage";
@@ -124,6 +124,29 @@ describe("triage memory on a real brand", () => {
     assert.equal(keys.has(keyOfRow(accepted)), false, "an idea already explored does not come back open");
     assert.equal(second, reopened.length, "the count is the ideas written, not the ideas ranked");
     assert.ok(second >= 1 && second < first, `the rest are still offered (first ${first}, second ${second})`);
+  });
+
+  it("a decline needs the reason in full: a short reason is refused and writes nothing", async () => {
+    const [open] = await db.sql<{ id: string; status: string }>`
+      select id, status from opportunities where organization_id = ${WS} and brand_id = ${BRAND} and status = 'open' limit 1
+    `;
+    assert.ok(open, "an open idea to decline");
+    await assert.rejects(
+      recordOpportunityDirection(db.sql, {
+        organizationId: WS,
+        brandId: BRAND,
+        opportunityId: open.id,
+        actorId: USER,
+        actorRole: "member",
+        action: "decline",
+        reason: "too short",
+      }),
+      /at least 20 characters/,
+    );
+    const [after] = await db.sql<{ status: string }>`select status from opportunities where id = ${open.id}`;
+    assert.equal(after?.status, "open", "a refused decline leaves the idea open");
+    const records = await db.sql<{ n: number }>`select count(*)::int as n from opportunity_direction_decisions where opportunity_id = ${open.id}`;
+    assert.equal(records[0]?.n, 0, "and records no decision");
   });
 
   it("the refresh action the person triggers keeps the same ideas out, and reports how many it kept out", async () => {
