@@ -10,7 +10,14 @@ import type { MarketCluster } from "../intelligence/whitespace.ts";
 import { rankOpportunities } from "./engine.ts";
 
 /** Replace open opportunities from stored evidence. Does not learn and does not call a provider. */
-export async function rerankBrand(sql: Sql, organizationId: string, brandId: string): Promise<number> {
+import { priorIdeaFor, priorIdeasByFingerprint } from "./triage-memory.ts";
+import { readPriorIdeas } from "./triage-memory-store.ts";
+
+/**
+ * Ranks a brand's open ideas. An idea the person declined is never put back as new. An idea already explored (accepted or briefed) is kept
+ * out too, unless `keepExplored` is set: that is a deliberate new brief (forceNew), which may brief the same idea again with a stated reason.
+ */
+export async function rerankBrand(sql: Sql, organizationId: string, brandId: string, options: { keepExplored?: boolean } = {}): Promise<number> {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
   const active = await loadQuestionPolicy(sql, organizationId, opportunityGate);
   let clusters: MarketCluster[] = [];
@@ -32,6 +39,7 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
   }
   const drafts = rankOpportunities({ organizationId, brandId, ...loaded, clusters });
   const correlationId = randomUUID();
+  let written = 0;
   // The open set is replaced as one unit. The deletes and the reinsertion share one transaction, so a failure part way
   // leaves the previous open set in place (contract section 7).
   await withTransaction(sql, async (tx) => {
@@ -43,7 +51,12 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
       await tx`delete from reviews where opportunity_id = ${row.id} and status = 'open'`;
       await tx`delete from opportunities where id = ${row.id}`;
     }
+    // An idea a person declined, or already explored, is not put back as new. It is counted, not written.
+    const prior = await readPriorIdeas(tx, organizationId, brandId);
+    const priorByKey = priorIdeasByFingerprint(options.keepExplored ? prior.filter((idea) => idea.outcome === "declined") : prior);
     for (const draft of drafts) {
+      if (priorIdeaFor(draft, priorByKey) !== null) continue;
+      written += 1;
       const opportunityId = randomUUID();
       const decisionId = randomUUID();
       const decision = decideForTenant(active.question, draft.gateInput, {
@@ -103,5 +116,5 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
       }
     }
   });
-  return drafts.length;
+  return written;
 }

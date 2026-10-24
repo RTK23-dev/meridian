@@ -84,7 +84,11 @@ async function topDiscoveredOpportunity(
     limit 1
   `;
   const row = rows[0];
-  if (!row) throw new Error("The discovered direction was not stored. Refresh did not write it.");
+  if (!row) {
+    throw new Error(
+      "No new discovered direction is open. Ideas you declined or already briefed are kept out of the list. Gather new research, or choose a direction on the Opportunities page.",
+    );
+  }
   return row;
 }
 
@@ -103,7 +107,8 @@ export async function openStudioBriefFor(
   // The reason is checked before anything is ranked or written, so a refused accept changes nothing.
   const reasonProblem = directionReasonProblem(data.reason);
   if (reasonProblem) throw new Error(reasonProblem);
-  if (!data.opportunityId) await rerankBrand(sql, access.organizationId, data.brandId);
+  // A new brief (forceNew) may brief an idea already explored, because the person asked for it; a declined idea stays out.
+  if (!data.opportunityId) await rerankBrand(sql, access.organizationId, data.brandId, { keepExplored: data.forceNew === true });
   const loaded = await loadBrandContext(sql, access.organizationId, data.brandId);
   assertSameTenant(loaded.creatives, access.organizationId, data.brandId);
   const row = data.opportunityId

@@ -10,6 +10,8 @@ import { withTransaction } from "../learning/store.ts";
 import type { OpportunityDirectionInput } from "../studio/brief-service.contract.ts";
 import { directionReasonProblem } from "./direction-reason.ts";
 import { storedNumberOrNull } from "../decisions/stored-number.ts";
+import { priorIdeaFor, priorIdeasByFingerprint } from "./triage-memory.ts";
+import { readPriorIdeas } from "./triage-memory-store.ts";
 import {
   id,
   asText,
@@ -109,6 +111,7 @@ export async function refreshOpportunitiesFor(sql: Sql, userId: string, brandId:
     ...loaded,
   });
   const correlationId = id();
+  let suppressed = 0;
   const active = await loadQuestionPolicy(sql, access.organizationId, opportunityGate);
   await withTransaction(sql, async (tx) => {
     const open = await tx<{ id: string }>`
@@ -119,7 +122,13 @@ export async function refreshOpportunitiesFor(sql: Sql, userId: string, brandId:
       await tx`delete from reviews where opportunity_id = ${row.id} and status = 'open'`;
       await tx`delete from opportunities where id = ${row.id}`;
     }
+    // An idea a person declined, or already explored, is not put back as new. It is counted in the audit line, not written.
+    const priorByKey = priorIdeasByFingerprint(await readPriorIdeas(tx, access.organizationId, brandId));
     for (const draft of drafts) {
+      if (priorIdeaFor(draft, priorByKey) !== null) {
+        suppressed += 1;
+        continue;
+      }
       const opportunityId = id();
       const decisionId = id();
       const decision = decideForTenant(active.question, draft.gateInput, {
@@ -190,10 +199,10 @@ export async function refreshOpportunitiesFor(sql: Sql, userId: string, brandId:
       action: "opportunities.refreshed",
       objectType: "brand",
       objectId: brandId,
-      metadata: { count: String(drafts.length), correlationId },
+      metadata: { count: String(drafts.length - suppressed), suppressed: String(suppressed), correlationId },
     });
   });
-  return { count: drafts.length, correlationId };
+  return { count: drafts.length - suppressed, suppressed, correlationId };
 }
 
 export async function assertOpportunityClear(sql: Sql, opportunityId: string): Promise<void> {
