@@ -83,11 +83,33 @@ function childEnv() {
   return env;
 }
 
+// The longest one CLI or ffprobe call may run. A call past it is killed and reported as failed, so a stuck job cannot hold the bridge.
+const CHILD_TIMEOUT_MS = (() => {
+  const parsed = Number(process.env.HYPIT_CHILD_TIMEOUT_MS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30 * 60 * 1000;
+})();
+
+// Kills the child and anything it started. The child leads its own process group, so a shell's own children are stopped too, and their open
+// output pipes do not hold the bridge.
+function killTree(child) {
+  try {
+    process.kill(-child.pid, "SIGKILL");
+  } catch {
+    child.kill("SIGKILL");
+  }
+}
+
 function run(args, cwd) {
   return new Promise((resolve) => {
-    const child = spawn(hypitBin, args, { cwd, env: childEnv() });
+    const child = spawn(hypitBin, args, { cwd, env: childEnv(), detached: true });
     let out = "";
     let err = "";
+    let timedOut = false;
+    const deadline = setTimeout(() => {
+      timedOut = true;
+      killTree(child);
+      resolve({ code: 124, out, err: "The Hypit CLI did not finish in time, so it was stopped. Nothing was exported." });
+    }, CHILD_TIMEOUT_MS);
     child.stdout.on("data", (chunk) => {
       const text = String(chunk);
       out += text;
@@ -99,8 +121,15 @@ function run(args, cwd) {
       process.stderr.write(text);
     });
     // A missing or unrunnable binary emits 'error' and no exit code. Without this listener Node throws and the bridge exits.
-    child.on("error", (error) => resolve({ code: 127, out, err: startFailure("hypit CLI", error) }));
-    child.on("close", (code) => resolve({ code: code ?? 1, out, err }));
+    child.on("error", (error) => {
+      clearTimeout(deadline);
+      resolve({ code: 127, out, err: startFailure("hypit CLI", error) });
+    });
+    child.on("close", (code) => {
+      clearTimeout(deadline);
+      if (timedOut) resolve({ code: 124, out, err: "The Hypit CLI did not finish in time, so it was stopped. Nothing was exported." });
+      else resolve({ code: code ?? 1, out, err });
+    });
   });
 }
 
@@ -112,13 +141,21 @@ function probe(file) {
       "-show_entries", "stream=width,height,duration,codec_name",
       "-of", "json",
       file,
-    ], { env: childEnv() });
+    ], { env: childEnv(), detached: true });
     let out = "";
     child.stdout.on("data", (chunk) => {
       out += chunk;
     });
-    child.on("error", (error) => reject(new Error(startFailure("ffprobe", error))));
+    const deadline = setTimeout(() => {
+      killTree(child);
+      reject(new Error("ffprobe did not finish in time, so it was stopped."));
+    }, CHILD_TIMEOUT_MS);
+    child.on("error", (error) => {
+      clearTimeout(deadline);
+      reject(new Error(startFailure("ffprobe", error)));
+    });
     child.on("close", () => {
+      clearTimeout(deadline);
       try {
         const parsed = JSON.parse(out || "{}");
         const stream = parsed.streams?.[0] ?? {};

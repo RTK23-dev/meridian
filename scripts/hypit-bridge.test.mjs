@@ -356,3 +356,20 @@ test("a body larger than 64 KB is refused with 413 before any job is written", a
   if (response) assert.equal(response.status, 413);
   await assert.rejects(stat(join(bridge.jobRoot, "job_big")), { code: "ENOENT" });
 });
+
+test("a Hypit CLI that does not finish is stopped at its deadline, and its job fails instead of holding the bridge", async (t) => {
+  const dir = await workspace(t);
+  const cli = await fakeCli(dir, "sleep 30");
+  const bridge = await startBridge(t, dir, { HYPIT_BIN: cli, HYPIT_CHILD_TIMEOUT_MS: "300" });
+  const id = "job-stuck-cli";
+  const started = Date.now();
+  const created = await call(bridge.base, "/v1/jobs", { method: "POST", body: jobContract({ meridianJobId: id }) });
+  assert.equal(created.status, 200);
+  let job = created;
+  for (let attempt = 0; attempt < 100 && job.json.status !== "failed" && job.json.status !== "succeeded"; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    job = await call(bridge.base, `/v1/jobs/${id}`);
+  }
+  assert.equal(job.json.status, "failed", "the stuck job ends as failed");
+  assert.ok(Date.now() - started < 20_000, "the bridge stopped the CLI well before its 30-second sleep finished");
+});
