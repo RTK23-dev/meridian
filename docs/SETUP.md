@@ -101,8 +101,9 @@ HYPIT_BRIDGE_PORT=8766 HYPIT_JOB_ROOT=<a directory for job folders> HYPIT_API_TO
 node scripts/hypit-bridge.mjs
 ```
 
-Set `HYPIT_BRIDGE_HOST` only to the address other machines should reach. Any address other than loopback refuses to start unless
-`HYPIT_API_TOKEN` is set. In Meridian's environment set `HYPIT_BASE_URL` to the bridge's URL and `HYPIT_API_TOKEN` to the same token.
+`HYPIT_API_TOKEN` is required on every address, loopback included. Without it the bridge refuses to start, because a page open in the
+operator's browser can reach a loopback port. Every request must carry the token as a Bearer header, and a request with an `Origin` header (a
+browser page) is refused. Set `HYPIT_BRIDGE_HOST` only to the address other machines should reach. In Meridian's environment set `HYPIT_BASE_URL` to the bridge's URL and `HYPIT_API_TOKEN` to the same token.
 The bridge keeps its jobs in memory, so a restart loses them. The production router's `hypit` entry is not connected to this handoff
 and refuses every job with `NOT_CONNECTED`, so no production run selects Hypit yet. A multi-tenant runtime and a cost figure for
 Hypit are not built or verified. Owner action: run one live job with the real CLI and record the job id, the artifact bytes and the

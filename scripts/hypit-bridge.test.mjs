@@ -66,6 +66,7 @@ async function startBridge(t, dir, env = {}) {
       HYPIT_BRIDGE_PORT: String(port),
       HYPIT_JOB_ROOT: jobRoot,
       HYPIT_BIN: join(dir, "no-such-hypit"),
+      HYPIT_API_TOKEN: FAKE_TOKEN,
       ...env,
     },
     stdio: ["ignore", "pipe", "pipe"],
@@ -92,7 +93,7 @@ async function startBridge(t, dir, env = {}) {
   return { child, host, port, base: `http://${host}:${port}`, jobRoot };
 }
 
-async function call(base, path, { method = "GET", token, body } = {}) {
+async function call(base, path, { method = "GET", token = FAKE_TOKEN, body } = {}) {
   const headers = {};
   if (token) headers.authorization = `Bearer ${token}`;
   if (body !== undefined) headers["content-type"] = "application/json";
@@ -310,3 +311,48 @@ test("a non-loopback bind address without HYPIT_API_TOKEN does not start the bri
   assert.match(stderr, /HYPIT_API_TOKEN must be set/);
 });
 
+
+test("a loopback bridge without HYPIT_API_TOKEN does not start either: a page in the browser can reach a loopback port", async (t) => {
+  const dir = await workspace(t);
+  const child = spawn(process.execPath, [bridgeFile], {
+    env: { PATH: process.env.PATH ?? "/usr/bin:/bin", HYPIT_BRIDGE_PORT: String(await freePort()), HYPIT_JOB_ROOT: join(dir, "jobs"), HYPIT_BIN: join(dir, "no-such-hypit") },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  t.after(() => child.kill());
+  let stderr = "";
+  child.stderr.on("data", (chunk) => (stderr += chunk));
+  const code = await new Promise((resolve) => child.on("exit", resolve));
+  assert.equal(code, 1);
+  assert.match(stderr, /HYPIT_API_TOKEN must be set/);
+});
+
+test("a request that carries an Origin header is refused, even with the right token", async (t) => {
+  const dir = await workspace(t);
+  const bridge = await startBridge(t, dir);
+  const response = await fetch(new URL("/health", bridge.base), {
+    headers: { authorization: `Bearer ${FAKE_TOKEN}`, origin: "https://attacker.example" },
+  });
+  assert.equal(response.status, 403);
+});
+
+test("a token of the same length but a different value is refused with 401", async (t) => {
+  const dir = await workspace(t);
+  const bridge = await startBridge(t, dir);
+  const wrong = "x".repeat(FAKE_TOKEN.length);
+  const response = await call(bridge.base, "/health", { token: wrong });
+  assert.equal(response.status, 401);
+});
+
+test("a body larger than 64 KB is refused with 413 before any job is written", async (t) => {
+  const dir = await workspace(t);
+  const bridge = await startBridge(t, dir);
+  const huge = JSON.stringify({ meridianJobId: "job_big", durationSeconds: 5, padding: "x".repeat(70 * 1024) });
+  const response = await fetch(new URL("/v1/jobs", bridge.base), {
+    method: "POST",
+    headers: { authorization: `Bearer ${FAKE_TOKEN}`, "content-type": "application/json" },
+    body: huge,
+  }).catch(() => null);
+  // The bridge closes a too-large request, so the client may see a 413 or a reset. Either way nothing is started or written.
+  if (response) assert.equal(response.status, 413);
+  await assert.rejects(stat(join(bridge.jobRoot, "job_big")), { code: "ENOENT" });
+});

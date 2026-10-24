@@ -5,10 +5,11 @@
  *
  * Single-organization proof runner. Not a multi-tenant Hypit service.
  *
- * Listens on HYPIT_BRIDGE_HOST (default 127.0.0.1). Set HYPIT_API_TOKEN before binding any other address:
- * the token is the only check on a request.
+ * Listens on HYPIT_BRIDGE_HOST (default 127.0.0.1). HYPIT_API_TOKEN is required on every address: every request must carry
+ * it as a Bearer token, and a request with an Origin header (a browser page) is refused.
  */
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -21,7 +22,6 @@ const host = (process.env.HYPIT_BRIDGE_HOST || "").trim() || "127.0.0.1";
 const token = (process.env.HYPIT_API_TOKEN || "").trim();
 
 /** Loopback addresses. Any other bind address serves other machines too, so it needs HYPIT_API_TOKEN. */
-const isLoopback = (address) => address === "localhost" || address === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(address);
 
 /** A job id names a folder under HYPIT_JOB_ROOT, so it is one plain segment: no separators, no dots, no spaces. */
 const JOB_ID = /^[A-Za-z0-9_-]{1,100}$/;
@@ -225,13 +225,26 @@ function send(response, status, body) {
   response.end(payload);
 }
 
+/**
+ * Every request must carry the bridge's token, on every address, and must not come from a browser. A web page open in the operator's
+ * browser can reach a loopback port, so an address check alone is not enough: a page's request carries an Origin header, which is refused.
+ * The comparison is constant-time.
+ */
 function authorized(request) {
-  if (!token) return true;
-  return request.headers.authorization === `Bearer ${token}`;
+  if (request.headers.origin !== undefined) return false;
+  const expected = Buffer.from(`Bearer ${token}`);
+  const given = Buffer.from(String(request.headers.authorization || ""));
+  return given.length === expected.length && timingSafeEqual(given, expected);
 }
+
+/** The largest request body the bridge reads. A job contract is a few kilobytes. */
+const MAX_BODY_BYTES = 64 * 1024;
+
+class BodyTooLarge extends Error {}
 
 const server = createServer(async (request, response) => {
   try {
+    if (request.headers.origin !== undefined) return send(response, 403, { error: "browser requests are refused" });
     if (!authorized(request)) return send(response, 401, { error: "unauthorized" });
     const url = new URL(request.url || "/", "http://127.0.0.1");
     if (request.method === "GET" && url.pathname === "/health") {
@@ -242,8 +255,13 @@ const server = createServer(async (request, response) => {
       return send(response, 200, { provider: "hypit", version: version.out.trim() });
     }
     if (request.method === "POST" && url.pathname === "/v1/jobs") {
-      const raw = await readBody(request);
-      const contract = JSON.parse(raw);
+      let contract;
+      try {
+        contract = JSON.parse(await readBody(request));
+      } catch (error) {
+        if (error instanceof BodyTooLarge) return send(response, 413, { error: "The request body is larger than 64 KB. Nothing was started." });
+        return send(response, 400, { error: "The request body is not valid JSON. Nothing was started." });
+      }
       if (!validDuration(contract?.durationSeconds)) {
         return send(response, 400, { error: "durationSeconds must be a finite number from 1 to 60. Nothing was started." });
       }
@@ -303,14 +321,23 @@ const server = createServer(async (request, response) => {
 function readBody(request) {
   return new Promise((resolve, reject) => {
     const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
+    let size = 0;
+    request.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        reject(new BodyTooLarge());
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
     request.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
     request.on("error", reject);
   });
 }
 
-if (!isLoopback(host) && !token) {
-  process.stderr.write("HYPIT_BRIDGE_HOST is not a loopback address, so HYPIT_API_TOKEN must be set. The bridge did not start.\n");
+if (!token) {
+  process.stderr.write("HYPIT_API_TOKEN must be set. The bridge did not start. Loopback alone is not enough: a page in the operator's browser can reach it.\n");
   process.exit(1);
 }
 await mkdir(root, { recursive: true });
