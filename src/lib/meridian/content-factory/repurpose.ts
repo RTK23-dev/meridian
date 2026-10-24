@@ -57,6 +57,8 @@ export type RepurposeRenderPort = (child: {
   organizationId: string;
   engineRequestId: string;
   variationKey: string;
+  /** The child cut's artifact id, which the render reads its EDL from. */
+  childArtifactId: string;
   edl: EditDecisionList;
   estimateUsd: number;
 }) => Promise<{ status: "rendered"; artifactId: string } | { status: "failed"; reason: string }>;
@@ -186,7 +188,7 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
     `;
     if (claimed.length === 0) continue;
     const edl = await childEdlOf(sql, organizationId, variant.child_artifact_id);
-    const result = await ports.render({ organizationId, engineRequestId: requestId, variationKey: variant.variant_key, edl, estimateUsd });
+    const result = await ports.render({ organizationId, engineRequestId: requestId, variationKey: variant.variant_key, childArtifactId: variant.child_artifact_id, edl, estimateUsd });
     if (result.status === "rendered") await setStatus(sql, runId, variant.variant_key, "rendered", "", result.artifactId);
     else await setStatus(sql, runId, variant.variant_key, "failed", result.reason, null);
   }

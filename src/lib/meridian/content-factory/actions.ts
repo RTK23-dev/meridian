@@ -21,6 +21,7 @@ import {
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { repurposePreview, startRepurpose } from "./repurpose.ts";
+import { productionRepurposeRenderPort } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
@@ -158,7 +159,11 @@ export const previewContentFactoryRepurpose = createServerFn({ method: "POST" })
 export const startContentFactoryRepurpose = createServerFn({ method: "POST" })
   .validator((input: unknown) => repurposeInput(input))
   .middleware([authMiddleware])
-  .handler(async ({ context, data }) => startRepurpose(await getSql(), context.userId, data));
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const render = productionRepurposeRenderPort(sql);
+    return startRepurpose(sql, context.userId, data, render === undefined ? {} : { render });
+  });
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
