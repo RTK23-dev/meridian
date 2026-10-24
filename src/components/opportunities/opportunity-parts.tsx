@@ -1,11 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Bookmark, CalendarClock, CircleDashed, Clock, FileText, Info, Layers, Sparkles, XCircle, CheckCircle2, SearchCheck, type LucideIcon } from "lucide-react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, Textarea, errorText } from "@/components/ui";
 import { directionReasonProblem } from "@/lib/meridian/opportunity/direction-reason";
-import { isHeldStatus, triageActionsFor, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
+import { canMakeBrief, triageActionsFor, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { statusLabel } from "@/lib/copy";
-import { CATEGORY_LEGEND, barPercent, canDismiss, categoryLabel, isHeld, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
+import { useWorkspace } from "@/components/workspace";
+import { hasRole } from "@/lib/meridian/access";
+import { createContentFactoryBriefFromOpportunity } from "@/lib/meridian/content-factory/actions";
+import { CATEGORY_LEGEND, barPercent, categoryLabel, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
 
 /** A value that is not stored. It is always written out, never drawn as an empty bar or a zero. */
 export function UnknownValue() {
@@ -100,17 +103,44 @@ export function OpportunityActions({ brandId, item, canEdit, triaging, onTriage 
   triaging: boolean;
   onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
 }) {
+  const { data: workspace } = useWorkspace();
   if (!canEdit) return <span className="text-sm text-muted">Read-only for viewers.</span>;
   const actions = triageActionsFor(item.status);
-  // Studio does not select this idea: it writes its own recommended direction. So no link is offered for a held idea (set aside, or with a
-  // review open on it), which Studio would not take.
-  const studio = canDismiss(item.status) && !isHeldStatus(item.status) && !isHeld(item);
-  if (!studio && actions.length === 0) return null;
+  // A brief is a Content Factory session, which only the workspace's admins can make. It carries this idea's own brief, so the person
+  // reviews the idea they picked, not a direction chosen elsewhere.
+  const brief = hasRole(workspace?.active?.role ?? "viewer", "admin") && canMakeBrief(item.status);
+  if (!brief && actions.length === 0) return null;
   return <>
-    {studio ? <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg">
-      Open Studio<span className="sr-only"> (its recommended direction, not {item.label})</span>
-    </Link> : null}
+    {brief ? <MakeBriefButton organizationId={workspace?.active?.id ?? ""} brandId={brandId} opportunityId={item.id} label={item.label} /> : null}
     {actions.length > 0 ? <TriageControl item={item} actions={actions} triaging={triaging} onTriage={onTriage} /> : null}
+  </>;
+}
+
+/**
+ * Makes this idea's brief as a Content Factory session, then opens that session on the Content Factory screen. The server checks the admin
+ * role, the brand, and the idea's status again. A refusal is shown here, and nothing is opened.
+ */
+function MakeBriefButton({ organizationId, brandId, opportunityId, label }: { organizationId: string; brandId: string; opportunityId: string; label: string }) {
+  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  async function makeBrief() {
+    setBusy(true);
+    setFailure(null);
+    try {
+      const made = await createContentFactoryBriefFromOpportunity({ data: { organizationId, brandId, opportunityId } });
+      await navigate({ to: "/content-factory", search: { session: made.sessionId } });
+    } catch (error) {
+      setFailure(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return <>
+    <Button type="button" disabled={busy} onClick={() => void makeBrief()}>
+      {busy ? "Making the brief..." : "Make a brief"}<span className="sr-only"> from {label}</span>
+    </Button>
+    {failure ? <p role="alert" className="basis-full text-sm text-danger">{failure}</p> : null}
   </>;
 }
 

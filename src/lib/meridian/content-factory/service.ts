@@ -19,6 +19,8 @@ import { readBrandLedger, readBrandRuns } from "./economics-store.ts";
 import { approvalProblem, approvalStateFor, isApprovalDecision, publishStateOf, type ApprovalRecord, type ApprovalState, type PublishState } from "./approval.ts";
 import { coveringRightsRecordIds, rightsGate, type FileReference, type RightsRecordFacts } from "./governance.ts";
 import { deliveredManifestOf } from "./manifest.ts";
+import { briefTextOf, evidenceSummariesOf } from "./opportunity-brief.ts";
+import { canMakeBrief } from "../opportunity/triage-states.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -251,6 +253,81 @@ export async function createSession(sql: Sql, userId: string, input: { organizat
   const row = rows[0];
   if (!row) throw new Error("The session was not saved.");
   return summaryOf(row);
+}
+
+/**
+ * Makes a draft session from one opportunity: the session is titled with the idea, its first message is the idea's brief (briefTextOf), and
+ * the idea is marked briefed. All of it is one transaction, and the idea's row is locked, so two clicks make one session. A draft already made
+ * from this idea is returned unchanged. A rejected, dismissed or unread idea is refused. Only the workspace's admins, as every session action.
+ */
+export async function briefFromOpportunity(
+  sql: Sql,
+  userId: string,
+  input: { organizationId: string; brandId: string; opportunityId: string },
+): Promise<{ sessionId: string; created: boolean }> {
+  await requireWorkspaceAdmin(sql, userId, input.organizationId);
+  await requireBrandInWorkspace(sql, input.organizationId, input.brandId);
+  return withTransaction(sql, async (tx) => {
+    const ideas = await tx<{
+      id: string;
+      status: string;
+      label: string;
+      angle: string;
+      hook_type: string;
+      audience: string;
+      format: string;
+      proof_type: string;
+      product_name: string;
+      reason: string;
+      evidence: string;
+    }>`
+      select id, status, label, angle, hook_type, audience, format, proof_type, product_name, reason, evidence
+      from opportunities
+      where id = ${input.opportunityId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
+      for update
+    `;
+    const idea = ideas[0];
+    if (!idea) throw new Error("That idea is not in this brand.");
+    const existing = await tx<{ id: string }>`
+      select id from content_factory_sessions
+      where organization_id = ${input.organizationId} and opportunity_id = ${idea.id} and status = 'draft'
+      order by created_at desc, id desc limit 1
+    `;
+    if (existing[0]) return { sessionId: existing[0].id, created: false };
+    if (!canMakeBrief(idea.status)) {
+      throw new Error("This idea was rejected or dismissed, or has not been researched yet, so no brief can be made from it.");
+    }
+    const sessionId = randomUUID();
+    const text = briefTextOf({
+      label: idea.label,
+      angle: idea.angle,
+      hookType: idea.hook_type,
+      audience: idea.audience,
+      format: idea.format,
+      proofType: idea.proof_type,
+      productName: idea.product_name,
+      reason: idea.reason,
+      evidence: evidenceSummariesOf(idea.evidence),
+    });
+    await tx`
+      insert into content_factory_sessions (id, organization_id, brand_id, created_by, title, opportunity_id)
+      values (${sessionId}, ${input.organizationId}, ${input.brandId}, ${userId}, ${idea.label.slice(0, 120)}, ${idea.id})
+    `;
+    await tx`
+      insert into content_factory_messages (id, organization_id, session_id, author_id, text, beat_role)
+      values (${randomUUID()}, ${input.organizationId}, ${sessionId}, ${userId}, ${text}, null)
+    `;
+    await tx`update opportunities set status = 'briefed' where id = ${idea.id} and organization_id = ${input.organizationId}`;
+    await audit(tx, {
+      organizationId: input.organizationId,
+      brandId: input.brandId,
+      actorId: userId,
+      action: "content_factory.brief_from_opportunity",
+      objectId: sessionId,
+      metadata: { opportunityId: idea.id },
+    });
+    return { sessionId, created: true };
+  });
 }
 
 async function messagesOf(sql: Sql, row: SessionRow): Promise<Message[]> {

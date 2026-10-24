@@ -31,7 +31,7 @@ const contentFactoryKeys = {
 
 type BrandOption = { id: string; name: string };
 
-export function ContentFactoryScreen() {
+export function ContentFactoryScreen({ initialSessionId = null }: { initialSessionId?: string | null } = {}) {
   const { data: workspace } = useWorkspace();
   const { user, isPending } = useCurrentUserState();
   const organizationId = workspace?.active?.id ?? "";
@@ -43,7 +43,7 @@ export function ContentFactoryScreen() {
     queryFn: () => listContentFactorySessions({ data: { organizationId } }),
     enabled: !isPending && !!user && canAdmin && !!organizationId,
   });
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
   const [creating, setCreating] = useState(false);
   const list = sessions.data ?? [];
   const selected = list.find((item) => item.id === selectedId) ?? list[0] ?? null;

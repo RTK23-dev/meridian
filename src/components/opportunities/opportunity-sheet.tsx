@@ -6,7 +6,7 @@ import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
 import { isHeldStatus, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
-import { canDismiss, categoryLabel, evidenceSourceLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, RANKING_INPUTS_NOTE, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
+import { categoryLabel, evidenceSourceLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, RANKING_INPUTS_NOTE, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
 
 // The radar pulls in recharts, so it loads only when the sheet shows the rank parts.
 const ScoreRadar = lazy(() => import("./score-radar").then((module) => ({ default: module.ScoreRadar })));
@@ -122,7 +122,6 @@ function OpportunityDetail({ item, position, brandId, canEdit, triaging, onTriag
         <div className="flex flex-wrap items-center gap-2">
           <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} triaging={triaging} onTriage={onTriage} />
         </div>
-        {canEdit && canDismiss(item.status) && !held && !isHeldStatus(item.status) ? <p className="text-sm text-muted">The Studio link opens Studio's own recommended direction. Studio does not select this idea from here, so it may not be the one shown.</p> : null}
         <Button type="button" variant="quiet" size="sm" onClick={() => onOpenChange(false)}>Close details</Button>
       </section>
     </div>

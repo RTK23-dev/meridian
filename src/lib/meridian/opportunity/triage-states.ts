@@ -52,3 +52,13 @@ export function triageActionsFor(status: string): TriageAction[] {
   if (isHeldStatus(status)) return ["reopen"];
   return [];
 }
+
+/**
+ * The statuses an idea can be made into a brief from. A declined idea (rejected, dismissed) is not briefed, and an idea that needs research is
+ * not yet read. A briefed idea may be briefed again: that is a second video from the same idea.
+ */
+export const BRIEFABLE_STATUSES = ["open", "accepted", "saved", "deferred", "briefed"] as const;
+
+export function canMakeBrief(status: string): boolean {
+  return (BRIEFABLE_STATUSES as readonly string[]).includes(status);
+}
