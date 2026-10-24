@@ -38,6 +38,7 @@ import { check, gateResult } from "../../review/gates/common.ts";
 import { checkRequest, type RequestGateInput, type VisualClassification } from "../../review/gates/request.ts";
 import { minimumMasterBudgetUsd, planKitsOf, spokenBeatMs, type MasterMinimum } from "../../plan/minimum.ts";
 import { readArtifact, writeArtifact, type StoredArtifact } from "../artifact-store.ts";
+import { reuseCachedVideoDna, type CachedVideoDna } from "../video-dna-cache.ts";
 import { withWorkspaceLedger } from "../sql-ledger-store.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
 import type { WorkspaceBudgetSource, WorkspaceMonthBudget } from "./estimate-reserve.ts";
@@ -55,8 +56,8 @@ export type KitScope = { organizationId: string; request: ProductionRequest };
  */
 export type IntakePorts = {
   loadKits: (input: KitScope) => Promise<ResolvedKits>;
-  /** The VideoDNA lookup (6.1 step 5): the cached dna_ id for this format and reference, or null for a miss. */
-  lookupDna?: (input: KitScope) => Promise<string | null>;
+  /** The VideoDNA lookup (6.1 step 5): the stored analysis of this format and reference, or null for a miss. */
+  lookupDna?: (input: KitScope) => Promise<CachedVideoDna | null>;
   /** The workspace's monthly budget for the pre-flight hold (Bible 14.1 step 2). */
   workspaceBudget?: WorkspaceBudgetSource;
   /**
@@ -301,7 +302,8 @@ export function createIntakeHandler(ports: IntakePorts): StageHandler {
       const organizationId = ctx.organizationId;
       const scope: KitScope = { organizationId, request };
       const kits = await ports.loadKits(scope);
-      const videoDnaId = ports.lookupDna === undefined ? undefined : await ports.lookupDna(scope);
+      const cached = ports.lookupDna === undefined ? undefined : await ports.lookupDna(scope);
+      const videoDnaId = cached === undefined ? undefined : cached === null ? null : cached.videoDnaId;
       const musts: VisualRequestRef[] = visualRequestsOf(request).filter((item) => item.strength === "must");
 
       // 1. The request's own checks, before any money. A failure here rejects the request and holds nothing.
@@ -365,6 +367,8 @@ export function createIntakeHandler(ports: IntakePorts): StageHandler {
       // 4. The final gate. A pass keeps the hold; a failure releases it and rejects the request.
       const final = decideIntake({ request, kits, videoDnaId, classifications, ...(classifierProblem === undefined ? {} : { classifierProblem }) });
       if (final.gate.pass && final.validated !== null) {
+        // A cached VideoDNA is copied into this request, so analyze_reference is not run for it (Bible 6.1 step 5, video-dna-cache.ts).
+        const dnaArtifactId = cached ? await reuseCachedVideoDna(ctx.sql, { organizationId, requestId: ctx.requestId, cached, createdAt: now }) : undefined;
         const written = await writeArtifact(ctx.sql, {
           organizationId,
           requestId: ctx.requestId,
@@ -379,7 +383,7 @@ export function createIntakeHandler(ports: IntakePorts): StageHandler {
           output: {
             stage: "intake",
             subjectId: ctx.subjectId,
-            artifacts: { validated: written.artifactId },
+            artifacts: { validated: written.artifactId, ...(dnaArtifactId === undefined ? {} : { dna: dnaArtifactId }) },
             gate: final.gate,
             budgetReservationId: reservationId,
             budgetPause: null,

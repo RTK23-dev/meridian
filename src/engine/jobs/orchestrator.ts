@@ -435,6 +435,8 @@ function applyIntake(state: OrchestratorState, output: Extract<StageOutput, { st
   }
   state.nodes.intake.status = "passed";
   if (output.budgetReservationId !== null) state.budgetReservationId = output.budgetReservationId;
+  // Intake reused a stored VideoDNA: its dna slot names the copy, so analyze_reference is not queued (Bible 6.1 step 5).
+  if (output.artifacts.dna !== undefined) state.cachedDna = true;
   if (state.cachedDna) state.nodes.analyze_reference.status = "passed";
 }
 

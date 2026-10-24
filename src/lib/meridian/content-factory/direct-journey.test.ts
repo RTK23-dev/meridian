@@ -11,14 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, before, describe, test } from "node:test";
 import { stagesNeeded } from "../../../engine/api/index.ts";
-import { characterSheetFixture, personaFixture, styleKitFixture, voiceKitFixture } from "../../../engine/contracts/fixtures/index.ts";
+import { characterSheetFixture, FIXTURE_IDS, personaFixture, styleKitFixture, videoDnaFixture, voiceKitFixture } from "../../../engine/contracts/fixtures/index.ts";
 import { createGateway } from "../../../engine/gateway/index.ts";
+import { writeArtifact } from "../../../engine/jobs/artifact-store.ts";
 import { executeEngineJob } from "../../../engine/jobs/dispatch.ts";
 import { writeKit } from "../../../engine/jobs/kit-store.ts";
 import { notConnectedMediaLinks } from "../../../engine/jobs/media-link.ts";
 import { productionVariantPorts } from "../../../engine/jobs/production-ports.ts";
-import { createEngineRuntime, productionComposition } from "../../../engine/jobs/runtime.ts";
+import { createEngineRuntime, productionComposition, productionEngineRuntime } from "../../../engine/jobs/runtime.ts";
+import type { EngineRuntime } from "../../../engine/jobs/types.ts";
 import { fakeObjects, keySource, recordedTransport } from "../../../engine/jobs/test/harness.ts";
+import { cachedVideoDnaFor } from "../../../engine/jobs/video-dna-cache.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { claimAndRun } from "../jobs/sql-worker.ts";
 import type { Sql } from "../learning/store.ts";
@@ -29,6 +32,7 @@ const WS = "ws_trace_direct";
 const BRAND = "brand_trace_direct";
 const ADMIN = "user_trace_admin";
 const TRACE_OPENROUTER_KEY = "sk-or-trace-not-a-key";
+const STORED_AT = "2026-10-24T10:00:00.000Z";
 
 /** One object store for the whole trace: the file the session stores is the file analyze_reference reads (both are Meridian's store in production). */
 const objects = fakeObjects();
@@ -71,9 +75,64 @@ function connectedReadiness() {
   };
 }
 
+/**
+ * The production composition over a recording gateway with only the OpenRouter key: every other connection is not connected. Speech-to-text
+ * is not connected, so nothing that needs it is ever sent.
+ */
+function productionRuntimeOver(db: TestDatabase) {
+  const transport = recordedTransport({});
+  const gateway = createGateway({ transport: transport.transport, credentials: keySource({ openrouter: TRACE_OPENROUTER_KEY }) });
+  const composition = productionComposition(db.sql as unknown as Sql, {
+    gateway,
+    mediaLinks: notConnectedMediaLinks("this trace has no media link signer"),
+    objects,
+    referenceStore: { get: (organizationId, brandId, key) => objects.get(organizationId, brandId, key), release: async () => undefined },
+    mediaFunctionsMode: "in_process",
+    mediaFunctionsBaseUrl: null,
+  });
+  const runtime = createEngineRuntime({
+    ...composition,
+    variants: productionVariantPorts({
+      sql: db.sql as unknown as Sql,
+      gateway: composition.gateway,
+      speech: composition.speech,
+      voice: typeof composition.voice === "function" ? composition.voice : undefined,
+      roles: () => ({}) as never,
+      workspaceBudget: composition.workspaceBudget,
+      loadStyleKit: async () => undefined,
+      now: () => new Date().toISOString(),
+    }),
+  });
+  return { transport, runtime };
+}
+
+/** Drains the engine's queued jobs the way the worker does: claim, run, and record the outcome, for at most a bounded number of claims. */
+async function drainEngineQueue(db: TestDatabase, runtime: EngineRuntime): Promise<void> {
+  for (let step = 0; step < 12; step += 1) {
+    const next = await db.sql<{ id: string }>`
+      select id from jobs where organization_id = ${WS} and job_type like 'engine.%' and status in ('queued', 'retry')
+      order by created_at asc, id asc limit 1
+    `;
+    if (!next[0]) break;
+    await claimAndRun(db.sql, next[0].id, (sql, job) => executeEngineJob(sql, job, runtime));
+  }
+}
+
+/** The engine's jobs of one request, in the order they were queued, as the worker records them. */
+async function jobsOf(db: TestDatabase, requestId: string): Promise<Array<{ job_type: string; status: string; last_error: string }>> {
+  return db.sql<{ job_type: string; status: string; last_error: string }>`
+    select job_type, status, last_error from jobs
+    where organization_id = ${WS} and payload like ${`%${requestId}%`}
+    order by created_at asc, id asc
+  `;
+}
+
 describe("direct creation, from a Content Factory session to the engine's first connection it does not have", () => {
   let db: TestDatabase;
   let MP4 = "";
+  /** The VideoDNA stored for the trace's reference, written by the tests below (its format is the reference's `ref_<sha256>`). */
+  let storedDnaArtifactId = "";
+  let referenceFormatId = "";
 
   before(async () => {
     MP4 = referenceClipBase64();
@@ -122,40 +181,8 @@ describe("direct creation, from a Content Factory session to the engine's first 
     const started = await startRun(db.sql, ADMIN, { sessionId }, { readiness: connectedReadiness() as never });
     assert.equal(started.status, "started");
 
-    // The production composition over a recording gateway with only the OpenRouter key: every other connection is not connected.
-    const transport = recordedTransport({});
-    const gateway = createGateway({ transport: transport.transport, credentials: keySource({ openrouter: TRACE_OPENROUTER_KEY }) });
-    const composition = productionComposition(db.sql as unknown as Sql, {
-      gateway,
-      mediaLinks: notConnectedMediaLinks("this trace has no media link signer"),
-      objects,
-      referenceStore: { get: (organizationId, brandId, key) => objects.get(organizationId, brandId, key), release: async () => undefined },
-      mediaFunctionsMode: "in_process",
-      mediaFunctionsBaseUrl: null,
-    });
-    const runtime = createEngineRuntime({
-      ...composition,
-      variants: productionVariantPorts({
-        sql: db.sql as unknown as Sql,
-        gateway: composition.gateway,
-        speech: composition.speech,
-        voice: typeof composition.voice === "function" ? composition.voice : undefined,
-        roles: () => ({}) as never,
-        workspaceBudget: composition.workspaceBudget,
-        loadStyleKit: async () => undefined,
-        now: () => new Date().toISOString(),
-      }),
-    });
-
-    // Drain the queue the way the worker does: claim, run, and record the outcome.
-    for (let step = 0; step < 12; step += 1) {
-      const next = await db.sql<{ id: string }>`
-        select id from jobs where organization_id = ${WS} and job_type like 'engine.%' and status in ('queued', 'retry')
-        order by created_at asc, id asc limit 1
-      `;
-      if (!next[0]) break;
-      await claimAndRun(db.sql, next[0].id, (sql, job) => executeEngineJob(sql, job, runtime));
-    }
+    const { transport, runtime } = productionRuntimeOver(db);
+    await drainEngineQueue(db, runtime);
 
     const jobs = await db.sql<{ job_type: string; status: string; last_error: string }>`
       select job_type, status, last_error from jobs where organization_id = ${WS} order by created_at asc, id asc
@@ -171,5 +198,79 @@ describe("direct creation, from a Content Factory session to the engine's first 
     const view = await readRun(db.sql, ADMIN, { sessionId }, { readiness: connectedReadiness() as never });
     assert.equal(view.stage, "started");
     assert.ok(view.stage === "started" && /speech-to-text|Deepgram/i.test(view.feed.headline), "the run view names the stop, not a delivered video");
+  });
+
+  test("with no stored VideoDNA, the production start names speech-to-text among what is not connected, because the reference is analysed", async () => {
+    const sessionId = await readySession();
+    const outcome = await startRun(db.sql, ADMIN, { sessionId });
+    assert.equal(outcome.status, "refused");
+    assert.ok(outcome.status === "refused" && outcome.notConnected.some((reason) => reason.startsWith("Speech-to-text")));
+  });
+
+  test("the reference's VideoDNA is stored under its format, and the production lookup finds it", async () => {
+    // The trace's first request names the reference's format; a VideoDNA of that format is written under a request of the workspace.
+    const formats = await db.sql<{ format_id: string }>`select format_id from engine_requests where organization_id = ${WS} order by id asc limit 1`;
+    referenceFormatId = formats[0]?.format_id ?? "";
+    assert.match(referenceFormatId, /^ref_/, "the started request names the reference by its format id");
+    await db.sql`
+      insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state)
+      values (${FIXTURE_IDS.request}, ${WS}, ${BRAND}, ${referenceFormatId}, 'normal', 'running', '{}')
+    `;
+    const stored = await writeArtifact(db.sql, {
+      organizationId: WS,
+      requestId: FIXTURE_IDS.request,
+      stage: "analyze_reference",
+      type: "video_dna",
+      body: { ...videoDnaFixture, formatId: referenceFormatId },
+      createdAt: STORED_AT,
+    });
+    storedDnaArtifactId = stored.artifactId;
+    const found = await cachedVideoDnaFor(db.sql, { organizationId: WS, formatId: referenceFormatId });
+    assert.equal(found?.artifactId, storedDnaArtifactId);
+  });
+
+  test("with a stored VideoDNA, the start still names speech-to-text: the voice stage needs its word timings on every run", async () => {
+    const sessionId = await readySession();
+    const outcome = await startRun(db.sql, ADMIN, { sessionId });
+    assert.equal(outcome.status, "refused", "a run with a cached analysis is not started while speech-to-text is not connected");
+    assert.ok(outcome.status === "refused" && outcome.notConnected.some((reason) => reason.startsWith("Speech-to-text")));
+    assert.ok(outcome.status === "refused" && outcome.notConnected.some((reason) => reason.startsWith("OpenRouter:")));
+  });
+
+  test("a started session with a stored VideoDNA: intake reuses the analysis, no analysis job is queued, and no speech-to-text is sent", async () => {
+    const sessionId = await readySession();
+    const started = await startRun(db.sql, ADMIN, { sessionId }, { readiness: connectedReadiness() as never });
+    assert.equal(started.status, "started");
+    const requestId = started.status === "started" ? started.requestId : "";
+
+    const { transport, runtime } = productionRuntimeOver(db);
+    await drainEngineQueue(db, runtime);
+
+    const jobs = await jobsOf(db, requestId);
+    assert.equal(jobs[0]?.job_type, "engine.intake");
+    assert.equal(jobs[0]?.status, "succeeded", "intake passes on the stored analysis");
+    assert.equal(jobs.filter((job) => job.job_type === "engine.analyze_reference").length, 0, "a cache hit queues no reference analysis");
+
+    const row = await db.sql<{ state: string }>`select state from engine_requests where id = ${requestId} and organization_id = ${WS}`;
+    const state = JSON.parse(row[0]?.state ?? "{}") as { cachedDna: boolean; nodes: Record<string, { status: string }>; artifacts: Record<string, string> };
+    assert.equal(state.cachedDna, true);
+    assert.equal(state.nodes.analyze_reference?.status, "passed", "the analysis is recorded as passed, because the stored analysis is used");
+    const dnaId = state.artifacts.dna;
+    assert.ok(dnaId, "the request's dna slot names its copy of the stored analysis");
+
+    const copy = await db.sql<{ request_id: string; parent_ids: string; content_hash: string }>`
+      select request_id, parent_ids, content_hash from engine_artifacts where id = ${dnaId} and organization_id = ${WS}
+    `;
+    const original = await db.sql<{ content_hash: string }>`select content_hash from engine_artifacts where id = ${storedDnaArtifactId}`;
+    assert.equal(copy[0]?.request_id, requestId, "the copy belongs to this request, so its jobs can read it");
+    assert.deepEqual(JSON.parse(copy[0]?.parent_ids ?? "[]"), [storedDnaArtifactId], "the copy names the stored analysis as its parent");
+    assert.equal(copy[0]?.content_hash, original[0]?.content_hash, "the copy has the stored content hash");
+    assert.ok(transport.requests.every((request) => !request.url.includes("deepgram")), "no speech-to-text call is sent on this path");
+  });
+
+  test("the production runtime registers a handler for every stage a request needs, so readiness is not met by a stub", () => {
+    const runtime = productionEngineRuntime(db.sql as unknown as Sql);
+    const missing = stagesNeeded(0).filter((stage) => runtime.handlers[stage] === undefined);
+    assert.deepEqual(missing, [], "every stage the start needs has a registered handler");
   });
 });
