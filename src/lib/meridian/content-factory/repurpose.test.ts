@@ -11,6 +11,8 @@ import { defaultRepurposeSettings } from "../../../engine/repurpose/resolve.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { RENDER_PRICE_NOT_VERIFIED, RENDERER_NOT_CONNECTED, repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
+import { sqlRepurposeUploadStore } from "./repurpose-upload.ts";
+import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
 
 const WS = "ws_repurpose";
 const BRAND = "brand_repurpose";
@@ -391,3 +393,46 @@ describe("reviewing a rendered repurposed variation", () => {
   });
 });
 
+
+describe("recording a Meta upload receipt in Postgres", () => {
+  test("a receipt is stored once per variation and account, is found again by both, and a second receipt for the same pair is refused", async () => {
+    const rows = await db.sql<{ id: string }>`select v.id from content_factory_repurpose_variants v where v.rendered_artifact_id is not null limit 1`;
+    const variantId = rows[0]!.id;
+    const store = sqlRepurposeUploadStore(db.sql);
+    assert.equal(await store.find(variantId, "act_fixture_1"), null);
+
+    const receipt = {
+      id: "upl_fixture_1",
+      organizationId: WS,
+      brandId: BRAND,
+      variantId,
+      platformAccountId: "act_fixture_1",
+      externalId: "meta_video_fixture_1",
+      idempotencyKey: `${BRAND}:run:variation:act_fixture_1:meta_ad_video`,
+    };
+    await store.save(receipt);
+    assert.deepEqual(await store.find(variantId, "act_fixture_1"), receipt);
+    await assert.rejects(store.save({ ...receipt, id: "upl_fixture_2", idempotencyKey: `${receipt.idempotencyKey}:again` }));
+    assert.equal(await store.find(variantId, "act_fixture_2"), null, "another account has no receipt");
+  });
+});
+
+describe("uploading a repurposed variation to Meta, from the session", () => {
+  test("a member is refused, and an admin's request for a variation the gate refuses sends nothing to Meta", async () => {
+    const rows = await db.sql<{ run_id: string; variant_key: string }>`
+      select v.run_id, v.variant_key from content_factory_repurpose_variants v
+      join content_factory_repurpose_runs r on r.id = v.run_id
+      where v.rendered_artifact_id is not null and r.session_id = ${DELIVERED_SESSION}
+      limit 1
+    `;
+    const { run_id: runId, variant_key: variantKey } = rows[0]!;
+    const noSend = async () => {
+      throw new Error("nothing may be sent to Meta in this test");
+    };
+    await assert.rejects(
+      uploadRepurposeVariantToMeta(db.sql, MEMBER, { sessionId: DELIVERED_SESSION, runId, variantKey }, { env: {}, transport: noSend }),
+    );
+    const outcome = await uploadRepurposeVariantToMeta(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey }, { env: {}, transport: noSend });
+    assert.equal(outcome.status, "blocked");
+  });
+});

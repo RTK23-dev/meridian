@@ -5,7 +5,7 @@
 // The upload's own idempotency (uploadMetaVideo looks for a video with the same name before it sends one) makes a retry after a lost reply
 // reuse Meta's video rather than send a second copy.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import type { MetaCredentials } from "../providers/meta.ts";
 import type { Transport } from "../providers/http.ts";
@@ -46,8 +46,6 @@ export type UploadRepurposedVariantInput = {
   platformAccountId: string;
   adAccountId: string;
   accessToken: string;
-  /** The name the video is uploaded under. Meta finds an earlier upload with this name on a retry. */
-  uploadName: string;
 };
 
 export type UploadRepurposedVariantOutcome =
@@ -70,9 +68,11 @@ export async function uploadRepurposedVariantToMeta(
   }
 
   const idempotencyKey = `${input.brandId}:${input.runId}:${input.variantKey}:${input.platformAccountId}:meta_ad_video`;
+  // The name carries a hash of the key, as the Hypit upload's does, so Meta can find an earlier upload of the same variation on a retry.
+  const uploadName = `Repurposed ${input.variantKey} [Meridian:${createHash("sha256").update(idempotencyKey).digest("hex").slice(0, 32)}]`;
   const result = await deps.upload(
     { accessToken: input.accessToken, adAccountId: input.adAccountId },
-    { adAccountId: input.adAccountId, bytes: input.bytes, uploadName: input.uploadName, idempotencyKey },
+    { adAccountId: input.adAccountId, bytes: input.bytes, uploadName, idempotencyKey },
     deps.transport,
   );
   // A failed upload leaves no receipt, so the next attempt uploads again, and Meta's name lookup prevents a duplicate.

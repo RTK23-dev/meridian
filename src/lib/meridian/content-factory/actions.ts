@@ -26,6 +26,7 @@ import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
+import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
 import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
@@ -196,6 +197,15 @@ export const getContentFactoryRepurposeOutput = createServerFn({ method: "POST" 
   .validator((input: unknown) => repurposeOutputInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => repurposeOutputLink(await getSql(), context.userId, data));
+
+/**
+ * Uploads one approved, rendered repurposed variation to the brand's Meta ad account and records the upload only when Meta returns its
+ * video id. Admins only. A variation that is not ready, or a brand with no connected Meta account, sends nothing and says why.
+ */
+export const uploadContentFactoryRepurposeVariant = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOutputInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => uploadRepurposeVariantToMeta(await getSql(), context.userId, data, { env: process.env }));
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))

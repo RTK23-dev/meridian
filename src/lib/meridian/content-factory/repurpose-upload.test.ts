@@ -26,14 +26,13 @@ const BASE: UploadRepurposedVariantInput = {
   platformAccountId: "acct_1",
   adAccountId: "act_123",
   accessToken: "token-not-logged",
-  uploadName: "Repurposed one [Meridian:abc]",
 };
 
 /** A Meta upload that records its calls and answers with the given result. */
 function fakeUpload(answer: Awaited<ReturnType<MetaVideoUpload>>) {
-  const calls: { adAccountId: string; idempotencyKey: string }[] = [];
+  const calls: { adAccountId: string; idempotencyKey: string; uploadName: string }[] = [];
   const upload: MetaVideoUpload = async (_credentials, input) => {
-    calls.push({ adAccountId: input.adAccountId, idempotencyKey: input.idempotencyKey });
+    calls.push({ adAccountId: input.adAccountId, idempotencyKey: input.idempotencyKey, uploadName: input.uploadName });
     return answer;
   };
   return { upload, calls };
@@ -51,6 +50,7 @@ test("a ready variation is uploaded once, and its receipt holds the id Meta retu
   assert.equal(calls.length, 1);
   assert.equal(calls[0]!.adAccountId, "act_123");
   assert.equal(calls[0]!.idempotencyKey, "brand_1:run_1:variation-1:acct_1:meta_ad_video");
+  assert.match(calls[0]!.uploadName, /^Repurposed variation-1 \[Meridian:[0-9a-f]{32}\]$/);
   assert.equal(outcome.status === "uploaded" && outcome.receipt.externalId, "meta_video_9");
   assert.equal(store.all().length, 1);
 });
