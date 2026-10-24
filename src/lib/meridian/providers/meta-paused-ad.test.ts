@@ -1,217 +1,139 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { fakeMeta } from "../testing/meta-paused-fake.ts";
 import type { Transport, TransportRequest, TransportResponse } from "./http.ts";
 import { GRAPH } from "./meta.ts";
-import { createMetaPausedAd, listMetaAdSets, verifyMetaAdSet, type PausedAdInput } from "./meta-paused-ad.ts";
+import {
+  createPausedAdObject,
+  createPausedCreative,
+  listMetaAdSets,
+  lookupPausedAdObjects,
+  readPausedAd,
+  verifyMetaAdSet,
+} from "./meta-paused-ad.ts";
 
-const TOKEN = "test-token-not-logged";
-const ACCOUNT = "act_123";
-const OWN_AD_SET = "as_own";
-const FOREIGN_AD_SET = "as_foreign";
+const CREDENTIALS = { accessToken: "test-token-not-logged", adAccountId: "act_123" };
+const NAME = "Repurposed variation-1 [Meridian:abc]";
 
-const INPUT: PausedAdInput = {
-  adAccountId: ACCOUNT,
-  adSetId: OWN_AD_SET,
-  pageId: "page_1",
-  videoId: "vid_9",
-  link: "https://example.com/offer",
-  message: "A short message",
-  name: "Repurposed one [Meridian:abc123]",
-};
-
-type Fake = {
-  transport: Transport;
-  posts: { url: string; body: Record<string, unknown> }[];
-  reads: string[];
-  ads: Map<string, { id: string; name: string; adset: string; status: string; creative: string }>;
-};
-
-/**
- * An in-memory Meta. It stores creates and answers reads the way the Graph API does for the endpoints the module uses. Options script a
- * failure: `loseReplyOnAdCreate` creates the ad and then throws, as a dropped connection does; `adStatus` is what an ad reads back as.
- */
-function fakeMeta(options: { loseReplyOnAdCreate?: boolean; adStatus?: string; failReadBackAttempts?: number } = {}): Fake {
-  const posts: Fake["posts"] = [];
-  const reads: string[] = [];
-  const ads: Fake["ads"] = new Map();
-  const creatives = new Map<string, string>();
-  let next = 1;
-  let lost = false;
-  let readBackFailuresLeft = options.failReadBackAttempts ?? 0;
-  const transport: Transport = async (request: TransportRequest): Promise<TransportResponse> => {
-    const url = request.url;
-    const ok = (json: unknown) => ({ status: 200, body: JSON.stringify(json), headers: {} });
-    if (request.method === "POST") {
-      const body = JSON.parse(String(request.body ?? "{}")) as Record<string, unknown>;
-      posts.push({ url, body });
-      if (url === `${GRAPH}/${ACCOUNT}/adcreatives`) {
-        const id = `cr_${next++}`;
-        creatives.set(id, String(body.name));
-        return ok({ id });
-      }
-      if (url === `${GRAPH}/${ACCOUNT}/ads`) {
-        const id = `ad_${next++}`;
-        const creative = String((body.creative as { creative_id: string }).creative_id);
-        ads.set(id, { id, name: String(body.name), adset: String(body.adset_id), status: String(body.status), creative });
-        if (options.loseReplyOnAdCreate && !lost) {
-          lost = true;
-          throw new Error("connection reset after the ad was created");
-        }
-        return ok({ id });
-      }
-      throw new Error(`fake Meta: unexpected POST ${url}`);
-    }
-    reads.push(url);
-    if (url.startsWith(`${GRAPH}/${OWN_AD_SET}?`)) return ok({ id: OWN_AD_SET, account_id: "123", name: "Own set", status: "PAUSED", campaign_id: "cmp_1" });
-    if (url.startsWith(`${GRAPH}/${FOREIGN_AD_SET}?`)) return ok({ id: FOREIGN_AD_SET, account_id: "999", name: "Other", status: "PAUSED", campaign_id: "cmp_9" });
-    if (url.startsWith(`${GRAPH}/${OWN_AD_SET}/ads?`)) {
-      const data = [...ads.values()].filter((ad) => ad.adset === OWN_AD_SET).map((ad) => ({ id: ad.id, name: ad.name, status: ad.status }));
-      return ok({ data });
-    }
-    if (url.startsWith(`${GRAPH}/${ACCOUNT}/adcreatives?`)) {
-      return ok({ data: [...creatives.entries()].map(([id, name]) => ({ id, name })) });
-    }
-    if (url.startsWith(`${GRAPH}/${ACCOUNT}/adsets?`)) {
-      return ok({ data: [{ id: OWN_AD_SET, name: "Own set", status: "PAUSED", campaign_id: "cmp_1" }] });
-    }
-    const adMatch = url.match(new RegExp(`^${GRAPH}/(ad_\\d+)\\?`));
-    if (adMatch) {
-      if (readBackFailuresLeft > 0) {
-        readBackFailuresLeft -= 1;
-        throw new Error("connection reset during the read-back");
-      }
-      const ad = ads.get(adMatch[1]!);
-      if (!ad) return { status: 404, body: JSON.stringify({ error: { message: "not found" } }), headers: {} };
-      return ok({ id: ad.id, status: options.adStatus ?? ad.status, effective_status: options.adStatus ?? ad.status, adset_id: ad.adset, creative: { id: ad.creative } });
-    }
-    throw new Error(`fake Meta: unexpected read ${url}`);
-  };
-  return { transport, posts, reads, ads };
+function reply(status: number, body: unknown): TransportResponse {
+  return { status, body: JSON.stringify(body), headers: {} };
 }
 
-const CREDENTIALS = { accessToken: TOKEN, adAccountId: ACCOUNT };
+/** A transport that answers one POST with `answer`, and still records every request it receives. */
+function postAnswer(answer: () => TransportResponse | never): { transport: Transport; posts: TransportRequest[] } {
+  const posts: TransportRequest[] = [];
+  const transport: Transport = async (request) => {
+    if (request.method === "POST") {
+      posts.push(request);
+      return answer();
+    }
+    throw new Error("only the POST is scripted here");
+  };
+  return { transport, posts };
+}
 
-test("a paused ad is created once inside the chosen ad set, and every request says PAUSED, never ACTIVE", async () => {
+const ADS = { adAccountId: "act_123", adSetId: "as_a", name: NAME, pageId: "page_1", videoId: "vid_9", link: "https://example.com/o", message: "m" };
+
+test("a 2xx reply with an id is a created object, and the ad is sent PAUSED", async () => {
+  const { transport, posts } = postAnswer(() => reply(200, { id: "ad_new" }));
+  const outcome = await createPausedAdObject(CREDENTIALS, { adAccountId: ADS.adAccountId, adSetId: ADS.adSetId, creativeId: "cr_1", name: NAME }, transport);
+  assert.deepEqual(outcome, { kind: "created", id: "ad_new" });
+  assert.equal(posts.length, 1, "one create, never retried here");
+  const body = JSON.parse(String(posts[0]!.body)) as { status: string };
+  assert.equal(body.status, "PAUSED");
+});
+
+test("a 2xx reply with no id is uncertain: the object may exist", async () => {
+  const { transport } = postAnswer(() => reply(200, {}));
+  const outcome = await createPausedAdObject(CREDENTIALS, { adAccountId: ADS.adAccountId, adSetId: ADS.adSetId, creativeId: "cr_1", name: NAME }, transport);
+  assert.equal(outcome.kind, "uncertain");
+});
+
+test("a 5xx or a 429 is uncertain, because Meta may have created the object before it answered", async () => {
+  for (const status of [500, 503, 429]) {
+    const { transport } = postAnswer(() => reply(status, { error: {} }));
+    const outcome = await createPausedAdObject(CREDENTIALS, { adAccountId: ADS.adAccountId, adSetId: ADS.adSetId, creativeId: "cr_1", name: NAME }, transport);
+    assert.equal(outcome.kind, "uncertain", `status ${status}`);
+  }
+});
+
+test("a dropped reply is uncertain, and it is sent once", async () => {
+  const { transport, posts } = postAnswer(() => {
+    throw new Error("connection reset");
+  });
+  const outcome = await createPausedCreative(CREDENTIALS, { adAccountId: ADS.adAccountId, name: NAME, pageId: "page_1", videoId: "vid_9", message: "m", link: "https://example.com/o" }, transport);
+  assert.equal(outcome.kind, "uncertain");
+  assert.equal(posts.length, 1, "a dropped create is not sent a second time here");
+});
+
+test("a 4xx refusal, other than 429, is a definite refusal with nothing created", async () => {
+  const { transport } = postAnswer(() => reply(400, { error: { message: "invalid" } }));
+  const outcome = await createPausedAdObject(CREDENTIALS, { adAccountId: ADS.adAccountId, adSetId: ADS.adSetId, creativeId: "cr_1", name: NAME }, transport);
+  assert.equal(outcome.kind, "refused");
+});
+
+test("the account lookup finds every object with the marker name, across ad sets, and says it is complete", async () => {
   const fake = fakeMeta();
-  const outcome = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(outcome.status, "paused");
-  assert.equal(outcome.status === "paused" && outcome.reused, false);
-  assert.equal(fake.posts.length, 2, "one creative and one ad, each sent once");
-  const adPost = fake.posts.find((post) => post.url.endsWith("/ads"));
-  assert.equal(adPost?.body.status, "PAUSED");
-  assert.equal(adPost?.body.adset_id, OWN_AD_SET);
-  assert.ok(!JSON.stringify(fake.posts).includes("ACTIVE"), "nothing is ever sent as ACTIVE");
-  assert.equal(fake.ads.size, 1);
+  fake.seedAd({ id: "ad_in_a", name: NAME, status: "PAUSED", adsetId: "as_a", accountId: "123", creativeId: "cr_x" });
+  fake.seedAd({ id: "ad_in_b", name: NAME, status: "PAUSED", adsetId: "as_b", accountId: "123", creativeId: "cr_y" });
+  fake.seedAd({ id: "ad_other", name: `${NAME} copy`, status: "PAUSED", adsetId: "as_a", accountId: "123", creativeId: "cr_z" });
+  const lookup = await lookupPausedAdObjects(CREDENTIALS, "act_123", NAME, fake.transport);
+  assert.equal(lookup.ok, true);
+  assert.deepEqual(lookup.ok && lookup.ads.map((ad) => ad.id).sort(), ["ad_in_a", "ad_in_b"], "exact name only, in every ad set");
+});
+
+test("a list that fails is incomplete: the lookup says so and names no object as absent", async () => {
+  const fake = fakeMeta({ listFailure: true });
+  const lookup = await lookupPausedAdObjects(CREDENTIALS, "act_123", NAME, fake.transport);
+  assert.equal(lookup.ok, false);
+});
+
+test("a list longer than the page limit is incomplete, not a shorter list that looks complete", async () => {
+  const fake = fakeMeta({ pageSize: 1 });
+  for (let i = 0; i < 60; i += 1) fake.seedAd({ name: `other ${i}`, status: "PAUSED", adsetId: "as_a", accountId: "123", creativeId: "cr" });
+  const lookup = await lookupPausedAdObjects(CREDENTIALS, "act_123", NAME, fake.transport);
+  assert.equal(lookup.ok, false, "more than 50 pages is not read to the end, so it is not complete");
+});
+
+test("a read-back shows the ad as paused only when it is in the chosen ad set, in this account, with this name", async () => {
+  const fake = fakeMeta();
+  const ad = fake.seedAd({ name: NAME, status: "PAUSED", adsetId: "as_a", accountId: "123", creativeId: "cr_1" });
+  const expect = { adAccountId: "act_123", adSetId: "as_a", name: NAME };
+  assert.deepEqual(await readPausedAd(CREDENTIALS, ad.id, expect, fake.transport), { kind: "paused", adId: ad.id, creativeId: "cr_1" });
+  const otherSet = await readPausedAd(CREDENTIALS, ad.id, { ...expect, adSetId: "as_b" }, fake.transport);
+  assert.equal(otherSet.kind, "not_this_object");
+  const otherName = await readPausedAd(CREDENTIALS, ad.id, { ...expect, name: "different" }, fake.transport);
+  assert.equal(otherName.kind, "not_this_object");
+});
+
+test("a read-back that finds the ad ACTIVE reports it as not paused, and does not change it", async () => {
+  const fake = fakeMeta({ readBackStatus: "ACTIVE" });
+  const ad = fake.seedAd({ name: NAME, status: "ACTIVE", adsetId: "as_a", accountId: "123", creativeId: "cr_1" });
+  const read = await readPausedAd(CREDENTIALS, ad.id, { adAccountId: "act_123", adSetId: "as_a", name: NAME }, fake.transport);
+  assert.deepEqual(read, { kind: "not_paused", adId: ad.id, status: "ACTIVE" });
+  assert.equal(fake.posts.length, 0, "Meridian sent nothing that changes the ad");
+});
+
+test("a read-back that fails, or an ad that is missing, is unreadable, not a confirmation and not an absence", async () => {
+  const fake = fakeMeta({ readBackFailures: 3 });
+  const ad = fake.seedAd({ name: NAME, status: "PAUSED", adsetId: "as_a", accountId: "123", creativeId: "cr_1" });
+  assert.equal((await readPausedAd(CREDENTIALS, ad.id, { adAccountId: "act_123", adSetId: "as_a", name: NAME }, fake.transport)).kind, "unreadable");
+  assert.equal((await readPausedAd(CREDENTIALS, "ad_missing", { adAccountId: "act_123", adSetId: "as_a", name: NAME }, fake.transport)).kind, "unreadable");
 });
 
 test("an ad set that belongs to another ad account is refused before anything is created", async () => {
-  const fake = fakeMeta();
-  const outcome = await createMetaPausedAd(CREDENTIALS, { ...INPUT, adSetId: FOREIGN_AD_SET }, fake.transport);
-  assert.equal(outcome.status, "blocked");
-  assert.equal(fake.posts.length, 0, "no create was sent");
-  const check = await verifyMetaAdSet(CREDENTIALS, ACCOUNT, FOREIGN_AD_SET, fake.transport);
+  const fake = fakeMeta({ adSetAccountId: "999" });
+  const check = await verifyMetaAdSet(CREDENTIALS, "act_123", "as_a", fake.transport);
   assert.equal(check.ok, false);
 });
 
-test("a lost reply after the ad was created is recovered by name on the next attempt, with no second ad", async () => {
-  const fake = fakeMeta({ loseReplyOnAdCreate: true });
-  const first = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(first.status, "uncertain");
-  assert.equal(first.status === "uncertain" && first.stage, "ad");
-  assert.equal(fake.ads.size, 1, "Meta created the ad before the reply was lost");
-
-  const second = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(second.status, "paused");
-  assert.equal(second.status === "paused" && second.reused, true, "the earlier ad was found, not created again");
-  assert.equal(fake.ads.size, 1, "still exactly one ad");
-  const adPosts = fake.posts.filter((post) => post.url.endsWith("/ads")).length;
-  assert.equal(adPosts, 1, "the ad was posted once across both attempts");
-});
-
-test("when Meta reads the ad back as not paused, the result says so and does not claim a paused ad", async () => {
-  const fake = fakeMeta({ adStatus: "ACTIVE" });
-  const outcome = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(outcome.status, "not_paused");
-  assert.equal(outcome.status === "not_paused" && outcome.verifiedStatus, "ACTIVE");
-});
-
-test("without an ad account id, a Page, a video or a link, nothing is sent", async () => {
+test("listing ad sets is read only", async () => {
   const fake = fakeMeta();
-  assert.equal((await createMetaPausedAd(CREDENTIALS, { ...INPUT, adAccountId: "123" }, fake.transport)).status, "blocked");
-  assert.equal((await createMetaPausedAd(CREDENTIALS, { ...INPUT, link: "" }, fake.transport)).status, "blocked");
-  assert.equal((await createMetaPausedAd(CREDENTIALS, { ...INPUT, pageId: "" }, fake.transport)).status, "blocked");
-  assert.equal(fake.posts.length, 0);
-});
-
-test("listing ad sets is a read only: it names each ad set and creates nothing", async () => {
-  const fake = fakeMeta();
-  const listed = await listMetaAdSets(CREDENTIALS, ACCOUNT, fake.transport);
+  const listed = await listMetaAdSets(CREDENTIALS, "act_123", fake.transport);
   assert.equal(listed.ok, true);
-  assert.deepEqual(listed.ok && listed.adSets, [{ id: OWN_AD_SET, name: "Own set", status: "PAUSED", campaignId: "cmp_1" }]);
   assert.equal(fake.posts.length, 0);
 });
 
-test("a failed read-back after the ad was created is uncertain, and the next attempt confirms that ad without creating another", async () => {
-  // sendWithRetry makes three attempts at a read, so the read-back fails for all three before the result is uncertain.
-  const fake = fakeMeta({ failReadBackAttempts: 3 });
-  const first = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(first.status, "uncertain", "the ad may exist, so the result is not a clean failure");
-  assert.equal(first.status === "uncertain" && first.stage, "ad");
-  assert.equal(fake.ads.size, 1);
-
-  const second = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
-  assert.equal(second.status, "paused");
-  assert.equal(second.status === "paused" && second.reused, true);
-  assert.equal(fake.ads.size, 1, "no second ad was created");
-  assert.equal(fake.posts.filter((post) => post.url.endsWith("/ads")).length, 1, "the ad was posted once");
-});
-
-/** A Meta whose reply to the ad create is replaced by `reply` once, after the fake has done what Meta would do with the request. */
-function replyToAdCreateOnce(fake: Fake, reply: TransportResponse): Transport {
-  let replaced = false;
-  return async (request: TransportRequest): Promise<TransportResponse> => {
-    const real = await fake.transport(request);
-    if (request.method === "POST" && request.url.endsWith("/ads") && !replaced) {
-      replaced = true;
-      return reply;
-    }
-    return real;
-  };
-}
-
-test("a server error on the ad create is uncertain even though Meta created the ad, and the next attempt finds it by name", async () => {
-  const fake = fakeMeta();
-  const transport = replyToAdCreateOnce(fake, { status: 500, body: JSON.stringify({ error: { message: "server error" } }), headers: {} });
-  const first = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
-  assert.equal(first.status, "uncertain", "a 500 does not prove that nothing was created");
-  assert.equal(first.status === "uncertain" && first.stage, "ad");
-  assert.equal(fake.ads.size, 1, "Meta created the ad before the server error");
-
-  const second = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
-  assert.equal(second.status, "paused");
-  assert.equal(second.status === "paused" && second.reused, true, "the earlier ad was found by name");
-  assert.equal(fake.ads.size, 1, "still exactly one ad");
-});
-
-test("a success reply with no id on the ad create is uncertain, not a clean failure", async () => {
-  const fake = fakeMeta();
-  const transport = replyToAdCreateOnce(fake, { status: 200, body: "{}", headers: {} });
-  const first = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
-  assert.equal(first.status, "uncertain");
-  const second = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
-  assert.equal(second.status, "paused");
-  assert.equal(fake.ads.size, 1, "no second ad was created");
-});
-
-test("a 4xx refusal on the ad create is a definite failure: nothing was created", async () => {
-  const fake = fakeMeta();
-  const transport: Transport = async (request: TransportRequest): Promise<TransportResponse> => {
-    if (request.method === "POST" && request.url.endsWith("/ads")) {
-      return { status: 400, body: JSON.stringify({ error: { message: "invalid parameter" } }), headers: {} };
-    }
-    return fake.transport(request);
-  };
-  const outcome = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
-  assert.equal(outcome.status, "failed");
-  assert.equal(fake.ads.size, 0, "Meta refused the ad and created nothing");
+test("the graph base is the one the module sends to", () => {
+  assert.match(GRAPH, /^https:\/\/graph\.facebook\.com\//);
 });

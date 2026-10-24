@@ -23,7 +23,7 @@ export type RepurposeUploadReceipt = {
 
 /** The receipts of uploaded variations. One per variation and account. */
 export type RepurposeUploadStore = {
-  find(variantId: string, platformAccountId: string): Promise<RepurposeUploadReceipt | null>;
+  find(organizationId: string, variantId: string, platformAccountId: string): Promise<RepurposeUploadReceipt | null>;
   save(receipt: RepurposeUploadReceipt): Promise<void>;
 };
 
@@ -58,7 +58,7 @@ export async function uploadRepurposedVariantToMeta(
   input: UploadRepurposedVariantInput,
   deps: { store: RepurposeUploadStore; upload: MetaVideoUpload; transport: Transport },
 ): Promise<UploadRepurposedVariantOutcome> {
-  const existing = await deps.store.find(input.variantId, input.platformAccountId);
+  const existing = await deps.store.find(input.organizationId, input.variantId, input.platformAccountId);
   if (existing) return { status: "already_uploaded", receipt: existing };
 
   const readiness = repurposePublishReadiness(input.readiness);
@@ -95,8 +95,9 @@ export async function uploadRepurposedVariantToMeta(
 export function memoryRepurposeUploadStore(): RepurposeUploadStore & { all(): RepurposeUploadReceipt[] } {
   const receipts = new Map<string, RepurposeUploadReceipt>();
   return {
-    async find(variantId, platformAccountId) {
-      return receipts.get(`${variantId}|${platformAccountId}`) ?? null;
+    async find(organizationId, variantId, platformAccountId) {
+      const receipt = receipts.get(`${variantId}|${platformAccountId}`);
+      return receipt && receipt.organizationId === organizationId ? receipt : null;
     },
     async save(receipt) {
       const key = `${receipt.variantId}|${receipt.platformAccountId}`;
@@ -112,11 +113,11 @@ export function memoryRepurposeUploadStore(): RepurposeUploadStore & { all(): Re
 /** The receipt store in Postgres (migration 0126). A save for an existing variation and account is rejected by its unique key. */
 export function sqlRepurposeUploadStore(sql: Sql): RepurposeUploadStore {
   return {
-    async find(variantId, platformAccountId) {
+    async find(organizationId, variantId, platformAccountId) {
       const rows = await sql<Record<string, string>>`
         select id, organization_id, brand_id, variant_id, platform_account_id, external_id, idempotency_key
         from content_factory_repurpose_publications
-        where variant_id = ${variantId} and platform_account_id = ${platformAccountId} and kind = 'meta_ad_video'
+        where organization_id = ${organizationId} and variant_id = ${variantId} and platform_account_id = ${platformAccountId} and kind = 'meta_ad_video'
         limit 1
       `;
       const row = rows[0];

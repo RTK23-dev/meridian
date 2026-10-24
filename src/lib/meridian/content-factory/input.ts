@@ -242,6 +242,7 @@ export function pausedAdInput(input: unknown): {
   pageId: string;
   destinationUrl: string;
   message: string;
+  confirmRetryAfterAbsence: boolean;
 } {
   const body = fields(input);
   return {
@@ -253,6 +254,7 @@ export function pausedAdInput(input: unknown): {
     pageId: text(body.pageId),
     destinationUrl: text(body.destinationUrl),
     message: typeof body.message === "string" ? body.message : "",
+    confirmRetryAfterAbsence: body.confirmRetryAfterAbsence === true,
   };
 }
 

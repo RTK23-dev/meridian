@@ -345,13 +345,30 @@ function UploadToMeta({ sessionId, runId, variantKey }: { sessionId: string; run
 
 /** The outcome of a paused-ad request, in words. A paused ad is not an active one, and the message says so. */
 function pausedAdMessage(outcome: CreatePausedAdOutcome): string {
-  if (outcome.status === "created_paused") return "Created a PAUSED ad. It is not active, and nothing has been switched on.";
-  if (outcome.status === "already_created") return "This variation already has a paused ad in this ad account. Nothing was created again.";
-  if (outcome.status === "blocked") return outcome.reason;
-  if (outcome.status === "in_progress") return outcome.reason;
-  if (outcome.status === "uncertain") return "Meta did not confirm the create. Press the button again: Meridian looks for the ad by name before it creates another.";
-  if (outcome.status === "not_paused") return `Meta reports the ad as ${outcome.verifiedStatus}, not PAUSED. It is not recorded as paused.`;
-  return outcome.error;
+  switch (outcome.status) {
+    case "created_paused":
+      return "Created a PAUSED ad and confirmed it in Meta. It is not active, and nothing has been switched on.";
+    case "already_created":
+      if (!outcome.bindingMatches) {
+        return outcome.reconciled
+          ? "Found the paused ad from an earlier attempt and confirmed it in Meta. The inputs you entered differ from that attempt, so the original inputs were kept and nothing was created."
+          : "This variation already has a paused ad in this ad account. The inputs you entered differ from it, so nothing was changed.";
+      }
+      return outcome.reconciled
+        ? "Found the paused ad from an earlier attempt and confirmed it in Meta. Nothing was created again."
+        : "This variation already has a paused ad in this ad account. Nothing was created again.";
+    case "blocked":
+    case "in_progress":
+    case "conflict":
+    case "refused":
+      return outcome.reason;
+    case "uncertain":
+      return `${outcome.reason} Press the button again to reconcile it: Meridian searches the ad account by name before it creates anything.`;
+    case "absent":
+      return `${outcome.reason} If you start a new attempt, it uses the same inputs and is sent once.`;
+    case "unexpected":
+      return `${outcome.reason} Meridian never switches an ad on or off.`;
+  }
 }
 
 /**
@@ -367,6 +384,8 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+  // Offered only after a complete search found no ad. Its confirmation is what lets the server start a new attempt.
+  const [absentConfirmable, setAbsentConfirmable] = useState(false);
   async function load() {
     setBusy(true);
     try {
@@ -378,10 +397,12 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
     }
   }
   const ready = adSetId !== "" && confirmAdSetId === adSetId && pageId !== "" && destinationUrl.trim() !== "";
-  async function create() {
+  async function create(confirmRetryAfterAbsence: boolean) {
     setBusy(true);
     try {
-      setNote(pausedAdMessage(await createContentFactoryPausedAd({ data: { sessionId, runId, variantKey, adSetId, confirmAdSetId, pageId, destinationUrl, message } })));
+      const outcome = await createContentFactoryPausedAd({ data: { sessionId, runId, variantKey, adSetId, confirmAdSetId, pageId, destinationUrl, message, confirmRetryAfterAbsence } });
+      setAbsentConfirmable(outcome.status === "absent");
+      setNote(pausedAdMessage(outcome));
     } catch (error) {
       setNote(errorText(error));
     } finally {
@@ -428,10 +449,15 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
             Ad text
             <textarea className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" rows={3} value={message} onChange={(event) => setMessage(event.target.value)} />
           </label>
-          <div className="sm:col-span-2">
-            <Button type="button" loading={busy} disabled={busy || !ready} onClick={() => void create()}>
+          <div className="flex flex-wrap gap-2 sm:col-span-2">
+            <Button type="button" loading={busy} disabled={busy || !ready} onClick={() => void create(false)}>
               Create a paused ad in this ad set
             </Button>
+            {absentConfirmable ? (
+              <Button type="button" variant="secondary" loading={busy} disabled={busy || !ready} onClick={() => void create(true)}>
+                Start a new attempt with these inputs
+              </Button>
+            ) : null}
           </div>
         </div>
       ) : null}
