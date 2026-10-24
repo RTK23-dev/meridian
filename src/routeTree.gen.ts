@@ -11,7 +11,10 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as Char91_designChar93RouteImport } from './routes/[_design]'
+import { Route as DocsRouteImport } from './routes/docs'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as ProductRouteImport } from './routes/product'
+import { Route as QuickstartRouteImport } from './routes/quickstart'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
@@ -62,9 +65,24 @@ const Char91_designChar93Route = Char91_designChar93RouteImport.update({
   path: '/_design',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProductRoute = ProductRouteImport.update({
+  id: '/product',
+  path: '/product',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const QuickstartRoute = QuickstartRouteImport.update({
+  id: '/quickstart',
+  path: '/quickstart',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -277,7 +295,10 @@ const AppBrandsBrandIdStudioRoute = AppBrandsBrandIdStudioRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
   '/_design': typeof Char91_designChar93Route
+  '/docs': typeof DocsRoute
   '/login': typeof LoginRoute
+  '/product': typeof ProductRoute
+  '/quickstart': typeof QuickstartRoute
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
@@ -320,7 +341,10 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/_design': typeof Char91_designChar93Route
+  '/docs': typeof DocsRoute
   '/login': typeof LoginRoute
+  '/product': typeof ProductRoute
+  '/quickstart': typeof QuickstartRoute
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
@@ -366,7 +390,10 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_design': typeof Char91_designChar93Route
+  '/docs': typeof DocsRoute
   '/login': typeof LoginRoute
+  '/product': typeof ProductRoute
+  '/quickstart': typeof QuickstartRoute
   '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
@@ -413,7 +440,10 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/_design'
+    | '/docs'
     | '/login'
+    | '/product'
+    | '/quickstart'
     | '/$'
     | '/alerts'
     | '/audit'
@@ -456,7 +486,10 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/_design'
+    | '/docs'
     | '/login'
+    | '/product'
+    | '/quickstart'
     | '/$'
     | '/alerts'
     | '/audit'
@@ -501,7 +534,10 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/_design'
+    | '/docs'
     | '/login'
+    | '/product'
+    | '/quickstart'
     | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
@@ -547,7 +583,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   Char91_designChar93Route: typeof Char91_designChar93Route
+  DocsRoute: typeof DocsRoute
   LoginRoute: typeof LoginRoute
+  ProductRoute: typeof ProductRoute
+  QuickstartRoute: typeof QuickstartRoute
   ApiEngineMediaRoute: typeof ApiEngineMediaRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
@@ -576,11 +615,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof Char91_designChar93RouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/product': {
+      id: '/product'
+      path: '/product'
+      fullPath: '/product'
+      preLoaderRoute: typeof ProductRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/quickstart': {
+      id: '/quickstart'
+      path: '/quickstart'
+      fullPath: '/quickstart'
+      preLoaderRoute: typeof QuickstartRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -937,7 +997,10 @@ const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   Char91_designChar93Route: Char91_designChar93Route,
+  DocsRoute: DocsRoute,
   LoginRoute: LoginRoute,
+  ProductRoute: ProductRoute,
+  QuickstartRoute: QuickstartRoute,
   ApiEngineMediaRoute: ApiEngineMediaRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
