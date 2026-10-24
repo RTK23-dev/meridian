@@ -1,13 +1,17 @@
-# The Content Factory page
+# The Content page
 
 Dated 2026-10-24. This is the reference for the one content page: what it is, how it is wired, what was checked, and what comes next.
 
 ## Checkpoint
 
 - Code: `8b9a173d` on `feat/one-content-page`, one commit on top of `origin/main`.
-- Base: `97cba9a3` (`origin/main`). It already holds RTK's PR #75 (`c5d6b6bf`) and PR #76 (`97cba9a3`), both merged on 2026-10-24.
-- This document is committed on top of the code. The tag `checkpoint/one-content-page-2026-10-24` points at that commit.
-- Not in this checkpoint: the Repurpose, paused Meta ad and Hypit bridge work on `code/beautiful-cori-1zfk11` (37 commits).
+- Base: `97cba9a3` (`origin/main`). It holds RTK's PR #75 (`c5d6b6bf`) and PR #76 (`97cba9a3`), both merged on 2026-10-24.
+- The name change and this document are committed on top of the code. The branch `checkpoint/one-content-page-2026-10-24` points at the head of that commit.
+- Left out of the checkpoint: the work on `code/beautiful-cori-1zfk11` (37 commits from Claude sessions). The owner has paused its Meta paused-ad work and its Hypit bridge work. The Repurpose panel on that branch is not merged, and its status is still open.
+
+## Name
+
+The page is called **Content**. It was "Content Factory" until 2026-10-24. The Ads section keeps its name, because ads are a form of content. The engine's pipeline keeps the name Content Factory in its own docs and code (`src/lib/meridian/content-factory`). The route stays at `/content-factory`, so existing links keep working.
 
 ## What the page is
 
@@ -59,9 +63,9 @@ A section a person may not use falls back to Create.
 
 ## Navigation
 
-- Brand sidebar: Brand (Overview, Brand brain, Products), Research (Market, Intelligence), Content (Content Factory, with the open review count), Results (Calibration), Settings.
+- Brand sidebar: Brand (Overview, Brand brain, Products), Research (Market, Intelligence), Create (Content, with the open review count), Results (Calibration), Settings. The group is named Create so the item is not repeated as "Content / Content".
 - Bottom bar on a brand: Overview, Content, Market, Calibration.
-- Next step: Intelligence, then Content Factory, then Calibration, then Content Factory.
+- Next step: Intelligence, then Content, then Calibration, then Content.
 
 ## Code map
 
@@ -71,23 +75,22 @@ A section a person may not use falls back to Create.
 - `screen.tsx`: the engine screen. `embedded` hides its page header inside the page.
 - `src/lib/navigation/model.ts`: sidebar, bottom bar, next step and the area guide. Tests: `model.test.ts`.
 
-## Checks at this checkpoint
+## Checks
 
-- Typecheck: `npm run typecheck` passes.
-- Lint: `npm run lint` has no errors. Its four warnings are the fast-refresh rule, and all four are on the base branch. One of them is in `intelligence-whitespace.tsx`, a file this change edited, on code this change did not touch.
-- Tests, run as the two halves of `npm test`:
-  - Scripts: 160 pass, 0 fail.
-  - Src: 6,251 tests, 6,210 pass, 0 fail, 41 skipped. The skips need `MERIDIAN_PG_TEST_URL` (the PostgreSQL paths) or a live Gemini key, so the PostgreSQL paths did not run.
-- Build: `vite build` passes and regenerates `src/routeTree.gen.ts`.
-- Not checked: the page in a browser (AGENTS.md rule 11), screenshots, and any live provider run.
+- Typecheck: `npm run typecheck` passes after the rename.
+- Lint: `npx eslint` on the changed files has no errors or warnings after the rename. Across the repo, `npm run lint` had no errors and four warnings before the rename. All four are on the base branch.
+- Tests:
+  - After the rename: the content hub and navigation model test files, 30 pass, 0 fail.
+  - On `8b9a173d`, before the rename: scripts 160 pass, 0 fail. Src 6,251 tests, 6,210 pass, 0 fail, 41 skipped. The skips need `MERIDIAN_PG_TEST_URL` (the PostgreSQL paths) or a live Gemini key, so the PostgreSQL paths did not run.
+- Build: `vite build` passed on `8b9a173d` and regenerated `src/routeTree.gen.ts`. The rename changes no route path, so the route tree needs no regeneration.
+- Not checked: the page in a browser (AGENTS.md rule 11), screenshots, the browser flow `scripts/content-factory-flow.mjs` (it needs a running server and a sign-in), and any live provider run.
 
 ## Next, in order
 
-1. Check the page in a browser as an admin and as a member, at desktop and phone width. Capture before and after.
+1. Check the page in a browser as an admin and as a member, at desktop and phone width. Capture before and after. Run `scripts/content-factory-flow.mjs` against a running server. Its page check now looks for the page description.
 2. Section headings: each embedded section still shows its own eyebrow and page title under the page title. Make them section headings.
-3. Move the brand overview's stage links and next-action links (`src/components/brand-overview/pipeline.ts`), and the home attention links, to the section links. They work now through the redirects.
-4. Decide on the Repurpose work on `code/beautiful-cori-1zfk11`. It changes `screen.tsx`, which this slice changed, so merging it needs conflict work.
+3. Move the brand overview's stage and next-action links (`src/components/brand-overview/pipeline.ts`) and the home attention links to the section links. They work now through the redirects.
+4. Repurpose panel: owner decision needed. The Meta paused-ad work and the Hypit bridge work stay paused.
 5. Backend unification, not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
 6. Calibration is still its own page.
-7. Confirm the owner's naming. The Factory screen is labelled "Ads".
-8. The line of record (which branch is the release line) is an open owner decision.
+7. Line of record (which branch is the release line): owner decision.

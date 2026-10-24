@@ -28,7 +28,7 @@ export const SETTINGS_SCREEN_LINKS: NavItem[] = [
 
 /**
  * Sidebar groups: Brand, Research, Content, Results, then Settings. Brand groups exist only on brand pages, so a workspace
- * page shows the workspace overview and Settings. The Content Factory page holds ideas, creating, review, library, publishing,
+ * page shows the workspace overview and Settings. The Content page holds ideas, creating, review, library, publishing,
  * results and ads, so the sidebar has one item for it. A badge appears only for a real count above zero: a null count (not
  * loaded yet, or failed) and a zero count both show no badge.
  */
@@ -50,7 +50,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
         label: "Overview",
         items: [
           { id: "overview", label: "Workspace overview", to: "/" },
-          { id: "content-factory", label: "Content Factory", to: "/content-factory" },
+          { id: "content-factory", label: "Content", to: "/content-factory" },
         ],
       },
       settings,
@@ -78,9 +78,9 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
     },
     {
       id: "content",
-      label: "Content",
+      label: "Create",
       // The badge counts the reviews waiting for a person. They are in this page's Review section.
-      items: [{ id: "content", label: "Content Factory", to: `${base}/content`, badge: openReviews }],
+      items: [{ id: "content", label: "Content", to: `${base}/content`, badge: openReviews }],
     },
     {
       id: "results",
@@ -94,16 +94,16 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
 /**
  * Where each kind of work lives on a brand, in words a new person can use. The brand overview shows this list. Each path is a screen
  * the sidebar lists, and a test keeps it that way. Ideas, creating, review, library, publishing, results and ads are sections of the
- * Content Factory page.
+ * Content page.
  */
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
-  { id: "content", label: "Content Factory", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Ads (admins only) runs the research-led Factory runs." },
+  { id: "content", label: "Content", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Ads (admins only) runs the research-led Factory runs." },
 ];
 
 /**
- * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Intelligence, Content Factory, Calibration,
- * then back to Content Factory. The brand overview is not listed: its own next-action card names the next step from stored data,
+ * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Intelligence, Content, Calibration,
+ * then back to Content. The brand overview is not listed: its own next-action card names the next step from stored data,
  * so a second link would contradict it.
  */
 const BRAND_NEXT: Record<string, string> = {

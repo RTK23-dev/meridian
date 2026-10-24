@@ -53,16 +53,16 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   const newSession = canAdmin && list.length > 0 ? <Button size="md" leftIcon={<Plus aria-hidden="true" className="size-4" />} onClick={() => setCreating((open) => !open)}>New session</Button> : null;
   const header = embedded ? null : (
     <PageHeader
-      title="Content Factory"
+      title="Content"
       description="Start a video from any idea. Chat with instructions, attach a reference video, images, text and records from other Meridian pages, then ask for the video. Each decision the engine makes appears in the Decisions panel as it happens."
       actions={newSession}
     />
   );
   if (!canAdmin) {
-    return <div className="space-y-6">{header}<AdminOnlyNotice screen="Content Factory" role={role} /></div>;
+    return <div className="space-y-6">{header}<AdminOnlyNotice screen="Content" role={role} /></div>;
   }
   if (sessions.isError && !sessions.data) return <div>{header}<PlainErrorState error={sessions.error} onRetry={() => void sessions.refetch()} /></div>;
-  if (!sessions.data) return <ScreenSkeleton label="Loading Content Factory sessions" shape="cards" />;
+  if (!sessions.data) return <ScreenSkeleton label="Loading Content sessions" shape="cards" />;
 
   return (
     <div className="space-y-6">

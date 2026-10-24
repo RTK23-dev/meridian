@@ -27,7 +27,7 @@ test("brandIdFromPath reads the brand from brand paths and never from /brands/ne
 test("workspace pages list the workspace overview and the Settings group, and no brand groups", () => {
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
-  assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content Factory is a workspace screen");
+  assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content is a workspace screen");
   assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "settings"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);
@@ -76,11 +76,11 @@ test("the brand overview has no footer next step, because its own next-action ca
   assert.equal(nextStep({ pathname: "/brands/brand-1", brandId: "brand-1" }), null);
 });
 
-test("the loop runs Intelligence, Content Factory, Calibration, then back to Content Factory", () => {
+test("the loop runs Intelligence, Content, Calibration, then back to Content", () => {
   const next = (pathname: string) => nextStep({ pathname, brandId: "brand-1" })?.label;
-  assert.equal(next("/brands/brand-1/intelligence"), "Content Factory");
+  assert.equal(next("/brands/brand-1/intelligence"), "Content");
   assert.equal(next("/brands/brand-1/content"), "Calibration");
-  assert.equal(next("/brands/brand-1/calibration"), "Content Factory");
+  assert.equal(next("/brands/brand-1/calibration"), "Content");
   assert.equal(nextStep({ pathname: "/brands/brand-1/studio", brandId: "brand-1" }), null, "an old screen path is not in the sidebar, so it has no next step");
 });
 
@@ -174,7 +174,7 @@ function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): str
   return groups.find((group) => group.id === groupId)?.items.map((item) => item.id) ?? [];
 }
 
-test("the brand sidebar opens the Content Factory page from one item, and keeps Calibration under Results", () => {
+test("the brand sidebar opens the Content page from one item, and keeps Calibration under Results", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
   assert.deepEqual(itemIds(groups, "content"), ["content"], "ideas, create, review, library, publish, results and ads are sections of that page");
   const content = groups.flatMap((group) => group.items).find((item) => item.id === "content");

@@ -119,7 +119,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Content Factory" description={description} actions={brandPicker} />
+      <PageHeader title="Content" description={description} actions={brandPicker} />
       <Tabs value={current} onValueChange={(value) => onSearchChange(searchForSection(search, sectionOf(value)), false)} className="space-y-6">
         <TabsList>
           {sections.map((item) => (
