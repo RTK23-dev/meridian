@@ -175,3 +175,41 @@ describe("the decision check on a repurpose plan", () => {
     assert.match(spec.instructions, /brand/);
   });
 });
+
+describe("the brand-fit check on a rendered variation", () => {
+  // A stub renderer that renders every variation to a fixed video id, so the check and its recording can be read without a provider.
+  const renders = { count: 0 };
+  const renderStub = async () => {
+    renders.count += 1;
+    return { status: "rendered" as const, artifactId: `art_variant_check_${renders.count}` };
+  };
+  const rendering = { renderPriceUsd: () => 0.05, render: renderStub };
+
+  test("a rendered variation is checked once, and the check is recorded on that variation as advisory review", async () => {
+    const registry = registryWith(0.95);
+    const callsBefore = registry.calls();
+    const run = await startRepurpose(
+      db.sql,
+      ADMIN,
+      { sessionId: SESSION, settings: { ...settingsOf(1), intensity: 4 } },
+      { ...rendering, decision: { selection: { engineId: "jev", source: "workspace" }, engines: registry.engines } },
+    );
+    assert.equal(run.variations[0]?.status, "rendered", "the variation is rendered");
+    assert.equal(run.variations[0]?.decision.outcome, "review", "the check is recorded on the variation");
+    assert.equal(run.variations[0]?.decision.engineId, "jev", "with the engine that gave it");
+    assert.equal(registry.calls() - callsBefore, 2, "one call for the plan and one for the rendered variation");
+  });
+
+  test("without a decision engine, a rendered variation is still rendered and its check is recorded as not consulted", async () => {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: SESSION, settings: { ...settingsOf(1), intensity: 5 } }, rendering);
+    assert.equal(run.variations[0]?.status, "rendered");
+    assert.equal(run.variations[0]?.decision.outcome, "not_consulted");
+    assert.equal(run.variations[0]?.decision.engineId, null);
+  });
+
+  test("a variation that is not rendered has no check to show", async () => {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: SESSION, settings: { ...settingsOf(1), intensity: 2 } }, { renderPriceUsd: () => undefined });
+    assert.equal(run.variations[0]?.status, "not_priced");
+    assert.equal(run.variations[0]?.decision.outcome, "not_consulted", "nothing was judged, and nothing is shown as judged");
+  });
+});

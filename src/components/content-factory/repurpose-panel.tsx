@@ -269,6 +269,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       </div>
                       <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
+                      {variation.status === "rendered" ? <p className="text-xs text-muted">{brandFitLine(variation.decision.outcome)}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendering" ? <CheckRenderer sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? (
@@ -290,6 +291,17 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
       </div>
     </Card>
   );
+}
+
+/**
+ * The brand-fit check on one rendered variation, in words. It is advisory: an uncalibrated score never approves or blocks a variation, and
+ * the reviewer decides. A variation rendered before the check existed, or with no engine, says that it was not consulted.
+ */
+function brandFitLine(outcome: "approved" | "review" | "rejected" | "not_consulted"): string {
+  if (outcome === "approved") return "Brand-fit check: approved. A note for the reviewer, not a decision.";
+  if (outcome === "review") return "Brand-fit check: sent to review. A note for the reviewer. Uncalibrated scores never approve or block a variation.";
+  if (outcome === "rejected") return "Brand-fit check: rejected. A note for the reviewer. It blocks nothing.";
+  return "Brand-fit check: not consulted. No decision engine answered for this variation.";
 }
 
 /** A short-lived link to a rendered variation's video. The server signs it only for a variation recorded as rendered, and says why when it cannot. */

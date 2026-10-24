@@ -13,7 +13,7 @@ import { repurposeSettingsSchema, resolveRepurpose, type RepurposeOutcome } from
 import { renderedVideoSchema } from "../../../engine/contracts/render.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import type { GateInput } from "../decisions/gate.ts";
-import { judgeRepurposePlan, type RepurposePlanCheck } from "./repurpose-gate.ts";
+import { judgeRepurposePlan, judgeRepurposeVariant, type RepurposeCheck } from "./repurpose-gate.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { engineMediaLinkSigner, type EngineMediaLinkResult, type EngineMediaLinkSigner } from "../storage/engine-media-link.ts";
 import { sessionAccess } from "./service.ts";
@@ -38,6 +38,8 @@ export type RepurposeVariationRow = {
   childArtifactId: string;
   renderedArtifactId: string | null;
   treatments: Array<{ category: string; optionId: string; label: string }>;
+  /** The brand-fit check on the rendered video. Only a rendered variation is checked. Advisory: it blocks nothing. */
+  decision: { outcome: RepurposeCheck["outcome"]; reason: string; engineId: string | null };
 };
 
 export type RepurposeRunView = {
@@ -45,7 +47,7 @@ export type RepurposeRunView = {
   created: boolean;
   masterEdlId: string;
   /** The decision check the plan was made with. not_consulted: no decision engine answered (see repurpose-gate.ts). */
-  decision: { outcome: RepurposePlanCheck["outcome"]; reason: string; engineId: string | null };
+  decision: { outcome: RepurposeCheck["outcome"]; reason: string; engineId: string | null };
   variations: RepurposeVariationRow[];
 };
 
@@ -78,7 +80,7 @@ export type RepurposePorts = {
   decision?: { selection?: GateInput["selection"]; engines?: DecisionEngineRegistry };
 };
 
-const NO_CHECK: RepurposePlanCheck = { outcome: "not_consulted", reason: "", engineId: null, gateRecordId: null };
+const NO_CHECK: RepurposeCheck = { outcome: "not_consulted", reason: "", engineId: null, gateRecordId: null };
 
 /** The master cut of a delivered engine request, read through its contract. */
 async function masterOf(sql: Sql, organizationId: string, requestId: string): Promise<{ edl: EditDecisionList; artifactId: string }> {
@@ -139,7 +141,7 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
     select id from content_factory_repurpose_runs
     where organization_id = ${organizationId} and session_id = ${session} and master_edl_id = ${master.edl.edlId} and settings_digest = ${digest}
   `;
-  const check: RepurposePlanCheck =
+  const check: RepurposeCheck =
     planned.length > 0
       ? NO_CHECK
       : await judgeRepurposePlan({
@@ -198,8 +200,8 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
   const priceUsd = ports.renderPriceUsd ?? renderPriceUsdOf;
   const estimateUsd = priceUsd(master.edl.durationMs);
   // Only a variation that may be claimed is read: a rendered one, or one a renderer is still working on or was interrupted during, is left alone.
-  const pending = await sql<{ variant_key: string; child_artifact_id: string }>`
-    select variant_key, child_artifact_id from content_factory_repurpose_variants
+  const pending = await sql<{ variant_key: string; child_artifact_id: string; treatments: string }>`
+    select variant_key, child_artifact_id, treatments from content_factory_repurpose_variants
     where run_id = ${runId} and organization_id = ${organizationId} and status in ('planned', 'not_priced', 'not_connected', 'failed')
     order by ordinal asc
   `;
@@ -221,15 +223,30 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
     if (claimed.length === 0) continue;
     const edl = await childEdlOf(sql, organizationId, variant.child_artifact_id);
     const result = await ports.render({ organizationId, engineRequestId: requestId, variationKey: variant.variant_key, childArtifactId: variant.child_artifact_id, edl, estimateUsd });
-    if (result.status === "rendered") await setStatus(sql, runId, variant.variant_key, "rendered", "", result.artifactId);
-    else await setStatus(sql, runId, variant.variant_key, "failed", result.reason, null);
+    if (result.status !== "rendered") {
+      await setStatus(sql, runId, variant.variant_key, "failed", result.reason, null);
+      continue;
+    }
+    await setStatus(sql, runId, variant.variant_key, "rendered", "", result.artifactId);
+    // The brand-fit check is made once for each rendered video, and it is advisory: it is recorded on the variation and blocks nothing.
+    const treatments = (JSON.parse(variant.treatments) as RepurposeVariationRow["treatments"]).map((treatment) => treatment.label);
+    const check = await judgeRepurposeVariant({
+      sql,
+      organizationId,
+      brandId: row.brand_id,
+      subjectId: `${runId}:${variant.variant_key}:${result.artifactId}`,
+      treatments,
+      selection: ports.decision?.selection,
+      engines: ports.decision?.engines,
+    });
+    await setVariantCheck(sql, runId, variant.variant_key, check);
   }
 
-  const variations = await sql<{ variant_key: string; ordinal: number; status: RepurposeVariationStatus; reason: string; child_edl_id: string; child_artifact_id: string; rendered_artifact_id: string | null; treatments: string }>`
-    select variant_key, ordinal, status, reason, child_edl_id, child_artifact_id, rendered_artifact_id, treatments
+  const variations = await sql<{ variant_key: string; ordinal: number; status: RepurposeVariationStatus; reason: string; child_edl_id: string; child_artifact_id: string; rendered_artifact_id: string | null; treatments: string; gate_outcome: RepurposeCheck["outcome"]; gate_reason: string; gate_engine: string | null }>`
+    select variant_key, ordinal, status, reason, child_edl_id, child_artifact_id, rendered_artifact_id, treatments, gate_outcome, gate_reason, gate_engine
     from content_factory_repurpose_variants where run_id = ${runId} and organization_id = ${organizationId} order by ordinal asc
   `;
-  const decisionRows = await sql<{ gate_outcome: RepurposePlanCheck["outcome"]; gate_reason: string; gate_engine: string | null }>`
+  const decisionRows = await sql<{ gate_outcome: RepurposeCheck["outcome"]; gate_reason: string; gate_engine: string | null }>`
     select gate_outcome, gate_reason, gate_engine from content_factory_repurpose_runs where id = ${runId} and organization_id = ${organizationId}
   `;
   const decision = decisionRows[0];
@@ -247,6 +264,7 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
       childArtifactId: item.child_artifact_id,
       renderedArtifactId: item.rendered_artifact_id,
       treatments: JSON.parse(item.treatments) as RepurposeVariationRow["treatments"],
+      decision: { outcome: item.gate_outcome, reason: item.gate_reason, engineId: item.gate_engine },
     })),
   };
 }
@@ -255,6 +273,14 @@ async function setStatus(sql: Sql, runId: string, variantKey: string, status: Re
   await sql`
     update content_factory_repurpose_variants
     set status = ${status}, reason = ${reason}, rendered_artifact_id = ${renderedArtifactId}, updated_at = now()
+    where run_id = ${runId} and variant_key = ${variantKey}
+  `;
+}
+
+async function setVariantCheck(sql: Sql, runId: string, variantKey: string, check: RepurposeCheck): Promise<void> {
+  await sql`
+    update content_factory_repurpose_variants
+    set gate_outcome = ${check.outcome}, gate_reason = ${check.reason}, gate_engine = ${check.engineId}, gate_record_id = ${check.gateRecordId}, updated_at = now()
     where run_id = ${runId} and variant_key = ${variantKey}
   `;
 }
