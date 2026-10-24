@@ -4,6 +4,7 @@
  * brief is written through createGatedBrief. A person may name the opportunity to brief; without one, the top discovered
  * direction is used. Server-only: the server function in actions.ts loads this module on demand.
  */
+import { frameFromBrand } from "../brief/frame.ts";
 import { requireBrand } from "../brand-membership.ts";
 import { buildBrief } from "../brief/engine.ts";
 import { loadBrandContext } from "../context/load.ts";
@@ -184,6 +185,13 @@ export async function openStudioBriefFor(
     if (!brief.constraints.includes(line)) brief.constraints = `${brief.constraints}\n${line} ${pattern.summary}`.trim();
   }
   if (!brief.cta.trim()) brief.cta = "See it in use";
+  // The brand frame is read from the brand's own values and the product's allowed claims. Nothing the brand does not hold is invented.
+  const frame = frameFromBrand({
+    tone: loaded.brain.tone,
+    prohibitedClaims: loaded.brain.prohibitedClaims,
+    requiredDisclaimers: loaded.brain.requiredDisclaimers,
+    productAllowedClaims: loaded.products.find((product) => product.id === draft.productId)?.allowedClaims ?? null,
+  });
   brief.why.push("Success would test whether this direction beats this brand's stored baseline without copying a competitor line.");
   const outcome: { result?: BriefGateResult } = {};
   const judge = briefGateJudge(sql, {
@@ -206,6 +214,7 @@ export async function openStudioBriefFor(
     brandId: data.brandId,
     createdBy: userId,
     brief: {
+      frame,
       opportunityId,
       title: brief.title,
       audience: brief.audience,

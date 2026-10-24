@@ -1,3 +1,4 @@
+import type { BriefFrame } from "../brief/frame.ts";
 /**
  * The frozen brief-creation and opportunity-direction contract. Every brief-creation path calls `createGatedBrief`. It is
  * the only place a brief row is written, and it writes that row only after the shared brief gate has judged the brief.
@@ -11,6 +12,8 @@ export type BriefStatus = "ready" | "awaiting_review" | "rejected";
 
 /** The fields of a brief row, as the caller built them. The service adds the id, status and decision link. */
 export type BriefRecord = {
+  /** The brand frame, stored as text. Absent: the brief is stored with an empty frame, so every field reads as not set. */
+  frame?: BriefFrame;
   opportunityId: string | null;
   title: string;
   audience: string;
