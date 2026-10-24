@@ -275,15 +275,6 @@ async function startBatchLocked(sql: Sql, userId: string, input: { batchId: stri
  * committed spend past the budget; the failed attempt's budget is still counted, so the check is conservative. Its siblings are not changed.
  */
 export async function retryBatchItem(sql: Sql, userId: string, input: { batchId: string; sessionId: string }, ports?: StartPorts): Promise<BatchSummary> {
-  const { batch } = await loadBatch(sql, input.batchId);
-  await requireBrand(sql, userId, batch.brand_id, "admin");
-  return withTransaction(sql, async (tx) => {
-    await lockBatch(tx, input.batchId);
-    return retryBatchItemLocked(tx, userId, input, ports);
-  });
-}
-
-async function retryBatchItemLocked(sql: Sql, userId: string, input: { batchId: string; sessionId: string }, ports?: StartPorts): Promise<BatchSummary> {
   const { batch, items } = await loadBatch(sql, input.batchId);
   await requireBrand(sql, userId, batch.brand_id, "admin");
   const item = items.find((candidate) => candidate.session_id === input.sessionId);
@@ -292,17 +283,29 @@ async function retryBatchItemLocked(sql: Sql, userId: string, input: { batchId: 
   if (!current?.retryable) throw new Error(`Only a failed video with attempts left can be retried. This one is ${current?.state ?? "unknown"}.`);
   const fit = fitsBatchBudget({ batchBudgetUsd: Number(batch.budget_usd), committedUsd: committedUsd(items.map(spendOf)), itemBudgetUsd: budgetOf(item.budget_usd) });
   if (!fit.ok) throw new Error(fit.reason);
+  // The revision changes the video's state, not the committed spend, and it runs its own transaction, so it is made before the batch lock.
   const revised = await reviseSession(sql, userId, { sessionId: input.sessionId });
   if (revised.status === "refused") throw new Error(revised.reason);
-  // A refused start is stored on the item by startRun, so the item shows why it is not running.
-  await startRun(sql, userId, { sessionId: input.sessionId }, ports);
-  await auditBatch(sql, {
-    organizationId: batch.organization_id,
-    brandId: batch.brand_id,
-    actorId: userId,
-    action: "content_factory.item_retried",
-    objectId: input.sessionId,
-    metadata: { batchId: batch.id, attempt: String(current.attempts + 1) },
+  // The start is what spends. The committed spend is read again under the batch lock, and the start runs in the same transaction.
+  return withTransaction(sql, async (tx) => {
+    await lockBatch(tx, input.batchId);
+    const locked = await loadBatch(tx, input.batchId);
+    const lockedFit = fitsBatchBudget({
+      batchBudgetUsd: Number(locked.batch.budget_usd),
+      committedUsd: committedUsd(locked.items.map(spendOf)),
+      itemBudgetUsd: budgetOf(item.budget_usd),
+    });
+    if (!lockedFit.ok) throw new Error(lockedFit.reason);
+    // A refused start is stored on the item by startRun, so the item shows why it is not running.
+    await startRun(tx, userId, { sessionId: input.sessionId }, ports);
+    await auditBatch(tx, {
+      organizationId: batch.organization_id,
+      brandId: batch.brand_id,
+      actorId: userId,
+      action: "content_factory.item_retried",
+      objectId: input.sessionId,
+      metadata: { batchId: batch.id, attempt: String(current.attempts + 1) },
+    });
+    return getBatch(tx, userId, { batchId: batch.id });
   });
-  return getBatch(sql, userId, { batchId: batch.id });
 }
