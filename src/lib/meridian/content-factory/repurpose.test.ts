@@ -10,6 +10,7 @@ import { startEngineRequest } from "../../../engine/jobs/orchestrator-sql.ts";
 import { defaultRepurposeSettings } from "../../../engine/repurpose/resolve.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { RENDER_PRICE_NOT_VERIFIED, RENDERER_NOT_CONNECTED, repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
+import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 
 const WS = "ws_repurpose";
 const BRAND = "brand_repurpose";
@@ -297,3 +298,96 @@ describe("opening a rendered variation's video", () => {
     assert.equal(link.status, "not_connected");
   });
 });
+
+describe("reviewing a rendered repurposed variation", () => {
+  /** A stored rendered video on one rendered variation, so the review has a video to decide on. */
+  async function reviewable(number: number) {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, settings: settings(3) });
+    const rendered = run.variations.find((variation) => variation.status === "rendered");
+    assert.ok(rendered, "the run has a rendered variation");
+    const videoId = `vid_01HZ${String(100 + number).padStart(22, "0")}`;
+    const video = await writeArtifact(db.sql, {
+      organizationId: WS,
+      requestId: DELIVERED_REQUEST,
+      stage: "render",
+      type: "rendered_video",
+      body: {
+        videoId,
+        edlId: rendered.childEdlId,
+        uri: `store://renders/${videoId}.mp4`,
+        renderer: "hyperframes-cloud",
+        durationMs: edlFixture.durationMs,
+        bytes: 16,
+        estimateUsd: 0.05,
+        costUsd: null,
+        idempotencyKey: `sha256:${"b".repeat(64)}`,
+      },
+      createdAt: NOW,
+    });
+    await db.sql`update content_factory_repurpose_variants set rendered_artifact_id = ${video.artifactId} where run_id = ${run.runId} and variant_key = ${rendered.key}`;
+    return { runId: run.runId, variantKey: rendered.key, artifactId: video.artifactId };
+  }
+
+  test("an approval is recorded on the rendered video it was made on, and shows in the review state", async () => {
+    const { runId, variantKey } = await reviewable(1);
+    await recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "approved", reason: "Looks right." });
+    const states = await repurposeReviewsOf(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId });
+    assert.equal(states[variantKey]?.status, "approved");
+    assert.equal(states[variantKey]?.reason, "Looks right.");
+  });
+
+  test("a second approval of the same video is refused, as it is for a master", async () => {
+    const { runId, variantKey } = await reviewable(2);
+    await recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "approved", reason: "" });
+    await assert.rejects(recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "approved", reason: "" }), /already approved/);
+  });
+
+  test("a rejection needs a reason of at least 10 characters, and is recorded with it", async () => {
+    const { runId, variantKey } = await reviewable(3);
+    await assert.rejects(recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "rejected", reason: "no" }), /at least 10 characters/);
+    await recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "rejected", reason: "The product is not visible." });
+    const states = await repurposeReviewsOf(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId });
+    assert.equal(states[variantKey]?.status, "rejected");
+  });
+
+  test("a variation that was not rendered cannot be reviewed", async () => {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, settings: settings(2) }, { renderPriceUsd: () => 0.2 });
+    await assert.rejects(
+      recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId: run.runId, variantKey: run.variations[0]!.key, decision: "approved", reason: "" }),
+      /not rendered/,
+    );
+  });
+
+  test("a member who is not an admin cannot review, and reads no review state", async () => {
+    const { runId, variantKey } = await reviewable(4);
+    await assert.rejects(recordRepurposeReview(db.sql, MEMBER, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "approved", reason: "" }), /admin/i);
+    await assert.rejects(repurposeReviewsOf(db.sql, MEMBER, { sessionId: DELIVERED_SESSION, runId }), /admin/i);
+  });
+
+  test("a re-rendered video starts undecided: the earlier decision was on a different video", async () => {
+    const { runId, variantKey } = await reviewable(5);
+    await recordRepurposeReview(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey, decision: "approved", reason: "" });
+    const newVideo = await writeArtifact(db.sql, {
+      organizationId: WS,
+      requestId: DELIVERED_REQUEST,
+      stage: "render",
+      type: "rendered_video",
+      body: {
+        videoId: `vid_01HZ${String(105).padStart(22, "0")}`,
+        edlId: edlFixture.edlId,
+        uri: `store://renders/vid_01HZ${String(105).padStart(22, "0")}.mp4`,
+        renderer: "hyperframes-cloud",
+        durationMs: edlFixture.durationMs,
+        bytes: 16,
+        estimateUsd: 0.05,
+        costUsd: null,
+        idempotencyKey: `sha256:${"c".repeat(64)}`,
+      },
+      createdAt: NOW,
+    });
+    await db.sql`update content_factory_repurpose_variants set rendered_artifact_id = ${newVideo.artifactId} where run_id = ${runId} and variant_key = ${variantKey}`;
+    const states = await repurposeReviewsOf(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId });
+    assert.equal(states[variantKey]?.status, "not_decided");
+  });
+});
+

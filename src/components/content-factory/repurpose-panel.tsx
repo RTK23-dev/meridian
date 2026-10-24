@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, toast } from "@/components/ui";
-import { getContentFactoryRepurposeOutput, previewContentFactoryRepurpose, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
+import { getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
+import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
 import {
   CATEGORY_LABELS,
@@ -46,13 +47,23 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
   const [run, setRun] = useState<RepurposeRunView | null>(null);
   const [busy, setBusy] = useState<"preview" | "plan" | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Record<string, RepurposeReviewState>>({});
 
   // A change to the choice makes any earlier preview or plan out of date, so both are cleared.
   function change(next: Choice) {
     setChoice(next);
     setPreview(null);
     setRun(null);
+    setReviews({});
     setProblem(null);
+  }
+
+  async function loadReviews(runId: string) {
+    try {
+      setReviews(await listContentFactoryRepurposeReviews({ data: { sessionId, runId } }));
+    } catch (error) {
+      setProblem(errorText(error));
+    }
   }
 
   function setCategory(category: RepurposeCategory, next: CategoryChoice) {
@@ -85,6 +96,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
     try {
       const result = await startContentFactoryRepurpose({ data: { sessionId, settings } });
       setRun(result);
+      void loadReviews(result.runId);
       toast.success(result.created ? "The variations are planned." : "These variations were already planned.");
     } catch (error) {
       setProblem(errorText(error));
@@ -236,8 +248,8 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <div className="space-y-2" aria-live="polite">
                 <h3 className="text-sm font-semibold">Variations</h3>
                 <p className="text-sm text-muted">
-                  Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. Review and publishing of a
-                  repurposed video are not connected in this release, so a rendered variation has no approve or publish action here yet.
+                  Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. A reviewer can approve or
+                  reject a rendered variation. Publishing a repurposed variation is not connected in this release.
                 </p>
                 <ol className="space-y-2 text-sm">
                   {run.variations.map((variation) => (
@@ -249,6 +261,15 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
+                      {variation.status === "rendered" ? (
+                        <ReviewVariation
+                          sessionId={sessionId}
+                          runId={run.runId}
+                          variantKey={variation.key}
+                          state={reviews[variation.key] ?? { status: "not_decided" }}
+                          onChanged={() => void loadReviews(run.runId)}
+                        />
+                      ) : null}
                     </li>
                   ))}
                 </ol>
@@ -286,6 +307,60 @@ function OpenOutput({ sessionId, runId, variantKey }: { sessionId: string; runId
         </p>
       ) : null}
       {result !== null && result.status !== "ok" ? <p role="status" className="text-sm text-muted">{result.reason}</p> : null}
+    </div>
+  );
+}
+
+/** A reviewer's decision on one rendered variation. An approval the rights gate blocks says why; a rejection needs its reason. */
+function ReviewVariation({
+  sessionId,
+  runId,
+  variantKey,
+  state,
+  onChanged,
+}: {
+  sessionId: string;
+  runId: string;
+  variantKey: string;
+  state: RepurposeReviewState;
+  onChanged: () => void;
+}) {
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState<"approved" | "rejected" | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const rejectReady = reason.trim().length >= 10;
+  async function decide(decision: "approved" | "rejected") {
+    setBusy(decision);
+    setProblem(null);
+    try {
+      await reviewContentFactoryRepurposeVariant({ data: { sessionId, runId, variantKey, decision, reason } });
+      toast.success(decision === "approved" ? "The variation is approved." : "The variation is rejected.");
+      setReason("");
+      onChanged();
+    } catch (error) {
+      setProblem(errorText(error));
+    } finally {
+      setBusy(null);
+    }
+  }
+  const current = state.status === "not_decided" ? "Not decided" : state.status === "approved" ? "Approved" : "Rejected";
+  return (
+    <div className="space-y-2 border-t border-border pt-2">
+      <p className="text-sm">
+        <span className="font-semibold">Review:</span> {current}
+        {state.status !== "not_decided" && state.reason ? ` · ${state.reason}` : ""}
+      </p>
+      <Input label="Reason or note" value={reason} maxLength={500} onChange={(event) => setReason(event.target.value)} />
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="secondary" loading={busy === "approved"} disabled={busy !== null} onClick={() => void decide("approved")}>
+          Approve variation
+        </Button>
+        <Button type="button" variant="quiet" loading={busy === "rejected"} disabled={busy !== null || !rejectReady} onClick={() => void decide("rejected")}>
+          Reject variation
+        </Button>
+      </div>
+      {!rejectReady ? <p className="text-xs text-muted">A rejection needs a reason of at least 10 characters.</p> : null}
+      {problem !== null ? <p role="alert" className="text-sm text-danger">{problem}</p> : null}
     </div>
   );
 }

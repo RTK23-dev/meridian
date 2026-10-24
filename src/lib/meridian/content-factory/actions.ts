@@ -9,6 +9,8 @@ import {
   messageInput,
   repurposeInput,
   repurposeOutputInput,
+  repurposeReviewInput,
+  repurposeRunInput,
   remakeShotInput,
   clipInput,
   reviseDirectionInput,
@@ -22,6 +24,7 @@ import {
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
+import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { productionRepurposeRenderPort } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
@@ -165,6 +168,18 @@ export const startContentFactoryRepurpose = createServerFn({ method: "POST" })
     const render = productionRepurposeRenderPort(sql);
     return startRepurpose(sql, context.userId, data, render === undefined ? {} : { render });
   });
+
+/** The latest decision on each rendered variation of a repurpose run. Admins only. */
+export const listContentFactoryRepurposeReviews = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeRunInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => repurposeReviewsOf(await getSql(), context.userId, data));
+
+/** A reviewer's approve or reject decision on one rendered variation. Records a decision only; nothing is published. Admins only. */
+export const reviewContentFactoryRepurposeVariant = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeReviewInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => recordRepurposeReview(await getSql(), context.userId, data));
 
 /** A short-lived link to a rendered variation's video. Admins only. Nothing is signed for a variation that was not rendered. */
 export const getContentFactoryRepurposeOutput = createServerFn({ method: "POST" })

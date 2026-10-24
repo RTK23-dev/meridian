@@ -58,6 +58,24 @@ export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
 
+/** A run of a repurpose, whose rendered variations' decisions are read. */
+export function repurposeRunInput(input: unknown): { sessionId: string; runId: string } {
+  const body = fields(input);
+  return { sessionId: idOf(body.sessionId, "session"), runId: idOf(body.runId, "run") };
+}
+
+/** A reviewer's decision on one rendered variation of a run. The decision and the reason are checked by the review, not here. */
+export function repurposeReviewInput(input: unknown): { sessionId: string; runId: string; variantKey: string; decision: string; reason: string } {
+  const body = fields(input);
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    runId: idOf(body.runId, "run"),
+    variantKey: idOf(body.variantKey, "variation"),
+    decision: typeof body.decision === "string" ? body.decision : "",
+    reason: typeof body.reason === "string" ? body.reason : "",
+  };
+}
+
 /** The rendered variation of a repurpose run whose video a reviewer opens: the session, the run and the variation key. */
 export function repurposeOutputInput(input: unknown): { sessionId: string; runId: string; variantKey: string } {
   const body = fields(input);
