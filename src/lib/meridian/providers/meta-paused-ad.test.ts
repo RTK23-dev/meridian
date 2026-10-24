@@ -30,13 +30,14 @@ type Fake = {
  * An in-memory Meta. It stores creates and answers reads the way the Graph API does for the endpoints the module uses. Options script a
  * failure: `loseReplyOnAdCreate` creates the ad and then throws, as a dropped connection does; `adStatus` is what an ad reads back as.
  */
-function fakeMeta(options: { loseReplyOnAdCreate?: boolean; adStatus?: string } = {}): Fake {
+function fakeMeta(options: { loseReplyOnAdCreate?: boolean; adStatus?: string; failReadBackAttempts?: number } = {}): Fake {
   const posts: Fake["posts"] = [];
   const reads: string[] = [];
   const ads: Fake["ads"] = new Map();
   const creatives = new Map<string, string>();
   let next = 1;
   let lost = false;
+  let readBackFailuresLeft = options.failReadBackAttempts ?? 0;
   const transport: Transport = async (request: TransportRequest): Promise<TransportResponse> => {
     const url = request.url;
     const ok = (json: unknown) => ({ status: 200, body: JSON.stringify(json), headers: {} });
@@ -75,6 +76,10 @@ function fakeMeta(options: { loseReplyOnAdCreate?: boolean; adStatus?: string } 
     }
     const adMatch = url.match(new RegExp(`^${GRAPH}/(ad_\\d+)\\?`));
     if (adMatch) {
+      if (readBackFailuresLeft > 0) {
+        readBackFailuresLeft -= 1;
+        throw new Error("connection reset during the read-back");
+      }
       const ad = ads.get(adMatch[1]!);
       if (!ad) return { status: 404, body: JSON.stringify({ error: { message: "not found" } }), headers: {} };
       return ok({ id: ad.id, status: options.adStatus ?? ad.status, effective_status: options.adStatus ?? ad.status, adset_id: ad.adset, creative: { id: ad.creative } });
@@ -144,4 +149,19 @@ test("listing ad sets is a read only: it names each ad set and creates nothing",
   assert.equal(listed.ok, true);
   assert.deepEqual(listed.ok && listed.adSets, [{ id: OWN_AD_SET, name: "Own set", status: "PAUSED", campaignId: "cmp_1" }]);
   assert.equal(fake.posts.length, 0);
+});
+
+test("a failed read-back after the ad was created is uncertain, and the next attempt confirms that ad without creating another", async () => {
+  // sendWithRetry makes three attempts at a read, so the read-back fails for all three before the result is uncertain.
+  const fake = fakeMeta({ failReadBackAttempts: 3 });
+  const first = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
+  assert.equal(first.status, "uncertain", "the ad may exist, so the result is not a clean failure");
+  assert.equal(first.status === "uncertain" && first.stage, "ad");
+  assert.equal(fake.ads.size, 1);
+
+  const second = await createMetaPausedAd(CREDENTIALS, INPUT, fake.transport);
+  assert.equal(second.status, "paused");
+  assert.equal(second.status === "paused" && second.reused, true);
+  assert.equal(fake.ads.size, 1, "no second ad was created");
+  assert.equal(fake.posts.filter((post) => post.url.endsWith("/ads")).length, 1, "the ad was posted once");
 });

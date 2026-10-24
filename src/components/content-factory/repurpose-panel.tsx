@@ -348,6 +348,7 @@ function pausedAdMessage(outcome: CreatePausedAdOutcome): string {
   if (outcome.status === "created_paused") return "Created a PAUSED ad. It is not active, and nothing has been switched on.";
   if (outcome.status === "already_created") return "This variation already has a paused ad in this ad account. Nothing was created again.";
   if (outcome.status === "blocked") return outcome.reason;
+  if (outcome.status === "in_progress") return outcome.reason;
   if (outcome.status === "uncertain") return "Meta did not confirm the create. Press the button again: Meridian looks for the ad by name before it creates another.";
   if (outcome.status === "not_paused") return `Meta reports the ad as ${outcome.verifiedStatus}, not PAUSED. It is not recorded as paused.`;
   return outcome.error;

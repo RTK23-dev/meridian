@@ -160,7 +160,8 @@ async function confirmPaused(
     url: `${GRAPH}/${adId}?fields=id,status,effective_status,adset_id,creative{id}`,
     headers: authHeaders(credentials.accessToken),
   });
-  if (!result.ok) return { status: "failed", error: result.error || "Meta did not confirm the ad. Nothing else was sent." };
+  // The ad may already exist, so a failed read-back is uncertain, never a clean failure: the next attempt reconciles by name.
+  if (!result.ok) return { status: "uncertain", stage: "ad", error: "Meta created or found the ad, but the read-back failed. The next attempt confirms it before anything else is created." };
   const status = text(result.json, "status");
   if (status !== "PAUSED") return { status: "not_paused", adId, verifiedStatus: status || "unknown" };
   const creative = result.json && typeof result.json === "object" ? (result.json as { creative?: unknown }).creative : undefined;
