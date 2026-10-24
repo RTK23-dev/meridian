@@ -91,8 +91,8 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
       const parts = [`Started ${outcome.started} ${outcome.started === 1 ? "video" : "videos"}.`];
       if (outcome.refused > 0) parts.push(`${outcome.refused} ${outcome.refused === 1 ? "was" : "were"} refused and stay draft, with the reason on each.`);
       if (outcome.stoppedAtBudget) parts.push("The batch stopped at its budget, so the videos after it were not started.");
-      setNotice(parts.join(" "));
       await detail.refetch();
+      setNotice(parts.join(" "));
     } catch (error) {
       setItemError(error instanceof Error ? error.message : "The batch could not be started. Nothing more was started.");
     } finally {
@@ -107,8 +107,8 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
     setNotice(null);
     try {
       await retryContentBatchItem({ data: { batchId: selectedId, sessionId } });
-      setNotice("A new attempt was made for that video. The other videos in the batch are unchanged.");
       await detail.refetch();
+      setNotice("A new attempt was made for that video. The other videos in the batch are unchanged.");
     } catch (error) {
       setItemError(error instanceof Error ? error.message : "The video could not be retried. Nothing was changed.");
     } finally {
