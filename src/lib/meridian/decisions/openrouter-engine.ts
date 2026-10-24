@@ -402,7 +402,7 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     this.timeoutMs = options.timeoutMs ?? OPENROUTER_DECISIONS_TIMEOUT_MS;
     this.keys = options.keys ?? databaseKeys;
     this.store = options.store ?? databaseStore;
-    this.deploymentModel = options.deploymentModel ?? process.env[OPENROUTER_DECISIONS_MODEL_ENV];
+    this.deploymentModel = options.deploymentModel ?? process.env.OPENROUTER_DECISIONS_MODEL;
   }
 
   /** The capabilities across every verified model, since the model is chosen per workspace. Per decision, the model's own limits apply. */
