@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
+import { advance } from "../../../engine/jobs/orchestrator.ts";
 import { approvalProblem, approvalStateFor, publishStateOf, type ApprovalRecord } from "./approval.ts";
 import { deliveryApprovalOf, recordDeliveryApproval } from "./service.ts";
 
@@ -18,6 +19,17 @@ const UNDELIVERED = "sess_appr_running";
 
 let db: TestDatabase;
 
+/** The state the engine writes when a request starts. The approval reads the request's status and manifest, so the state must parse. */
+function startedState(requestId: string): Record<string, unknown> {
+  const started = advance(null, { type: "start", organizationId: WS, requestId, priority: "normal", cachedDna: false, variantCount: 0, requestArtifactId: "art_appr" });
+  return JSON.parse(JSON.stringify(started.state)) as Record<string, unknown>;
+}
+
+function withIntakePassed(state: Record<string, unknown>, extra: Record<string, unknown> = {}): Record<string, unknown> {
+  const nodes = state.nodes as Record<string, Record<string, unknown>>;
+  return { ...state, ...extra, nodes: { ...nodes, intake: { ...nodes.intake, status: "passed" } } };
+}
+
 before(async () => {
   db = await createTestDatabase();
   await seedWorkspace(db.sql, WS, BRAND);
@@ -27,8 +39,8 @@ before(async () => {
   }
   await db.sql`
     insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state)
-    values ('req_appr_1', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'delivered', '{}'),
-           ('req_appr_running', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'running', '{}')
+    values ('req_appr_1', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'delivered', ${JSON.stringify(withIntakePassed(startedState("req_appr_1"), { manifestId: "vid_appr_1" }))}),
+           ('req_appr_running', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'running', ${JSON.stringify(withIntakePassed(startedState("req_appr_running")))})
   `;
   await db.sql`
     insert into content_factory_sessions (id, organization_id, brand_id, created_by, title, status, engine_request_id, started_at)
@@ -104,7 +116,7 @@ test("a rejection after an approval becomes the state, and both decisions stay i
 });
 
 test("a revision is a new request: it starts undecided, the earlier decisions stay, and it can be decided once delivered", async () => {
-  await db.sql`insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state) values ('req_appr_2', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'running', '{}')`;
+  await db.sql`insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state) values ('req_appr_2', ${WS}, ${BRAND}, 'fmt_appr', 'normal', 'running', ${JSON.stringify(withIntakePassed(startedState("req_appr_2")))})`;
   await db.sql`update content_factory_sessions set engine_request_id = 'req_appr_2' where id = ${SESSION}`;
   const revising = await deliveryApprovalOf(db.sql, ADMIN, { sessionId: SESSION });
   assert.equal(revising.requestId, "req_appr_2");
@@ -113,7 +125,8 @@ test("a revision is a new request: it starts undecided, the earlier decisions st
   assert.equal(revising.history.length, 2, "the decisions on the earlier video stay in the history");
   await assert.rejects(recordDeliveryApproval(db.sql, ADMIN, { sessionId: SESSION, decision: "approved", reason: "" }), /not delivered/);
 
-  await db.sql`update engine_requests set status = 'delivered' where id = 'req_appr_2'`;
+  // The revision is delivered under its own manifest, so the earlier decisions do not carry over to it.
+  await db.sql`update engine_requests set status = 'delivered', state = ${JSON.stringify(withIntakePassed(startedState("req_appr_2"), { manifestId: "vid_appr_2" }))} where id = 'req_appr_2'`;
   const decided = await recordDeliveryApproval(db.sql, ADMIN, { sessionId: SESSION, decision: "approved", reason: "" });
   assert.equal(decided.state.status, "approved");
   assert.equal(decided.history.length, 3);
