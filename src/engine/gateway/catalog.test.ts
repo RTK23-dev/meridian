@@ -88,25 +88,36 @@ describe("model exclusions: scoped to one endpoint, each with its reason", () =>
 });
 
 describe("catalog parse: GET /models for image and speech", () => {
-  it("prices image rows per image, then per request, and drops token-only, variable, text-only and malformed rows", () => {
+  it("prices image rows per request only, and drops token-priced, variable, text-only and malformed rows", () => {
     const parsed = parseModelsCatalog("image", fixture("openrouter-catalog-image"), READ_AT);
     assert.deepEqual(
       parsed.entries.map((entry) => [entry.id, entry.price.unit, entry.price.usd, entry.modelClasses]),
-      [
-        ["bytedance-seed/seedream-4.5", "per_image", 0.04, ["image.keyframe", "image.edit"]],
-        ["vendor/text-to-image-flat", "per_request", 0.02, ["image.keyframe"]],
-      ],
+      [["vendor/text-to-image-flat", "per_request", 0.02, ["image.keyframe"]]],
     );
-    const seedream = parsed.entries[0];
-    assert.equal(seedream?.capabilities.firstFrame, true, "an image input means it can start from a picture");
-    assert.equal(seedream?.capabilities.refsMax, null, "how many references is not listed");
-    assert.equal(parsed.entries[1]?.capabilities.refsMax, 0, "a text-only input takes no reference");
+    assert.equal(parsed.entries[0]?.capabilities.refsMax, 0, "a text-only input takes no reference");
     const reasons = new Map(parsed.dropped.map((drop) => [drop.id, drop.reason]));
     assert.match(reasons.get("google/gemini-image-tokens") ?? "", /per token only/);
+    assert.match(reasons.get("bytedance-seed/seedream-4.5") ?? "", /per token only/, "image output is a per-token rate on the live listing, not a per-image price");
     assert.match(reasons.get("vendor/text-only") ?? "", /does not list image as an output/);
     assert.match(reasons.get("vendor/variable-price") ?? "", /no positive price/);
     assert.ok(parsed.dropped.some((drop) => drop.id === null && /listing shape/.test(drop.reason)), "a row whose id is not a string");
-    assert.equal(parsed.dropped.length, 4);
+    assert.equal(parsed.dropped.length, 5);
+  });
+
+  it("reads the live image listing with no row kept: every image output is priced per token, so none can be reserved", () => {
+    const live = parseModelsCatalog("image", fixture("openrouter-catalog-image-live"), READ_AT);
+    assert.equal(live.entries.length, 0);
+    assert.equal(live.dropped.length, 63);
+    assert.ok(live.dropped.some((drop) => /per token only/.test(drop.reason)));
+    assert.ok(live.dropped.some((drop) => /no positive price/.test(drop.reason)), "a row with no price at all is named");
+  });
+
+  it("reads the live speech listing with no row kept: every row is priced per token", () => {
+    const live = parseModelsCatalog("speech", fixture("openrouter-catalog-speech-live"), READ_AT);
+    assert.equal(live.entries.length, 0);
+    assert.equal(live.dropped.length, 36);
+    assert.ok(live.dropped.every((drop) => /per token only|no positive price/.test(drop.reason)));
+    assert.equal(live.dropped.filter((drop) => /per token only/.test(drop.reason)).length, 35, "35 rows are token-priced; one has no price");
   });
 
   it("prices speech rows per request and drops token-only rows", () => {
@@ -129,7 +140,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.equal(read.catalog.readAt, READ_AT);
     assert.deepEqual(read.catalog.failed, []);
-    assert.equal(read.catalog.entries.length, 6, "3 video, 2 image, 1 speech");
+    assert.equal(read.catalog.entries.length, 5, "3 video, 1 image (a per-request price), 1 speech (a per-request price)");
     assert.notEqual(read.catalog.videoListing, null, "the video listing is kept for the video adapters' profiles");
     assert.deepEqual(
       transport.requests.map((request) => `${request.method} ${request.url}`),
@@ -159,7 +170,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.deepEqual(read.catalog.failed.map((failure) => failure.source), ["videos", "speech"]);
     assert.equal(read.catalog.videoListing, null);
-    assert.deepEqual(read.catalog.entries.map((entry) => entry.id), ["bytedance-seed/seedream-4.5", "vendor/text-to-image-flat"]);
+    assert.deepEqual(read.catalog.entries.map((entry) => entry.id), ["vendor/text-to-image-flat"]);
   });
 });
 

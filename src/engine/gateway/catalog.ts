@@ -208,16 +208,22 @@ export function parseVideoCatalog(body: unknown, readAt: string, exclusions: rea
   return out;
 }
 
-/** The price of an image or speech row, from its pricing strings, or the reason it has none. Token rates are not usable. */
-function listedPrice(source: "image" | "speech", pricing: Record<string, unknown> | undefined): CatalogPrice | string {
+/**
+ * The token-priced fields of an image or speech row. The live listings (read 2026-10-24) price image output per token, and `image_output`
+ * is a per-token rate there, not a per-image one. A token rate cannot be reserved, because the engine cannot know a call's tokens before
+ * it is made.
+ */
+const TOKEN_RATE_FIELDS = ["prompt", "completion", "image_output", "image_token"] as const;
+
+/**
+ * The price of an image or speech row, from its pricing strings, or the reason it has none. Only a per-request price is kept: it is the
+ * one per-call price the listings state. The `image` field is per image on some rows and per token on others, so it is not read.
+ */
+function listedPrice(pricing: Record<string, unknown> | undefined): CatalogPrice | string {
   if (pricing === undefined) return "no pricing, so a call could not be reserved";
-  if (source === "image") {
-    const perImage = usableRate(pricing.image_output);
-    if (perImage !== null) return { unit: "per_image", usd: perImage, sku: "image_output" };
-  }
   const perRequest = usableRate(pricing.request);
   if (perRequest !== null) return { unit: "per_request", usd: perRequest, sku: "request" };
-  if (usableRate(pricing.prompt) !== null || usableRate(pricing.completion) !== null) {
+  if (TOKEN_RATE_FIELDS.some((field) => usableRate(pricing[field]) !== null)) {
     return "priced per token only; the engine cannot know a call's tokens before it is made, so it could not be reserved";
   }
   return "no positive price, so a call could not be reserved";
@@ -246,7 +252,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
       out.dropped.push({ source, id: model.id, reason: `the row does not list ${OUTPUT_MODALITY[source]} as an output` });
       continue;
     }
-    const price = listedPrice(source, model.pricing);
+    const price = listedPrice(model.pricing);
     if (typeof price === "string") {
       out.dropped.push({ source, id: model.id, reason: price });
       continue;

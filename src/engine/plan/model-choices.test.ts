@@ -115,7 +115,7 @@ describe("chooseModels", () => {
     const calls = JSON.parse(block.split("\n")[2] ?? "[]") as Array<{ callId: string; shotId: string; output: string; candidates: Array<{ id: string; price: unknown }> }>;
     assert.deepEqual(calls.map((call) => [call.callId, call.shotId, call.output, call.candidates.map((candidate) => candidate.id)]), [
       ["c1", SHOT_1, "shot", ["kwaivgi/kling-v3.0-std", "alibaba/wan-2.6"]],
-      ["c2", SHOT_2, "keyframe", ["bytedance-seed/seedream-4.5", "vendor/text-to-image-flat"]],
+      ["c2", SHOT_2, "keyframe", ["vendor/text-to-image-flat"]],
       ["c3", SHOT_2, "clip", ["google/veo-3.1-lite"]],
     ]);
 
@@ -124,8 +124,9 @@ describe("chooseModels", () => {
     assert.equal(result.choices.catalogReadAt, READ_AT);
     assert.deepEqual(byCall(result.choices), {
       [`${SHOT_1}:shot`]: ["alibaba/wan-2.6", "orchestrator"],
-      // c2's pick is not a candidate: the first eligible route-table target of image.keyframe (Seedream 4.5).
-      [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
+      // c2's pick is not a candidate. Seedream 4.5 is not one: its image output is priced per token, so no per-call price can be reserved.
+      // The only reservable keyframe candidate is text-to-image-flat.
+      [`${SHOT_2}:keyframe`]: ["vendor/text-to-image-flat", "fallback"],
       // c3 has no pick: the first eligible catalog candidate for the clip (Veo 3.1 Lite, the only one that lists 6 s).
       [`${SHOT_2}:clip`]: ["google/veo-3.1-lite", "fallback"],
     });
@@ -156,7 +157,7 @@ describe("chooseModels", () => {
     assert.ok(result.choices !== null);
     assert.deepEqual(byCall(result.choices), {
       [`${SHOT_1}:shot`]: ["kwaivgi/kling-v3.0-std", "fallback"],
-      [`${SHOT_2}:keyframe`]: ["bytedance-seed/seedream-4.5", "fallback"],
+      [`${SHOT_2}:keyframe`]: ["vendor/text-to-image-flat", "fallback"],
       [`${SHOT_2}:clip`]: ["google/veo-3.1-lite", "fallback"],
     });
     assert.match(result.choices.choices[0]?.modelChoice.reason ?? "", /model_chooser call failed/);
