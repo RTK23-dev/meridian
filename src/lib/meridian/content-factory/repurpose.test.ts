@@ -13,6 +13,7 @@ import { RENDER_PRICE_NOT_VERIFIED, RENDERER_NOT_CONNECTED, repurposeOutputLink,
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { sqlRepurposeUploadStore } from "./repurpose-upload.ts";
 import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
+import { createRepurposedPausedAd, sqlPausedAdStore } from "./repurpose-paused-ad.ts";
 
 const WS = "ws_repurpose";
 const BRAND = "brand_repurpose";
@@ -433,6 +434,55 @@ describe("uploading a repurposed variation to Meta, from the session", () => {
       uploadRepurposeVariantToMeta(db.sql, MEMBER, { sessionId: DELIVERED_SESSION, runId, variantKey }, { env: {}, transport: noSend }),
     );
     const outcome = await uploadRepurposeVariantToMeta(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey }, { env: {}, transport: noSend });
+    assert.equal(outcome.status, "blocked");
+  });
+});
+
+describe("recording a paused Meta ad in Postgres", () => {
+  test("the receipt round-trips, the database refuses a paused receipt that is not verified paused, and a refused confirmation sends nothing", async () => {
+    const rows = await db.sql<{ id: string }>`select v.id from content_factory_repurpose_variants v where v.rendered_artifact_id is not null limit 1`;
+    const variantId = rows[0]!.id;
+    const store = sqlPausedAdStore(db.sql);
+    assert.equal(await store.find(variantId, "act_paused_fixture"), null);
+
+    const receipt = {
+      id: "pad_fixture_1",
+      organizationId: WS,
+      brandId: BRAND,
+      variantId,
+      adAccountId: "act_paused_fixture",
+      adSetId: "23851",
+      pageId: "1020",
+      destinationUrl: "https://example.com/offer",
+      creativeId: "cr_fixture_1",
+      adId: "ad_fixture_1",
+      verifiedStatus: "PAUSED" as const,
+    };
+    await store.save(receipt);
+    assert.deepEqual(await store.find(variantId, "act_paused_fixture"), receipt);
+    await assert.rejects(store.save({ ...receipt, id: "pad_fixture_2", adId: "ad_fixture_2" }), "one paused ad per variation and account");
+
+    // A paused-ad row whose verified status is not PAUSED is refused by the table, whatever the code above it did.
+    await assert.rejects(
+      db.sql`
+        insert into content_factory_repurpose_publications (
+          id, organization_id, brand_id, variant_id, platform, kind, platform_account_id, external_id, idempotency_key,
+          ad_set_id, meta_creative_id, page_id, destination_url, verified_status
+        ) values ('pad_bad', ${WS}, ${BRAND}, ${variantId}, 'meta', 'meta_paused_ad', 'act_other', 'ad_bad', 'k_bad',
+          '1', 'cr_bad', '1', 'https://example.com', 'ACTIVE')
+      `,
+    );
+
+    // A confirmation that does not match the chosen ad set is refused before the session, the Page or Meta is touched.
+    const noSend = async () => {
+      throw new Error("nothing may be sent to Meta in this test");
+    };
+    const outcome = await createRepurposedPausedAd(
+      db.sql,
+      ADMIN,
+      { sessionId: DELIVERED_SESSION, runId: "run_unused", variantKey: "variation-1", adSetId: "23851", confirmAdSetId: "99999", pageId: "1020", destinationUrl: "https://example.com", message: "" },
+      { env: {}, transport: noSend, createAd: async () => { throw new Error("no Meta call may happen"); } },
+    );
     assert.equal(outcome.status, "blocked");
   });
 });
