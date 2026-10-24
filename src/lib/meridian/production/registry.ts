@@ -6,7 +6,7 @@
  * - Model availability is mutable external state.
  * - Deprecated preview endpoints with a dated shutdown are flagged or blocked once the date passes
  *   are flagged with warnings or blocked when expired.
- * - Recommends active replacements (e.g. gemini-omni-1.1-flash-preview).
+ * - Recommends active replacements (e.g. gemini-omni-1.1-flash).
  */
 
 export type ModelAvailabilityState = "ACTIVE" | "DEPRECATED" | "SHUTDOWN" | "PREVIEW";
@@ -48,7 +48,7 @@ export class ModelCapabilityRegistry {
   private registerDefaults(): void {
     // 1. Gemini Omni (recommended primary Google video generation)
     this.register({
-      model_id: "gemini-omni-1.1-flash-preview",
+      model_id: "gemini-omni-1.1-flash",
       provider_id: "google_omni",
       api_family: "interactions",
       release_channel: "ga",

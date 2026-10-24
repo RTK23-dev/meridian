@@ -97,7 +97,7 @@ test("an image requirement is not refused for lacking a duration, which an image
 
 test("a video-only model is refused for an image requirement by its task, not by a guessed modality", () => {
   const choice = selectOffer({
-    candidates: [candidate("gemini-omni-1.1-flash-preview", provider("google_omni", perSecond(0.15)))],
+    candidates: [candidate("gemini-omni-1.1-flash", provider("google_omni", perSecond(0.15)))],
     requirement: image(), registry: modelCapabilityRegistry, mode: "PREFERENCE", preference: ["google_omni"], allowUnknownCost: true,
   });
   assert.equal(choice.chosen, null);

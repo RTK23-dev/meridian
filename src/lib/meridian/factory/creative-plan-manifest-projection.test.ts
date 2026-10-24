@@ -16,7 +16,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
     aspectRatio: "9:16",
     targetDurationSeconds: 8,
     provider: "google_omni",
-    model: "gemini-omni-1.1-flash-preview",
+    model: "gemini-omni-1.1-flash",
     hook: {
       type: "curiosity_gap",
       text: "Wait, you actually won't believe what arrived in the mail today...",
@@ -91,7 +91,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
         deliverableId: "deliv-video-custom-42",
         action: "generate_video",
         providerId: "google_omni",
-        modelId: "gemini-omni-1.1-flash-preview",
+        modelId: "gemini-omni-1.1-flash",
         estimatedCostUsd: 1.20,
       },
     ],
@@ -156,7 +156,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
 
   // 4. Invariant: Provider and model match exactly without silent reinterpretation
   assert.equal(manifest.production?.provider, "google_omni");
-  assert.equal(manifest.production?.model, "gemini-omni-1.1-flash-preview");
+  assert.equal(manifest.production?.model, "gemini-omni-1.1-flash");
   assert.equal(manifest.production?.fallbackUsed, false);
 
   // 5. Invariant: Duration and Aspect Ratio preserved
@@ -172,7 +172,7 @@ test("CreativePlan to Manifest Projection: preserves all semantic creative decis
   assert.equal(fallbackManifest.production?.fallbackUsed, true);
   assert.equal(fallbackManifest.production?.fallbackReason, "provider_unavailable");
   assert.equal(fallbackManifest.production?.requestedProvider, "google_omni");
-  assert.equal(fallbackManifest.production?.requestedModel, "gemini-omni-1.1-flash-preview");
+  assert.equal(fallbackManifest.production?.requestedModel, "gemini-omni-1.1-flash");
 
   // 7. Invariant: Unpermitted or missing fallback throws instead of silent change
   const planNoFallback: CreativePlan = {

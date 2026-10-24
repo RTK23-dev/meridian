@@ -25,7 +25,7 @@ function candidates(modelIds: string[]) {
   });
 }
 
-const ALL = ["gemini-omni-1.1-flash-preview", "higgsfield-video-v1", "hypit-hyperframes", "manual-cloud"];
+const ALL = ["gemini-omni-1.1-flash", "higgsfield-video-v1", "hypit-hyperframes", "manual-cloud"];
 
 // A deprecated preview model, registered only for this file, so the lifecycle rejection stays covered.
 const DEPRECATED_FIXTURE = "fixture-deprecated-video";
@@ -56,7 +56,7 @@ test("PREFERENCE keeps the preferred eligible provider: google_omni for an 8 sec
 test("a 4:5 video is never sent to a provider that does not offer 4:5, even when it is preferred", () => {
   const choice = selectOffer({ candidates: candidates(ALL), requirement: requirement({ aspectRatio: "4:5" }), registry: modelCapabilityRegistry, mode: "PREFERENCE", preference: PREFERENCE });
   assert.equal(choice.chosen?.providerId, "hypit", "the first provider that offers 4:5");
-  const omni = choice.rejected.find((item) => item.modelId === "gemini-omni-1.1-flash-preview");
+  const omni = choice.rejected.find((item) => item.modelId === "gemini-omni-1.1-flash");
   assert.ok(omni?.reasons.some((reason) => reason.includes("4:5")), omni?.reasons.join("; "));
 });
 
@@ -86,7 +86,7 @@ test("a deprecated model is rejected with its lifecycle state", () => {
     availability_state: "DEPRECATED",
     // Far in the future, so the fixture stays DEPRECATED on any date. A shutdown already past reads SHUTDOWN, as the registry says.
     announced_shutdown_at: "2030-01-01T00:00:00Z",
-    replacement_model_id: "gemini-omni-1.1-flash-preview",
+    replacement_model_id: "gemini-omni-1.1-flash",
     last_verified_at: "2026-10-09",
     source_url: "https://example.test/deprecations",
   });
@@ -126,7 +126,7 @@ test("a known price is chosen before an allowed unknown price, because an unknow
   const unpriced: ProviderCost = { id: "google_omni", zeroSpend: false, price: unknownQuote("per_second", "none declared") };
   const choice = selectOffer({
     candidates: [
-      { provider: unpriced, record: modelCapabilityRegistry.getModel("gemini-omni-1.1-flash-preview")! },
+      { provider: unpriced, record: modelCapabilityRegistry.getModel("gemini-omni-1.1-flash")! },
       { provider: costs.hypit!, record: modelCapabilityRegistry.getModel("hypit-hyperframes")! },
     ],
     requirement: requirement(), registry: modelCapabilityRegistry, mode: "LOWEST_COST", allowUnknownCost: true,

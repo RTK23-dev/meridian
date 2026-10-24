@@ -35,7 +35,7 @@ const FULL = () => [
 test("the router records its selection: google_omni for an 8 second 9:16 video under BALANCED, with the model and the estimate", async () => {
   const { provider, selection } = await router(FULL()).selectForSpec(spec(), "BALANCED");
   assert.equal(provider.id, "google_omni");
-  assert.equal(selection.chosen?.modelId, "gemini-omni-1.1-flash-preview");
+  assert.equal(selection.chosen?.modelId, "gemini-omni-1.1-flash");
   assert.equal(selection.chosen?.estimateUsd, 1.2);
 });
 
@@ -55,14 +55,14 @@ test("automatic routing never falls back to the zero-spend manual workflow", asy
 
 test("a job records the provider choice and its estimate on the durable job, through the real execution path", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "selection", null, "google_omni", "gemini-omni-1.1-flash-preview");
+  const tenant = await createTenantFixture(sql, "selection", null, "google_omni", "gemini-omni-1.1-flash");
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED"));
   try {
     await execute(sql, tenant, tenant.plan);
     const [row] = await sql<{ input: unknown }>`select input from production_jobs where creative_plan_id = ${tenant.plan.id}`;
     const input = typeof row!.input === "string" ? JSON.parse(row!.input) : row!.input;
     assert.equal(input.providerSelection.chosen.providerId, "google_omni");
-    assert.equal(input.providerSelection.chosen.modelId, "gemini-omni-1.1-flash-preview");
+    assert.equal(input.providerSelection.chosen.modelId, "gemini-omni-1.1-flash");
     assert.equal(typeof input.providerSelection.chosen.estimateUsd, "number");
     assert.ok(Array.isArray(input.providerSelection.rejected));
   } finally {

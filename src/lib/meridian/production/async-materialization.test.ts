@@ -22,7 +22,7 @@ import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
 import { pollProductionJobs } from "./poller.ts";
 
 const MP4_BASE64 = Buffer.from(fakeMp4()).toString("base64");
-const MODEL = "gemini-omni-1.1-flash-preview";
+const MODEL = "gemini-omni-1.1-flash";
 /** Suffixes every provider job id this file invents, so a rerun against a database that kept earlier rows cannot collide. */
 const RUN = randomUUID().slice(0, 8);
 
