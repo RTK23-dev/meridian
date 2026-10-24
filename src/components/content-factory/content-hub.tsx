@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, EmptyState, PageHeader, ScreenSkeleton, SelectInput, Tabs, TabsList, TabsTrigger } from "@/components/ui";
+import { Button, EmptyState, PageHeader, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
 import { ContentFactoryScreen } from "./screen";
@@ -126,10 +126,12 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
             <TabsTrigger key={item} value={item}>{CONTENT_SECTION_LABELS[item]}</TabsTrigger>
           ))}
         </TabsList>
-        {/* Only the open section is mounted, so its data loads when it is opened. */}
-        <div role="tabpanel" className="min-w-0">
-          <Suspense fallback={<ScreenSkeleton label="Loading section" shape="cards" />}>{body}</Suspense>
-        </div>
+        {/* Each tab has its own panel, so every tab's aria-controls points at a real element. Only the open section's content is mounted. */}
+        {sections.map((item) => (
+          <TabsContent key={item} value={item} forceMount className="min-w-0 data-[state=inactive]:hidden">
+            {item === current ? <Suspense fallback={<ScreenSkeleton label="Loading section" shape="cards" />}>{body}</Suspense> : null}
+          </TabsContent>
+        ))}
       </Tabs>
     </div>
   );
