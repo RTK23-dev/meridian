@@ -114,7 +114,8 @@ describe("chooseModels", () => {
     assert.match(block, /<untrusted-data name="calls">/);
     const calls = JSON.parse(block.split("\n")[2] ?? "[]") as Array<{ callId: string; shotId: string; output: string; candidates: Array<{ id: string; price: unknown }> }>;
     assert.deepEqual(calls.map((call) => [call.callId, call.shotId, call.output, call.candidates.map((candidate) => candidate.id)]), [
-      ["c1", SHOT_1, "shot", ["kwaivgi/kling-v3.0-std", "alibaba/wan-2.6"]],
+      // The candidates are shown cheapest first (Wan 2.6 at 0.0425 a second, Kling 3.0 Std at 0.14), with no preference list set.
+      ["c1", SHOT_1, "shot", ["alibaba/wan-2.6", "kwaivgi/kling-v3.0-std"]],
       ["c2", SHOT_2, "keyframe", ["vendor/text-to-image-flat"]],
       ["c3", SHOT_2, "clip", ["google/veo-3.1-lite"]],
     ]);
@@ -156,7 +157,8 @@ describe("chooseModels", () => {
     assert.equal(requests.length, 2, "the call and its one retry");
     assert.ok(result.choices !== null);
     assert.deepEqual(byCall(result.choices), {
-      [`${SHOT_1}:shot`]: ["kwaivgi/kling-v3.0-std", "fallback"],
+      // With no preference list, the fallback is the cheapest eligible candidate: the engine has no quality measure, so quality is set by config/model-preferences.
+      [`${SHOT_1}:shot`]: ["alibaba/wan-2.6", "fallback"],
       [`${SHOT_2}:keyframe`]: ["vendor/text-to-image-flat", "fallback"],
       [`${SHOT_2}:clip`]: ["google/veo-3.1-lite", "fallback"],
     });

@@ -124,3 +124,23 @@ describe("ranking hook", () => {
     assert.deepEqual(ranked.map((candidate) => candidate.id), ["a"]);
   });
 });
+
+describe("ranking by price, with no preference list", () => {
+  const priced = (id: string, usd: number) => entry(id, { price: { unit: "per_second", usd, sku: "duration_seconds" } });
+
+  it("puts the cheapest eligible candidate first, so the chooser sees the lowest price first", () => {
+    const candidates = [priced("dear", 0.2), priced("cheap", 0.05), priced("mid", 0.1)];
+    assert.deepEqual(rankCandidates("video.cinematic", candidates).map((candidate) => candidate.id), ["cheap", "mid", "dear"]);
+  });
+
+  it("keeps catalog order between candidates at the same price", () => {
+    const candidates = [priced("first", 0.1), priced("second", 0.1), priced("cheaper", 0.05)];
+    assert.deepEqual(rankCandidates("video.cinematic", candidates).map((candidate) => candidate.id), ["cheaper", "first", "second"]);
+  });
+
+  it("an explicit preference list still decides the order, and price does not override it", () => {
+    const candidates = [priced("cheap", 0.05), priced("preferred", 0.2)];
+    const ranked = rankCandidates("video.cinematic", candidates, { "video.cinematic": ["preferred"] });
+    assert.deepEqual(ranked.map((candidate) => candidate.id), ["preferred", "cheap"]);
+  });
+});
