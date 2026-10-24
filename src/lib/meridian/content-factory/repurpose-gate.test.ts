@@ -23,20 +23,20 @@ function result(fields: { action: GateResult["action"]; engineCalled?: boolean; 
 }
 
 test("with no engine configured, the check is not configured, and nothing is judged", () => {
-  const check = repurposeCheckOf(result({ action: "REVIEW", engineCalled: false, failureKind: "not_configured" }));
+  const check = repurposeCheckOf(result({ action: "HUMAN_REVIEW", engineCalled: false, failureKind: "not_configured" }));
   assert.equal(check.state, "not_configured");
   assert.equal(check.outcome, "not_consulted");
   assert.equal(check.engineId, null);
 });
 
 test("when the selected engine cannot be reached, the check is not consulted, not a review", () => {
-  const check = repurposeCheckOf(result({ action: "REVIEW", engineCalled: false, failureKind: "selection_unavailable" }));
+  const check = repurposeCheckOf(result({ action: "HUMAN_REVIEW", engineCalled: false, failureKind: "selection_unavailable" }));
   assert.equal(check.state, "not_consulted");
   assert.equal(check.outcome, "not_consulted");
 });
 
 test("an engine that was called and failed is a failed check, never an approval or a rejection", () => {
-  for (const action of ["AUTO_APPROVE", "REJECT", "REVIEW"] as const) {
+  for (const action of ["AUTO_APPROVE", "REJECT", "HUMAN_REVIEW"] as const) {
     const check = repurposeCheckOf(result({ action, failureKind: "provider_unavailable", votes: [{ calibrationStatus: "calibrated" }] }));
     assert.equal(check.state, "failed", `a failure with ${action} is still a failure`);
     assert.equal(check.outcome, "not_consulted");
@@ -61,17 +61,17 @@ test("a calibrated approval is the only approval, and a calibrated rejection the
 });
 
 test("a calibrated review is review required, and a review with no calibration says so", () => {
-  assert.equal(repurposeCheckOf(result({ action: "REVIEW", votes: [{ calibrationStatus: "calibrated" }] })).state, "review_required");
-  assert.equal(repurposeCheckOf(result({ action: "REVIEW", votes: [{ calibrationStatus: "uncalibrated" }] })).state, "uncalibrated");
+  assert.equal(repurposeCheckOf(result({ action: "HUMAN_REVIEW", votes: [{ calibrationStatus: "calibrated" }] })).state, "review_required");
+  assert.equal(repurposeCheckOf(result({ action: "HUMAN_REVIEW", votes: [{ calibrationStatus: "uncalibrated" }] })).state, "uncalibrated");
 });
 
 test("every state is advisory, and every state names the question's engine only when one answered", () => {
   const cases = [
     result({ action: "AUTO_APPROVE", votes: [{ calibrationStatus: "calibrated" }] }),
     result({ action: "REJECT", votes: [{ calibrationStatus: "calibrated" }] }),
-    result({ action: "REVIEW", votes: [{ calibrationStatus: "uncalibrated" }] }),
-    result({ action: "REVIEW", engineCalled: false, failureKind: "not_configured" }),
-    result({ action: "REVIEW", failureKind: "timeout" }),
+    result({ action: "HUMAN_REVIEW", votes: [{ calibrationStatus: "uncalibrated" }] }),
+    result({ action: "HUMAN_REVIEW", engineCalled: false, failureKind: "not_configured" }),
+    result({ action: "HUMAN_REVIEW", failureKind: "timeout" }),
   ];
   for (const fixture of cases) {
     const check = repurposeCheckOf(fixture);
