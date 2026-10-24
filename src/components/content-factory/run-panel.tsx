@@ -3,7 +3,7 @@ import type { UseQueryResult } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
-import { reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { getDeliveredMasterLink, reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
 import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import { MAX_MESSAGE_CHARS } from "@/lib/meridian/content-factory/model";
 import type { RunView } from "@/lib/meridian/content-factory/service";
@@ -39,6 +39,7 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
         {feed.unattributedCalls > 0 ? <span className="block text-xs text-fg-muted">{feed.unattributedCalls} of these calls are not tied to one step on the ledger (for example a Claude check), so they appear only in this total.</span> : null}
       </p>
       <FlowBoard sessionId={sessionId} feed={feed} onChanged={onStarted} />
+      {feed.status.status === "delivered" ? <DeliveredDownload sessionId={sessionId} /> : null}
       <details className="mb-4">
         <summary className="cursor-pointer text-sm font-semibold">Step details: inputs, outputs, reasons and models</summary>
         <ol aria-label="Engine steps" className="mt-3 space-y-3">
@@ -201,5 +202,44 @@ function StepCard({ card, index }: { card: FeedCard; index: number }) {
         ) : card.costNote ? <p className="text-xs text-fg-muted">{card.costNote}</p> : null}
       </div>
     </li>
+  );
+}
+
+type DeliveredLinkState = Awaited<ReturnType<typeof getDeliveredMasterLink>>;
+
+/**
+ * A download link to the engine's delivered master. It is made on request, and only once the engine delivered the request: the engine reads
+ * the master back and refuses if the manifest and the video do not match. The link expires; asking again makes a new one.
+ */
+function DeliveredDownload({ sessionId }: { sessionId: string }) {
+  const [link, setLink] = useState<DeliveredLinkState | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function request() {
+    setBusy(true);
+    try {
+      setLink(await getDeliveredMasterLink({ data: { sessionId } }));
+    } catch (error) {
+      setLink({ status: "refused", reason: error instanceof Error ? error.message : "The download link could not be made." });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <section aria-labelledby="cf-download" className="mb-4 space-y-2 rounded-md border border-border bg-surface-2 p-3">
+      <h3 id="cf-download" className="text-sm font-semibold">The engine delivered this video</h3>
+      <p className="text-sm text-fg-muted">The file is the engine's delivered master, read back and checked against its manifest before a link is made.</p>
+      {link?.status === "ready" ? (
+        <p className="text-sm">
+          <a className="font-semibold text-accent underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-accent" href={link.url}>
+            Download the MP4
+          </a>
+          <span className="text-fg-muted"> · {(link.durationMs / 1000).toFixed(1)} s · {(link.bytes / 1_000_000).toFixed(1)} MB · the link expires in {Math.round(link.ttlSeconds / 60)} minutes</span>
+        </p>
+      ) : null}
+      {link !== null && link.status !== "ready" ? <p role="status" className="text-sm text-warning">{link.reason}</p> : null}
+      <Button variant="secondary" loading={busy} disabled={busy} onClick={() => void request()}>
+        {link?.status === "ready" ? "Make a new link" : "Get a download link"}
+      </Button>
+    </section>
   );
 }

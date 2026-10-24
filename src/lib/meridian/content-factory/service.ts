@@ -28,6 +28,7 @@ import {
   quoteEngineShotRemake,
   remakeEngineShot,
   replaceShotWithClip,
+  engineDeliveredMaster,
   shotTakeLink,
   startEngineRequest,
   type EngineReadiness,
@@ -38,7 +39,7 @@ import {
   shotModelOptions,
   type ShotTakeLink,
 } from "../../../engine/api/index.ts";
-import type { MediaLinkSigner } from "../../../engine/jobs/media-link.ts";
+import { ENGINE_MEDIA_LINK_TTL_SECONDS, type MediaLinkSigner } from "../../../engine/jobs/media-link.ts";
 import type { ShotDecision } from "../../../engine/review/shot-decision.ts";
 import { hasRole, isRole } from "../access.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
@@ -599,6 +600,35 @@ export async function brandEconomics(sql: Sql, userId: string, input: { organiza
   const runs = await readBrandRuns(sql, input.organizationId, input.brandId);
   const lines = await readBrandLedger(sql, input.organizationId, input.brandId);
   return economicsOf(runs, lines);
+}
+
+export type DeliveredLink =
+  | { status: "ready"; url: string; ttlSeconds: number; bytes: number; durationMs: number }
+  | { status: "not_ready" | "not_connected" | "refused"; reason: string };
+
+/**
+ * A short-lived link to the delivered master of a session's video. The engine reads the master back through its contracts (the manifest and
+ * the rendered video must name the same video), and refuses unless the request is delivered, so a link is never made for an undelivered
+ * video. The link is signed on request and expires after the media-link TTL. Admins of the session's workspace only.
+ */
+export async function deliveredMasterLink(sql: Sql, userId: string, input: { sessionId: string }, signer?: MediaLinkSigner): Promise<DeliveredLink> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  if (row.status !== "started" || row.engine_request_id === null) return { status: "not_ready", reason: "This session has no video yet." };
+  let master: Awaited<ReturnType<typeof engineDeliveredMaster>>;
+  try {
+    master = await engineDeliveredMaster(sql, row.organization_id, row.engine_request_id);
+  } catch (error) {
+    // The engine names the state of the request ("is running, not delivered"). A person needs the consequence, not the state.
+    const message = error instanceof Error ? error.message : "";
+    if (/not delivered/.test(message)) return { status: "not_ready", reason: "The engine has not delivered this video yet, so there is no file to download." };
+    return { status: "not_ready", reason: message || "The video is not delivered yet, so there is no file to download." };
+  }
+  const mediaLinks = signer ?? (await import("../storage/engine-media-link.ts")).engineMediaLinkSigner();
+  const result = await mediaLinks.sign(row.organization_id, master.renderedVideo.uri, ENGINE_MEDIA_LINK_TTL_SECONDS);
+  if (result.status === "ok") {
+    return { status: "ready", url: result.url, ttlSeconds: ENGINE_MEDIA_LINK_TTL_SECONDS, bytes: master.renderedVideo.bytes, durationMs: master.renderedVideo.durationMs };
+  }
+  return { status: result.status, reason: result.reason };
 }
 
 export type ReviseOutcome =
