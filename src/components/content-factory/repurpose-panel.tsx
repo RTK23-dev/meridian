@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
-import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
+import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
@@ -276,6 +276,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
                       {variation.status === "rendered" ? <p className="text-xs text-muted">{brandFitLine(variation.decision.outcome)}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
+                      {variation.status === "rendered" ? <UploadToMeta sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendering" ? <CheckRenderer sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? (
                         <ReviewVariation
@@ -307,6 +308,37 @@ function brandFitLine(outcome: "approved" | "review" | "rejected" | "not_consult
   if (outcome === "review") return "Brand-fit check: sent to review. A note for the reviewer. Uncalibrated scores never approve or block a variation.";
   if (outcome === "rejected") return "Brand-fit check: rejected. A note for the reviewer. It blocks nothing.";
   return "Brand-fit check: not consulted. No decision engine answered for this variation.";
+}
+
+/**
+ * Uploads a rendered, approved variation's video to the brand's Meta ad account. Admins only. It uploads the video and nothing more: no post
+ * or ad is created from it. The server says why nothing was sent, and the message names that reason.
+ */
+function UploadToMeta({ sessionId, runId, variantKey }: { sessionId: string; runId: string; variantKey: string }) {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  async function upload() {
+    setBusy(true);
+    try {
+      const outcome = await uploadContentFactoryRepurposeVariant({ data: { sessionId, runId, variantKey } });
+      if (outcome.status === "uploaded") setMessage("Uploaded to the Meta ad account, and Meta's video id is recorded. No post or ad was created.");
+      else if (outcome.status === "already_uploaded") setMessage("Already uploaded to this ad account. Nothing was sent again.");
+      else if (outcome.status === "blocked") setMessage(outcome.reason);
+      else setMessage(outcome.error);
+    } catch (error) {
+      setMessage(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void upload()}>
+        Upload to the Meta ad account
+      </Button>
+      {message !== null ? <p role="status" className="text-sm text-muted">{message}</p> : null}
+    </div>
+  );
 }
 
 /** A short-lived link to a rendered variation's video. The server signs it only for a variation recorded as rendered, and says why when it cannot. */
