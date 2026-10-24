@@ -17,9 +17,12 @@ try {
   for (const theme of themes) {
     for (const width of widths) {
       const context = await browser.newContext({ viewport: { width, height: 960 }, colorScheme: theme });
+      // The app picks its theme from the saved choice (dark by default), not from the browser's colour scheme. Set the choice, so each
+      // pass checks the palette it names, and wait until the page applies it.
+      await context.addInitScript((value) => { try { localStorage.setItem("meridian-theme", value); } catch { /* storage off */ } }, theme);
       const page = await context.newPage();
       await page.goto(url, { waitUntil: "networkidle", timeout: 45_000 });
-      await page.waitForFunction((expected) => document.documentElement.classList.contains("dark") === expected, theme === "dark");
+      await page.waitForFunction((expected) => document.documentElement.getAttribute("data-theme") === expected, theme);
       if (!(await page.getByRole("heading", { name: "Design system", exact: true }).count())) {
         throw new Error("The development-only design system route did not render.");
       }

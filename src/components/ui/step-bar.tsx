@@ -25,6 +25,6 @@ function StepItem({ step, number }: { step: StepBarStep; number: number }) {
       ? <Link to={step.to} className={cn(done, "rounded-sharp underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent")}>{content}</Link>
       : <span className={done}>{content}</span>;
   }
-  if (step.state === "current") return <span className="inline-flex items-center gap-1.5 font-semibold text-accent">{content}</span>;
+  if (step.state === "current") return <span className="inline-flex items-center gap-1.5 font-semibold text-accent-text">{content}</span>;
   return <span className="inline-flex items-center gap-1.5 text-fg-muted">{content}</span>;
 }
