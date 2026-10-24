@@ -10,7 +10,9 @@ import { readArtifact, writeArtifact } from "../../../engine/jobs/artifact-store
 import { priceFor } from "../../../engine/config/prices.ts";
 import { repurposedEdl } from "../../../engine/repurpose/child.ts";
 import { repurposeSettingsSchema, resolveRepurpose, type RepurposeOutcome } from "../../../engine/repurpose/resolve.ts";
+import { renderedVideoSchema } from "../../../engine/contracts/render.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
+import { engineMediaLinkSigner, type EngineMediaLinkResult, type EngineMediaLinkSigner } from "../storage/engine-media-link.ts";
 import { sessionAccess } from "./service.ts";
 
 /** The reason a variation is not rendered while the HyperFrames cloud render price is not in the price table. Stated, never estimated. */
@@ -226,3 +228,37 @@ async function childEdlOf(sql: Sql, organizationId: string, artifactId: string):
   const stored = await readArtifact(sql, { organizationId, artifactId });
   return edlSchema.parse(stored.envelope.body);
 }
+
+/** The longest a link to a rendered video may last: the link policy's 15 minutes. */
+const OUTPUT_LINK_SECONDS = 15 * 60;
+const STORE_URI = "store://";
+
+/**
+ * A short-lived link to a rendered variation's video, for a reviewer to open. Admins only, and only for a variation recorded as rendered.
+ * The engine's media signer signs it: it refuses an object that is not the organization's, and it says not_connected when the signing
+ * secret or the public origin is not set. Nothing is signed for a variation that was not rendered.
+ */
+export async function repurposeOutputLink(
+  sql: Sql,
+  userId: string,
+  input: { sessionId: string; runId: string; variantKey: string },
+  signer: EngineMediaLinkSigner = engineMediaLinkSigner(),
+): Promise<EngineMediaLinkResult> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  const found = await sql<{ status: string; rendered_artifact_id: string | null }>`
+    select v.status, v.rendered_artifact_id
+    from content_factory_repurpose_variants v
+    join content_factory_repurpose_runs r on r.id = v.run_id and r.organization_id = v.organization_id
+    where v.organization_id = ${row.organization_id} and r.session_id = ${row.id} and v.run_id = ${input.runId} and v.variant_key = ${input.variantKey}
+    limit 1
+  `;
+  const variant = found[0];
+  if (variant === undefined || variant.status !== "rendered" || variant.rendered_artifact_id === null) {
+    return { status: "refused", reason: "This variation has no rendered video, so there is nothing to open." };
+  }
+  const stored = await readArtifact(sql, { organizationId: row.organization_id, artifactId: variant.rendered_artifact_id });
+  const video = renderedVideoSchema.parse(stored.envelope.body);
+  const key = video.uri.startsWith(STORE_URI) ? video.uri.slice(STORE_URI.length) : video.uri;
+  return signer.sign(row.organization_id, key, OUTPUT_LINK_SECONDS);
+}
+

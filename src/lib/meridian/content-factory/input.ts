@@ -58,6 +58,12 @@ export function sessionInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
 
+/** The rendered variation of a repurpose run whose video a reviewer opens: the session, the run and the variation key. */
+export function repurposeOutputInput(input: unknown): { sessionId: string; runId: string; variantKey: string } {
+  const body = fields(input);
+  return { sessionId: idOf(body.sessionId, "session"), runId: idOf(body.runId, "run"), variantKey: idOf(body.variantKey, "variation") };
+}
+
 /** A repurpose request: the session, and the settings as the person chose them. The settings are validated by the repurpose contract, not here. */
 export function repurposeInput(input: unknown): { sessionId: string; settings: unknown } {
   const body = fields(input);

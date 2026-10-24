@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, toast } from "@/components/ui";
-import { previewContentFactoryRepurpose, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
+import { getContentFactoryRepurposeOutput, previewContentFactoryRepurpose, startContentFactoryRepurpose } from "@/lib/meridian/content-factory/actions";
+import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
 import {
   CATEGORY_LABELS,
@@ -247,6 +248,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       </div>
                       <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
+                      {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                     </li>
                   ))}
                 </ol>
@@ -258,3 +260,33 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
     </Card>
   );
 }
+
+/** A short-lived link to a rendered variation's video. The server signs it only for a variation recorded as rendered, and says why when it cannot. */
+function OpenOutput({ sessionId, runId, variantKey }: { sessionId: string; runId: string; variantKey: string }) {
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<EngineMediaLinkResult | null>(null);
+  async function open() {
+    setBusy(true);
+    try {
+      setResult(await getContentFactoryRepurposeOutput({ data: { sessionId, runId, variantKey } }));
+    } catch (error) {
+      setResult({ status: "refused", reason: errorText(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-1">
+      <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void open()}>
+        Open the rendered video
+      </Button>
+      {result?.status === "ok" ? (
+        <p className="text-sm">
+          <a className="underline" href={result.url} target="_blank" rel="noopener noreferrer">Open the video in a new tab</a>. The link lasts 15 minutes.
+        </p>
+      ) : null}
+      {result !== null && result.status !== "ok" ? <p role="status" className="text-sm text-muted">{result.reason}</p> : null}
+    </div>
+  );
+}
+

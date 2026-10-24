@@ -9,7 +9,7 @@ import { writeArtifact } from "../../../engine/jobs/artifact-store.ts";
 import { startEngineRequest } from "../../../engine/jobs/orchestrator-sql.ts";
 import { defaultRepurposeSettings } from "../../../engine/repurpose/resolve.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
-import { RENDER_PRICE_NOT_VERIFIED, RENDERER_NOT_CONNECTED, repurposePreview, startRepurpose } from "./repurpose.ts";
+import { RENDER_PRICE_NOT_VERIFIED, RENDERER_NOT_CONNECTED, repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 
 const WS = "ws_repurpose";
 const BRAND = "brand_repurpose";
@@ -230,5 +230,70 @@ describe("with a price and a renderer injected (not a live render)", () => {
       select count(*)::int as n from content_factory_repurpose_variants where run_id = ${first.runId} and status = 'rendered'
     `;
     assert.equal(rendered[0]?.n, 4);
+  });
+});
+
+describe("opening a rendered variation's video", () => {
+  /** Attaches a stored rendered video to one rendered variation of the run, as the render port would have recorded it. */
+  async function renderedVariation(number: number) {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, settings: settings(3) });
+    const rendered = run.variations.find((variation) => variation.status === "rendered");
+    assert.ok(rendered, "the run has a rendered variation");
+    const videoId = `vid_01HZ${String(number).padStart(22, "0")}`;
+    const video = await writeArtifact(db.sql, {
+      organizationId: WS,
+      requestId: DELIVERED_REQUEST,
+      stage: "render",
+      type: "rendered_video",
+      body: {
+        videoId,
+        edlId: rendered.childEdlId,
+        uri: `store://renders/${videoId}.mp4`,
+        renderer: "hyperframes-cloud",
+        durationMs: edlFixture.durationMs,
+        bytes: 16,
+        estimateUsd: 0.05,
+        costUsd: null,
+        idempotencyKey: `sha256:${"a".repeat(64)}`,
+      },
+      createdAt: NOW,
+    });
+    await db.sql`update content_factory_repurpose_variants set rendered_artifact_id = ${video.artifactId} where run_id = ${run.runId} and variant_key = ${rendered.key}`;
+    return { runId: run.runId, variantKey: rendered.key, videoId };
+  }
+
+  test("signs a 15-minute link to the stored video, and only for a variation recorded as rendered", async () => {
+    const { runId, variantKey, videoId } = await renderedVariation(1);
+    const calls: Array<{ organizationId: string; key: string; ttlSeconds: number }> = [];
+    const signer = {
+      sign: async (organizationId: string, key: string, ttlSeconds: number) => {
+        calls.push({ organizationId, key, ttlSeconds });
+        return { status: "ok" as const, url: `https://app.example.test/api/engine-media?key=${key}`, expires: 1 };
+      },
+    };
+    const link = await repurposeOutputLink(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey }, signer);
+    assert.equal(link.status, "ok");
+    assert.deepEqual(calls, [{ organizationId: WS, key: `renders/${videoId}.mp4`, ttlSeconds: 900 }], "the stored key, the organization, and 15 minutes");
+  });
+
+  test("refuses a variation with no rendered video, and signs nothing", async () => {
+    const run = await startRepurpose(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, settings: settings(3) });
+    let signed = 0;
+    const signer = { sign: async () => { signed += 1; return { status: "ok" as const, url: "https://x.test", expires: 1 }; } };
+    const link = await repurposeOutputLink(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId: run.runId, variantKey: "no-such-variation" }, signer);
+    assert.equal(link.status, "refused");
+    assert.equal(signed, 0);
+  });
+
+  test("refuses a member who is not an admin", async () => {
+    const { runId, variantKey } = await renderedVariation(2);
+    await assert.rejects(repurposeOutputLink(db.sql, MEMBER, { sessionId: DELIVERED_SESSION, runId, variantKey }), /admin/i);
+  });
+
+  test("says not connected when the engine's signing secret is not set, rather than returning a link", async () => {
+    const { runId, variantKey } = await renderedVariation(3);
+    const signer = { sign: async () => ({ status: "not_connected" as const, reason: "the media link secret is not set" }) };
+    const link = await repurposeOutputLink(db.sql, ADMIN, { sessionId: DELIVERED_SESSION, runId, variantKey }, signer);
+    assert.equal(link.status, "not_connected");
   });
 });
