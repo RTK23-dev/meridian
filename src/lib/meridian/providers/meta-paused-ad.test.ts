@@ -165,3 +165,53 @@ test("a failed read-back after the ad was created is uncertain, and the next att
   assert.equal(fake.ads.size, 1, "no second ad was created");
   assert.equal(fake.posts.filter((post) => post.url.endsWith("/ads")).length, 1, "the ad was posted once");
 });
+
+/** A Meta whose reply to the ad create is replaced by `reply` once, after the fake has done what Meta would do with the request. */
+function replyToAdCreateOnce(fake: Fake, reply: TransportResponse): Transport {
+  let replaced = false;
+  return async (request: TransportRequest): Promise<TransportResponse> => {
+    const real = await fake.transport(request);
+    if (request.method === "POST" && request.url.endsWith("/ads") && !replaced) {
+      replaced = true;
+      return reply;
+    }
+    return real;
+  };
+}
+
+test("a server error on the ad create is uncertain even though Meta created the ad, and the next attempt finds it by name", async () => {
+  const fake = fakeMeta();
+  const transport = replyToAdCreateOnce(fake, { status: 500, body: JSON.stringify({ error: { message: "server error" } }), headers: {} });
+  const first = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
+  assert.equal(first.status, "uncertain", "a 500 does not prove that nothing was created");
+  assert.equal(first.status === "uncertain" && first.stage, "ad");
+  assert.equal(fake.ads.size, 1, "Meta created the ad before the server error");
+
+  const second = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
+  assert.equal(second.status, "paused");
+  assert.equal(second.status === "paused" && second.reused, true, "the earlier ad was found by name");
+  assert.equal(fake.ads.size, 1, "still exactly one ad");
+});
+
+test("a success reply with no id on the ad create is uncertain, not a clean failure", async () => {
+  const fake = fakeMeta();
+  const transport = replyToAdCreateOnce(fake, { status: 200, body: "{}", headers: {} });
+  const first = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
+  assert.equal(first.status, "uncertain");
+  const second = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
+  assert.equal(second.status, "paused");
+  assert.equal(fake.ads.size, 1, "no second ad was created");
+});
+
+test("a 4xx refusal on the ad create is a definite failure: nothing was created", async () => {
+  const fake = fakeMeta();
+  const transport: Transport = async (request: TransportRequest): Promise<TransportResponse> => {
+    if (request.method === "POST" && request.url.endsWith("/ads")) {
+      return { status: 400, body: JSON.stringify({ error: { message: "invalid parameter" } }), headers: {} };
+    }
+    return fake.transport(request);
+  };
+  const outcome = await createMetaPausedAd(CREDENTIALS, INPUT, transport);
+  assert.equal(outcome.status, "failed");
+  assert.equal(fake.ads.size, 0, "Meta refused the ad and created nothing");
+});

@@ -188,8 +188,11 @@ async function sendOnce(
     json = null;
   }
   const id = text(json, "id");
-  if (reply.status < 200 || reply.status >= 300 || !id) {
-    return { kind: "failed", error: `Meta did not create the object (status ${reply.status}). Nothing was stored.` };
+  if (reply.status >= 200 && reply.status < 300 && id) return { kind: "created", id };
+  // A server error, or a success with no id, may still have created the object. It is uncertain, so the claim is kept and the next attempt
+  // looks for it by name. Only a refusal (a 4xx or another status) is a definite failure with nothing created.
+  if (reply.status >= 500 || (reply.status >= 200 && reply.status < 300)) {
+    return { kind: "uncertain", error: `Meta answered with status ${reply.status} without confirming the object. It may exist, so the next attempt looks for it before creating another.` };
   }
-  return { kind: "created", id };
+  return { kind: "failed", error: `Meta did not create the object (status ${reply.status}). Nothing was stored.` };
 }
