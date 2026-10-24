@@ -56,7 +56,7 @@ function unrunStage(stage: string): StageHandler {
 }
 
 /** The readiness ports of a connected workspace, with a handler for every stage and a fixture key. No key is read: the lookup is scripted. */
-function readinessPorts(options: { openrouterConnected?: boolean } = {}): EngineReadinessPorts {
+function readinessPorts(options: { openrouterConnected?: boolean; deepgramConnected?: boolean } = {}): EngineReadinessPorts {
   const handlers = Object.fromEntries(ENGINE_STAGES.map((stage) => [stage, unrunStage(stage)] as const)) as EngineRuntime["handlers"];
   const ready: CredentialLookup = { status: "ready", credential: { kind: "api_key", secret: "fixture-not-a-key" } };
   return {
@@ -66,7 +66,10 @@ function readinessPorts(options: { openrouterConnected?: boolean } = {}): Engine
         if (credentialId === "openrouter" && options.openrouterConnected === false) {
           return { status: "not_connected", reason: "no OpenRouter key is saved for this workspace (fixture)" };
         }
-        if (credentialId === "openrouter" || credentialId === "heygen") return ready;
+        if (credentialId === "deepgram" && options.deepgramConnected === false) {
+          return { status: "not_connected", reason: "no Deepgram key is saved for this workspace (fixture)" };
+        }
+        if (credentialId === "openrouter" || credentialId === "heygen" || credentialId === "deepgram") return ready;
         return { status: "not_connected", reason: "not used by this fixture" };
       },
     },
@@ -74,7 +77,7 @@ function readinessPorts(options: { openrouterConnected?: boolean } = {}): Engine
   };
 }
 
-function engineSeams(options: { openrouterConnected?: boolean; withFields?: boolean } = {}): FactoryEngineSeams {
+function engineSeams(options: { openrouterConnected?: boolean; deepgramConnected?: boolean; withFields?: boolean } = {}): FactoryEngineSeams {
   const withFields = options.withFields !== false;
   return { readiness: readinessPorts(options), ...(withFields ? { fields: () => ENGINE_FIELDS } : {}) };
 }
@@ -324,6 +327,28 @@ test("a run that names the engine stops with the engine's own reason when it is 
   assert.equal(row.status, "paused");
   assert.match(row.error, /not connected, so no request was sent/);
   assert.match(row.error, /OpenRouter: no OpenRouter key is saved for this workspace \(fixture\)/, "the reason is the engine's, and names the key");
+});
+
+test("a request with a reference video stops the run when speech-to-text is not connected, and sends nothing", async () => {
+  // The fixture's fields carry a reference video, and a reference is analysed from its transcript: without Deepgram the engine could not finish it.
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "factory-engine-no-speech");
+  const runId = await factoryRunFor(sql, tenant, {
+    automation: "full",
+    formats: ["video"],
+    providers: { video: "engine" },
+    costPerMasterUsd: 1.25,
+    caps: { totalCents: 500 },
+  });
+  const [variantId] = await planRowsFor(sql, tenant, runId, ["video"]);
+  assert.ok(variantId);
+
+  const before = await engineCounts(sql, tenant.organizationId);
+  assert.equal(await produce(sql, tenant, runId, engineSeams({ deepgramConnected: false })), "stopped:factory.produce");
+  assert.deepEqual(await engineCounts(sql, tenant.organizationId), before, "no engine request and no link was written");
+  const row = await runRow(sql, tenant, runId);
+  assert.equal(row.status, "paused");
+  assert.match(row.error, /Speech-to-text \(Deepgram\): no Deepgram key is saved/, "the stop names the speech connection");
 });
 
 test("a request the plan cannot fill names the fields it lacks, and sends nothing", async () => {
