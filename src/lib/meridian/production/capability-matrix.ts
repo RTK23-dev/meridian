@@ -4,8 +4,10 @@ import { estimateCost, type CostEstimate, type PriceQuote, type PriceStatus, typ
 /**
  * Capability and cost matrix (P4a, P4b). A provider is chosen for a deliverable only when one of its registered models
  * meets every requirement the deliverable has: the generation task, the duration (video), and the aspect ratio. Among
- * the models that meet them, LOWEST_COST takes the cheapest known estimate and PREFERENCE takes the first in the mode's
- * order. Every refusal is recorded with its reasons, so a choice can be audited and a refusal is never silent.
+ * the models that meet them, LOWEST_COST takes the cheapest known estimate. PREFERENCE takes the first id of the caller's
+ * explicit preference list, and otherwise the cheapest known estimate. No provider is ranked ahead of another in code, and
+ * the order candidates are passed in never decides a choice: ties go to the lower provider id, then the lower model id.
+ * Every refusal is recorded with its reasons, so a choice can be audited and a refusal is never silent.
  *
  * P4b: a candidate with an unknown or stale price is refused unless the caller allows unknown costs. Under LOWEST_COST
  * an allowed unknown-cost candidate sorts after every known one, because it cannot be compared. A requirement's task
@@ -60,6 +62,14 @@ export interface SelectionRejection {
   reasons: string[];
 }
 
+/**
+ * What decided the choice. `explicit_preference`: the caller's list named the chosen provider. `lowest_known_price`: the cheapest
+ * eligible candidate with a known price. `unknown_price`: no eligible candidate had a known price, so an allowed unknown was chosen.
+ * `zero_spend_only`: the manual workflow was the only option. A record that does not say a quality ranking was applied is not one:
+ * no measured quality exists yet, so the price is the only basis Meridian can state.
+ */
+export type SelectionBasis = "explicit_preference" | "lowest_known_price" | "unknown_price" | "zero_spend_only";
+
 export interface SelectionRecord {
   requirement: SelectionRequirement;
   mode: "LOWEST_COST" | "PREFERENCE";
@@ -71,6 +81,8 @@ export interface SelectionRecord {
     /** Null when the cost is not known. A missing price is never recorded as zero. */
     estimateUsd: number | null;
   } | null;
+  /** Why the chosen candidate won, or null when nothing was chosen. */
+  basis: SelectionBasis | null;
   rejected: SelectionRejection[];
 }
 
@@ -131,7 +143,8 @@ export function selectOffer(input: {
   requirement: SelectionRequirement;
   registry: ModelCapabilityRegistry;
   mode: "LOWEST_COST" | "PREFERENCE";
-  preference?: string[];
+  /** Explicit provider ids, best first. Empty or absent means no preference: the cheapest known estimate decides. */
+  preference?: readonly string[];
   allowDeprecated?: boolean;
   allowZeroSpend?: boolean;
   allowUnknownCost?: boolean;
@@ -165,6 +178,11 @@ export function selectOffer(input: {
     return rank(a.candidate.provider.id) - rank(b.candidate.provider.id) || byCost(a, b) || byName(a, b);
   });
   const first = eligible[0];
+  const basisOf = (): SelectionBasis | null => {
+    if (!first) return null;
+    if (mode === "PREFERENCE" && preference.includes(first.candidate.provider.id)) return "explicit_preference";
+    return first.cost.costKnown ? "lowest_known_price" : "unknown_price";
+  };
   return {
     requirement,
     mode,
@@ -177,6 +195,7 @@ export function selectOffer(input: {
           estimateUsd: first.cost.estimateUsd,
         }
       : null,
+    basis: basisOf(),
     rejected,
   };
 }

@@ -208,10 +208,13 @@ test("Gate 6: Model Capability Registry & Gemini Omni as the Google video engine
   const router = new ProductionRouter({ runtime: "production" });
   assert.equal(router.get("veo"), undefined);
 
-  // Gemini Omni leads the automatic ranking
+  // No provider leads the automatic ranking by name. Order is the known price, cheapest first, then the lower id, and an unpriced
+  // provider last. Omni is ranked like any other eligible provider: it ties Higgsfield at 0.15 a second. The zero-spend workflow is
+  // not offered automatically.
   const ranked = router.rankProviders({} as any, "QUALITY_FIRST");
   assert.equal(ranked.some((p) => p.id === "veo"), false);
-  assert.equal(ranked[0]?.id, "google_omni", "Omni is the primary Google video engine");
+  assert.equal(ranked.some((p) => p.id === "manual_cloud"), false);
+  assert.deepEqual(ranked.map((p) => p.id), ["google_omni", "higgsfield", "hypit"]);
 });
 
 test("Gate 7: Multi-Source Discovery with Cyclone Optional (P1.3, P1.4)", async () => {
