@@ -234,15 +234,22 @@ test("ManualCloudProvider returns PREFLIGHT_FAILED when Google Drive is disconne
   assert.equal(job.error, "GOOGLE_DRIVE_NOT_CONFIGURED");
 });
 
-test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP when configured", async () => {
+test("HypitProvider refuses as not connected, even with a URL and a key, and sends no request", async () => {
   const origUrl = process.env.HYPIT_BASE_URL;
-  delete process.env.HYPIT_BASE_URL;
-
+  process.env.HYPIT_BASE_URL = "https://hypit.internal";
   try {
     const { HypitProvider } = await import("./providers/hypit.ts");
-    const provider = new HypitProvider();
+    const calls: string[] = [];
+    const provider = new HypitProvider({
+      fetchImpl: async (url) => {
+        calls.push(String(url));
+        return new Response("{}", { status: 200 });
+      },
+      apiKey: "workspace-hypit-key",
+    });
     const health = await provider.health();
     assert.equal(health.state, "NOT_CONFIGURED");
+    assert.match(health.detail ?? "", /^NOT_CONNECTED: /);
 
     const job = await provider.submitJob({
       id: "spec-hypit",
@@ -255,72 +262,42 @@ test("HypitProvider returns NOT_CONFIGURED without URL and executes real HTTP wh
       hookLine: "Hook",
       script: "Script",
       scenes: [],
-    });
-    assert.equal(job.status, "NOT_CONFIGURED");
-    assert.equal(job.jobId, "");
-    assert.ok(job.error?.includes("not configured"));
-
-    // Configured real HTTP test
-    process.env.HYPIT_BASE_URL = "https://hypit.internal";
-    const calledEndpoints: string[] = [];
-    const fakeFetch: typeof fetch = async (url, init) => {
-      calledEndpoints.push(String(url));
-      if (String(url).endsWith("/health")) {
-        return new Response(JSON.stringify({ status: "ok" }), { status: 200 });
-      }
-      if (String(url).endsWith("/v1/jobs") && init?.method === "POST") {
-        const headers = init.headers as Record<string, string>;
-        assert.equal(headers["idempotency-key"], "durable-job-key");
-        const body = JSON.parse(String(init.body));
-        assert.equal(body.meridianJobId, "prod_hypit_durable-job-key");
-        return new Response(JSON.stringify({ id: "hypit-job-456", status: "queued" }), { status: 200 });
-      }
-      return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
-    };
-
-    const configuredProvider = new HypitProvider({ fetchImpl: fakeFetch, apiKey: "workspace-hypit-key" });
-    const configuredHealth = await configuredProvider.health();
-    assert.equal(configuredHealth.state, "HEALTHY");
-    assert.ok(calledEndpoints.some((ep) => ep.includes("/health")));
-
-    const submittedJob = await configuredProvider.submitJob({
-      id: "spec-hypit-2",
-      organizationId: "org-1",
-      brandId: "brand-1",
-      title: "Hypit Submit",
-      modality: "video", format: "ugc",
-      aspectRatio: "9:16",
-      durationTargetSeconds: 10,
-      hookLine: "Hook",
-      script: "Script",
-      scenes: [],
       idempotencyKey: "durable-job-key",
     });
-    assert.equal(submittedJob.status, "RUNNING");
-    assert.equal(submittedJob.jobId, "hypit-job-456");
-    assert.ok(calledEndpoints.some((ep) => ep.includes("/v1/jobs")));
+    assert.equal(job.status, "NOT_CONFIGURED");
+    assert.equal(job.errorCode, "NOT_CONNECTED");
+    assert.equal(job.jobId, "");
+    assert.equal(calls.length, 0, "the production route sends nothing until it is wired to the Hypit handoff");
   } finally {
     if (origUrl) process.env.HYPIT_BASE_URL = origUrl;
     else delete process.env.HYPIT_BASE_URL;
   }
 });
 
-test("Hypit submission transport failure is explicitly unknown, not safely retryable", async () => {
+test("a refused Hypit submission is never reported as an unknown outcome, because nothing was sent", async () => {
   const originalUrl = process.env.HYPIT_BASE_URL;
   process.env.HYPIT_BASE_URL = "https://hypit.internal";
   try {
     const { HypitProvider } = await import("./providers/hypit.ts");
-    const provider = new HypitProvider({ fetchImpl: async () => { throw new Error("connection reset after request write"); }, apiKey: "workspace-hypit-key" });
+    let attempts = 0;
+    const provider = new HypitProvider({
+      fetchImpl: async () => {
+        attempts += 1;
+        throw new Error("connection reset after request write");
+      },
+      apiKey: "workspace-hypit-key",
+    });
     const result = await provider.submitJob({
       id: "spec-unknown", idempotencyKey: "durable-job-key", organizationId: "org-1", brandId: "brand-1",
       title: "Unknown outcome", modality: "video", format: "ugc", aspectRatio: "9:16", durationTargetSeconds: 8,
       hookLine: "Hook", script: "Script", scenes: [],
     });
-    assert.equal(result.status, "SUBMISSION_UNKNOWN");
+    assert.equal(result.status, "NOT_CONFIGURED");
+    assert.notEqual(result.status, "SUBMISSION_UNKNOWN");
     assert.equal(result.jobId, "");
+    assert.equal(attempts, 0);
   } finally {
     if (originalUrl) process.env.HYPIT_BASE_URL = originalUrl;
     else delete process.env.HYPIT_BASE_URL;
   }
 });
-

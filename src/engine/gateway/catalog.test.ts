@@ -88,25 +88,36 @@ describe("model exclusions: scoped to one endpoint, each with its reason", () =>
 });
 
 describe("catalog parse: GET /models for image and speech", () => {
-  it("prices image rows per image, then per request, and drops token-only, variable, text-only and malformed rows", () => {
+  it("prices image rows per request only, and drops token-priced, variable, text-only and malformed rows", () => {
     const parsed = parseModelsCatalog("image", fixture("openrouter-catalog-image"), READ_AT);
     assert.deepEqual(
       parsed.entries.map((entry) => [entry.id, entry.price.unit, entry.price.usd, entry.modelClasses]),
-      [
-        ["bytedance-seed/seedream-4.5", "per_image", 0.04, ["image.keyframe", "image.edit"]],
-        ["vendor/text-to-image-flat", "per_request", 0.02, ["image.keyframe"]],
-      ],
+      [["vendor/text-to-image-flat", "per_request", 0.02, ["image.keyframe"]]],
     );
-    const seedream = parsed.entries[0];
-    assert.equal(seedream?.capabilities.firstFrame, true, "an image input means it can start from a picture");
-    assert.equal(seedream?.capabilities.refsMax, null, "how many references is not listed");
-    assert.equal(parsed.entries[1]?.capabilities.refsMax, 0, "a text-only input takes no reference");
+    assert.equal(parsed.entries[0]?.capabilities.refsMax, 0, "a text-only input takes no reference");
     const reasons = new Map(parsed.dropped.map((drop) => [drop.id, drop.reason]));
     assert.match(reasons.get("google/gemini-image-tokens") ?? "", /per token only/);
+    assert.match(reasons.get("bytedance-seed/seedream-4.5") ?? "", /per token only/, "image output is a per-token rate on the live listing, not a per-image price");
     assert.match(reasons.get("vendor/text-only") ?? "", /does not list image as an output/);
     assert.match(reasons.get("vendor/variable-price") ?? "", /no positive price/);
     assert.ok(parsed.dropped.some((drop) => drop.id === null && /listing shape/.test(drop.reason)), "a row whose id is not a string");
-    assert.equal(parsed.dropped.length, 4);
+    assert.equal(parsed.dropped.length, 5);
+  });
+
+  it("reads the live image listing with no row kept: every image output is priced per token, so none can be reserved", () => {
+    const live = parseModelsCatalog("image", fixture("openrouter-catalog-image-live"), READ_AT);
+    assert.equal(live.entries.length, 0);
+    assert.equal(live.dropped.length, 63);
+    assert.ok(live.dropped.some((drop) => /per token only/.test(drop.reason)));
+    assert.ok(live.dropped.some((drop) => /no positive price/.test(drop.reason)), "a row with no price at all is named");
+  });
+
+  it("reads the live speech listing with no row kept: every row is priced per token", () => {
+    const live = parseModelsCatalog("speech", fixture("openrouter-catalog-speech-live"), READ_AT);
+    assert.equal(live.entries.length, 0);
+    assert.equal(live.dropped.length, 36);
+    assert.ok(live.dropped.every((drop) => /per token only|no positive price/.test(drop.reason)));
+    assert.equal(live.dropped.filter((drop) => /per token only/.test(drop.reason)).length, 35, "35 rows are token-priced; one has no price");
   });
 
   it("prices speech rows per request and drops token-only rows", () => {
@@ -129,7 +140,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.equal(read.catalog.readAt, READ_AT);
     assert.deepEqual(read.catalog.failed, []);
-    assert.equal(read.catalog.entries.length, 6, "3 video, 2 image, 1 speech");
+    assert.equal(read.catalog.entries.length, 5, "3 video, 1 image (a per-request price), 1 speech (a per-request price)");
     assert.notEqual(read.catalog.videoListing, null, "the video listing is kept for the video adapters' profiles");
     assert.deepEqual(
       transport.requests.map((request) => `${request.method} ${request.url}`),
@@ -159,7 +170,7 @@ describe("readModelCatalog through the gateway", () => {
     if (read.status !== "read") return;
     assert.deepEqual(read.catalog.failed.map((failure) => failure.source), ["videos", "speech"]);
     assert.equal(read.catalog.videoListing, null);
-    assert.deepEqual(read.catalog.entries.map((entry) => entry.id), ["bytedance-seed/seedream-4.5", "vendor/text-to-image-flat"]);
+    assert.deepEqual(read.catalog.entries.map((entry) => entry.id), ["vendor/text-to-image-flat"]);
   });
 });
 
@@ -199,5 +210,55 @@ describe("modelCatalogCache", () => {
     assert.equal(a, b);
     await cache.read("org_2");
     assert.equal(transport.requests.length, 6, "one read for org_1, one for org_2");
+  });
+});
+
+describe("catalog parse: GET /videos/models, as the live listing answered on 2026-10-24", () => {
+  const live = parseVideoCatalog(fixture("openrouter-catalog-videos-live"), READ_AT);
+  const priced = (id: string) => live.entries.find((entry) => entry.id === id);
+
+  it("keeps 24 of the 30 listed rows and drops the six that have no per-second price", () => {
+    assert.equal(live.entries.length, 24);
+    assert.deepEqual(
+      live.dropped.map((drop) => drop.id).sort(),
+      [
+        "black-forest-labs/flux-video-upscale",
+        "bytedance/seedance-1-5-pro",
+        "bytedance/seedance-2.0",
+        "bytedance/seedance-2.0-fast",
+        "bytedance/seedance-2.0-mini",
+        "bytedance/seedance-2.5",
+      ],
+    );
+    for (const drop of live.dropped) assert.match(drop.reason, /no positive per-second price/);
+  });
+
+  it("reads a per-token row as not priced per second: the engine cannot know its tokens before a call", () => {
+    assert.equal(priced("bytedance/seedance-2.0"), undefined);
+    const drop = live.dropped.find((item) => item.id === "bytedance/seedance-2.0");
+    assert.match(drop?.reason ?? "", /no positive per-second price/);
+  });
+
+  it("converts a cents SKU to dollars, and prices a row at its highest per-second SKU", () => {
+    // Published $0.12 a second: the listing gives 12 cents.
+    assert.deepEqual([priced("runway/gen-4.5")?.price.usd, priced("runway/gen-4.5")?.price.sku], [0.12, "cents_per_second_output"]);
+    // Published $0.168 a second with audio. The listing's other SKU for this model is $0.112 without it, and the higher one is kept.
+    assert.deepEqual([priced("kwaivgi/kling-v3.0-pro")?.price.usd, priced("kwaivgi/kling-v3.0-pro")?.price.sku], [0.168, "duration_seconds_with_audio"]);
+    // Four-k is the highest rate Veo lists, so a reservation at its price cannot run short at a lower resolution.
+    assert.deepEqual([priced("google/veo-3.1")?.price.usd, priced("google/veo-3.1")?.price.sku], [0.6, "duration_seconds_with_audio_4k"]);
+  });
+
+  it("reads a field the listing sends as null as not stated, not as a broken row", () => {
+    const grok = priced("x-ai/grok-imagine-video-1.5-lite");
+    assert.ok(grok, "a row with a null generate_audio is kept");
+    assert.equal(grok.capabilities.audio, null, "an unstated audio flag stays unknown");
+    const edit = priced("black-forest-labs/flux-video-edit");
+    assert.ok(edit, "a row with null durations is kept");
+    assert.equal(edit.capabilities.durationsSeconds, null, "unstated durations stay unknown");
+    assert.equal(edit.capabilities.firstFrame, null, "unstated frame support stays unknown");
+  });
+
+  it("every kept row is a catalog entry the contract accepts", () => {
+    for (const entry of live.entries) assert.doesNotThrow(() => modelCatalogEntrySchema.parse(entry), entry.id);
   });
 });

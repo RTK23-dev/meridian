@@ -7,6 +7,12 @@ import {
   createSessionInput,
   opportunityBriefInput,
   messageInput,
+  repurposeInput,
+  repurposeOutputInput,
+  pausedAdChoicesInput,
+  pausedAdInput,
+  repurposeReviewInput,
+  repurposeRunInput,
   remakeShotInput,
   clipInput,
   reviseDirectionInput,
@@ -19,6 +25,12 @@ import {
   workspaceInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
+import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
+import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
+import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
+import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
+import { createRepurposedPausedAd, listPausedAdChoices } from "./repurpose-paused-ad.ts";
+import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
@@ -142,6 +154,78 @@ export const createContentFactoryBriefFromOpportunity = createServerFn({ method:
   .validator((input: unknown) => opportunityBriefInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => briefFromOpportunity(await getSql(), context.userId, data));
+
+/** The variations a repurpose choice resolves to on a delivered video. Nothing is stored. Admins only. */
+export const previewContentFactoryRepurpose = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => repurposePreview(await getSql(), context.userId, data));
+
+/**
+ * Plans the repurposed variations of a delivered video, as child cuts. Idempotent. A variation is rendered only when the render price is
+ * verified and the renderer is connected; otherwise it is recorded with its reason. Admins only.
+ */
+export const startContentFactoryRepurpose = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const render = productionRepurposeRenderPort(sql);
+    return startRepurpose(sql, context.userId, data, render === undefined ? {} : { render });
+  });
+
+/** The latest decision on each rendered variation of a repurpose run. Admins only. */
+export const listContentFactoryRepurposeReviews = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeRunInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => repurposeReviewsOf(await getSql(), context.userId, data));
+
+/** A reviewer's approve or reject decision on one rendered variation. Records a decision only; nothing is published. Admins only. */
+export const reviewContentFactoryRepurposeVariant = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeReviewInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => recordRepurposeReview(await getSql(), context.userId, data));
+
+/** What the renderer reports for an interrupted repurposed cut. Read-only: it settles and retries nothing. Admins only. */
+export const checkContentFactoryRepurposeRender = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOutputInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return checkInterruptedRepurposeRender(sql, context.userId, data, productionRepurposeStatusPoll(sql));
+  });
+
+/** A short-lived link to a rendered variation's video. Admins only. Nothing is signed for a variation that was not rendered. */
+export const getContentFactoryRepurposeOutput = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOutputInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => repurposeOutputLink(await getSql(), context.userId, data));
+
+/**
+ * The ad sets and Pages a paused Meta ad can be created under, for the brand's saved accounts. Read only. Admins only.
+ */
+export const listContentFactoryPausedAdChoices = createServerFn({ method: "POST" })
+  .validator((input: unknown) => pausedAdChoicesInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => listPausedAdChoices(await getSql(), context.userId, data, { env: process.env }));
+
+/**
+ * Creates one PAUSED Meta ad from an uploaded variation, inside the ad set the person chose and confirmed again. Nothing is activated.
+ * Admins only. A request that fails any check sends nothing and says why.
+ */
+export const createContentFactoryPausedAd = createServerFn({ method: "POST" })
+  .validator((input: unknown) => pausedAdInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => createRepurposedPausedAd(await getSql(), context.userId, data, { env: process.env }));
+
+/**
+ * Uploads one approved, rendered repurposed variation to the brand's Meta ad account and records the upload only when Meta returns its
+ * video id. Admins only. A variation that is not ready, or a brand with no connected Meta account, sends nothing and says why.
+ */
+export const uploadContentFactoryRepurposeVariant = createServerFn({ method: "POST" })
+  .validator((input: unknown) => repurposeOutputInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => uploadRepurposeVariantToMeta(await getSql(), context.userId, data, { env: process.env }));
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))

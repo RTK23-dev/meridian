@@ -174,7 +174,7 @@ export async function requireWorkspaceAdmin(sql: Sql, userId: string, organizati
 }
 
 /** The session and its workspace, read in one statement with the caller's role. Unknown and foreign sessions get the same refusal. */
-async function sessionAccess(sql: Sql, userId: string, sessionId: string): Promise<SessionRow> {
+export async function sessionAccess(sql: Sql, userId: string, sessionId: string): Promise<SessionRow> {
   const rows = await sql.query<SessionRow & { role: string | null }>(
     `select ${SESSION_COLUMNS}, m.role
      from content_factory_sessions s
@@ -760,7 +760,7 @@ function idListOf(value: unknown): string[] {
   return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : [];
 }
 
-function todayIso(): string {
+export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
@@ -769,7 +769,7 @@ function dateString(value: unknown): string {
 }
 
 /** The stored files a session's video was made from. Each one needs a rights record before the video can be approved. */
-async function storedFilesOf(sql: Sql, organizationId: string, sessionId: string): Promise<FileReference[]> {
+export async function storedFilesOf(sql: Sql, organizationId: string, sessionId: string): Promise<FileReference[]> {
   const rows = await sql<{ id: string; file_name: string | null }>`
     select id, file_name from content_factory_attachments
     where organization_id = ${organizationId} and session_id = ${sessionId} and kind = 'file'
@@ -778,7 +778,7 @@ async function storedFilesOf(sql: Sql, organizationId: string, sessionId: string
 }
 
 /** The rights records of a brand that name a stored file. A record with an end date, or a revocation, is read as it stands. */
-async function rightsRecordsOf(sql: Sql, organizationId: string, brandId: string | null): Promise<RightsRecordFacts[]> {
+export async function rightsRecordsOf(sql: Sql, organizationId: string, brandId: string | null): Promise<RightsRecordFacts[]> {
   if (brandId === null) return [];
   const rows = await sql<{ id: string; attachment_id: string | null; valid_until: unknown; revoked_at: unknown }>`
     select id, attachment_id, valid_until, revoked_at from rights_records

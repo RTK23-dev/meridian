@@ -9,10 +9,11 @@
 // has no price the engine can estimate a call from is dropped with its reason, never guessed. What is kept is a ModelCatalogEntry
 // (contracts/catalog.ts), which cannot represent a model without a positive price.
 //
-// UNVERIFIED LIVE. PROVIDER_APIS.md lists the fields of GET /videos/models but not the keys of `pricing_skus`, and the fields of
-// GET /models beyond `pricing` and `architecture` are taken from OpenRouter's models guide. The SKU names below
-// (VIDEO_SECOND_SKUS) and the image and speech price fields come from the lead's brief of 2026-10-16. The recorded fixtures in
-// gateway/test/fixtures/ are written from that documented shape, not from a live answer. The owner's live run confirms them.
+// A live read of GET /videos/models on 2026-10-24 (gateway/test/fixtures/openrouter-catalog-videos-live.json) showed two things the
+// first parser did not expect. The listing names its SKUs by model family: some in USD per second (`duration_seconds_*`), some in
+// cents (`cents_per_video_output_second_*`, `cents_per_second_output`), and some per token, which cannot be reserved. It also sends
+// null for a field it does not state, which is read as not stated. The image and speech listings, and the fields of GET /models
+// beyond `pricing` and `architecture`, are still taken from the documented shape: they have not been read live.
 //
 // Mapping (fail closed):
 // - A video model serves video.cinematic and video.budget. It is never a video.i2v_pinned candidate: that class takes only models
@@ -45,15 +46,6 @@ const SOURCE_PATHS: Record<CatalogSource, string> = {
   image: "/models?output_modalities=image",
   speech: "/models?output_modalities=speech",
 };
-
-/** The resolution the engine renders video at (Bible section 1), so the per-second SKU priced for it is preferred. */
-export const CATALOG_VIDEO_RESOLUTION = "1080p";
-
-/**
- * The per-second SKUs of `pricing_skus` the engine estimates a video call from, best first: the one priced for the engine's
- * resolution, then the general one. UNVERIFIED LIVE (see the file header). A model with neither is not a candidate.
- */
-export const VIDEO_SECOND_SKUS = [`per-video-second-${CATALOG_VIDEO_RESOLUTION}`, "per-video-second"] as const;
 
 /** The classes a listed video model serves. video.i2v_pinned is left out on purpose (see the file header). */
 export const CATALOG_VIDEO_CLASSES = ["video.cinematic", "video.budget"] as const satisfies readonly ModelClass[];
@@ -109,13 +101,14 @@ function idOf(raw: unknown): string | null {
 
 const listingSchema = z.looseObject({ data: z.array(z.unknown()) });
 
+// The live listing sends null for a field a model does not state, so each of these accepts null as well as absence.
 const videoRowSchema = z.looseObject({
   id: z.string().min(1).max(200),
-  generate_audio: z.boolean().optional(),
-  supported_durations: z.array(z.number().finite().positive()).optional(),
-  supported_resolutions: z.array(z.string().min(1)).optional(),
-  supported_aspect_ratios: z.array(z.string().min(1)).optional(),
-  supported_frame_images: z.array(z.string()).optional(),
+  generate_audio: z.boolean().nullish(),
+  supported_durations: z.array(z.number().finite().positive()).nullish(),
+  supported_resolutions: z.array(z.string().min(1)).nullish(),
+  supported_aspect_ratios: z.array(z.string().min(1)).nullish(),
+  supported_frame_images: z.array(z.string()).nullish(),
   pricing_skus: z.unknown().optional(),
 });
 
@@ -143,16 +136,31 @@ function keep(out: Parsed, source: CatalogSource, entry: ModelCatalogEntry): voi
   out.dropped.push({ source, id: entry.id, reason: `the entry does not fit the catalog contract (${issue ? issue.path.join(".") || "entry" : "entry"})` });
 }
 
-/** The per-second price of a video row, from its pricing_skus, or the reason it has none. */
+/** A per-second SKU the listing names in USD: the first listing's names, and the live listing's `duration_seconds_*` ones. */
+const USD_PER_SECOND_SKU = /^(per-video-second(-\w+)?|duration_seconds(_\w+)?|text_to_video_duration_seconds(_\w+)?|image_to_video_duration_seconds(_\w+)?)$/;
+/** A per-second SKU the listing names in cents, as `cents_per_video_output_second_<resolution>` or `cents_per_second_output`. */
+const CENTS_PER_SECOND_SKU = /^(cents_per_video_output_second(_\w+)?|cents_per_second_output)$/;
+
+/**
+ * The per-second price of a video row, from its pricing_skus, or the reason it has none. The unit comes from the SKU's name. A row can
+ * price one second at several resolutions or with and without audio, and a call's variant is not known when it is reserved, so the
+ * highest per-second SKU is the price. A reservation at that price never runs short. Per-token SKUs are not per second, so they are
+ * ignored: the engine cannot know a call's tokens before it is made.
+ */
 function videoPrice(skus: unknown): CatalogPrice | string {
-  if (skus === undefined) return "no pricing_skus, so a call could not be reserved";
-  if (typeof skus !== "object" || skus === null || Array.isArray(skus)) return "pricing_skus is not an object of SKU to price";
-  const table = skus as Record<string, unknown>;
-  for (const sku of VIDEO_SECOND_SKUS) {
-    const rate = usableRate(table[sku]);
-    if (rate !== null) return { unit: "per_second", usd: rate, sku };
+  if (skus === undefined || skus === null) return "no pricing_skus, so a call could not be reserved";
+  if (typeof skus !== "object" || Array.isArray(skus)) return "pricing_skus is not an object of SKU to price";
+  let best: { usd: number; sku: string } | null = null;
+  for (const [sku, value] of Object.entries(skus as Record<string, unknown>)) {
+    const cents = CENTS_PER_SECOND_SKU.test(sku);
+    if (!cents && !USD_PER_SECOND_SKU.test(sku)) continue;
+    const rate = usableRate(value);
+    if (rate === null) continue;
+    const usd = cents ? rate / 100 : rate;
+    if (best === null || usd > best.usd) best = { usd, sku };
   }
-  return `no positive per-second price (${VIDEO_SECOND_SKUS.join(" or ")}), so a call could not be reserved`;
+  if (best === null) return "no positive per-second price, so a call could not be reserved";
+  return { unit: "per_second", usd: best.usd, sku: best.sku };
 }
 
 /** Parses GET /videos/models. Pure. An exclusion applies to this endpoint only, and its reason is recorded on the drop. */
@@ -189,8 +197,8 @@ export function parseVideoCatalog(body: unknown, readAt: string, exclusions: rea
       durationsSeconds: durations.length > 0 ? durations : null,
       aspectRatios: model.supported_aspect_ratios ?? null,
       resolutions: model.supported_resolutions ?? null,
-      firstFrame: frames === undefined ? null : frames.includes("first_frame"),
-      lastFrame: frames === undefined ? null : frames.includes("last_frame"),
+      firstFrame: frames == null ? null : frames.includes("first_frame"),
+      lastFrame: frames == null ? null : frames.includes("last_frame"),
       // The listing does not say how many reference images a video model takes.
       refsMax: null,
       audio: model.generate_audio ?? null,
@@ -200,16 +208,22 @@ export function parseVideoCatalog(body: unknown, readAt: string, exclusions: rea
   return out;
 }
 
-/** The price of an image or speech row, from its pricing strings, or the reason it has none. Token rates are not usable. */
-function listedPrice(source: "image" | "speech", pricing: Record<string, unknown> | undefined): CatalogPrice | string {
+/**
+ * The token-priced fields of an image or speech row. The live listings (read 2026-10-24) price image output per token, and `image_output`
+ * is a per-token rate there, not a per-image one. A token rate cannot be reserved, because the engine cannot know a call's tokens before
+ * it is made.
+ */
+const TOKEN_RATE_FIELDS = ["prompt", "completion", "image_output", "image_token"] as const;
+
+/**
+ * The price of an image or speech row, from its pricing strings, or the reason it has none. Only a per-request price is kept: it is the
+ * one per-call price the listings state. The `image` field is per image on some rows and per token on others, so it is not read.
+ */
+function listedPrice(pricing: Record<string, unknown> | undefined): CatalogPrice | string {
   if (pricing === undefined) return "no pricing, so a call could not be reserved";
-  if (source === "image") {
-    const perImage = usableRate(pricing.image_output);
-    if (perImage !== null) return { unit: "per_image", usd: perImage, sku: "image_output" };
-  }
   const perRequest = usableRate(pricing.request);
   if (perRequest !== null) return { unit: "per_request", usd: perRequest, sku: "request" };
-  if (usableRate(pricing.prompt) !== null || usableRate(pricing.completion) !== null) {
+  if (TOKEN_RATE_FIELDS.some((field) => usableRate(pricing[field]) !== null)) {
     return "priced per token only; the engine cannot know a call's tokens before it is made, so it could not be reserved";
   }
   return "no positive price, so a call could not be reserved";
@@ -238,7 +252,7 @@ export function parseModelsCatalog(source: "image" | "speech", body: unknown, re
       out.dropped.push({ source, id: model.id, reason: `the row does not list ${OUTPUT_MODALITY[source]} as an output` });
       continue;
     }
-    const price = listedPrice(source, model.pricing);
+    const price = listedPrice(model.pricing);
     if (typeof price === "string") {
       out.dropped.push({ source, id: model.id, reason: price });
       continue;

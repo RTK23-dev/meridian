@@ -14,8 +14,8 @@ function withDurations(durationsSeconds: number[] | null) {
   return { ...modelCatalogEntryFixture, capabilities: { ...modelCatalogEntryFixture.capabilities, minSeconds, maxSeconds, durationsSeconds } };
 }
 
-test("the contract set is engine-contracts@10 (the version the v10 note of Bible section 4 records)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@10");
+test("the contract set is at or above v10, the version the v10 note of Bible section 4 records (v11 and later keep it)", () => {
+  assert.ok(Number(CONTRACTS_VERSION.split("@")[1]) >= 10, CONTRACTS_VERSION);
 });
 
 test("an entry with no list, which gives only a range, is accepted as before", () => {

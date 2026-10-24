@@ -137,7 +137,14 @@ export function rankCandidates(
   ranked: Readonly<Partial<Record<ModelClass, readonly string[]>>> = modelPreferences.ranked,
 ): ModelCatalogEntry[] {
   const preferred = ranked[modelClass] ?? [];
-  if (preferred.length === 0) return [...eligible];
+  // Without an explicit preference, the cheapest eligible candidate comes first, so the chooser sees the lowest price first. Quality is
+  // the chooser's judgement from the candidates' capabilities; the engine has no quality measure. Ties keep catalog order.
+  if (preferred.length === 0) {
+    return eligible
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => a.entry.price.usd - b.entry.price.usd || a.index - b.index)
+      .map(({ entry }) => entry);
+  }
   const position = (id: string): number => {
     const at = preferred.indexOf(id);
     return at === -1 ? Number.POSITIVE_INFINITY : at;

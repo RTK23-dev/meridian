@@ -383,7 +383,7 @@ function FactoryPage({ brandId }: { brandId: string }) {
           <section aria-labelledby="production-queue" className="space-y-3">
             <h2 id="production-queue" className="text-section font-semibold">Production queue</h2>
             <p className="text-sm text-muted">The jobs this brand has, read from the job records. The stages below are the order a run goes through.</p>
-            <ProductionQueue query={queue} />
+            <ProductionQueue query={queue} organizationId={board.organizationId} canAdmin={canAdmin} />
           </section>
           <section aria-labelledby="production-stages" className="space-y-3">
             <h2 id="production-stages" className="text-section font-semibold">Production stages</h2>

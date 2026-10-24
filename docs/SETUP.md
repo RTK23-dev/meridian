@@ -83,6 +83,32 @@ release reads are:
 
 Until a variable is set, the feature that needs it stays NOT_CONNECTED and says so. Nothing is sent in its place.
 
+## Hypit runtime (video production, not yet routed in production)
+
+Hypit is licensed under Apache 2.0 with conditions that bar a multi-tenant service and commercial bundling without Hypit.AI's written
+authorization. Read `docs/HYPIT_LICENSE.md` before any use beyond one organization.
+
+Hypit is not a skill and not a Docker service in this repository. Meridian talks to one process at `HYPIT_BASE_URL` through the
+handoff in `src/lib/meridian/hypit/`, which uses four routes: `POST /v1/jobs`, `GET /v1/jobs/{id}`, `GET /v1/jobs/{id}/artifact`
+and `/health`. The only implementation of those routes here is `scripts/hypit-bridge.mjs`. It is a single-organization proof runner
+that spawns a `hypit` CLI. The CLI is not in this repository and is not in the Meridian image.
+
+To run it yourself, on a host where the Hypit CLI is installed:
+
+```
+HYPIT_BIN=<path to the hypit CLI> HYPIT_FFMPEG=/usr/bin/ffmpeg HYPIT_FFPROBE=/usr/bin/ffprobe \
+HYPIT_BRIDGE_PORT=8766 HYPIT_JOB_ROOT=<a directory for job folders> HYPIT_API_TOKEN=<a long random token> \
+node scripts/hypit-bridge.mjs
+```
+
+`HYPIT_API_TOKEN` is required on every address, loopback included. Without it the bridge refuses to start, because a page open in the
+operator's browser can reach a loopback port. Every request must carry the token as a Bearer header, and a request with an `Origin` header (a
+browser page) is refused. Set `HYPIT_BRIDGE_HOST` only to the address other machines should reach. In Meridian's environment set `HYPIT_BASE_URL` to the bridge's URL and `HYPIT_API_TOKEN` to the same token.
+The bridge keeps its jobs in memory, so a restart loses them. The production router's `hypit` entry is not connected to this handoff
+and refuses every job with `NOT_CONNECTED`, so no production run selects Hypit yet. A multi-tenant runtime and a cost figure for
+Hypit are not built or verified. Owner action: run one live job with the real CLI and record the job id, the artifact bytes and the
+provider bill, if any.
+
 ## Publishing and approving work
 
 Publishing is optional. Paid ads (Meta, TikTok, Google) are created paused, and Meridian never switches them on. Regular posts go to a

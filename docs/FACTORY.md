@@ -115,7 +115,7 @@ Produce materializes each variant of the run for each format the run makes, thro
 - **Carousels** are one carousel job with one image job for each slide. The slides come from the creative engine's carousel scope
   (`creative/engine.ts`), so the number and the words of the slides are the engine's. Each slide is produced like an image, and the
   carousel creative is made when its last slide is stored. A slide the engine left without words carries the product name alone.
-- **Videos** are one provider job each, through the router's video providers (Hypit, Gemini Omni, Higgsfield, or ManualCloud). A video's
+- **Videos** are one provider job each, through the router's video providers (Gemini Omni, Higgsfield, or ManualCloud; Hypit is not connected, see `docs/HYPIT_LICENSE.md`). A video's
   estimate is reserved before the call. A video that finishes at once is stored and recorded. A video still at its provider keeps the run
   **running**, with its reason in the run row and `waiting_on` set to produce. The stages after produce do not run until it finishes. The
   stage checks again about every ten minutes, and the poller in the worker reads the job's own row to finish it. Nothing is marked
@@ -489,7 +489,7 @@ Items 1 to 11 of NORTH_STAR section 8 are built on recorded fixtures. What is st
 [ROADMAP.md](ROADMAP.md):
 
 - The Content Factory page: a revision is opened only after the current video is delivered or has failed. The earlier request stays stored, and the next video gets its own request id. Text files that need a connected Drive are still not read from Drive (see the Content Factory page section above). A readable PDF is used in the brief. An image records its header size and does not read pixels.
-- A video's cost is metered only when the provider returns its own bill (`costUsd` on a Hypit job, stored as `provider_reported`).
+- A video's cost is metered only when the provider returns its own bill (for example an OpenRouter generation's bill, stored as `provider_reported`). No Hypit job has reported a bill, because Hypit is not connected.
   A declared estimate is held against the run's caps and is not written as priced spend.
 - A video or carousel that is not produced for a reason says the reason on the run, and the run stops or waits with it.
 - Preflight on Factory images checks that the still has a hook or a script, and does not apply the video duration rule. The image asks the claim question before a provider is called. A rejection skips that image. An uncalibrated answer, or a brand with no stored claims, does not block it and is not a pass. A Factory video with an empty hook skips that variant. The run records each skip. If nothing is produced, the run stops with those reasons. Another preflight refusal still stops the run.

@@ -1,5 +1,49 @@
 # STATUS: engine render (W10): HyperFrames cloud adapter, integrity hook, zip
 
+## Production rendering is disabled: the HyperFrames price and its billing are unknown (2026-10-24)
+
+Production rendering stays off. Nothing in this folder can make a paid HyperFrames render until the owner supplies the three items at
+the end of this section. This is the trace of every render outcome through the ledger, checked against the code and the tests named.
+
+What keeps it off today:
+- `config/prices.ts` `render_hyperframes_cloud` has `usd: null`. `jobs/production-ports.ts` `renderLineUsd` returns undefined for a
+  null price, and the render handler then fails `render_price_known` before any hold or request. Test: `jobs/production-ports.test.ts`.
+- No bill reader exists for HyperFrames. `jobs/runtime.ts` registers readers for OpenRouter and Deepgram only. The adapter never records a
+  `providerRef` on the ledger entry, so no bill can be read back for a render.
+
+How each render outcome settles (the ledger's only settlements are a verified bill, `billed`, or a confirmed absence,
+`confirmed_absent`; an estimate is never an actual):
+
+| Outcome | Ledger entry | Hold after the step | Release | Test |
+| --- | --- | --- | --- | --- |
+| Budget refuses the render | none written; no request | none | n/a | `hyperframesCloud.test.ts` "makes no request and writes no entry when the budget refuses" |
+| Price unknown | none; fails `render_price_known` first | none | n/a | `production-ports.test.ts` |
+| Accepted, finished, no bill (the only path today) | held at its estimate; `costUsd` null | kept at the render line | none: committed stays at the estimate | "a successful render with no bill has costUsd null" |
+| Accepted, provider reports `failed` | held; non-retryable error; not reconciled | kept (may or may not have been billed) | none | "does not re-submit a failed render under its key" |
+| Integrity check fails after the render | held; non-retryable provider error; nothing stored | kept | none | "fails closed when the render-integrity check does not pass" |
+| Polling times out, render still running | held; retryable timeout | kept for a resume | none | "is a retryable timeout when the render never finishes" |
+| `submit` throws (accepted or not, unknown) | held (authorised before the call); error propagates | kept | none; a retry is a duplicate and is refused "settle it first" | "a second render under the same key, while the first is unsettled, throws conflict" |
+
+Consequences the owner must accept or change before any live render:
+1. A held render stays in the month's reserved total (`budget/store.ts` `sumForMonth` counts every non-paused reservation). Each render
+   therefore uses up its line of the workspace's monthly cap until a bill or an absence is recorded. The cap is never overrun, but a
+   render-heavy month can exhaust the cap with renders that were never billed.
+2. No operator path can record a render's absence. `budget/reconcile.ts` `confirmAbsentCall` exists and is used for speech-to-text, but
+   nothing offers it for a render, and nothing can prove that a render was never created.
+3. A held render is given up by the bill reconciler once it has no `providerRef` (`budget/reconcile-holds.ts`), and is reported for an
+   operator. Nothing settles it automatically.
+
+### Owner-only verification needed before a capped live render
+
+These are not code tasks. The agent holds no key and has not made a paid call.
+1. A verified HyperFrames price: the per-minute rate and its source (the provider's own pricing page or invoice, with the date read).
+   The list price is not a verified bill. Set it in `config/prices.ts`; the production render then becomes priceable.
+2. A per-render bill source: a billing endpoint or invoice line keyed by the render id. Only with it can a render settle to `billed`, and
+   only then should the adapter record the render id as the ledger `providerRef` and register a bill reader in `jobs/runtime.ts`.
+3. A cap: the owner sets the workspace budget and the request budget for one live render, and a test workspace. The owner runs the render
+   and records the render id, the ledger entry id, the estimate, the bill (or its absence), and the output. A render that is not billed
+   stays held by design; the owner decides whether to accept that reserve or to provide an absence check.
+
 ## W2 wiring pass (branch `eng-e45-leftovers-2`)
 
 Not run in this pass.
@@ -155,8 +199,9 @@ component EDL goes to review."
    `gateway.secretFor("heygen", organizationId)` from the API gateway, and a real reservation from `reserve()`. Use the E1 acceptance EDL (one stock clip, one TTS voice, three components). Record the render id, the
    video id, the cost in the ledger, the artifact ids, and the output file.
 2. Run `ffprobe` on the output: 1080 × 1920, 30 fps, duration within 100 ms of the EDL, audio present.
-3. Ten test renders: record each bill. Set `render_hyperframes_cloud` in `prices.ts` to a verified price. Until then
-   the render line is `budgets.fixedPerMasterUsd.render` (0.05), and each ledger entry says it is an estimate.
+3. Ten test renders: record each bill. Set `render_hyperframes_cloud` in `prices.ts` to a verified price. Until then the
+   render gate `render_price_known` fails closed and nothing is rendered. `budgets.fixedPerMasterUsd.render` (0.05) is the
+   intake hold, not a render price.
 4. Submit the same composition twice. Check that HeyGen returns the same render id and bills once. The adapter assumes
    this, and it is not verified.
 5. Check `resolution: "1080p"` and `aspect_ratio: "9:16"` on an `asset_id` project. If the output is not 1080 × 1920,

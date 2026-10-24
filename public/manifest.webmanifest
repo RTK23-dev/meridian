@@ -4,8 +4,8 @@
   "description": "A content and advertising factory that learns from what works.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f6f4ee",
-  "theme_color": "#f6f4ee",
+  "background_color": "#08070B",
+  "theme_color": "#08070B",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
   ]

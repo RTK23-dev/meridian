@@ -1,8 +1,9 @@
 /**
  * Provider-Neutral Production Router
  *
- * Directs creative rendering jobs to the optimal production provider based on
- * tenant cost modes: ZERO_SPEND, LOWEST_COST, BALANCED, QUALITY_FIRST.
+ * Directs creative rendering jobs to a production provider chosen by the capability matrix, under the tenant's cost mode:
+ * ZERO_SPEND, LOWEST_COST, BALANCED, QUALITY_FIRST. The matrix decides eligibility; among eligible candidates the order comes
+ * from an explicit preference, else the price. No provider is ranked first in code (see ProviderPreference).
  */
 
 import type {
@@ -33,11 +34,16 @@ async function healthOf(
   return organizationId && scoped.healthFor ? scoped.healthFor(organizationId) : provider.health();
 }
 
-/** Automatic preference order by cost mode. The matrix decides eligibility first; this only orders eligible providers. */
-const PREFERENCE_BY_MODE: Record<"BALANCED" | "QUALITY_FIRST", string[]> = {
-  BALANCED: ["google_omni", "hypit", "higgsfield", "manual_cloud"],
-  QUALITY_FIRST: ["google_omni", "higgsfield", "hypit", "manual_cloud"],
-};
+/**
+ * An explicit preference: provider ids for one modality, best first. Empty by default. No provider is ranked ahead of another
+ * in code. Without a preference, automatic selection takes the cheapest eligible candidate with a known price, and the order
+ * providers were registered in never decides a choice. Meridian has no measured quality ranking, so QUALITY_FIRST without a
+ * preference is ordered by price too, and the selection's basis records that.
+ */
+export interface ProviderPreference {
+  video?: readonly string[];
+  image?: readonly string[];
+}
 
 export interface ProviderSelection {
   provider: ProductionProvider;
@@ -48,9 +54,6 @@ export interface ImageProviderSelection {
   provider: ProductionImageProvider;
   selection: SelectionRecord;
 }
-
-/** Automatic image preference. The matrix decides eligibility first; this only orders eligible providers. */
-const IMAGE_PREFERENCE = ["google_nano_banana", "test:image"];
 
 /** Any provider the matrix can price: a video provider or an image provider. */
 type CandidateProvider = PricedProvider & { capabilities: PricedProvider["capabilities"] & { zeroSpend: boolean } };
@@ -110,10 +113,17 @@ export function requirementForImage(spec: CreativeSpec): SelectionRequirement {
 export class ProductionRouter {
   private providers = new Map<string, ProductionProvider>();
   private imageProviders = new Map<string, ProductionImageProvider>();
+  private readonly preference: ProviderPreference;
   readonly runtime: "production" | "testing";
 
-  constructor(options?: { runtime?: "production" | "testing"; providers?: ProductionProvider[]; imageProviders?: ProductionImageProvider[] }) {
+  constructor(options?: {
+    runtime?: "production" | "testing";
+    providers?: ProductionProvider[];
+    imageProviders?: ProductionImageProvider[];
+    preference?: ProviderPreference;
+  }) {
     this.runtime = options?.runtime || (testingRuntimeNow() ? "testing" : "production");
+    this.preference = options?.preference ?? {};
 
     if (options?.providers) {
       for (const p of options.providers) {
@@ -166,40 +176,34 @@ export class ProductionRouter {
     return Array.from(this.providers.values());
   }
 
+  /**
+   * The order providers are offered in for a mode. Ranks on the price quote, not the raw declaration: a known amount sorts first,
+   * cheapest first, and an unknown price sorts last and is never treated as zero. LOWEST_COST uses only the price. BALANCED and
+   * QUALITY_FIRST first take the caller's explicit preference, if any. Ties go to the lower provider id.
+   */
   rankProviders(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): ProductionProvider[] {
-    const available = Array.from(this.providers.values());
+    const all = Array.from(this.providers.values());
     if (mode === "ZERO_SPEND") {
-      return available.filter((p) => p.capabilities.zeroSpend);
+      return all.filter((p) => p.capabilities.zeroSpend);
     }
-    if (mode === "LOWEST_COST") {
-      // Ranks on the price quote, not the raw declaration. A known amount sorts first, cheapest first. An unknown price
-      // sorts last, and is never treated as zero.
-      const modality: SelectionModality = (spec as { modality?: string }).modality === "image" ? "image" : "video";
-      const amountOf = (provider: ProductionProvider): number | null => {
-        const quote = priceFor(provider, modality);
-        return quote.status !== "unknown" && typeof quote.amountUsd === "number" ? quote.amountUsd : null;
-      };
-      return [...available].sort((a, b) => {
-        const left = amountOf(a);
-        const right = amountOf(b);
-        if (left === null && right === null) return 0;
-        if (left === null) return 1;
-        if (right === null) return -1;
-        return left - right;
-      });
-    }
-    if (mode === "QUALITY_FIRST") {
-      // Omni is the primary Google video engine.
-      const preferred = ["google_omni", "higgsfield", "hypit", "manual_cloud"];
-      return [...available].sort(
-        (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
-      );
-    }
-    // BALANCED
-    const preferred = ["google_omni", "hypit", "higgsfield", "manual_cloud"];
-    return [...available].sort(
-      (a, b) => preferred.indexOf(a.id) - preferred.indexOf(b.id),
-    );
+    // Automatic modes never offer the zero-spend workflow, as selectForSpec and the matrix's refusalReasons say.
+    const available = all.filter((p) => !p.capabilities.zeroSpend);
+    const modality: SelectionModality = (spec as { modality?: string }).modality === "image" ? "image" : "video";
+    const amountOf = (provider: ProductionProvider): number | null => {
+      const quote = priceFor(provider, modality);
+      return quote.status !== "unknown" && typeof quote.amountUsd === "number" ? quote.amountUsd : null;
+    };
+    const preferred = mode === "LOWEST_COST" ? [] : (this.preference[modality] ?? []);
+    const position = (id: string): number => {
+      const at = preferred.indexOf(id);
+      return at === -1 ? preferred.length : at;
+    };
+    return [...available].sort((a, b) => {
+      const left = amountOf(a);
+      const right = amountOf(b);
+      const byPrice = left === null || right === null ? (left === null ? 1 : 0) - (right === null ? 1 : 0) : left - right;
+      return position(a.id) - position(b.id) || byPrice || a.id.localeCompare(b.id);
+    });
   }
 
   routeTheoretical(spec: CreativeSpec, mode: CostMode = "ZERO_SPEND"): ProductionProvider {
@@ -278,19 +282,21 @@ export class ProductionRouter {
             costStatus: cost.costStatus,
             estimateUsd: cost.estimateUsd,
           },
+          basis: "zero_spend_only",
           rejected: [],
         },
       };
     }
     if (healthy.length === 0) throw new Error(`No configured production providers available for mode ${mode}.`);
 
-    // Automatic selection never sends work to an unknown or stale price (allowUnknownCost is not set).
+    // Automatic selection never sends work to an unknown or stale price (allowUnknownCost is not set). BALANCED and QUALITY_FIRST
+    // use the explicit preference, if one is set, and otherwise the cheapest known price. There is no measured quality yet.
     const selection = selectOffer({
       candidates: this.candidatesFor(healthy, requirement.modality),
       requirement,
       registry: modelCapabilityRegistry,
       mode: mode === "LOWEST_COST" ? "LOWEST_COST" : "PREFERENCE",
-      preference: mode === "LOWEST_COST" ? undefined : PREFERENCE_BY_MODE[mode],
+      preference: mode === "LOWEST_COST" ? undefined : this.preference.video,
     });
     if (!selection.chosen) throw new Error(`No eligible production provider for mode ${mode}: ${summarize(selection)}`);
     const provider = healthy.find((p) => p.id === selection.chosen!.providerId);
@@ -339,7 +345,7 @@ export class ProductionRouter {
       requirement,
       registry: modelCapabilityRegistry,
       mode: "PREFERENCE",
-      preference: IMAGE_PREFERENCE,
+      preference: this.preference.image,
       allowUnknownCost: options.allowUnknownCost,
     });
     if (!selection.chosen) throw new Error(`No eligible image provider: ${summarize(selection)}`);

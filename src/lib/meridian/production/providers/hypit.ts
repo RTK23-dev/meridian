@@ -1,269 +1,84 @@
-import { secretForCategory } from "../../credentials/resolve.ts";
-import type {
-  CreativeSpec,
-  ProductionCapabilities,
-  ProductionJob,
-  ProductionProvider,
-  ProviderHealth,
-} from "../types.ts";
+import type { CreativeSpec, ProductionCapabilities, ProductionJob, ProductionProvider, ProviderHealth } from "../types.ts";
 
-/** A finite cost Hypit returned on the job. Anything else is not a bill, so the estimate stays an estimate. */
-function reportedBill(costUsd: unknown): Pick<ProductionJob, "costActualUsd" | "metadata"> {
-  if (typeof costUsd !== "number" || !Number.isFinite(costUsd) || costUsd < 0) return {};
-  return { costActualUsd: costUsd, metadata: { costBasis: "provider_reported" } };
+/**
+ * The production `hypit` route is NOT CONNECTED. Its request body and status parsing were never the Hypit handoff contract
+ * (src/lib/meridian/hypit/contract.ts and client.ts), so this route sends nothing and reads nothing until it is rewired to
+ * that contract. The Hypit handoff in src/lib/meridian/hypit/handoff.ts is the only Hypit path.
+ *
+ * Licence: Hypit bars a multi-tenant service and commercial bundling without written authorization from Hypit.AI. Meridian is
+ * multi-workspace, so this route stays refused until the position in docs/HYPIT_LICENSE.md is settled in writing.
+ */
+const NOT_CONNECTED_REASON =
+  "NOT_CONNECTED: the production hypit route is not connected to the Hypit runtime. The Hypit handoff in src/lib/meridian/hypit/handoff.ts is the only Hypit path.";
+
+/**
+ * Nothing about Hypit is verified here: no per-second price, no latency. NaN is the unknown sentinel. The router's priceFor reads
+ * a non-finite declaration as an unknown price, so the cost matrix never prices this route. Replace it only with a number that
+ * has a cited source.
+ */
+const UNVERIFIED = Number.NaN;
+
+/** A refusal before any request. Nothing was sent, so there is no estimate (NaN, not 0) and no bill. */
+function notConnectedJob(spec: CreativeSpec, providerId: string): ProductionJob {
+  const now = new Date().toISOString();
+  return {
+    jobId: "",
+    organizationId: spec.organizationId,
+    brandId: spec.brandId,
+    creativeSpec: spec,
+    providerId,
+    status: "NOT_CONFIGURED",
+    errorCode: "NOT_CONNECTED",
+    costEstimateUsd: UNVERIFIED,
+    error: `${NOT_CONNECTED_REASON} No job was sent.`,
+    createdAt: now,
+    updatedAt: now,
+  };
 }
 
+/**
+ * The production Hypit route, refused until it is connected. It makes no request, reads no key, returns no receipt, and claims
+ * no capability it cannot provide. The constructor options are accepted so existing construction sites still compile; they are
+ * not used.
+ */
 export class HypitProvider implements ProductionProvider {
   readonly id = "hypit";
   readonly capabilities: ProductionCapabilities = {
     textToVideo: false,
     imageToVideo: false,
-    timelineEditing: true,
-    voiceoverGeneration: true,
+    timelineEditing: false,
+    voiceoverGeneration: false,
     zeroSpend: false,
-    averageLatencySeconds: 120,
-    costPerSecondEstimateUsd: 0.05,
+    averageLatencySeconds: UNVERIFIED,
+    costPerSecondEstimateUsd: UNVERIFIED,
   };
 
-  private fetchImpl: typeof fetch;
-  private readonly apiKey?: string;
-
-  /**
-   * `apiKey` is the workspace's key when the caller already holds it (explicit wiring and tests). Without it, each request
-   * resolves the workspace's key through the credential resolver.
-   */
-  constructor(options?: { fetchImpl?: typeof fetch; apiKey?: string }) {
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
-    this.apiKey = options?.apiKey;
-  }
-
-  private getBaseUrl(): string | undefined {
-    return process.env.HYPIT_BASE_URL?.trim();
-  }
-
-  /** The workspace's Hypit key, through the credential resolver. With no workspace in scope there is no key. */
-  private async tokenFor(organizationId: string | undefined): Promise<{ token: string | null; reason: string }> {
-    if (this.apiKey) return { token: this.apiKey, reason: "" };
-    const resolved = await secretForCategory("hypit", organizationId);
-    return { token: resolved.secret, reason: resolved.reason };
-  }
+  constructor(_options?: { fetchImpl?: typeof fetch; apiKey?: string }) {}
 
   healthFor(organizationId: string): Promise<ProviderHealth> {
     return this.health(organizationId);
   }
 
-  async health(organizationId?: string): Promise<ProviderHealth> {
-    const baseUrl = this.getBaseUrl();
-    if (!baseUrl) {
-      return {
-        id: this.id,
-        state: "NOT_CONFIGURED",
-        capabilities: [],
-        detail: "HYPIT_BASE_URL is not set.",
-        checkedAt: new Date().toISOString(),
-      };
-    }
-
-    const { token } = await this.tokenFor(organizationId);
-    try {
-      const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/health`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      if (res.ok) {
-        return {
-          id: this.id,
-          state: "HEALTHY",
-          capabilities: ["timelineEditing", "voiceoverGeneration"],
-          detail: `Hypit runtime reachable at ${baseUrl}.`,
-          checkedAt: new Date().toISOString(),
-        };
-      }
-      return {
-        id: this.id,
-        state: "DEGRADED",
-        capabilities: [],
-        detail: `Hypit runtime returned status ${res.status}.`,
-        checkedAt: new Date().toISOString(),
-      };
-    } catch {
-      return {
-        id: this.id,
-        state: "UNAVAILABLE",
-        capabilities: [],
-        detail: `Hypit runtime unreachable at ${baseUrl}.`,
-        checkedAt: new Date().toISOString(),
-      };
-    }
+  /** NOT_CONFIGURED is the only state the router refuses for an explicit choice and never selects automatically. */
+  async health(_organizationId?: string): Promise<ProviderHealth> {
+    return {
+      id: this.id,
+      state: "NOT_CONFIGURED",
+      capabilities: [],
+      detail: NOT_CONNECTED_REASON,
+      checkedAt: new Date().toISOString(),
+    };
   }
 
   async submitJob(spec: CreativeSpec): Promise<ProductionJob> {
-    const baseUrl = this.getBaseUrl();
-    const costEstimate = spec.durationTargetSeconds * this.capabilities.costPerSecondEstimateUsd;
-
-    if (!baseUrl) {
-      return {
-        jobId: "",
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: "NOT_CONFIGURED",
-        costEstimateUsd: costEstimate,
-        error: "Hypit runtime is not configured (HYPIT_BASE_URL unset).",
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    const { token, reason } = await this.tokenFor(spec.organizationId);
-    if (!token) {
-      return {
-        jobId: "",
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: "NOT_CONFIGURED",
-        costEstimateUsd: costEstimate,
-        error: `${reason} No job was sent.`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
-
-    try {
-      const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(spec.idempotencyKey ? { "idempotency-key": spec.idempotencyKey } : {}),
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          meridianJobId: spec.idempotencyKey ? `prod_hypit_${spec.idempotencyKey}` : `prod_hypit_${globalThis.crypto.randomUUID()}`,
-          creativeSpec: spec,
-          targetDurationSeconds: spec.durationTargetSeconds,
-          aspectRatio: spec.aspectRatio,
-        }),
-      });
-
-      if (!res.ok) {
-        return {
-          jobId: "",
-          organizationId: spec.organizationId,
-          brandId: spec.brandId,
-          creativeSpec: spec,
-          providerId: this.id,
-          status: res.status >= 500 ? "SUBMISSION_UNKNOWN" : "FAILED",
-          costEstimateUsd: costEstimate,
-          error: `Hypit rejected job submission (${res.status}): ${await res.text()}`,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-
-      const data = (await res.json()) as { id?: string; jobId?: string; status?: string; costUsd?: unknown };
-      const externalId = data.id || data.jobId;
-      if (!externalId) {
-        return {
-          jobId: "",
-          organizationId: spec.organizationId,
-          brandId: spec.brandId,
-          creativeSpec: spec,
-          providerId: this.id,
-          status: "SUBMISSION_UNKNOWN",
-          costEstimateUsd: costEstimate,
-          error: "Hypit response missing job ID.",
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-
-      return {
-        jobId: externalId,
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: data.status === "completed" || data.status === "succeeded" ? "RENDERED" : "RUNNING",
-        costEstimateUsd: costEstimate,
-        ...reportedBill(data.costUsd),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    } catch (err) {
-      return {
-        jobId: "",
-        organizationId: spec.organizationId,
-        brandId: spec.brandId,
-        creativeSpec: spec,
-        providerId: this.id,
-        status: "SUBMISSION_UNKNOWN",
-        costEstimateUsd: costEstimate,
-        error: `Failed to connect to Hypit process: ${err instanceof Error ? err.message : String(err)}`,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-      };
-    }
+    return notConnectedJob(spec, this.id);
   }
 
-  async checkJobStatus(jobId: string, metadata?: Record<string, unknown>): Promise<ProductionJob> {
-    const baseUrl = this.getBaseUrl();
-    if (!baseUrl) {
-      throw new Error("Cannot check Hypit job status: HYPIT_BASE_URL is not configured.");
-    }
-    const { token, reason } = await this.tokenFor(typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined);
-    if (!token) throw new Error(`Cannot check Hypit job status: ${reason}`);
-
-    const res = await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!res.ok) {
-      throw new Error(`Hypit status poll failed (${res.status}): ${await res.text()}`);
-    }
-
-    const data = (await res.json()) as {
-      id?: string;
-      status?: string;
-      error?: string;
-      outputArtifactId?: string;
-      costUsd?: unknown;
-    };
-
-    let status: ProductionJob["status"] = "RUNNING";
-    if (data.status === "succeeded" || data.status === "completed") status = "RENDERED";
-    else if (data.status === "failed") status = "FAILED";
-    else if (data.status === "queued") status = "QUEUED";
-
-    return {
-      jobId,
-      organizationId: "",
-      brandId: "",
-      creativeSpec: {} as CreativeSpec,
-      providerId: this.id,
-      status,
-      costEstimateUsd: 0,
-      outputArtifactId: data.outputArtifactId,
-      error: data.error,
-      ...reportedBill(data.costUsd),
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+  async checkJobStatus(_jobId: string, _metadata?: Record<string, unknown>): Promise<ProductionJob> {
+    throw new Error(`Cannot check Hypit job status: ${NOT_CONNECTED_REASON}`);
   }
 
-  async cancelJob(jobId: string, metadata?: Record<string, unknown>): Promise<void> {
-    const baseUrl = this.getBaseUrl();
-    if (!baseUrl) return;
-    const { token } = await this.tokenFor(typeof metadata?.organizationId === "string" ? metadata.organizationId : undefined);
-    if (!token) return;
-    try {
-      await this.fetchImpl(`${baseUrl.replace(/\/+$/, "")}/v1/jobs/${encodeURIComponent(jobId)}/cancel`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-    } catch {
-      // Best-effort cancellation
-    }
+  async cancelJob(_jobId: string, _metadata?: Record<string, unknown>): Promise<void> {
+    throw new Error(`Cannot cancel Hypit job: ${NOT_CONNECTED_REASON}`);
   }
 }

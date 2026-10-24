@@ -31,7 +31,8 @@ Shotstack checks the component-free rule and builds the timeline.
 5. Submit with `Idempotency-Key` = `Composition.contentHash`. Poll until `completed` or `failed` (interval and poll
    count injected; defaults are the CLI's 10 s and 360 polls, one hour). A timeout is a retryable error and keeps the
    hold, so a resumed job re-sends the same key.
-6. `failed`: the hold is reconciled as an estimate and a retryable provider error is thrown.
+6. `failed`: a retryable provider error is thrown and the hold is left open, not reconciled. A repeated submit for the same
+   idempotency key is refused until that entry is settled (the call may already have been billed).
 7. `completed`: download the video from its signed URL (no API key is sent there), reconcile the ledger, then run the
    injected `verifyIntegrity` hook. A failing gate throws (not retryable) and nothing is stored.
 8. `storeVideo` returns the URI. The result is a `RenderedVideo` that passes `renderedVideoSchema`.
@@ -66,8 +67,9 @@ Settings sent: `fps` 30, `quality` standard, `format` mp4, `resolution` 1080p, `
 - Whether HeyGen honours `Idempotency-Key` on renders (the retry and resume behaviour depends on it).
 - Whether a failed render is billed, and whether any response carries a bill. None is known, so the ledger records the
   hold as an estimate (`actualIsEstimate: true`).
-- The render price. `prices.ts` has `render_hyperframes_cloud` = null (verify). The render line uses
-  `budgets.fixedPerMasterUsd.render` (0.05) as its estimate, passed in by the caller.
+- The render price. `prices.ts` has `render_hyperframes_cloud` = null (verify). With no verified price,
+  `renderLineUsd` returns undefined and the render gate `render_price_known` fails closed. `budgets.fixedPerMasterUsd.render`
+  (0.05) is the intake hold only; it is not a render price and is never used as one.
 - Whether `resolution: "1080p"` with `aspect_ratio: "9:16"` on an `asset_id` project gives 1080 × 1920.
 
 ## The Shotstack fallback (E5, Bible 6.11 and 9.3)

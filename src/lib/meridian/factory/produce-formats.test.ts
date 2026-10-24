@@ -79,12 +79,15 @@ test("a carousel variant is produced as its slides and one carousel creative, ev
   assert.equal(parent?.status, "COMPLETED", "the carousel job completes once its last slide is stored");
 });
 
+/** The price the Hypit stub declares for these fixture runs. It is a test number. The production Hypit route declares no price. */
+const HYPIT_FIXTURE_PRICE = { costPerSecondEstimateUsd: 0.05 };
+
 test("a video variant is produced as a video creative after its fixture job completes, linked to the run, and judged once", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "factory-video-done");
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["video"], providers: { video: "hypit" }, caps: { totalCents: 500 } });
   const [variantId] = await planRowsFor(sql, tenant, runId, ["video"]);
-  const provider = fixtures.injectProvider("hypit", async (spec) => completedVideo(spec, `fx-${spec.idempotencyKey}`));
+  const provider = fixtures.injectProvider("hypit", async (spec) => completedVideo(spec, `fx-${spec.idempotencyKey}`), undefined, HYPIT_FIXTURE_PRICE);
   try {
     assert.equal(await produce(sql, tenant, runId), "variants:1;creatives:1");
   } finally {
@@ -119,7 +122,7 @@ test("a video that never completes leaves the run waiting with its reason: nothi
   const tenant = await studioTenant(sql, "factory-video-waits");
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["video"], providers: { video: "hypit" }, caps: { totalCents: 500 } });
   const [variantId] = await planRowsFor(sql, tenant, runId, ["video"]);
-  const provider = fixtures.injectProvider("hypit", async (spec) => fixtures.job(spec, "QUEUED", { providerJobId: `fx-queued-${spec.idempotencyKey}` }));
+  const provider = fixtures.injectProvider("hypit", async (spec) => fixtures.job(spec, "QUEUED", { providerJobId: `fx-queued-${spec.idempotencyKey}` }), undefined, HYPIT_FIXTURE_PRICE);
   try {
     assert.equal(await produce(sql, tenant, runId), "waiting:factory.produce;creatives:0");
   } finally {
@@ -159,6 +162,7 @@ test("once the poller stores a waiting video, the check links it, judges it once
     "hypit",
     async (spec) => fixtures.job(spec, "QUEUED", { providerJobId: `fx-resume-${spec.idempotencyKey}` }),
     async (providerJobId) => completedVideo({} as CreativeSpec, providerJobId),
+    HYPIT_FIXTURE_PRICE,
   );
   try {
     assert.equal(await produce(sql, tenant, runId), "waiting:factory.produce;creatives:0");
