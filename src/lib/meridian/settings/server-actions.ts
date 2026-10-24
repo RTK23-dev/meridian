@@ -14,6 +14,8 @@ import { getDecisionEngineStatus } from "../decisions/status.ts";
 import { createDecisionEngines } from "../decisions/dispatcher.ts";
 import { isDecisionEngineId } from "../decisions/types.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
+import { OpenRouterDecisionsEngine, validateDecisionModel } from "../decisions/openrouter-engine.ts";
+import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
 import { readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
 
 /** The workspace's monthly video budget in US dollars, or null when none is set. Any member may read it. */
@@ -174,4 +176,69 @@ export const saveDecisionEngine = createServerFn({ method: "POST" })
     return result.ok
       ? { ok: true as const, engineId: result.engineId }
       : { ok: false as const, reason: result.reason, activeEngineId: result.previous.engineId };
+  });
+
+/**
+ * Saves the workspace's OpenRouter decision model. It must be a pinned, verified decision model. Saving it changes no active
+ * engine, and it does not count as a passed connection: the connection test is what makes the engine READY.
+ */
+export const saveOpenRouterDecisionModel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const model = asText(obj.model);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!model) throw new Error("model is required.");
+    return { organizationId, model };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    const checked = validateDecisionModel(data.model);
+    if (!checked.ok) return { ok: false as const, reason: checked.reason };
+    await writeOpenRouterModel(sql, { organizationId: data.organizationId, actorId: context.userId, model: checked.model });
+    const health = await new OpenRouterDecisionsEngine().healthFor(data.organizationId);
+    return { ok: true as const, model: checked.model, health };
+  });
+
+/**
+ * An explicit connection test for the OpenRouter decision engine. It sends one real request, which may incur model usage, and it
+ * records the outcome. It changes no product data and no active engine. The result only says whether the provider answered.
+ */
+export const testOpenRouterDecisionConnection = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    const engine = new OpenRouterDecisionsEngine();
+    const outcome = await engine.connectionCheck(data.organizationId);
+    if (outcome.kind === "not_run") {
+      return { ok: false as const, status: "NOT_RUN" as const, message: outcome.message, health: await engine.healthFor(data.organizationId) };
+    }
+    await recordOpenRouterCheck(sql, {
+      organizationId: data.organizationId,
+      actorId: context.userId,
+      check: {
+        status: outcome.status,
+        model: outcome.model,
+        keyFingerprint: outcome.keyFingerprint,
+        message: outcome.message,
+        returnedModel: outcome.returnedModel,
+        upstreamProvider: outcome.upstreamProvider,
+        providerRequestId: outcome.providerRequestId,
+      },
+    });
+    return {
+      ok: outcome.status === "passed",
+      status: outcome.status === "passed" ? ("PASSED" as const) : ("FAILED" as const),
+      message: outcome.message,
+      health: await engine.healthFor(data.organizationId),
+    };
   });

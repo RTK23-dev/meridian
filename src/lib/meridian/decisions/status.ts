@@ -7,10 +7,14 @@
 import type { Sql } from "../learning/store.ts";
 import { DECISION_ENGINE_LABELS, createDecisionEngines, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
+import { OPENROUTER_DECISIONS_MODEL_ENV, resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
+import { readOpenRouterModel } from "./openrouter-settings.ts";
 import { DECISION_ENGINE_IDS, type DecisionCapabilities, type DecisionEngineHealth, type DecisionEngineId } from "./types.ts";
 
 export type DecisionEngineStatus = {
   active: EngineSelection;
+  /** The OpenRouter decision model this workspace would use, and where it comes from. `reason` is set when it cannot be used. */
+  openrouterModel: { model: string; source: "workspace" | "deployment" | "default"; reason?: string };
   engines: Array<{
     id: DecisionEngineId;
     label: string;
@@ -21,12 +25,27 @@ export type DecisionEngineStatus = {
   }>;
 };
 
+/** The OpenRouter model for one workspace. A stored choice that cannot be read is reported as unreadable, never replaced by the default. */
+async function openrouterModelFor(sql: Sql | undefined, organizationId: string | undefined): Promise<DecisionEngineStatus["openrouterModel"]> {
+  let workspace: string | null = null;
+  if (sql && organizationId) {
+    try {
+      workspace = await readOpenRouterModel(sql, organizationId);
+    } catch {
+      return { model: "", source: "workspace", reason: "The workspace's OpenRouter decision model could not be read." };
+    }
+  }
+  const resolved = resolveOpenRouterDecisionModel({ workspace, deployment: process.env[OPENROUTER_DECISIONS_MODEL_ENV] });
+  return resolved.ok ? { model: resolved.model, source: resolved.source } : { model: resolved.model, source: resolved.source, reason: resolved.reason };
+}
+
 export async function getDecisionEngineStatus(
   sql: Sql | undefined,
   organizationId: string | undefined,
   engines: DecisionEngineRegistry = createDecisionEngines(),
 ): Promise<DecisionEngineStatus> {
   const active = await resolveActiveEngine(sql, organizationId);
+  const openrouterModel = await openrouterModelFor(sql, organizationId);
   const rows = await Promise.all(
     DECISION_ENGINE_IDS.map(async (id) => {
       const engine = engines[id];
@@ -41,5 +60,5 @@ export async function getDecisionEngineStatus(
       };
     }),
   );
-  return { active, engines: rows };
+  return { active, openrouterModel, engines: rows };
 }

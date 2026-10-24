@@ -3,6 +3,7 @@
  * Each question sees only its own scope. Evidence for one question never satisfies another. Approval needs a calibrated answer,
  * an explicit policy, and a threshold. A whole-call failure stops the later scopes, and the engine is never switched.
  */
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -432,7 +433,7 @@ test("the OpenAI adapter receives the visual question with the image, because th
     evidence: [FRAME],
     images: [IMAGE],
     selected: "openai-decisions",
-    engines: { jev: jev.engine, "openai-decisions": openai },
+    engines: { jev: jev.engine, "openai-decisions": openai, "openrouter-decisions": unselectedOpenRouterEngine() },
   });
   assert.equal(sent.length, 1, "the visual question is sent to OpenAI");
   assert.match(sent[0]!, /input_image/, "the image is sent with the question");

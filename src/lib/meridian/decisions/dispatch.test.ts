@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
@@ -52,7 +53,7 @@ function countingEngine(id: DecisionEngineId, options: { fail?: boolean } = {}) 
 }
 
 function registry(jev: ReturnType<typeof countingEngine>, openai: ReturnType<typeof countingEngine>): DecisionEngineRegistry {
-  return { jev: jev.engine, "openai-decisions": openai.engine };
+  return { jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": unselectedOpenRouterEngine() };
 }
 
 test("the workspace setting outranks the deployment default, which outranks jev", () => {

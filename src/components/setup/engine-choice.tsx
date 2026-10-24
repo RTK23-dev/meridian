@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Button, DisabledReason } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { KeyForm } from "@/components/settings/setup-panel";
+import { OpenRouterDecisionControls } from "@/components/openrouter-decision-controls";
 import { plainError } from "@/lib/copy";
 import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
@@ -9,7 +10,7 @@ import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
 
 /** What each engine does and what it needs, in plain words. */
-const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" }> = {
+const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" }> = {
   jev: {
     title: "TypeSafe JEV",
     summary: "Answers each idea or ad as text: a score, a yes or no, or a choice.",
@@ -21,6 +22,12 @@ const ENGINE_COPY: Record<string, { title: string; summary: string; needs: strin
     summary: "The same questions, answered by an OpenAI model. It can also read images.",
     needs: "An OpenAI key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "openai",
+  },
+  "openrouter-decisions": {
+    title: "OpenRouter Decisions",
+    summary: "The same kinds of question, answered by a decision model on OpenRouter. The verified models can also read images.",
+    needs: "An OpenRouter key, saved on this card, and a passed connection test. Until the test passes, this engine cannot be chosen.",
+    keyCategory: "openrouter",
   },
 };
 
@@ -40,7 +47,7 @@ export function EngineChoice({
   organizationId: string;
   canAdmin: boolean;
   engines: SetupEngines;
-  keys: Record<"jev" | "openai", EngineKeyState>;
+  keys: Record<"jev" | "openai" | "openrouter", EngineKeyState>;
 }) {
   const activeId = engines.active.engineId;
   const [picked, setPicked] = useState<string | null>(null);
@@ -111,6 +118,9 @@ export function EngineChoice({
               {!ready && engine.health.message ? <p className="text-sm text-fg [overflow-wrap:anywhere]">{engine.health.message}</p> : null}
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
+              ) : null}
+              {engine.id === "openrouter-decisions" && engines.openrouterModel ? (
+                <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={engines.openrouterModel} />
               ) : null}
             </div>
           );

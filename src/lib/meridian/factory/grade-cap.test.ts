@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DecisionRequest, DecisionResult, DecisionUsage } from "../decisions/types.ts";
@@ -115,6 +116,7 @@ function seamsWith(engine: FixtureDecisionEngine): FactorySeams {
     decisionEngines: {
       jev: new FixtureDecisionEngine({ health: NOT_CONFIGURED }),
       "openai-decisions": engine,
+      "openrouter-decisions": unselectedOpenRouterEngine(),
     },
   };
 }

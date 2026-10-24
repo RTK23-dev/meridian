@@ -183,7 +183,7 @@ rating, and nulling `type` would drop every hashtag result, so the fields are ke
 
 ## Engine choice
 
-Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. A workspace's own choice,
+Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. OpenRouter Decisions uses the workspace's OpenRouter key and a pinned decision model, set with `OPENROUTER_DECISIONS_MODEL` (DECISIONS.md, "OpenRouter Decisions"). A workspace's own choice,
 made in Settings, takes precedence.
 
 ## Inbound webhooks

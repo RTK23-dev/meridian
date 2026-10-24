@@ -42,14 +42,15 @@ export async function persistDecisionLineage(
     await sql`
       insert into jev_runs (
         id, organization_id, brand_id, question_set, model, provider, input_hash, status, metadata,
-        engine_id, adapter_version, requested_model, input_modality, image_count, usage, latency_ms, failure_kind
+        engine_id, adapter_version, requested_model, input_modality, image_count, usage, latency_ms, failure_kind,
+        upstream_provider, provider_request_id
       ) values (
         ${result.runId}, ${request.organizationId}, ${request.brandId}, 'semantic_decision',
         ${result.model}, ${result.provider}, ${result.inputHash}, ${failed ? "failed" : "completed"},
         ${JSON.stringify(metadata)},
         ${result.engineId}, ${result.adapterVersion}, ${result.requestedModel}, ${result.inputModality},
         ${result.imageCount}, ${result.usage ? JSON.stringify(result.usage) : null}, ${result.latencyMs},
-        ${result.failure?.kind ?? null}
+        ${result.failure?.kind ?? null}, ${result.upstreamProvider ?? null}, ${result.providerRequestId ?? null}
       )
       on conflict (id) do nothing
     `;

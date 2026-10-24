@@ -7,12 +7,13 @@ const engineSchema = z.object({ engineId: z.string().min(1, "Choose a decision e
 import { Button, DisabledReason, ErrorState, Field, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
+import { OpenRouterDecisionControls, type OpenRouterModelStatus } from "@/components/openrouter-decision-controls";
 import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useScopedMutation } from "@/lib/query/hooks";
 
 type EngineStatus = {
-  id: "jev" | "openai-decisions";
+  id: "jev" | "openai-decisions" | "openrouter-decisions";
   label: string;
   isActive: boolean;
   health: { status: string; message?: string };
@@ -26,7 +27,8 @@ type EngineStatus = {
 };
 
 type Status = {
-  active: { engineId: "jev" | "openai-decisions"; source: "workspace" | "deployment" | "default"; invalidDeploymentValue?: string };
+  active: { engineId: "jev" | "openai-decisions" | "openrouter-decisions"; source: "workspace" | "deployment" | "default"; invalidDeploymentValue?: string };
+  openrouterModel: OpenRouterModelStatus;
   engines: EngineStatus[];
 };
 
@@ -137,6 +139,9 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
         ))}
       </div>
 
+      {status.engines.some((engine) => engine.id === "openrouter-decisions") ? (
+        <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={status.openrouterModel} />
+      ) : null}
       {canAdmin ? (
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-[16rem]">

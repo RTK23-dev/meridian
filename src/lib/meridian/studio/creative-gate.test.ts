@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -131,6 +132,7 @@ function stubEngine(id: DecisionEngineId, options: { respond?: Responder; failur
 const registryWith = (jev: ReturnType<typeof stubEngine>, openai: ReturnType<typeof stubEngine>): DecisionEngineRegistry => ({
   jev: jev.engine,
   "openai-decisions": openai.engine,
+  "openrouter-decisions": unselectedOpenRouterEngine(),
 });
 
 const textApproves: Responder = (spec) => {

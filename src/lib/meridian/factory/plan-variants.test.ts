@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
@@ -82,7 +83,7 @@ test("the grade, pick, template and produce stages plan one pick, and every vari
   await seedPlannableAd(sql);
   const engine = new FixtureDecisionEngine({ respond: (spec) => (spec.type === "choice" ? { choice: "low_risk" } : { probability: 0.99 }) });
   const seams: FactorySeams = {
-    decisionEngines: { jev: engine, "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }) },
+    decisionEngines: { jev: engine, "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }), "openrouter-decisions": unselectedOpenRouterEngine() },
   };
   const payload = { runId: FACTORY_TEST_RUN };
 
@@ -140,7 +141,7 @@ test("the produce stage writes no variant for an attribute the brain does not su
   await sql`update brand_brains set problems = '', differentiators = '', proof_points = '', preferred_formats = '' where brand_id = ${FACTORY_TEST_BRAND}`;
   const engine = new FixtureDecisionEngine({ respond: (spec) => (spec.type === "choice" ? { choice: "low_risk" } : { probability: 0.99 }) });
   const seams: FactorySeams = {
-    decisionEngines: { jev: engine, "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }) },
+    decisionEngines: { jev: engine, "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }), "openrouter-decisions": unselectedOpenRouterEngine() },
   };
   const payload = { runId: FACTORY_TEST_RUN };
   await executeFactoryJob(sql, factoryJob("factory.grade"), payload, undefined, seams);
@@ -161,7 +162,7 @@ test("a pick with no engine decision behind it gets no plan, and so no variant",
   const payload = { runId: FACTORY_TEST_RUN };
   // No engine is ready: the grade is observed only, so no gate record backs the ad.
   const seams: FactorySeams = {
-    decisionEngines: { jev: new FixtureDecisionEngine({ health: NOT_CONFIGURED }), "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }) },
+    decisionEngines: { jev: new FixtureDecisionEngine({ health: NOT_CONFIGURED }), "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }), "openrouter-decisions": unselectedOpenRouterEngine() },
   };
   await executeFactoryJob(sql, factoryJob("factory.grade"), payload, undefined, seams);
   await executeFactoryJob(sql, factoryJob("factory.pick"), payload);

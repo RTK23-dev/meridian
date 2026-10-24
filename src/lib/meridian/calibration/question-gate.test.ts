@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
@@ -25,7 +26,7 @@ async function gateFor(sql: Awaited<ReturnType<typeof getSql>>, tenant: Tenant, 
     questions: [{ key: "graded", spec: GRADED_QUESTION, needsImage: false, evidenceScope: ["copy"] }],
     evidence: [COPY_EVIDENCE],
     selection: { engineId: "jev", source: "workspace" },
-    engines: { jev: probabilityEngine("jev", probability), "openai-decisions": probabilityEngine("openai-decisions", null) },
+    engines: { jev: probabilityEngine("jev", probability), "openai-decisions": probabilityEngine("openai-decisions", null), "openrouter-decisions": unselectedOpenRouterEngine() },
   });
 }
 
