@@ -13,7 +13,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "color-scheme", content: "light dark" },
       { title: "Meridian" },
-      { name: "theme-color", content: "#f3f0e7" },
+      { name: "theme-color", content: "#08070B" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },

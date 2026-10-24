@@ -20,6 +20,8 @@ import {
   type EdlClip,
   type EditDecisionList,
   type EdlLayer,
+  type LookPreset,
+  type VisualTreatment,
 } from "../contracts/index.ts";
 import { attributeJson, escapeHtml } from "./html.ts";
 import { COMPONENT_LIBRARY } from "./components/index.ts";
@@ -35,6 +37,26 @@ export const GSAP_SCRIPT_URL = "https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gs
 
 /** Audio gain is set with data-volume, which HyperFrames caps at +12 dB (3.98). */
 const MAX_VOLUME = 3.98;
+
+/** The layers a visual treatment changes: the footage. Captions, graphics and stickers are never mirrored, framed or tinted (contract v11). */
+const FOOTAGE_LAYERS: ReadonlySet<EdlLayer> = new Set<EdlLayer>(["base", "cutaway", "presenter"]);
+
+/**
+ * The Meridian-owned overlay of each look (contract v11): its colour, its blend mode and its opacity at full strength. A look is a preset
+ * name, so the composition never receives CSS from the EDL.
+ */
+const LOOK_OVERLAY: Record<LookPreset, { color: string; blend: string; opacity: number }> = {
+  warm: { color: "#ff8c42", blend: "overlay", opacity: 0.45 },
+  cool: { color: "#3d7bd9", blend: "overlay", opacity: 0.4 },
+  faded: { color: "#d8cfc4", blend: "screen", opacity: 0.25 },
+  mono: { color: "#808080", blend: "saturation", opacity: 1 },
+};
+
+/** Grain is a fractal-noise tile drawn in the composition itself (no asset to register). Every special character is percent-encoded. */
+const GRAIN_URL =
+  "data:image/svg+xml;utf8,%3Csvg%20xmlns=%27http://www.w3.org/2000/svg%27%20width=%27160%27%20height=%27160%27%3E%3Cfilter%20id=%27n%27%3E%3CfeTurbulence%20type=%27fractalNoise%27%20baseFrequency=%270.85%27%20numOctaves=%272%27%20stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect%20width=%27100%25%27%20height=%27100%25%27%20filter=%27url%28%23n%29%27/%3E%3C/svg%3E";
+const GRAIN_OPACITY = 0.2;
+const VIGNETTE_EDGE_OPACITY = 0.75;
 
 /** Track index for each layer, in stack order (back to front). Audio sits on its own tracks above the picture. */
 const LAYER_TRACK: Record<EdlLayer, number> = {
@@ -288,11 +310,47 @@ function componentValues(
   return mapMediaUris(parsed.data, assets) as Record<string, unknown>;
 }
 
-function mediaElement(clip: EdlClip, layer: EdlLayer, src: string, kind: AssetKind): string {
+/** A footage clip's treatment as a CSS transform: the mirror first, then the framing. Empty when the cut has neither. */
+function footageTransform(visual: VisualTreatment): string {
+  const parts: string[] = [];
+  if (visual.mirror === true) parts.push("scaleX(-1)");
+  if (visual.framing !== undefined) {
+    const framing = visual.framing;
+    parts.push(`scale(${num(framing.zoom)})`, `rotate(${num(framing.rotationDeg)}deg)`, `translate(${num(framing.offsetXPct)}%, ${num(framing.offsetYPct)}%)`);
+  }
+  return parts.length === 0 ? "" : `transform:${parts.join(" ")};`;
+}
+
+/**
+ * The overlays of a cut's look, grain and vignette: over the footage, under the graphics, captions and stickers. Empty when none is set. The
+ * geometry is inline, so a composition without treatments keeps its style.css and its contentHash.
+ */
+function overlayElements(visual: VisualTreatment): string[] {
+  const z = LAYER_TRACK.presenter + 1;
+  const box = `position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:${z};`;
+  const overlays: string[] = [];
+  if (visual.look !== undefined && visual.look.strength > 0) {
+    const look = LOOK_OVERLAY[visual.look.preset];
+    overlays.push(
+      `<div id="fx-look" class="fx-overlay" style="${box}background:${look.color};mix-blend-mode:${look.blend};opacity:${num(look.opacity * visual.look.strength)};"></div>`,
+    );
+  }
+  if (visual.grain !== undefined && visual.grain.strength > 0) {
+    overlays.push(`<div id="fx-grain" class="fx-overlay" style="${box}background-image:url(${GRAIN_URL});opacity:${num(GRAIN_OPACITY * visual.grain.strength)};"></div>`);
+  }
+  if (visual.vignette !== undefined && visual.vignette.strength > 0) {
+    overlays.push(
+      `<div id="fx-vignette" class="fx-overlay" style="${box}background:radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,1) 100%);opacity:${num(VIGNETTE_EDGE_OPACITY * visual.vignette.strength)};"></div>`,
+    );
+  }
+  return overlays;
+}
+
+function mediaElement(clip: EdlClip, layer: EdlLayer, src: string, kind: AssetKind, treatment = ""): string {
   const start = secs(clip.startMs);
   const duration = secs(clip.endMs - clip.startMs);
   const mediaStart = secs(clip.srcInMs ?? 0);
-  const style = `z-index:${LAYER_TRACK[layer] + 1};${boxStyle(clip)}`;
+  const style = `z-index:${LAYER_TRACK[layer] + 1};${boxStyle(clip)}${treatment}`;
   if (kind === "video") {
     return `<video class="clip" id="clip-${clip.clipId}" src="${escapeHtml(src)}" data-start="${start}" data-duration="${duration}" data-track-index="${LAYER_TRACK[layer]}" data-media-start="${mediaStart}" muted playsinline preload="auto" style="${style}"></video>`;
   }
@@ -467,10 +525,13 @@ export function compile(
           throw invalid(`clip ${clip.clipId} needs a video or image, got ${src}`);
         }
         const path = assets.register(src, [kind]);
-        picture.push(mediaElement(clip, layer, path, kind));
+        const treatment = edl.visual !== undefined && FOOTAGE_LAYERS.has(layer) ? footageTransform(edl.visual) : "";
+        picture.push(mediaElement(clip, layer, path, kind, treatment));
       }
     }
   }
+  // The look, grain and vignette sit over the footage and under the graphics, captions and stickers (contract v11).
+  if (edl.visual !== undefined) picture.push(...overlayElements(edl.visual));
 
   const audio: string[] = [];
   const voiceSrc = assets.register(edl.audio.voice.uri, ["audio"]);

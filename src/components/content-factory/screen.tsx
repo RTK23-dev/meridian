@@ -17,6 +17,7 @@ import { GovernanceCard } from "./governance-panel";
 import { ChatPanel } from "./chat-panel";
 import { OrchestratorModelPanel } from "./orchestrator-model-panel";
 import { OrchestratorPlans } from "./orchestrator-plans";
+import { RepurposePanel } from "./repurpose-panel";
 import { RunPanel } from "./run-panel";
 import { SettingsPanel } from "./settings-panel";
 
@@ -192,6 +193,7 @@ function SessionView({ session, brands, userId }: { session: SessionSummary; bra
       </div>
       <div className="min-w-0">
         <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} />
+        {data.status === "started" ? <RepurposePanel sessionId={data.id} /> : null}
       </div>
     </div>
   );

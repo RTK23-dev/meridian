@@ -14,7 +14,7 @@ section 1, for the rules.
 | Gemini perception | Reading images and video | Perception | Google key aliases in `config/resolver.ts`, with `PERCEPTION_SHARED_DEFAULT=gemini` | Not configured |
 | Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
 | Higgsfield | Video generation | Production | `HIGGSFIELD_API_KEY`, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured |
-| Hypit | Video runtime | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. Set `HYPIT_BASE_URL` for the runtime itself |
+| Hypit | Video runtime (the Hypit handoff; see SETUP.md) | Hypit | `HYPIT_API_TOKEN` or `HYPIT_API_KEY`, with `HYPIT_SHARED_DEFAULT=deployment` | Not connected. The production route refuses with `NOT_CONNECTED`. The handoff needs `HYPIT_BASE_URL` pointing at a bridge you run |
 | Shopify | Order webhooks, for sales attribution (see below) | Shopify | `SHOPIFY_WEBHOOK_SECRET`, with `SHOPIFY_SHARED_DEFAULT=deployment` | Not configured. Orders are refused with `NOT_CONNECTED` (503) and nothing is stored |
 | Apify | Instagram volume discovery for Factory Gather (see below) | Apify | `APIFY_TOKEN`, with `APIFY_SHARED_DEFAULT=deployment` | Not configured. No Apify request is sent |
 
@@ -106,7 +106,7 @@ itself. See [SOURCING_SIDECAR.md](SOURCING_SIDECAR.md).
 
 Regular posts go through a connected account, saved per brand on Connected accounts with its platform account ID and an access token.
 
-- **Facebook Page** and **Instagram**: a token for the Page or account, saved on the brand's account. Instagram needs a public https
+- **Facebook Page** and **Instagram**: a token for the Page or account, saved on the brand's account. A repurposed variation can also be posted to one Facebook Page, by an admin's explicit action, and its metrics read on request. Both use this connection. The token must be able to publish to the Page and to read its video insights; this build has not verified those permissions against a live Page, so the first real post is an owner check (FACTORY.md, "Repurposing a delivered video"). Instagram needs a public https
   route for the media (see the roadmap).
 - **YouTube Shorts**: a token that grants the upload scope (`https://www.googleapis.com/auth/youtube.upload`). A token that declares
   scopes without it is not connected, and the reason says so.

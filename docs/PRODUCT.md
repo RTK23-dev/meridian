@@ -12,9 +12,9 @@ happened. Each step is a screen, and each screen says what it has and what it is
 3. **Market and research.** Public pages and the connected sources the deployment has configured. Each item keeps where it came from. A
    source that is not configured is listed as such, with the reason.
 4. **Opportunities.** Angles drawn from the evidence, each listing the evidence it cites.
-5. **Studio.** A brief is judged before anything is generated. An approved brief can make an image, or a video through Gemini Omni, Hypit, Higgsfield, or a manual cloud folder. A missing provider is shown as not connected. Each variant keeps its evidence, its decision, and its review.
+5. **Studio.** A brief is judged before anything is generated. An approved brief can make an image, or a video through Gemini Omni, Higgsfield, or a manual cloud folder. Hypit is not connected (see `docs/HYPIT_LICENSE.md`). A missing provider is shown as not connected. Each variant keeps its evidence, its decision, and its review.
 6. **Library.** The creatives that exist, with their media and their lineage. An export package for manual posting is made here.
-7. **Publishing.** A connected Facebook Page, Instagram, YouTube, or TikTok account can receive an organic post. Paid ads are created paused. A channel with no connection says so, and nothing is sent.
+7. **Publishing.** A connected Facebook Page, Instagram, YouTube, or TikTok account can receive an organic post. Paid ads are created paused. A channel with no connection says so, and nothing is sent. A delivered video can also be repurposed into reviewed variations: an admin can upload one to the ad account, create one paused ad from it, post it to one Facebook Page, or read its metrics. Each step is a separate action, and approval never publishes (FACTORY.md, "Repurposing a delivered video").
 8. **Learning.** Measured results are stored only when they were observed. The next recommendation can change. A grade already stored is not rewritten when calibration changes.
 
 ## Roles

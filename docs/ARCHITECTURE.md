@@ -12,7 +12,7 @@ process. Every piece of data belongs to one workspace (organization), and most r
   - `credentials/` resolves every provider key for a workspace (see PROVIDERS.md).
   - `decisions/` and `jev/` hold the decision engines, the policy gate and the evidence scopes (see DECISIONS.md).
   - `studio/` builds briefs and variants, and records reviews and publishing.
-  - `production/` routes a creative to a production provider (Gemini Omni, Hypit, Higgsfield, manual cloud, image providers). A video spec passes preflight in `production/submit.ts` before any provider is called, and the copy check judges its claims through the engine gate (`production/assess.ts`). Images are not preflighted, and see ROADMAP for what is still open.
+  - `production/` routes a creative to a production provider (Gemini Omni, Higgsfield, manual cloud, image providers; Hypit is not connected, see `HYPIT_LICENSE.md`). A video spec passes preflight in `production/submit.ts` before any provider is called, and the copy check judges its claims through the engine gate (`production/assess.ts`). Images are not preflighted, and see ROADMAP for what is still open.
   - `sources/`, `discovery/`, `research/` and `evidence/` collect public sources and store evidence with its provenance.
   - `brand/` stores the brand brain, its versions and its onboarding progress.
   - `settings/` holds the provider settings summary and the save and test actions.

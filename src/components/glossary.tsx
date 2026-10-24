@@ -12,7 +12,7 @@ const TERMS = {
   },
   hypit: {
     label: "Hypit",
-    description: "The video production engine. It runs as a separate process and renders from an approved brief. A clip is stored only after it returns verified MP4 bytes.",
+    description: "The video production engine, which runs as a separate process. It is not connected in this build, so no provider routes video to it. A clip is stored only after it returns verified MP4 bytes.",
   },
   confidence: {
     label: "Confidence",

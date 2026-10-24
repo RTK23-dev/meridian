@@ -10,9 +10,9 @@ It does not invent a result. A step with no key, no account, or no bill says so 
 2. **Evidence.** Pages, ads, and uploads the brand is allowed to use.
 3. **Decision.** JEV answers a fixed set of questions from that evidence. It does not invent the evidence.
 4. **Brief.** An approved decision becomes a creative brief.
-5. **Make.** Images go to the image provider configured for the workspace. Video can go to Gemini Omni, Hypit, Higgsfield, or a manual cloud folder. Hypit is a separate process. If the chosen provider is not connected, the job says so and nothing is sent.
+5. **Make.** Images go to the image provider configured for the workspace. Video can go to Gemini Omni, Higgsfield, or a manual cloud folder. Hypit is not connected to production routing: it refuses every job until its runtime is connected and licensed (docs/HYPIT_LICENSE.md). If the chosen provider is not connected, the job says so and nothing is sent.
 6. **Check.** Claims, brand rules, and a review.
-7. **Publish.** Organic posts go to a connected account. Paid ads are created paused. Meridian does not turn them on.
+7. **Publish.** Organic posts go to a connected account. Paid ads are created paused. Meridian does not turn them on. A delivered video can also be repurposed into reviewed variations, and each step (library, upload, paused ad, Facebook post, metrics) is a separate action; see docs/FACTORY.md.
 8. **Learn.** Measured results are stored and the next brief can change.
 
 ## Run it on your machine

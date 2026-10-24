@@ -209,7 +209,7 @@ export function DirectionStep({ session, brandId, canEdit, pending, opportunitie
       ) : null}
 
       <p className="text-xs text-fg-muted">
-        Scores are read from stored evidence. <Term id="jev" /> evaluates the evidence and <Term id="hypit" /> renders approved briefs.
+        Scores are read from stored evidence. <Term id="jev" /> evaluates the evidence, and a connected video provider renders approved briefs (<Term id="hypit" /> is not connected).
       </p>
     </div>
   );

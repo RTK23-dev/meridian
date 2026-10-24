@@ -57,7 +57,7 @@ function modeIn(value: unknown, stage: string): BudgetMode {
   return parsed.data;
 }
 
-type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string };
+export type Limits = { requestBudgetUsd: number; workspaceMonthBudgetUsd: number; now: string };
 
 /** The two budgets and the time, checked. `now` decides the workspace month, as in reserve(). */
 function limitsIn(input: Limits, stage: string): Limits {
@@ -74,7 +74,7 @@ function limitsIn(input: Limits, stage: string): Limits {
  * The overruns of a reservation that would hold `holdUsd` for the request and bring the workspace month to `monthUsd`.
  * The messages match reserve() so that the reasons read the same wherever they appear.
  */
-function limitReasons(limits: Limits, holdUsd: number, monthUsd: number): { reasons: string[]; alerts: BudgetAlert[] } {
+export function limitReasons(limits: Limits, holdUsd: number, monthUsd: number): { reasons: string[]; alerts: BudgetAlert[] } {
   const reasons: string[] = [];
   const alerts: BudgetAlert[] = [];
   if (holdUsd > limits.requestBudgetUsd) {

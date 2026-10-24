@@ -188,8 +188,8 @@ export class ModelCapabilityRegistry {
       region_constraints: ["global"],
       pricing_basis: "per_second",
       availability_state: "ACTIVE",
-      last_verified_at: "2026-10-09",
-      source_url: "https://hypit.dev/docs",
+      last_verified_at: "",
+      source_url: "https://github.com/hypit-ai/hypit",
     });
 
     this.register({

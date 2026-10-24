@@ -32,11 +32,13 @@ const FULL = () => [
   fakeProvider("manual_cloud", 0, true),
 ];
 
-test("the router records its selection: google_omni for an 8 second 9:16 video under BALANCED, with the model and the estimate", async () => {
+test("the router records its selection: the cheapest eligible known price for an 8 second 9:16 video under BALANCED, with the model, the estimate and the basis", async () => {
+  // The fixture's hypit declares 0.05 a second, so it is the cheapest eligible candidate. No provider is ranked first in code.
   const { provider, selection } = await router(FULL()).selectForSpec(spec(), "BALANCED");
-  assert.equal(provider.id, "google_omni");
-  assert.equal(selection.chosen?.modelId, "gemini-omni-1.1-flash");
-  assert.equal(selection.chosen?.estimateUsd, 1.2);
+  assert.equal(provider.id, "hypit");
+  assert.equal(selection.chosen?.modelId, "hypit-hyperframes");
+  assert.equal(selection.chosen?.estimateUsd, 0.4);
+  assert.equal(selection.basis, "lowest_known_price");
 });
 
 test("the router never sends a 4:5 video to a provider that does not offer 4:5, and says which provider it chose instead", async () => {
