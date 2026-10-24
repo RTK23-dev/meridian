@@ -1,6 +1,6 @@
 import { collectPages, sendWithRetry, type Transport } from "./http.ts";
 
-const GRAPH = "https://graph.facebook.com/v21.0";
+export const GRAPH = "https://graph.facebook.com/v21.0";
 
 export type MetaCredentials = {
   accessToken: string;
@@ -13,7 +13,7 @@ export type ProbeResult =
   | { ok: true; accountId: string; accountName: string; accounts: ProbeAccount[]; permissions: string[] }
   | { ok: false; error: string; status: number };
 
-function authHeaders(token: string): Record<string, string> {
+export function authHeaders(token: string): Record<string, string> {
   return { Authorization: `Bearer ${token}`, "content-type": "application/json" };
 }
 
