@@ -17,7 +17,8 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, brandEconomics, brandHookHistory, createSession, deliveredMasterLink, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
+import { attachSource, brandEconomics, brandHookHistory, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -38,6 +39,91 @@ export const getDeliveredMasterLink = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => deliveredMasterLink(await getSql(), context.userId, data));
+
+/** The approval state of a session's video, its decisions, and its publish state (not connected). Admins of the workspace only. */
+export const getDeliveryApproval = createServerFn({ method: "POST" })
+  .validator((input: unknown) => sessionInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => deliveryApprovalOf(await getSql(), context.userId, data));
+
+// Batches of videos (prompt 15). Admins of the brand's workspace only; the batch service checks each call and each item.
+
+function brandIdOf(input: unknown): string {
+  const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return typeof body.brandId === "string" ? body.brandId.trim().slice(0, 80) : "";
+}
+
+function batchIdOf(input: unknown): string {
+  const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+  return typeof body.batchId === "string" ? body.batchId.trim().slice(0, 80) : "";
+}
+
+export const listContentBatches = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = brandIdOf(input);
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => listBatches(await getSql(), context.userId, data));
+
+export const getContentBatch = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const batchId = batchIdOf(input);
+    if (!batchId) throw new Error("Choose a batch.");
+    return { batchId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => getBatch(await getSql(), context.userId, data));
+
+export const createContentBatch = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    return {
+      brandId: brandIdOf(input),
+      title: typeof body.title === "string" ? body.title.slice(0, 200) : "",
+      budgetUsd: typeof body.budgetUsd === "number" ? body.budgetUsd : Number.NaN,
+      sessionIds: Array.isArray(body.sessionIds) ? body.sessionIds.filter((item): item is string => typeof item === "string").slice(0, 50) : [],
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => createBatch(await getSql(), context.userId, data));
+
+export const startContentBatch = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const batchId = batchIdOf(input);
+    if (!batchId) throw new Error("Choose a batch.");
+    return { batchId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => startBatch(await getSql(), context.userId, data));
+
+export const retryContentBatchItem = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const sessionId = typeof body.sessionId === "string" ? body.sessionId.trim().slice(0, 80) : "";
+    const batchId = batchIdOf(input);
+    if (!batchId || !sessionId) throw new Error("Choose a video in a batch.");
+    return { batchId, sessionId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => retryBatchItem(await getSql(), context.userId, data));
+
+/** Approves, or rejects with a reason, the delivered video of a session. Admins of the workspace only; the service checks the rest. */
+export const decideDeliveryApproval = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    return {
+      sessionId: typeof body.sessionId === "string" ? body.sessionId.trim().slice(0, 80) : "",
+      decision: typeof body.decision === "string" ? body.decision : "",
+      reason: typeof body.reason === "string" ? body.reason.slice(0, 1000) : "",
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    if (!data.sessionId) throw new Error("Choose a video.");
+    return recordDeliveryApproval(await getSql(), context.userId, data);
+  });
 
 /** What a brand's video runs cost: billed, estimated and held amounts, and the cost per delivered video. Admins of the brand's workspace only. */
 export const getBrandEconomics = createServerFn({ method: "POST" })

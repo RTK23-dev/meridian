@@ -79,13 +79,13 @@ export async function createGatedBrief(sql: Sql, input: CreateGatedBriefInput): 
       insert into briefs (
         id, organization_id, brand_id, opportunity_id, title, audience, angle, hook, message, offer, cta,
         format, proof_type, constraints, context_pack, workflow, why, learning_notes, failure_notes,
-        status, decision_id, created_by
+        status, decision_id, created_by, frame
       ) values (
         ${briefId}, ${input.organizationId}, ${input.brandId}, ${brief.opportunityId}, ${brief.title},
         ${brief.audience}, ${brief.angle}, ${brief.hook}, ${brief.message}, ${brief.offer}, ${brief.cta},
         ${brief.format}, ${brief.proofType}, ${brief.constraints}, ${JSON.stringify(brief.context)},
         ${JSON.stringify(brief.workflow)}, ${JSON.stringify(brief.why)}, ${JSON.stringify(brief.learningNotes)},
-        ${JSON.stringify(brief.failureNotes)}, ${status}, ${decisionId}, ${input.createdBy}
+        ${JSON.stringify(brief.failureNotes)}, ${status}, ${decisionId}, ${input.createdBy}, ${JSON.stringify(brief.frame ?? {})}
       )
     `;
     if (input.supersedeReady && status !== "rejected" && brief.opportunityId) {

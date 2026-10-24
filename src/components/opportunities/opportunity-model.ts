@@ -45,6 +45,8 @@ export type ScoreKey = "brandFit" | "historicalEvidence" | "marketSignal" | "nov
 export type OpportunityRow = {
   id: string;
   label: string;
+  /** The latest decision a person made on this idea, with the reason they gave. Null when none was made. */
+  lastDecision?: { action: string; reason: string; decidedAt: string } | null;
   category: string;
   status: string;
   decision: string;
@@ -105,9 +107,9 @@ export function canDismiss(status: string): boolean {
   return status !== "rejected" && status !== "dismissed";
 }
 
-/** Matches `dismissOpportunity` on the server, which accepts only open or rejected rows. */
+/** Matches `dismissOpportunity` on the server, which declines only open ideas in bulk. An accepted idea is declined from its own sheet. */
 export function isBulkSelectable(status: string): boolean {
-  return status === "open" || status === "rejected";
+  return status === "open";
 }
 
 /** Scale a 0 to 1 value to a bar width. Unknown stays unknown. Values outside 0 to 1 are clamped for the bar only. */

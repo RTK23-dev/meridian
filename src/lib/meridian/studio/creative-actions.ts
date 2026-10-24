@@ -1,3 +1,4 @@
+import { parseFrame } from "../brief/frame.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
@@ -34,6 +35,7 @@ import { productionRefusalFor } from "./brief-status";
 
 export function briefDraftFromRow(row: Record<string, unknown>): BriefDraft {
   return {
+    frame: parseFrame(row.frame),
     title: asText(row.title),
     audience: asText(row.audience),
     angle: asText(row.angle),

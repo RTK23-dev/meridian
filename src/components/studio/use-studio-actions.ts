@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { publishMultiChannelVariant, recordOrganicTelemetryAction } from "@/lib/meridian/distribution/actions";
+import type { FrameEdit } from "@/lib/meridian/brief/frame";
 import {
   approveAndExecuteCreativePlan,
   generateStudioVariants,
@@ -8,6 +9,7 @@ import {
   recordStudioTestPerformance,
   rejectCreativePlan,
   reviewStudioVariant,
+  updateStudioBriefFrame,
 } from "@/lib/meridian/studio/actions";
 import type { StudioGeneration } from "@/lib/meridian/schemas/studio-generation";
 import { usePendingVariables, useScopedMutation } from "@/lib/query/hooks";
@@ -34,8 +36,17 @@ export function useStudioActions(brandId: string) {
     mutationKey: studioKey("brief"),
     mutationFn: (vars: { forceNew: boolean; reason: string; opportunityId?: string }) =>
       openStudioBrief({ data: { brandId, forceNew: vars.forceNew, reason: vars.reason, opportunityId: vars.opportunityId } }),
-    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId)],
+    // Accepting a direction settles the idea's review hold, so the reviews and the overview count are refreshed too.
+    invalidate: () => [qk.studio(brandId), qk.opportunities(brandId), qk.reviews(brandId), qk.machine(brandId)],
     success: (vars) => (vars.forceNew ? "Next brief written." : "Brief written from the accepted direction."),
+  });
+
+  // The frame edit changes the brief's constraints only. The copy is not touched, so the success message says so.
+  const saveBriefFrame = useScopedMutation({
+    mutationKey: studioKey("brief-frame"),
+    mutationFn: (vars: { briefId: string; edit: FrameEdit }) => updateStudioBriefFrame({ data: { brandId, briefId: vars.briefId, ...vars.edit } }),
+    invalidate: () => [qk.studio(brandId)],
+    success: "Brief frame saved. The copy is unchanged.",
   });
 
   const generateVariants = useScopedMutation({
@@ -123,7 +134,7 @@ export function useStudioActions(brandId: string) {
     ...usePendingVariables<string>(studioKey("publish-test")),
     ...usePendingVariables<{ creativeId: string }>(studioKey("publish-channels")).map((vars) => vars.creativeId),
   ];
-  const studioActions = [openBrief, generateVariants, approvePlan, rejectPlan, reviewVariant, publishTest, publishMulti, recordTestPerformance, recordOrganic];
+  const studioActions = [openBrief, saveBriefFrame, generateVariants, approvePlan, rejectPlan, reviewVariant, publishTest, publishMulti, recordTestPerformance, recordOrganic];
   const actionErrors = studioActions.map((action) => action.error).filter((error): error is Error => Boolean(error));
   const anyActionPending = studioActions.some((action) => action.isPending);
 
@@ -149,6 +160,7 @@ export function useStudioActions(brandId: string) {
   return {
     confirmPublish,
     openBrief,
+    saveBriefFrame,
     generateVariants,
     approvePlan,
     rejectPlan,

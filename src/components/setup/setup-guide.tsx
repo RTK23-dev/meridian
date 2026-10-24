@@ -110,7 +110,7 @@ export function SetupGuide() {
             <p className="text-sm text-fg-muted">
               Meridian creates Meta campaigns and ads with status <strong className="text-fg">paused</strong>. A paused ad does not show or spend until
               someone switches it on in Meta Ads Manager. Meridian has no button that switches it on.
-              {firstBrand ? <> Connected Facebook Pages and YouTube accounts are set on <Link to={`/brands/${firstBrand.id}/accounts` as never} className="font-semibold text-accent underline-offset-4 hover:underline">Connected accounts</Link>.</> : null}
+              {firstBrand ? <> Connected Facebook Pages and YouTube accounts are set on <Link to={`/brands/${firstBrand.id}/accounts` as never} className="font-semibold text-accent-text underline-offset-4 hover:underline">Connected accounts</Link>.</> : null}
             </p>
           </div>
         );

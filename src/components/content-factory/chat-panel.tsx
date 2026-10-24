@@ -149,28 +149,38 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
     const problems: string[] = [];
     try {
       const { messageId } = await postContentFactoryMessage({ data: { sessionId: session.id, text, beatRole: isScript ? kind : null } });
+      // The message is sent, so its text is cleared. An attachment that was not stored stays in the composer, so it is not lost.
+      const failedFiles: PendingFile[] = [];
       for (const item of pendingFiles) {
         try {
           const base64 = await fileBase64(item.file);
           const outcome = await uploadContentFactoryFile({ data: { sessionId: session.id, messageId, fileName: item.file.name, purpose: item.purpose, base64 } });
-          if (outcome.status !== "stored") problems.push(`${item.file.name}: ${outcome.reason}`);
+          if (outcome.status !== "stored") {
+            problems.push(`${item.file.name}: ${outcome.reason}`);
+            failedFiles.push(item);
+          }
         } catch (error) {
           problems.push(`${item.file.name}: ${error instanceof Error ? error.message : "it was not stored."}`);
+          failedFiles.push(item);
         }
       }
+      const failedSources: SourceResult[] = [];
       for (const source of pendingSources) {
         try {
           await attachContentFactorySource({ data: { sessionId: session.id, messageId, brandId: source.brandId, page: source.page, recordId: source.recordId } });
         } catch (error) {
           problems.push(`${source.title}: ${error instanceof Error ? error.message : "it was not attached."}`);
+          failedSources.push(source);
         }
       }
       setText("");
       setKind("instruction");
-      setPendingFiles([]);
-      setPendingSources([]);
-      setErrors(problems);
-      if (problems.length > 0) toast.error("The message was sent, but some attachments were not added.");
+      setPendingFiles(failedFiles);
+      setPendingSources(failedSources);
+      if (problems.length > 0) {
+        setErrors([...problems, "The attachments that failed are still in the composer. Send again to attach them to a new message."]);
+        toast.error("The message was sent, but some attachments were not added.");
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "The message was not sent.");
     } finally {

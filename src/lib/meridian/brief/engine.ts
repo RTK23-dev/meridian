@@ -1,3 +1,4 @@
+import type { BriefFrame } from "./frame.ts";
 import type { BrainSlice, LearnedPattern, RejectionFact } from "../domain.ts";
 import { influenceNotes } from "../knowledge/graph.ts";
 import type { OpportunityDraft } from "../opportunity/engine.ts";
@@ -16,6 +17,8 @@ export type GenerationContext = {
 };
 
 export type BriefDraft = {
+  /** The brand frame: constraints with their value and source (frame.ts). Absent on a draft built before the frame existed. */
+  frame?: BriefFrame;
   title: string;
   audience: string;
   angle: string;

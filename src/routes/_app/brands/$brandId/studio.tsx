@@ -173,7 +173,9 @@ function Studio({ brandId }: { brandId: string }) {
             canEdit={canEdit}
             changed={changed}
             pending={actions.openBrief.isPending}
+            framePending={actions.saveBriefFrame.isPending}
             onWriteNext={(reason) => actions.openBrief.mutateAsync({ forceNew: true, reason })}
+            onSaveFrame={(briefId, edit) => actions.saveBriefFrame.mutateAsync({ briefId, edit })}
           />
         </TabsContent>
 

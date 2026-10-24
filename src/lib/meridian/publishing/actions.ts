@@ -163,15 +163,19 @@ export async function applyReviewDecision(
         `;
       }
     }
+    // The review's opportunity must be in this brand, or the whole action is refused and rolled back. A rejected review dismisses only an
+    // open idea: an idea already accepted or briefed keeps its status, because its brief is written from it (security review, finding 11).
     if (review.opportunity_id && action === "reject") {
-      expectOneRow(
+      const [linked] = await tx<{ status: string }>`
+        select status from opportunities where id = ${review.opportunity_id} and brand_id = ${brandId} and organization_id = ${organizationId} limit 1
+      `;
+      if (!linked) throw new Error("The review's opportunity is not in this brand, so nothing was changed.");
+      if (linked.status === "open") {
         await tx`
           update opportunities set status = 'dismissed'
-          where id = ${review.opportunity_id} and brand_id = ${brandId} and organization_id = ${organizationId}
-          returning id
-        `,
-        "The review's opportunity is not in this brand, so nothing was changed.",
-      );
+          where id = ${review.opportunity_id} and brand_id = ${brandId} and organization_id = ${organizationId} and status = 'open'
+        `;
+      }
     }
     await audit(tx, {
       organizationId,

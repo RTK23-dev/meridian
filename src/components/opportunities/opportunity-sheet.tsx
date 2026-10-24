@@ -4,6 +4,7 @@ import { Badge, Button, ChartSkeleton, Sheet, SheetContent, SheetDescription, Sh
 import { copy, percentOrUnknown, statusLabel } from "@/lib/copy";
 import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
+import { isHeldStatus, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
 import { canDismiss, categoryLabel, evidenceSourceLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, RANKING_INPUTS_NOTE, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
 
@@ -15,8 +16,8 @@ type SheetProps = {
   position: number | null;
   brandId: string;
   canEdit: boolean;
-  declining: boolean;
-  onDecline: (id: string, reason: string) => Promise<unknown>;
+  triaging: boolean;
+  onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -30,11 +31,12 @@ export function OpportunitySheet(props: SheetProps) {
   </Sheet>;
 }
 
-function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecline, onOpenChange }: SheetProps & { item: OpportunityRow }) {
+function OpportunityDetail({ item, position, brandId, canEdit, triaging, onTriage, onOpenChange }: SheetProps & { item: OpportunityRow }) {
   const dimensions = scoreDimensions(item);
   const probability = jevProbability(item);
   const reasons = whyNotFacts(item);
   const held = isHeld(item);
+  const setAside = setAsideView(item);
   const showWhyNot = reasons.length > 0 || (position !== null && position > 1);
   return <>
     <SheetTitle className="text-2xl">{item.label}</SheetTitle>
@@ -46,6 +48,12 @@ function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecl
         <h3 id="opportunity-reason" className="font-semibold">Reason</h3>
         <p className="text-sm">{item.reason || "No reason is stored for this opportunity."}</p>
       </section>
+
+      {setAside ? <section aria-labelledby="opportunity-set-aside" className="space-y-2">
+        <h3 id="opportunity-set-aside" className="font-semibold">{setAside.title}</h3>
+        <p className="text-sm">{setAside.when}: {setAside.reason}</p>
+        {canEdit && setAside.reopenable ? <p className="text-xs text-muted">Reopen it under Actions to put it back in the open list.</p> : null}
+      </section> : null}
 
       <section aria-labelledby="opportunity-score" className="space-y-3">
         <h3 id="opportunity-score" className="font-semibold">How the rank is built</h3>
@@ -112,13 +120,27 @@ function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecl
       <section aria-labelledby="opportunity-actions" className="space-y-2">
         <h3 id="opportunity-actions" className="font-semibold">Actions</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} declining={declining} onDecline={onDecline} />
+          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} triaging={triaging} onTriage={onTriage} />
         </div>
-        {canEdit && canDismiss(item.status) ? <p className="text-sm text-muted">Studio opens its own recommended direction. It cannot select this opportunity from here yet.</p> : null}
+        {canEdit && canDismiss(item.status) && !held && !isHeldStatus(item.status) ? <p className="text-sm text-muted">The Studio link opens Studio's own recommended direction. Studio does not select this idea from here, so it may not be the one shown.</p> : null}
         <Button type="button" variant="quiet" size="sm" onClick={() => onOpenChange(false)}>Close details</Button>
       </section>
     </div>
   </>;
+}
+
+/**
+ * What a person decided about a set-aside or declined idea, and the reason they gave. Null for an idea that was not set aside, and for one
+ * whose decision was recorded with no reason (the reason then says so).
+ */
+function setAsideView(item: OpportunityRow): { title: string; when: string; reason: string; reopenable: boolean } | null {
+  const decision = item.lastDecision;
+  if (!decision) return null;
+  const when = new Date(decision.decidedAt).toLocaleDateString();
+  const reason = decision.reason.trim() || "No reason was recorded.";
+  if (item.status === "dismissed") return { title: "Declined", when: `Declined on ${when}`, reason, reopenable: false };
+  if (isHeldStatus(item.status)) return { title: "Set aside", when: `Set aside on ${when}`, reason, reopenable: true };
+  return null;
 }
 
 /** Ids stay out of the way until someone asks for them. The region is labelled and the toggle says what it shows. */

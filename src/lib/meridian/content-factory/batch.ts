@@ -1,0 +1,91 @@
+// A batch of videos (prompt 15). Each item is a Content Factory session with its own state. The state comes from the engine's own status of the
+// item's request, or from a start the engine never took (a refusal, a budget stop). Nothing is shown as running, delivered or retried without
+// that status. A batch has one budget and it is a hard limit: a start that would take the committed spend past it is refused, and the batch
+// stops there, so the videos after it are not started. A retry is for one failed item; its siblings are not touched.
+
+import type { EngineRequestStatus } from "../../../engine/api/index.ts";
+
+export const BATCH_ITEM_STATES = ["ready", "queued", "running", "awaiting_review", "blocked", "failed", "retryable", "delivered"] as const;
+export type BatchItemState = (typeof BATCH_ITEM_STATES)[number];
+
+/** Attempts an item may make in all: its first and its retries. A session's revision counts from 0, so attempts are revision + 1. */
+export const MAX_ITEM_ATTEMPTS = 3;
+
+/** The most videos one batch holds. A batch is a set a person can read in one screen. */
+export const MAX_BATCH_ITEMS = 20;
+
+export type BatchItemFacts = {
+  /** The session's status: 'draft' before a start, 'started' once the engine has taken the request. */
+  sessionStatus: string;
+  /** The session's revision: 0 for the first attempt, one more for each revision. */
+  revision: number;
+  /** The reasons the last start was refused, as the start stored them. Empty when the last start was taken, or none was tried. */
+  lastRefusal: string[];
+  /** The engine's status of the session's request. Null when the session has none yet. */
+  engine: EngineRequestStatus | null;
+};
+
+export type BatchItemView = { state: BatchItemState; reason: string; retryable: boolean; attempts: number };
+
+/** The state of one item, from its facts. A started item with no engine status is blocked, never shown as working. */
+export function itemStateOf(facts: BatchItemFacts): BatchItemView {
+  const attempts = facts.revision + 1;
+  if (facts.sessionStatus !== "started") {
+    if (facts.lastRefusal.length > 0) return { state: "blocked", reason: `Not started: ${facts.lastRefusal.join(" ")}`, retryable: false, attempts };
+    return { state: "ready", reason: "Ready to start.", retryable: false, attempts };
+  }
+  const engine = facts.engine;
+  if (engine === null) return { state: "blocked", reason: "The engine has no status for this video.", retryable: false, attempts };
+  switch (engine.status) {
+    case "queued":
+      return { state: "queued", reason: "Queued. The engine has not picked it up yet.", retryable: false, attempts };
+    case "running":
+      return { state: "running", reason: `Working now${engine.stage ? ` (at ${engine.stage})` : ""}.`, retryable: false, attempts };
+    case "needs_review":
+      return {
+        state: "awaiting_review",
+        reason: `${engine.openItems} open review ${engine.openItems === 1 ? "item" : "items"}: ${engine.reason}`,
+        retryable: false,
+        attempts,
+      };
+    case "paused":
+      return {
+        state: "blocked",
+        reason: engine.pauseKind === "budget" ? `Waiting on the budget: ${engine.reason}` : `A job failed for good: ${engine.reason}`,
+        retryable: false,
+        attempts,
+      };
+    case "delivered":
+      return { state: "delivered", reason: "Delivered.", retryable: false, attempts };
+    case "failed": {
+      const why = engine.reasons.length > 0 ? engine.reasons.join(" ") : "The engine refused the video.";
+      if (attempts < MAX_ITEM_ATTEMPTS) return { state: "retryable", reason: why, retryable: true, attempts };
+      return { state: "failed", reason: `${why} No attempts are left for this item.`, retryable: false, attempts };
+    }
+  }
+}
+
+/** The spend an item has committed: the budgets of the items whose request the engine took. A refused or unstarted item commits nothing. */
+export function committedUsd(items: readonly { started: boolean; budgetUsd: number | null }[]): number {
+  return items.reduce((sum, item) => (item.started && item.budgetUsd !== null ? sum + item.budgetUsd : sum), 0);
+}
+
+/**
+ * Whether one more item may start under the batch's budget. An item with no budget cannot be bounded, so it is refused while the batch has
+ * a budget. A start that would take the committed spend past the budget is refused. The caller decides what that means: a batch start stops
+ * there, and a retry is refused.
+ */
+export function fitsBatchBudget(input: { batchBudgetUsd: number; committedUsd: number; itemBudgetUsd: number | null }): { ok: true } | { ok: false; reason: string; overBudget: boolean } {
+  if (input.itemBudgetUsd === null) {
+    return { ok: false, reason: "This video has no budget set, so the batch cannot bound its spend. Set a budget on the video.", overBudget: false };
+  }
+  const after = input.committedUsd + input.itemBudgetUsd;
+  if (after > input.batchBudgetUsd + 1e-9) {
+    return {
+      ok: false,
+      reason: `Starting this video would take the batch past its budget of $${input.batchBudgetUsd.toFixed(2)} (committed $${input.committedUsd.toFixed(2)}).`,
+      overBudget: true,
+    };
+  }
+  return { ok: true };
+}

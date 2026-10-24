@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, toast } from "@/components/ui";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, ErrorState, Skeleton, Textarea, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
-import { getDeliveredMasterLink, reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { decideDeliveryApproval, getDeliveredMasterLink, getDeliveryApproval, reviseContentFactorySession, reviseContentFactoryWithDirection, startContentFactoryRun } from "@/lib/meridian/content-factory/actions";
+import { approvalProblem, type ApprovalRecord, type ApprovalState } from "@/lib/meridian/content-factory/approval";
 import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import { MAX_MESSAGE_CHARS } from "@/lib/meridian/content-factory/model";
 import type { RunView } from "@/lib/meridian/content-factory/service";
 import { FlowBoard } from "./run-board";
+import { QualityScore } from "./quality-score";
 import { STATUS_LABELS } from "./status";
 
 export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void }) {
@@ -40,6 +42,8 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
       </p>
       <FlowBoard sessionId={sessionId} feed={feed} onChanged={onStarted} />
       {feed.status.status === "delivered" ? <DeliveredDownload sessionId={sessionId} /> : null}
+      {feed.status.status === "delivered" ? <DeliveryApproval sessionId={sessionId} /> : null}
+      {feed.status.status === "delivered" ? <QualityScore sessionId={sessionId} /> : null}
       <details className="mb-4">
         <summary className="cursor-pointer text-sm font-semibold">Step details: inputs, outputs, reasons and models</summary>
         <ol aria-label="Engine steps" className="mt-3 space-y-3">
@@ -99,7 +103,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
         <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-start-reason" : undefined} onClick={() => void start()}>Make the video</Button>
-        {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Complete the items above first." : "Connect the engine first."}</p> : null}
+        {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first."}</p> : null}
       </div>
       {refusal || lastRefusal.length > 0 ? (
         <div role="status" className="mt-4 space-y-1 text-sm">
@@ -206,6 +210,128 @@ function StepCard({ card, index }: { card: FeedCard; index: number }) {
 }
 
 type DeliveredLinkState = Awaited<ReturnType<typeof getDeliveredMasterLink>>;
+type DeliveryApprovalState = Awaited<ReturnType<typeof getDeliveryApproval>>;
+
+function whenLabel(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? "at an unknown time" : date.toLocaleString();
+}
+
+function stateSentence(state: ApprovalState): string {
+  if (state.status === "not_decided") return "Not decided. Nobody has approved or rejected this video yet.";
+  if (state.status === "approved") return `Approved on ${whenLabel(state.decidedAt)} by an admin of this workspace.`;
+  return `Rejected on ${whenLabel(state.decidedAt)} by an admin of this workspace: ${state.reason}`;
+}
+
+function historyLine(record: ApprovalRecord): string {
+  const verb = record.decision === "approved" ? "Approved" : "Rejected";
+  const note = record.reason ? `: ${record.reason}` : "";
+  return `${verb} on ${whenLabel(record.createdAt)} for the video from request ${record.engineRequestId}${note}`;
+}
+
+/**
+ * The approval of the delivered video. A decision is written once, against this video, with who made it and when. A revision is a new
+ * video and starts undecided. Publishing is not connected, so the panel says so and offers no publish control. Performance is not measured.
+ */
+function DeliveryApproval({ sessionId }: { sessionId: string }) {
+  const [view, setView] = useState<DeliveryApprovalState | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [rejecting, setRejecting] = useState(false);
+  const [reason, setReason] = useState("");
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    getDeliveryApproval({ data: { sessionId } }).then(
+      (value) => {
+        if (active) setView(value);
+      },
+      (error: unknown) => {
+        if (active) setLoadError(error instanceof Error ? error.message : "The approval could not be read.");
+      },
+    );
+    return () => {
+      active = false;
+    };
+  }, [sessionId]);
+
+  async function decide(decision: "approved" | "rejected", note: string) {
+    setBusy(true);
+    setActionError(null);
+    try {
+      setView(await decideDeliveryApproval({ data: { sessionId, decision, reason: note } }));
+      setRejecting(false);
+      setReason("");
+      setProblem(null);
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : "The decision could not be saved. Nothing was changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (loadError !== null) return <p role="alert" className="mb-4 text-sm text-danger">{loadError}</p>;
+  if (view === null) return <p className="mb-4 text-sm text-fg-muted">Reading the approval of this video.</p>;
+  const { state, history, publish, delivered } = view;
+  return (
+    <section aria-labelledby="cf-approval" className="mb-4 space-y-3 rounded-md border border-border p-3">
+      <h3 id="cf-approval" className="text-sm font-semibold">Approval of this video</h3>
+      <p className="text-sm">{stateSentence(state)}</p>
+      {delivered ? null : <p className="text-sm text-fg-muted">The engine has not delivered the current video, so it cannot be decided yet.</p>}
+      {delivered && view.rightsMissing.length > 0 ? (
+        <p role="status" className="text-sm text-danger">
+          Approval is blocked: no valid rights record covers {view.rightsMissing.join(", ")}. Add one under Content standards for this brand, then approve.
+        </p>
+      ) : null}
+      {delivered && rejecting ? (
+        <form
+          className="space-y-2"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            const found = approvalProblem({ decision: "rejected", reason });
+            setProblem(found);
+            if (found === null) void decide("rejected", reason.trim());
+          }}
+        >
+          <Textarea
+            label="Why reject this video?"
+            hint="The reason stays on record with the decision."
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            error={problem ?? undefined}
+            rows={3}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit" disabled={busy}>Reject this video</Button>
+            <Button type="button" variant="quiet" disabled={busy} onClick={() => { setRejecting(false); setProblem(null); }}>Cancel</Button>
+          </div>
+        </form>
+      ) : null}
+      {delivered && !rejecting ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="secondary" disabled={busy || state.status === "approved" || view.rightsMissing.length > 0} onClick={() => void decide("approved", "")}>Approve this video</Button>
+          <Button variant="quiet" disabled={busy || state.status === "rejected"} onClick={() => { setRejecting(true); setActionError(null); }}>Reject this video</Button>
+        </div>
+      ) : null}
+      {actionError !== null ? <p role="alert" className="text-sm text-danger">{actionError}</p> : null}
+      <div className="space-y-1 text-sm">
+        <p><span className="font-semibold">Publish:</span> {publish.reason}</p>
+        <p><span className="font-semibold">Performance:</span> Not measured. A video is measured only after it is published through a connected channel.</p>
+      </div>
+      {history.length > 0 ? (
+        <div>
+          <h4 className="text-sm font-semibold">History</h4>
+          <ol className="mt-1 space-y-1 text-sm">
+            {history.map((record, index) => <li key={`${record.createdAt}:${index}`}>{historyLine(record)}</li>)}
+          </ol>
+        </div>
+      ) : null}
+    </section>
+  );
+}
 
 /**
  * A download link to the engine's delivered master. It is made on request, and only once the engine delivered the request: the engine reads

@@ -193,6 +193,8 @@ try {
   const accessibility = [];
   for (const theme of themes) {
     const context = await browser.newContext({ colorScheme: theme, storageState });
+    // The app takes its theme from the saved choice (dark by default), not from the browser's colour scheme, so set the choice here.
+    await context.addInitScript((value) => { try { localStorage.setItem("meridian-theme", value); } catch { /* storage off */ } }, theme);
     const page = await context.newPage();
     for (const width of widths) {
       await page.setViewportSize({ width, height: 960 });
@@ -216,6 +218,9 @@ try {
         });
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
+          // Data loads after the first paint, and a section that mounts with its data starts its entrance fade then. Wait for the
+          // requests to finish, so the settle below sees that fade and the scan measures the settled colours.
+          await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
           await settleAnimations(page);
           const { violations } = await new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])

@@ -33,7 +33,8 @@ import { getNotificationPreferences } from "@/lib/meridian/observability/actions
 import { qk, userScopedQueryKey } from "./keys";
 import { ACTIVE_POLL_MS, jobDetailRefetchInterval, jobsRefetchInterval } from "./polling";
 import { markAlertAcknowledged, markOpportunitiesDismissed, markReviewResolved } from "./optimistic";
-import { declineOpportunity } from "@/lib/meridian/opportunity/actions";
+import { triageOpportunity } from "@/lib/meridian/opportunity/actions";
+import type { TriageAction } from "@/lib/meridian/opportunity/triage-states";
 
 /** The user and whether the session has resolved. Queries stay disabled until both are known. */
 function useSession() {
@@ -535,14 +536,20 @@ export function useResolveReview(brandId: string) {
 
 /** Dismiss one or more opportunities. Rows show as dismissed at once and roll back if the server refuses. */
 /** Declines one opportunity with its reason. The list is refreshed when the decision is saved; a failure keeps the reason the person wrote. */
-export function useDeclineOpportunity(brandId: string) {
+export function useTriageOpportunity(brandId: string) {
   const queryClient = useQueryClient();
   const { userId } = useSession();
   const key = userScopedQueryKey(userId, qk.opportunities(brandId));
   return useMutation({
-    mutationKey: ["mutation", "opportunity.decline", brandId],
-    mutationFn: ({ opportunityId, reason }: { opportunityId: string; reason: string }) => declineOpportunity({ data: { brandId, opportunityId, reason } }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    mutationKey: ["mutation", "opportunity.triage", brandId],
+    mutationFn: ({ opportunityId, action, reason }: { opportunityId: string; action: TriageAction; reason: string }) =>
+      triageOpportunity({ data: { brandId, opportunityId, action, reason } }),
+    // A decision also settles or reopens the idea's review, and Studio reads the direction, so those views are refreshed with the list.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: key });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.machine(brandId)) });
+      void queryClient.invalidateQueries({ queryKey: userScopedQueryKey(userId, qk.studio(brandId)) });
+    },
   });
 }
 
@@ -552,12 +559,9 @@ export function useDismissOpportunities(brandId: string) {
   const key = userScopedQueryKey(userId, qk.opportunities(brandId));
   return useMutation({
     mutationKey: ["mutation", "opportunity.dismiss", brandId],
-    mutationFn: async (opportunityIds: string[]) => {
-      for (const opportunityId of opportunityIds) {
-        await dismissOpportunity({ data: { brandId, opportunityId } });
-      }
-    },
-    onMutate: async (opportunityIds) => {
+    mutationFn: ({ opportunityIds, reason }: { opportunityIds: string[]; reason: string }) =>
+      dismissOpportunity({ data: { brandId, opportunityIds, reason } }),
+    onMutate: async ({ opportunityIds }) => {
       await queryClient.cancelQueries({ queryKey: key });
       const previous = queryClient.getQueryData<OpportunitiesData>(key);
       queryClient.setQueryData<OpportunitiesData>(key, (current) => markOpportunitiesDismissed(current, opportunityIds));
@@ -567,8 +571,11 @@ export function useDismissOpportunities(brandId: string) {
       if (context?.previous) queryClient.setQueryData(key, context.previous);
       toast.error(errorText(error));
     },
-    onSuccess: (_data, opportunityIds) => {
-      toast.success(opportunityIds.length === 1 ? "Opportunity dismissed." : `${opportunityIds.length} opportunities dismissed.`);
+    onSuccess: (result) => {
+      const declined = result.declined.length;
+      toast.success(declined === 1 ? "Idea declined." : `${declined} ideas declined.`);
+      // An idea the server would not decline keeps its row. Its reason is shown, so the person can see why it stayed.
+      if (result.skipped.length > 0) toast.error(`${result.skipped.length} could not be declined: ${result.skipped[0]?.reason ?? ""}`);
     },
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: key });

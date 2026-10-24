@@ -8,6 +8,9 @@
  */
 
 const STATUS_LABELS: Record<string, string> = {
+  // One word for each act across the screens: a declined idea is "Declined" on its card, in bulk, and in the status filter.
+  dismissed: "Declined",
+  needs_research: "Needs research",
   not_connected: "Not connected",
   in_review: "Needs review",
   dead: "Dead letter",
@@ -145,8 +148,8 @@ export const copy = {
   opportunities: {
     rankAction: "Rank opportunities",
     rankingAction: "Ranking…",
-    intro: "Each card is ranked from stored evidence. A hypothesis is not a market finding. Ranking replaces open cards. Accepted work is kept.",
-    rankedNote: (count: number) => `${count} ${count === 1 ? "candidate" : "candidates"} ranked. Starting ideas stay labelled as ideas, not findings. An angle is added only when stored observations or a learned pattern contain it.`,
+    intro: "Each card is ranked from stored evidence. A hypothesis is not a market finding. Ranking replaces open cards. Accepted work, and ideas you declined or set aside, are kept.",
+    rankedNote: (count: number, kept = 0) => `${count} ${count === 1 ? "candidate" : "candidates"} ranked.${kept > 0 ? ` ${kept} ${kept === 1 ? "idea you declined or set aside was" : "ideas you declined or set aside were"} kept out.` : ""} Starting ideas stay labelled as ideas, not findings. An angle is added only when stored observations or a learned pattern contain it.`,
     empty: "Nothing is ranked yet. Ranking uses the brand brain, stored observations, and learned patterns. It does not invent competitors.",
     decisionNotYet: "No decision yet. No probability is shown until the decision engine returns one.",
   },

@@ -1,3 +1,5 @@
+import type { BriefFrame } from "../brief/frame.ts";
+import type { DirectionAction } from "../opportunity/triage-states.ts";
 /**
  * The frozen brief-creation and opportunity-direction contract. Every brief-creation path calls `createGatedBrief`. It is
  * the only place a brief row is written, and it writes that row only after the shared brief gate has judged the brief.
@@ -11,6 +13,8 @@ export type BriefStatus = "ready" | "awaiting_review" | "rejected";
 
 /** The fields of a brief row, as the caller built them. The service adds the id, status and decision link. */
 export type BriefRecord = {
+  /** The brand frame, stored as text. Absent: the brief is stored with an empty frame, so every field reads as not set. */
+  frame?: BriefFrame;
   opportunityId: string | null;
   title: string;
   audience: string;
@@ -60,7 +64,7 @@ export type OpportunityDirectionInput = {
   opportunityId: string;
   actorId: string;
   actorRole: string;
-  action: "approve" | "decline";
+  action: DirectionAction;
   /** Required. At least MIN_DIRECTION_REASON_LENGTH characters after trimming. */
   reason: string;
 };
