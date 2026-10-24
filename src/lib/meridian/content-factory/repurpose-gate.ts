@@ -43,8 +43,14 @@ const PLAN_SCOPE = "treatment_plan";
 const VARIANT_SCOPE = "variant_treatments";
 const NO_BRAND = "The session has no brand, so the decision check is not consulted.";
 
+/** What the check established. Only `approved` and `rejected` are calibrated decisions. Every other state is not a verdict. */
+export type RepurposeCheckState = "not_consulted" | "not_configured" | "failed" | "uncalibrated" | "review_required" | "approved" | "rejected";
+
 export type RepurposeCheck = {
+  state: RepurposeCheckState;
   outcome: "approved" | "review" | "rejected" | "not_consulted";
+  /** Always advisory: the check approves no variation, and only a calibrated rejection of a plan stops the run. */
+  authority: "advisory";
   reason: string;
   engineId: string | null;
   gateRecordId: string | null;
@@ -62,12 +68,22 @@ export function planTextOf(variations: readonly RepurposedVariation[]): string {
  * judgement, so nothing is recorded as approved, reviewed or rejected. Uncalibrated scores stay under review (policy: scores are scores
  * until a calibration report says otherwise), so an approval or a rejection needs a calibration for the question.
  */
-function checkOf(result: GateResult): RepurposeCheck {
-  if (!result.engineCalled || result.failureKind === "not_configured" || result.failureKind === "selection_unavailable") {
-    return { outcome: "not_consulted", reason: result.reason, engineId: null, gateRecordId: result.gateRecordId };
+/**
+ * The check's state from the gate's result. A check is a verdict only when a calibrated threshold applies: an uncalibrated answer is never an
+ * approval or a rejection, however the engine scored it. No engine, or an engine that did not answer usably, is not a judgement at all.
+ */
+export function repurposeCheckOf(result: GateResult): RepurposeCheck {
+  const base = { authority: "advisory" as const, reason: result.reason, gateRecordId: result.gateRecordId };
+  if (!result.engineCalled) {
+    const state = result.failureKind === "not_configured" ? "not_configured" : "not_consulted";
+    return { ...base, state, outcome: "not_consulted", engineId: null };
   }
-  const outcome = result.action === "AUTO_APPROVE" ? "approved" : result.action === "REJECT" ? "rejected" : "review";
-  return { outcome, reason: result.reason, engineId: result.engineId, gateRecordId: result.gateRecordId };
+  if (result.failureKind) return { ...base, state: "failed", outcome: "not_consulted", engineId: result.engineId };
+  const calibrated = result.votes.some((vote) => vote.calibrationStatus === "calibrated");
+  if (!calibrated) return { ...base, state: "uncalibrated", outcome: "review", engineId: result.engineId };
+  if (result.action === "AUTO_APPROVE") return { ...base, state: "approved", outcome: "approved", engineId: result.engineId };
+  if (result.action === "REJECT") return { ...base, state: "rejected", outcome: "rejected", engineId: result.engineId };
+  return { ...base, state: "review_required", outcome: "review", engineId: result.engineId };
 }
 
 export async function judgeRepurposePlan(input: {
@@ -79,7 +95,7 @@ export async function judgeRepurposePlan(input: {
   selection?: GateInput["selection"];
   engines?: DecisionEngineRegistry;
 }): Promise<RepurposeCheck> {
-  if (input.brandId === null) return { outcome: "not_consulted", reason: NO_BRAND, engineId: null, gateRecordId: null };
+  if (input.brandId === null) return { state: "not_consulted", outcome: "not_consulted", authority: "advisory", reason: NO_BRAND, engineId: null, gateRecordId: null };
   const result = await runEngineGate({
     sql: input.sql,
     organizationId: input.organizationId,
@@ -92,7 +108,7 @@ export async function judgeRepurposePlan(input: {
     selection: input.selection,
     engines: input.engines,
   });
-  return checkOf(result);
+  return repurposeCheckOf(result);
 }
 
 /**
@@ -108,7 +124,7 @@ export async function judgeRepurposeVariant(input: {
   selection?: GateInput["selection"];
   engines?: DecisionEngineRegistry;
 }): Promise<RepurposeCheck> {
-  if (input.brandId === null) return { outcome: "not_consulted", reason: NO_BRAND, engineId: null, gateRecordId: null };
+  if (input.brandId === null) return { state: "not_consulted", outcome: "not_consulted", authority: "advisory", reason: NO_BRAND, engineId: null, gateRecordId: null };
   const result = await runEngineGate({
     sql: input.sql,
     organizationId: input.organizationId,
@@ -121,5 +137,5 @@ export async function judgeRepurposeVariant(input: {
     selection: input.selection,
     engines: input.engines,
   });
-  return checkOf(result);
+  return repurposeCheckOf(result);
 }

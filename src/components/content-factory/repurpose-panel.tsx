@@ -6,6 +6,7 @@ import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurp
 import type { CreatePausedAdOutcome, PausedAdChoices } from "@/lib/meridian/content-factory/repurpose-paused-ad";
 import type { OrganicPublishOutcome } from "@/lib/meridian/content-factory/repurpose-organic";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
+import type { RepurposeCheckState } from "@/lib/meridian/content-factory/repurpose-gate";
 import {
   CATEGORY_LABELS,
   MAX_REPURPOSE_VARIANTS,
@@ -250,13 +251,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <div className="space-y-2" aria-live="polite">
                 <h3 className="text-sm font-semibold">Variations</h3>
                 <p className="text-sm text-muted">
-                  {run.decision.outcome === "not_consulted"
-                    ? "Decision check: not consulted. No decision engine answered for this workspace, so the plan is the deterministic one."
-                    : run.decision.outcome === "review"
-                      ? "Decision check: sent to review. Uncalibrated scores never approve or block a plan, so this is a note, not a gate."
-                      : run.decision.outcome === "approved"
-                        ? "Decision check: approved."
-                        : "Decision check: rejected."}
+                  {decisionCheckLine(run.decision.state, "plan")}
                 </p>
                 <p className="text-sm text-muted">
                   Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. A reviewer can approve or
@@ -276,7 +271,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       </div>
                       <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
                       {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
-                      {variation.status === "rendered" ? <p className="text-xs text-muted">{brandFitLine(variation.decision.outcome)}</p> : null}
+                      {variation.status === "rendered" ? <p className="text-xs text-muted">{decisionCheckLine(variation.decision.state, "variation")}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <UploadToMeta sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <PausedAd sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
@@ -307,11 +302,29 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
  * The brand-fit check on one rendered variation, in words. It is advisory: an uncalibrated score never approves or blocks a variation, and
  * the reviewer decides. A variation rendered before the check existed, or with no engine, says that it was not consulted.
  */
-function brandFitLine(outcome: "approved" | "review" | "rejected" | "not_consulted"): string {
-  if (outcome === "approved") return "Brand-fit check: approved. A note for the reviewer, not a decision.";
-  if (outcome === "review") return "Brand-fit check: sent to review. A note for the reviewer. Uncalibrated scores never approve or block a variation.";
-  if (outcome === "rejected") return "Brand-fit check: rejected. A note for the reviewer. It blocks nothing.";
-  return "Brand-fit check: not consulted. No decision engine answered for this variation.";
+/**
+ * The decision check, in words. Only a calibrated approval or rejection is a verdict; every other state says what is missing. The check is
+ * advisory everywhere it appears: it never approves a variation, and only a calibrated rejection stops a plan.
+ */
+function decisionCheckLine(state: RepurposeCheckState, subject: "plan" | "variation"): string {
+  switch (state) {
+    case "approved":
+      return `Decision check on the ${subject}: approved against a calibrated threshold. A note for the reviewer, not an approval.`;
+    case "rejected":
+      return subject === "plan"
+        ? "Decision check on the plan: rejected against a calibrated threshold, so the plan was not created."
+        : "Decision check on this variation: rejected against a calibrated threshold. A note for the reviewer; it blocks nothing.";
+    case "review_required":
+      return `Decision check on the ${subject}: a calibrated threshold asks for a human review. A note, not a gate.`;
+    case "uncalibrated":
+      return `Decision check on the ${subject}: an engine answered, but no calibrated threshold applies, so this is not a verdict. It blocks nothing.`;
+    case "failed":
+      return `Decision check on the ${subject}: the engine did not give a usable answer, so it was not consulted. It blocks nothing.`;
+    case "not_configured":
+      return `Decision check on the ${subject}: no decision engine is configured for this workspace, so it was not consulted.`;
+    case "not_consulted":
+      return `Decision check on the ${subject}: not consulted.`;
+  }
 }
 
 /**
