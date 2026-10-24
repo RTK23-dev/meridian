@@ -43,6 +43,30 @@ export const openStudioBrief = createServerFn({ method: "POST" })
   });
 
 import { serverStudioGenerationSchema } from "@/lib/meridian/schemas/studio-generation";
+import type { FrameEdit } from "../brief/frame.ts";
+
+/**
+ * A person's edit of a ready brief's frame (prompt 14). Only the fields sent are changed; a field sent as null returns to not set. The
+ * copy is not an input here: it is judged as written.
+ */
+export const updateStudioBriefFrame = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const edit: FrameEdit = {};
+    if ("platform" in body) edit.platform = typeof body.platform === "string" ? body.platform : null;
+    if ("budgetUsd" in body) edit.budgetUsd = typeof body.budgetUsd === "number" ? body.budgetUsd : null;
+    if ("visualReferences" in body) {
+      edit.visualReferences = Array.isArray(body.visualReferences) ? body.visualReferences.filter((item): item is string => typeof item === "string") : null;
+    }
+    if ("successCriteria" in body) edit.successCriteria = typeof body.successCriteria === "string" ? body.successCriteria : null;
+    return { brandId: clip(body.brandId), briefId: clip(body.briefId), edit };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    if (!data.brandId || !data.briefId) throw new Error("Choose a brief in a brand.");
+    const [{ getSql }, api] = await Promise.all([import("../../db.ts"), import("./brief-frame.server.ts")]);
+    return api.updateBriefFrame(await getSql(), context.userId, data);
+  });
 
 /** The disclosure for a brief the engine could not judge: the failure, the unresolved questions, and the evidence. */
 export const getStudioBriefReview = createServerFn({ method: "POST" })

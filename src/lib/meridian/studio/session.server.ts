@@ -1,5 +1,6 @@
 import { getSql } from "../../db.ts";
 import { assertRole, isRole, type Role } from "../access.ts";
+import { parseFrame } from "../brief/frame.ts";
 import { loadBrandContext } from "../context/load.ts";
 import { assertSameTenant } from "../domain.ts";
 import type { Sql } from "../learning/store.ts";
@@ -186,7 +187,7 @@ export async function loadSession(sql: Sql, organizationId: string, brandId: str
     : null;
   const briefs = await sql<Record<string, unknown>>`
     select id, title, audience, angle, hook, message, offer, cta, format, proof_type, constraints, why,
-           learning_notes, failure_notes, status, opportunity_id, created_at
+           learning_notes, failure_notes, status, opportunity_id, frame, created_at
     from briefs
     where brand_id = ${brandId} and organization_id = ${organizationId}
     order by created_at desc
@@ -239,6 +240,7 @@ export async function loadSession(sql: Sql, organizationId: string, brandId: str
     failureNotes: asJson<string[]>(row.failure_notes, []),
     status: asText(row.status),
     opportunityId: asText(row.opportunity_id),
+    frame: parseFrame(row.frame),
   });
   return {
     role,
