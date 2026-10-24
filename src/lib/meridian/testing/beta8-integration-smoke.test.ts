@@ -208,7 +208,7 @@ test("Smoke 5: Autonomy Mode Gates Generation and Enforces Spend Cap (P0-D)", ()
 test("Smoke 6: Gemini Omni 3-10s Duration Bounds & Veo Is Not Registered (P0-E)", () => {
   // Valid duration 5s
   const valid = buildOmniTextToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "Camera panning over beach",
     durationSeconds: 5,
   });
@@ -216,7 +216,7 @@ test("Smoke 6: Gemini Omni 3-10s Duration Bounds & Veo Is Not Registered (P0-E)"
 
   // Invalid duration 15s rejected
   assert.throws(
-    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "Test", durationSeconds: 15 }),
+    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash-preview", prompt: "Test", durationSeconds: 15 }),
     /Gemini Omni supports video durations between 3 and 10 seconds/
   );
 

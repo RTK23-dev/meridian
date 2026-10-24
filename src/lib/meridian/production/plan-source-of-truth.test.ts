@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { getSql } from "../../db.ts";
 import { createTenantFixture, execute, injectProvider, job } from "../testing/production-fixtures.ts";
 
-const MODEL = "gemini-omni-1.1-flash";
+const MODEL = "gemini-omni-1.1-flash-preview";
 
 test("production gates on the decision the plan recorded: a plan whose decision is gone is refused before any provider call, even though its brief keeps one", async () => {
   const sql = await getSql();

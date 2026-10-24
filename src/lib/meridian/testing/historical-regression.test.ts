@@ -859,7 +859,7 @@ test("33. Regression: the model registry lists no Veo model and keeps Gemini Omn
   const { modelCapabilityRegistry } = await import("../production/registry.ts");
   assert.equal(modelCapabilityRegistry.getModel("veo-3.1-generate-preview"), undefined);
   assert.equal(modelCapabilityRegistry.getModel("veo-2.0-generate-001"), undefined);
-  const omni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash", new Date("2026-10-09"));
+  const omni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash-preview", new Date("2026-10-09"));
   assert.equal(omni.state, "ACTIVE");
   assert.equal(omni.usable, true);
 });

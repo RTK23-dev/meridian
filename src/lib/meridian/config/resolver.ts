@@ -52,7 +52,7 @@ export class ProviderConfigResolver {
       const custom = input?.vaultCustomFields ?? {};
       const omniModel = typeof custom.omniModel === "string" && custom.omniModel.trim()
         ? custom.omniModel.trim()
-        : "gemini-omni-1.1-flash";
+        : "gemini-omni-1.1-flash-preview";
       const imageModel = typeof custom.imageModel === "string" && custom.imageModel.trim()
         ? custom.imageModel.trim()
         : "gemini-nano-banana-2.1";
@@ -81,7 +81,7 @@ export class ProviderConfigResolver {
     const omniModel =
       env.MERIDIAN_GEMINI_OMNI_MODEL?.trim() ||
       env.MERIDIAN_OMNI_MODEL?.trim() ||
-      "gemini-omni-1.1-flash";
+      "gemini-omni-1.1-flash-preview";
 
     const imageModel =
       env.MERIDIAN_IMAGE_MODEL?.trim() ||

@@ -151,7 +151,7 @@ async function productionJobStatus(sql: Sql, tenant: { organizationId: string; b
 
 test("ambiguous submission (thrown): the reservation stays held, the job is recorded unknown, and nothing is resubmitted", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "throw", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "throw", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const estimateMicros = toMicros(tenant.plan.estimatedCost.totalEstimatedUsd);
   const injected = injectProvider("google_omni", async () => {
     throw new Error("socket hang up after the request was written");
@@ -177,7 +177,7 @@ test("ambiguous submission (thrown): the reservation stays held, the job is reco
 
 test("ambiguous submission (reported SUBMISSION_UNKNOWN): the reservation stays held", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "reported", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "reported", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const estimateMicros = toMicros(tenant.plan.estimatedCost.totalEstimatedUsd);
   const injected = injectProvider("google_omni", async (spec) =>
     job(spec, "SUBMISSION_UNKNOWN", { error: "timed out waiting for acceptance" }),
@@ -196,7 +196,7 @@ test("ambiguous submission (reported SUBMISSION_UNKNOWN): the reservation stays 
 
 test("definitive provider rejection: the reservation is released and the budget is free again", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "rejected", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "rejected", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const injected = injectProvider("google_omni", async (spec) =>
     job(spec, "FAILED", { error: "quota rejected before any work started", errorCode: "QUOTA" }),
   );
@@ -215,7 +215,7 @@ test("definitive provider rejection: the reservation is released and the budget 
 test("plan spend cap is enforced before any provider call", async () => {
   const sql = await getSql();
   // Estimate is above the plan's own cap. The account default ($100) would allow it.
-  const tenant = await createTenantFixture(sql, "cap", 0.5, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "cap", 0.5, "google_omni", "gemini-omni-1.1-flash-preview");
   assert.ok(tenant.plan.estimatedCost.totalEstimatedUsd > 0.5, "fixture: estimate must exceed the plan cap");
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
@@ -234,7 +234,7 @@ test("plan spend cap is enforced before any provider call", async () => {
 
 test("zero estimate on a billable provider is refused before any provider call", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "zero", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "zero", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const plan = { ...tenant.plan, estimatedCost: { ...tenant.plan.estimatedCost, totalEstimatedUsd: 0 } };
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
@@ -250,7 +250,7 @@ test("zero estimate on a billable provider is refused before any provider call",
 
 test("missing estimate on a billable provider is refused before any provider call", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "missing", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "missing", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const plan = { ...tenant.plan, estimatedCost: undefined } as unknown as CreativePlan;
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
@@ -265,7 +265,7 @@ test("missing estimate on a billable provider is refused before any provider cal
 
 test("non-finite estimate on a billable provider is refused before any provider call", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "nan", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "nan", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   const plan = { ...tenant.plan, estimatedCost: { ...tenant.plan.estimatedCost, totalEstimatedUsd: Number.NaN } };
   const injected = injectProvider("google_omni", async (spec) => job(spec, "QUEUED", { providerJobId: "never" }));
   try {
@@ -296,7 +296,7 @@ test("zero estimate is accepted only when the registry establishes the provider 
 
 test("artifact finalization failure after a completed submission records its error in the real production_jobs schema", async () => {
   const sql = await getSql();
-  const tenant = await createTenantFixture(sql, "finalize", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "finalize", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   // COMPLETED with no bytes and no artifact URI: the finalizer returns WAITING_FOR_ARTIFACT,
   // which drives the storage-persistence failure branch of the executor.
   const injected = injectProvider("google_omni", async (spec) => job(spec, "COMPLETED", { providerJobId: "omni-1" }));

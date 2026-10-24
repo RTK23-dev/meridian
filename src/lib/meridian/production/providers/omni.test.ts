@@ -79,7 +79,7 @@ test("GeminiOmniVideoProvider submits official REST Interactions API payload wit
     assert.equal(headers["x-goog-api-key"], "test-gemini-key");
 
     const body = JSON.parse(init?.body as string);
-    assert.equal(body.model, "gemini-omni-1.1-flash");
+    assert.equal(body.model, "gemini-omni-1.1-flash-preview");
     assert.equal(typeof body.input, "string");
     assert.ok(body.input.includes("Stop scrolling!"));
     assert.equal(body.response_format.type, "video");
@@ -194,7 +194,7 @@ test("GeminiOmniVideoProvider supports image-to-video multimodal input structure
 
   const mockFetch = async (_url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(init?.body as string);
-    assert.equal(body.model, "gemini-omni-1.1-flash");
+    assert.equal(body.model, "gemini-omni-1.1-flash-preview");
     assert.ok(Array.isArray(body.input));
     // Official typed input array: image part followed by text instruction
     assert.equal(body.input[0].type, "image");
@@ -277,7 +277,7 @@ test("E2E: Production poller consumes Omni Base64 video response and materialize
 
   // A real tenant and a durable job row, as the executor leaves it while the render is in flight. The workspace has its own
   // saved production key, which the poller's job metadata leads the provider to.
-  const tenant = await createTenantFixture(sql, "omni-poll", 50, "google_omni", "gemini-omni-1.1-flash");
+  const tenant = await createTenantFixture(sql, "omni-poll", 50, "google_omni", "gemini-omni-1.1-flash-preview");
   await storeVaultCredential(sql, tenant.organizationId, "provider_config:production", { accessToken: "", apiKey: "test-gemini-key" });
   const omniProvider = new GeminiOmniVideoProvider({
     fetchImpl: mockOmniFetch as unknown as typeof fetch,
@@ -340,7 +340,7 @@ test("ModelCapabilityRegistry does not list Veo: Gemini Omni is the only Google 
   assert.equal(modelCapabilityRegistry.getModel("veo-2.0-generate-001"), undefined);
 
   // Active Omni model
-  const checkOmni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash");
+  const checkOmni = modelCapabilityRegistry.checkModelLifecycle("gemini-omni-1.1-flash-preview");
   assert.equal(checkOmni.state, "ACTIVE");
   assert.equal(checkOmni.usable, true);
 });
@@ -348,13 +348,13 @@ test("ModelCapabilityRegistry does not list Veo: Gemini Omni is the only Google 
 test("Omni task payloads include documented generation_config.video_config.task", () => {
   // 1. Text-to-video builder
   const textPayload = buildOmniTextToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "A neon storefront in Tokyo",
     aspectRatio: "9:16",
     durationSeconds: 10,
   });
 
-  assert.equal(textPayload.model, "gemini-omni-1.1-flash");
+  assert.equal(textPayload.model, "gemini-omni-1.1-flash-preview");
   assert.equal(textPayload.input, "A neon storefront in Tokyo");
   assert.deepEqual(textPayload.generation_config, {
     video_config: {
@@ -369,13 +369,13 @@ test("Omni task payloads include documented generation_config.video_config.task"
 
   // 2. Image-to-video builder
   const imagePayload = buildOmniImageToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "Animate camera zooming in on bottle",
     referenceImageUri: "https://storage.googleapis.com/assets/bottle.jpg",
     aspectRatio: "16:9",
   });
 
-  assert.equal(imagePayload.model, "gemini-omni-1.1-flash");
+  assert.equal(imagePayload.model, "gemini-omni-1.1-flash-preview");
   assert.ok(Array.isArray(imagePayload.input));
   assert.equal((imagePayload.input as any[])[0].type, "image");
   assert.equal((imagePayload.input as any[])[0].uri, "https://storage.googleapis.com/assets/bottle.jpg");
@@ -398,15 +398,15 @@ test("Omni task payloads include documented generation_config.video_config.task"
 
 test("Omni payload builder rejects durations outside 3-10 seconds", () => {
   assert.throws(
-    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", durationSeconds: 15 }),
+    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash-preview", prompt: "test", durationSeconds: 15 }),
     /Gemini Omni supports video durations between 3 and 10 seconds/
   );
   assert.throws(
-    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", durationSeconds: 2 }),
+    () => buildOmniTextToVideoPayload({ model: "gemini-omni-1.1-flash-preview", prompt: "test", durationSeconds: 2 }),
     /Gemini Omni supports video durations between 3 and 10 seconds/
   );
   assert.throws(
-    () => buildOmniImageToVideoPayload({ model: "gemini-omni-1.1-flash", prompt: "test", referenceImageUri: "https://example.com/img.jpg", durationSeconds: 30 }),
+    () => buildOmniImageToVideoPayload({ model: "gemini-omni-1.1-flash-preview", prompt: "test", referenceImageUri: "https://example.com/img.jpg", durationSeconds: 30 }),
     /Gemini Omni supports video durations between 3 and 10 seconds/
   );
 });

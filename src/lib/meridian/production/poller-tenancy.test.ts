@@ -30,9 +30,9 @@ test("production poller: one pass polls each tenant's job with that tenant's own
   try {
     const sql = await getSql();
     const tag = randomUUID().slice(0, 8);
-    const tenantA = await createTenantFixture(sql, `keys-a-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash");
-    const tenantB = await createTenantFixture(sql, `keys-b-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash");
-    const tenantC = await createTenantFixture(sql, `keys-c-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash");
+    const tenantA = await createTenantFixture(sql, `keys-a-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash-preview");
+    const tenantB = await createTenantFixture(sql, `keys-b-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash-preview");
+    const tenantC = await createTenantFixture(sql, `keys-c-${tag}`, 50, "google_omni", "gemini-omni-1.1-flash-preview");
 
     await storeVaultCredential(sql, tenantA.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: KEY_A, customFields: {} });
     await storeVaultCredential(sql, tenantB.organizationId, CREDENTIAL_VAULT_TYPE.production, { accessToken: "", apiKey: KEY_B, customFields: {} });

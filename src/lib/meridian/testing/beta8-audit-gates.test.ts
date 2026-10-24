@@ -28,7 +28,7 @@ test("Gate 1: Canonical Provider Config Resolver (P0.1)", () => {
   });
   assert.equal(resolved.apiKey, "canonical-key-9999");
   assert.equal(resolved.keyFingerprint, "...9999");
-  assert.equal(resolved.omniModel, "gemini-omni-1.1-flash");
+  assert.equal(resolved.omniModel, "gemini-omni-1.1-flash-preview");
   assert.equal(resolved.imageModel, "gemini-nano-banana-2.1");
 
   // 2. Resolves legacy alias when canonical is unset
@@ -76,7 +76,7 @@ test("Gate 2: Google Image REST Response Normalizer (P0.2)", () => {
 test("Gate 3: Gemini Omni Request Payloads & Image-to-Video (P0.3)", () => {
   // Text-to-video payload
   const t2v = buildOmniTextToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "An urban skate park at dusk",
     aspectRatio: "9:16",
     durationSeconds: 5,
@@ -87,7 +87,7 @@ test("Gate 3: Gemini Omni Request Payloads & Image-to-Video (P0.3)", () => {
 
   // Image-to-video payload
   const i2v = buildOmniImageToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "Product rotates 360 degrees",
     referenceImageUri: "https://example.com/shoe.png",
     aspectRatio: "16:9",

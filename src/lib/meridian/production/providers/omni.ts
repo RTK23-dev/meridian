@@ -4,7 +4,7 @@
  * Implements Google's Gemini Omni video generation/editing via the official
  * Gemini Interactions API REST contract:
  * POST https://generativelanguage.googleapis.com/v1beta/interactions
- * Model: gemini-omni-1.1-flash
+ * Model: gemini-omni-1.1-flash-preview
  *
  * Request contract:
  * - Text-to-video: { model, input: string, response_format: { type: "video", aspect_ratio: "9:16" } }

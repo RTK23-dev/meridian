@@ -53,16 +53,16 @@ test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () =
 
   // 2. Payload builder enforces 3s to 10s duration constraint
   const validPayload = buildOmniTextToVideoPayload({
-    model: "gemini-omni-1.1-flash",
+    model: "gemini-omni-1.1-flash-preview",
     prompt: "A quick product demo",
     durationSeconds: 5,
     aspectRatio: "9:16",
   });
-  assert.equal(validPayload.model, "gemini-omni-1.1-flash");
+  assert.equal(validPayload.model, "gemini-omni-1.1-flash-preview");
 
   assert.throws(
     () => buildOmniTextToVideoPayload({
-      model: "gemini-omni-1.1-flash",
+      model: "gemini-omni-1.1-flash-preview",
       prompt: "Too long",
       durationSeconds: 25,
     }),
@@ -72,7 +72,7 @@ test("GeminiOmniVideoProvider Contract & Duration Limits Validation", async () =
 
   assert.throws(
     () => buildOmniTextToVideoPayload({
-      model: "gemini-omni-1.1-flash",
+      model: "gemini-omni-1.1-flash-preview",
       prompt: "Too short",
       durationSeconds: 2,
     }),

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { getSql } from "../../db.ts";
 import { createTenantFixture, execute, injectProvider, job } from "../testing/production-fixtures.ts";
 
-const MODEL = "gemini-omni-1.1-flash";
+const MODEL = "gemini-omni-1.1-flash-preview";
 
 test("a video whose provider declares no price is refused before any job row or provider call, and never stored as a zero-cost job", async () => {
   const sql = await getSql();
