@@ -125,6 +125,15 @@ export function createSessionInput(input: unknown): { organizationId: string; br
   return { organizationId: idOf(body.organizationId, "workspace"), brandId: optionalId(body.brandId, "brand"), title };
 }
 
+export function opportunityBriefInput(input: unknown): { organizationId: string; brandId: string; opportunityId: string } {
+  const body = fields(input);
+  return {
+    organizationId: idOf(body.organizationId, "workspace"),
+    brandId: idOf(body.brandId, "brand"),
+    opportunityId: idOf(body.opportunityId, "idea"),
+  };
+}
+
 export function messageInput(input: unknown): { sessionId: string; text: string; beatRole: ScriptRole | null } {
   const body = fields(input);
   const raw = typeof body.text === "string" ? body.text : "";

@@ -31,6 +31,7 @@
 // No key is read here: the gateway takes its credentials from Meridian's resolver, and the transport is the gateway's own.
 
 import { createAssetRouter, type AsyncAssetRouter, type RouterSettings } from "../assets/router.ts";
+import { videoDnaLookupOf } from "./video-dna-cache.ts";
 import type { MediaStore } from "../assets/adapter.ts";
 import { isVideoClass, type VideoProfile } from "../assets/providers/openrouterVideo.ts";
 import { adapterFor, stockProviderFor } from "../assets/providers/index.ts";
@@ -40,7 +41,7 @@ import { createAnalyzeReferenceHandler, type ReferencePortsFor } from "./handler
 import { createVoiceHandler, type VoicePortsFor, type VoiceStagePorts } from "./handlers/voice.ts";
 import { createWriteScriptHandler, type WriteScriptPorts } from "./handlers/write-script.ts";
 import { productionAnalysisPortsFor, productionReferenceSource, productionVoicePortsFor } from "./production-stages.ts";
-import { engineReferenceStore } from "../../lib/meridian/storage/engine-reference-store.ts";
+import { engineReferenceStore, type EngineReferenceStore } from "../../lib/meridian/storage/engine-reference-store.ts";
 import type { ReferencePorts } from "../analyze/reference.ts";
 import { analysisReadings } from "../analyze/frameReader.ts";
 import { deepgramBillReader, deepgramForRoute, deepgramProjects, speechPortsOf, type MediaFunctionsMode, type PictureClient, type SpeechPorts } from "../media/index.ts";
@@ -534,6 +535,8 @@ export type ProductionDeps = {
    * runs the ffmpeg handlers in this process, and "http" calls the functions through the gateway.
    */
   mediaFunctionsMode?: MediaFunctionsMode;
+  /** The reference store analyze_reference reads an uploaded reference video from. Production passes none (Meridian's store). */
+  referenceStore?: EngineReferenceStore;
 };
 
 /**
@@ -579,10 +582,14 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     videoProfiles: videoProfileLoader({ gateway }),
     catalog: modelCatalogCache({ gateway }),
     shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
+    // check_take reads a take's black frames, flicker and motion from the same media functions (gate-measures.ts). Not connected, each
+    // reads as missing evidence and escalates; it is never read as a pass.
+    detectors: media,
   };
   // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so
   // they are built from the composition, lazily: each call reads the composition's gateway, clock and stores for its own job.
-  const referenceSource = productionReferenceSource({ sql, store: engineReferenceStore(sql) });
+  // The reference store reads an uploaded reference video under its brand. Production: Meridian's store. A test passes its own (ProductionDeps).
+  const referenceSource = productionReferenceSource({ sql, store: deps.referenceStore ?? engineReferenceStore(sql) });
   const composition: EngineComposition = {
     sql,
     gateway,
@@ -597,6 +604,9 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
     postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
+    // Intake's VideoDNA lookup (Bible 6.1 step 5). Without it the request gate reads "the lookup has not run" and every production request fails
+    // at intake; with it, a stored analysis of the same reference is the hit and no stored analysis is a miss (video-dna-cache.ts).
+    lookupDna: videoDnaLookupOf(sql),
     shotPorts,
     speech,
     analysis: productionAnalysisPortsFor({

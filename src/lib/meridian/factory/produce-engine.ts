@@ -170,12 +170,16 @@ async function startEngineVideo(sql: Sql, input: ProduceInput, scope: Scope, req
   const label = req.label;
   const requestId = engineRequestIdFor(req.jobId, req.plan.createdAt);
 
-  const readiness = await engineReadiness(scope.organizationId, input.engine?.readiness ?? (await productionReadinessPorts(sql)), { variantCount: 0 });
+  const fields = input.engine?.fields?.({ plan: req.plan, deliverableId: req.planDeliverableId, variantId: req.variant.id }) ?? {};
+  // A request with a reference video is analysed from its transcript, so speech-to-text must be connected for it (readiness checks it).
+  const readiness = await engineReadiness(scope.organizationId, input.engine?.readiness ?? (await productionReadinessPorts(sql)), {
+    variantCount: 0,
+    speech: fields.referenceVideo !== undefined,
+  });
   if (readiness.status === "not_connected") {
     return { kind: "stop", reason: `The video engine is not connected, so no request was sent for ${label}. ${readiness.reasons.join(" ")}` };
   }
 
-  const fields = input.engine?.fields?.({ plan: req.plan, deliverableId: req.planDeliverableId, variantId: req.variant.id }) ?? {};
   const mapped = mapVideoToEngineRequest({
     organizationId: scope.organizationId,
     requestId,

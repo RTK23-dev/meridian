@@ -5,6 +5,7 @@ import {
   attachSourceInput,
   brandHookInput,
   createSessionInput,
+  opportunityBriefInput,
   messageInput,
   remakeShotInput,
   clipInput,
@@ -18,7 +19,7 @@ import {
   workspaceInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
-import { attachSource, brandEconomics, brandHookHistory, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -135,6 +136,12 @@ export const createContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => createSessionInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createSession(await getSql(), context.userId, data));
+
+/** A draft session made from one opportunity, with its brief as the first message (service.ts briefFromOpportunity). Admins only. */
+export const createContentFactoryBriefFromOpportunity = createServerFn({ method: "POST" })
+  .validator((input: unknown) => opportunityBriefInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => briefFromOpportunity(await getSql(), context.userId, data));
 
 export const getContentFactorySession = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
