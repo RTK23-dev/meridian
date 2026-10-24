@@ -231,3 +231,32 @@ export function settingsInput(input: unknown): {
     keepGenes: keep as KeepableGene[],
   };
 }
+
+/** A paused-ad request: the variation, the ad set the person chose and confirmed again, the Page, the link and the ad text. */
+export function pausedAdInput(input: unknown): {
+  sessionId: string;
+  runId: string;
+  variantKey: string;
+  adSetId: string;
+  confirmAdSetId: string;
+  pageId: string;
+  destinationUrl: string;
+  message: string;
+} {
+  const body = fields(input);
+  return {
+    sessionId: idOf(body.sessionId, "session"),
+    runId: idOf(body.runId, "run"),
+    variantKey: idOf(body.variantKey, "variation"),
+    adSetId: text(body.adSetId),
+    confirmAdSetId: text(body.confirmAdSetId),
+    pageId: text(body.pageId),
+    destinationUrl: text(body.destinationUrl),
+    message: typeof body.message === "string" ? body.message : "",
+  };
+}
+
+/** The ad sets and Pages the paused-ad form offers: only the session is needed. */
+export function pausedAdChoicesInput(input: unknown): { sessionId: string } {
+  return { sessionId: idOf(fields(input).sessionId, "session") };
+}

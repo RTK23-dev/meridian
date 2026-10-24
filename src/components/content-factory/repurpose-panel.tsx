@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
-import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant } from "@/lib/meridian/content-factory/actions";
+import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd } from "@/lib/meridian/content-factory/actions";
 import type { EngineMediaLinkResult } from "@/lib/meridian/storage/engine-media-link";
 import type { RepurposeReviewState } from "@/lib/meridian/content-factory/repurpose-review";
+import type { CreatePausedAdOutcome, PausedAdChoices } from "@/lib/meridian/content-factory/repurpose-paused-ad";
 import type { RepurposeRunView, RepurposeVariationRow } from "@/lib/meridian/content-factory/repurpose";
 import {
   CATEGORY_LABELS,
@@ -277,6 +278,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                       {variation.status === "rendered" ? <p className="text-xs text-muted">{brandFitLine(variation.decision.outcome)}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <UploadToMeta sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
+                      {variation.status === "rendered" ? <PausedAd sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendering" ? <CheckRenderer sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? (
                         <ReviewVariation
@@ -337,6 +339,102 @@ function UploadToMeta({ sessionId, runId, variantKey }: { sessionId: string; run
         Upload to the Meta ad account
       </Button>
       {message !== null ? <p role="status" className="text-sm text-muted">{message}</p> : null}
+    </div>
+  );
+}
+
+/** The outcome of a paused-ad request, in words. A paused ad is not an active one, and the message says so. */
+function pausedAdMessage(outcome: CreatePausedAdOutcome): string {
+  if (outcome.status === "created_paused") return "Created a PAUSED ad. It is not active, and nothing has been switched on.";
+  if (outcome.status === "already_created") return "This variation already has a paused ad in this ad account. Nothing was created again.";
+  if (outcome.status === "blocked") return outcome.reason;
+  if (outcome.status === "uncertain") return "Meta did not confirm the create. Press the button again: Meridian looks for the ad by name before it creates another.";
+  if (outcome.status === "not_paused") return `Meta reports the ad as ${outcome.verifiedStatus}, not PAUSED. It is not recorded as paused.`;
+  return outcome.error;
+}
+
+/**
+ * Creates one PAUSED Meta ad from this uploaded variation, inside an ad set the person chooses and then chooses again to confirm. The
+ * server checks everything again. Nothing is activated, and the page says so before the button is pressed.
+ */
+function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: string; variantKey: string }) {
+  const [choices, setChoices] = useState<PausedAdChoices | null>(null);
+  const [adSetId, setAdSetId] = useState("");
+  const [confirmAdSetId, setConfirmAdSetId] = useState("");
+  const [pageId, setPageId] = useState("");
+  const [destinationUrl, setDestinationUrl] = useState("");
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<string | null>(null);
+  async function load() {
+    setBusy(true);
+    try {
+      setChoices(await listContentFactoryPausedAdChoices({ data: { sessionId } }));
+    } catch (error) {
+      setChoices({ status: "failed", error: errorText(error) });
+    } finally {
+      setBusy(false);
+    }
+  }
+  const ready = adSetId !== "" && confirmAdSetId === adSetId && pageId !== "" && destinationUrl.trim() !== "";
+  async function create() {
+    setBusy(true);
+    try {
+      setNote(pausedAdMessage(await createContentFactoryPausedAd({ data: { sessionId, runId, variantKey, adSetId, confirmAdSetId, pageId, destinationUrl, message } })));
+    } catch (error) {
+      setNote(errorText(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      <p className="text-sm text-muted">
+        Create a paused Meta ad from this video. The ad is paused and nothing is switched on. Choose the ad set, then choose it again to confirm.
+      </p>
+      <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void load()}>
+        Load ad sets and Pages
+      </Button>
+      {choices?.status === "blocked" || choices?.status === "failed" ? <p role="status" className="text-sm text-muted">{choices.status === "blocked" ? choices.reason : choices.error}</p> : null}
+      {choices?.status === "listed" ? (
+        <div className="grid gap-2 sm:grid-cols-2">
+          <label className="space-y-1 text-sm">
+            Ad set
+            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={adSetId} onChange={(event) => setAdSetId(event.target.value)}>
+              <option value="">Choose an ad set</option>
+              {choices.adSets.map((set) => <option key={set.id} value={set.id}>{set.name} ({set.status})</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            Confirm the ad set
+            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={confirmAdSetId} onChange={(event) => setConfirmAdSetId(event.target.value)}>
+              <option value="">Choose the same ad set again</option>
+              {choices.adSets.map((set) => <option key={set.id} value={set.id}>{set.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            Facebook Page
+            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
+              <option value="">Choose a Page</option>
+              {choices.pages.map((page) => <option key={page.id} value={page.id}>{page.name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            Destination link (https)
+            <Input value={destinationUrl} onChange={(event) => setDestinationUrl(event.target.value)} placeholder="https://" />
+          </label>
+          <label className="space-y-1 text-sm sm:col-span-2">
+            Ad text
+            <textarea className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" rows={3} value={message} onChange={(event) => setMessage(event.target.value)} />
+          </label>
+          <div className="sm:col-span-2">
+            <Button type="button" loading={busy} disabled={busy || !ready} onClick={() => void create()}>
+              Create a paused ad in this ad set
+            </Button>
+          </div>
+        </div>
+      ) : null}
+      {note !== null ? <p role="status" className="text-sm text-muted">{note}</p> : null}
     </div>
   );
 }

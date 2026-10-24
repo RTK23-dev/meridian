@@ -9,6 +9,8 @@ import {
   messageInput,
   repurposeInput,
   repurposeOutputInput,
+  pausedAdChoicesInput,
+  pausedAdInput,
   repurposeReviewInput,
   repurposeRunInput,
   remakeShotInput,
@@ -27,6 +29,7 @@ import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpo
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
 import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
+import { createRepurposedPausedAd, listPausedAdChoices } from "./repurpose-paused-ad.ts";
 import { productionRepurposeRenderPort, productionRepurposeStatusPoll } from "./repurpose-production.ts";
 import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
@@ -197,6 +200,23 @@ export const getContentFactoryRepurposeOutput = createServerFn({ method: "POST" 
   .validator((input: unknown) => repurposeOutputInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => repurposeOutputLink(await getSql(), context.userId, data));
+
+/**
+ * The ad sets and Pages a paused Meta ad can be created under, for the brand's saved accounts. Read only. Admins only.
+ */
+export const listContentFactoryPausedAdChoices = createServerFn({ method: "POST" })
+  .validator((input: unknown) => pausedAdChoicesInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => listPausedAdChoices(await getSql(), context.userId, data, { env: process.env }));
+
+/**
+ * Creates one PAUSED Meta ad from an uploaded variation, inside the ad set the person chose and confirmed again. Nothing is activated.
+ * Admins only. A request that fails any check sends nothing and says why.
+ */
+export const createContentFactoryPausedAd = createServerFn({ method: "POST" })
+  .validator((input: unknown) => pausedAdInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => createRepurposedPausedAd(await getSql(), context.userId, data, { env: process.env }));
 
 /**
  * Uploads one approved, rendered repurposed variation to the brand's Meta ad account and records the upload only when Meta returns its

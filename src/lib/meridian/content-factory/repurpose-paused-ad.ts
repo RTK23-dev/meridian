@@ -9,7 +9,7 @@ import type { Sql } from "../learning/store.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
 import { providerAccessToken } from "../providers/access-token.ts";
-import { createMetaPausedAd, type PausedAdOutcome } from "../providers/meta-paused-ad.ts";
+import { createMetaPausedAd, listMetaAdSets, type MetaAdSetOption, type PausedAdOutcome } from "../providers/meta-paused-ad.ts";
 import { sessionAccess } from "./service.ts";
 import { repurposePublishReadiness } from "./repurpose-publish.ts";
 import { sqlRepurposeUploadStore } from "./repurpose-upload.ts";
@@ -229,4 +229,56 @@ export async function createRepurposedPausedAd(
   if (outcome.status === "uncertain") return { status: "uncertain", stage: outcome.stage, error: outcome.error };
   if (outcome.status === "not_paused") return { status: "not_paused", adId: outcome.adId, verifiedStatus: outcome.verifiedStatus };
   return { status: "failed", error: outcome.error };
+}
+
+export type PausedAdChoices =
+  | { status: "listed"; adAccountId: string; adSets: MetaAdSetOption[]; pages: { id: string; name: string }[] }
+  | { status: "blocked"; reason: string }
+  | { status: "failed"; error: string };
+
+/**
+ * What the paused-ad form offers: the ad sets of the brand's saved ad account, and the Pages saved for the brand. A read only. Nothing is
+ * created, and a list that cannot be read says so instead of showing an empty choice.
+ */
+export async function listPausedAdChoices(
+  sql: Sql,
+  userId: string,
+  input: { sessionId: string },
+  options: { env: { TOKEN_ENCRYPTION_KEY?: string }; transport?: Transport },
+): Promise<PausedAdChoices> {
+  const session = await sessionAccess(sql, userId, input.sessionId);
+  if (!session.brand_id) return { status: "blocked", reason: "This session has no brand, so no ad account can belong to it." };
+  const organizationId = session.organization_id;
+  const brandId = session.brand_id;
+  const adAccountId = await savedAdAccountId(sql, organizationId, brandId, AD_ACCOUNT_PLATFORM.meta);
+  if (!adAccountId) return { status: "blocked", reason: "No Meta ad account is saved for this brand. Save one on Connected accounts first." };
+  const pages = await sql<{ external_account_id: string; name: string }>`
+    select external_account_id, name from platform_accounts
+    where organization_id = ${organizationId} and brand_id = ${brandId} and account_type = 'social_page'
+      and external_account_id is not null and external_account_id <> ''
+    order by name asc
+  `;
+  const secrets = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
+    select sealed_token, sealed_refresh, expires_at from provider_secrets
+    where organization_id = ${organizationId} and provider = 'meta'
+    limit 1
+  `;
+  const opened = await providerAccessToken(sql, {
+    organizationId,
+    provider: "meta",
+    sealed: secrets[0]?.sealed_token ?? "",
+    encryptionKey: options.env.TOKEN_ENCRYPTION_KEY ?? "",
+    env: options.env,
+    expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,
+    hasRefresh: (secrets[0]?.sealed_refresh ?? "").trim() !== "",
+  });
+  if (!("token" in opened)) return { status: "blocked", reason: "Meta is not connected for this brand. Nothing was read." };
+  const listed = await listMetaAdSets({ accessToken: opened.token, adAccountId }, adAccountId, options.transport ?? liveTransport());
+  if (!listed.ok) return { status: "failed", error: listed.error };
+  return {
+    status: "listed",
+    adAccountId,
+    adSets: listed.adSets,
+    pages: pages.map((row) => ({ id: row.external_account_id, name: row.name })),
+  };
 }
