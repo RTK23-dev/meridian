@@ -7,7 +7,7 @@
 import type { Sql } from "../learning/store.ts";
 import { DECISION_ENGINE_LABELS, createDecisionEngines, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
-import { OPENROUTER_DECISIONS_MODEL_ENV, resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
+import { resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
 import { readOpenRouterModel } from "./openrouter-settings.ts";
 import { DECISION_ENGINE_IDS, type DecisionCapabilities, type DecisionEngineHealth, type DecisionEngineId } from "./types.ts";
 
@@ -35,7 +35,7 @@ async function openrouterModelFor(sql: Sql | undefined, organizationId: string |
       return { model: "", source: "workspace", reason: "The workspace's OpenRouter decision model could not be read." };
     }
   }
-  const resolved = resolveOpenRouterDecisionModel({ workspace, deployment: process.env[OPENROUTER_DECISIONS_MODEL_ENV] });
+  const resolved = resolveOpenRouterDecisionModel({ workspace, deployment: process.env.OPENROUTER_DECISIONS_MODEL });
   return resolved.ok ? { model: resolved.model, source: resolved.source } : { model: resolved.model, source: resolved.source, reason: resolved.reason };
 }
 
