@@ -75,7 +75,7 @@ export function OpenRouterDecisionControls({
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
       <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-[16rem] flex-1">
+        <div className="w-full sm:min-w-[16rem] sm:flex-1">
           <Input
             label="Decision model ID"
             value={draft}
