@@ -20,6 +20,7 @@
  * Scope vocabulary. A scope names evidence items (`GateEvidence.name`). The scope name `IMAGE_SCOPE` stands for every image
  * item. A question's requirements (`spec.evidenceRequirements`) are met only by the names in its own scope.
  */
+import { engineAcceptsImages } from "./capabilities.ts";
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
@@ -261,8 +262,8 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       failureKind: "selection_unavailable",
     });
   }
-  const engineAcceptsImages = selection.engineId === "openai-decisions";
-  const images = engineAcceptsImages ? (input.images ?? []) : [];
+  const engineTakesImages = engineAcceptsImages(selection.engineId);
+  const images = engineTakesImages ? (input.images ?? []) : [];
 
   // 2b. The brand's calibrated thresholds: the newest stored report for each question version, read for this brand only. A question
   //     with no calibrated report keeps its registry policy. A read that fails keeps every policy as it was, so nothing is approved on
@@ -313,7 +314,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       continue;
     }
     if (question.needsImage) {
-      if (!engineAcceptsImages) {
+      if (!engineTakesImages) {
         localAnswers[question.key] = refusalAnswer(
           question,
           selection.engineId,

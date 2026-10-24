@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
@@ -141,6 +142,7 @@ function stubEngine(id: DecisionEngineId, options: { respond?: Responder; failur
 const engineFor = (jev: ReturnType<typeof stubEngine>, openai: ReturnType<typeof stubEngine>) => ({
   jev: jev.engine,
   "openai-decisions": openai.engine,
+  "openrouter-decisions": unselectedOpenRouterEngine(),
 });
 
 const healthyAnswers: Responder = (key, spec) => {

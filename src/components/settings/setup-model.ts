@@ -63,6 +63,7 @@ export type SetupRow = {
 export type SetupEngines = {
   active: { engineId: string; source: "workspace" | "deployment" | "default"; invalidDeploymentValue?: string };
   engines: ReadonlyArray<{ id: string; label: string; health: { status: string; message?: string } }>;
+  openrouterModel?: { model: string; source: "workspace" | "deployment" | "default"; reason?: string };
 };
 
 export type SetupInput = {

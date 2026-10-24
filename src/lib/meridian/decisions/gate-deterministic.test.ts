@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
@@ -149,7 +150,7 @@ const baseInput = (overrides: Partial<Parameters<typeof runEngineGate>[0]> = {})
       questions: [{ key: "copy", spec: COPY_CHECK, needsImage: false, evidenceScope: ["copy"] }] as GateQuestion[],
       evidence: [COPY],
       selection: selected("jev"),
-      engines: { jev: jev.engine, "openai-decisions": openai.engine },
+      engines: { jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": unselectedOpenRouterEngine() },
       ...overrides,
     } satisfies Parameters<typeof runEngineGate>[0],
   };
@@ -269,7 +270,7 @@ test("when the workspace engine cannot be read, no engine is called, the subject
     description: "Test creative.",
     questions: [{ key: "copy", spec: COPY_CHECK, needsImage: false, evidenceScope: ["copy"] }],
     evidence: [COPY],
-    engines: { jev: jev.engine, "openai-decisions": openai.engine },
+    engines: { jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": unselectedOpenRouterEngine() },
   });
   assert.equal(totalCalls(jev, openai), 0);
   assert.equal(result.action, "HUMAN_REVIEW");

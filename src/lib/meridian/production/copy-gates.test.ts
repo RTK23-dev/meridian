@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { copyClaimRejections, prohibitedClaimRejection, PROHIBITED_CLAIM_RULE, UNSUPPORTED_CLAIM_RULE } from "../decisions/deterministic.ts";
@@ -102,7 +103,7 @@ test("a copy rejection passed to the shared gate decides with zero engine calls"
     evidence: [{ kind: "text", name: "copy", source: "test", content: { text: "Acme Cleanser is a guaranteed fix." } }],
     deterministicRejections: copyClaimRejections(evidence),
     selection: { engineId: "jev", source: "workspace" },
-    engines: { jev: throwingEngine("jev"), "openai-decisions": throwingEngine("openai-decisions") },
+    engines: { jev: throwingEngine("jev"), "openai-decisions": throwingEngine("openai-decisions"), "openrouter-decisions": unselectedOpenRouterEngine() },
   });
   assert.equal(result.action, "REJECT");
   assert.equal(result.engineCalled, false);

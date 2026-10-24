@@ -84,8 +84,8 @@ export function stubEngine(id: DecisionEngineId, options: { respond?: StubRespon
     capabilities: () => ({
       engineId: id,
       questionKinds: ["predicate", "choice", "score"],
-      inputModalities: id === "openai-decisions" ? ["text", "image"] : ["text"],
-      maxImages: id === "openai-decisions" ? 128 : 0,
+      inputModalities: id === "jev" ? ["text"] : ["text", "image"],
+      maxImages: id === "openai-decisions" ? 128 : id === "openrouter-decisions" ? 8 : 0,
       maxImageBytes: 20 * 1024 * 1024,
       imageMimeTypes: [],
       batchQuestions: true,
@@ -131,7 +131,8 @@ export function stubEngine(id: DecisionEngineId, options: { respond?: StubRespon
 export const registryWith = (
   jev: ReturnType<typeof stubEngine>,
   openai: ReturnType<typeof stubEngine>,
-): DecisionEngineRegistry => ({ jev: jev.engine, "openai-decisions": openai.engine });
+  openrouter: ReturnType<typeof stubEngine> = stubEngine("openrouter-decisions"),
+): DecisionEngineRegistry => ({ jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": openrouter.engine });
 
 /**
  * Creates a brief through the real path: the shared gate judges it, and `createGatedBrief` writes the decision and the brief

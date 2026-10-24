@@ -1,3 +1,4 @@
+import { engineAcceptsImages } from "../decisions/capabilities.ts";
 import { getSql } from "../../db.ts";
 import { assertRole, isRole, type Role } from "../access.ts";
 import { parseFrame } from "../brief/frame.ts";
@@ -1388,7 +1389,7 @@ export async function executeApprovedCreativePlan(
       const selection = await resolveActiveEngine(sql, access.organizationId);
       // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
       const perceptionCandidate = selectPerceptionProvider().provider;
-      const perceptionForJudgment = selection.engineId !== "openai-decisions" &&
+      const perceptionForJudgment = !engineAcceptsImages(selection.engineId) &&
         (await perceptionReadiness(sql, access.organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
       const facts = factsFor(loaded, {
         kind: "video",
@@ -1422,7 +1423,7 @@ export async function executeApprovedCreativePlan(
         selection,
         perception: perceptionForJudgment,
         visual: await videoVisualEvidence(sql, access.organizationId, brandId, asText(video.storage_key), videoDurationMs, {
-          sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+          sample: engineAcceptsImages(selection.engineId) || perceptionForJudgment !== null,
           sampled: videoFrames,
         }),
       });

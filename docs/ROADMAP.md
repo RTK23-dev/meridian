@@ -136,4 +136,5 @@ The Factory's open items are listed in [FACTORY.md](FACTORY.md#not-built-yet). T
 ## Not verified
 
 - **OpenAI Decisions default model** `gpt-6-luna` is listed in OpenAI's official changelog, released 2026-09-22. Confirm it on the account before a production key is set. `OPENAI_DECISIONS_MODEL` overrides it.
+- **OpenRouter Decisions** (`openrouter-decisions`) is verified against fixtures only. Its live Decisions request, the response shape against the live API and its reported cost are not yet recorded. A live connection test on a real OpenRouter key, with its recorded check, is the owner's to run. The default model is `typesafe/jev-1.14`, pinned.
 - **Brand onboarding in a browser.** Sign-up, the 26 fields, reload resume and completion pass 19 browser checks. Not exercised: the viewer role, mobile width, dark mode and uploads.

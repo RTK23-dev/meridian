@@ -7,6 +7,7 @@
  *
  * The creative is judged once, by the same creative_qa check Studio runs on a video. A video the engine has not judged is review.
  */
+import { engineAcceptsImages } from "../decisions/capabilities.ts";
 import type { Sql } from "../learning/store.ts";
 import { loadBrandContext } from "../context/load.ts";
 import { semanticNearest } from "../embeddings/store.ts";
@@ -448,7 +449,7 @@ async function judgeFactoryVideo(
   // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
   const perceptionCandidate = selectPerceptionProvider().provider;
   const perceptionForJudgment =
-    selection.engineId !== "openai-decisions" && (await perceptionReadiness(sql, organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
+    !engineAcceptsImages(selection.engineId) && (await perceptionReadiness(sql, organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
   const facts = factsFor(loaded, {
     kind: "video",
     productName: args.productName,
@@ -481,7 +482,7 @@ async function judgeFactoryVideo(
     selection,
     perception: perceptionForJudgment,
     visual: await videoVisualEvidence(sql, organizationId, brandId, video.storage_key, durationMs, {
-      sample: selection.engineId === "openai-decisions" || perceptionForJudgment !== null,
+      sample: engineAcceptsImages(selection.engineId) || perceptionForJudgment !== null,
       sampled: videoFrames,
     }),
     engines: input.engines,

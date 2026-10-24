@@ -3,6 +3,7 @@
  * injected credential and fetch) and against the OpenAI Decisions engine (the real adapter, with an injected fetch). No live
  * request is made. Keys come from credentials/fixtures.ts.
  */
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { fixedLookup } from "../credentials/fixtures.ts";
@@ -72,7 +73,7 @@ function buildEngines(options: { jev?: Mode; openai?: Mode } = {}) {
     fetchImpl: openai.fetchImpl,
     sleep: async () => {},
   });
-  return { jev, openai, registry: { jev: jevEngine, "openai-decisions": openaiEngine } as const, jevEngine, openaiEngine };
+  return { jev, openai, registry: { jev: jevEngine, "openai-decisions": openaiEngine, "openrouter-decisions": unselectedOpenRouterEngine() } as const, jevEngine, openaiEngine };
 }
 
 const withPolicy = (spec: JevQuestionSpec, policyMapping: JevQuestionSpec["policyMapping"]): JevQuestionSpec => ({ ...spec, policyMapping });
@@ -287,6 +288,7 @@ test("no fallback: a JEV engine that throws is recorded as a failure, and OpenAI
   const registry = {
     jev: new JevDecisionEngine(throwingRouter),
     "openai-decisions": new OpenAiDecisionsEngine({ config: { apiKey: "sk-fixture-openai-key-0001", model: "gpt-6-luna", maxRetries: 0 }, fetchImpl: openai.fetchImpl, sleep: async () => {} }),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   } as const;
   const result = await runEngineGate({
     organizationId: "org-parity",
