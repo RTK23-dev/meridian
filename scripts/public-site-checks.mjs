@@ -4,10 +4,22 @@
  */
 
 export const PUBLIC_SITE_ROUTES = [
-  { path: "/product", title: "Product · Meridian", keyboard: true },
-  { path: "/docs", title: "Docs · Meridian", keyboard: false },
-  { path: "/quickstart", title: "Quickstart · Meridian", keyboard: false },
+  { path: "/product", slug: "product", title: "Product · Meridian", keyboard: true },
+  { path: "/docs", slug: "docs", title: "Docs · Meridian", keyboard: false },
+  { path: "/quickstart", slug: "quickstart", title: "Quickstart · Meridian", keyboard: false },
 ];
+
+/**
+ * The signed-out front door. It is `/` with auth on: with auth off, `/` is the signed-in dashboard, so the smoke checks it only when
+ * PUBLIC_SITE_AUTH_ON=1. `mustContain` is text the front door must show: the form's heading and the links to the public pages.
+ */
+export const SIGNED_OUT_HOME_ROUTE = {
+  path: "/",
+  slug: "home",
+  title: "Welcome · Meridian",
+  keyboard: true,
+  mustContain: ["Sign in or create an account", "New to Meridian?"],
+};
 
 export const MOBILE_VIEWPORT = { width: 390, height: 844 };
 export const DESKTOP_VIEWPORT = { width: 1280, height: 800 };
@@ -23,6 +35,7 @@ export function pageFailures(observed, expected) {
   if (observed.title !== expected.title) failures.push(`title is "${observed.title}", expected "${expected.title}"`);
   if (observed.h1Count !== 1) failures.push(`has ${observed.h1Count} h1 headings, expected one`);
   if (observed.overflowPx > 0) failures.push(`scrolls sideways by ${observed.overflowPx}px at ${observed.width}px wide`);
+  for (const text of observed.missingText ?? []) failures.push(`does not show "${text}"`);
   for (const message of observed.consoleErrors ?? []) failures.push(`console error: ${message}`);
   for (const message of observed.pageErrors ?? []) failures.push(`page error: ${message}`);
   for (const violation of observed.seriousViolations ?? []) {

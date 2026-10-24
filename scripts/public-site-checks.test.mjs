@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   PUBLIC_SITE_ROUTES,
+  SIGNED_OUT_HOME_ROUTE,
   blockingViolations,
   isOwnConsoleError,
   pageFailures,
@@ -77,6 +78,11 @@ describe("the rules for one public page", () => {
     assert.equal(pageFailures(failing, expectation).length, 2);
   });
 
+  test("text the front door must show, and does not, fails", () => {
+    const failures = pageFailures(passingObservation({ missingText: ["New to Meridian?"] }), expectation);
+    assert.deepEqual(failures, ['does not show "New to Meridian?"']);
+  });
+
   test("a focused link with no visible ring fails", () => {
     assert.match(pageFailures(passingObservation({ focusRingVisible: false }), expectation).join("\n"), /no visible focus ring/);
   });
@@ -131,6 +137,22 @@ describe("the summary", () => {
     const failed = summarize([{ label: "/docs 390px", failures: ["answered 500, not 200"] }]);
     assert.equal(failed.ok, false);
     assert.deepEqual(failed.failed, [{ label: "/docs 390px", failures: ["answered 500, not 200"] }]);
+  });
+});
+
+describe("the signed-out front door the smoke test checks", () => {
+  test("the text it must show is in the source that renders it", () => {
+    const home = SIGNED_OUT_HOME_ROUTE;
+    const gate = readFileSync(`${ROOT}src/components/gate.tsx`, "utf8");
+    const publicSite = readFileSync(`${ROOT}src/components/public/public-site.tsx`, "utf8");
+    assert.ok(gate.includes('title="Sign in or create an account"'), "the Welcome screen renders the form heading");
+    assert.ok(publicSite.includes("New to Meridian?"), "the reading links under the form render the line");
+    assert.deepEqual(home.mustContain, ["Sign in or create an account", "New to Meridian?"]);
+  });
+
+  test("the front door's title is the one Welcome sets", () => {
+    assert.equal(SIGNED_OUT_HOME_ROUTE.title, "Welcome · Meridian");
+    assert.ok(readFileSync(`${ROOT}src/components/gate.tsx`, "utf8").includes('documentTitle({ page: "Welcome" })'));
   });
 });
 

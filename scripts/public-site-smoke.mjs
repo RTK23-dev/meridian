@@ -15,11 +15,15 @@ import {
   DESKTOP_VIEWPORT,
   MOBILE_VIEWPORT,
   PUBLIC_SITE_ROUTES,
+  SIGNED_OUT_HOME_ROUTE,
   blockingViolations,
   isOwnConsoleError,
   pageFailures,
   summarize,
 } from "./public-site-checks.mjs";
+
+// With auth on, `/` is the signed-out front door, and it is checked too. With auth off it is the dashboard, so it is not.
+const ROUTES = process.env.PUBLIC_SITE_AUTH_ON === "1" ? [...PUBLIC_SITE_ROUTES, SIGNED_OUT_HOME_ROUTE] : PUBLIC_SITE_ROUTES;
 
 const base = checkedUrl(process.argv[2] ?? "http://127.0.0.1:8080").replace(/\/$/, "");
 const origin = new URL(base).origin;
@@ -102,9 +106,11 @@ async function measure(browser, route, pass) {
 
   const axe = await new AxeBuilder({ page }).analyze();
   observed.seriousViolations = blockingViolations(axe.violations);
+  const bodyText = await page.locator("body").innerText();
+  observed.missingText = (route.mustContain ?? []).filter((text) => !bodyText.includes(text));
 
   if (!pass.reducedMotion && pass.name === "phone") {
-    const shot = checkedOutputPath(join(artifactsDir, `public-site${route.path.replaceAll("/", "-")}-${pass.viewport.width}.png`), [artifactsDir]);
+    const shot = checkedOutputPath(join(artifactsDir, `public-site-${route.slug}-${pass.viewport.width}.png`), [artifactsDir]);
     await page.screenshot({ path: shot, fullPage: true });
   }
 
@@ -118,7 +124,7 @@ async function measure(browser, route, pass) {
 const browser = await chromium.launch({ headless: true, executablePath: process.env.MERIDIAN_SMOKE_CHROMIUM || undefined });
 const results = [];
 try {
-  for (const route of PUBLIC_SITE_ROUTES) {
+  for (const route of ROUTES) {
     for (const pass of PASSES) {
       results.push(await measure(browser, route, pass));
     }
