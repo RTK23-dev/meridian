@@ -192,6 +192,9 @@ try {
   await publishDialog.getByRole("button", { name: /^Publish to \d+ destination/ }).click();
   await page.locator("code").filter({ hasText: /^test:/ }).first().waitFor();
   await page.keyboard.press("Escape");
+  // The learning panel reads the brand's stored publications after the studio refetch that publishing triggers. Wait for that row, so the
+  // record button is used only once the stored publication is the thing it reads.
+  await page.getByText("Test publication · publisher ID").first().waitFor({ timeout: 30000 });
   await page.getByRole("button", { name: "Record test-provider performance and learn" }).click();
   await page.getByText(/angle=offer:/).first().waitFor({ timeout: 30000 });
   await page.getByRole("tab", { name: "2. Brief" }).click();
