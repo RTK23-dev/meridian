@@ -17,6 +17,7 @@ import { readStartedHooks } from "./hook-history-store.ts";
 import { economicsOf, type BrandEconomics } from "./economics.ts";
 import { readBrandLedger, readBrandRuns } from "./economics-store.ts";
 import { approvalProblem, approvalStateFor, isApprovalDecision, publishStateOf, type ApprovalRecord, type ApprovalState, type PublishState } from "./approval.ts";
+import { rightsGate, type FileReference, type RightsRecordFacts } from "./governance.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -661,6 +662,37 @@ async function requestDelivered(sql: Sql, organizationId: string, requestId: str
   return rows[0]?.status === "delivered";
 }
 
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function dateString(value: unknown): string {
+  return value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+}
+
+/** The stored files a session's video was made from. Each one needs a rights record before the video can be approved. */
+async function storedFilesOf(sql: Sql, organizationId: string, sessionId: string): Promise<FileReference[]> {
+  const rows = await sql<{ id: string; file_name: string | null }>`
+    select id, file_name from content_factory_attachments
+    where organization_id = ${organizationId} and session_id = ${sessionId} and kind = 'file'
+  `;
+  return rows.map((row) => ({ attachmentId: row.id, fileName: row.file_name ?? "an unnamed file" }));
+}
+
+/** The rights records of a brand that name a stored file. A record with an end date, or a revocation, is read as it stands. */
+async function rightsRecordsOf(sql: Sql, organizationId: string, brandId: string | null): Promise<RightsRecordFacts[]> {
+  if (brandId === null) return [];
+  const rows = await sql<{ attachment_id: string | null; valid_until: unknown; revoked_at: unknown }>`
+    select attachment_id, valid_until, revoked_at from rights_records
+    where organization_id = ${organizationId} and brand_id = ${brandId} and attachment_id is not null
+  `;
+  return rows.map((row) => ({
+    attachmentId: row.attachment_id,
+    validUntil: row.valid_until === null || row.valid_until === undefined ? null : dateString(row.valid_until),
+    revoked: row.revoked_at !== null && row.revoked_at !== undefined,
+  }));
+}
+
 /** The approval state of a session's video. Admins of the session's workspace only. */
 export async function deliveryApprovalOf(sql: Sql, userId: string, input: { sessionId: string }): Promise<DeliveryApproval> {
   const row = await sessionAccess(sql, userId, input.sessionId);
@@ -697,6 +729,14 @@ export async function recordDeliveryApproval(sql: Sql, userId: string, input: { 
     }
     const current = approvalStateFor(await approvalRecords(tx, row.organization_id, row.id), row.engine_request_id);
     if (current.status === input.decision) throw new Error(`This video is already ${input.decision}.`);
+    // The rights gate blocks an approval until every file the video was made from has a valid rights record (governance.ts). A rejection
+    // is not gated: a video that should not go out is always allowed to be turned down.
+    if (input.decision === "approved") {
+      const gate = rightsGate(await storedFilesOf(tx, row.organization_id, row.id), await rightsRecordsOf(tx, row.organization_id, row.brand_id), todayIso());
+      if (!gate.ok) {
+        throw new Error(`The approval is blocked: no valid rights record covers ${gate.missing.join(", ")}. Add the rights under Content governance, then approve.`);
+      }
+    }
     await tx`
       insert into content_factory_approvals (id, organization_id, brand_id, session_id, engine_request_id, decision, reason, actor_id)
       values (${randomUUID()}, ${row.organization_id}, ${row.brand_id}, ${row.id}, ${row.engine_request_id}, ${input.decision}, ${reason}, ${userId})

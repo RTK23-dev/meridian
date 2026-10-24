@@ -9,6 +9,7 @@ import { costLabel, type FeedCard } from "@/lib/meridian/content-factory/feed";
 import { MAX_MESSAGE_CHARS } from "@/lib/meridian/content-factory/model";
 import type { RunView } from "@/lib/meridian/content-factory/service";
 import { FlowBoard } from "./run-board";
+import { QualityScore } from "./quality-score";
 import { STATUS_LABELS } from "./status";
 
 export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void }) {
@@ -42,6 +43,7 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
       <FlowBoard sessionId={sessionId} feed={feed} onChanged={onStarted} />
       {feed.status.status === "delivered" ? <DeliveredDownload sessionId={sessionId} /> : null}
       {feed.status.status === "delivered" ? <DeliveryApproval sessionId={sessionId} /> : null}
+      {feed.status.status === "delivered" ? <QualityScore sessionId={sessionId} /> : null}
       <details className="mb-4">
         <summary className="cursor-pointer text-sm font-semibold">Step details: inputs, outputs, reasons and models</summary>
         <ol aria-label="Engine steps" className="mt-3 space-y-3">
