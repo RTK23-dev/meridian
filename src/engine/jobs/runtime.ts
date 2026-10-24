@@ -582,6 +582,9 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
     videoProfiles: videoProfileLoader({ gateway }),
     catalog: modelCatalogCache({ gateway }),
     shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
+    // check_take reads a take's black frames, flicker and motion from the same media functions (gate-measures.ts). Not connected, each
+    // reads as missing evidence and escalates; it is never read as a pass.
+    detectors: media,
   };
   // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so
   // they are built from the composition, lazily: each call reads the composition's gateway, clock and stores for its own job.
