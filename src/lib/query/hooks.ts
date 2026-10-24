@@ -33,7 +33,8 @@ import { getNotificationPreferences } from "@/lib/meridian/observability/actions
 import { qk, userScopedQueryKey } from "./keys";
 import { ACTIVE_POLL_MS, jobDetailRefetchInterval, jobsRefetchInterval } from "./polling";
 import { markAlertAcknowledged, markOpportunitiesDismissed, markReviewResolved } from "./optimistic";
-import { declineOpportunity } from "@/lib/meridian/opportunity/actions";
+import { triageOpportunity } from "@/lib/meridian/opportunity/actions";
+import type { TriageAction } from "@/lib/meridian/opportunity/triage-states";
 
 /** The user and whether the session has resolved. Queries stay disabled until both are known. */
 function useSession() {
@@ -535,13 +536,14 @@ export function useResolveReview(brandId: string) {
 
 /** Dismiss one or more opportunities. Rows show as dismissed at once and roll back if the server refuses. */
 /** Declines one opportunity with its reason. The list is refreshed when the decision is saved; a failure keeps the reason the person wrote. */
-export function useDeclineOpportunity(brandId: string) {
+export function useTriageOpportunity(brandId: string) {
   const queryClient = useQueryClient();
   const { userId } = useSession();
   const key = userScopedQueryKey(userId, qk.opportunities(brandId));
   return useMutation({
-    mutationKey: ["mutation", "opportunity.decline", brandId],
-    mutationFn: ({ opportunityId, reason }: { opportunityId: string; reason: string }) => declineOpportunity({ data: { brandId, opportunityId, reason } }),
+    mutationKey: ["mutation", "opportunity.triage", brandId],
+    mutationFn: ({ opportunityId, action, reason }: { opportunityId: string; action: TriageAction; reason: string }) =>
+      triageOpportunity({ data: { brandId, opportunityId, action, reason } }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
   });
 }

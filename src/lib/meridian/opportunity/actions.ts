@@ -12,6 +12,7 @@ import { directionReasonProblem } from "./direction-reason.ts";
 import { storedNumberOrNull } from "../decisions/stored-number.ts";
 import { priorIdeaFor, priorIdeasByFingerprint } from "./triage-memory.ts";
 import { readPriorIdeas } from "./triage-memory-store.ts";
+import { TRIAGE_ACTIONS, isDirectionAction, sourceStatusProblem, statusAfter, type TriageAction } from "./triage-states.ts";
 import {
   id,
   asText,
@@ -224,14 +225,16 @@ export async function recordOpportunityDirection(
   if (!isRole(input.actorRole) || !hasRole(input.actorRole, "member")) {
     throw new Error("Only a member or higher can decide an opportunity's direction.");
   }
-  if (input.action !== "approve" && input.action !== "decline") throw new Error("Choose approve or decline.");
+  if (!isDirectionAction(input.action)) {
+    throw new Error("Choose approve, decline, save, defer, request more research or reopen.");
+  }
   const problem = directionReasonProblem(input.reason);
   if (problem) throw new Error(problem);
   const reason = input.reason.trim();
   const directionId = globalThis.crypto.randomUUID();
-  // The opportunity leaves 'open' with its decision. Ranking deletes open opportunities, and a direction row must not be
-  // deleted with them, so a declined direction is dismissed and an accepted one is accepted until its brief is written.
-  const opportunityStatus = input.action === "approve" ? "accepted" : "dismissed";
+  // The opportunity leaves 'open' (or a held state) with its decision. Ranking deletes open opportunities, and a direction row must not be
+  // deleted with them, so each action sets a status that ranking keeps (triage-states.ts).
+  const opportunityStatus = statusAfter(input.action);
   return withTransaction(sql, async (tx) => {
     const [opportunity] = await tx<{ id: string; status: string }>`
       select id, status from opportunities
@@ -239,9 +242,8 @@ export async function recordOpportunityDirection(
       limit 1 for update
     `;
     if (!opportunity) throw new Error("Opportunity not found.");
-    if (opportunity.status !== "open" && opportunity.status !== "accepted") {
-      throw new Error("This opportunity was rejected, dismissed, or already briefed, so its direction cannot be decided now.");
-    }
+    const refusal = sourceStatusProblem(input.action, opportunity.status);
+    if (refusal) throw new Error(refusal);
     await tx`
       insert into opportunity_direction_decisions (
         id, organization_id, brand_id, opportunity_id, actor_id, actor_role, action, reason
@@ -250,10 +252,13 @@ export async function recordOpportunityDirection(
         ${input.actorRole}, ${input.action}, ${reason}
       )
     `;
-    await tx`
-      update reviews set status = ${input.action === "approve" ? "approved" : "rejected"}
-      where opportunity_id = ${input.opportunityId} and organization_id = ${input.organizationId} and status = 'open'
-    `;
+    // Approving or declining settles the review hold on the idea. A hold, or a reopen, leaves the review as it was.
+    if (input.action === "approve" || input.action === "decline") {
+      await tx`
+        update reviews set status = ${input.action === "approve" ? "approved" : "rejected"}
+        where opportunity_id = ${input.opportunityId} and organization_id = ${input.organizationId} and status = 'open'
+      `;
+    }
     await tx`
       update opportunities set status = ${opportunityStatus}
       where id = ${input.opportunityId} and organization_id = ${input.organizationId} and brand_id = ${input.brandId}
@@ -272,14 +277,23 @@ export async function recordOpportunityDirection(
 }
 
 /**
- * Declines an opportunity from the Opportunities screen. The reason is required (at least the direction reason's length) and is kept with
- * the decision, so a refresh keeps the idea out (triage-memory.ts). It goes through recordOpportunityDirection, the same decision path the
- * Studio uses.
+ * Holds an open idea (save, defer, request more research), reopens a held one, or declines it, from the Opportunities screen. The reason is
+ * required and is kept with the decision. A refresh keeps a held or declined idea out (triage-memory.ts). Approving is not offered here:
+ * Studio takes that decision, because it writes the brief from it.
  */
-export const declineOpportunity = createServerFn({ method: "POST" })
+export const triageOpportunity = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { brandId: clip(body.brandId, 80, "Brand", true), opportunityId: clip(body.opportunityId, 80, "Opportunity", true), reason: clip(body.reason, 2000, "Reason", true) };
+    const action = clip(body.action, 40, "Action", true);
+    if (!(TRIAGE_ACTIONS as readonly string[]).includes(action)) {
+      throw new Error("Choose decline, save, defer, request more research or reopen.");
+    }
+    return {
+      brandId: clip(body.brandId, 80, "Brand", true),
+      opportunityId: clip(body.opportunityId, 80, "Opportunity", true),
+      action: action as TriageAction,
+      reason: clip(body.reason, 2000, "Reason", true),
+    };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -291,7 +305,7 @@ export const declineOpportunity = createServerFn({ method: "POST" })
       opportunityId: data.opportunityId,
       actorId: context.userId,
       actorRole: access.role,
-      action: "decline",
+      action: data.action,
       reason: data.reason,
     });
   });

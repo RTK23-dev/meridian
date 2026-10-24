@@ -4,6 +4,7 @@ import { Badge, Button, ChartSkeleton, Sheet, SheetContent, SheetDescription, Sh
 import { copy, percentOrUnknown, statusLabel } from "@/lib/copy";
 import { Term } from "@/components/glossary";
 import { TechnicalDetails } from "@/components/plain-error";
+import type { TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { CategoryChip, HoldBadge, OpportunityActions, OpportunityStatusBadge, ScoreValue, UnknownValue } from "./opportunity-parts";
 import { canDismiss, categoryLabel, evidenceSourceLabel, finiteOrNull, isHeld, jevDecisionLabel, jevProbability, RANKING_INPUTS_NOTE, scoreDimensions, whyNotFacts, type OpportunityRow } from "./opportunity-model";
 
@@ -15,8 +16,8 @@ type SheetProps = {
   position: number | null;
   brandId: string;
   canEdit: boolean;
-  declining: boolean;
-  onDecline: (id: string, reason: string) => Promise<unknown>;
+  triaging: boolean;
+  onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
   onOpenChange: (open: boolean) => void;
 };
 
@@ -30,7 +31,7 @@ export function OpportunitySheet(props: SheetProps) {
   </Sheet>;
 }
 
-function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecline, onOpenChange }: SheetProps & { item: OpportunityRow }) {
+function OpportunityDetail({ item, position, brandId, canEdit, triaging, onTriage, onOpenChange }: SheetProps & { item: OpportunityRow }) {
   const dimensions = scoreDimensions(item);
   const probability = jevProbability(item);
   const reasons = whyNotFacts(item);
@@ -112,7 +113,7 @@ function OpportunityDetail({ item, position, brandId, canEdit, declining, onDecl
       <section aria-labelledby="opportunity-actions" className="space-y-2">
         <h3 id="opportunity-actions" className="font-semibold">Actions</h3>
         <div className="flex flex-wrap items-center gap-2">
-          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} declining={declining} onDecline={onDecline} />
+          <OpportunityActions brandId={brandId} item={item} canEdit={canEdit} triaging={triaging} onTriage={onTriage} />
         </div>
         {canEdit && canDismiss(item.status) ? <p className="text-sm text-muted">Studio opens its own recommended direction. It cannot select this opportunity from here yet.</p> : null}
         <Button type="button" variant="quiet" size="sm" onClick={() => onOpenChange(false)}>Close details</Button>

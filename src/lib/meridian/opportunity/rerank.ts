@@ -14,8 +14,9 @@ import { priorIdeaFor, priorIdeasByFingerprint } from "./triage-memory.ts";
 import { readPriorIdeas } from "./triage-memory-store.ts";
 
 /**
- * Ranks a brand's open ideas. An idea the person declined is never put back as new. An idea already explored (accepted or briefed) is kept
- * out too, unless `keepExplored` is set: that is a deliberate new brief (forceNew), which may brief the same idea again with a stated reason.
+ * Ranks a brand's open ideas. An idea the person declined, or held (saved, deferred, or sent for more research), is never put back as new.
+ * An idea already explored (accepted or briefed) is kept out too, unless `keepExplored` is set: that is a deliberate new brief (forceNew),
+ * which may brief the same idea again with a stated reason. Declined and held ideas stay out either way.
  */
 export async function rerankBrand(sql: Sql, organizationId: string, brandId: string, options: { keepExplored?: boolean } = {}): Promise<number> {
   const loaded = await loadBrandContext(sql, organizationId, brandId);
@@ -53,7 +54,7 @@ export async function rerankBrand(sql: Sql, organizationId: string, brandId: str
     }
     // An idea a person declined, or already explored, is not put back as new. It is counted, not written.
     const prior = await readPriorIdeas(tx, organizationId, brandId);
-    const priorByKey = priorIdeasByFingerprint(options.keepExplored ? prior.filter((idea) => idea.outcome === "declined") : prior);
+    const priorByKey = priorIdeasByFingerprint(options.keepExplored ? prior.filter((idea) => idea.outcome !== "explored") : prior);
     for (const draft of drafts) {
       if (priorIdeaFor(draft, priorByKey) !== null) continue;
       written += 1;

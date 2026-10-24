@@ -5,7 +5,7 @@ import { PlainErrorNotice } from "@/components/plain-error";
 import { copy, plainError } from "@/lib/copy";
 import { hasRole } from "@/lib/meridian/access";
 import { refreshOpportunities } from "@/lib/meridian/machine";
-import { useDeclineOpportunity, useDismissOpportunities, useOpportunitiesQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useDismissOpportunities, useOpportunitiesQuery, useScopedMutation, useTriageOpportunity } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { usePageCommands } from "@/components/page-commands";
@@ -72,7 +72,7 @@ function Opportunities({ brandId }: { brandId: string }) {
     onSuccess: (result) => setNote(copy.opportunities.rankedNote(result.count)),
   });
   const dismiss = useDismissOpportunities(brandId);
-  const decline = useDeclineOpportunity(brandId);
+  const triage = useTriageOpportunity(brandId);
   const canEdit = hasRole(role, "member");
   // The palette runs the same scoring mutation as the button, and only for roles that see the button.
   usePageCommands(canEdit ? [{ id: "score-opportunities", label: copy.opportunities.rankAction, run: () => { void refresh.mutateAsync().catch(() => undefined); } }] : []);
@@ -152,7 +152,7 @@ function Opportunities({ brandId }: { brandId: string }) {
       {note ? <p className="text-sm text-muted">{note}</p> : null}
       {refresh.error ? <PlainErrorNotice error={refresh.error} /> : null}
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
-      {decline.error ? <PlainErrorNotice error={decline.error} /> : null}
+      {triage.error ? <PlainErrorNotice error={triage.error} /> : null}
       {hasHold ? <HoldBanner brandId={brandId} /> : null}
       {rows.length === 0 ? (
         <EmptyState
@@ -166,7 +166,7 @@ function Opportunities({ brandId }: { brandId: string }) {
             <CategoryLegend />
           </div>
           <div className="flex flex-wrap items-end gap-3">
-            <Field label="Status"><SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.currentTarget.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="accepted">Accepted</option><option value="briefed">Briefed</option><option value="dismissed">Dismissed</option><option value="rejected">Rejected</option></SelectInput></Field>
+            <Field label="Status"><SelectInput value={statusFilter} onChange={(event) => setStatusFilter(event.currentTarget.value)}><option value="all">All statuses</option><option value="open">Open</option><option value="accepted">Accepted</option><option value="briefed">Briefed</option><option value="dismissed">Dismissed</option><option value="rejected">Rejected</option><option value="saved">Saved</option><option value="deferred">Deferred</option><option value="needs_research">Needs research</option></SelectInput></Field>
             <Field label="Sort by"><SelectInput value={sortKey} onChange={(event) => chooseSort(event.currentTarget.value as OpportunitySortKey)}>{SORT_OPTIONS.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}</SelectInput></Field>
             <Button type="button" variant="secondary" onClick={() => setSortDirection((current) => current === "asc" ? "desc" : "asc")}>
               Direction: {sortDirection === "asc" ? "ascending" : "descending"}
@@ -194,8 +194,8 @@ function Opportunities({ brandId }: { brandId: string }) {
               onSelectedChange={setSelected}
               onSelectAll={setSelectedAll}
               onOpen={setOpenId}
-              declining={decline.isPending}
-              onDecline={(id, reason) => decline.mutateAsync({ opportunityId: id, reason })}
+              triaging={triage.isPending}
+              onTriage={(id, action, reason) => triage.mutateAsync({ opportunityId: id, action, reason })}
             />
           )}
           <OpportunitySheet
@@ -203,8 +203,8 @@ function Opportunities({ brandId }: { brandId: string }) {
             position={selectedPosition}
             brandId={brandId}
             canEdit={canEdit}
-            declining={decline.isPending}
-            onDecline={(id, reason) => decline.mutateAsync({ opportunityId: id, reason }).then(() => setOpenId(null))}
+            triaging={triage.isPending}
+            onTriage={(id, action, reason) => triage.mutateAsync({ opportunityId: id, action, reason }).then(() => setOpenId(null))}
             onOpenChange={(open) => { if (!open) setOpenId(null); }}
           />
         </>

@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { CircleDashed, Clock, FileText, Info, Layers, Sparkles, XCircle, CheckCircle2, type LucideIcon } from "lucide-react";
+import { Bookmark, CalendarClock, CircleDashed, Clock, FileText, Info, Layers, Sparkles, XCircle, CheckCircle2, SearchCheck, type LucideIcon } from "lucide-react";
 import { Badge, Button, Popover, PopoverContent, PopoverTrigger, Textarea } from "@/components/ui";
 import { directionReasonProblem } from "@/lib/meridian/opportunity/direction-reason";
+import { isHeldStatus, triageActionsFor, type TriageAction } from "@/lib/meridian/opportunity/triage-states";
 import { statusLabel } from "@/lib/copy";
 import { CATEGORY_LEGEND, barPercent, canDismiss, categoryLabel, type OpportunityCategory, type OpportunityRow } from "./opportunity-model";
 
@@ -31,12 +32,15 @@ export function CategoryChip({ category }: { category: string }) {
   return <Badge variant={known?.variant ?? "neutral"}><Icon aria-hidden="true" className="size-3.5" />{categoryLabel(category)}</Badge>;
 }
 
-const STATUS_BADGE: Record<string, { variant: "info" | "success" | "danger" | "neutral"; icon: LucideIcon }> = {
+const STATUS_BADGE: Record<string, { variant: "info" | "success" | "danger" | "neutral" | "warning"; icon: LucideIcon }> = {
   open: { variant: "info", icon: Clock },
   accepted: { variant: "success", icon: CheckCircle2 },
   briefed: { variant: "success", icon: FileText },
   dismissed: { variant: "neutral", icon: CircleDashed },
   rejected: { variant: "danger", icon: XCircle },
+  saved: { variant: "info", icon: Bookmark },
+  deferred: { variant: "neutral", icon: CalendarClock },
+  needs_research: { variant: "warning", icon: SearchCheck },
 };
 
 export function OpportunityStatusBadge({ status }: { status: string }) {
@@ -80,66 +84,89 @@ export function CategoryFilter({ value, onChange }: { value: OpportunityCategory
   </div>;
 }
 
-/** Studio and dismiss are member actions. Viewers see the state and nothing they cannot change. */
-export function OpportunityActions({ brandId, item, canEdit, declining, onDecline }: {
+const TRIAGE_LABEL: Record<TriageAction, string> = {
+  decline: "Decline this idea",
+  save: "Save for later",
+  defer: "Defer",
+  request_research: "Request more research",
+  reopen: "Reopen this idea",
+};
+
+/** Studio and triage are member actions. Viewers see the state and nothing they cannot change. */
+export function OpportunityActions({ brandId, item, canEdit, triaging, onTriage }: {
   brandId: string;
   item: Pick<OpportunityRow, "id" | "label" | "status">;
   canEdit: boolean;
-  declining: boolean;
-  onDecline: (id: string, reason: string) => Promise<unknown>;
+  triaging: boolean;
+  onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
 }) {
   if (!canEdit) return <span className="text-sm text-muted">Read-only for viewers.</span>;
-  if (!canDismiss(item.status)) return null;
+  const actions = triageActionsFor(item.status);
+  // Studio cannot select a held idea from here, so a held idea offers reopen only.
+  const studio = canDismiss(item.status) && !isHeldStatus(item.status);
+  if (!studio && actions.length === 0) return null;
   return <>
-    <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg">
+    {studio ? <Link to="/brands/$brandId/studio" params={{ brandId }} className="inline-flex min-h-11 items-center rounded-md bg-accent px-4 text-sm font-semibold text-accent-fg">
       Open in Studio<span className="sr-only"> for {item.label}</span>
-    </Link>
-    <DeclineControl item={item} declining={declining} onDecline={onDecline} />
+    </Link> : null}
+    {actions.length > 0 ? <TriageControl item={item} actions={actions} triaging={triaging} onTriage={onTriage} /> : null}
   </>;
 }
 
 /**
- * Declines an opportunity with the reason. The reason is required and is kept with the decision: it is what keeps the idea out of the next
- * refresh. A failed save keeps what was written, so the person can send it again.
+ * Decides an open or accepted idea with a reason: declines it, saves it, defers it, sends it for more research, or reopens a held one. The
+ * reason is required and is kept with the decision: it is what keeps a declined or held idea out of the next refresh. A failed save keeps
+ * what was written, so the person can send it again.
  */
-function DeclineControl({ item, declining, onDecline }: {
+function TriageControl({ item, actions, triaging, onTriage }: {
   item: Pick<OpportunityRow, "id" | "label">;
-  declining: boolean;
-  onDecline: (id: string, reason: string) => Promise<unknown>;
+  actions: TriageAction[];
+  triaging: boolean;
+  onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
 }) {
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const problem = reason.trim().length === 0 ? null : directionReasonProblem(reason);
+  const onlyReopen = actions.length === 1 && actions[0] === "reopen";
   if (!open) {
-    return <Button type="button" variant="quiet" disabled={declining} onClick={() => setOpen(true)}>Decline<span className="sr-only"> {item.label}</span></Button>;
+    return <Button type="button" variant="quiet" disabled={triaging} onClick={() => setOpen(true)}>{onlyReopen ? "Reopen" : "Decide"}<span className="sr-only"> {item.label}</span></Button>;
+  }
+  function choose(action: TriageAction) {
+    if (directionReasonProblem(reason) !== null) return;
+    void onTriage(item.id, action, reason.trim()).then(
+      () => {
+        setOpen(false);
+        setReason("");
+      },
+      () => undefined,
+    );
   }
   return (
-    <form
-      className="flex w-full flex-col gap-2"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (directionReasonProblem(reason) !== null) return;
-        void onDecline(item.id, reason.trim()).then(
-          () => {
-            setOpen(false);
-            setReason("");
-          },
-          () => undefined,
-        );
-      }}
-    >
+    <div role="group" aria-label={`Decide on ${item.label}`} className="flex w-full flex-col gap-2">
       <Textarea
-        label={`Why decline ${item.label}?`}
+        label={`Why decide on ${item.label}?`}
         value={reason}
         onChange={(event) => setReason(event.target.value)}
-        hint="Say what this idea gets wrong for this brand. The reason stays on record, and the idea is kept out of the next refresh."
+        hint={onlyReopen
+          ? "Say what changed since this idea was set aside. The reason stays on record."
+          : "Say why. The reason stays on record. A declined or held idea stays out of the next refresh."}
         error={problem ?? undefined}
         rows={3}
       />
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" disabled={declining || reason.trim().length === 0 || problem !== null}>Decline this idea</Button>
-        <Button type="button" variant="quiet" disabled={declining} onClick={() => setOpen(false)}>Keep it open</Button>
+        {actions.map((action) => (
+          <Button
+            key={action}
+            type="button"
+            variant={action === "decline" ? "quiet" : "secondary"}
+            disabled={triaging || reason.trim().length === 0 || problem !== null}
+            onClick={() => choose(action)}
+          >
+            {TRIAGE_LABEL[action]}
+          </Button>
+        ))}
+        <Button type="button" variant="quiet" disabled={triaging} onClick={() => setOpen(false)}>Cancel</Button>
       </div>
-    </form>
+    </div>
   );
 }
