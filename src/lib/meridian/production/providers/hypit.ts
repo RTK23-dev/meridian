@@ -4,6 +4,9 @@ import type { CreativeSpec, ProductionCapabilities, ProductionJob, ProductionPro
  * The production `hypit` route is NOT CONNECTED. Its request body and status parsing were never the Hypit handoff contract
  * (src/lib/meridian/hypit/contract.ts and client.ts), so this route sends nothing and reads nothing until it is rewired to
  * that contract. The Hypit handoff in src/lib/meridian/hypit/handoff.ts is the only Hypit path.
+ *
+ * Licence: Hypit bars a multi-tenant service and commercial bundling without written authorization from Hypit.AI. Meridian is
+ * multi-workspace, so this route stays refused until the position in docs/HYPIT_LICENSE.md is settled in writing.
  */
 const NOT_CONNECTED_REASON =
   "NOT_CONNECTED: the production hypit route is not connected to the Hypit runtime. The Hypit handoff in src/lib/meridian/hypit/handoff.ts is the only Hypit path.";

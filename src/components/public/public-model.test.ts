@@ -2,7 +2,19 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { COMMITMENTS, CONCEPTS, PUBLIC_NAV, PUBLIC_PAGES, QUICKSTART, REPO_DOCS, WORKFLOW, repoDocUrl } from "./public-model.ts";
+import {
+  COMMITMENTS,
+  CONCEPTS,
+  FACTORY_STAGES,
+  PUBLIC_NAV,
+  PUBLIC_PAGES,
+  QUICKSTART,
+  REPO_DOCS,
+  SHARED_CORE,
+  SIGNAL_LABEL,
+  WORKFLOW,
+  repoDocUrl,
+} from "./public-model.ts";
 
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 const read = (path: string) => readFileSync(`${ROOT}${path}`, "utf8");
@@ -11,6 +23,9 @@ const read = (path: string) => readFileSync(`${ROOT}${path}`, "utf8");
 function allCopy(): string[] {
   return [
     ...WORKFLOW.flatMap((step) => [step.label, step.what]),
+    ...FACTORY_STAGES.flatMap((stage) => [stage.name, stage.what]),
+    ...SHARED_CORE,
+    ...Object.values(SIGNAL_LABEL),
     ...COMMITMENTS,
     ...CONCEPTS.flatMap((concept) => [concept.term, concept.definition]),
     ...QUICKSTART.flatMap((step) => [step.title, step.body, step.command ?? ""]),

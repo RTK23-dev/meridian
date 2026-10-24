@@ -48,6 +48,52 @@ export const WORKFLOW: readonly WorkflowStep[] = [
   },
 ];
 
+/**
+ * Where a stage stops for a person, or holds money or a post. A label names it in words, so the signal never relies on colour alone.
+ */
+export const SIGNAL_LABEL = {
+  review: "Missing evidence goes to review",
+  decision: "A person or a set policy decides",
+  paused: "Paid ads are created paused",
+} as const;
+export type StageSignal = keyof typeof SIGNAL_LABEL;
+
+export type FactoryStage = { id: string; name: string; what: string; signal: StageSignal | null };
+
+/**
+ * The Factory's stages, in the order AGENTS.md gives them. Each line restates what docs/FACTORY.md and AGENTS.md say the stage does.
+ */
+export const FACTORY_STAGES: readonly FactoryStage[] = [
+  { id: "source", name: "Source", what: "Finds public pages and ads for the niche. Each item keeps where it came from.", signal: null },
+  { id: "grade", name: "Grade", what: "Scores each ad from what its source reported. A score is a score until a calibration report says otherwise.", signal: null },
+  { id: "angle", name: "Angle", what: "Picks what to make next from the graded evidence, and names the evidence it used.", signal: null },
+  { id: "plan", name: "Plan", what: "Turns the chosen angle into a plan for each variant. Each variant changes one attribute.", signal: null },
+  { id: "produce", name: "Produce", what: "Provider jobs make the media. A provider with no price or no connection is not called.", signal: null },
+  {
+    id: "gate",
+    name: "Gate",
+    what: "Originality, claims, policy and rights checks can block a creative. Missing evidence goes to review, never to a pass.",
+    signal: "review",
+  },
+  { id: "approve", name: "Approve", what: "A person approves each creative, or a policy the brand has set does.", signal: "decision" },
+  { id: "publish", name: "Publish", what: "Organic posts go to a connected account. Paid ads are created paused.", signal: "paused" },
+  { id: "measure", name: "Measure", what: "Stores observed results only, pulled on a schedule for creatives that have a publishing receipt.", signal: null },
+  { id: "learn", name: "Learn", what: "Updates the brand's patterns from measured outcomes. A run finishes only when its own creatives have a measured outcome.", signal: null },
+];
+
+/** What both ways of creating share, from AGENTS.md. Each is a record a person can open, not a separate pipeline. */
+export const SHARED_CORE: readonly string[] = [
+  "Brands",
+  "Evidence",
+  "Plans",
+  "Assets",
+  "Runs",
+  "Reviews",
+  "Publishing receipts",
+  "Measurements",
+  "Learning",
+];
+
 /** The two ways to create, from AGENTS.md. Both share the same brands, evidence, plans, assets, reviews and learning. */
 export const TWO_WAYS: readonly { id: string; label: string; path: string; start: string }[] = [
   {

@@ -85,6 +85,9 @@ Until a variable is set, the feature that needs it stays NOT_CONNECTED and says 
 
 ## Hypit runtime (video production, not yet routed in production)
 
+Hypit is licensed under Apache 2.0 with conditions that bar a multi-tenant service and commercial bundling without Hypit.AI's written
+authorization. Read `docs/HYPIT_LICENSE.md` before any use beyond one organization.
+
 Hypit is not a skill and not a Docker service in this repository. Meridian talks to one process at `HYPIT_BASE_URL` through the
 handoff in `src/lib/meridian/hypit/`, which uses four routes: `POST /v1/jobs`, `GET /v1/jobs/{id}`, `GET /v1/jobs/{id}/artifact`
 and `/health`. The only implementation of those routes here is `scripts/hypit-bridge.mjs`. It is a single-organization proof runner
