@@ -258,7 +258,12 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                 </p>
                 <p className="text-sm text-muted">
                   Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. A reviewer can approve or
-                  reject a rendered variation. Publishing a repurposed variation is not connected in this release.
+                  reject a rendered variation. Variations are not ranked: the brand-fit check reads only the treatment names, so it cannot
+                  tell rendered variations apart.
+                </p>
+                <p className="text-sm text-muted">
+                  Publishing, measurement and learning for a repurposed variation are not built. A variation is not a library creative yet,
+                  so it cannot reach the publishing queue, and no publishing account can receive it until it is.
                 </p>
                 <ol className="space-y-2 text-sm">
                   {run.variations.map((variation) => (
