@@ -4,6 +4,9 @@
  * A job is succeeded only after `hypit build` exports a real MP4.
  *
  * Single-organization proof runner. Not a multi-tenant Hypit service.
+ *
+ * Listens on HYPIT_BRIDGE_HOST (default 127.0.0.1). Set HYPIT_API_TOKEN before binding any other address:
+ * the token is the only check on a request.
  */
 import { createServer } from "node:http";
 import { spawn } from "node:child_process";
@@ -14,19 +17,43 @@ const hypitBin = process.env.HYPIT_BIN || "hypit";
 const ffmpegPath = process.env.HYPIT_FFMPEG || "/usr/local/bin/ffmpeg";
 const ffprobePath = process.env.HYPIT_FFPROBE || "ffprobe";
 const port = Number(process.env.HYPIT_BRIDGE_PORT || "8766");
+const host = (process.env.HYPIT_BRIDGE_HOST || "").trim() || "127.0.0.1";
 const token = (process.env.HYPIT_API_TOKEN || "").trim();
+
+/** Loopback addresses. Any other bind address serves other machines too, so it needs HYPIT_API_TOKEN. */
+const isLoopback = (address) => address === "localhost" || address === "::1" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(address);
+
+/** A job id names a folder under HYPIT_JOB_ROOT, so it is one plain segment: no separators, no dots, no spaces. */
+const JOB_ID = /^[A-Za-z0-9_-]{1,100}$/;
 const root = process.env.HYPIT_JOB_ROOT || "/tmp/hypit-bridge-jobs";
 
 const jobs = new Map();
 
-function xmlText(value) {
+/** The contract's duration range (src/lib/meridian/hypit/contract.ts), checked before any file is written or the CLI starts. */
+function validDuration(value) {
+  return Number.isFinite(value) && value >= 1 && value <= 60;
+}
+
+const XML_ENTITIES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" };
+
+/** Plain text: control characters dropped, whitespace collapsed, ends trimmed. */
+function plainText(value) {
   let text = "";
   for (const char of String(value ?? "")) {
     const code = char.charCodeAt(0);
     if (code < 32 && code !== 9 && code !== 10 && code !== 13) continue;
     text += char;
   }
-  return text.replace(/&/g, "&").replace(/</g, "<").replace(/>/g, ">").replace(/\s+/g, " ").trim();
+  return text.replace(/\s+/g, " ").trim();
+}
+
+/** Plain text escaped for an XML text node or attribute value, so no input can open a tag or an attribute. */
+function xmlText(value) {
+  return plainText(value).replace(/[&<>"']/g, (char) => XML_ENTITIES[char]);
+}
+
+function startFailure(tool, error) {
+  return `${tool} could not be started (${error?.code || "error"}).`;
 }
 
 function canvasFor(aspect) {
@@ -38,9 +65,27 @@ function canvasFor(aspect) {
   return [360, 640];
 }
 
+/**
+ * The only variables the spawned Hypit CLI and ffprobe receive. Everything else the bridge was started with stays
+ * with the bridge, including HYPIT_API_TOKEN, DATABASE_URL and every other secret.
+ * PATH finds the binaries (the CLI may be a Node script). HOME and TMPDIR give it a home and a temp folder.
+ * LANG and LC_ALL set the locale.
+ * No HYPIT_* name is passed: this repo does not document which of them the CLI reads. Add one here only after the
+ * owner confirms it is a setting and not a secret.
+ */
+const CHILD_ENV_KEYS = ["PATH", "HOME", "LANG", "LC_ALL", "TMPDIR"];
+
+function childEnv() {
+  const env = {};
+  for (const key of CHILD_ENV_KEYS) {
+    if (process.env[key] !== undefined) env[key] = process.env[key];
+  }
+  return env;
+}
+
 function run(args, cwd) {
   return new Promise((resolve) => {
-    const child = spawn(hypitBin, args, { cwd, env: process.env });
+    const child = spawn(hypitBin, args, { cwd, env: childEnv() });
     let out = "";
     let err = "";
     child.stdout.on("data", (chunk) => {
@@ -53,29 +98,42 @@ function run(args, cwd) {
       err += text;
       process.stderr.write(text);
     });
+    // A missing or unrunnable binary emits 'error' and no exit code. Without this listener Node throws and the bridge exits.
+    child.on("error", (error) => resolve({ code: 127, out, err: startFailure("hypit CLI", error) }));
     child.on("close", (code) => resolve({ code: code ?? 1, out, err }));
   });
 }
 
-async function probe(file) {
-  const child = spawn(ffprobePath, [
-    "-v", "error",
-    "-select_streams", "v:0",
-    "-show_entries", "stream=width,height,duration,codec_name",
-    "-of", "json",
-    file,
-  ]);
-  let out = "";
-  for await (const chunk of child.stdout) out += chunk;
-  const parsed = JSON.parse(out || "{}");
-  const stream = parsed.streams?.[0] ?? {};
-  const duration = Number(stream.duration);
-  return {
-    width: Number(stream.width) || null,
-    height: Number(stream.height) || null,
-    durationMs: Number.isFinite(duration) ? Math.round(duration * 1000) : null,
-    codec: typeof stream.codec_name === "string" ? stream.codec_name : "",
-  };
+function probe(file) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(ffprobePath, [
+      "-v", "error",
+      "-select_streams", "v:0",
+      "-show_entries", "stream=width,height,duration,codec_name",
+      "-of", "json",
+      file,
+    ], { env: childEnv() });
+    let out = "";
+    child.stdout.on("data", (chunk) => {
+      out += chunk;
+    });
+    child.on("error", (error) => reject(new Error(startFailure("ffprobe", error))));
+    child.on("close", () => {
+      try {
+        const parsed = JSON.parse(out || "{}");
+        const stream = parsed.streams?.[0] ?? {};
+        const duration = Number(stream.duration);
+        resolve({
+          width: Number(stream.width) || null,
+          height: Number(stream.height) || null,
+          durationMs: Number.isFinite(duration) ? Math.round(duration * 1000) : null,
+          codec: typeof stream.codec_name === "string" ? stream.codec_name : "",
+        });
+      } catch (error) {
+        reject(error);
+      }
+    });
+  });
 }
 
 async function renderJob(contract) {
@@ -83,7 +141,8 @@ async function renderJob(contract) {
   await mkdir(dir, { recursive: true });
   const [width, height] = canvasFor(contract.aspectRatio);
   const seconds = contract.durationSeconds;
-  const line = xmlText([contract.product, contract.angle, contract.cta].filter(Boolean).join(" · ")).slice(0, 180);
+  // Cut the plain text first and escape after, so the cut never splits an entity such as &amp;.
+  const line = xmlText(plainText([contract.product, contract.angle, contract.cta].filter(Boolean).join(" · ")).slice(0, 180));
   const runtime = {
     format: "hypit.runtime-local@1",
     dataRoot: ".hypit/runtimes/local",
@@ -177,12 +236,22 @@ const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", "http://127.0.0.1");
     if (request.method === "GET" && url.pathname === "/health") {
       const version = await run(["--version"], root);
+      if (version.code !== 0) {
+        return send(response, 503, { provider: "hypit", version: "", error: "hypit CLI did not report a version." });
+      }
       return send(response, 200, { provider: "hypit", version: version.out.trim() });
     }
     if (request.method === "POST" && url.pathname === "/v1/jobs") {
       const raw = await readBody(request);
       const contract = JSON.parse(raw);
-      const key = String(request.headers["idempotency-key"] || contract.meridianJobId || "");
+      if (!validDuration(contract?.durationSeconds)) {
+        return send(response, 400, { error: "durationSeconds must be a finite number from 1 to 60. Nothing was started." });
+      }
+      const idHeader = String(request.headers["idempotency-key"] || "");
+      if (!JOB_ID.test(String(contract.meridianJobId ?? "")) || (idHeader !== "" && !JOB_ID.test(idHeader))) {
+        return send(response, 400, { error: "meridianJobId must be 1 to 100 letters, digits, '-' or '_'. Nothing was started." });
+      }
+      const key = idHeader || contract.meridianJobId;
       const existing = [...jobs.values()].find((job) => job.meridianJobId === key);
       if (existing) return send(response, 200, { providerJobId: existing.providerJobId, status: existing.status, error: existing.error });
       const pendingId = `pending_${key.slice(0, 12) || "job"}`;
@@ -240,8 +309,13 @@ function readBody(request) {
   });
 }
 
+if (!isLoopback(host) && !token) {
+  process.stderr.write("HYPIT_BRIDGE_HOST is not a loopback address, so HYPIT_API_TOKEN must be set. The bridge did not start.\n");
+  process.exit(1);
+}
 await mkdir(root, { recursive: true });
 server.requestTimeout = 0;
-server.listen(port, "127.0.0.1", () => {
-  process.stdout.write(`Hypit bridge listening on http://127.0.0.1:${port}\n`);
+server.listen(port, host, () => {
+  const shown = host.includes(":") ? `[${host}]` : host;
+  process.stdout.write(`Hypit bridge listening on http://${shown}:${server.address().port}\n`);
 });
