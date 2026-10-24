@@ -12,6 +12,7 @@ import { createContentFactorySession, getBrandEconomics, getBrandHookHistory, ge
 import type { BrandEconomics } from "@/lib/meridian/content-factory/economics";
 import type { HookHistory } from "@/lib/meridian/content-factory/hook-history";
 import { MAX_TITLE_CHARS, type SessionSummary } from "@/lib/meridian/content-factory/model";
+import { BatchCard } from "./batch-panel";
 import { ChatPanel } from "./chat-panel";
 import { OrchestratorModelPanel } from "./orchestrator-model-panel";
 import { OrchestratorPlans } from "./orchestrator-plans";
@@ -95,6 +96,11 @@ export function ContentFactoryScreen() {
                 organizationId={organizationId}
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
+              />
+              <BatchCard
+                brandId={selected.brandId}
+                brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
+                drafts={list.filter((item) => item.brandId === selected.brandId && item.status === "draft").map((item) => ({ id: item.id, title: item.title }))}
               />
             </>
           ) : null}
