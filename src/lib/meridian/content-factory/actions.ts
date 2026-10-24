@@ -17,7 +17,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { attachSource, brandEconomics, brandHookHistory, createSession, deliveredMasterLink, getSession, listSessions, postMessage, readRun, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
+import { attachSource, brandEconomics, brandHookHistory, createSession, deliveredMasterLink, deliveryApprovalOf, getSession, listSessions, postMessage, readRun, recordDeliveryApproval, remakeShot, reviseWithDirection, shotClip, shotClipQuote, shotDecision, shotDecisionQuote, shotModelChoices, shotRemakeQuote, shotTakeOf, reviseSession, saveSettings, searchSources, startRun, uploadFile } from "./service.ts";
 
 // Content Factory (the /content-factory screen). The checks are in service.ts: every function needs the admin role in the workspace,
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
@@ -38,6 +38,28 @@ export const getDeliveredMasterLink = createServerFn({ method: "POST" })
   .validator((input: unknown) => sessionInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => deliveredMasterLink(await getSql(), context.userId, data));
+
+/** The approval state of a session's video, its decisions, and its publish state (not connected). Admins of the workspace only. */
+export const getDeliveryApproval = createServerFn({ method: "POST" })
+  .validator((input: unknown) => sessionInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => deliveryApprovalOf(await getSql(), context.userId, data));
+
+/** Approves, or rejects with a reason, the delivered video of a session. Admins of the workspace only; the service checks the rest. */
+export const decideDeliveryApproval = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    return {
+      sessionId: typeof body.sessionId === "string" ? body.sessionId.trim().slice(0, 80) : "",
+      decision: typeof body.decision === "string" ? body.decision : "",
+      reason: typeof body.reason === "string" ? body.reason.slice(0, 1000) : "",
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    if (!data.sessionId) throw new Error("Choose a video.");
+    return recordDeliveryApproval(await getSql(), context.userId, data);
+  });
 
 /** What a brand's video runs cost: billed, estimated and held amounts, and the cost per delivered video. Admins of the brand's workspace only. */
 export const getBrandEconomics = createServerFn({ method: "POST" })

@@ -16,6 +16,7 @@ import { hookHistoryOf, type HookHistory } from "./hook-history.ts";
 import { readStartedHooks } from "./hook-history-store.ts";
 import { economicsOf, type BrandEconomics } from "./economics.ts";
 import { readBrandLedger, readBrandRuns } from "./economics-store.ts";
+import { approvalProblem, approvalStateFor, isApprovalDecision, publishStateOf, type ApprovalRecord, type ApprovalState, type PublishState } from "./approval.ts";
 import { randomUUID } from "node:crypto";
 import {
   engineReadiness,
@@ -629,6 +630,87 @@ export async function deliveredMasterLink(sql: Sql, userId: string, input: { ses
     return { status: "ready", url: result.url, ttlSeconds: ENGINE_MEDIA_LINK_TTL_SECONDS, bytes: master.renderedVideo.bytes, durationMs: master.renderedVideo.durationMs };
   }
   return { status: result.status, reason: result.reason };
+}
+
+/** The approval of a session's video: the current video's state, every decision on the session, and the publish state (not connected). */
+export type DeliveryApproval = {
+  /** The engine request of the session's current video, or null when the session has no video yet. */
+  requestId: string | null;
+  /** Whether the engine has delivered the current video. Only a delivered video can be decided. */
+  delivered: boolean;
+  state: ApprovalState;
+  /** Every decision made on the session, oldest first. Each names the video it was made on. Rows are never edited. */
+  history: ApprovalRecord[];
+  publish: PublishState;
+};
+
+async function approvalRecords(sql: Sql, organizationId: string, sessionId: string): Promise<ApprovalRecord[]> {
+  const rows = await sql<{ engine_request_id: string; decision: string; reason: string; actor_id: string; created_at: unknown }>`
+    select engine_request_id, decision, reason, actor_id, created_at from content_factory_approvals
+    where organization_id = ${organizationId} and session_id = ${sessionId}
+    order by created_at asc
+  `;
+  return rows.flatMap((row) => (isApprovalDecision(row.decision)
+    ? [{ engineRequestId: row.engine_request_id, decision: row.decision, reason: row.reason, actorId: row.actor_id, createdAt: iso(row.created_at) }]
+    : []));
+}
+
+async function requestDelivered(sql: Sql, organizationId: string, requestId: string | null): Promise<boolean> {
+  if (requestId === null) return false;
+  const rows = await sql<{ status: string }>`select status from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1`;
+  return rows[0]?.status === "delivered";
+}
+
+/** The approval state of a session's video. Admins of the session's workspace only. */
+export async function deliveryApprovalOf(sql: Sql, userId: string, input: { sessionId: string }): Promise<DeliveryApproval> {
+  const row = await sessionAccess(sql, userId, input.sessionId);
+  const history = await approvalRecords(sql, row.organization_id, row.id);
+  const requestId = row.engine_request_id;
+  return {
+    requestId,
+    delivered: await requestDelivered(sql, row.organization_id, requestId),
+    state: requestId === null ? { status: "not_decided" } : approvalStateFor(history, requestId),
+    history,
+    publish: publishStateOf(),
+  };
+}
+
+/**
+ * A person's decision on the delivered video: approve, or reject with the reason. Only an admin of the session's workspace can decide, and
+ * only a video the engine has delivered. The decision is written once, against the video's request, and is audited. Saying the same
+ * decision twice is refused, so the history holds no repeats. A later decision may change an earlier one, and both stay on record.
+ */
+export async function recordDeliveryApproval(sql: Sql, userId: string, input: { sessionId: string; decision: string; reason: string }): Promise<DeliveryApproval> {
+  const problem = approvalProblem(input);
+  if (problem) throw new Error(problem);
+  if (!isApprovalDecision(input.decision)) throw new Error("Choose approve or reject.");
+  const reason = input.reason.trim();
+  await withTransaction(sql, async (tx) => {
+    const row = await sessionAccess(tx, userId, input.sessionId);
+    if (row.status !== "started" || row.engine_request_id === null) {
+      throw new Error("This session has no video yet, so there is nothing to approve or reject.");
+    }
+    // The session row is locked, so two decisions on one video cannot both pass the check below.
+    await tx`select id from content_factory_sessions where id = ${row.id} for update`;
+    if (!(await requestDelivered(tx, row.organization_id, row.engine_request_id))) {
+      throw new Error("The engine has not delivered this video yet, so there is nothing to approve or reject.");
+    }
+    const current = approvalStateFor(await approvalRecords(tx, row.organization_id, row.id), row.engine_request_id);
+    if (current.status === input.decision) throw new Error(`This video is already ${input.decision}.`);
+    await tx`
+      insert into content_factory_approvals (id, organization_id, brand_id, session_id, engine_request_id, decision, reason, actor_id)
+      values (${randomUUID()}, ${row.organization_id}, ${row.brand_id}, ${row.id}, ${row.engine_request_id}, ${input.decision}, ${reason}, ${userId})
+    `;
+    await audit(tx, {
+      organizationId: row.organization_id,
+      brandId: row.brand_id,
+      actorId: userId,
+      action: `content_factory.video_${input.decision}`,
+      objectId: row.id,
+      metadata: { engineRequestId: row.engine_request_id },
+    });
+  });
+  return deliveryApprovalOf(sql, userId, { sessionId: input.sessionId });
 }
 
 export type ReviseOutcome =
