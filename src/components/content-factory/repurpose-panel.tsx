@@ -248,6 +248,15 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <div className="space-y-2" aria-live="polite">
                 <h3 className="text-sm font-semibold">Variations</h3>
                 <p className="text-sm text-muted">
+                  {run.decision.outcome === "not_consulted"
+                    ? "Decision check: not consulted. No decision engine answered for this workspace, so the plan is the deterministic one."
+                    : run.decision.outcome === "review"
+                      ? "Decision check: sent to review. Uncalibrated scores never approve or block a plan, so this is a note, not a gate."
+                      : run.decision.outcome === "approved"
+                        ? "Decision check: approved."
+                        : "Decision check: rejected."}
+                </p>
+                <p className="text-sm text-muted">
                   Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. A reviewer can approve or
                   reject a rendered variation. Publishing a repurposed variation is not connected in this release.
                 </p>

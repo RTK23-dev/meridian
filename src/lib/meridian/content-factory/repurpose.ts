@@ -11,6 +11,9 @@ import { priceFor } from "../../../engine/config/prices.ts";
 import { repurposedEdl } from "../../../engine/repurpose/child.ts";
 import { repurposeSettingsSchema, resolveRepurpose, type RepurposeOutcome } from "../../../engine/repurpose/resolve.ts";
 import { renderedVideoSchema } from "../../../engine/contracts/render.ts";
+import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
+import type { GateInput } from "../decisions/gate.ts";
+import { judgeRepurposePlan, type RepurposePlanCheck } from "./repurpose-gate.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { engineMediaLinkSigner, type EngineMediaLinkResult, type EngineMediaLinkSigner } from "../storage/engine-media-link.ts";
 import { sessionAccess } from "./service.ts";
@@ -41,6 +44,8 @@ export type RepurposeRunView = {
   runId: string;
   created: boolean;
   masterEdlId: string;
+  /** The decision check the plan was made with. not_consulted: no decision engine answered (see repurpose-gate.ts). */
+  decision: { outcome: RepurposePlanCheck["outcome"]; reason: string; engineId: string | null };
   variations: RepurposeVariationRow[];
 };
 
@@ -69,7 +74,11 @@ export type RepurposePorts = {
   /** The render price for a video of this length, or undefined. Default: the price table. */
   renderPriceUsd?: (durationMs: number) => number | undefined;
   render?: RepurposeRenderPort;
+  /** The decision check's engine selection and registry. Default: the workspace's active engine, as the gate resolves it. */
+  decision?: { selection?: GateInput["selection"]; engines?: DecisionEngineRegistry };
 };
+
+const NO_CHECK: RepurposePlanCheck = { outcome: "not_consulted", reason: "", engineId: null, gateRecordId: null };
 
 /** The master cut of a delivered engine request, read through its contract. */
 async function masterOf(sql: Sql, organizationId: string, requestId: string): Promise<{ edl: EditDecisionList; artifactId: string }> {
@@ -124,10 +133,31 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
   const digest = digestOf(settings.data, master.edl.edlId);
   const organizationId = row.organization_id;
   const session = row.id;
+  // One decision check for a new plan, before anything is planned. A repeat of a planned run returns that run with the check it was planned
+  // with, and makes no call. A rejected plan creates no run.
+  const planned = await sql<{ id: string }>`
+    select id from content_factory_repurpose_runs
+    where organization_id = ${organizationId} and session_id = ${session} and master_edl_id = ${master.edl.edlId} and settings_digest = ${digest}
+  `;
+  const check: RepurposePlanCheck =
+    planned.length > 0
+      ? NO_CHECK
+      : await judgeRepurposePlan({
+          sql,
+          organizationId,
+          brandId: row.brand_id,
+          subjectId: `${master.edl.edlId}:${digest.slice(0, 16)}`,
+          variations: outcome.variations,
+          selection: ports.decision?.selection,
+          engines: ports.decision?.engines,
+        });
+  if (check.outcome === "rejected") throw new Error(`The decision check rejected this plan: ${check.reason}`);
   const { runId, created } = await withTransaction(sql, async (tx) => {
     const inserted = await tx<{ id: string }>`
-      insert into content_factory_repurpose_runs (id, organization_id, brand_id, session_id, engine_request_id, master_edl_id, settings_digest, settings, created_by)
-      values (${randomUUID()}, ${organizationId}, ${row.brand_id}, ${session}, ${requestId}, ${master.edl.edlId}, ${digest}, ${JSON.stringify(settings.data)}, ${userId})
+      insert into content_factory_repurpose_runs (id, organization_id, brand_id, session_id, engine_request_id, master_edl_id, settings_digest, settings, created_by,
+        gate_outcome, gate_reason, gate_engine, gate_record_id)
+      values (${randomUUID()}, ${organizationId}, ${row.brand_id}, ${session}, ${requestId}, ${master.edl.edlId}, ${digest}, ${JSON.stringify(settings.data)}, ${userId},
+        ${check.outcome}, ${check.reason}, ${check.engineId}, ${check.gateRecordId})
       on conflict (organization_id, session_id, master_edl_id, settings_digest) do nothing
       returning id
     `;
@@ -199,10 +229,15 @@ export async function startRepurpose(sql: Sql, userId: string, input: { sessionI
     select variant_key, ordinal, status, reason, child_edl_id, child_artifact_id, rendered_artifact_id, treatments
     from content_factory_repurpose_variants where run_id = ${runId} and organization_id = ${organizationId} order by ordinal asc
   `;
+  const decisionRows = await sql<{ gate_outcome: RepurposePlanCheck["outcome"]; gate_reason: string; gate_engine: string | null }>`
+    select gate_outcome, gate_reason, gate_engine from content_factory_repurpose_runs where id = ${runId} and organization_id = ${organizationId}
+  `;
+  const decision = decisionRows[0];
   return {
     runId,
     created,
     masterEdlId: master.edl.edlId,
+    decision: { outcome: decision?.gate_outcome ?? "not_consulted", reason: decision?.gate_reason ?? "", engineId: decision?.gate_engine ?? null },
     variations: variations.map((item) => ({
       key: item.variant_key,
       ordinal: item.ordinal,
