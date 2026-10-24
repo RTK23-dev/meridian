@@ -34,9 +34,9 @@ test("workspace pages list the workspace overview and the Settings group, and no
   }
 });
 
-test("brand pages list the brand groups in the order Brand, Research, Create, Review, Results, then Settings", () => {
+test("brand pages list the brand groups in the order Brand, Research, Content, Results, then Settings", () => {
   const groups = sidebarGroups({ brandId: "brand-1", reviewCount: null });
-  assert.deepEqual(groups.map((group) => group.id), ["brand", "research", "create", "review", "results", "settings"]);
+  assert.deepEqual(groups.map((group) => group.id), ["brand", "research", "content", "results", "settings"]);
   const brandItems = groups.slice(0, -1).flatMap((group) => group.items);
   for (const item of brandItems) assert.equal(item.to === "/brands/brand-1" || item.to.startsWith("/brands/brand-1/"), true, item.to);
   const settingsItems = groups[groups.length - 1]?.items ?? [];
@@ -50,7 +50,7 @@ test("the sidebar shows the core loop and no longer lists the six screens that m
     for (const id of moved) assert.equal(ids.includes(id), false, `${id} must not be in the sidebar`);
   }
   const brandIds = sidebarGroups({ brandId: "brand-1", reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-  assert.equal(brandIds.length, 17, "13 brand screens and 4 workspace screens");
+  assert.equal(brandIds.length, 11, "7 brand screens and 4 settings screens");
 });
 
 test("the Settings screen lists every screen that moved out of the sidebar, with its route", () => {
@@ -76,16 +76,12 @@ test("the brand overview has no footer next step, because its own next-action ca
   assert.equal(nextStep({ pathname: "/brands/brand-1", brandId: "brand-1" }), null);
 });
 
-test("the loop runs Opportunities, Studio, Reviews, Library, Learning, Calibration, then back to Opportunities", () => {
+test("the loop runs Intelligence, Content Factory, Calibration, then back to Content Factory", () => {
   const next = (pathname: string) => nextStep({ pathname, brandId: "brand-1" })?.label;
-  assert.equal(next("/brands/brand-1/opportunities"), "Studio");
-  assert.equal(next("/brands/brand-1/studio"), "Reviews");
-  assert.equal(next("/brands/brand-1/factory"), "Reviews");
-  assert.equal(next("/brands/brand-1/reviews"), "Library");
-  assert.equal(next("/brands/brand-1/library"), "Learning");
-  assert.equal(next("/brands/brand-1/learning"), "Calibration");
-  assert.equal(next("/brands/brand-1/calibration"), "Opportunities");
-  assert.equal(nextStep({ pathname: "/brands/brand-1/studio", brandId: "brand-1" })?.to, "/brands/brand-1/reviews");
+  assert.equal(next("/brands/brand-1/intelligence"), "Content Factory");
+  assert.equal(next("/brands/brand-1/content"), "Calibration");
+  assert.equal(next("/brands/brand-1/calibration"), "Content Factory");
+  assert.equal(nextStep({ pathname: "/brands/brand-1/studio", brandId: "brand-1" }), null, "an old screen path is not in the sidebar, so it has no next step");
 });
 
 test("the setup guide's next step is the workspace overview, and off-sidebar pages have none", () => {
@@ -107,22 +103,22 @@ test("the command palette lists every sidebar screen and every screen under Sett
   assert.ok(paletteScreens("brand-1").some((screen) => screen.to === "/notifications"), "a moved screen is still found by the palette");
 });
 
-test("a review badge appears only for a real count above zero", () => {
+test("the content page shows the open review count only for a real count above zero", () => {
   const badgeOf = (reviewCount: number | null) => sidebarGroups({ brandId: "b", reviewCount })
-    .flatMap((group) => group.items).find((item) => item.id === "reviews")?.badge;
+    .flatMap((group) => group.items).find((item) => item.id === "content")?.badge;
   assert.equal(badgeOf(null), undefined, "a count that has not loaded shows no badge");
   assert.equal(badgeOf(0), undefined, "zero shows no badge");
   assert.equal(badgeOf(3), 3);
 });
 
-test("the review badge is absent on workspace pages", () => {
+test("the review count is absent on workspace pages", () => {
   const items = sidebarGroups({ reviewCount: 5 }).flatMap((group) => group.items);
-  assert.equal(items.some((item) => item.id === "reviews"), false);
+  assert.equal(items.some((item) => item.badge !== undefined), false);
 });
 
 test("bottom tabs are the workspace four off brand pages and the brand four on them", () => {
   assert.deepEqual(bottomTabs().map((tab) => tab.to), ["/", "/setup", "/alerts", "/settings"]);
-  assert.deepEqual(bottomTabs("brand-1").map((tab) => tab.to), ["/brands/brand-1", "/brands/brand-1/opportunities", "/brands/brand-1/studio", "/brands/brand-1/reviews"]);
+  assert.deepEqual(bottomTabs("brand-1").map((tab) => tab.to), ["/brands/brand-1", "/brands/brand-1/content", "/brands/brand-1/market", "/brands/brand-1/calibration"]);
 });
 
 test("a trailing slash is the same page, and other paths are not", () => {
@@ -178,20 +174,19 @@ function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): str
   return groups.find((group) => group.id === groupId)?.items.map((item) => item.id) ?? [];
 }
 
-test("the brand sidebar keeps Factory under Create and Calibration under Results", () => {
+test("the brand sidebar opens the Content Factory page from one item, and keeps Calibration under Results", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
-  assert.ok(itemIds(groups, "create").includes("factory"), "Factory is in the Create workflow group");
-  assert.ok(itemIds(groups, "results").includes("calibration"), "Calibration is in the Results workflow group");
-  const factory = groups.flatMap((group) => group.items).find((item) => item.id === "factory");
-  assert.equal(factory?.to, "/brands/b1/factory", "Factory links to the brand's factory screen");
+  assert.deepEqual(itemIds(groups, "content"), ["content"], "ideas, create, review, library, publish, results and ads are sections of that page");
+  const content = groups.flatMap((group) => group.items).find((item) => item.id === "content");
+  assert.equal(content?.to, "/brands/b1/content", "the sidebar item opens the brand's content page");
+  assert.deepEqual(itemIds(groups, "results"), ["calibration"]);
   const calibration = groups.flatMap((group) => group.items).find((item) => item.id === "calibration");
   assert.equal(calibration?.to, "/brands/b1/calibration");
 });
 
-test("connected accounts sit in the brand group, and notification preferences are listed under Settings", () => {
+test("connected accounts are a section of the content page, and notification preferences are listed under Settings", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
-  assert.ok(itemIds(groups, "brand").includes("accounts"));
-  assert.equal(groups.flatMap((group) => group.items).find((item) => item.id === "accounts")?.to, "/brands/b1/accounts");
+  assert.equal(groups.flatMap((group) => group.items).some((item) => item.to === "/brands/b1/accounts"), false, "accounts open from the Publish section");
   assert.equal(itemIds(groups, "settings").includes("notifications"), false, "notification preferences moved out of the sidebar");
   assert.ok(SETTINGS_SCREEN_LINKS.some((link) => link.to === "/notifications"), "notification preferences stay reachable from Settings");
 });

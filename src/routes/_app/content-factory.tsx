@@ -1,17 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ContentFactoryScreen } from "@/components/content-factory/screen";
+import { ContentHub } from "@/components/content-factory/content-hub";
+import { contentSearchOf } from "@/components/content-factory/content-hub-model";
 
-/** `?session=<id>` opens that session on the screen (an opportunity's brief links to it). Any other value is ignored. */
+/** The Content Factory page without a brand in the URL, so it offers a brand picker. `?session=<id>` opens that session, which an opportunity's brief links to. */
 export const Route = createFileRoute("/_app/content-factory")({
   staticData: { pageTitle: "Content Factory" },
-  validateSearch: (search: Record<string, unknown>): { session?: string } => {
-    const session = typeof search.session === "string" ? search.session : "";
-    return session !== "" && session.length <= 80 ? { session } : {};
-  },
-  component: ContentFactoryRoute,
+  validateSearch: contentSearchOf,
+  component: WorkspaceContentRoute,
 });
 
-function ContentFactoryRoute() {
-  const { session } = Route.useSearch();
-  return <ContentFactoryScreen initialSessionId={session ?? null} />;
+function WorkspaceContentRoute() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  return (
+    <ContentHub
+      brandId={null}
+      search={search}
+      onSearchChange={(next, replace) => void navigate({ search: next, replace })}
+    />
+  );
 }

@@ -27,9 +27,10 @@ export const SETTINGS_SCREEN_LINKS: NavItem[] = [
 ];
 
 /**
- * Sidebar groups: Brand, Research, Create, Review, Results, then Settings. Brand groups exist only on brand pages, so a
- * workspace page shows the workspace overview and Settings. A badge appears only for a real count above zero: a null
- * count (not loaded yet, or failed) and a zero count both show no badge.
+ * Sidebar groups: Brand, Research, Content, Results, then Settings. Brand groups exist only on brand pages, so a workspace
+ * page shows the workspace overview and Settings. The Content Factory page holds ideas, creating, review, library, publishing,
+ * results and ads, so the sidebar has one item for it. A badge appears only for a real count above zero: a null count (not
+ * loaded yet, or failed) and a zero count both show no badge.
  */
 export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; reviewCount: number | null }): NavGroup[] {
   const settings: NavGroup = {
@@ -65,8 +66,6 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
         { id: "brand-overview", label: "Overview", to: base },
         { id: "brain", label: "Brand brain", to: `${base}/brain` },
         { id: "products", label: "Products", to: `${base}/products` },
-        // Brand-scoped, so it sits here rather than in the workspace-level account menu.
-        { id: "accounts", label: "Connected accounts", to: `${base}/accounts` },
       ],
     },
     {
@@ -78,29 +77,15 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       ],
     },
     {
-      id: "create",
-      label: "Create",
-      items: [
-        { id: "studio", label: "Studio", to: `${base}/studio` },
-        { id: "factory", label: "Factory", to: `${base}/factory` },
-        { id: "library", label: "Library", to: `${base}/library` },
-      ],
-    },
-    {
-      id: "review",
-      label: "Review",
-      items: [
-        { id: "opportunities", label: "Opportunities", to: `${base}/opportunities` },
-        { id: "reviews", label: "Reviews", to: `${base}/reviews`, badge: openReviews },
-      ],
+      id: "content",
+      label: "Content",
+      // The badge counts the reviews waiting for a person. They are in this page's Review section.
+      items: [{ id: "content", label: "Content Factory", to: `${base}/content`, badge: openReviews }],
     },
     {
       id: "results",
       label: "Results",
-      items: [
-        { id: "learning", label: "Learning", to: `${base}/learning` },
-        { id: "calibration", label: "Calibration", to: `${base}/calibration` },
-      ],
+      items: [{ id: "calibration", label: "Calibration", to: `${base}/calibration` }],
     },
     settings,
   ];
@@ -108,36 +93,26 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
 
 /**
  * Where each kind of work lives on a brand, in words a new person can use. The brand overview shows this list. Each path is a screen
- * the sidebar lists, and a test keeps it that way. Direct creation is Studio; the research-led runs are the Factory.
+ * the sidebar lists, and a test keeps it that way. Ideas, creating, review, library, publishing, results and ads are sections of the
+ * Content Factory page.
  */
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
-  { id: "opportunities", label: "Opportunities", path: "opportunities", what: "Directions ranked from your stored evidence. Open one to see its evidence and decide." },
-  { id: "studio", label: "Studio: direct creation", path: "studio", what: "Write a brief from an accepted direction, generate variants, review them, and queue them to publish." },
-  { id: "factory", label: "Factory: research-led runs", path: "factory", what: "Runs that move from research through grading, production, gates and approval. Its Production tab shows the job queue." },
-  { id: "library", label: "Library", path: "library", what: "The creatives and outputs this brand has stored." },
-  { id: "reviews", label: "Reviews", path: "reviews", what: "Decisions waiting for a person, such as a brief or a variant." },
-  { id: "learning", label: "Learning", path: "learning", what: "What your recorded results have taught the next brief." },
+  { id: "content", label: "Content Factory", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Ads (admins only) runs the research-led Factory runs." },
 ];
 
 /**
- * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Opportunities, Studio, Reviews,
- * Library, Learning, Calibration, then back to Opportunities. The brand overview is not listed: its own next-action card
- * names the next step from stored data, so a second link would contradict it.
+ * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Intelligence, Content Factory, Calibration,
+ * then back to Content Factory. The brand overview is not listed: its own next-action card names the next step from stored data,
+ * so a second link would contradict it.
  */
 const BRAND_NEXT: Record<string, string> = {
   brain: "products",
-  products: "accounts",
-  accounts: "market",
+  products: "market",
   market: "intelligence",
-  intelligence: "opportunities",
-  opportunities: "studio",
-  studio: "reviews",
-  factory: "reviews",
-  reviews: "library",
-  library: "learning",
-  learning: "calibration",
-  calibration: "opportunities",
+  intelligence: "content",
+  content: "calibration",
+  calibration: "content",
 };
 
 const WORKSPACE_NEXT: Record<string, string> = { setup: "overview" };
@@ -169,9 +144,9 @@ export function bottomTabs(brandId?: string): NavItem[] {
   const base = `/brands/${brandId}`;
   return [
     { id: "overview", label: "Overview", to: base },
-    { id: "opportunities", label: "Opportunities", to: `${base}/opportunities` },
-    { id: "studio", label: "Studio", to: `${base}/studio` },
-    { id: "reviews", label: "Reviews", to: `${base}/reviews` },
+    { id: "content", label: "Content", to: `${base}/content` },
+    { id: "market", label: "Market", to: `${base}/market` },
+    { id: "calibration", label: "Calibration", to: `${base}/calibration` },
   ];
 }
 
