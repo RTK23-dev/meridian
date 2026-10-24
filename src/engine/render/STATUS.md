@@ -155,8 +155,9 @@ component EDL goes to review."
    `gateway.secretFor("heygen", organizationId)` from the API gateway, and a real reservation from `reserve()`. Use the E1 acceptance EDL (one stock clip, one TTS voice, three components). Record the render id, the
    video id, the cost in the ledger, the artifact ids, and the output file.
 2. Run `ffprobe` on the output: 1080 × 1920, 30 fps, duration within 100 ms of the EDL, audio present.
-3. Ten test renders: record each bill. Set `render_hyperframes_cloud` in `prices.ts` to a verified price. Until then
-   the render line is `budgets.fixedPerMasterUsd.render` (0.05), and each ledger entry says it is an estimate.
+3. Ten test renders: record each bill. Set `render_hyperframes_cloud` in `prices.ts` to a verified price. Until then the
+   render gate `render_price_known` fails closed and nothing is rendered. `budgets.fixedPerMasterUsd.render` (0.05) is the
+   intake hold, not a render price.
 4. Submit the same composition twice. Check that HeyGen returns the same render id and bills once. The adapter assumes
    this, and it is not verified.
 5. Check `resolution: "1080p"` and `aspect_ratio: "9:16"` on an `asset_id` project. If the output is not 1080 × 1920,

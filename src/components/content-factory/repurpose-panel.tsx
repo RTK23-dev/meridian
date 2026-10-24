@@ -234,6 +234,10 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
             {run !== null ? (
               <div className="space-y-2" aria-live="polite">
                 <h3 className="text-sm font-semibold">Variations</h3>
+                <p className="text-sm text-muted">
+                  Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. Review and publishing of a
+                  repurposed video are not connected in this release, so a rendered variation has no approve or publish action here yet.
+                </p>
                 <ol className="space-y-2 text-sm">
                   {run.variations.map((variation) => (
                     <li key={variation.key} className="rounded-md border border-border p-3">
