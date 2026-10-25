@@ -314,7 +314,7 @@ test("a server error is uncertain, is not retried, and its body is not echoed", 
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
   assert.equal(result.status, "uncertain");
-  assert.match(result.error, /returned 500\. The call may have been billed/);
+  assert.match(result.error, /returned an error \(500\)\. The call may have been billed/);
   assert.equal(JSON.stringify(result).includes(KEY_A), false);
   const runs = await runsOf(organizationId, "copy-test");
   assert.equal(runs[0]?.status, "uncertain", "the hold stays on the ledger");
@@ -327,10 +327,21 @@ test("a request refused before generation (400) is failed, and its hold is relea
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
   assert.equal(result.status, "failed");
-  assert.equal(result.error, "OpenRouter returned 400.");
+  assert.match(result.error, /rejected the request as invalid \(400\)/);
   const runs = await runsOf(organizationId, "copy-test");
   assert.equal(runs[0]?.status, "failed");
   assert.equal(runs[0]?.cost_usd, null);
+});
+
+test("a rejected key is failed with an actionable reason, and the key is not echoed", async () => {
+  const { organizationId, record } = await scenario("bad-key");
+  const { resolver } = fakeResolver({ [organizationId]: { status: "ready", secret: KEY_A } });
+  const { transport } = fakeTransport(() => json(401, { error: { code: 401, message: `invalid ${KEY_A}` } }));
+  const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
+  assert.ok(!result.ok);
+  assert.equal(result.status, "failed");
+  assert.match(result.error, /rejected the workspace's key \(401\)\. Check or replace the OpenRouter key in Settings/);
+  assert.equal(JSON.stringify(result).includes(KEY_A), false);
 });
 
 test("a host that cannot be reached, or a timed-out request, is uncertain and carries no key", async () => {

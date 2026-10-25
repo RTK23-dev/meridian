@@ -20,6 +20,17 @@ import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 export const GENERATION_CEILING_ENV = "OPENROUTER_GENERATION_MAX_USD_PER_CALL";
 export const DEFAULT_GENERATION_CEILING_USD = 0.05;
 
+/**
+ * HTTP statuses that OpenRouter's documentation describes as request rejections (invalid request, credentials, credits, permissions,
+ * model not served, size, rate limit). They are treated as refused before generation, so their hold is released. No live call has
+ * confirmed that they are never billed. Every other error status may have been billed, and its hold is kept.
+ */
+const REFUSED_BEFORE_GENERATION_STATUSES = new Set([400, 401, 402, 403, 404, 413, 422, 429]);
+
+export function refusedBeforeGeneration(status: number): boolean {
+  return REFUSED_BEFORE_GENERATION_STATUSES.has(status);
+}
+
 /** Bytes of request framing (role names, the JSON envelope) added to the bound. Generous: the bound must not undercount. */
 const REQUEST_OVERHEAD_BYTES = 256;
 

@@ -24,6 +24,7 @@ import {
   boundGenerationCall,
   generationCeilingUsd,
   GENERATION_CEILING_ENV,
+  refusedBeforeGeneration,
   reserveGenerationCall,
   settleGenerationCall,
   type ContentPart,
@@ -35,8 +36,34 @@ export type { ContentPart } from "./generation-ledger.ts";
 /** How long a read of the live text catalogue is reused before the next paid call checks it again. */
 export const CATALOG_REUSE_MS = 60_000;
 
-/** HTTP statuses OpenRouter returns before it generates anything, so nothing is billed for them. Every other error may have been billed. */
-const NOT_BILLED_STATUSES = new Set([400, 401, 402, 403, 404, 422, 429]);
+/**
+ * What a non-2xx answer means, in words for the person. The meanings are OpenRouter's documented status codes. The provider's body is
+ * not shown: it is untrusted, and it may echo the key.
+ */
+export function statusReason(status: number): string {
+  switch (status) {
+    case 400:
+      return "OpenRouter rejected the request as invalid (400). The model or its input may not be supported.";
+    case 401:
+      return "OpenRouter rejected the workspace's key (401). Check or replace the OpenRouter key in Settings.";
+    case 402:
+      return "OpenRouter reports insufficient credits for this key (402). Add credits on OpenRouter, then try again.";
+    case 403:
+      return "OpenRouter refused the request for this key (403). Check the key's permissions and guardrails on OpenRouter.";
+    case 404:
+      return "OpenRouter does not serve this model (404). Choose another model in Settings.";
+    case 408:
+      return "OpenRouter timed out the request (408).";
+    case 413:
+      return "The request is too large for OpenRouter (413). Shorten the input.";
+    case 422:
+      return "OpenRouter could not process the request (422). The model or its input may not be supported.";
+    case 429:
+      return "OpenRouter is rate-limiting this key (429). Try again later.";
+    default:
+      return `OpenRouter returned an error (${status}).`;
+  }
+}
 
 /** The model a task will use, decided before the call. A task with no usable model sends nothing. */
 export type ModelDecision =
@@ -263,13 +290,14 @@ export async function completeWithModel(
   const response = result.response;
   const latencyMs = Date.now() - started;
   if (response.status < 200 || response.status >= 300) {
-    const error = `OpenRouter returned ${response.status}.`;
-    if (NOT_BILLED_STATUSES.has(response.status)) {
-      await settleSafely(sql, hold.id, { status: "failed", error, latencyMs });
-      return { ok: false, status: "failed", provider: "openrouter", error, model: input.model };
+    const reason = statusReason(response.status);
+    if (refusedBeforeGeneration(response.status)) {
+      await settleSafely(sql, hold.id, { status: "failed", error: reason, latencyMs });
+      return { ok: false, status: "failed", provider: "openrouter", error: reason, model: input.model };
     }
-    await settleSafely(sql, hold.id, { status: "uncertain", error: `${error} The call may have been billed, so it was not retried.`, latencyMs });
-    return { ok: false, status: "uncertain", provider: "openrouter", error: `${error} The call may have been billed, so it was not retried.`, model: input.model };
+    const uncertain = `${reason} The call may have been billed, so it was not retried.`;
+    await settleSafely(sql, hold.id, { status: "uncertain", error: uncertain, latencyMs });
+    return { ok: false, status: "uncertain", provider: "openrouter", error: uncertain, model: input.model };
   }
   let parsed: z.infer<typeof chatBodySchema>;
   try {
