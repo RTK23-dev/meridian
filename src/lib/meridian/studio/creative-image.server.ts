@@ -27,6 +27,7 @@ import { generateNanoBananaImage } from "@/lib/meridian/providers/nano-banana.se
 import type { ImageResult } from "@/lib/meridian/providers/media";
 import type { ProductFact } from "../domain.ts";
 import type { PolicyOutcome } from "../decisions/policy.ts";
+import type { MultimodalPerceptionProvider } from "../perception/types.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { settleProductionReservation } from "../production/materialization.ts";
@@ -253,6 +254,7 @@ async function judgeAttachedImage(
     prompt: string;
     width: number;
     height: number;
+    perception?: MultimodalPerceptionProvider | null;
   },
 ): Promise<{ rollup: PolicyOutcome; reason: string; decisionId: string }> {
   // The judgment compares against the brand as it is now, and reads the creative's persisted copy, not the prompt. The creative
@@ -292,6 +294,7 @@ async function judgeAttachedImage(
     organizationId: input.organizationId,
     brandId: input.brandId,
     creativeId: input.creativeId,
+    perception: input.perception,
     facts,
     visual: generatedImageVisual(input.bytes, input.sha256),
   });
@@ -449,8 +452,15 @@ async function resumeStaleStoredAttaches(sql: Sql, scope: { organizationId: stri
 /**
  * Generates and stores an image for a creative, for a signed-in user. The role and the tenant are checked here. The image is
  * generated with the creative's own workspace production key, resolved through the shared credential resolver.
+ *
+ * `imageFetch` is the seam for tests, which answer the provider with a fixture. Production passes nothing, so the image provider's
+ * disabled capability refuses the request and the reservation is released.
  */
-export async function attachCreativeImageFor(userId: string, data: { brandId: string; creativeId: string }): Promise<AttachCreativeImageResult> {
+export async function attachCreativeImageFor(
+  userId: string,
+  data: { brandId: string; creativeId: string },
+  options: { imageFetch?: typeof fetch; perception?: MultimodalPerceptionProvider | null } = {},
+): Promise<AttachCreativeImageResult> {
   const sql = await getSql();
   const access = await requireBrand(sql, userId, data.brandId, "member");
   const orgId = access.organizationId;
@@ -528,7 +538,7 @@ export async function attachCreativeImageFor(userId: string, data: { brandId: st
   // The provider is called once. From here a failure is ambiguous, so the reservation is held, never released.
   let image: ImageResult;
   try {
-    image = await generateNanoBananaImage({ prompt, promptVersion: PROMPT_VERSION, apiKey });
+    image = await generateNanoBananaImage({ prompt, promptVersion: PROMPT_VERSION, apiKey, fetchImpl: options.imageFetch });
   } catch (callError) {
     await setAttachJob(sql, jobId, scope, { status: "SUBMISSION_UNKNOWN", code: "PROVIDER_CALL_AMBIGUOUS", message: errorText(callError) });
     throw callError;
@@ -571,6 +581,7 @@ export async function attachCreativeImageFor(userId: string, data: { brandId: st
 
   try {
     const judged = await judgeAttachedImage(sql, {
+      perception: options.perception,
       organizationId: orgId,
       brandId: data.brandId,
       creative,

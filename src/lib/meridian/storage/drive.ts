@@ -54,6 +54,8 @@ export type GoogleDriveClientOptions = {
   uploadStore?: () => Promise<ArtifactUploadStore>;
   /** Upload overrides: chunk size, retry cap, backoff and sleep. Defaults are 8 MiB chunks and six failures in a row. */
   upload?: ArtifactUploadPolicy;
+  /** The fetch for resumable uploads. Tests pass a fixture. Production passes nothing, so the disabled Drive path refuses. */
+  fetch?: typeof fetch;
   /** Writes the storage_objects row for a file put with `storageRecord`. Default: the shared database connection. */
   recordObject?: (record: DriveObjectRecord) => Promise<void>;
 };
@@ -73,9 +75,9 @@ export type DriveWriteInput = {
 };
 
 /** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
-function driveTransportFor(organizationId: string): ResumableTransport {
+function driveTransportFor(organizationId: string, fetchImpl: typeof fetch = gatedFetch("drive.write")): ResumableTransport {
   return {
-    fetch: gatedFetch("drive.write"),
+    fetch: fetchImpl,
     accessToken: async () => {
       const access = await resolveDriveAccess(organizationId);
       if (!access.ok) throw new DriveUploadError(access.reason, null, false);
@@ -370,7 +372,7 @@ export class GoogleDriveClient {
         {
           ...this.options.upload,
           store,
-          transport: driveTransportFor(input.organizationId),
+          transport: driveTransportFor(input.organizationId, this.options.fetch),
           onUnauthorized: () => invalidateGoogleDriveAccessToken(),
         },
         {

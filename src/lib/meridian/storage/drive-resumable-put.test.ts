@@ -71,6 +71,7 @@ test("a file over 5 MB is put to Drive in chunks, its session is recorded in Pos
       const client = new GoogleDriveClient({
         uploadStore: async () => createSqlArtifactUploadStore(sql),
         upload: { chunkBytes: CHUNK, sleep: async () => {} },
+        fetch: globalThis.fetch,
       });
       const bytes = patternBytes(5 * 1024 * 1024 + 300 * 1024);
       const path = `production/${randomUUID()}/artifact.png`;
@@ -110,6 +111,7 @@ test("a put whose upload fails after the retry cap throws a plain error, and the
       const client = new GoogleDriveClient({
         uploadStore: async () => createSqlArtifactUploadStore(sql),
         upload: { chunkBytes: CHUNK, maxFailures: 2, sleep: async () => {} },
+        fetch: globalThis.fetch,
       });
       const path = `production/${randomUUID()}/artifact.png`;
       await assert.rejects(
