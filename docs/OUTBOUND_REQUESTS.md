@@ -74,6 +74,15 @@ Negative tests:
 - `providers/capability.test.ts`: each capability refuses without a request, and a disabled capability is not retried.
 - `providers/disabled-paths.test.ts`: the image adapter, the embeddings call and the email send, through their production defaults, send no
   request.
+- `distribution/disabled-entry-points.test.ts`: the Facebook, Instagram, YouTube and TikTok publish channels and the paused Meta publish,
+  through their production defaults. A refusal is reported as `NOT_CONNECTED` with the gate's message, and no request is sent.
+- `content-factory/upload-default-gate.test.ts`: the Meta video upload through its production default, on the test database. With no
+  readable video it is blocked; with readable bytes the `publish.meta_video_upload` gate refuses it. No receipt is stored either way.
+- `storage/drive-write-default-gate.test.ts`: a small Drive put, a delete and a folder create, through the production default. Each is
+  refused before any write is sent. Drive reads are not disabled, so they are not covered by this test.
+- `studio/hypit-default-gate.test.ts`: the Hypit start, poll and artifact calls, each given the `hypit.client` gate. The studio run itself
+  needs a saved credential from the database, so it is not run end to end here.
+- `alerts/deliver-default-gate.test.ts`: the alert webhook through the `alerts.webhook` gate.
 
 Live behavior is not verified by design. These tests use fixtures and fake transports only.
 
