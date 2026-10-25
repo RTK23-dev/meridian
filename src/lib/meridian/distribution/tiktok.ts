@@ -20,7 +20,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { gatedTransport } from "../providers/capability.ts";
+import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { hostIsVerified } from "../storage/media-host.ts";
@@ -88,7 +88,9 @@ export async function publishTikTokPull(
         source_info: { source: "PULL_FROM_URL", video_url: input.mediaUrl },
       }),
     });
-  } catch {
+  } catch (error) {
+    // A disabled path sent nothing, so there is no unknown outcome to check on TikTok.
+    if (isCapabilityDisabledError(error)) return failure("tiktok", "NOT_CONNECTED", error.message);
     // The request may have reached TikTok, so the post is unconfirmed rather than failed.
     return failure("tiktok", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived"));
   }

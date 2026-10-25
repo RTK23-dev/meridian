@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gatedTransport } from "../providers/capability.ts";
+import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { YOUTUBE_READ_SCOPES, YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
@@ -119,7 +119,9 @@ export async function uploadYouTubeShort(
       },
       body: metadata,
     });
-  } catch {
+  } catch (error) {
+    // A disabled path sent nothing, so there is no unknown outcome to check on YouTube.
+    if (isCapabilityDisabledError(error)) return failure("youtube", "NOT_CONNECTED", error.message);
     return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived"));
   }
   if (session.status < 200 || session.status >= 300) {
@@ -137,7 +139,8 @@ export async function uploadYouTubeShort(
       headers: { "Content-Type": input.mimeType },
       body: input.mediaBytes,
     });
-  } catch {
+  } catch (error) {
+    if (isCapabilityDisabledError(error)) return failure("youtube", "NOT_CONNECTED", error.message);
     return failure("youtube", "UNCONFIRMED", unconfirmed(LABEL, "the upload did not get a response"));
   }
   const json = parseJsonBody(uploaded.body);

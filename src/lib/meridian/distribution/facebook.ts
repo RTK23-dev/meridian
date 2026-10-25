@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gatedTransport } from "../providers/capability.ts";
+import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
@@ -105,7 +105,9 @@ export async function publishFacebookPageVideo(
       headers: { Authorization: `Bearer ${input.accessToken}` },
       body: form,
     });
-  } catch {
+  } catch (error) {
+    // A disabled path sent nothing, so there is no unknown outcome to check on the Page.
+    if (isCapabilityDisabledError(error)) return failure("facebook", "NOT_CONNECTED", error.message);
     return failure("facebook", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived"));
   }
 

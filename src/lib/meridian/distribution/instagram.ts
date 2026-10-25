@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { gatedTransport } from "../providers/capability.ts";
+import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport, TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
@@ -135,7 +135,9 @@ async function send(transport: Transport, request: TransportRequest, uploadStart
   let response;
   try {
     response = await transport(request);
-  } catch {
+  } catch (error) {
+    // A disabled path sent nothing, so there is no unknown outcome to check on Instagram.
+    if (isCapabilityDisabledError(error)) return { ok: false, receipt: failure("instagram", "NOT_CONNECTED", error.message) };
     return { ok: false, receipt: failure("instagram", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived")) };
   }
   const json = parseJsonBody(response.body);
