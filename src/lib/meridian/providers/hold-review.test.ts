@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { openTestBackends } from "../credentials/test-databases.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../testing/monthly-budget.ts";
 import type { Sql } from "../learning/store.ts";
 import { monthlyHeldUsd, reserveGenerationCall, settleGenerationCall, type HoldInput } from "./generation-ledger.ts";
 import { listUncertainHoldsAs, releaseHoldAs } from "./hold-review.ts";
@@ -42,6 +43,7 @@ function holdFor(organizationId: string, brandId: string, operation: string): Ho
 /** One uncertain hold in a new workspace, and the held id. */
 async function uncertainHoldIn(sql: Sql, label: string): Promise<{ organizationId: string; brandId: string; memberId: string; holdId: string }> {
   const tenant = await studioTenant(sql, label);
+  await setMonthlyBudget(sql, tenant.organizationId, 1);
   const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-review"), 0.0004);
   assert.equal(held.status, "held");
   if (held.status !== "held") throw new Error("the fixture hold was refused");

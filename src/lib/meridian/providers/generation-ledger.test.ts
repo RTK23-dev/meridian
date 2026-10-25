@@ -6,11 +6,13 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { openTestBackends } from "../credentials/test-databases.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../testing/monthly-budget.ts";
 import {
   boundGenerationCall,
   DEFAULT_GENERATION_CEILING_USD,
   generationCeilingUsd,
   monthlyHeldUsd,
+  NO_MONTHLY_BUDGET_REASON,
   releaseUncertainHold,
   reserveGenerationCall,
   settleGenerationCall,
@@ -85,6 +87,7 @@ function holdFor(organizationId: string, brandId: string | null, operation: stri
 for (const { name, sql } of backends) {
   test(`[${name}] a hold counts at the reported cost once settled as completed, and at its estimate until then`, async () => {
     const tenant = await studioTenant(sql, `ledger-settle-${name}`);
+    await setMonthlyBudget(sql, tenant.organizationId, 1);
     const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-settle"), 0.0005);
     assert.equal(held.status, "held");
     if (held.status !== "held") return;
@@ -105,6 +108,7 @@ for (const { name, sql } of backends) {
 
   test(`[${name}] a hold settles once: a second settlement changes nothing and reports that it did not apply`, async () => {
     const tenant = await studioTenant(sql, `ledger-once-${name}`);
+    await setMonthlyBudget(sql, tenant.organizationId, 1);
     const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-once"), 0.0004);
     assert.equal(held.status, "held");
     if (held.status !== "held") return;
@@ -116,6 +120,7 @@ for (const { name, sql } of backends) {
 
   test(`[${name}] an uncertain hold keeps counting against the month, and a hold the gateway never sent is released`, async () => {
     const tenant = await studioTenant(sql, `ledger-release-${name}`);
+    await setMonthlyBudget(sql, tenant.organizationId, 1);
     const uncertain = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-uncertain"), 0.0003);
     assert.equal(uncertain.status, "held");
     if (uncertain.status !== "held") return;
@@ -129,6 +134,7 @@ for (const { name, sql } of backends) {
 
   test(`[${name}] an administrator releases an uncertain hold once: it stops counting against the month, and the release is audited`, async () => {
     const tenant = await studioTenant(sql, `ledger-admin-release-${name}`);
+    await setMonthlyBudget(sql, tenant.organizationId, 1);
     const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-release"), 0.0005);
     assert.equal(held.status, "held");
     if (held.status !== "held") return;
@@ -156,6 +162,8 @@ for (const { name, sql } of backends) {
   test(`[${name}] a release refuses a short reason, an in-flight hold, and a hold in another workspace, and changes nothing`, async () => {
     const tenant = await studioTenant(sql, `ledger-release-refuse-${name}`);
     const other = await studioTenant(sql, `ledger-release-other-${name}`);
+    await setMonthlyBudget(sql, tenant.organizationId, 1);
+    await setMonthlyBudget(sql, other.organizationId, 1);
     const inFlight = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-in-flight"), 0.0002);
     const foreign = await reserveGenerationCall(sql, holdFor(other.organizationId, other.brandId, "op-foreign"), 0.0002);
     assert.equal(inFlight.status, "held");
@@ -198,10 +206,13 @@ for (const { name, sql } of backends) {
     assert.equal(Number(rows[0]?.count), 0, "the refused call has no row");
   });
 
-  test(`[${name}] a workspace without a monthly budget has no monthly limit, and the per-call ceiling still applies to each call`, async () => {
+  test(`[${name}] a workspace without a monthly budget is refused: paid generation waits for one, and no row is written`, async () => {
     const tenant = await studioTenant(sql, `ledger-nocap-${name}`);
-    const big = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-nocap"), 1000);
-    assert.equal(big.status, "held", "the ledger holds any amount the caller has bounded; the ceiling is checked by the caller");
+    const result = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-nocap"), 0.0001);
+    assert.equal(result.status, "refused");
+    if (result.status === "refused") assert.equal(result.reason, NO_MONTHLY_BUDGET_REASON);
+    const rows = await sql<{ count: string | number }>`select count(*) as count from model_runs where organization_id = ${tenant.organizationId}`;
+    assert.equal(Number(rows[0]?.count), 0, "the refused call has no row");
   });
 
   test(`[${name}] a call with no workspace in scope is refused, and nothing is written`, async () => {

@@ -4,6 +4,7 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../testing/monthly-budget.ts";
 import {
   BRAIN,
   BRIEF,
@@ -494,6 +495,8 @@ for (const outcome of ["HUMAN_REVIEW", "REJECT"] as const) {
 test("generateCreative: a ready brief calls the text model once and records the run (the control for the refusals)", async () => {
   const sql = await getSql();
   const tenant = await studioTenant(sql, "svc-generate-ready");
+  // Paid generation is blocked without a monthly budget (providers/generation-ledger.ts), so this workspace has one.
+  await setMonthlyBudget(sql, tenant.organizationId, 1);
   // A brief built the way the brief builder builds one: the context carries its observations, and the workflow is an object.
   const ready = await createGatedBrief(sql, {
     organizationId: tenant.organizationId,

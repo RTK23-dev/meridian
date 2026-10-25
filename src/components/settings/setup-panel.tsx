@@ -160,13 +160,12 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
   return (
     <div className="space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
       <div className="space-y-1">
-        <p className="font-semibold text-fg">Monthly video budget (USD)</p>
+        <p className="font-semibold text-fg">Monthly budget (USD)</p>
         <p className="text-sm text-fg-muted">
-          The most this workspace may spend in a month, in US dollars, on each of two kinds of work: video generation
-          (checked against the video engine's own ledger) and text work (copy and scripts, research analysis, brand brain
-          suggestions, Factory image labels and OpenRouter JEV decisions, checked against the spend held in the
-          workspace's text ledger). The two are not added together. Blank means no budget is set: video generation stays
-          blocked, and text work has no monthly limit, though each call is still capped. There is no default. {current}
+          The most this workspace may spend in a month, in US dollars, on all paid generation together: video, copy and
+          scripts, research analysis, brand brain suggestions, Factory image labels and OpenRouter JEV decisions. One cap
+          covers them all, and each one counts the others' spend. Blank means no budget is set, so paid generation is
+          blocked until one is saved. Each call is also capped on its own. There is no default. {current}
         </p>
       </div>
       {!canAdmin ? (

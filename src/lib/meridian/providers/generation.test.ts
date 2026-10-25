@@ -14,7 +14,18 @@ import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
 import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
 import type { Sql } from "../learning/store.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../testing/monthly-budget.ts";
 import { storedGenerationModel, storedGenerationModels, saveGenerationModel, type GenerationTask } from "../settings/generation-models.ts";
+
+/**
+ * A workspace with a monthly budget. Paid generation is blocked without one (providers/generation-ledger.ts), so the calls these tests
+ * make need it. The budget is large enough that no test reaches it: the cap is tested in generation-ledger.test.ts.
+ */
+async function budgetedTenant(sql: Sql, label: string) {
+  const tenant = await studioTenant(sql, label);
+  await setMonthlyBudget(sql, tenant.organizationId, 1);
+  return tenant;
+}
 import { completeGenerationTask, completeWithModel, extractJson, generationModelFor, type GenerationDeps, type GenerationInput, type GenerationRecord } from "./chat.server.ts";
 
 const backends = await openTestBackends();
@@ -40,7 +51,7 @@ const embedded: Sql = backends[0]!.sql;
 
 /** One workspace and its record, on the embedded database. Each scenario gets its own, so holds never meet another test's. */
 async function scenario(label: string, operation = "copy-test") {
-  const tenant = await studioTenant(embedded, label);
+  const tenant = await budgetedTenant(embedded, label);
   const record: GenerationRecord = {
     sql: embedded,
     brandId: tenant.brandId,
@@ -486,7 +497,7 @@ test("an uncertain research analysis reports uncertain, so the job does not retr
 // Stored choices, read and written through the database. Each backend runs the same checks.
 for (const { name, sql } of backends) {
   test(`[${name}] a workspace's text model is saved, read back and cleared`, async () => {
-    const tenant = await studioTenant(sql, `gen-save-${name}`);
+    const tenant = await budgetedTenant(sql, `gen-save-${name}`);
     const saved = await saveGenerationModel(sql, { organizationId: tenant.organizationId, task: "copy", modelId: WRITER, actorId: "user-a", choices: CATALOG });
     assert.deepEqual(saved, { status: "saved", modelId: WRITER });
     assert.equal(await storedGenerationModel(sql, tenant.organizationId, "copy"), WRITER);
@@ -498,7 +509,7 @@ for (const { name, sql } of backends) {
   });
 
   test(`[${name}] a decision model, an alias, and a text-only model for images are all refused, and nothing is stored`, async () => {
-    const tenant = await studioTenant(sql, `gen-refuse-${name}`);
+    const tenant = await budgetedTenant(sql, `gen-refuse-${name}`);
     await assert.rejects(saveGenerationModel(sql, { organizationId: tenant.organizationId, task: "copy", modelId: DECIDER, actorId: "user-a", choices: CATALOG }), /is not a text model/);
     await assert.rejects(saveGenerationModel(sql, { organizationId: tenant.organizationId, task: "copy", modelId: "~vendor/writer-latest", actorId: "user-a", choices: CATALOG }), /pinned OpenRouter id/);
     await assert.rejects(saveGenerationModel(sql, { organizationId: tenant.organizationId, task: "vision", modelId: WRITER, actorId: "user-a", choices: CATALOG }), /does not take images/);
@@ -506,21 +517,21 @@ for (const { name, sql } of backends) {
   });
 
   test(`[${name}] a model is never saved without a readable catalogue`, async () => {
-    const tenant = await studioTenant(sql, `gen-nocatalog-${name}`);
+    const tenant = await budgetedTenant(sql, `gen-nocatalog-${name}`);
     await assert.rejects(saveGenerationModel(sql, { organizationId: tenant.organizationId, task: "copy", modelId: WRITER, actorId: "user-a", choices: null }), /could not be read/);
     assert.equal(await storedGenerationModel(sql, tenant.organizationId, "copy"), null);
   });
 
   test(`[${name}] one workspace's chosen model is never read by another`, async () => {
-    const a = await studioTenant(sql, `gen-iso-a-${name}`);
-    const b = await studioTenant(sql, `gen-iso-b-${name}`);
+    const a = await budgetedTenant(sql, `gen-iso-a-${name}`);
+    const b = await budgetedTenant(sql, `gen-iso-b-${name}`);
     await saveGenerationModel(sql, { organizationId: a.organizationId, task: "research_analysis", modelId: WRITER, actorId: "user-a", choices: CATALOG });
     assert.equal(await storedGenerationModel(sql, b.organizationId, "research_analysis"), null);
     assert.deepEqual(await storedGenerationModels(sql, b.organizationId), {});
   });
 
   test(`[${name}] a settled call keeps its provenance, and a second settlement changes nothing`, async () => {
-    const tenant = await studioTenant(sql, `gen-prov-${name}`);
+    const tenant = await budgetedTenant(sql, `gen-prov-${name}`);
     const operation = `copy-prov-${name}-${Date.now()}`;
     const record: GenerationRecord = { sql, brandId: tenant.brandId, correlationId: "corr-p", operation, promptId: "p", promptVersion: "1", inputRef: "r" };
     const { transport } = fakeTransport(() => answered("ok"));

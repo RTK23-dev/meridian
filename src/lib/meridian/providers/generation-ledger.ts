@@ -3,7 +3,8 @@
 //   1. bound: the worst case the call can cost, from the chosen model's stated prices, its context length and max_tokens. A call
 //      that cannot be bounded (an image with no stated context length, a missing price) is refused before anything is written.
 //   2. reserve: a row with status 'in_flight' and estimate_usd = that bound. Under a per-workspace transaction lock, the call is
-//      refused when the month's held spend plus this bound would exceed the workspace's monthly budget (when one is set).
+//      refused when the month's held spend across text and video, plus this bound, would exceed the workspace's monthly budget. A
+//      workspace with no monthly budget is refused: paid generation waits for one.
 //   3. settle: the outcome is written once, on a row that is still 'in_flight':
 //        completed   the provider answered and reported its cost (cost_usd; null when it reported none)
 //        failed      the call was never sent (the gateway reported the provider not connected, before any transport); nothing was sent
@@ -107,39 +108,70 @@ export type HoldInput = {
 
 export type HoldResult = { status: "held"; id: string } | { status: "refused"; reason: string };
 
+/** The current month in UTC, keyed "YYYY-MM" as the video engine keys its months. */
+export function currentMonthUtc(now: Date = new Date()): string {
+  return now.toISOString().slice(0, 7);
+}
+
 /**
- * The spend the workspace holds in the current month: reported cost where there is one, the estimate where there is not. Failed rows
- * (refused before generating) hold nothing.
+ * The text spend a workspace holds in one UTC month: reported cost where there is one, the estimate where there is not. A failed row
+ * (never sent) and a released row hold nothing.
  */
-export async function monthlyHeldUsd(sql: Sql, organizationId: string): Promise<number> {
+export async function textHeldUsdForMonth(sql: Sql, organizationId: string, month: string): Promise<number> {
   const rows = await sql<{ held: string | number | null }>`
     select coalesce(sum(coalesce(cost_usd, estimate_usd)), 0) as held from model_runs
     where organization_id = ${organizationId}
       and status in ('completed', 'in_flight', 'uncertain')
-      and created_at >= date_trunc('month', now())
+      and to_char(created_at at time zone 'UTC', 'YYYY-MM') = ${month}
   `;
   return Number(rows[0]?.held ?? 0);
 }
 
 /**
- * Writes the hold for one call, or refuses it. The workspace's transaction lock makes the month check and the write one step, so two
- * calls cannot both pass a budget that only one of them fits. A workspace without a monthly budget has no monthly limit; the per-call
- * ceiling still applies to every call.
+ * The video engine's committed spend in one UTC month: the reservations it made, paused ones excluded. This is the rule the engine's own
+ * month total uses (engine/jobs/sql-ledger-store.ts), read here so the text path counts the same money.
+ */
+export async function videoCommittedUsdForMonth(sql: Sql, organizationId: string, month: string): Promise<number> {
+  const rows = await sql<{ total: string | number | null }>`
+    select coalesce(sum(reserved_usd), 0) as total from engine_reservations
+    where organization_id = ${organizationId} and state <> 'paused'
+      and to_char(created_at at time zone 'UTC', 'YYYY-MM') = ${month}
+  `;
+  return Number(rows[0]?.total ?? 0);
+}
+
+/**
+ * The spend one monthly budget counts in the current month: text and video together. The cap is one figure for both, so a text hold and
+ * a video reservation each see the other's money. See reserveGenerationCall for the lock that makes the check and the write one step.
+ */
+export async function monthlyHeldUsd(sql: Sql, organizationId: string): Promise<number> {
+  const month = currentMonthUtc();
+  return (await textHeldUsdForMonth(sql, organizationId, month)) + (await videoCommittedUsdForMonth(sql, organizationId, month));
+}
+
+/** What a paid call is told when its workspace has no monthly budget. Paid generation is blocked until one is set. */
+export const NO_MONTHLY_BUDGET_REASON =
+  "No monthly budget is set for this workspace, so paid generation is blocked. Set a monthly budget in Settings. Nothing was sent.";
+
+/**
+ * Writes the hold for one call, or refuses it. The workspace's row lock, which the video engine also takes, makes the month check and the
+ * write one step, so two calls cannot both pass a budget that only one of them fits. A workspace without a monthly budget is refused.
  */
 export async function reserveGenerationCall(sql: Sql, input: HoldInput, estimateUsd: number): Promise<HoldResult> {
   if (!input.organizationId.trim()) return { status: "refused", reason: "No workspace is in scope, so no budget can be held. Nothing was sent." };
   const id = randomUUID();
   return withTransaction(sql, async (tx) => {
-    await tx`select pg_advisory_xact_lock(hashtext(${`generation-ledger:${input.organizationId}`}))`;
+    // The row lock the video engine takes for its own reservations (engine/jobs/sql-ledger-store.ts, withWorkspaceLedger). With both
+    // paths on this lock, a text hold and a video reservation cannot both pass a cap that only one of them fits.
+    await tx`select id from organizations where id = ${input.organizationId} for update`;
     const cap = await monthlyVideoBudgetUsd(tx, input.organizationId);
-    if (cap !== null) {
-      const held = await monthlyHeldUsd(tx, input.organizationId);
-      if (held + estimateUsd > cap + 1e-9) {
-        return {
-          status: "refused" as const,
-          reason: `This call could cost up to $${estimateUsd.toFixed(6)}, and the month's held spend is $${held.toFixed(6)} of a $${cap.toFixed(2)} monthly budget. Nothing was sent.`,
-        };
-      }
+    if (cap === null) return { status: "refused" as const, reason: NO_MONTHLY_BUDGET_REASON };
+    const held = await monthlyHeldUsd(tx, input.organizationId);
+    if (held + estimateUsd > cap + 1e-9) {
+      return {
+        status: "refused" as const,
+        reason: `This call could cost up to $${estimateUsd.toFixed(6)}, and the month's held spend across text and video is $${held.toFixed(6)} of a $${cap.toFixed(2)} monthly budget. Nothing was sent.`,
+      };
     }
     await tx`
       insert into model_runs (

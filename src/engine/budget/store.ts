@@ -38,7 +38,8 @@ export interface LedgerStore {
    */
   setProviderRef(entryId: string, providerRef: string): Promise<LedgerRow>;
   /**
-   * Reserved total: the reservedUsd of the workspace's reservations created in the month, excluding paused ones.
+   * Reserved total: the reservedUsd of the workspace's reservations created in the month, excluding paused ones. On the Postgres store it
+   * also includes the text ledger's held spend for the month, so the one monthly cap covers video and text.
    * Actual total: the actuals of the workspace's entries that happened in the month.
    */
   sumForMonth(workspaceId: string, month: string): Promise<MonthTotals>;
