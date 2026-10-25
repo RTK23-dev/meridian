@@ -20,7 +20,7 @@
  * Scope vocabulary. A scope names evidence items (`GateEvidence.name`). The scope name `IMAGE_SCOPE` stands for every image
  * item. A question's requirements (`spec.evidenceRequirements`) are met only by the names in its own scope.
  */
-import { engineAcceptsImages } from "./capabilities.ts";
+import { resolveImageSupport } from "./capabilities.ts";
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
@@ -262,7 +262,9 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       failureKind: "selection_unavailable",
     });
   }
-  const engineTakesImages = engineAcceptsImages(selection.engineId);
+  // The backend and model are resolved once here, so the image decision and every request made for this decision agree.
+  const imageSupport = await resolveImageSupport({ selection, sql: input.sql, organizationId: input.organizationId });
+  const engineTakesImages = imageSupport.takesImages;
   const images = engineTakesImages ? (input.images ?? []) : [];
 
   // 2b. The brand's calibrated thresholds: the newest stored report for each question version, read for this brand only. A question
@@ -319,7 +321,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
           question,
           selection.engineId,
           "unsupported",
-          `${selection.engineId} cannot judge images, and this question needs one. Routed to human review.`,
+          `${selection.engineId} cannot judge images here (${imageSupport.reason}), and this question needs one. Routed to human review.`,
         );
         continue;
       }
@@ -411,6 +413,7 @@ export async function runEngineGate(input: GateInput): Promise<GateResult> {
       questions: Object.fromEntries(group.questions.map((question) => [question.key, question.spec])),
       images: groupImages.map((image) => ({ bytes: image.bytes, evidenceRef: image.evidenceRef, label: image.label })),
       imagePolicy: group.needsImage ? "required" : "optional",
+      resolved: imageSupport.resolved,
     };
     call.engineCalled = true;
     try {

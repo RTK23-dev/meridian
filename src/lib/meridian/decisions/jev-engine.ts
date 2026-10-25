@@ -107,7 +107,10 @@ export class JevDecisionEngine implements DecisionEngine {
 
 
   async decide(request: DecisionRequest): Promise<DecisionResult> {
-    const backend = await this.backendFor(request.organizationId);
+    // The gate resolves the backend once for the decision. It is read here only when a caller did not resolve it.
+    const backend: { ok: true; backend: "typesafe_direct" | "openrouter" } | { ok: false; reason: string } = request.resolved?.jevBackend
+      ? { ok: true, backend: request.resolved.jevBackend }
+      : await this.backendFor(request.organizationId);
     if (!backend.ok) {
       // The backend is unknown, so nothing is sent to any service. The decision is refused, and no other backend is tried.
       const requestedModel = request.model ?? "";
