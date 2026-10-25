@@ -21,6 +21,7 @@ import {
 import type { Sql } from "../../learning/store.ts";
 import { loadDefaultSql, resolveHiggsfieldCredential, type CredentialEnv } from "../../credentials/resolve.ts";
 import type { CredentialResolution } from "../../credentials/contract.ts";
+import { gatedFetch } from "../../providers/capability.ts";
 
 /** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
 type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
@@ -141,7 +142,7 @@ export class HiggsfieldProvider implements ProductionProvider {
     env?: CredentialEnv;
     lookup?: (organizationId: string) => Promise<CredentialResolution>;
   }) {
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.fetchImpl = options?.fetchImpl || gatedFetch("generation.higgsfield_video");
     this.sql = options?.sql;
     this.env = options?.env;
     this.lookup = options?.lookup;

@@ -20,7 +20,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { liveTransport, type Transport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { hostIsVerified } from "../storage/media-host.ts";
 import { TIKTOK_POSTING_SCOPE, TIKTOK_VIDEO_LIST_SCOPE } from "./connection.ts";
@@ -195,7 +196,7 @@ export class TikTokOrganicChannel implements DistributionChannel {
 
   constructor(options: { transport?: Transport; sleep?: (ms: number) => Promise<void>; polls?: number } = {}) {
     this.deps = {
-      transport: options.transport ?? liveTransport(),
+      transport: options.transport ?? gatedTransport("publish.tiktok"),
       sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
       polls: options.polls ?? DEFAULT_POLLS,
     };

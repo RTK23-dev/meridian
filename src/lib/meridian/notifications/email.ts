@@ -1,5 +1,6 @@
 import type { Transport } from "../providers/http.ts";
-import { liveTransport, sendWithRetry } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import { sendWithRetry } from "../providers/http.ts";
 
 export type EmailMessage = {
   to: string;
@@ -37,7 +38,7 @@ export function realEmailProvider(env?: { url?: string; key?: string }, transpor
       if (!url || !key) {
         return { status: "NOT_CONFIGURED", provider: "real:email", error: "Email delivery is not configured." };
       }
-      const result = await sendWithRetry(transport ?? liveTransport(), {
+      const result = await sendWithRetry(transport ?? gatedTransport("email.send"), {
         method: "POST",
         url,
         headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },

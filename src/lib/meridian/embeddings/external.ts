@@ -1,5 +1,6 @@
 import type { Transport } from "../providers/http.ts";
-import { liveTransport, sendWithRetry } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import { sendWithRetry } from "../providers/http.ts";
 import type { EmbeddingVector } from "./provider.ts";
 
 export type ExternalSemanticEnv = {
@@ -44,7 +45,7 @@ export async function embedExternal(
   if (endpoint.protocol !== "https:" && endpoint.hostname !== "127.0.0.1" && endpoint.hostname !== "localhost") {
     throw new Error("external:semantic requires https. No vector was stored.");
   }
-  const transport = options?.transport ?? liveTransport();
+  const transport = options?.transport ?? gatedTransport("embeddings.external");
   const result = await sendWithRetry(transport, {
     method: "POST",
     url: endpoint.toString(),

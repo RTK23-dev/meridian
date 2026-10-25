@@ -10,6 +10,7 @@
  * - Preserve exact provider identity in decisions and answers.
  */
 
+import { gatedFetch } from "../providers/capability.ts";
 import type {
   JevProvider,
   JevProviderId,
@@ -91,7 +92,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
   }) {
     const config = resolveJevConfig();
     this.baseUrl = options?.baseUrl ?? config.typesafe.baseUrl;
-    this.fetchImpl = options?.fetchImpl ?? globalThis.fetch;
+    this.fetchImpl = options?.fetchImpl ?? gatedFetch("decision.typesafe_jev");
     this.sql = options?.sql;
     this.env = options?.env;
     this.lookup = options?.lookup;

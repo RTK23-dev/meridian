@@ -5,7 +5,8 @@
 import { readArtifact, readMediaBytes } from "../../../engine/jobs/artifact-store.ts";
 import type { Sql } from "../learning/store.ts";
 import { engineObjectStore } from "../storage/engine-media-link.ts";
-import { liveTransport, type Transport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport } from "../providers/http.ts";
 import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
 import { providerAccessToken } from "../providers/access-token.ts";
 import { uploadMetaVideo } from "../providers/meta.ts";
@@ -91,7 +92,7 @@ export async function uploadRepurposeVariantToMeta(
     {
       store: sqlRepurposeUploadStore(sql),
       upload: uploadMetaVideo,
-      transport: options.transport ?? liveTransport(),
+      transport: options.transport ?? gatedTransport("publish.meta_video_upload"),
     },
   );
 }

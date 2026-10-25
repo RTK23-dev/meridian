@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { liveTransport, type Transport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { YOUTUBE_READ_SCOPES, YOUTUBE_UPLOAD_SCOPE } from "./connection.ts";
 import { classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
@@ -32,7 +33,7 @@ export class YouTubeShortsChannel implements DistributionChannel {
   private readonly transport: Transport;
 
   constructor(options: { transport?: Transport } = {}) {
-    this.transport = options.transport ?? liveTransport();
+    this.transport = options.transport ?? gatedTransport("publish.youtube");
   }
 
   checkConnection(connection: OrganicConnection | undefined): ConnectionCheck {

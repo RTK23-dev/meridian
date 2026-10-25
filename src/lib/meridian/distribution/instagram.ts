@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { liveTransport, type Transport, type TransportRequest } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport, TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
 import { INSTAGRAM_PUBLISH_SCOPE } from "./connection.ts";
@@ -51,7 +52,7 @@ export class InstagramReelsChannel implements DistributionChannel {
 
   constructor(options: InstagramOptions = {}) {
     this.options = {
-      transport: options.transport ?? liveTransport(),
+      transport: options.transport ?? gatedTransport("publish.instagram"),
       sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
       polls: options.polls ?? 20,
       pollIntervalMs: options.pollIntervalMs ?? 3000,

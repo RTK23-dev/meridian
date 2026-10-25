@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gatedFetch } from "./capability.ts";
 import { inspectImage } from "../assets/images.ts";
 import type { ImageResult } from "./media.ts";
 import { ProviderConfigResolver } from "../config/resolver.ts";
@@ -117,7 +118,7 @@ export async function generateNanoBananaImage(input: {
     };
   }
   const started = Date.now();
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fetchImpl = input.fetchImpl ?? gatedFetch("generation.gemini_image");
 
   try {
     const response = await fetchImpl(ENDPOINT, {

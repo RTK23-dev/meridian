@@ -11,6 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { gatedFetch } from "../providers/capability.ts";
 import type { AssetLifecycle } from "./object-store.ts";
 import { uploadArtifactToDrive, type ArtifactUploadPolicy, type ArtifactUploadStore } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
@@ -74,7 +75,7 @@ export type DriveWriteInput = {
 /** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
 function driveTransportFor(organizationId: string): ResumableTransport {
   return {
-    fetch: (input, init) => globalThis.fetch(input, init),
+    fetch: gatedFetch("drive.write"),
     accessToken: async () => {
       const access = await resolveDriveAccess(organizationId);
       if (!access.ok) throw new DriveUploadError(access.reason, null, false);

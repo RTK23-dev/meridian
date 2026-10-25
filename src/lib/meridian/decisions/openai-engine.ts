@@ -23,6 +23,7 @@
  * documented contract.
  */
 import { createHash } from "node:crypto";
+import { gatedFetch } from "../providers/capability.ts";
 import { ACCEPTED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { secretForCategory } from "../credentials/resolve.ts";
 import { checkEvidenceSufficiency, minimizeJevState } from "../jev/client.ts";
@@ -306,7 +307,7 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
     sleep?: (ms: number) => Promise<void>;
   } = {}) {
     this.overrides = options.config ?? {};
-    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.fetchImpl = options.fetchImpl ?? gatedFetch("decision.openai");
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 

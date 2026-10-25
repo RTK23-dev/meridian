@@ -1,3 +1,5 @@
+import { isCapabilityDisabledError } from "./capability.ts";
+
 export type TransportRequest = {
   method: "GET" | "POST" | "PUT";
   url: string;
@@ -100,13 +102,21 @@ export function redactProviderText(text: string, options: { url?: string; secret
   return out.replace(SECRET_QUERY_VALUE, "$1=[redacted]");
 }
 
-/** Retries 429 and 5xx. A 4xx other than 429 is the provider's answer and is not retried. */
+/** GET and PUT repeat the same request. A POST may create or charge something, so it is repeated only when the caller says it is idempotent. */
+const REPEATABLE_METHODS = new Set<TransportRequest["method"]>(["GET", "PUT"]);
+
+/**
+ * Retries 429 and 5xx, and a request that failed before any answer, when the request can be repeated safely. A 4xx other than 429 is the
+ * provider's answer and is not retried. A request that cannot be repeated is sent once: its outcome may be unknown, and a repeat could
+ * bill or write twice. A disabled capability sent nothing, so it returns at once.
+ */
 export async function sendWithRetry(
   transport: Transport,
   request: TransportRequest,
-  options?: { attempts?: number; sleep?: (ms: number) => Promise<void>; redact?: readonly string[] },
+  options?: { attempts?: number; sleep?: (ms: number) => Promise<void>; redact?: readonly string[]; idempotent?: boolean },
 ): Promise<HttpResult> {
-  const attempts = options?.attempts ?? 3;
+  const repeatable = options?.idempotent === true || REPEATABLE_METHODS.has(request.method);
+  const attempts = repeatable ? (options?.attempts ?? 3) : 1;
   const sleep = options?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   // Error text is built from transport and provider messages, which can echo the request URL or its query.
   const scrub = (text: string) => redactProviderText(text, { url: request.url, secrets: options?.redact });
@@ -116,6 +126,7 @@ export async function sendWithRetry(
     try {
       response = await transport(request);
     } catch (error) {
+      if (isCapabilityDisabledError(error)) return { ok: false, status: 0, json: null, error: error.message, attempts: attempt };
       last = {
         ok: false,
         status: 0,

@@ -5,27 +5,38 @@
 // - A new file that makes a request fails until it is classified here.
 // - An entry whose file no longer makes a request fails, so the inventory cannot go stale.
 // - A paid or side-effecting request must name the guard that governs it, and a guard must point at a test that exists.
-// - A paid or side-effecting request with no guard is BLOCKED. The BLOCKED list is asserted exactly, so a path can leave it only by a
-//   change that is reviewed here, and a path cannot join it silently.
+// - A paid or side-effecting request must be held in the ledger, guarded by a tested lib-level guard, or disabled. A disabled path has a
+//   default transport that refuses before any request is made (providers/capability.ts). Nothing is left unguarded.
+// - Each disabled path names its capability, and each capability is named by a file and passed to its gate in production code.
 //
-// The inventory is a statement of what the code does today. It does not say that an unguarded path is safe.
+// The inventory is a statement of what the code does today. A disabled path is off until its guard exists, and turning it on is a change
+// that this test records.
 
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { test } from "node:test";
+import { DISABLED_CAPABILITIES, type DisabledCapability } from "./capability.ts";
 
 const ROOT = process.cwd();
 
-/** Kinds that cost money or change something outside Meridian. Every entry of these kinds needs a guard or a BLOCKED reason. */
+/** Kinds that cost money or change something outside Meridian. Every entry of these kinds is held, guarded, or disabled. */
 const COSTLY_OR_EXTERNAL = new Set(["paid", "side_effect"]);
+
+/** The test that proves every disabled capability refuses without a request. */
+const CAPABILITY_TEST = "src/lib/meridian/providers/capability.test.ts";
 
 type Entry = {
   kind: "transport" | "transport_helper" | "paid" | "side_effect" | "read" | "probe" | "auth" | "internal" | "fixture" | "types";
-  /** "gateway" and "ledger" are the engine's guards; "guarded" names a test that proves a lib-level guard; "none" means no guard here. */
-  governed: "gateway" | "ledger" | "guarded" | "none" | "n/a";
-  /** For "guarded": the test file that proves the guard. It must exist. */
+  /**
+   * "gateway" and "ledger" are the engine's guards; "guarded" names a test that proves a lib-level guard; "disabled" means the path's
+   * default transport refuses (providers/capability.ts); "none" means no guard, and no paid or side-effecting entry may have it.
+   */
+  governed: "gateway" | "ledger" | "guarded" | "disabled" | "none" | "n/a";
+  /** For "guarded" and "disabled": the test file that proves the guard. It must exist. */
   evidence?: string;
+  /** For "disabled": the capability whose gate this file uses or is wired to. */
+  capability?: DisabledCapability;
   note: string;
 };
 
@@ -35,20 +46,20 @@ const INVENTORY: Record<string, Entry> = {
 
   // Decisions and JEV
   "src/lib/meridian/decisions/decision-catalog.ts": { kind: "read", governed: "n/a", note: "OpenRouter's public model catalogue, read without a key." },
-  "src/lib/meridian/decisions/openai-engine.ts": { kind: "paid", governed: "none", note: "OpenAI Decisions. A call is not held in the ledger." },
+  "src/lib/meridian/decisions/openai-engine.ts": { kind: "paid", governed: "disabled", capability: "decision.openai", evidence: CAPABILITY_TEST, note: "OpenAI Decisions. Off until its calls are held in the ledger." },
   "src/lib/meridian/decisions/openrouter-engine.ts": {
     kind: "paid",
     governed: "ledger",
     note: "OpenRouter Decisions. Each call is held in the ledger before it is sent and settled once.",
   },
-  "src/lib/meridian/jev/router.ts": { kind: "paid", governed: "none", note: "TypeSafe JEV decisions, the default JEV backend. Not held in the ledger." },
+  "src/lib/meridian/jev/router.ts": { kind: "paid", governed: "disabled", capability: "decision.typesafe_jev", evidence: CAPABILITY_TEST, note: "TypeSafe JEV decisions, the default JEV backend. Off until its calls are held." },
 
   // Generation through providers outside the gateway
-  "src/lib/meridian/perception/multimodal.ts": { kind: "paid", governed: "none", note: "Gemini perception calls. Not held in the ledger." },
-  "src/lib/meridian/production/providers/higgsfield.ts": { kind: "paid", governed: "none", note: "Higgsfield video generation. Not held in the ledger." },
-  "src/lib/meridian/production/providers/omni.ts": { kind: "paid", governed: "none", note: "Gemini omni generation. Not held in the ledger." },
-  "src/lib/meridian/providers/nano-banana.server.ts": { kind: "paid", governed: "none", note: "Gemini image generation. Not held in the ledger." },
-  "src/lib/meridian/embeddings/external.ts": { kind: "paid", governed: "none", note: "A paid embeddings API. Not held in the ledger." },
+  "src/lib/meridian/perception/multimodal.ts": { kind: "paid", governed: "disabled", capability: "perception.gemini", evidence: CAPABILITY_TEST, note: "Gemini perception calls. Off until they are held in the ledger." },
+  "src/lib/meridian/production/providers/higgsfield.ts": { kind: "paid", governed: "disabled", capability: "generation.higgsfield_video", evidence: CAPABILITY_TEST, note: "Higgsfield video generation. Off until it is held in the ledger." },
+  "src/lib/meridian/production/providers/omni.ts": { kind: "paid", governed: "disabled", capability: "generation.gemini_omni", evidence: CAPABILITY_TEST, note: "Gemini omni generation. Off until it is held in the ledger." },
+  "src/lib/meridian/providers/nano-banana.server.ts": { kind: "paid", governed: "disabled", capability: "generation.gemini_image", evidence: CAPABILITY_TEST, note: "Gemini image generation. Off until it is held in the ledger." },
+  "src/lib/meridian/embeddings/external.ts": { kind: "paid", governed: "disabled", capability: "embeddings.external", evidence: CAPABILITY_TEST, note: "A paid embeddings API. Off until it is held in the ledger." },
 
   // Connection tests and probes that a person starts
   "src/lib/meridian/settings/provider-config.ts": { kind: "probe", governed: "n/a", note: "An explicit connection test a person starts. The provider may bill it." },
@@ -87,23 +98,23 @@ const INVENTORY: Record<string, Entry> = {
     note: "An explicit organic publish, with receipts.",
   },
 
-  // Side effects with no guard in this code. They are BLOCKED below.
-  "src/lib/meridian/providers/publish-action.ts": { kind: "side_effect", governed: "none", note: "Publishes paused objects to a provider. Keys are stored, but no test exercises this function." },
-  "src/lib/meridian/storage/drive.ts": { kind: "side_effect", governed: "none", note: "Writes files to a workspace's Google Drive. A retry can create a duplicate file." },
-  "src/lib/meridian/storage/drive-resumable.ts": { kind: "side_effect", governed: "none", note: "Resumable Drive uploads." },
-  "src/lib/meridian/alerts/deliver.ts": { kind: "side_effect", governed: "none", note: "Sends alert webhooks." },
-  "src/lib/meridian/notifications/email.ts": { kind: "side_effect", governed: "none", note: "Sends email." },
-  "src/lib/meridian/jobs/execute.ts": { kind: "side_effect", governed: "none", note: "Sends the request a job carries. The job decides the request." },
-  "src/lib/meridian/hypit/client.ts": { kind: "side_effect", governed: "none", note: "The Hypit bridge client." },
-  "src/lib/meridian/studio/hypit-run.ts": { kind: "side_effect", governed: "none", note: "Starts a Hypit run." },
-  "src/lib/meridian/distribution/facebook.ts": { kind: "side_effect", governed: "none", note: "Facebook publishing. Receipts are written; no idempotency key is sent." },
-  "src/lib/meridian/distribution/instagram.ts": { kind: "side_effect", governed: "none", note: "Instagram publishing. Receipts are written; no idempotency key is sent." },
-  "src/lib/meridian/distribution/tiktok.ts": { kind: "side_effect", governed: "none", note: "TikTok publishing. Receipts are written; no idempotency key is sent." },
-  "src/lib/meridian/distribution/youtube.ts": { kind: "side_effect", governed: "none", note: "YouTube publishing. Receipts are written; no idempotency key is sent." },
-  "src/lib/meridian/providers/meta.ts": { kind: "side_effect", governed: "none", note: "Meta ad calls. The paused-ad guard is in meta-paused-ad.ts; this path is not verified idempotent." },
-  "src/lib/meridian/providers/google-ads.ts": { kind: "side_effect", governed: "none", note: "Google Ads calls, including writes." },
-  "src/lib/meridian/providers/tiktok.ts": { kind: "side_effect", governed: "none", note: "TikTok calls, including writes." },
-  "src/lib/meridian/content-factory/repurpose-upload-service.ts": { kind: "side_effect", governed: "none", note: "The upload service's own request. Not verified idempotent." },
+  // Side effects. Each is disabled: its default transport refuses before any request is made, until its guard exists.
+  "src/lib/meridian/providers/publish-action.ts": { kind: "side_effect", governed: "disabled", capability: "publish.paused_action", evidence: CAPABILITY_TEST, note: "The paused publish action. Off until a test proves its idempotency keys." },
+  "src/lib/meridian/storage/drive.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Google Drive writes and reads. Off; files are kept in Postgres." },
+  "src/lib/meridian/storage/drive-resumable.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Resumable Drive uploads. Their transport comes from drive.ts, which is off." },
+  "src/lib/meridian/alerts/deliver.ts": { kind: "side_effect", governed: "disabled", capability: "alerts.webhook", evidence: CAPABILITY_TEST, note: "Alert webhooks. Its only caller, the job executor, uses the same off capability." },
+  "src/lib/meridian/notifications/email.ts": { kind: "side_effect", governed: "disabled", capability: "email.send", evidence: CAPABILITY_TEST, note: "Outbound email. Off until a send has an idempotency key." },
+  "src/lib/meridian/jobs/execute.ts": { kind: "side_effect", governed: "disabled", capability: "alerts.webhook", evidence: CAPABILITY_TEST, note: "The job executor's alert delivery. Off through the webhook capability." },
+  "src/lib/meridian/hypit/client.ts": { kind: "side_effect", governed: "disabled", capability: "hypit.client", evidence: CAPABILITY_TEST, note: "The Hypit bridge client. Its transport comes from the caller; the lib run is off." },
+  "src/lib/meridian/studio/hypit-run.ts": { kind: "side_effect", governed: "disabled", capability: "hypit.client", evidence: CAPABILITY_TEST, note: "Starts a Hypit run. Off through the Hypit capability." },
+  "src/lib/meridian/distribution/facebook.ts": { kind: "side_effect", governed: "disabled", capability: "publish.facebook", evidence: CAPABILITY_TEST, note: "Facebook publishing. Off; the guarded path is the organic publish with receipts." },
+  "src/lib/meridian/distribution/instagram.ts": { kind: "side_effect", governed: "disabled", capability: "publish.instagram", evidence: CAPABILITY_TEST, note: "Instagram publishing and its reads. Off, since they share one transport." },
+  "src/lib/meridian/distribution/tiktok.ts": { kind: "side_effect", governed: "disabled", capability: "publish.tiktok", evidence: CAPABILITY_TEST, note: "TikTok publishing. Off until it has an idempotency key." },
+  "src/lib/meridian/distribution/youtube.ts": { kind: "side_effect", governed: "disabled", capability: "publish.youtube", evidence: CAPABILITY_TEST, note: "YouTube publishing. Off until it has an idempotency key." },
+  "src/lib/meridian/providers/meta.ts": { kind: "side_effect", governed: "disabled", capability: "ads.meta_write", evidence: CAPABILITY_TEST, note: "Meta ad writes. Their transport is gated in providers/live.ts. The guarded path is meta-paused-ad.ts." },
+  "src/lib/meridian/providers/google-ads.ts": { kind: "side_effect", governed: "disabled", capability: "ads.google_ads_write", evidence: CAPABILITY_TEST, note: "Google Ads writes. Their transport is gated in providers/live.ts." },
+  "src/lib/meridian/providers/tiktok.ts": { kind: "side_effect", governed: "disabled", capability: "ads.tiktok_write", evidence: CAPABILITY_TEST, note: "TikTok ad writes. Their transport is gated in providers/live.ts." },
+  "src/lib/meridian/content-factory/repurpose-upload-service.ts": { kind: "side_effect", governed: "disabled", capability: "publish.meta_video_upload", evidence: CAPABILITY_TEST, note: "The Meta video upload. Off until it is verified idempotent." },
 
   // Auth and session, and internal services
   "src/routes/api/oauth/callback.ts": { kind: "auth", governed: "n/a", note: "The OAuth callback route." },
@@ -126,35 +137,6 @@ const INVENTORY: Record<string, Entry> = {
   "src/lib/meridian/sources/types.ts": { kind: "types", governed: "n/a", note: "A type declaration. No request is made here." },
 };
 
-/**
- * The paid and side-effecting paths with no guard in this code, and why. This list is asserted exactly. Removing a path from it means its
- * guard exists and a test proves it, which the inventory above must then say.
- */
-const BLOCKED: Record<string, string> = {
-  "src/lib/meridian/decisions/openai-engine.ts": "OpenAI decision calls are not held in the ledger.",
-  "src/lib/meridian/jev/router.ts": "TypeSafe JEV decisions are not held in the ledger.",
-  "src/lib/meridian/perception/multimodal.ts": "Gemini perception calls are not held in the ledger.",
-  "src/lib/meridian/production/providers/higgsfield.ts": "Higgsfield video generation is not held in the ledger.",
-  "src/lib/meridian/production/providers/omni.ts": "Gemini omni generation is not held in the ledger.",
-  "src/lib/meridian/providers/nano-banana.server.ts": "Gemini image generation is not held in the ledger.",
-  "src/lib/meridian/embeddings/external.ts": "The paid embeddings API is not held in the ledger.",
-  "src/lib/meridian/storage/drive.ts": "Drive writes have no idempotency key, so a retry can duplicate a file.",
-  "src/lib/meridian/storage/drive-resumable.ts": "Resumable Drive uploads have no idempotency key, so a retry can duplicate a file.",
-  "src/lib/meridian/alerts/deliver.ts": "Alert webhooks have no guard.",
-  "src/lib/meridian/notifications/email.ts": "Outbound email has no guard.",
-  "src/lib/meridian/jobs/execute.ts": "The job executor sends the request a job carries, with no guard of its own.",
-  "src/lib/meridian/hypit/client.ts": "The Hypit client sends the request. The Meta publish that calls it (publishing/hypit-meta.ts) has an idempotency key and an approval step, but neither reaches the request here.",
-  "src/lib/meridian/studio/hypit-run.ts": "A Hypit run has no guard of its own.",
-  "src/lib/meridian/distribution/facebook.ts": "Facebook writes carry no idempotency key.",
-  "src/lib/meridian/distribution/instagram.ts": "Instagram writes carry no idempotency key.",
-  "src/lib/meridian/distribution/tiktok.ts": "TikTok writes carry no idempotency key.",
-  "src/lib/meridian/distribution/youtube.ts": "YouTube writes carry no idempotency key.",
-  "src/lib/meridian/providers/meta.ts": "The Meta ad path is not verified idempotent here.",
-  "src/lib/meridian/providers/google-ads.ts": "Google Ads writes have no guard.",
-  "src/lib/meridian/providers/tiktok.ts": "TikTok calls, including writes, have no guard.",
-  "src/lib/meridian/content-factory/repurpose-upload-service.ts": "The upload service's request is not verified idempotent.",
-  "src/lib/meridian/providers/publish-action.ts": "The paused publish stores idempotency keys, but no test in this repository exercises it.",
-};
 
 /** A direct fetch call. Engine code may not make one at all. */
 const DIRECT_CALL = /(?<!async )(?<!function )(?<![\w.])(?:fetch|fetchImpl)\s*\(|globalThis\.fetch\s*\(|this\.(?:fetchImpl|fetchFn)\s*\(/;
@@ -185,6 +167,11 @@ function codeOf(source: string): string {
     .join("\n");
 }
 
+/** Whether a file's code hands a request to a disabled capability's gate, so the request is off in this file. */
+function wiresGate(file: string): boolean {
+  return /\bgated(?:Fetch|Transport)\(/.test(codeOf(readFileSync(join(ROOT, file), "utf8")));
+}
+
 function requestingFiles(): string[] {
   const found: string[] = [];
   for (const file of sourceFiles(join(ROOT, "src"))) {
@@ -198,30 +185,45 @@ function requestingFiles(): string[] {
 test("every file that makes a request is classified in the inventory, and every entry still makes one", () => {
   const found = requestingFiles();
   const missing = found.filter((file) => !(file in INVENTORY));
-  const stale = Object.keys(INVENTORY).filter((file) => !found.includes(file));
+  // A disabled entry may be a caller that only hands its transport to the callee that sends. It must still wire its gate.
+  const stale = Object.keys(INVENTORY).filter((file) => !found.includes(file) && !(INVENTORY[file]?.governed === "disabled" && wiresGate(file)));
   assert.deepEqual(missing, [], "classify each new request site in direct-requests.test.ts");
   assert.deepEqual(stale, [], "remove each inventory entry whose file no longer makes a request");
 });
 
 test("a guard named as evidence is a test file that exists", () => {
   for (const [file, entry] of Object.entries(INVENTORY)) {
-    if (entry.governed !== "guarded") continue;
+    if (entry.governed !== "guarded" && entry.governed !== "disabled") continue;
     assert.ok(entry.evidence, `${file} names a guard but no evidence`);
     assert.ok(existsSync(join(ROOT, entry.evidence)), `${file}: ${entry.evidence} does not exist`);
   }
 });
 
-test("every paid or side-effecting request is guarded by a named test, or is listed as BLOCKED", () => {
+test("no paid or side-effecting request is unguarded: each is held in the ledger, guarded by a tested guard, or disabled", () => {
   const unguarded = Object.entries(INVENTORY)
-    .filter(([, entry]) => COSTLY_OR_EXTERNAL.has(entry.kind) && (entry.governed === "none"))
+    .filter(([, entry]) => COSTLY_OR_EXTERNAL.has(entry.kind) && entry.governed === "none")
     .map(([file]) => file)
     .sort();
-  assert.deepEqual(unguarded, Object.keys(BLOCKED).sort(), "the BLOCKED list is exactly the unguarded paid and side-effecting paths");
+  assert.deepEqual(unguarded, [], "a paid or side-effecting path must be held, guarded, or disabled");
 });
 
-test("the BLOCKED list is a statement of gaps: each names a reason", () => {
-  for (const [file, reason] of Object.entries(BLOCKED)) {
-    assert.ok(reason.length > 10, `${file} has a reason`);
+test("each disabled path names a capability that exists, every capability is named, and each is passed to its gate in production code", () => {
+  const named = new Set<DisabledCapability>();
+  for (const [file, entry] of Object.entries(INVENTORY)) {
+    if (entry.governed !== "disabled") continue;
+    assert.ok(entry.capability && entry.capability in DISABLED_CAPABILITIES, `${file} names a capability in providers/capability.ts`);
+    named.add(entry.capability);
+  }
+  const unnamed = (Object.keys(DISABLED_CAPABILITIES) as DisabledCapability[]).filter((capability) => !named.has(capability));
+  assert.deepEqual(unnamed, [], "every disabled capability is used by a classified file");
+  const production = sourceFiles(join(ROOT, "src"))
+    .filter((file) => !file.endsWith("providers/capability.ts"))
+    .map((file) => readFileSync(file, "utf8"));
+  for (const capability of named) {
+    assert.ok(
+      production.some((source) => source.includes(`"${capability}"`)),
+      `${capability} is passed to its gate in production code`,
+    );
   }
 });
 

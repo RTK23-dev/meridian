@@ -1,3 +1,4 @@
+import { gatedTransport } from "./capability.ts";
 import { liveTransport, type Transport } from "./http.ts";
 import { probeAdLibrary, probeMeta, publishMetaPaused } from "./meta.ts";
 import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
@@ -161,7 +162,9 @@ export async function publishPausedStages(input: {
   transport?: Transport;
 }): Promise<PausedStage[]> {
   const env = input.env ?? process.env;
-  const transport = input.transport ?? liveTransport();
+  // A paused publish writes ads to the provider. Its default transport is gated per provider, so nothing is sent until that write is guarded.
+  const writeCapability = input.provider === "meta" ? "ads.meta_write" : input.provider === "tiktok" ? "ads.tiktok_write" : "ads.google_ads_write";
+  const transport = input.transport ?? gatedTransport(writeCapability);
   const token = input.accessToken?.trim() ?? "";
   if (!token) {
     // No stored token means nothing is sent. Every stage is reported as not connected, with the reason.

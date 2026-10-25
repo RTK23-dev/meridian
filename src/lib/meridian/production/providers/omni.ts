@@ -17,6 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { gatedFetch } from "../../providers/capability.ts";
 import {
   providerPromptOf,
   type CreativeSpec,
@@ -179,7 +180,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     env?: CredentialEnv;
     lookup?: (organizationId: string) => Promise<CredentialResolution>;
   }) {
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.fetchImpl = options?.fetchImpl || gatedFetch("generation.gemini_omni");
     this.sql = options?.sql;
     this.env = options?.env;
     this.lookup = options?.lookup;
