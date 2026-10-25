@@ -19,6 +19,31 @@ A decision never goes to the chat endpoint, and a chat call never goes to the De
 
 A workspace's key and model never reach another organization. Every lookup is scoped to the signed-in workspace.
 
+## Decision models: the live catalogue
+
+Decision models come from OpenRouter's live model catalogue, read without a key from `GET https://openrouter.ai/api/v1/models?output_modalities=decisions`. An entry is eligible for the Decisions endpoint only if its output modality is `decisions`. The catalogue does not say which question types a model answers, so Meridian also keeps a **profile** for each model it has verified against the vendor's documentation. A model with no profile is listed with its reason and is not offered.
+
+| Rule | What it does |
+| --- | --- |
+| Aliases (`~…`) | Refused everywhere. An alias moves to new builds, so its pinned target is what can be chosen. |
+| No usable input price | Excluded. The call's cost could not be bounded before it is sent. |
+| No context length | Excluded, for the same reason. |
+| No verified profile | Listed under "Not offered", with the reason. Meridian does not infer a model's questions or inputs from its name. |
+| Catalogue unavailable | No decision model is offered, and no decision is sent. A failed read is remembered for one minute. |
+
+The profiles in code (`src/lib/meridian/decisions/decision-catalog.ts`) at 2026-10-25:
+
+| Model | Answers | Takes | Basis |
+| --- | --- | --- | --- |
+| `typesafe/jev-1.14` | probability, choice, score | text, PNG/JPEG images | TypeSafe's documentation, as recorded. The catalogue agrees on modalities. |
+| `typesafe/jev-1.13` | probability, choice, score | text only | TypeSafe's documentation, as recorded. **The catalogue now lists image input too.** Meridian keeps the stricter reading until a vendor source or a live check says otherwise. |
+
+The other 25 decision models in the recorded catalogue (`nace-ai/…`, `perplexity/…`, `liquid/…`, `cloudflare/…` and others) are listed and not offered. Each needs a profile, and a profile needs evidence of which primitives it answers. None has been recorded.
+
+## The per-call ceiling
+
+Before a decision is sent, its most expensive case is computed: the model's whole context length at its catalogued input price. The call is refused if that ceiling is above the deployment's limit, `OPENROUTER_DECISION_MAX_USD_PER_CALL` (default `0.05`). A set value that is not a positive number is refused, so a mistyped limit cannot allow more than it says. The ceiling is stored with the provider-reported cost, so the two can be compared. It is a bound, not an estimate, and it is not a monthly budget: decision spend has no monthly limit yet.
+
 ## Every path
 
 | Where | What it does | Classification | Key | State |
@@ -40,12 +65,14 @@ A workspace's key and model never reach another organization. Every lookup is sc
 
 ## Open decisions for the owner
 
-1. **Which model JEV uses through OpenRouter.** JEV through OpenRouter has no model setting of its own. It uses the workspace's OpenRouter decision model (`typesafe/jev-1.14` by default, pinned), the same one the OpenRouter Decisions engine uses. Whether JEV should choose its own pinned model is a product decision. Nothing has been changed here.
-2. **`typesafe/jev-1.13` is verified for text only.** Its documentation states no image support, so the engine refuses images for it.
-3. **Score-level and choice-criteria shapes.** The request shape follows the documentation's published examples. A single live call on a real key is needed to confirm the shapes the API accepts for all three question types before the engine is treated as live-verified.
+1. **Copy generation with a workspace key.** Ordinary chat (copy generation) still uses only the deployment's `OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` for its model. A workspace's own OpenRouter key is not used there. Moving chat onto the workspace path needs the workspace's model choice for chat, and it changes what a workspace's key can do. This is a product decision.
+2. **Which model JEV uses through OpenRouter.** JEV through OpenRouter uses the workspace's OpenRouter decision model. Whether JEV should choose its own pinned model is a product decision.
+3. **Image input for `typesafe/jev-1.13`.** The catalogue lists it with image input; the recorded documentation does not. The question is whether TypeSafe's documentation says so, or a live check confirms it. Until then it stays text-only.
+4. **Image input for JEV at all.** JEV's input contract is text-only in its own documentation for the TypeSafe backend. Through OpenRouter, JEV receives image evidence only when the selected model's profile takes images, and only as image parts.
 
 ## What was not verified
 
-- No live call was made to OpenRouter or TypeSafe. Every test uses a fixture fetch stub or a fake router. The browser check exercised the connection test without a key, which sends nothing, and the JEV backend control with no keys saved.
-- JEV through OpenRouter takes no images. The shared gate removes images before any engine declared text-only is called, and JEV is declared text-only, so an image-bearing decision reaches OpenRouter without them. Lifting that needs a decision about JEV's image contract, not a code change alone.
-- The reported cost is stored as the provider reports it. Meridian has no price for this engine, so decision spend records its cost as unknown.
+- **No live call has been made to OpenRouter in this change.** No OpenRouter key is available in this environment, so no paid request was sent. The catalogue read is public and was recorded (2026-10-25, 30 decision entries). Every other test uses a fixture or a fake fetch.
+- **Live verification steps that remain for the owner:** (1) save a read-only OpenRouter key in Settings; (2) choose `typesafe/jev-1.14`; (3) run **Test the connection**, which sends one billable request; (4) confirm the returned model, the provider request id and the cost against the recorded `ceilingUsd` and `reportedCostUsd`; (5) for JEV over OpenRouter, run one decision with an image and confirm the lineage records the image as sent.
+- The reported cost is stored as the provider reports it, and the ceiling is stored beside it. Meridian has no price table for this engine, so decision spend records the reported cost as reported, not as a price.
+- The profile for each model is a claim about its documentation. No primitive of any model has been checked by a live request.

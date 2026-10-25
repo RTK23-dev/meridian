@@ -93,7 +93,7 @@ A token row's dollar cost is written only when the price table (`factory/price-t
 The table is versioned, and each entry names the provider's pricing page and the date it was read. The OpenAI Decisions default model,
 `gpt-6-luna`, is priced from that page: $0.10 input, $0.01 cached input and $0.50 output per million tokens, with the long-context rates
 above 272,000 input tokens, read on 2026-10-13. A model with no entry is **tokens only, not priced**: its cost is null, never zero, and
-the run view says so. The JEV engine reports no token usage, so its decisions write no row, and the run says its spend is not measured. When a workspace's JEV backend is OpenRouter, the cost OpenRouter reports for each decision is kept on the decision's run, and it is never estimated.
+the run view says so. The JEV engine reports no token usage, so its decisions write no row, and the run says its spend is not measured. When a workspace's JEV backend is OpenRouter, the cost OpenRouter reports for each decision is kept on the decision's run, and it is never estimated. Each such decision is also checked against its most-possible cost, the model's whole context at its catalogued input price, before it is sent; the most-possible cost is stored beside the reported one (OPENROUTER.md).
 
 Caps count only priced cost. Unpriced spend is not counted. The priced cost is rounded up to a whole cent when it is compared with a cap,
 so a cap is never under-counted. The run view states this rule.
