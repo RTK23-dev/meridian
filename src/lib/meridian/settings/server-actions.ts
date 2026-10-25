@@ -16,6 +16,8 @@ import { isDecisionEngineId } from "../decisions/types.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
 import { OpenRouterDecisionsEngine, validateDecisionModel } from "../decisions/openrouter-engine.ts";
 import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
+import { JevDecisionEngine } from "../decisions/jev-engine.ts";
+import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
 import { readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
 
 /** The workspace's monthly video budget in US dollars, or null when none is set. Any member may read it. */
@@ -241,4 +243,30 @@ export const testOpenRouterDecisionConnection = createServerFn({ method: "POST" 
       message: outcome.message,
       health: await engine.healthFor(data.organizationId),
     };
+  });
+
+/**
+ * Chooses the backend JEV decisions use for this workspace: TypeSafe or OpenRouter. The chosen backend must report READY first,
+ * and the stored choice is kept if it does not. Only the backend is stored. The model comes from that backend's own settings.
+ */
+export const saveJevBackend = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const backend = asText(obj.backend);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!backend) throw new Error("backend is required.");
+    return { organizationId, backend };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    if (!isJevBackend(data.backend)) {
+      return { ok: false as const, reason: `'${data.backend}' is not a JEV backend. Choose TypeSafe or OpenRouter.` };
+    }
+    const target = await new JevDecisionEngine().healthForBackend(data.organizationId, data.backend);
+    if (target.status !== "READY") return { ok: false as const, reason: `${target.message} The JEV backend is unchanged.` };
+    await writeJevBackend(sql, { organizationId: data.organizationId, actorId: context.userId, backend: data.backend });
+    return { ok: true as const, backend: data.backend };
   });

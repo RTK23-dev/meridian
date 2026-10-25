@@ -8,6 +8,7 @@ import { Button, DisabledReason, ErrorState, Field, SelectInput } from "@/compon
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { OpenRouterDecisionControls, type OpenRouterModelStatus } from "@/components/openrouter-decision-controls";
+import { JevBackendControls, type JevBackendOptionView, type JevBackendStatusView } from "@/components/jev-backend-controls";
 import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -29,6 +30,8 @@ type EngineStatus = {
 type Status = {
   active: { engineId: "jev" | "openai-decisions" | "openrouter-decisions"; source: "workspace" | "deployment" | "default"; invalidDeploymentValue?: string };
   openrouterModel: OpenRouterModelStatus;
+  jevBackend: JevBackendStatusView;
+  jevBackends: JevBackendOptionView[];
   engines: EngineStatus[];
 };
 
@@ -139,6 +142,13 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
         ))}
       </div>
 
+      <JevBackendControls
+        key={status.jevBackend.backend ?? "unreadable"}
+        organizationId={organizationId}
+        canAdmin={canAdmin}
+        status={status.jevBackend}
+        options={status.jevBackends}
+      />
       {status.engines.some((engine) => engine.id === "openrouter-decisions") ? (
         <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={status.openrouterModel} />
       ) : null}
