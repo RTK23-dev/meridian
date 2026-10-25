@@ -2,8 +2,8 @@
 // seed-holds.mjs prepares. It checks the uncertain-hold panel in Settings (the reason gate, keyboard release, focus, the notice, and
 // the audit row the release writes), a saved key that reads as stored but not live-verified, and blank configuration failing closed.
 // No provider request is sent: the key is a fixture, and the run fails if any request leaves the local server.
-// It does not check stale readiness: the readiness code never marks a recorded success as stale (see docs/RELEASE_ACCEPTANCE.md).
-// Steps and the account it needs are in docs/RELEASE_ACCEPTANCE.md.
+// Stale readiness is not checked here: providers/stored-freshness.test.ts covers it, with the same function the screens call.
+// run.mjs does the whole sequence (the account, the seed, this pass and the database check); docs/RELEASE_ACCEPTANCE.md describes it.
 
 import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
@@ -117,6 +117,8 @@ try {
       rowText = await row.innerText();
     }
     assert.match(rowText, /Stored key/, "the saved key is shown by its last characters only");
+    assert.match(rowText, /Saved, not checked live/, "the row says the key is saved and not checked live");
+    assert.doesNotMatch(rowText, /Usable/, "the row no longer calls a saved key usable");
     assert.doesNotMatch(rowText, /healthy|live verified|verified against|connected and tested/i, "the row never claims a live verification");
     const main = await page.locator("main").innerText();
     assert.match(main, /Nothing is checked against a live provider here\./, "the page says nothing was checked against a live provider");

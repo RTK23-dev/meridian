@@ -1,61 +1,72 @@
 # Release acceptance: browser checks for the Settings states
 
 This is the browser acceptance for the release review of PR #80. It checks what a workspace administrator sees in Settings: the uncertain
-budget holds and their release, and the provider rows, where a saved key must read as stored and not as verified live. It runs against a
-local dev server in the testing runtime, on a database that the seed script prepares. It sends no provider request. The key it saves is a
-fixture, and the run fails if any request leaves the local server.
+budget holds and their release, and the provider rows, where a saved key must read as saved and not as checked live. It runs against a
+dev server in the testing runtime, on a fresh embedded database. It sends no provider request. The key it saves is a fixture, and the run
+fails if any request leaves the local server.
 
 The screenshots from the passing run are in `docs/release-acceptance/`.
 
 ## Run it
 
-1. Start the dev server in the testing runtime, on a data directory of your own:
+One command does the whole sequence, locally or in CI:
 
-       MERIDIAN_TESTING_RUNTIME=true MERIDIAN_LOCAL_DATA_DIR=/path/to/data npm run dev
+    node scripts/release-acceptance/run.mjs
 
-2. Create the owner account once, through the create-account form on `/login`: name `Acceptance Owner`, email
-   `acceptance-owner@example.com`, password `AcceptancePass-1`, then the workspace `Acceptance workspace`. The seed and the browser pass
-   use these values unless `ACCEPTANCE_EMAIL` and `ACCEPTANCE_PASSWORD` are set.
+The script starts the dev server on a fresh data directory, creates the owner account through the sign-up form (`acceptance-owner@example.com`,
+password `AcceptancePass-1`, workspace `Acceptance workspace`), stops the server, seeds two uncertain holds, starts the server again, runs
+the browser checks, and then checks the database. Set `ACCEPTANCE_OUT` to choose where the screenshots and the server log go; the default
+is `artifacts/release-acceptance`. Set `ACCEPTANCE_BASE_URL` if the server is not on `http://127.0.0.1:8080`.
 
-3. Stop the dev server. The embedded database takes one process at a time. Seed the holds into the same directory:
+The steps are also available one at a time, against a data directory you choose. The embedded database takes one process at a time, so the
+server is stopped while the seed or the database check runs:
 
-       node scripts/release-acceptance/seed-holds.mjs /path/to/data
+    node scripts/release-acceptance/seed-holds.mjs <data directory>
+    node scripts/release-acceptance/acceptance.mjs
+    node scripts/release-acceptance/verify-release.mjs <data directory>
 
-4. Start the dev server again, on the same directory, and run the browser pass:
-
-       ACCEPTANCE_OUT=artifacts/release-acceptance node scripts/release-acceptance/acceptance.mjs
-
-The seed resets the two holds on every run, so the pass starts from the same state. Set `ACCEPTANCE_BASE_URL` if the server is not on
-`http://127.0.0.1:8080`.
+CI runs the same script in the `release-acceptance` job, which the `check` gate requires. The job uploads the screenshots and the server log
+whether the run passes or fails.
 
 ## What the run checks
 
-| ID | Check | Result on `c0748af`-era code |
+| ID | Check | Result |
 | --- | --- | --- |
 | A1 | Two uncertain holds are listed with their operation and model | PASS |
 | A2 | A release with no reason is disabled | PASS |
 | A3 | Keyboard: the reason takes focus, a reason under 10 characters keeps release disabled, Tab reaches release with a visible focus ring | PASS |
 | A4 | Keyboard: Enter releases the hold, the notice names it, and only that hold leaves the list | PASS |
 | A5 | The second, unreleased hold keeps its release disabled | PASS |
-| B1 | A stored key reads as stored and usable, and nothing on the row or the page claims a live verification | PASS |
+| B1 | A stored key reads as "Saved, not checked live", and nothing on the row or the page claims a live verification | PASS |
 | C1 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
 | D1 | No request left the local server | PASS |
 | E1 | Phone width (390 px): no horizontal scroll | PASS |
 
-The run prints `SUMMARY 9 pass, 0 fail` on the reset state. The audit side of A4 was checked separately, against the database: the
-release wrote one `generation_hold_releases` row for the first hold, with the admin's user id, the organization, and the reason typed
-in A3. The second hold stayed `uncertain`.
+`verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
+with a reason of at least ten characters, and the second hold still `uncertain`.
+
+## Stale readiness
+
+A recorded provider success is HEALTHY only while it is fresh. The window is one day (`PROVIDER_SUCCESS_FRESH_MS` in `providers/phase.ts`).
+The success is recorded only when someone checks or connects the provider, so a shorter window fails closed sooner: a success older than a day
+reads DEGRADED with "The last successful request is stale.", and a success that cannot be read as a time is DEGRADED too.
+
+The rule is tested by `providers/stored-freshness.test.ts`, which calls the function the Integrations and Performance screens call. The
+browser pass does not seed a stored success, because that needs a sealed credential. The 90-day case that the review reported now reads DEGRADED.
+
+A stale connection stops performance sync from being planned until someone checks the provider again. Performance sync does not record a
+success, so re-checking is the only way back to HEALTHY.
+
+## The saved-key wording
+
+A stored key shows the status "Saved, not checked live", with the reason "The workspace's own key is saved and can be read. Nothing has
+been checked against the provider with it." The setup flow has no live-verified state: the Check key action reads the key and calls no
+provider. The HEALTHY phase in the connection rows is the only live-verified state, and it needs a recorded successful provider request.
 
 ## What is not covered
 
-- **Stale readiness: FAIL.** `src/lib/meridian/providers/live.ts` (`phaseForProbe`) passes `stale: false` to `connectionPhase` and nothing
-  else ever sets it. A recorded success therefore reads HEALTHY however old it is. A 90-day-old success returns
-  `HEALTHY | The last provider request succeeded.` `connectionPhase` in `providers/phase.ts` says HEALTHY requires a fresh success, so the
-  rule exists and the path never applies it. The fix needs a freshness window, and the codebase defines none. It is a change to provider
-  readiness logic, so it is not made here.
-- **The wording "Usable".** A saved key shows the badge "Usable" with the line "The workspace's own saved key is in use." No live request
-  has been made, and the page says so, but "Usable" next to a stored key reads more like a working connection than a saved one.
-- **Live provider behaviour.** Nothing here calls a provider, so this proves the screens, not the providers.
+- **Live provider behaviour.** Nothing here calls a provider, so this proves the screens and the fixtures, not the providers.
 - **Server-side outbound calls.** The browser can see only the requests the page makes. A request the server makes on its own is not
   visible from here.
-- **PostgreSQL.** This pass ran on the embedded database. The same screens are not run against PostgreSQL here.
+- **PostgreSQL.** The browser pass ran on the embedded database. The same screens are not run against PostgreSQL here.
+- **The stored-success browser case.** Stale readiness is covered by its function test, not by a browser check of a seeded provider row.

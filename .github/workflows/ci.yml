@@ -207,22 +207,49 @@ jobs:
   # The gate that e2e waits on. It passes only when every test shard and the static checks pass. It keeps the name `check`,
   # which docs/TESTING.md names as the job that decides whether code can merge.
   check:
-    needs: [tests, static, sidecar, postgres]
+    needs: [tests, static, sidecar, postgres, release-acceptance]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require every test shard, the static checks, the sidecar tests and the PostgreSQL money checks to pass
+      - name: Require every test shard, the static checks, the sidecar tests, the PostgreSQL money checks and the release acceptance to pass
         env:
           TESTS_RESULT: ${{ needs.tests.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           SIDECAR_RESULT: ${{ needs.sidecar.result }}
           POSTGRES_RESULT: ${{ needs.postgres.result }}
+          RELEASE_ACCEPTANCE_RESULT: ${{ needs.release-acceptance.result }}
         run: |
-          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT; sidecar: $SIDECAR_RESULT; postgres: $POSTGRES_RESULT"
+          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT; sidecar: $SIDECAR_RESULT; postgres: $POSTGRES_RESULT; release acceptance: $RELEASE_ACCEPTANCE_RESULT"
           test "$TESTS_RESULT" = success
           test "$STATIC_RESULT" = success
           test "$SIDECAR_RESULT" = success
           test "$POSTGRES_RESULT" = success
+          test "$RELEASE_ACCEPTANCE_RESULT" = success
+
+  # The release browser acceptance: the Settings screens for uncertain holds and stored keys, and the audited release. It runs
+  # scripts/release-acceptance/run.mjs against a dev server on a fresh embedded database, with the testing runtime. It sends no provider
+  # request, and every request stays on the local server. The screenshots and the server log are kept whether or not it passes.
+  release-acceptance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Run the release browser acceptance
+        env:
+          ACCEPTANCE_OUT: artifacts/release-acceptance
+        run: node scripts/release-acceptance/run.mjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-acceptance
+          path: artifacts/release-acceptance/
+          if-no-files-found: ignore
 
   sidecar:
     runs-on: ubuntu-latest
