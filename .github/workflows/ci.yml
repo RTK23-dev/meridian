@@ -15,9 +15,10 @@ env:
 jobs:
   ui-smoke:
     runs-on: ubuntu-latest
-    # The UI baseline captures every route at each width and theme, and the run has no other limit. A stalled capture fails here in
-    # 45 minutes, instead of holding the job for the six-hour default.
-    timeout-minutes: 45
+    # The UI baseline captures every route at each width and theme: about 11 minutes locally, and longer on the runner. Its own
+    # watchdog (scripts/ui-baseline.mjs) ends a stall first, at 75 minutes, and names the route it stopped on. This limit is the
+    # backstop above that, so a stall never holds the job for the six-hour default.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

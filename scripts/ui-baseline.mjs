@@ -7,6 +7,25 @@ import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 import { settleAnimations } from "./page-settle.mjs";
 
+const startedAt = Date.now();
+// The run prints a line before each capture, so a stall is visible and names the route it stopped on.
+let lastStep = "starting";
+const step = (label) => {
+  lastStep = label;
+  console.log(`[ui-baseline ${Math.round((Date.now() - startedAt) / 1000)}s] ${label}`);
+};
+// Some page calls have no timeout of their own (a page evaluate, the accessibility scan). They wait for as long as the page's
+// script takes to answer. The watchdog ends the run first, with the last step named, so a stall fails with its route in the log
+// instead of holding the job until its limit.
+// About 11 minutes locally, and about 21 with the CPU throttled four times. The default leaves room for a slower runner, and it ends
+// a real stall before the ui-smoke job's own limit.
+const WATCHDOG_MS = Number(process.env.UI_BASELINE_WATCHDOG_MS || 75 * 60_000);
+const watchdog = setTimeout(() => {
+  const limit = WATCHDOG_MS >= 60_000 ? `${Math.round(WATCHDOG_MS / 60_000)} minutes` : `${Math.round(WATCHDOG_MS / 1000)} seconds`;
+  console.error(`UI baseline stopped after ${limit} without finishing. Last step: ${lastStep}`);
+  process.exit(1);
+}, WATCHDOG_MS);
+
 const baseUrl = checkedUrl(process.env.UI_BASELINE_URL || "http://127.0.0.1:8080/");
 const root = resolve(process.env.UI_BASELINE_DIR || "docs/ui-baseline");
 const outputRoot = resolve(process.env.UI_BASELINE_OUTPUT_ROOT || process.cwd());
@@ -179,7 +198,9 @@ const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "
 try {
   const discoveryContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
   const discoveryPage = await discoveryContext.newPage();
+  step("signing in and preparing the fixture workspace");
   const seededBrandId = await prepareFixtureWorkspace(discoveryPage);
+  step("discovering routes");
   const discoveredRoutes = await discoverRoutes(discoveryPage, seededBrandId);
   const captureFilter = (process.env.UI_BASELINE_CAPTURE_ROUTES || "").split(",").map((route) => route.trim()).filter(Boolean);
   const routes = captureFilter.length
@@ -199,11 +220,15 @@ try {
     for (const width of widths) {
       await page.setViewportSize({ width, height: 960 });
       for (const url of routes) {
+        step(`${theme} ${width}px ${new URL(url).pathname}`);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
         await page.waitForFunction(() => document.body.innerText.trim().length > 0, undefined, { timeout: 10_000 }).catch(() => undefined);
         const overflow = await page.evaluate(() => {
           const viewport = document.documentElement.clientWidth;
+          const horizontal = document.documentElement.scrollWidth > viewport + 1;
+          // The offending elements are only named in the failure message below, so they are measured only when the page overflows.
+          if (!horizontal) return { horizontal, elements: [] };
           const elements = [...document.querySelectorAll("body *")]
             .filter((element) => {
               const rect = element.getBoundingClientRect();
@@ -214,7 +239,7 @@ try {
               const rect = element.getBoundingClientRect();
               return `${element.tagName.toLowerCase()}.${String(element.className ?? "").split(/\s+/).slice(0, 3).join(".")} [${Math.round(rect.left)}..${Math.round(rect.right)}; ${element.clientWidth}/${element.scrollWidth}]`;
             });
-          return { horizontal: document.documentElement.scrollWidth > viewport + 1, elements };
+          return { horizontal, elements };
         });
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
@@ -242,5 +267,6 @@ try {
   }
   console.log(JSON.stringify({ ok: true, routes: routes.length, captureCount: captures.length, accessibility, outputDir, captures }, null, 2));
 } finally {
+  clearTimeout(watchdog);
   await browser.close();
 }
