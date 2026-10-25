@@ -212,7 +212,9 @@ try {
 
   const captures = [];
   const accessibility = [];
-  for (const theme of themes) {
+  // The two themes capture the same routes independently, each in its own browser context, so they run side by side. Each theme keeps
+  // every width and route, and the accessibility scan still runs at 1440 px in both.
+  await Promise.all(themes.map(async (theme) => {
     const context = await browser.newContext({ colorScheme: theme, storageState });
     // The app takes its theme from the saved choice (dark by default), not from the browser's colour scheme, so set the choice here.
     await context.addInitScript((value) => { try { localStorage.setItem("meridian-theme", value); } catch { /* storage off */ } }, theme);
@@ -264,7 +266,7 @@ try {
       }
     }
     await context.close();
-  }
+  }));
   console.log(JSON.stringify({ ok: true, routes: routes.length, captureCount: captures.length, accessibility, outputDir, captures }, null, 2));
 } finally {
   clearTimeout(watchdog);
