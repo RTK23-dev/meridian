@@ -35,10 +35,12 @@ export function createDecisionEngines(options: {
   openai?: OpenAiDecisionsEngine;
   openrouter?: OpenRouterDecisionsEngine;
 } = {}): DecisionEngineRegistry {
+  // One OpenRouter engine serves both the decisions engine and JEV's OpenRouter backend, so they share keys and settings.
+  const openrouter = options.openrouter ?? new OpenRouterDecisionsEngine();
   return {
-    jev: new JevDecisionEngine(options.jevRouter),
+    jev: new JevDecisionEngine(options.jevRouter, { openrouter }),
     "openai-decisions": options.openai ?? new OpenAiDecisionsEngine(),
-    "openrouter-decisions": options.openrouter ?? new OpenRouterDecisionsEngine(),
+    "openrouter-decisions": openrouter,
   };
 }
 
