@@ -14,6 +14,7 @@ import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
 import type { OpenRouterCheckStore } from "./openrouter-engine.ts";
 import type { DecisionRequest } from "./types.ts";
 import type { EngineSelection } from "./selection.ts";
+import { memoryDecisionHolds } from "./holds.ts";
 
 const ORG = "org_budget_fixture";
 const KEY = "sk-or-v1-budget-fixture-secret-0123456789";
@@ -75,7 +76,7 @@ function counting(response: () => Response | Promise<Response>) {
 }
 
 function engineWith(options: { fetchImpl: typeof fetch; catalog: DecisionCatalogSource; workspaceModel?: string | null }): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({
+  return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(),
     fetchImpl: options.fetchImpl,
     keys,
     store: { ...noCheck, async workspaceModel() { return options.workspaceModel ?? null; } },

@@ -13,6 +13,7 @@ import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateQuestion, 
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenRouterDecisionsEngine, type OpenRouterCheckStore } from "./openrouter-engine.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";
+import { memoryDecisionHolds } from "./holds.ts";
 
 const KEY = "sk-or-v1-jev-image-fixture-secret-0123456789";
 
@@ -59,7 +60,7 @@ function openRouterWith(): { engine: OpenRouterDecisionsEngine; requests: Record
   }) as typeof fetch;
   const keys = { async keyFor() { return { secret: KEY, fingerprint: "sk-or-…6789", reason: "" }; } };
   const store: OpenRouterCheckStore = { async workspaceModel() { return null; }, async latestCheck() { return null; } };
-  const engine = new OpenRouterDecisionsEngine({ fetchImpl, keys, store, deploymentModel: undefined, catalog: recordedDecisionCatalogSource() });
+  const engine = new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(), fetchImpl, keys, store, deploymentModel: undefined, catalog: recordedDecisionCatalogSource() });
   return { engine, requests };
 }
 

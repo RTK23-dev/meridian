@@ -23,6 +23,7 @@ import {
 } from "./openrouter-engine.ts";
 import type { OpenRouterCheckRecord } from "./openrouter-settings.ts";
 import type { DecisionRequest } from "./types.ts";
+import { memoryDecisionHolds } from "./holds.ts";
 
 const KEY = "sk-or-v1-fixture-secret-0123456789abcdef";
 const KEY_FINGERPRINT = "sk-or-…cdef";
@@ -106,7 +107,7 @@ const noCheck: OpenRouterCheckStore = {
 };
 
 function engine(options: { fetchImpl?: typeof fetch; store?: OpenRouterCheckStore; keys?: OpenRouterKeySource; deploymentModel?: string; catalog?: DecisionCatalogSource } = {}): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({ keys: keySource, store: noCheck, deploymentModel: undefined, catalog: recordedDecisionCatalogSource(), ...options });
+  return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(), keys: keySource, store: noCheck, deploymentModel: undefined, catalog: recordedDecisionCatalogSource(), ...options });
 }
 
 /** A Decisions response body for the given answers. */

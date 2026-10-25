@@ -15,6 +15,7 @@ import type { DecisionEngineRegistry } from "./dispatcher.ts";
 import type { Sql } from "../learning/store.ts";
 import type { DecisionEngine, DecisionRequest } from "./types.ts";
 import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { memoryDecisionHolds } from "./holds.ts";
 
 const ORG = "org_jev_backend_fixture";
 const KEY = "sk-or-v1-jev-backend-secret-abcdef0123456789";
@@ -93,7 +94,7 @@ function openrouter(
   calls: string[] = [],
   check: OpenRouterCheckRecord | null = null,
 ): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({
+  return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(),
     catalog: recordedDecisionCatalogSource(),
     fetchImpl: ((url: string | URL | Request, init?: RequestInit) => {
       calls.push(String(url));

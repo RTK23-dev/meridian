@@ -16,6 +16,7 @@ import { persistDecisionLineage } from "./lineage.ts";
 import { resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
 import type { DecisionEngine, DecisionRequest, DecisionResult } from "./types.ts";
 import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { memoryDecisionHolds } from "./holds.ts";
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "migrations", "0132_openrouter_decisions.sql");
 const ORG_A = "org_openrouter_selection_a";
@@ -182,7 +183,7 @@ describe("dispatch", () => {
     const jev = recordingEngine("jev");
     const openai = recordingEngine("openai-decisions");
     const failingFetch = (async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })) as unknown as typeof fetch;
-    const openrouter = new OpenRouterDecisionsEngine({
+    const openrouter = new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(),
       fetchImpl: failingFetch,
       catalog: recordedDecisionCatalogSource(),
       keys: { async keyFor() { return { secret: "sk-or-v1-dispatch-secret", fingerprint: "sk-or-…cret", reason: "" }; } },
@@ -207,7 +208,7 @@ describe("dispatch", () => {
   });
 
   test("the default engine registry covers every engine id, including OpenRouter", () => {
-    const registry = createDecisionEngines();
+    const registry = createDecisionEngines({ openrouter: new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds() }) });
     assert.deepEqual(Object.keys(registry).sort(), ["jev", "openai-decisions", "openrouter-decisions"]);
     assert.equal(registry["openrouter-decisions"].id, "openrouter-decisions");
   });

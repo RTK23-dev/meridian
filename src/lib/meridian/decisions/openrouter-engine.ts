@@ -12,6 +12,8 @@
  */
 import { MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { loadDefaultSql, secretForCategory } from "../credentials/resolve.ts";
+import { refusedBeforeGeneration } from "../providers/generation-ledger.ts";
+import { ledgerDecisionHolds, type DecisionHolds } from "./holds.ts";
 import { checkEvidenceSufficiency } from "../jev/client.ts";
 import type { EvidenceRef, JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import { decisionContextText } from "./openai-engine.ts";
@@ -395,6 +397,7 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
   readonly id = "openrouter-decisions" as const;
   readonly adapterVersion = OPENROUTER_DECISIONS_ADAPTER_VERSION;
   private readonly fetchImpl: typeof fetch;
+  private readonly holds: DecisionHolds;
   private readonly endpoint: string;
   private readonly timeoutMs: number;
   private readonly keys: OpenRouterKeySource;
@@ -411,9 +414,12 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     deploymentModel?: string;
     /** The live model catalogue. A decision is refused unless its model is in it. */
     catalog?: DecisionCatalogSource;
+    /** The budget hold each call is written to. The workspace's ledger unless a test gives its own. */
+    holds?: DecisionHolds;
   } = {}) {
     this.catalog = options.catalog ?? liveDecisionCatalog;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
+    this.holds = options.holds ?? ledgerDecisionHolds();
     this.endpoint = options.endpoint ?? OPENROUTER_DECISIONS_ENDPOINT;
     this.timeoutMs = options.timeoutMs ?? OPENROUTER_DECISIONS_TIMEOUT_MS;
     this.keys = options.keys ?? databaseKeys;
@@ -664,6 +670,26 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "budget_refused", message } });
     }
     const inputHash = await hashOf(`${model.model}\n${JSON.stringify(questions)}\n${text}\n${usable.map((image) => image.dataUrl).join("")}`);
+    // The call is held before it is sent. A hold that cannot be written, or a month that cannot fit it, refuses the call with the reason.
+    const hold = await this.holds.reserve(
+      {
+        organizationId: request.organizationId,
+        brandId: request.brandId || null,
+        correlationId: inputHash.slice(0, 32),
+        operation: "jev.decision",
+        promptId: "jev.decision",
+        promptVersion: "1",
+        inputRef: inputHash,
+        provider: PROVIDER,
+        model: model.model,
+        modelSource: "workspace",
+      },
+      ceilingUsd,
+    );
+    if (hold.status === "refused") {
+      return finish({ answers: abstainAll(request, { status: "unsupported", reason: hold.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "budget_refused", message: hold.reason } });
+    }
+    const holdId = hold.id;
 
     const fail = (kind: DecisionFailureKind, message: string): DecisionResult => {
       for (const entry of asked) {
@@ -693,23 +719,35 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       });
     } catch (error) {
       const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
-      if (timedOut) return fail("timeout", `OpenRouter Decisions did not respond within ${this.timeoutMs} ms.`);
-      return fail("network", `OpenRouter Decisions could not be reached: ${error instanceof Error ? safeProviderText(error.message) : "unknown error"}.`);
+      const message = timedOut
+        ? `OpenRouter Decisions did not respond within ${this.timeoutMs} ms.`
+        : `OpenRouter Decisions could not be reached: ${error instanceof Error ? safeProviderText(error.message) : "unknown error"}.`;
+      await this.holds.settle(holdId, { status: "uncertain", error: `${message} The call may have been billed, so it was not retried.`, latencyMs: Date.now() - started });
+      return fail(timedOut ? "timeout" : "network", message);
     }
     if (!response.ok) {
       const body = safeProviderText(await response.text().catch(() => ""));
       const kind = failureKindForStatus(response.status, body);
-      return fail(kind, `OpenRouter Decisions returned HTTP ${response.status}${body ? `: ${body}` : "."}`);
+      const message = `OpenRouter Decisions returned HTTP ${response.status}${body ? `: ${body}` : "."}`;
+      await this.holds.settle(
+        holdId,
+        refusedBeforeGeneration(response.status)
+          ? { status: "failed", error: message, latencyMs: Date.now() - started }
+          : { status: "uncertain", error: `${message} The call may have been billed, so it was not retried.`, latencyMs: Date.now() - started },
+      );
+      return fail(kind, message);
     }
 
     let decoded: Record<string, unknown>;
     try {
       decoded = (await response.json()) as Record<string, unknown>;
     } catch {
+      await this.holds.settle(holdId, { status: "uncertain", error: "OpenRouter Decisions returned a body that is not JSON. The call may have been billed, so it was not retried.", latencyMs: Date.now() - started });
       return fail("invalid_response", "OpenRouter Decisions returned a body that is not JSON.");
     }
     const answersBody = decoded && typeof decoded === "object" ? (decoded as { answers?: unknown }).answers : undefined;
     if (!answersBody || typeof answersBody !== "object" || Array.isArray(answersBody)) {
+      await this.holds.settle(holdId, { status: "uncertain", error: "OpenRouter Decisions returned no answers object. The call may have been billed, so it was not retried.", latencyMs: Date.now() - started });
       return fail("invalid_response", "OpenRouter Decisions returned no answers object.");
     }
     const returnedModel = typeof decoded.model === "string" && decoded.model.trim() ? decoded.model.trim() : model.model;
@@ -723,6 +761,17 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
         levelLabels: entry.levelLabels,
       });
     }
+    const usage = usageOf(decoded);
+    await this.holds.settle(holdId, {
+      status: "completed",
+      output: "",
+      latencyMs: Date.now() - started,
+      tokens: usage?.totalTokens ?? null,
+      returnedModel,
+      generationId: typeof decoded.id === "string" ? decoded.id : null,
+      costUsd: usage?.reportedCostUsd ?? null,
+      error: "",
+    });
     return finish({
       answers,
       inputHash,
