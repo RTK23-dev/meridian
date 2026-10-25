@@ -128,7 +128,7 @@ export function SetupGuide() {
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
-        <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
+        <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-gradient-to-br from-accent-muted/40 via-surface to-surface p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
@@ -195,7 +195,16 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
             </div>
             <p className="text-sm text-fg">{step.what}</p>
             <p className="text-sm text-fg-muted">{step.detail}</p>
-            <div className="pt-1">{body}</div>
+            {step.required || isCurrent ? (
+              <div className="pt-1">{body}</div>
+            ) : (
+              <details className="group pt-1">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                  Open this step
+                </summary>
+                <div className="mt-3">{body}</div>
+              </details>
+            )}
           </div>
         </div>
       </article>
