@@ -94,7 +94,7 @@ export function phaseForProbe(input: {
 /**
  * The phase of a stored connection. The workspace's credential decides whether there is a credential at all. An unusable
  * credential is a failure with its reason, so an earlier success never shows HEALTHY. Otherwise the phase follows the recorded
- * provider result, as it always has. DISCONNECTED comes first.
+ * provider result. A recorded success older than PROVIDER_SUCCESS_FRESH_MS is DEGRADED, not HEALTHY. DISCONNECTED comes first.
  */
 export function phaseForStoredConnection(input: {
   provider: LiveProvider;

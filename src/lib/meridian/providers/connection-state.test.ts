@@ -184,6 +184,16 @@ test("a usable saved key with a recorded success is HEALTHY through the stored-c
   assert.equal(phase.phase, "HEALTHY");
 }));
 
+test("a usable saved key whose recorded success is 90 days old is DEGRADED through the stored-connection path, never HEALTHY", withEncryptionKey(async () => {
+  const db = workspaceDb({
+    connections: [{ provider: "tiktok", last_success_at: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(), last_error: "", disconnected_at: null }],
+    vault: [savedKeyRow(SAVED_VALUE)],
+  });
+  const phase = await statusFor(db, "org-1", "tiktok");
+  assert.equal(phase.phase, "DEGRADED");
+  assert.equal(phase.detail, "The last successful request is stale.");
+}));
+
 test("no stored credential and no shared default is NOT_CONFIGURED with the credentials detail", withEncryptionKey(async () => {
   const phase = await statusFor(workspaceDb(), "org-1", "meta");
   assert.equal(phase.phase, "NOT_CONFIGURED");
