@@ -51,8 +51,11 @@ A recorded provider success is HEALTHY only while it is fresh. The window is one
 The success is recorded only when someone checks or connects the provider, so a shorter window fails closed sooner: a success older than a day
 reads DEGRADED with "The last successful request is stale.", and a success that cannot be read as a time is DEGRADED too.
 
-The rule is tested by `providers/stored-freshness.test.ts`, which calls the function the Integrations and Performance screens call. The
-browser pass does not seed a stored success, because that needs a sealed credential. The 90-day case that the review reported now reads DEGRADED.
+The rule is tested in two places. `providers/stored-freshness.test.ts` calls the function the Integrations and Performance screens call, with
+fresh, stale, 90-day, unreadable and boundary inputs. `providers/connection-state.test.ts` runs the stored-connection status path with a usable
+saved key and a success recorded 90 days ago, and asserts DEGRADED. That test uses the same fake database and saved-key row as its HEALTHY case,
+so it needs no sealed real credential. The browser pass does not seed a stored success, because the status row it would need is only reachable
+through a sealed credential in the real database.
 
 A stale connection stops performance sync from being planned until someone checks the provider again. Performance sync does not record a
 success, so re-checking is the only way back to HEALTHY.
