@@ -2,14 +2,15 @@
 
 The engine makes its provider requests only through the gateway (`src/engine/gateway`). Lib code makes its own: a direct `fetch`, or the
 shared request helper `providers/http.ts`. Those requests are not held by the engine gateway or the budget ledger. This document says which
-ones there are, what each one can cost or change, and which ones have no guard.
+ones there are, what each can cost or change, and how each one is guarded.
 
 The source of truth is `src/lib/meridian/providers/direct-requests.test.ts`. It is an inventory the tests enforce:
 
 - A new file that makes a request fails until it is classified there.
-- An entry whose file no longer makes a request fails, so the inventory cannot go stale.
-- A paid or side-effecting request must name a guard, and a guard must point at a test file that exists. Otherwise it is listed as BLOCKED.
-- The BLOCKED list is asserted exactly. A path leaves it only by a change that the test records.
+- An entry whose file no longer makes a request fails, unless it is a disabled caller that still wires its gate.
+- No paid or side-effecting entry may be unguarded: each is held in the ledger, guarded by a tested guard, or disabled.
+- Each disabled entry names a capability in `providers/capability.ts`, every capability is named by a classified file, and each name is
+  passed to its gate in production code.
 - No engine file calls `fetch` or the lib helper. Engine code reaches providers through an injected gateway transport.
 
 ## Kinds and guards
@@ -24,40 +25,61 @@ The source of truth is `src/lib/meridian/providers/direct-requests.test.ts`. It 
 | --- | --- |
 | `gateway` | The engine's gateway, with its credentials and ledger. |
 | `ledger` | The text budget: the call is held before it is sent and settled once (`providers/generation-ledger.ts`). |
-| `guarded` | A lib-level guard, such as the paused-ad state machine, with receipts and idempotent keys, and a test that proves it. |
-| `none` | No guard in this code. The path is BLOCKED. |
+| `guarded` | A lib-level guard, such as the paused-ad state machine, with receipts, idempotent keys, and a test that proves it. |
+| `disabled` | The path's default transport or fetch refuses before any request is made (`providers/capability.ts`). Its test proves it. |
 
 ## Guarded paths
 
 - `ledger`: OpenRouter Decisions (`decisions/openrouter-engine.ts`). Covered by `decisions/decision-holds.test.ts`.
-- `guarded`: the paused-ad creation and recovery state machine (`providers/meta-paused-ad.ts`, `content-factory/repurpose-paused-ad.ts`), and the
-  organic publish with receipts (`content-factory/repurpose-organic.ts`). Each names its test.
+- `guarded`: the paused-ad creation and recovery state machine (`providers/meta-paused-ad.ts`, `content-factory/repurpose-paused-ad.ts`), and
+  the organic publish with receipts (`content-factory/repurpose-organic.ts`). Each names its test.
 - `gateway`: the engine's transport and the media, render and download adapters, which take the gateway's injected transport.
 
-## BLOCKED: paid calls with no ledger hold
+## Disabled paths (fail closed)
 
-These are real paid calls made by lib code. None is held in the ledger, so none is capped by the monthly budget or the per-call ceiling.
+These paths are off. Their default transport refuses before any request is made, so a call sends nothing and is not retried. Tests that
+inject a fixture transport still exercise the module's logic. Each capability is listed in `DISABLED_CAPABILITIES`
+(`providers/capability.ts`) with the reason it is off.
 
-- OpenAI decisions (`decisions/openai-engine.ts`)
-- TypeSafe JEV decisions, the default JEV backend (`jev/router.ts`)
-- Gemini perception (`perception/multimodal.ts`), omni (`production/providers/omni.ts`) and image generation (`providers/nano-banana.server.ts`)
-- Higgsfield video generation (`production/providers/higgsfield.ts`)
-- The paid embeddings API (`embeddings/external.ts`)
+Paid calls with no ledger hold:
 
-Image and video generation through these providers is therefore not governed by the budget. That is the largest gap in this inventory.
+- `decision.openai`: OpenAI decisions (`decisions/openai-engine.ts`)
+- `decision.typesafe_jev`: TypeSafe JEV decisions, the default JEV backend (`jev/router.ts`)
+- `perception.gemini`: Gemini perception (`perception/multimodal.ts`)
+- `generation.gemini_omni`: Gemini omni (`production/providers/omni.ts`)
+- `generation.gemini_image`: Gemini image generation (`providers/nano-banana.server.ts`)
+- `generation.higgsfield_video`: Higgsfield video (`production/providers/higgsfield.ts`)
+- `embeddings.external`: the paid embeddings API (`embeddings/external.ts`)
 
-## BLOCKED: side effects with no idempotency or guard in this code
+Side effects with no idempotency guard:
 
-- Publishing to Facebook, Instagram, TikTok, YouTube and the Meta Graph (`distribution/*`), and the publish path that calls them (`publishing/engine.ts` forwards to them). Receipts are written; no idempotency key is sent.
-- Meta ad calls (`providers/meta.ts`), Google Ads writes (`providers/google-ads.ts`), TikTok calls (`providers/tiktok.ts`).
-- The paused publish that stores idempotency keys but has no test (`providers/publish-action.ts`).
-- The Hypit client and the Hypit run and handoff (`hypit/client.ts`, `studio/hypit-run.ts`). The Meta publish that calls the client has an idempotency key and an approval step, but neither reaches the request in the client.
-- Google Drive writes, including resumable uploads (`storage/drive.ts`, `storage/drive-resumable.ts`). A retry can duplicate a file.
-- Outbound email (`notifications/email.ts`), alert webhooks (`alerts/deliver.ts`), and the job executor, which sends whatever request a job carries (`jobs/execute.ts`).
-- The upload service's own request (`content-factory/repurpose-upload-service.ts`).
+- `publish.facebook`, `publish.instagram`, `publish.tiktok`, `publish.youtube`: social publishing (`distribution/*`). The guarded path is
+  the organic Facebook publish with receipts.
+- `publish.paused_action`: the paused publish action (`providers/publish-action.ts`).
+- `publish.meta_video_upload`: the Meta video upload (`content-factory/repurpose-upload-service.ts`).
+- `ads.meta_write`, `ads.google_ads_write`, `ads.tiktok_write`: ad writes. Their transports are gated per provider in `providers/live.ts`. The
+  guarded paused-ad path is `providers/meta-paused-ad.ts`.
+- `hypit.client`: the Hypit client and run (`hypit/client.ts`, `studio/hypit-run.ts`).
+- `drive.write`: Google Drive writes, including resumable uploads (`storage/drive.ts`, `storage/drive-resumable.ts`). Files are kept in
+  Postgres unless Drive is connected.
+- `email.send`: outbound email (`notifications/email.ts`).
+- `alerts.webhook`: alert webhooks (`alerts/deliver.ts`) and the job executor's alert delivery (`jobs/execute.ts`).
+
+A disabled capability is also not retried. `sendWithRetry` (`providers/http.ts`) repeats only GET and PUT, or a request the caller marks
+idempotent. The artifact upload (`storage/artifact-upload.ts`) stops at once on a disabled capability. The image adapter returns
+`NOT_CONNECTED` for one, so the attach flow releases its budget reservation.
+
+Negative tests:
+
+- `providers/capability.test.ts`: each capability refuses without a request, and a disabled capability is not retried.
+- `providers/disabled-paths.test.ts`: the image adapter, the embeddings call and the email send, through their production defaults, send no
+  request.
+
+Live behavior is not verified by design. These tests use fixtures and fake transports only.
 
 ## What closes a gap
 
-Route the path through the gateway and the ledger, or give it a guard with an idempotency key, receipts and a test. Then move its entry in
-`direct-requests.test.ts` from `none` to `guarded` or `ledger`, name the test, and remove it from BLOCKED. The test fails until both are done,
-so a gap cannot close silently.
+Route the path through the gateway and the ledger, or give it a guard with an idempotency key, receipts and an uncertain state, and a test
+that proves it. Then turn its capability on: remove it from `DISABLED_CAPABILITIES`, replace the gate with the real transport, move its
+inventory entry from `disabled` to `guarded` or `ledger`, and name the test. The inventory test fails until these changes are made, so a
+gap cannot close silently.
