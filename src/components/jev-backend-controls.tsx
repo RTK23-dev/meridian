@@ -71,7 +71,7 @@ export function JevBackendControls({
         </p>
         <p className="mt-1 text-sm">
           {status.backend
-            ? `Using ${labelOf(status.backend)} ${status.source === "workspace" ? "for this workspace" : "(the default)"}.`
+            ? `Using ${labelOf(status.backend)} ${status.source === "workspace" ? "for this workspace." : "(the default)."}`
             : "The saved JEV backend cannot be read, so JEV makes no request until a backend is chosen here."}
         </p>
         {status.reason ? <p className="mt-1 text-sm text-warning">{status.reason}</p> : null}
@@ -102,7 +102,7 @@ export function JevBackendControls({
 
       {canAdmin ? (
         <div className="flex flex-wrap items-end gap-3">
-          <div className="w-full sm:min-w-[16rem] sm:flex-1">
+          <div className="w-full sm:w-72">
             <Field label="Backend for JEV decisions">
               <SelectInput
                 value={draft}
@@ -141,5 +141,5 @@ export function JevBackendControls({
 }
 
 function labelOf(backend: JevBackendId): string {
-  return backend === "openrouter" ? "OpenRouter Decisions" : "TypeSafe System One (direct)";
+  return backend === "openrouter" ? "OpenRouter Decisions" : "TypeSafe System One";
 }

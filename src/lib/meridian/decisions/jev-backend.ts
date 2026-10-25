@@ -14,7 +14,7 @@ export const JEV_BACKENDS = ["typesafe_direct", "openrouter"] as const;
 export type JevBackend = (typeof JEV_BACKENDS)[number];
 export const DEFAULT_JEV_BACKEND: JevBackend = "typesafe_direct";
 export const JEV_BACKEND_LABELS: Record<JevBackend, string> = {
-  typesafe_direct: "TypeSafe System One (direct)",
+  typesafe_direct: "TypeSafe System One",
   openrouter: "OpenRouter Decisions",
 };
 
