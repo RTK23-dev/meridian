@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport } from "../providers/http.ts";
 import { inspectVideo } from "../video/inspect.ts";
 import type { HypitJobContract } from "./contract.ts";
@@ -79,6 +80,11 @@ export function looksLikeVideo(bytes: Uint8Array): boolean {
   return inspected.container === "mp4" && (inspected.durationMs != null || inspected.width != null);
 }
 
+/** A send the disabled-capability gate refused sent nothing, so its message says so. Any other failure is reported as no response. */
+function sendFailure(error: unknown, noResponse: string): string {
+  return isCapabilityDisabledError(error) ? error.message : noResponse;
+}
+
 export async function startHypitJob(
   connection: Extract<HypitConnection, { status: "CONFIGURED" }>,
   contract: HypitJobContract,
@@ -96,8 +102,8 @@ export async function startHypitJob(
       },
       body: JSON.stringify(contract),
     });
-  } catch {
-    return { ok: false, code: "HYPIT_FAILED", error: "The Hypit process did not respond. No video was stored." };
+  } catch (error) {
+    return { ok: false, code: "HYPIT_FAILED", error: sendFailure(error, "The Hypit process did not respond. No video was stored.") };
   }
   if (response.status < 200 || response.status >= 300) {
     return { ok: false, code: "HYPIT_FAILED", error: `Hypit refused the job (${response.status}). No video was stored.` };
@@ -119,8 +125,8 @@ export async function pollHypitJob(
       url: `${connection.baseUrl}/v1/jobs/${encodeURIComponent(providerJobId)}`,
       headers: headers(connection.token),
     });
-  } catch {
-    return { ok: false, code: "HYPIT_FAILED", error: "The Hypit process did not respond while the job was polled." };
+  } catch (error) {
+    return { ok: false, code: "HYPIT_FAILED", error: sendFailure(error, "The Hypit process did not respond while the job was polled.") };
   }
   if (response.status < 200 || response.status >= 300) {
     return { ok: false, code: "HYPIT_FAILED", error: `Hypit poll failed (${response.status}).` };
@@ -144,8 +150,8 @@ export async function collectHypitArtifact(
       url: `${connection.baseUrl}/v1/jobs/${encodeURIComponent(providerJobId)}/artifact`,
       headers: headers(connection.token),
     });
-  } catch {
-    return { ok: false, code: "HYPIT_FAILED", error: "The Hypit process did not return the artifact." };
+  } catch (error) {
+    return { ok: false, code: "HYPIT_FAILED", error: sendFailure(error, "The Hypit process did not return the artifact.") };
   }
   if (response.status === 404 || response.status === 204) {
     return { ok: false, code: "HYPIT_MISSING_ASSET", error: "Hypit reported completion without an artifact." };
