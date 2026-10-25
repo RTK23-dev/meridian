@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
@@ -167,6 +167,10 @@ export const providerSettingsQueryOptions = (userId: string | null | undefined, 
 export const decisionEnginesQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.decisionEngines(organizationId)),
   queryFn: () => getDecisionEngines({ data: { organizationId } }),
+});
+export const openRouterDecisionModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.openRouterDecisionModels(organizationId)),
+  queryFn: () => getOpenRouterDecisionModels({ data: { organizationId } }),
 });
 export const videoBudgetQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
@@ -395,6 +399,12 @@ export const useProviderSettingsQuery = (organizationId: string, enabled = true)
 export const useDecisionEnginesQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...decisionEnginesQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** The decision models this workspace may choose from. Read from the live catalogue on the server; nothing is cached as a connection check. */
+export const useOpenRouterDecisionModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...openRouterDecisionModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {
