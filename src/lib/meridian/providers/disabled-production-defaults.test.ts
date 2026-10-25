@@ -89,10 +89,13 @@ const media: PerceptionMedia = {
 };
 
 describe("the remaining disabled production defaults send nothing and name the gate", () => {
-  test("decision.openai: the OpenAI decisions engine, with its key, refuses through its default fetch and sends no request", async () => {
-    const engine = new OpenAiDecisionsEngine({ config: { apiKey: KEY, maxRetries: 2 }, sleep: async () => {} });
+  test("decision.openai: the OpenAI decisions engine refuses through its default fetch, sends nothing, and does not retry the gate", async () => {
+    let retrySleeps = 0;
+    const engine = new OpenAiDecisionsEngine({ config: { apiKey: KEY, maxRetries: 2 }, sleep: async () => { retrySleeps += 1; } });
     const result = await engine.decide(contractRequest());
     assert.match(result.failure?.message ?? "", GATE_MESSAGE, "the failure names the gate");
+    assert.equal(result.failure?.kind, "not_configured", "a disabled path is not reported as a network failure");
+    assert.equal(retrySleeps, 0, "a disabled capability is refused immediately, not retried");
     assert.equal(requests, 0, "no request is sent to OpenAI");
   });
 
