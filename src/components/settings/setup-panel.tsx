@@ -162,8 +162,11 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
       <div className="space-y-1">
         <p className="font-semibold text-fg">Monthly video budget (USD)</p>
         <p className="text-sm text-fg-muted">
-          The most this workspace's video engine may spend in a month, in US dollars. Blank means no budget is
-          set, and there is no default. {current}
+          The most this workspace may spend in a month, in US dollars, on each of two kinds of work: video generation
+          (checked against the video engine's own ledger) and text work (copy and scripts, research analysis, brand brain
+          suggestions, Factory image labels and OpenRouter JEV decisions, checked against the spend held in the
+          workspace's text ledger). The two are not added together. Blank means no budget is set: video generation stays
+          blocked, and text work has no monthly limit, though each call is still capped. There is no default. {current}
         </p>
       </div>
       {!canAdmin ? (
