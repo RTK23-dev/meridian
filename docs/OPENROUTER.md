@@ -19,7 +19,7 @@ OpenRouter models are not interchangeable across Meridian. Each class has its ow
 | Class | Used for | Endpoint | Catalogue and settings |
 | --- | --- | --- | --- |
 | **Decision models** | Structured judgments: JEV and the Decisions engine. Typed questions, typed answers (`noul`, `choice`, `score`). Never a prompt, a brief or copy. | `POST https://openrouter.ai/api/alpha/decisions` | The live decisions catalogue, read without a key. Chosen per workspace (`decision_engine_openrouter_config`), with the JEV backend (`decision_engine_jev_config`). |
-| **Prompt and text-generation models** | Plans, scripts, copy and other text, and ordinary chat. | `POST https://openrouter.ai/api/v1/chat/completions` (`providers/chat.server.ts`) | Today this path reads only the deployment key and the deployment's `OPENROUTER_MODEL`. It is not workspace-keyed and not chosen per task. See "Not built" below. |
+| **Prompt and text-generation models** | Plans, scripts, copy and other text, and ordinary chat. | `POST https://openrouter.ai/api/v1/chat/completions` (`providers/chat.server.ts`) | The workspace's own key, through the engine gateway. Each task's model is chosen per workspace in Settings and checked against the live text catalogue before each paid call. The deployment's `OPENROUTER_MODEL` serves a text task the workspace has not chosen for. See "Ordinary text generation". |
 | **Media models** | Image, video, speech and other modality-specific output. | Each adapter's own endpoint, through the engine gateway (`src/engine/gateway/`), which is the only place that makes these calls. | Capability-gated per adapter. Prices come from the provider's reported cost, not an estimate. |
 
 A decision never goes to the chat endpoint, a chat or media model is never sent to the Decisions endpoint, and a decision is never produced by asking a chat model for JSON.
@@ -27,9 +27,28 @@ A decision never goes to the chat endpoint, a chat or media model is never sent 
 ## The keys
 
 - **`openrouter`** is the workspace's own OpenRouter key. A workspace saves it in Settings, with its masked fingerprint, and removes it there. The deployment's key is used for a workspace only when `OPENROUTER_SHARED_DEFAULT=deployment` is set. The resolver (`credentials/resolve.ts`) applies this precedence for every caller: a usable workspace key, then the deployment key only when shared, otherwise not configured. No call is made without a key.
-- **`openrouter_chat`** is the deployment's `OPENROUTER_API_KEY`. It is deployment-only: a workspace cannot save it, and it is used only when `OPENROUTER_SHARED_DEFAULT=deployment` is set. Chat (`providers/chat.server.ts`) reads it through the same resolver.
+- **`openrouter_chat`** is the deployment's `OPENROUTER_API_KEY`. It is deployment-only: a workspace cannot save it, and it is used only when `OPENROUTER_SHARED_DEFAULT=deployment` is set. Ordinary generation (`providers/chat.server.ts`) reads it only when no workspace is in scope, through the same resolver, and no ordinary generation path runs without a workspace.
 
 A workspace's key and model never reach another organization. Every lookup is scoped to the signed-in workspace.
+
+## Ordinary text generation
+
+Copy and scripts, research analysis, brand brain suggestions and Factory image labels go through `providers/chat.server.ts`. Each call goes through the engine gateway, which takes the workspace's own key from the credential resolver, as every other OpenRouter call does.
+
+| Task | Model used | Notes |
+| --- | --- | --- |
+| Copy and scripts | The workspace's choice, else `OPENROUTER_MODEL` | The studio's creative script and copy |
+| Research analysis | The workspace's choice, else `OPENROUTER_MODEL` | Transcript analysis of collected ads |
+| Brand brain suggestions | The workspace's choice, else `OPENROUTER_MODEL` | Suggests fields from a stored page |
+| Image understanding | The workspace's choice only | The model must take images. `OPENROUTER_MODEL` is never used |
+
+- **Key.** A usable workspace key is used alone. An unusable saved key is never replaced by the deployment key. The deployment-only key is read only with `OPENROUTER_SHARED_DEFAULT=deployment`, and only when no workspace is in scope.
+- **Choice.** A workspace chooses each task's model in Settings, under "Text and image models". The save reads the live catalogue again and stores only a pinned text model with stated prices. An alias, a decision model, a model without stated prices, a model the catalogue no longer lists, or a text-only model for image understanding is refused, and the stored choice is unchanged. Clearing a choice needs no catalogue.
+- **Before every paid call.** The chosen model is checked against the live catalogue again. A model that is missing, unpriced or unsuitable is refused, and nothing is sent. An unreadable catalogue refuses the call.
+- **Without a choice.** A text task uses `OPENROUTER_MODEL` if the deployment sets it, and the answer says the deployment's default was used. Image understanding has no default: Factory keyframes are not labelled until a workspace chooses a model that takes images.
+- **Recording.** Each sent call writes a `model_runs` row with the model asked for (`model`), where that choice came from (`model_source`), the model OpenRouter reports as having answered (`returned_model`), the generation id (`generation_id`), latency, tokens, and the cost OpenRouter reported (`cost_usd`). A null cost means OpenRouter reported none; it is never estimated. A refused call sends nothing and writes no row.
+- **Failures.** A failed call is reported with its status, for example `OpenRouter returned 500.`. The provider's response body is not echoed, and no key appears in any result or error.
+- **Shape of the response.** The parser reads the top-level `id` and `model`, and `usage.cost` in USD, as OpenRouter's chat completions reference documents them. This is checked against the documentation, not against a live response.
 
 ## Decision models: the live catalogue
 
@@ -72,7 +91,9 @@ The limit is a set of documented units: USD per token from the catalogue, and to
 | `src/lib/meridian/decisions/jev-engine.ts`, `decisions/jev-backend.ts` | JEV. The workspace's JEV backend (migration 0133) chooses one service: TypeSafe System One directly (the default when no row exists), or the OpenRouter Decisions engine. Exactly one backend is called per decision, with no fallback. An unreadable setting makes no request. Image evidence reaches JEV only through OpenRouter, and only for a model whose verified profile lists image input (`typesafe/jev-1.14` today). The gate resolves that once per decision and passes it to the adapter (`capabilities.ts`). The regression test runs the real gate and dispatcher (`jev-openrouter-images.test.ts`). | **Decisions API, workspace-keyed, chosen per workspace.** | TypeSafe key for TypeSafe; `openrouter`, per workspace, for OpenRouter. | Fixture-tested through the real gate. No live call recorded. |
 | `src/lib/meridian/jev/router.ts`, `jev/client.ts` | The TypeSafe provider (`api.typesafe.ai/v1/systemone`) and the shared JEV helpers: input hashing, evidence sufficiency, state minimization. The helpers make no network call. | TypeSafe transport and helpers. No OpenRouter call. | TypeSafe key, per workspace. | Existing. Comments corrected in this change: the router has no OpenRouter provider and no router modes. |
 | `src/components/jev-backend-controls.tsx` | The JEV backend control in Settings: each backend's readiness and the switch. | UI for the JEV backend. Shows state only, never a key. | — | New. Checked in a browser at 360, 390 and 1440 px. |
-| `src/lib/meridian/providers/chat.server.ts` | Ordinary chat (`openrouter`, `OPENROUTER_MODEL`), used by research, the Factory's image understanding, the studio's copy generation and readiness. It calls `chat/completions` directly and does not go through the engine gateway. | Prompt and text-generation (ordinary chat). | `openrouter_chat` (deployment only). A workspace's own key is not used. | Existing, unchanged in this change. Needs `OPENROUTER_SHARED_DEFAULT=deployment`. Its comment that OpenRouter is the sole gateway for JEV was out of date and is corrected. |
+| `src/lib/meridian/providers/chat.server.ts`, `providers/model-run.ts` | Ordinary text generation: copy, research analysis, brand brain suggestions and Factory image labels. Each call goes through the engine gateway, and each sent call writes a `model_runs` row (`model-run.ts`). | Prompt and text-generation (`chat/completions`). | `openrouter`, per workspace, through the resolver. The deployment key only with the opt-in and no workspace in scope, which no ordinary path uses. | Rewritten in this change; the five callers use it. Fixture-tested through the gateway, the resolver and a fake transport. No live call recorded. |
+| `src/lib/meridian/settings/generation-models.ts`, `migrations/0134_generation_task_models.sql`, `migrations/0135_model_run_provenance.sql` | The workspace's model for each text task (`generation_task_models`, one row per workspace and task), the eligibility rules, and the provenance columns on `model_runs`. | Storage and rules. | Per workspace. | New in this change. Database tests on the embedded backend. |
+| `src/components/generation-model-settings.tsx`, `lib/meridian/settings/server-actions.ts` (`getGenerationModels`, `getGenerationCatalogue`, `saveGenerationModelChoice`) | The Settings section "Text and image models": the choice per task, the live catalogue list, and the save and clear actions (admin only). | UI and server functions. | Shows masked state only. | New in this change. Rendered in a browser with no key (the not-connected state). The populated list has not been seen live. |
 | `src/engine/gateway/openrouter.ts` | Video generation through OpenRouter's video API, with the reported USD cost per job. | Model/generation gateway call. | `openrouter`, per workspace (through the gateway, `gateway/meridian.ts`) | Existing, unchanged. The engine rule holds: no `fetch` outside `gateway/transport.ts`, and keys come from the resolver. |
 | `src/engine/gateway/providers.ts` (`baseUrl https://openrouter.ai/api/v1`) | The provider table entry for the generation gateway. | Model/generation gateway. | as above | Existing. |
 | `src/engine/assets/providers/openrouterImage.ts`, `openrouterSpeech.ts`, `openrouterVideo.ts` | Image, speech and video providers. They call the gateway and hold no key. | Model/generation gateway, capability-gated. | as above | Existing. Each is offered only where its capability is verified. |
@@ -84,7 +105,7 @@ The limit is a set of documented units: USD per token from the catalogue, and to
 
 ## Open decisions for the owner
 
-1. **Copy generation with a workspace key.** Ordinary chat (copy generation) still uses only the deployment's `OPENROUTER_API_KEY`, and `OPENROUTER_MODEL` for its model. A workspace's own OpenRouter key is not used there. Moving chat onto the workspace path needs the workspace's model choice for chat, and it changes what a workspace's key can do. This is a product decision.
+1. **Deployment default for text tasks.** Ordinary generation now uses the workspace's own key and a model the workspace chooses for each task. `OPENROUTER_MODEL` still serves a text task the workspace has not chosen for, and image understanding never uses it. Whether that default should exist at all is the owner's decision.
 2. **Which model JEV uses through OpenRouter.** JEV through OpenRouter uses the workspace's OpenRouter decision model. Whether JEV should choose its own pinned model is a product decision.
 3. **Image input for `typesafe/jev-1.13`.** The catalogue lists it with image input; the recorded documentation does not. The question is whether TypeSafe's documentation says so, or a live check confirms it. Until then it stays text-only.
 4. **Image input for JEV at all.** JEV's input contract is text-only in its own documentation for the TypeSafe backend. Through OpenRouter, JEV receives image evidence only when the selected model's profile takes images, and only as image parts.
@@ -93,8 +114,8 @@ The limit is a set of documented units: USD per token from the catalogue, and to
 
 These are deliberate gaps, not hidden ones. Each is stated in the product where it applies.
 
-- **Copy and prompt generation with a workspace key.** `providers/chat.server.ts` reads only the deployment key and `OPENROUTER_MODEL`. A workspace's own OpenRouter key is not used for it, and the model is not a workspace choice. Moving it means changing five callers (research, the Factory's vision decoding, the studio's copy generation, readiness and the chat provider) to take an organization and its selected model. It is an owner decision recorded in "Open decisions".
-- **Per-task model selection across the Content Factory.** Only the decision model is selectable. The orchestrator's model panel does not change the calls above.
+- **A reservation before each ordinary paid call, and a monthly limit for ordinary generation.** A call is made only with a model whose prices OpenRouter states, and its cost is recorded after it returns. No amount is reserved before the call, and no monthly limit applies. A failed analysis re-queues its research job (`retryCollection`), which makes another paid call. The rule that a billed request is never retried blindly is not met on this path yet: a call that OpenRouter billed and then failed can be paid for again. This is open.
+- **Per-task choice for the orchestrator's media models.** The Settings section chooses one model per ordinary text task. Video, image and speech models stay on the orchestrator's own route configuration.
 - **A monthly decision spend limit.** The per-call bound is the only limit.
 - **Live verification of any model.** See below.
 

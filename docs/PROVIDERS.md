@@ -37,9 +37,10 @@ Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_S
 A source with no usable key is listed as not configured, with the reason. Public web pages need no key.
 Reddit's API is not connected in this release; direct post URLs are still read from their public pages.
 
-OpenRouter's ordinary chat (copy generation) uses a deployment-only key: `OPENROUTER_API_KEY`, with
-`OPENROUTER_SHARED_DEFAULT=deployment`. A workspace cannot save that key. A workspace's own OpenRouter key is saved in Settings and
-is used for decisions and generation. OPENROUTER.md lists every path that calls OpenRouter.
+A workspace's own OpenRouter key is saved in Settings and is used for decisions and for ordinary text generation (copy, research analysis,
+brand brain suggestions and Factory image labels). A workspace chooses each task's model in Settings. The deployment's
+`OPENROUTER_API_KEY`, with `OPENROUTER_SHARED_DEFAULT=deployment`, is deployment-only: a workspace cannot save it, and no ordinary
+generation path uses it. OPENROUTER.md lists every path that calls OpenRouter.
 
 ## Shopify orders (sales attribution)
 

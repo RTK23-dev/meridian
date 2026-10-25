@@ -126,7 +126,9 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 
 The `ui-smoke` job in `.github/workflows/ci.yml` tests the production build. It builds the app, starts a Postgres 16 service, runs `npm run setup` (which migrates the database and creates the local secrets), and serves the build with `npm run preview`, the same server the Docker image runs. The UI baseline, the browser smoke, the design-system scan and the public-page scan all run against that server.
 
-The job does not use the Vite dev server. In the runs that stalled, the dev server's module responses had not completed under the baseline's load, and the dev server transforms modules on demand, so the job now serves the build instead. The cause on the dev-server side is not confirmed. A production build refuses the embedded database, which is why the job starts Postgres.
+The browser baseline and smoke checks do not use the Vite dev server. In the runs that stalled, the dev server's module responses had not completed under the baseline's load, and the dev server transforms modules on demand, so those checks serve the build instead. The cause on the dev-server side is not confirmed. A production build refuses the embedded database, which is why the job starts Postgres.
+
+One check does use the dev server. The design-system page (`/_design`) is development-only: `src/routes/[_design].tsx` answers 404 in a production build. The job therefore starts a dev server on port 8081, after `npx vite optimize`, and runs `scripts/design-system-smoke.mjs` against it. That check runs in its own step, so a stall there does not affect the baseline.
 
 ## Environment variables
 
