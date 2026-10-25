@@ -10,7 +10,7 @@ import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from ".
 import { resolveImageSupport } from "./capabilities.ts";
 import { DecisionCatalogSource } from "./decision-catalog.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
-import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
+import { OpenRouterDecisionsEngine, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import type { OpenRouterCheckStore } from "./openrouter-engine.ts";
 import type { DecisionRequest } from "./types.ts";
 import type { EngineSelection } from "./selection.ts";
@@ -46,7 +46,7 @@ const keys = {
 };
 const noCheck: OpenRouterCheckStore = {
   async workspaceModel() {
-    return null;
+    return OPENROUTER_DECISIONS_EXAMPLE_MODEL;
   },
   async latestCheck() {
     return null;
@@ -79,7 +79,7 @@ function engineWith(options: { fetchImpl: typeof fetch; catalog: DecisionCatalog
   return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(),
     fetchImpl: options.fetchImpl,
     keys,
-    store: { ...noCheck, async workspaceModel() { return options.workspaceModel ?? null; } },
+    store: { ...noCheck, async workspaceModel() { return options.workspaceModel ?? OPENROUTER_DECISIONS_EXAMPLE_MODEL; } },
     deploymentModel: undefined,
     catalog: options.catalog,
   });

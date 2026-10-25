@@ -8,7 +8,7 @@ import test from "node:test";
 import type { JevDecisionResponse, JevProvider, JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { isJevBackend, DEFAULT_JEV_BACKEND, type JevBackendStore } from "./jev-backend.ts";
-import { OpenRouterDecisionsEngine, OPENROUTER_DECISIONS_DEFAULT_MODEL } from "./openrouter-engine.ts";
+import { OpenRouterDecisionsEngine, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import type { OpenRouterCheckRecord } from "./openrouter-settings.ts";
 import { getDecisionEngineStatus } from "./status.ts";
 import type { DecisionEngineRegistry } from "./dispatcher.ts";
@@ -107,7 +107,7 @@ function openrouter(
     },
     store: {
       async workspaceModel() {
-        return null;
+        return OPENROUTER_DECISIONS_EXAMPLE_MODEL;
       },
       async latestCheck() {
         return check;
@@ -124,7 +124,7 @@ function storeReturning(read: Awaited<ReturnType<JevBackendStore["read"]>>): Jev
 /** A passed connection test for the fixture key and the default OpenRouter model. */
 const PASSED_CHECK: OpenRouterCheckRecord = {
   status: "passed",
-  model: OPENROUTER_DECISIONS_DEFAULT_MODEL,
+  model: OPENROUTER_DECISIONS_EXAMPLE_MODEL,
   keyFingerprint: "sk-or-…6789",
   message: "ok",
   checkedAt: "2026-10-20T10:00:00.000Z",
@@ -195,7 +195,7 @@ test("a workspace that chose OpenRouter gets its JEV decisions from OpenRouter, 
   assert.equal(openrouterCalls.length, 1, "one OpenRouter call");
   assert.equal(result.engineId, "jev", "the decision is recorded as a JEV decision");
   assert.equal(result.provider, "openrouter", "OpenRouter is the provider that served it");
-  assert.equal(result.requestedModel, OPENROUTER_DECISIONS_DEFAULT_MODEL, "the workspace's OpenRouter model, not a hard-coded one");
+  assert.equal(result.requestedModel, OPENROUTER_DECISIONS_EXAMPLE_MODEL, "the workspace's OpenRouter model, not a hard-coded one");
   assert.equal(result.returnedModel, "typesafe/jev-1.14-20261014", "the model OpenRouter reports is kept");
   assert.equal(result.usage?.reportedCostUsd, 0.0000051);
   assert.equal((result.answers.refund as { status: string }).status, "answered");

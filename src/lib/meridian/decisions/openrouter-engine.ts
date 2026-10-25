@@ -45,7 +45,7 @@ import {
 export const OPENROUTER_DECISIONS_ADAPTER_VERSION = "openrouter-decisions-adapter.v1";
 export const OPENROUTER_DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
 export const OPENROUTER_DECISIONS_MODEL_ENV = "OPENROUTER_DECISIONS_MODEL";
-export const OPENROUTER_DECISIONS_DEFAULT_MODEL = "typesafe/jev-1.14";
+export const OPENROUTER_DECISIONS_EXAMPLE_MODEL = "typesafe/jev-1.14";
 export const OPENROUTER_DECISIONS_TIMEOUT_MS = 60_000;
 /** Meridian's own cap on images in one decision. The provider documents no count limit, so this is a local bound, not a fact about the API. */
 export const OPENROUTER_DECISIONS_MAX_IMAGES = 8;
@@ -97,8 +97,12 @@ export const VERIFIED_DECISION_MODELS: Record<string, { questionKinds: DecisionQ
   );
 
 export type OpenRouterModelResolution =
-  | { ok: true; model: string; source: "workspace" | "deployment" | "default" }
-  | { ok: false; model: string; source: "workspace" | "deployment"; reason: string };
+  | { ok: true; model: string; source: "workspace" | "deployment" }
+  | { ok: false; model: string; source: "workspace" | "deployment" | "none"; reason: string };
+
+/** What a workspace is told when no decision model is chosen and the deployment sets none. Nothing is sent until one is chosen. */
+export const NO_DECISION_MODEL_REASON =
+  "No OpenRouter decision model is chosen for this workspace, and OPENROUTER_DECISIONS_MODEL is not set. Choose a model in Settings, then test the connection. Nothing was sent.";
 
 /** Checks a model id is a pinned, verified decision model. The reason says what is wrong, and it never includes a key. */
 export function validateDecisionModel(raw: string): { ok: true; model: string } | { ok: false; reason: string } {
@@ -108,7 +112,7 @@ export function validateDecisionModel(raw: string): { ok: true; model: string } 
   if (!MODEL_ID_PATTERN.test(model)) {
     return {
       ok: false,
-      reason: `'${model}' is not a model ID. Use a provider and model, for example ${OPENROUTER_DECISIONS_DEFAULT_MODEL}. Aliases with '~' are refused because they move to new snapshots.`,
+      reason: `'${model}' is not a model ID. Use a provider and model, for example ${OPENROUTER_DECISIONS_EXAMPLE_MODEL}. Aliases with '~' are refused because they move to new snapshots.`,
     };
   }
   if (!VERIFIED_DECISION_MODELS[model]) {
@@ -120,7 +124,11 @@ export function validateDecisionModel(raw: string): { ok: true; model: string } 
   return { ok: true, model };
 }
 
-/** The model a workspace's decisions use: its own choice, then the deployment's, then the pinned default. An invalid choice is reported, never replaced. */
+/**
+ * The model a workspace's decisions use: its own choice, then the deployment's. A blank deployment setting and no workspace choice is
+ * refused: Meridian names no model of its own, so decisions never run on a model nobody chose. An invalid choice is reported, never
+ * replaced.
+ */
 export function resolveOpenRouterDecisionModel(input: { workspace: string | null; deployment: string | undefined }): OpenRouterModelResolution {
   if (input.workspace !== null) {
     const checked = validateDecisionModel(input.workspace);
@@ -135,7 +143,7 @@ export function resolveOpenRouterDecisionModel(input: { workspace: string | null
       ? { ok: true, model: checked.model, source: "deployment" }
       : { ok: false, model: deployment, source: "deployment", reason: `${OPENROUTER_DECISIONS_MODEL_ENV} is not usable: ${checked.reason}` };
   }
-  return { ok: true, model: OPENROUTER_DECISIONS_DEFAULT_MODEL, source: "default" };
+  return { ok: false, model: "", source: "none", reason: NO_DECISION_MODEL_REASON };
 }
 
 /** The question kinds and image support one model is verified for. An unverified model supports nothing, so every question is refused. */
@@ -322,9 +330,10 @@ function withCeiling(usage: DecisionUsage | undefined, ceilingUsd: number): Deci
 }
 
 /** A model the gate already resolved for this decision, checked again here so a stored value cannot widen what is sent. */
-function resolvedModelOf(resolved: { model: string; source: "workspace" | "deployment" | "default" }): OpenRouterModelResolution {
+function resolvedModelOf(resolved: { model: string; source: "workspace" | "deployment" | "none" }): OpenRouterModelResolution {
+  if (resolved.source === "none") return { ok: false, model: "", source: "none", reason: NO_DECISION_MODEL_REASON };
   const checked = validateDecisionModel(resolved.model);
-  if (!checked.ok) return { ok: false, model: resolved.model, source: resolved.source === "default" ? "deployment" : resolved.source, reason: checked.reason };
+  if (!checked.ok) return { ok: false, model: resolved.model, source: resolved.source, reason: checked.reason };
   return { ok: true, model: checked.model, source: resolved.source };
 }
 

@@ -61,7 +61,7 @@ export type DecisionRequest = JevDecisionRequest & {
    */
   resolved?: {
     jevBackend?: "typesafe_direct" | "openrouter";
-    openrouterModel?: { model: string; source: "workspace" | "deployment" | "default" };
+    openrouterModel?: { model: string; source: "workspace" | "deployment" | "none" };
   };
 };
 

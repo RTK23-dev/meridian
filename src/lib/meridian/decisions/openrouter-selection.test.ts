@@ -10,7 +10,7 @@ import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { engineAcceptsImages } from "./capabilities.ts";
 import { createDecisionEngines, decideWithActiveEngine } from "./dispatcher.ts";
-import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
+import { OpenRouterDecisionsEngine, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import { readLatestOpenRouterCheck, readOpenRouterModel, recordOpenRouterCheck, writeOpenRouterModel } from "./openrouter-settings.ts";
 import { persistDecisionLineage } from "./lineage.ts";
 import { resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
@@ -187,7 +187,7 @@ describe("dispatch", () => {
       fetchImpl: failingFetch,
       catalog: recordedDecisionCatalogSource(),
       keys: { async keyFor() { return { secret: "sk-or-v1-dispatch-secret", fingerprint: "sk-or-…cret", reason: "" }; } },
-      store: { async workspaceModel() { return null; }, async latestCheck() { return null; } },
+      store: { async workspaceModel() { return OPENROUTER_DECISIONS_EXAMPLE_MODEL; }, async latestCheck() { return null; } },
     });
     const engines = { jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": openrouter } as ReturnType<typeof createDecisionEngines>;
     const decided = await decideWithActiveEngine({

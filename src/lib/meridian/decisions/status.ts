@@ -24,7 +24,7 @@ export type JevBackendOption = { backend: JevBackend; label: string; health: Dec
 export type DecisionEngineStatus = {
   active: EngineSelection;
   /** The OpenRouter decision model this workspace would use, and where it comes from. `reason` is set when it cannot be used. */
-  openrouterModel: { model: string; source: "workspace" | "deployment" | "default"; reason?: string };
+  openrouterModel: { model: string; source: "workspace" | "deployment" | "none"; reason?: string };
   /** The backend JEV decisions use for this workspace. `backend` is null when a stored value cannot be read, and nothing is assumed. */
   jevBackend: { backend: JevBackend | null; source: "workspace" | "default"; reason?: string };
   /** Readiness of each JEV backend for this workspace, so a switch to it is shown before it is saved. No live request is made. */

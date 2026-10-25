@@ -8,11 +8,12 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
 import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../testing/monthly-budget.ts";
 import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
 import { monthlyHeldUsd, reserveGenerationCall, type HoldInput } from "../providers/generation-ledger.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 import { ledgerHoldsOn, memoryDecisionHolds, type DecisionHolds } from "./holds.ts";
-import { OpenRouterDecisionsEngine, type OpenRouterCheckStore, type OpenRouterKeySource } from "./openrouter-engine.ts";
+import { OpenRouterDecisionsEngine, type OpenRouterCheckStore, type OpenRouterKeySource, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import type { DecisionRequest } from "./types.ts";
 
 const backends = await openTestBackends();
@@ -73,7 +74,7 @@ function keysFor(organizationId: string): OpenRouterKeySource {
 
 const noCheck: OpenRouterCheckStore = {
   async workspaceModel() {
-    return null;
+    return OPENROUTER_DECISIONS_EXAMPLE_MODEL;
   },
   async latestCheck() {
     return null;
@@ -267,11 +268,18 @@ test("a ledger that cannot be written refuses the call without sending it", asyn
   assert.match(result.failure?.message ?? "", /could not be written, so nothing was sent/);
 });
 
+/** A workspace with a monthly budget, which paid generation needs (providers/generation-ledger.ts). The budget is large enough that no test here reaches it. */
+async function budgetedTenant(sql: Parameters<typeof studioTenant>[0], label: string) {
+  const tenant = await studioTenant(sql, label);
+  await setMonthlyBudget(sql, tenant.organizationId, 1);
+  return tenant;
+}
+
 for (const { name, sql } of backends) {
   const ledger = ledgerHoldsOn(async () => sql);
 
   test(`[${name}] the decision's hold is in flight while the call is sent, and completes at the reported cost`, async () => {
-    const tenant = await studioTenant(sql, `decision-hold-complete-${name}`);
+    const tenant = await budgetedTenant(sql, `decision-hold-complete-${name}`);
     let inFlightDuringSend: Array<{ status: string }> = [];
     const { fetch } = fakeFetch(async () => {
       inFlightDuringSend = await sql<{ status: string }>`
@@ -312,7 +320,7 @@ for (const { name, sql } of backends) {
   });
 
   test(`[${name}] an error status keeps its hold on the month, and the call is not sent again`, async () => {
-    const tenant = await studioTenant(sql, `decision-hold-error-${name}`);
+    const tenant = await budgetedTenant(sql, `decision-hold-error-${name}`);
     const { fetch, calls } = fakeFetch(() => json({ error: "bad request" }, 400));
     await engineWith(tenant.organizationId, ledger, fetch).decide(request(tenant.organizationId, tenant.brandId));
 
@@ -328,7 +336,7 @@ for (const { name, sql } of backends) {
   });
 
   test(`[${name}] an uncertain decision keeps its hold, so a later decision the month cannot fit is refused without a send`, async () => {
-    const tenant = await studioTenant(sql, `decision-hold-uncertain-${name}`);
+    const tenant = await budgetedTenant(sql, `decision-hold-uncertain-${name}`);
     await sql`update organizations set monthly_video_budget_usd = ${0.01} where id = ${tenant.organizationId}`;
     const first = fakeFetch(() => json({ error: "the provider failed" }, 500));
     await engineWith(tenant.organizationId, ledger, first.fetch).decide(request(tenant.organizationId, tenant.brandId));
@@ -372,7 +380,7 @@ for (const { name, sql } of backends) {
   });
 
   test(`[${name}] a monthly budget already held in full refuses a decision before anything is sent`, async () => {
-    const tenant = await studioTenant(sql, `decision-hold-full-${name}`);
+    const tenant = await budgetedTenant(sql, `decision-hold-full-${name}`);
     await sql`update organizations set monthly_video_budget_usd = ${0.01} where id = ${tenant.organizationId}`;
     const filler = await reserveGenerationCall(
       sql,

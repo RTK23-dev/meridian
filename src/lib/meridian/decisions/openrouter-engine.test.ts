@@ -9,7 +9,8 @@ import { contractPngBytes } from "./contract-fixtures.ts";
 import type { DecisionCatalogSource } from "./decision-catalog.ts";
 import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
 import {
-  OPENROUTER_DECISIONS_DEFAULT_MODEL,
+  NO_DECISION_MODEL_REASON,
+  OPENROUTER_DECISIONS_EXAMPLE_MODEL,
   OpenRouterDecisionsEngine,
   capabilitiesOfModel,
   failureKindForStatus,
@@ -99,7 +100,7 @@ const keySource: OpenRouterKeySource = {
 
 const noCheck: OpenRouterCheckStore = {
   async workspaceModel() {
-    return null;
+    return OPENROUTER_DECISIONS_EXAMPLE_MODEL;
   },
   async latestCheck() {
     return null;
@@ -131,7 +132,7 @@ test("a noul question is sent to the Decisions endpoint with the model, state an
   const headers = calls[0]!.init.headers as Record<string, string>;
   assert.equal(headers.Authorization, `Bearer ${KEY}`);
   assert.equal(headers["Content-Type"], "application/json");
-  assert.equal(calls[0]!.body.model, OPENROUTER_DECISIONS_DEFAULT_MODEL);
+  assert.equal(calls[0]!.body.model, OPENROUTER_DECISIONS_EXAMPLE_MODEL);
   assert.equal(typeof calls[0]!.body.state, "string", "a text-only request sends its state as a string");
   assert.deepEqual(calls[0]!.body.questions, { refund: { type: "noul", instructions: NOUL.instructions + "\nTrue when: The customer asks for money back.\nFalse when: The customer asks for anything else." } }, "noul carries its criteria in the instructions and no criteria field");
   assert.equal(result.failure, undefined);
@@ -182,7 +183,7 @@ test("the result keeps the requested model, the model and provider the provider 
   const { fetch } = fakeFetch(() => json(decisionBody({ refund: { type: "noul", noul: 0.5 } })));
   const result = await engine({ fetchImpl: fetch }).decide(request());
   assert.equal(result.engineId, "openrouter-decisions");
-  assert.equal(result.requestedModel, OPENROUTER_DECISIONS_DEFAULT_MODEL);
+  assert.equal(result.requestedModel, OPENROUTER_DECISIONS_EXAMPLE_MODEL);
   assert.equal(result.returnedModel, "typesafe/jev-1.14-20261014");
   assert.equal(result.upstreamProvider, "TypeSafe");
   assert.equal(result.providerRequestId, "gen-dec-fixture-1");
@@ -375,14 +376,27 @@ test("a workspace with no saved key makes no call, and says so; no other workspa
   assert.equal(result.answers.refund!.status, "not_configured");
 });
 
-test("the model is the workspace's own choice, then the deployment's, then the pinned default; an invalid choice is refused, not replaced", () => {
+test("the model is the workspace's own choice, then the deployment's; with neither, nothing is chosen. An invalid choice is refused, not replaced", () => {
   assert.deepEqual(resolveOpenRouterDecisionModel({ workspace: "typesafe/jev-1.13", deployment: "typesafe/jev-1.14" }), { ok: true, model: "typesafe/jev-1.13", source: "workspace" });
   assert.deepEqual(resolveOpenRouterDecisionModel({ workspace: null, deployment: "typesafe/jev-1.13" }), { ok: true, model: "typesafe/jev-1.13", source: "deployment" });
-  assert.deepEqual(resolveOpenRouterDecisionModel({ workspace: null, deployment: undefined }), { ok: true, model: OPENROUTER_DECISIONS_DEFAULT_MODEL, source: "default" });
+  // A blank deployment and no workspace choice names no model: Meridian does not pick one for the workspace.
+  const none = resolveOpenRouterDecisionModel({ workspace: null, deployment: undefined });
+  assert.equal(none.ok, false);
+  assert.equal(none.ok === false ? none.source : null, "none");
+  assert.equal(none.ok === false ? none.reason : null, NO_DECISION_MODEL_REASON);
+  assert.equal(resolveOpenRouterDecisionModel({ workspace: null, deployment: "   " }).ok, false, "a blank deployment setting is the same as none");
   const invalid = resolveOpenRouterDecisionModel({ workspace: "typesafe/jev-9.9", deployment: "typesafe/jev-1.14" });
-  assert.equal(invalid.ok, false, "an invalid workspace choice is reported, and the deployment default does not replace it");
+  assert.equal(invalid.ok, false, "an invalid workspace choice is reported, and the deployment setting does not replace it");
   const badDeployment = resolveOpenRouterDecisionModel({ workspace: null, deployment: "~typesafe/jev-latest" });
   assert.equal(badDeployment.ok, false);
+});
+
+test("a decision for a workspace with no chosen model and no deployment setting is refused before anything is sent", async () => {
+  const { fetch, calls } = fakeFetch(() => json(decisionBody({ refund: { type: "noul", noul: 0.9 } })));
+  const result = await engine({ fetchImpl: fetch, store: { ...noCheck, async workspaceModel() { return null; } } }).decide(request());
+  assert.equal(calls.length, 0, "nothing is sent for a workspace that chose no model");
+  assert.equal(result.failure?.kind, "unknown_model");
+  assert.equal(result.failure?.message, NO_DECISION_MODEL_REASON);
 });
 
 test("health: no key is not configured, an unverified model is unsupported, a key without a passed check is configured, and only a passed check for this key and model is ready", async () => {
@@ -396,7 +410,7 @@ test("health: no key is not configured, an unverified model is unsupported, a ke
   assert.equal(configured.status, "CONFIGURED", "a saved key alone is not ready");
 
   const passed: OpenRouterCheckRecord = {
-    status: "passed", model: OPENROUTER_DECISIONS_DEFAULT_MODEL, keyFingerprint: KEY_FINGERPRINT, message: "ok", checkedAt: "2026-10-24T12:00:00.000Z",
+    status: "passed", model: OPENROUTER_DECISIONS_EXAMPLE_MODEL, keyFingerprint: KEY_FINGERPRINT, message: "ok", checkedAt: "2026-10-24T12:00:00.000Z",
     returnedModel: null, upstreamProvider: null, providerRequestId: null,
   };
   assert.equal((await engine({ store: { ...noCheck, async latestCheck() { return passed; } } }).healthFor(ORG)).status, "READY");

@@ -11,7 +11,7 @@ import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixtu
 import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateQuestion, type GateResult } from "./gate.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
-import { OpenRouterDecisionsEngine, type OpenRouterCheckStore } from "./openrouter-engine.ts";
+import { OpenRouterDecisionsEngine, type OpenRouterCheckStore, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";
 import { memoryDecisionHolds } from "./holds.ts";
 
@@ -59,7 +59,7 @@ function openRouterWith(): { engine: OpenRouterDecisionsEngine; requests: Record
     );
   }) as typeof fetch;
   const keys = { async keyFor() { return { secret: KEY, fingerprint: "sk-or-…6789", reason: "" }; } };
-  const store: OpenRouterCheckStore = { async workspaceModel() { return null; }, async latestCheck() { return null; } };
+  const store: OpenRouterCheckStore = { async workspaceModel() { return OPENROUTER_DECISIONS_EXAMPLE_MODEL; }, async latestCheck() { return null; } };
   const engine = new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(), fetchImpl, keys, store, deploymentModel: undefined, catalog: recordedDecisionCatalogSource() });
   return { engine, requests };
 }
