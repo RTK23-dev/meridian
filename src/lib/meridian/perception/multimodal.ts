@@ -8,7 +8,7 @@
  * The credential is passed in per request by perception/credential.ts. The key goes in a request header, never in the URL.
  */
 import { createHash } from "node:crypto";
-import { gatedFetch } from "../providers/capability.ts";
+import { gatedFetch, isCapabilityDisabledError } from "../providers/capability.ts";
 import { checkImageBytes } from "../media/image-input.ts";
 import type {
   MediaObservation,
@@ -222,6 +222,8 @@ export class GeminiPerceptionProvider implements MultimodalPerceptionProvider {
         },
       );
     } catch (error) {
+      // A refused send sent nothing, so it is not a network failure: the path is off in this build.
+      if (isCapabilityDisabledError(error)) return failed("not_configured", error.message);
       const name = error instanceof Error ? error.name : "";
       if (name === "TimeoutError" || name === "AbortError") return failed("timeout", `No response within ${this.timeoutMs} ms.`);
       return failed("network", "The request to the perception provider did not complete.");

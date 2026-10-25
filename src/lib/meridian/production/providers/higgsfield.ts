@@ -21,7 +21,7 @@ import {
 import type { Sql } from "../../learning/store.ts";
 import { loadDefaultSql, resolveHiggsfieldCredential, type CredentialEnv } from "../../credentials/resolve.ts";
 import type { CredentialResolution } from "../../credentials/contract.ts";
-import { gatedFetch } from "../../providers/capability.ts";
+import { gatedFetch, isCapabilityDisabledError } from "../../providers/capability.ts";
 
 /** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
 type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
@@ -346,15 +346,18 @@ export class HiggsfieldProvider implements ProductionProvider {
         updatedAt: new Date().toISOString(),
       };
     } catch (err) {
+      // A refused send sent nothing, so the job failed; it is not of unknown outcome. Any other error may follow an accepted submission.
+      const refused = isCapabilityDisabledError(err);
+      const detail = err instanceof Error ? err.message : String(err);
       return {
         jobId: "",
         organizationId: spec.organizationId,
         brandId: spec.brandId,
         creativeSpec: spec,
         providerId: this.id,
-        status: "SUBMISSION_UNKNOWN",
+        status: refused ? "FAILED" : "SUBMISSION_UNKNOWN",
         costEstimateUsd: costEstimate,
-        error: `Failed to contact Higgsfield API: ${err instanceof Error ? err.message : String(err)}`,
+        error: refused ? detail : `Failed to contact Higgsfield API: ${detail}`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

@@ -83,6 +83,11 @@ Negative tests:
 - `studio/hypit-default-gate.test.ts`: the Hypit start, poll and artifact calls, each given the `hypit.client` gate. The studio run itself
   needs a saved credential from the database, so it is not run end to end here.
 - `alerts/deliver-default-gate.test.ts`: the alert webhook through the `alerts.webhook` gate.
+- `providers/disabled-production-defaults.test.ts`: the OpenAI decisions engine, the TypeSafe JEV provider, the Gemini perception provider,
+  the Higgsfield and Gemini Omni submissions, and the paused Google Ads and TikTok publishes, each through its production default, with a
+  workspace key supplied through the module's own credential seam. The brand-level paused publish (`publish.paused_action`) is covered for
+  Google and TikTok, through the database. The gate's refusal is reported as a refusal: a refused Higgsfield or Omni submission is a failed
+  job, not one of unknown outcome, and a refused perception call is `not_configured`, not a network failure.
 
 Live behavior is not verified by design. These tests use fixtures and fake transports only.
 
