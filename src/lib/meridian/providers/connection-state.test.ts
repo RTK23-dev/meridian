@@ -14,7 +14,8 @@ const KEY = "connection-state-test-key";
 const SEALED_VALUE = "sealed-token-test-value";
 const SAVED_VALUE = "saved-key-test-value";
 const ENV_VALUE = "env-token-test-value";
-const SUCCESS_AT = "2026-10-20T10:00:00.000Z";
+// A success recorded an hour ago: inside the freshness window, so the phase is HEALTHY. A fixed past date would now be stale.
+const SUCCESS_AT = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
 const USABLE: ProviderCredentialState = { state: "usable", reason: "The stored access token can be opened." };
 const NOT_CONFIGURED: ProviderCredentialState = {
@@ -153,7 +154,7 @@ test("the most recent probe decides: a failure after an earlier success is FAILE
   // A successful probe clears last_error and records a new last_success_at (connect.ts saveProbe).
   const succeededLatest = await statusFor(
     workspaceDb({
-      connections: [{ provider: "tiktok", last_success_at: "2026-10-21T10:00:00.000Z", last_error: "", disconnected_at: null }],
+      connections: [{ provider: "tiktok", last_success_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), last_error: "", disconnected_at: null }],
       vault: [savedKeyRow(SAVED_VALUE)],
     }),
     "org-1",

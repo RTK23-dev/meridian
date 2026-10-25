@@ -89,7 +89,8 @@ test("a usable workspace key is usable, shows its fingerprint, and offers a form
   const jev = rowOf(rows, "jev");
   assert.equal(jev.status, "usable");
   assert.equal(jev.fingerprint, "...1234");
-  assert.match(jev.reason, /workspace's own saved key/);
+  assert.match(jev.reason, /workspace's own key is saved and can be read/);
+  assert.match(jev.reason, /Nothing has been checked against the provider/, "a saved key is not presented as live-verified");
   assert.deepEqual(jev.save, { kind: "form", category: "jev" });
   assert.equal(jev.removable, true);
 });

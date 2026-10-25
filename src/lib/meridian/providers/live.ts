@@ -3,7 +3,7 @@ import { liveTransport, type Transport } from "./http.ts";
 import { probeAdLibrary, probeMeta, publishMetaPaused } from "./meta.ts";
 import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
 import { probeTikTok, publishTikTokFlow } from "./tiktok.ts";
-import { connectionPhase, type ConnectionPhase } from "./phase.ts";
+import { connectionPhase, successIsStale, type ConnectionPhase } from "./phase.ts";
 import { DEPLOYMENT_ONLY_KEY_ENV } from "../credentials/contract.ts";
 import type { ProviderCredentialState } from "./access-token.ts";
 
@@ -77,6 +77,8 @@ export function phaseForProbe(input: {
   disconnected: boolean;
   env?: NodeJS.ProcessEnv;
   configured: boolean;
+  /** True when a recorded success is older than the freshness window. A probe that ran now is never stale. */
+  stale?: boolean;
 }): { phase: ConnectionPhase; detail: string } {
   return connectionPhase({
     configured: input.configured,
@@ -84,7 +86,7 @@ export function phaseForProbe(input: {
     probing: false,
     syncing: false,
     lastOk: input.ok,
-    stale: false,
+    stale: input.stale === true,
     lastError: input.error,
   });
 }
@@ -109,6 +111,8 @@ export function phaseForStoredConnection(input: {
     error: unusable ? input.credential.reason : input.lastError,
     disconnected: input.disconnected,
     configured: input.credential.state !== "not_configured",
+    // A recorded success older than the window is DEGRADED, so a stored success never reads HEALTHY indefinitely.
+    stale: successIsStale(input.lastSuccessAt),
   });
 }
 

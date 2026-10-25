@@ -20,7 +20,7 @@ import {
 } from "./setup-model";
 
 const STATUS_PRESENTATION: Record<SetupStatus, { label: string; className: string }> = {
-  usable: { label: "Usable", className: "bg-success-soft text-success" },
+  usable: { label: "Saved, not checked live", className: "bg-success-soft text-success" },
   deployment_shared_default: { label: "Deployment shared default", className: "bg-info-soft text-info" },
   unusable: { label: "Unusable", className: "bg-danger-soft text-danger" },
   not_configured: { label: "Not configured", className: "bg-surface-2 text-fg-muted" },

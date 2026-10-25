@@ -12,6 +12,23 @@ export const CONNECTION_PHASES = [
 export type ConnectionPhase = (typeof CONNECTION_PHASES)[number];
 
 /**
+ * How long a recorded provider success counts as fresh. Past this window a stored success is DEGRADED, not HEALTHY. The value is one
+ * day: the success is recorded only when someone checks or connects the provider, so a shorter window fails closed sooner.
+ */
+export const PROVIDER_SUCCESS_FRESH_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Whether a recorded success is stale. No success is not stale: it is simply not recorded, and the phase says so. A success that
+ * cannot be read as a time is stale, so an unreadable record never reads as fresh.
+ */
+export function successIsStale(lastSuccessAt: unknown, now: number = Date.now()): boolean {
+  if (!lastSuccessAt) return false;
+  const at = lastSuccessAt instanceof Date ? lastSuccessAt.getTime() : Date.parse(String(lastSuccessAt));
+  if (!Number.isFinite(at)) return true;
+  return now - at > PROVIDER_SUCCESS_FRESH_MS;
+}
+
+/**
  * Credentials alone are not a connection.
  * HEALTHY requires a recorded successful provider response that is still fresh.
  */
