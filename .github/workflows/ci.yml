@@ -139,6 +139,56 @@ jobs:
           NODE_ENV=development node --test "${scripts_tests[@]}"
           NODE_ENV=development node --experimental-strip-types --test "${src_tests[@]}"
 
+  # The money paths on a real PostgreSQL server. The test shards above run on the embedded database, and every PostgreSQL branch of the
+  # ledger, budget and decision tests skips unless MERIDIAN_PG_TEST_URL is set. This job sets it, so the concurrency cases run against a
+  # server: concurrent holds and reservations at the same monthly cap, taking the workspace row lock both paths share. It also checks the
+  # migrator on an empty database and on a database one migration behind.
+  postgres:
+    name: "postgres: money races and migrations"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        # pgvector is needed: migration 0019 creates the vector extension, which the plain postgres image does not include.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: meridian
+          POSTGRES_PASSWORD: meridian
+          POSTGRES_DB: meridian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meridian -d meridian"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://meridian:meridian@127.0.0.1:5432/meridian
+      MERIDIAN_PG_TEST_URL: postgres://meridian:meridian@127.0.0.1:5432/meridian
+      # The migration check creates and drops its own databases on this server. It never touches DATABASE_URL's database.
+      MIGRATION_TEST_ADMIN_URL: postgres://meridian:meridian@127.0.0.1:5432/meridian
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Migrate the empty database, then run the migrator's checks
+        run: |
+          set -euo pipefail
+          node scripts/migrate.mjs
+          NODE_ENV=development node --test scripts/migrate-postgres.test.mjs
+      - name: Run the ledger, hold and shared-cap tests on PostgreSQL
+        run: |
+          set -euo pipefail
+          NODE_ENV=development node --experimental-strip-types --test \
+            src/lib/meridian/providers/generation-ledger.test.ts \
+            src/lib/meridian/providers/generation.test.ts \
+            src/lib/meridian/providers/hold-review.test.ts \
+            src/lib/meridian/decisions/decision-holds.test.ts \
+            src/engine/jobs/shared-monthly-cap.test.ts
+
   # Typecheck, lint and build run beside the test shards, so the slowest path is the longer of the two, not their sum.
   static:
     name: typecheck, lint and build
@@ -157,20 +207,22 @@ jobs:
   # The gate that e2e waits on. It passes only when every test shard and the static checks pass. It keeps the name `check`,
   # which docs/TESTING.md names as the job that decides whether code can merge.
   check:
-    needs: [tests, static, sidecar]
+    needs: [tests, static, sidecar, postgres]
     if: always()
     runs-on: ubuntu-latest
     steps:
-      - name: Require every test shard, the static checks and the sidecar tests to pass
+      - name: Require every test shard, the static checks, the sidecar tests and the PostgreSQL money checks to pass
         env:
           TESTS_RESULT: ${{ needs.tests.result }}
           STATIC_RESULT: ${{ needs.static.result }}
           SIDECAR_RESULT: ${{ needs.sidecar.result }}
+          POSTGRES_RESULT: ${{ needs.postgres.result }}
         run: |
-          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT; sidecar: $SIDECAR_RESULT"
+          echo "tests: $TESTS_RESULT; typecheck, lint and build: $STATIC_RESULT; sidecar: $SIDECAR_RESULT; postgres: $POSTGRES_RESULT"
           test "$TESTS_RESULT" = success
           test "$STATIC_RESULT" = success
           test "$SIDECAR_RESULT" = success
+          test "$POSTGRES_RESULT" = success
 
   sidecar:
     runs-on: ubuntu-latest
