@@ -401,6 +401,7 @@ async function decodeStoredAds(sql: Sql, organizationId: string, brandId: string
       }
       dna = await decodeVideoDna({
         adId: ad.id,
+        organizationId,
         videoBytes,
         durationMs: ad.media_duration_ms,
         transcript: ad.transcript,

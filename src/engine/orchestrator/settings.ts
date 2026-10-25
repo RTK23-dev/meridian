@@ -13,18 +13,47 @@ export function isOrchestratorModelId(value: string): boolean {
 }
 
 /** A text model the orchestrator may plan with: text in, text out, and both per-token prices known, so a plan can be priced. */
-export type TextModelChoice = { id: string; name: string; promptUsdPerToken: number; completionUsdPerToken: number };
+export type TextModelChoice = {
+  id: string;
+  name: string;
+  promptUsdPerToken: number;
+  completionUsdPerToken: number;
+  inputModalities: string[];
+};
 
-/** The catalog's text models that can plan, sorted by name then id. Pure. */
+/**
+ * Whether a catalogue entry can be a text-generation model. It must be a text entry whose listed output is text, with both per-token
+ * prices known. A decision model lists `decisions` as its output, so it is never eligible here, even when a text listing returned it:
+ * decisioning and generation are separate catalogues, and a decision model cannot be chosen to write text.
+ */
+export function isTextGenerationEntry(entry: CatalogEntry): boolean {
+  if (entry.kind !== "text") return false;
+  const outputs = entry.output_modalities ?? [];
+  if (outputs.includes("decisions") || !outputs.includes("text")) return false;
+  return entry.pricing.promptUsdPerToken !== null && entry.pricing.completionUsdPerToken !== null;
+}
+
+/** The catalogue's text-generation models, sorted by name then id. Pure. */
 export function textChoices(catalog: Map<string, CatalogEntry>): TextModelChoice[] {
   const choices: TextModelChoice[] = [];
   for (const entry of catalog.values()) {
-    if (entry.kind !== "text") continue;
+    if (!isTextGenerationEntry(entry)) continue;
     const { promptUsdPerToken, completionUsdPerToken } = entry.pricing;
     if (promptUsdPerToken === null || completionUsdPerToken === null) continue;
-    choices.push({ id: entry.id, name: entry.name, promptUsdPerToken, completionUsdPerToken });
+    choices.push({
+      id: entry.id,
+      name: entry.name,
+      promptUsdPerToken,
+      completionUsdPerToken,
+      inputModalities: entry.input_modalities ?? [],
+    });
   }
   return choices.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+}
+
+/** The text-generation models that also take image input, for a task that reads a picture. Pure. */
+export function visionChoices(catalog: Map<string, CatalogEntry>): TextModelChoice[] {
+  return textChoices(catalog).filter((choice) => choice.inputModalities.includes("image"));
 }
 
 /** The workspace's stored model, or null when none is stored. */

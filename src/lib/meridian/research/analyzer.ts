@@ -31,7 +31,21 @@ export async function synthesizeResearchTranscript(input: {
   provider: string;
   model: string;
   complete: ResearchTextModel;
-}): Promise<{ status: "analyzed"; analysis: ResearchAnalysis; key: string; provider: string; model: string; latencyMs: number; tokens: number | null } | { status: "NOT_CONNECTED" | "failed"; error: string }> {
+}): Promise<
+  | {
+      status: "analyzed";
+      analysis: ResearchAnalysis;
+      key: string;
+      provider: string;
+      model: string;
+      latencyMs: number;
+      tokens: number | null;
+      returnedModel?: string | null;
+      generationId?: string | null;
+      costUsd?: number | null;
+    }
+  | { status: "NOT_CONNECTED" | "failed"; error: string }
+> {
   if (!input.transcript.trim() || !input.segments.length) return { status: "failed", error: "No transcript segments are available. Research Synthesis did not analyze this ad." };
   if (!input.provider.trim() || !input.model.trim()) return { status: "NOT_CONNECTED", error: "No research analysis model is configured." };
   const key = researchAnalysisKey(input);
@@ -69,7 +83,18 @@ export async function synthesizeResearchTranscript(input: {
       const original = originals.get(segment.id);
       return !original || segment.text !== original.text || segment.startMs !== original.startMs || segment.endMs !== original.endMs;
     })) throw new Error("Research Synthesis changed or omitted source transcript segments.");
-    return { status: "analyzed", analysis, key, provider: modelResult.provider, model: modelResult.model, latencyMs: modelResult.latencyMs, tokens: modelResult.tokens };
+    return {
+      status: "analyzed",
+      analysis,
+      key,
+      provider: modelResult.provider,
+      model: modelResult.model,
+      latencyMs: modelResult.latencyMs,
+      tokens: modelResult.tokens,
+      returnedModel: modelResult.returnedModel ?? null,
+      generationId: modelResult.generationId ?? null,
+      costUsd: modelResult.costUsd ?? null,
+    };
   } catch (error) {
     return { status: "failed", error: error instanceof Error ? error.message : "Research Synthesis returned invalid structured analysis." };
   }

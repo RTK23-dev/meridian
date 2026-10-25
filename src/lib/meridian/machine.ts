@@ -38,8 +38,9 @@ export const getMachine = createServerFn({ method: "POST" })
   .handler(async ({ context, data }): Promise<MachineSnapshot> => {
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
-    const { providerStatus } = await import("@/lib/meridian/providers/chat.server");
-    const provider = providerStatus();
+    const { generationCredentialStatus } = await import("@/lib/meridian/providers/chat.server");
+    // Whether this workspace has a usable OpenRouter key. A chosen model is checked when a task runs, not here.
+    const credential = await generationCredentialStatus(access.organizationId);
     const usageRows = (await sql<Record<string, unknown>>`
           select operation, tokens, cost_cents from model_runs
           where brand_id = ${data.brandId} and organization_id = ${access.organizationId}
@@ -73,8 +74,8 @@ export const getMachine = createServerFn({ method: "POST" })
     const recommendation = top[0];
     return {
       role: access.role,
-      providerConfigured: provider.configured,
-      provider: provider.provider,
+      providerConfigured: credential.status === "ready",
+      provider: credential.status === "ready" ? "openrouter" : "none",
       adapters: SOURCE_ADAPTERS.map((adapter) => ({ ...adapter })),
       counts,
       usage: summarizeUsage(usageRows),

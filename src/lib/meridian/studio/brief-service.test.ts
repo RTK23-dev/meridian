@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
@@ -419,9 +420,13 @@ test("a viewer cannot accept a direction or write a brief from an opportunity", 
 /** The copy the stubbed text model answers with. Only the request count matters to the refusal tests. */
 const COPY = { hook: "Dinner in ten minutes", script: "A calm dinner plan that needs no planning.", offer: "", cta: "See it in use", visualTreatment: "Kitchen counter", claims: [] };
 
+/** The recorded OpenRouter listings (engine fixtures). The deployment model must be one of them, as it must be in production. */
+const RECORDED_LISTINGS = JSON.parse(readFileSync(new URL("../../../engine/orchestrator/fixtures/openrouter-listings-trimmed-2026-10-20.json", import.meta.url), "utf8")).listings as Record<string, unknown>;
+const TEXT_MODEL = "anthropic/claude-haiku-5.5";
+
 /**
- * Replaces the text model for one test. The chat provider is OpenRouter over fetch, so the stub counts the requests the process
- * sends to it. The environment and fetch are restored afterwards.
+ * Replaces the text model for one test. The chat provider is OpenRouter over fetch: chat completions are counted, and the live catalogue
+ * the model is checked against is answered from the recorded listings. The environment and fetch are restored afterwards.
  */
 async function withTextModel<T>(run: (calls: { count: number }) => Promise<T>): Promise<T> {
   const saved = {
@@ -432,13 +437,21 @@ async function withTextModel<T>(run: (calls: { count: number }) => Promise<T>): 
   };
   const calls = { count: 0 };
   process.env.OPENROUTER_API_KEY = "test-key";
-  process.env.OPENROUTER_MODEL = "test-model";
+  process.env.OPENROUTER_MODEL = TEXT_MODEL;
   // The deployment key is used only when the deployment opts in, the same as in production.
   process.env.OPENROUTER_SHARED_DEFAULT = "deployment";
-  globalThis.fetch = (async () => {
-    calls.count += 1;
-    return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(COPY) } }], usage: { total_tokens: 12 } }), {
-      status: 200,
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith("/chat/completions")) {
+      calls.count += 1;
+      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(COPY) } }], usage: { total_tokens: 12 } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const listing = RECORDED_LISTINGS[url.replace("https://openrouter.ai/api/v1", "")];
+    return new Response(JSON.stringify(listing ?? { data: [] }), {
+      status: listing === undefined ? 404 : 200,
       headers: { "content-type": "application/json" },
     });
   }) as typeof fetch;

@@ -19,7 +19,7 @@ import {
   type SceneDna,
 } from "./creative-dna.ts";
 import { semanticEmbed } from "../embeddings/semantic.ts";
-import { completeWithImage, extractJson, openRouterChatCredential } from "../providers/chat.server.ts";
+import { completeGenerationTask, extractJson } from "../providers/chat.server.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -61,6 +61,8 @@ export type DecodeVideoInput = {
   segments?: ResearchSegment[] | null;
   ffmpegPath?: string;
   ffprobePath?: string;
+  /** The workspace whose image-understanding model labels the keyframes. Without one, no labelling call is made. */
+  organizationId?: string | null;
   visionLabeller?: SceneVisionLabeller;
   ocrRunner?: SceneOcrRunner;
   embedder?: (text: string) => Promise<number[]>;
@@ -207,19 +209,20 @@ export async function detectScenes(
 /**
  * Call the vision model on a keyframe PNG for scene visual labeling.
  *
- * Owner decision (docs/engine/PHASE_LOG.md, open list). This call goes straight to OpenRouter through completeWithImage. It does not go
- * through the perception provider (perception/run.ts: selectPerceptionProvider and runPerception). So PERCEPTION_PROVIDER=none does not
+ * Owner decision (docs/engine/PHASE_LOG.md, open list). This call goes through completeGenerationTask to the workspace's image-understanding model,
+ * not through the perception provider (perception/run.ts: selectPerceptionProvider and runPerception). So PERCEPTION_PROVIDER=none does not
  * turn it off, and no perception run is recorded. Routing it there needs decodeVideoDna to receive a sql handle, which the worker does
  * not pass (factory/worker.ts), and a mapping from MediaObservation to SceneVisionLabels, because the two schemas do not share their fields.
+ *
+ * The model is the workspace's own choice for the vision task, and it must take images. The deployment default is never used for images.
+ * Without a workspace (organizationId null) or a chosen model, nothing is sent and the keyframe gets no labels.
  */
 async function defaultVisionLabeller(
+  organizationId: string | null,
   keyframeBytes: Uint8Array,
   sceneIndex: number,
   second: number,
 ): Promise<SceneVisionLabels | null> {
-  // The vision call reads its key through the credential resolver. Without the deployment opt-in there is no call.
-  if (openRouterChatCredential().status !== "ready") return null;
-
   try {
     const base64 = Buffer.from(keyframeBytes).toString("base64");
     const imageUrl = `data:image/png;base64,${base64}`;
@@ -230,10 +233,14 @@ async function defaultVisionLabeller(
       "on_screen_text should be an array of objects with { text, role } where role is hook_line, benefit, price, cta, or other.",
     ].join(" ");
 
-    const result = await completeWithImage({
+    // The image URL is untrusted data, never a system instruction: it sits in the user message with the scene's text.
+    const result = await completeGenerationTask(organizationId, "vision", {
       system,
-      text: `Analyze scene ${sceneIndex} at second ${second}.`,
-      imageUrl,
+      user: [
+        { type: "text", text: `Analyze scene ${sceneIndex} at second ${second}.` },
+        { type: "image_url", image_url: { url: imageUrl } },
+      ],
+      temperature: 0,
       maxTokens: 300,
     });
 
@@ -401,7 +408,8 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
   const sceneDnaList: SceneDna[] = [];
   const onScreenTextList: OnScreenTextItem[] = [];
 
-  const labeller = input.visionLabeller ?? defaultVisionLabeller;
+  const organizationId = input.organizationId ?? null;
+  const labeller = input.visionLabeller ?? ((bytes, index, second) => defaultVisionLabeller(organizationId, bytes, index, second));
 
   for (const scene of detectedScenes) {
     const second = Math.round(scene.startMs / 1000);
