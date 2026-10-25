@@ -28,7 +28,7 @@ import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
 import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
-import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review.server";
+import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";

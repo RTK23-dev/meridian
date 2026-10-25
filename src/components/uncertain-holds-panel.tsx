@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
-import { releaseGenerationHold } from "@/lib/meridian/providers/hold-review.server";
+import { releaseGenerationHold } from "@/lib/meridian/providers/hold-review-actions";
 import { qk } from "@/lib/query/keys";
 import { useScopedMutation, useUncertainHoldsQuery } from "@/lib/query/hooks";
 
