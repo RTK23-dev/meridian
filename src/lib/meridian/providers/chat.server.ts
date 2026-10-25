@@ -93,6 +93,11 @@ async function defaultCatalog(organizationId: string): Promise<{ status: "ok"; c
   return { status: "ok", choices: state.models, takenAt };
 }
 
+/** The deployment's default text model, OPENROUTER_MODEL, or null. It serves only a text task the workspace has not chosen a model for. */
+export function deploymentTextModel(env: Record<string, string | undefined> = process.env): string | null {
+  return env.OPENROUTER_MODEL?.trim() || null;
+}
+
 /**
  * The model a task uses in one workspace, checked against the live catalogue. The workspace's own choice comes first. The deployment
  * default applies only when the workspace chose nothing, and never to the image task, whose inputs the default does not state.
@@ -110,7 +115,7 @@ export async function generationModelFor(organizationId: string | null, task: Ge
       reason: "Choose a model that takes images for Image understanding in Settings. The deployment default is not used for images, because its inputs are not verified.",
     };
   } else {
-    const deployment = (deps.env ?? process.env).OPENROUTER_MODEL?.trim() ?? "";
+    const deployment = deploymentTextModel(deps.env);
     if (!deployment) {
       return { status: "unset", reason: `No model is chosen for ${GENERATION_TASKS[task].label}. Choose one in Settings, or set OPENROUTER_MODEL for the deployment.` };
     }

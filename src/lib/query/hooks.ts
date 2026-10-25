@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
@@ -171,6 +171,16 @@ export const decisionEnginesQueryOptions = (userId: string | null | undefined, o
 export const openRouterDecisionModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.openRouterDecisionModels(organizationId)),
   queryFn: () => getOpenRouterDecisionModels({ data: { organizationId } }),
+});
+export const generationModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.generationModels(organizationId)),
+  queryFn: () => getGenerationModels({ data: { organizationId } }),
+});
+export const generationCatalogueQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.generationCatalogue(organizationId)),
+  queryFn: () => getGenerationCatalogue({ data: { organizationId } }),
+  // The catalogue is read live when the page opens. A stale list is replaced on the next focus, and a save reads it again.
+  staleTime: 0,
 });
 export const videoBudgetQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
@@ -405,6 +415,16 @@ export const useDecisionEnginesQuery = (organizationId: string, enabled = true) 
 export const useOpenRouterDecisionModelsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...openRouterDecisionModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useGenerationModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...generationModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useGenerationCatalogueQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...generationCatalogueQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {

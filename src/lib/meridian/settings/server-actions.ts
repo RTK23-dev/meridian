@@ -20,6 +20,10 @@ import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openro
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
 import { readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
+import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
+import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
+import { textModelsFor } from "../../../engine/orchestrator/api.ts";
+import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 
 /** The workspace's monthly video budget in US dollars, or null when none is set. Any member may read it. */
 export const getVideoBudget = createServerFn({ method: "GET" })
@@ -314,4 +318,112 @@ export const saveJevBackend = createServerFn({ method: "POST" })
     if (target.status !== "READY") return { ok: false as const, reason: `${target.message} The JEV backend is unchanged.` };
     await writeJevBackend(sql, { organizationId: data.organizationId, actorId: context.userId, backend: data.backend });
     return { ok: true as const, backend: data.backend };
+  });
+
+/**
+ * Each text-generation task's model in this workspace: the model the workspace chose, or, for a text task it has not chosen for, the
+ * deployment default. It also says whether OpenRouter is connected for the workspace. It reads no catalogue and sends nothing.
+ */
+export const getGenerationModels = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    const stored = await storedGenerationModels(sql, data.organizationId);
+    const deployment = deploymentTextModel();
+    const credential = await generationCredentialStatus(data.organizationId);
+    return {
+      connected: credential.status === "ready",
+      connectionReason: credential.status === "ready" ? null : credential.reason,
+      tasks: GENERATION_TASK_IDS.map((task) => {
+        const saved = stored[task] ?? null;
+        return {
+          task,
+          label: GENERATION_TASKS[task].label,
+          description: GENERATION_TASKS[task].description,
+          needsImage: GENERATION_TASKS[task].needsImage,
+          saved,
+          // The deployment default serves a text task only, and only while the workspace has chosen nothing for it.
+          deploymentDefault: saved === null && !GENERATION_TASKS[task].needsImage ? deployment : null,
+        };
+      }),
+    };
+  });
+
+/**
+ * The live OpenRouter catalogue's text models with stated prices, read now, and the tasks each one suits. A catalogue that cannot be
+ * read offers no model, and says why. Decision models are not in this list: a decision model is never a text model.
+ */
+export const getGenerationCatalogue = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    const state = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+    if (state.status !== "ok") return { ok: false as const, reason: state.reason, readAt: null, models: [] };
+    return {
+      ok: true as const,
+      reason: null,
+      readAt: new Date().toISOString(),
+      models: state.models.map((model) => ({
+        id: model.id,
+        name: model.name,
+        takes: model.inputModalities,
+        promptUsdPerMillionTokens: model.promptUsdPerToken * 1_000_000,
+        completionUsdPerMillionTokens: model.completionUsdPerToken * 1_000_000,
+        suitsTasks: GENERATION_TASK_IDS.filter((task) => eligibleForTask(task, model).ok),
+      })),
+    };
+  });
+
+/**
+ * Saves or clears one task's model. A model is saved only when the live catalogue lists it now as a text model that suits the task, and
+ * the catalogue is read again here, not taken from the page. Clearing needs no catalogue. The stored choice is unchanged on any refusal.
+ */
+export const saveGenerationModelChoice = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const task = asText(obj.task);
+    const modelId = obj.modelId === null || obj.modelId === undefined ? null : asText(obj.modelId).trim() || null;
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!isGenerationTask(task)) throw new Error(`'${task}' is not a generation task.`);
+    return { organizationId, task, modelId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    let choices: TextModelChoice[] | null = null;
+    if (data.modelId !== null) {
+      const state = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+      if (state.status !== "ok") return { ok: false as const, reason: `${state.reason} The model is unchanged.` };
+      choices = state.models;
+    }
+    try {
+      const result = await saveGenerationModel(sql, {
+        organizationId: data.organizationId,
+        task: data.task,
+        modelId: data.modelId,
+        actorId: context.userId,
+        choices,
+      });
+      return result.status === "saved"
+        ? { ok: true as const, status: "saved" as const, modelId: result.modelId }
+        : { ok: true as const, status: "cleared" as const, modelId: null };
+    } catch (error) {
+      return { ok: false as const, reason: error instanceof Error ? error.message : "The model could not be saved." };
+    }
   });
