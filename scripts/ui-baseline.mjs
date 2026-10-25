@@ -6,6 +6,7 @@ import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 import { settleAnimations } from "./page-settle.mjs";
+import { withDeadline } from "./page-deadline.mjs";
 
 const startedAt = Date.now();
 // The run prints a line before each capture, so a stall is visible and names the route it stopped on.
@@ -15,8 +16,9 @@ const step = (label) => {
   console.log(`[ui-baseline ${Math.round((Date.now() - startedAt) / 1000)}s] ${label}`);
 };
 // Some page calls have no timeout of their own (a page evaluate, the accessibility scan). They wait for as long as the page's
-// script takes to answer. The watchdog ends the run first, with the last step named, so a stall fails with its route in the log
-// instead of holding the job until its limit.
+// script takes to answer, so each one has a deadline that names the call (scripts/page-deadline.mjs). The watchdog stays as the
+// backstop for anything else, with the last step named, so a stall fails with its route in the log instead of holding the job
+// until its limit.
 // About 11 minutes locally, and about 21 with the CPU throttled four times. The default leaves room for a slower runner, and it ends
 // a real stall before the ui-smoke job's own limit.
 const WATCHDOG_MS = Number(process.env.UI_BASELINE_WATCHDOG_MS || 75 * 60_000);
@@ -41,6 +43,12 @@ const testUser = {
   email: process.env.UI_BASELINE_EMAIL || "ui-baseline@meridian.invalid",
   password: process.env.UI_BASELINE_PASSWORD || "BaselinePass123!",
 };
+
+// The path with its query and hash, so two variants of one path are told apart in the progress lines and the failure messages.
+function routeLabel(url) {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
 
 function routeKey(url) {
   const path = new URL(url).pathname;
@@ -222,11 +230,12 @@ try {
     for (const width of widths) {
       await page.setViewportSize({ width, height: 960 });
       for (const url of routes) {
-        step(`${theme} ${width}px ${new URL(url).pathname}`);
+        const label = `${theme} ${width}px ${routeLabel(url)}`;
+        step(label);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
         await page.waitForFunction(() => document.body.innerText.trim().length > 0, undefined, { timeout: 10_000 }).catch(() => undefined);
-        const overflow = await page.evaluate(() => {
+        const overflow = await withDeadline(`${label}: the overflow check`, 120_000, page.evaluate(() => {
           const viewport = document.documentElement.clientWidth;
           const horizontal = document.documentElement.scrollWidth > viewport + 1;
           // The offending elements are only named in the failure message below, so they are measured only when the page overflows.
@@ -242,16 +251,16 @@ try {
               return `${element.tagName.toLowerCase()}.${String(element.className ?? "").split(/\s+/).slice(0, 3).join(".")} [${Math.round(rect.left)}..${Math.round(rect.right)}; ${element.clientWidth}/${element.scrollWidth}]`;
             });
           return { horizontal, elements };
-        });
+        }));
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
           // Data loads after the first paint, and a section that mounts with its data starts its entrance fade then. Wait for the
           // requests to finish, so the settle below sees that fade and the scan measures the settled colours.
           await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-          await settleAnimations(page);
-          const { violations } = await new AxeBuilder({ page })
+          await withDeadline(`${label}: the animation settle`, 60_000, settleAnimations(page));
+          const { violations } = await withDeadline(`${label}: the accessibility scan`, 180_000, new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-            .analyze();
+            .analyze());
           const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
           accessibility.push({ url, theme, violations: violations.length, serious: serious.length });
           if (serious.length) {
