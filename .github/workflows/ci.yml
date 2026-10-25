@@ -24,7 +24,8 @@ jobs:
     timeout-minutes: 90
     services:
       postgres:
-        image: postgres:16
+        # pgvector is needed: migration 0019 creates the vector extension, which the plain postgres image does not include.
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: meridian
           POSTGRES_PASSWORD: meridian
