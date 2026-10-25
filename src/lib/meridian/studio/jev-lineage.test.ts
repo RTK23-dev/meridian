@@ -4,7 +4,8 @@
 // stored rows, and each boundary checks the organization and brand. The OpenAI decisions stub must receive no request: no fallback backend
 // is consulted. The decision engines and the text model are fixtures; no test calls a live provider.
 //
-// This proof does not cover the human review of the creative. The reviewed-creative step is a separate closeout item.
+// The second test takes the creative through its human review. The reviewer's approval is recorded on the same chain, and the reviewed
+// creative reads back to the opportunity in the same workspace. A reject is not covered here.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -21,6 +22,7 @@ import { enableAppAliases } from "../testing/module-aliases.ts";
 enableAppAliases();
 const { createBriefFromOpportunityFor } = await import("./opportunity-brief.server.ts");
 const { generateCreativeFor } = await import("./creative-generation.server.ts");
+const { applyReviewDecision } = await import("../publishing/actions.ts");
 
 const COPY = { hook: "Dinner in ten minutes", script: "A calm dinner plan that needs no planning.", offer: "", cta: "See it in use", visualTreatment: "Kitchen counter", claims: [] };
 const RECORDED_LISTINGS = JSON.parse(readFileSync(new URL("../../../engine/orchestrator/fixtures/openrouter-listings-trimmed-2026-10-20.json", import.meta.url), "utf8")).listings as Record<string, unknown>;
@@ -133,4 +135,114 @@ test("one decision is followed from its opportunity through the brief to the cre
     select count(*)::int as count from jev_decisions where id = ${origin.decisionId} and organization_id = ${other.organizationId}
   `;
   assert.equal(crossRows?.count, 0, "the origin decision is not visible to another workspace");
+});
+
+/** The chain from an opportunity to a generated creative, built the way the first test builds it. */
+async function chainToCreative(sql: Sql, tenant: Awaited<ReturnType<typeof studioTenant>>) {
+  await seedBrandBrain(sql, tenant);
+  await setMonthlyBudget(sql, tenant.organizationId, 1);
+  const origin = await seedOpportunity(sql, tenant, { outcome: "AUTO_APPROVE" });
+  const jev = stubEngine("jev", { respond: approvesBriefCalibrated });
+  const fallback = stubEngine("openai-decisions");
+  const made = await createBriefFromOpportunityFor(
+    tenant.userId,
+    { brandId: tenant.brandId, opportunityId: origin.opportunityId },
+    { engines: registryWith(jev, fallback), selection: { engineId: "jev", source: "workspace" } },
+  );
+  assert.equal(made.decision, "AUTO_APPROVE");
+  const created = await withTextModel(async () => generateCreativeFor(tenant.userId, { brandId: tenant.brandId, briefId: made.id }));
+  assert.ok(created.status === "completed", "the creative is generated");
+  return { origin, briefId: made.id, creativeId: created.creativeId, creativeDecision: created.decision, jev, fallback };
+}
+
+test("a human review of the creative is recorded on the same chain, and the reviewed creative reads back to the opportunity in its workspace", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "lineage-review");
+  const other = await studioTenant(sql, "lineage-review-other");
+  const chain = await chainToCreative(sql, tenant);
+  assert.equal(chain.fallback.requests.length, 0, "no fallback backend is consulted for the brief or the creative");
+
+  // The creative waits for a human because its copy decision asks for one. The review row is the only way to approve it.
+  assert.equal(chain.creativeDecision, "HUMAN_REVIEW", "the creative's copy decision asks for a human review");
+  const [review] = await sql<{ id: string; status: string; decision_id: string; organization_id: string; brand_id: string }>`
+    select id, status, decision_id, organization_id, brand_id from reviews where creative_id = ${chain.creativeId}
+  `;
+  assert.ok(review, "the creative has one review");
+  assert.equal(review.status, "open");
+  assert.equal(review.organization_id, tenant.organizationId, "the review belongs to the workspace");
+  assert.equal(review.brand_id, tenant.brandId, "the review belongs to the brand");
+
+  // Scope: a reviewer from another workspace cannot approve it, even by naming this brand. Nothing changes.
+  await assert.rejects(
+    applyReviewDecision(sql, {
+      organizationId: other.organizationId,
+      brandId: tenant.brandId,
+      userId: other.userId,
+      reviewId: review.id,
+      action: "approve",
+      reasonCode: "",
+      note: "Approved from another workspace.",
+    }),
+    /That review is not open/,
+  );
+  const [untouched] = await sql<{ status: string }>`select status from reviews where id = ${review.id}`;
+  assert.equal(untouched?.status, "open", "the other workspace's approval changed nothing");
+
+  // The tenant's reviewer approves the creative.
+  await applyReviewDecision(sql, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    userId: tenant.userId,
+    reviewId: review.id,
+    action: "approve",
+    reasonCode: "",
+    note: "Checked against the brief and its claims.",
+  });
+
+  const [approved] = await sql<{ status: string; reviewer_id: string; reviewer_decision: string; organization_id: string; brand_id: string }>`
+    select r.status, d.reviewer_id, d.reviewer_decision, d.organization_id, d.brand_id
+    from reviews r join jev_decisions d on d.id = r.decision_id
+    where r.id = ${review.id}
+  `;
+  assert.equal(approved?.status, "approved", "the review is approved");
+  assert.equal(approved?.reviewer_decision, "approve", "the decision records the reviewer's approval");
+  assert.equal(approved?.reviewer_id, tenant.userId, "the decision names the reviewer");
+  assert.equal(approved?.organization_id, tenant.organizationId, "the reviewed decision belongs to the workspace");
+  assert.equal(approved?.brand_id, tenant.brandId, "the reviewed decision belongs to the brand");
+
+  // Into the opportunity: the reviewed creative names its opportunity and its brief, both in the workspace.
+  const [creative] = await sql<{ status: string; opportunity_id: string; brief_id: string; organization_id: string; brand_id: string }>`
+    select status, opportunity_id, brief_id, organization_id, brand_id from creative_records where id = ${chain.creativeId}
+  `;
+  assert.equal(creative?.status, "approved", "the creative is approved");
+  assert.equal(creative?.opportunity_id, chain.origin.opportunityId, "the reviewed creative names the opportunity it came from");
+  assert.equal(creative?.brief_id, chain.briefId, "the reviewed creative names its brief");
+  assert.equal(creative?.organization_id, tenant.organizationId, "the reviewed creative belongs to the workspace");
+  assert.equal(creative?.brand_id, tenant.brandId, "the reviewed creative belongs to the brand");
+  const [opportunity] = await sql<{ decision_id: string; organization_id: string; brand_id: string }>`
+    select decision_id, organization_id, brand_id from opportunities where id = ${chain.origin.opportunityId}
+  `;
+  assert.equal(opportunity?.decision_id, chain.origin.decisionId, "the opportunity still points at the decision that scored it");
+  assert.equal(opportunity?.organization_id, tenant.organizationId, "the opportunity belongs to the workspace");
+  assert.equal(opportunity?.brand_id, tenant.brandId, "the opportunity belongs to the brand");
+
+  // The audit row names the reviewer, the review and the workspace.
+  const audits = await sql<{ organization_id: string; actor_id: string }>`
+    select organization_id, actor_id from audit_log where action = 'review.approved' and object_id = ${review.id}
+  `;
+  assert.equal(audits.length, 1, "one approval is audited");
+  assert.equal(audits[0]?.organization_id, tenant.organizationId, "the audit row belongs to the workspace");
+  assert.equal(audits[0]?.actor_id, tenant.userId, "the audit row names the reviewer");
+
+  // Scope: the reviewed creative and its opportunity are not visible from the other workspace.
+  const [crossCreative] = await sql<{ count: number }>`
+    select count(*)::int as count from creative_records where id = ${chain.creativeId} and organization_id = ${other.organizationId}
+  `;
+  const [crossOpportunity] = await sql<{ count: number }>`
+    select count(*)::int as count from opportunities where id = ${chain.origin.opportunityId} and organization_id = ${other.organizationId}
+  `;
+  assert.equal(crossCreative?.count, 0, "the reviewed creative is not visible to another workspace");
+  assert.equal(crossOpportunity?.count, 0, "the opportunity is not visible to another workspace");
+  assert.equal(chain.fallback.requests.length, 0, "no fallback backend is consulted at any link, the review included");
+  assert.ok(chain.jev.requests.length > 0, "the chosen engine judged the brief");
 });
