@@ -43,6 +43,7 @@ export const qk = {
   openRouterDecisionModels: (organizationId: string) => ["openrouter-decision-models", organizationId] as const,
   generationModels: (organizationId: string) => ["generation-models", organizationId] as const,
   generationCatalogue: (organizationId: string) => ["generation-catalogue", organizationId] as const,
+  uncertainHolds: (organizationId: string) => ["uncertain-holds", organizationId] as const,
   videoBudget: (organizationId: string) => ["video-budget", organizationId] as const,
 };
 

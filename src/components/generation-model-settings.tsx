@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Button, DisabledReason, Field, Input, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
+import { UncertainHoldsPanel } from "@/components/uncertain-holds-panel";
 import { plainError } from "@/lib/copy";
 import { saveGenerationModelChoice } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
@@ -73,6 +74,7 @@ export function GenerationModelSettings({ organizationId, canAdmin }: { organiza
           models={listing?.ok ? listing.models : []}
         />
       ))}
+      {canAdmin ? <UncertainHoldsPanel organizationId={organizationId} /> : null}
     </div>
   );
 }

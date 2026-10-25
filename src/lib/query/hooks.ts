@@ -28,6 +28,7 @@ import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
 import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review.server";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
@@ -425,6 +426,18 @@ export const useGenerationModelsQuery = (organizationId: string, enabled = true)
 export const useGenerationCatalogueQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...generationCatalogueQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** Uncertain budget holds for an administrator's review. Only an admin of the workspace can read them; the server refuses anyone else. */
+export const uncertainHoldsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.uncertainHolds(organizationId)),
+  queryFn: () => getUncertainGenerationHolds({ data: { organizationId } }),
+  staleTime: 0,
+});
+
+export const useUncertainHoldsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...uncertainHoldsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {

@@ -186,32 +186,19 @@ test("a call above the per-call limit is refused before any hold is written, so 
   assert.equal(holds.settled.length, 0);
 });
 
-const REFUSED_BEFORE_GENERATION = [400, 401, 402, 403, 404, 413, 422, 429];
-for (const status of REFUSED_BEFORE_GENERATION) {
-  test(`an HTTP ${status} is a refusal before generation: its hold is released as failed, with one call and no retry`, async () => {
+// No documented error status is a billing rule, so every error status keeps its hold until an administrator releases it.
+const ERROR_STATUSES = [400, 401, 402, 403, 404, 408, 413, 422, 429, 500, 502, 503, 524, 529];
+for (const status of ERROR_STATUSES) {
+  test(`an HTTP ${status} may have been billed: its hold stays uncertain until an administrator releases it, and the call is not retried`, async () => {
     const holds = memoryDecisionHolds();
-    const { fetch, calls } = fakeFetch(() => json({ error: "the provider refused the request" }, status));
+    const { fetch, calls } = fakeFetch(() => json({ error: "the provider refused or failed the request" }, status));
     const result = await engineWith(ORG, holds, fetch).decide(request(ORG, BRAND));
 
-    assert.equal(calls.length, 1, "a refused call is not sent again");
-    assert.equal(holds.settled.length, 1);
-    assert.equal(holds.settled[0]!.settlement.status, "failed");
-    assert.equal(result.answers.refund!.status, "provider_error");
-  });
-}
-
-const MAY_HAVE_BEEN_BILLED = [500, 502, 503, 524, 529];
-for (const status of MAY_HAVE_BEEN_BILLED) {
-  test(`an HTTP ${status} may have been billed: its hold stays uncertain and the call is not retried`, async () => {
-    const holds = memoryDecisionHolds();
-    const { fetch, calls } = fakeFetch(() => json({ error: "the provider failed" }, status));
-    const result = await engineWith(ORG, holds, fetch).decide(request(ORG, BRAND));
-
-    assert.equal(calls.length, 1, "an uncertain paid call is never retried blindly");
+    assert.equal(calls.length, 1, "an error response is not sent again");
     assert.equal(holds.settled.length, 1);
     const settlement = holds.settled[0]!.settlement;
     assert.equal(settlement.status, "uncertain");
-    assert.match(settlement.error, /may have been billed/);
+    assert.match(settlement.error, /Whether it was billed is not known, so the hold stays on the ledger until an administrator releases it/);
     assert.equal(result.answers.refund!.status, "provider_error");
   });
 }
@@ -265,7 +252,7 @@ test("the order is reserve, send, settle; no step runs twice and nothing is sett
   });
   await engineWith(ORG, holds, fetch).decide(request(ORG, BRAND));
 
-  assert.deepEqual(events, ["reserve", "sent", "settle:failed"]);
+  assert.deepEqual(events, ["reserve", "sent", "settle:uncertain"]);
 });
 
 test("a ledger that cannot be written refuses the call without sending it", async () => {
@@ -324,18 +311,20 @@ for (const { name, sql } of backends) {
     assert.ok(Math.abs((await monthlyHeldUsd(sql, tenant.organizationId)) - REPORTED_COST) < 1e-9, "the month holds the reported cost");
   });
 
-  test(`[${name}] a refusal the provider states before generating releases its hold`, async () => {
-    const tenant = await studioTenant(sql, `decision-hold-refused-${name}`);
+  test(`[${name}] an error status keeps its hold on the month, and the call is not sent again`, async () => {
+    const tenant = await studioTenant(sql, `decision-hold-error-${name}`);
     const { fetch, calls } = fakeFetch(() => json({ error: "bad request" }, 400));
     await engineWith(tenant.organizationId, ledger, fetch).decide(request(tenant.organizationId, tenant.brandId));
 
     assert.equal(calls.length, 1);
-    const rows = await sql<{ status: string; cost_usd: string | number | null }>`
-      select status, cost_usd from model_runs where organization_id = ${tenant.organizationId} and operation = 'jev.decision'
+    const rows = await sql<{ status: string; cost_usd: string | number | null; estimate_usd: string | number }>`
+      select status, cost_usd, estimate_usd from model_runs where organization_id = ${tenant.organizationId} and operation = 'jev.decision'
     `;
-    assert.equal(rows[0]?.status, "failed");
-    assert.equal(rows[0]?.cost_usd, null, "no cost is recorded for a call that was refused");
-    assert.equal(await monthlyHeldUsd(sql, tenant.organizationId), 0);
+    assert.equal(rows[0]?.status, "uncertain");
+    assert.equal(rows[0]?.cost_usd, null, "no cost is recorded: the provider reported none");
+    const estimate = Number(rows[0]?.estimate_usd);
+    assert.ok(estimate > 0);
+    assert.ok(Math.abs((await monthlyHeldUsd(sql, tenant.organizationId)) - estimate) < 1e-9, "the hold counts at its estimate until released");
   });
 
   test(`[${name}] an uncertain decision keeps its hold, so a later decision the month cannot fit is refused without a send`, async () => {

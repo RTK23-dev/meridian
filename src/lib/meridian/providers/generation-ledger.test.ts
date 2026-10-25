@@ -11,8 +11,10 @@ import {
   DEFAULT_GENERATION_CEILING_USD,
   generationCeilingUsd,
   monthlyHeldUsd,
+  releaseUncertainHold,
   reserveGenerationCall,
   settleGenerationCall,
+  uncertainHolds,
   type HoldInput,
 } from "./generation-ledger.ts";
 
@@ -106,23 +108,82 @@ for (const { name, sql } of backends) {
     const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-once"), 0.0004);
     assert.equal(held.status, "held");
     if (held.status !== "held") return;
-    assert.equal(await settleGenerationCall(sql, held.id, { status: "failed", error: "OpenRouter returned 400.", latencyMs: 1 }), true);
-    assert.equal(await settleGenerationCall(sql, held.id, { status: "uncertain", error: "late", latencyMs: 2 }), false, "a released hold is never settled again");
+    assert.equal(await settleGenerationCall(sql, held.id, { status: "failed", error: "Not sent: the provider is not connected.", latencyMs: 1 }), true);
+    assert.equal(await settleGenerationCall(sql, held.id, { status: "uncertain", error: "late", latencyMs: 2 }), false, "a settled hold is never settled again");
     const rows = await sql<{ status: string }>`select status from model_runs where id = ${held.id}`;
     assert.equal(rows[0]?.status, "failed");
   });
 
-  test(`[${name}] an uncertain hold keeps counting against the month, and a failed one releases it`, async () => {
+  test(`[${name}] an uncertain hold keeps counting against the month, and a hold the gateway never sent is released`, async () => {
     const tenant = await studioTenant(sql, `ledger-release-${name}`);
     const uncertain = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-uncertain"), 0.0003);
     assert.equal(uncertain.status, "held");
     if (uncertain.status !== "held") return;
     await settleGenerationCall(sql, uncertain.id, { status: "uncertain", error: "timed out", latencyMs: 25_000 });
-    const failed = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-failed"), 0.0007);
-    assert.equal(failed.status, "held");
-    if (failed.status !== "held") return;
-    await settleGenerationCall(sql, failed.id, { status: "failed", error: "OpenRouter returned 402.", latencyMs: 3 });
+    const notSent = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-not-sent"), 0.0007);
+    assert.equal(notSent.status, "held");
+    if (notSent.status !== "held") return;
+    await settleGenerationCall(sql, notSent.id, { status: "failed", error: "Not sent: the provider is not connected.", latencyMs: 0 });
     assert.ok(Math.abs((await monthlyHeldUsd(sql, tenant.organizationId)) - 0.0003) < 1e-9, "only the uncertain hold still holds money");
+  });
+
+  test(`[${name}] an administrator releases an uncertain hold once: it stops counting against the month, and the release is audited`, async () => {
+    const tenant = await studioTenant(sql, `ledger-admin-release-${name}`);
+    const held = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-release"), 0.0005);
+    assert.equal(held.status, "held");
+    if (held.status !== "held") return;
+    await settleGenerationCall(sql, held.id, { status: "uncertain", error: "timed out", latencyMs: 25_000 });
+    const listed = await uncertainHolds(sql, tenant.organizationId);
+    assert.deepEqual(listed.map((hold) => hold.id), [held.id], "the uncertain hold is listed for review");
+
+    const reason = "The provider account shows no charge for this call.";
+    const first = await releaseUncertainHold(sql, { organizationId: tenant.organizationId, holdId: held.id, actorId: "user_admin_fixture", reason });
+    assert.deepEqual(first, { status: "released", holdId: held.id });
+    assert.equal(await monthlyHeldUsd(sql, tenant.organizationId), 0, "a released hold does not count against the month");
+    assert.deepEqual(await uncertainHolds(sql, tenant.organizationId), [], "a released hold is no longer listed");
+
+    const second = await releaseUncertainHold(sql, { organizationId: tenant.organizationId, holdId: held.id, actorId: "user_admin_fixture", reason });
+    assert.equal(second.status, "refused", "a hold is released once");
+    const rows = await sql<{ status: string; error: string }>`select status, error from model_runs where id = ${held.id}`;
+    assert.equal(rows[0]?.status, "released");
+    assert.match(rows[0]?.error ?? "", /timed out Released by an administrator: The provider account shows no charge/, "the original error is kept beside the release");
+    const audit = await sql<{ actor_id: string; reason: string }>`select actor_id, reason from generation_hold_releases where model_run_id = ${held.id}`;
+    assert.equal(audit.length, 1, "one audit row for the one release");
+    assert.equal(audit[0]?.actor_id, "user_admin_fixture");
+    assert.equal(audit[0]?.reason, reason);
+  });
+
+  test(`[${name}] a release refuses a short reason, an in-flight hold, and a hold in another workspace, and changes nothing`, async () => {
+    const tenant = await studioTenant(sql, `ledger-release-refuse-${name}`);
+    const other = await studioTenant(sql, `ledger-release-other-${name}`);
+    const inFlight = await reserveGenerationCall(sql, holdFor(tenant.organizationId, tenant.brandId, "op-in-flight"), 0.0002);
+    const foreign = await reserveGenerationCall(sql, holdFor(other.organizationId, other.brandId, "op-foreign"), 0.0002);
+    assert.equal(inFlight.status, "held");
+    assert.equal(foreign.status, "held");
+    if (inFlight.status !== "held" || foreign.status !== "held") return;
+    await settleGenerationCall(sql, foreign.id, { status: "uncertain", error: "timed out", latencyMs: 1 });
+
+    const short = await releaseUncertainHold(sql, { organizationId: tenant.organizationId, holdId: inFlight.id, actorId: "user_admin_fixture", reason: "ok" });
+    assert.equal(short.status, "refused", "a release needs a reason the audit can read");
+    const notUncertain = await releaseUncertainHold(sql, {
+      organizationId: tenant.organizationId,
+      holdId: inFlight.id,
+      actorId: "user_admin_fixture",
+      reason: "Checked against the provider account.",
+    });
+    assert.equal(notUncertain.status, "refused", "an in-flight hold is settled by its call, not by an administrator");
+    const crossWorkspace = await releaseUncertainHold(sql, {
+      organizationId: tenant.organizationId,
+      holdId: foreign.id,
+      actorId: "user_admin_fixture",
+      reason: "Checked against the provider account.",
+    });
+    assert.equal(crossWorkspace.status, "refused", "a hold in another workspace cannot be released from this one");
+
+    const statuses = await sql<{ status: string }>`select status from model_runs where id = ${inFlight.id}`;
+    assert.equal(statuses[0]?.status, "in_flight");
+    assert.deepEqual((await uncertainHolds(sql, tenant.organizationId)).map((hold) => hold.id), [], "the other workspace's hold is not listed here");
+    assert.ok(Math.abs((await monthlyHeldUsd(sql, other.organizationId)) - 0.0002) < 1e-9, "the other workspace still holds its money");
   });
 
   test(`[${name}] a monthly budget refuses the call that does not fit, and writes no row for it`, async () => {

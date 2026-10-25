@@ -24,9 +24,9 @@ import {
   boundGenerationCall,
   generationCeilingUsd,
   GENERATION_CEILING_ENV,
-  refusedBeforeGeneration,
   reserveGenerationCall,
   settleGenerationCall,
+  UNCERTAIN_OUTCOME_NOTE,
   type ContentPart,
   type Settlement,
 } from "./generation-ledger.ts";
@@ -93,8 +93,9 @@ export type GenerationInput = {
 
 /**
  * The answer of one generation call. `model` is the model requested. `returnedModel` is the model OpenRouter reports it answered with.
- * A failure is `failed` when OpenRouter refused the request before generating it, `uncertain` when the call may have been billed (a
- * timeout, a server error, an unreadable reply), and `unavailable` when nothing was sent.
+ * A failure is `uncertain` when the call may have been billed (a timeout, any error status, an unreadable reply): its hold stays until an
+ * administrator releases it. It is `failed` only when the gateway reports the provider not connected, before anything was sent, and
+ * `unavailable` when nothing was sent.
  */
 export type GenerationResult =
   | {
@@ -267,7 +268,7 @@ export async function completeWithModel(
     max_tokens: input.maxTokens,
     ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
   };
-  const uncertainError = "OpenRouter could not be reached. The call may have been billed, so it was not retried.";
+  const uncertainError = `OpenRouter could not be reached. ${UNCERTAIN_OUTCOME_NOTE}`;
   let result;
   try {
     result = await gateway.call({
@@ -290,12 +291,8 @@ export async function completeWithModel(
   const response = result.response;
   const latencyMs = Date.now() - started;
   if (response.status < 200 || response.status >= 300) {
-    const reason = statusReason(response.status);
-    if (refusedBeforeGeneration(response.status)) {
-      await settleSafely(sql, hold.id, { status: "failed", error: reason, latencyMs });
-      return { ok: false, status: "failed", provider: "openrouter", error: reason, model: input.model };
-    }
-    const uncertain = `${reason} The call may have been billed, so it was not retried.`;
+    // No error status releases a hold: OpenRouter documents the statuses but no billing rule for them, so the call may have been billed.
+    const uncertain = `${statusReason(response.status)} ${UNCERTAIN_OUTCOME_NOTE}`;
     await settleSafely(sql, hold.id, { status: "uncertain", error: uncertain, latencyMs });
     return { ok: false, status: "uncertain", provider: "openrouter", error: uncertain, model: input.model };
   }
@@ -305,7 +302,7 @@ export async function completeWithModel(
     if (!safe.success) throw new Error("shape");
     parsed = safe.data;
   } catch {
-    const error = "OpenRouter answered with an unexpected shape. The call may have been billed, so it was not retried.";
+    const error = `OpenRouter answered with an unexpected shape. ${UNCERTAIN_OUTCOME_NOTE}`;
     await settleSafely(sql, hold.id, { status: "uncertain", error, latencyMs });
     return { ok: false, status: "uncertain", provider: "openrouter", error, model: input.model };
   }

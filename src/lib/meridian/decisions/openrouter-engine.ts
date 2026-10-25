@@ -12,7 +12,7 @@
  */
 import { MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { loadDefaultSql, secretForCategory } from "../credentials/resolve.ts";
-import { refusedBeforeGeneration } from "../providers/generation-ledger.ts";
+import { UNCERTAIN_OUTCOME_NOTE } from "../providers/generation-ledger.ts";
 import { ledgerDecisionHolds, type DecisionHolds } from "./holds.ts";
 import { checkEvidenceSufficiency } from "../jev/client.ts";
 import type { EvidenceRef, JevAnswer, JevQuestionSpec } from "../jev/types.ts";
@@ -722,19 +722,15 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       const message = timedOut
         ? `OpenRouter Decisions did not respond within ${this.timeoutMs} ms.`
         : `OpenRouter Decisions could not be reached: ${error instanceof Error ? safeProviderText(error.message) : "unknown error"}.`;
-      await this.holds.settle(holdId, { status: "uncertain", error: `${message} The call may have been billed, so it was not retried.`, latencyMs: Date.now() - started });
+      await this.holds.settle(holdId, { status: "uncertain", error: `${message} ${UNCERTAIN_OUTCOME_NOTE}`, latencyMs: Date.now() - started });
       return fail(timedOut ? "timeout" : "network", message);
     }
     if (!response.ok) {
       const body = safeProviderText(await response.text().catch(() => ""));
       const kind = failureKindForStatus(response.status, body);
       const message = `OpenRouter Decisions returned HTTP ${response.status}${body ? `: ${body}` : "."}`;
-      await this.holds.settle(
-        holdId,
-        refusedBeforeGeneration(response.status)
-          ? { status: "failed", error: message, latencyMs: Date.now() - started }
-          : { status: "uncertain", error: `${message} The call may have been billed, so it was not retried.`, latencyMs: Date.now() - started },
-      );
+      // No error status releases a hold: OpenRouter documents the statuses but no billing rule for them.
+      await this.holds.settle(holdId, { status: "uncertain", error: `${message} ${UNCERTAIN_OUTCOME_NOTE}`, latencyMs: Date.now() - started });
       return fail(kind, message);
     }
 
@@ -742,12 +738,12 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     try {
       decoded = (await response.json()) as Record<string, unknown>;
     } catch {
-      await this.holds.settle(holdId, { status: "uncertain", error: "OpenRouter Decisions returned a body that is not JSON. The call may have been billed, so it was not retried.", latencyMs: Date.now() - started });
+      await this.holds.settle(holdId, { status: "uncertain", error: `OpenRouter Decisions returned a body that is not JSON. ${UNCERTAIN_OUTCOME_NOTE}`, latencyMs: Date.now() - started });
       return fail("invalid_response", "OpenRouter Decisions returned a body that is not JSON.");
     }
     const answersBody = decoded && typeof decoded === "object" ? (decoded as { answers?: unknown }).answers : undefined;
     if (!answersBody || typeof answersBody !== "object" || Array.isArray(answersBody)) {
-      await this.holds.settle(holdId, { status: "uncertain", error: "OpenRouter Decisions returned no answers object. The call may have been billed, so it was not retried.", latencyMs: Date.now() - started });
+      await this.holds.settle(holdId, { status: "uncertain", error: `OpenRouter Decisions returned no answers object. ${UNCERTAIN_OUTCOME_NOTE}`, latencyMs: Date.now() - started });
       return fail("invalid_response", "OpenRouter Decisions returned no answers object.");
     }
     const returnedModel = typeof decoded.model === "string" && decoded.model.trim() ? decoded.model.trim() : model.model;

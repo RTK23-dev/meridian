@@ -6,10 +6,13 @@
 //      refused when the month's held spend plus this bound would exceed the workspace's monthly budget (when one is set).
 //   3. settle: the outcome is written once, on a row that is still 'in_flight':
 //        completed   the provider answered and reported its cost (cost_usd; null when it reported none)
-//        failed      the provider refused the request before generating it (4xx); nothing was billed, so the hold is released
-//        uncertain   the outcome is unknown (a timeout, a server error, an unreadable reply); the hold stays and is never retried
+//        failed      the call was never sent (the gateway reported the provider not connected, before any transport); nothing was sent
+//        uncertain   the outcome may have been billed: a timeout, any error status, or an unreadable reply. The hold stays and is never
+//                    retried. OpenRouter's documentation states no billing rule for its error statuses, so no status releases a hold.
+//   An administrator may release an uncertain hold after checking the provider's account (releaseUncertainHold). The release is audited
+//   in generation_hold_releases and applies once.
 //   Held spend (completed, in_flight and uncertain rows) counts against the month at the reported cost, or at the estimate when no
-//   cost was reported. The estimate is never recorded as a cost.
+//   cost was reported. The estimate is never recorded as a cost. A released hold is not held spend.
 
 import { randomUUID } from "node:crypto";
 import { withTransaction, type Sql } from "../learning/store.ts";
@@ -21,15 +24,11 @@ export const GENERATION_CEILING_ENV = "OPENROUTER_GENERATION_MAX_USD_PER_CALL";
 export const DEFAULT_GENERATION_CEILING_USD = 0.05;
 
 /**
- * HTTP statuses that OpenRouter's documentation describes as request rejections (invalid request, credentials, credits, permissions,
- * model not served, size, rate limit). They are treated as refused before generation, so their hold is released. No live call has
- * confirmed that they are never billed. Every other error status may have been billed, and its hold is kept.
+ * What every uncertain hold says about itself. The hold stays until an administrator releases it, so the workspace's budget shows the
+ * money at risk rather than hiding it.
  */
-const REFUSED_BEFORE_GENERATION_STATUSES = new Set([400, 401, 402, 403, 404, 413, 422, 429]);
-
-export function refusedBeforeGeneration(status: number): boolean {
-  return REFUSED_BEFORE_GENERATION_STATUSES.has(status);
-}
+export const UNCERTAIN_OUTCOME_NOTE =
+  "Whether it was billed is not known, so the hold stays on the ledger until an administrator releases it. It was not retried.";
 
 /** Bytes of request framing (role names, the JSON envelope) added to the bound. Generous: the bound must not undercount. */
 const REQUEST_OVERHEAD_BYTES = 256;
@@ -189,4 +188,68 @@ export async function settleGenerationCall(sql: Sql, holdId: string, settlement:
     returning id
   `;
   return rows.length === 1;
+}
+
+export type HoldRelease = { status: "released"; holdId: string } | { status: "refused"; reason: string };
+
+/** The shortest reason an administrator may give, so the audit records a reason rather than a click. */
+const MIN_RELEASE_REASON = 10;
+
+/**
+ * Releases one uncertain hold after an administrator has checked the provider's account for that call. The release is written in the
+ * same transaction as the model run's status change, with who released it, when and why. It applies once: the update only matches a
+ * row that is still uncertain in this workspace, so a second release, or a release of a completed or in-flight hold, changes nothing.
+ * Nothing in the system calls this on its own: it is reached only from an administrator's action.
+ */
+export async function releaseUncertainHold(
+  sql: Sql,
+  input: { organizationId: string; holdId: string; actorId: string; reason: string },
+): Promise<HoldRelease> {
+  const reason = input.reason.trim();
+  if (reason.length < MIN_RELEASE_REASON) {
+    return { status: "refused", reason: `A release needs a reason of at least ${MIN_RELEASE_REASON} characters, so the audit says why. Nothing was released.` };
+  }
+  return withTransaction(sql, async (tx) => {
+    await tx`select pg_advisory_xact_lock(hashtext(${`generation-ledger:${input.organizationId}`}))`;
+    const rows = await tx<{ id: string }>`
+      update model_runs set status = 'released', error = left(error || ${` Released by an administrator: ${reason}`}, 1000)
+      where id = ${input.holdId} and organization_id = ${input.organizationId} and status = 'uncertain'
+      returning id
+    `;
+    if (rows.length !== 1) {
+      return { status: "refused" as const, reason: "That hold is not an uncertain hold in this workspace, so nothing was released." };
+    }
+    await tx`
+      insert into generation_hold_releases (id, organization_id, model_run_id, actor_id, reason)
+      values (${randomUUID()}, ${input.organizationId}, ${input.holdId}, ${input.actorId}, ${reason})
+    `;
+    return { status: "released" as const, holdId: input.holdId };
+  });
+}
+
+export type UncertainHold = {
+  id: string;
+  operation: string;
+  model: string;
+  estimateUsd: number;
+  createdAt: string;
+  error: string;
+};
+
+/** The uncertain holds of one workspace, oldest first, for an administrator to check against the provider's account. */
+export async function uncertainHolds(sql: Sql, organizationId: string): Promise<UncertainHold[]> {
+  const rows = await sql<{ id: string; operation: string; model: string; estimate_usd: string | number | null; created_at: string; error: string }>`
+    select id, operation, model, estimate_usd, created_at, error from model_runs
+    where organization_id = ${organizationId} and status = 'uncertain'
+    order by created_at asc
+    limit 200
+  `;
+  return rows.map((row) => ({
+    id: row.id,
+    operation: row.operation,
+    model: row.model,
+    estimateUsd: Number(row.estimate_usd ?? 0),
+    createdAt: new Date(row.created_at).toISOString(),
+    error: row.error,
+  }));
 }

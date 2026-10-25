@@ -314,34 +314,37 @@ test("a server error is uncertain, is not retried, and its body is not echoed", 
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
   assert.equal(result.status, "uncertain");
-  assert.match(result.error, /returned an error \(500\)\. The call may have been billed/);
+  assert.match(result.error, /returned an error \(500\)\. Whether it was billed is not known, so the hold stays on the ledger/);
   assert.equal(JSON.stringify(result).includes(KEY_A), false);
   const runs = await runsOf(organizationId, "copy-test");
   assert.equal(runs[0]?.status, "uncertain", "the hold stays on the ledger");
 });
 
-test("a request refused before generation (400) is failed, and its hold is released", async () => {
+test("a request the provider rejects (400) is uncertain: its hold stays on the ledger, and it is not retried", async () => {
   const { organizationId, record } = await scenario("refused");
   const { resolver } = fakeResolver({ [organizationId]: { status: "ready", secret: KEY_A } });
-  const { transport } = fakeTransport(() => json(400, { error: "bad request" }));
+  const { transport, sent } = fakeTransport(() => json(400, { error: "bad request" }));
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "uncertain", "no status code is documented as unbilled, so no error releases a hold");
   assert.match(result.error, /rejected the request as invalid \(400\)/);
+  assert.equal(sent.length, 1, "an uncertain call is not sent again");
   const runs = await runsOf(organizationId, "copy-test");
-  assert.equal(runs[0]?.status, "failed");
+  assert.equal(runs[0]?.status, "uncertain");
   assert.equal(runs[0]?.cost_usd, null);
 });
 
-test("a rejected key is failed with an actionable reason, and the key is not echoed", async () => {
+test("a rejected key (401) is uncertain with an actionable reason, the key is not echoed, and the hold stays", async () => {
   const { organizationId, record } = await scenario("bad-key");
   const { resolver } = fakeResolver({ [organizationId]: { status: "ready", secret: KEY_A } });
   const { transport } = fakeTransport(() => json(401, { error: { code: 401, message: `invalid ${KEY_A}` } }));
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "uncertain");
   assert.match(result.error, /rejected the workspace's key \(401\)\. Check or replace the OpenRouter key in Settings/);
   assert.equal(JSON.stringify(result).includes(KEY_A), false);
+  const runs = await runsOf(organizationId, "copy-test");
+  assert.equal(runs[0]?.status, "uncertain");
 });
 
 test("a host that cannot be reached, or a timed-out request, is uncertain and carries no key", async () => {
@@ -353,7 +356,7 @@ test("a host that cannot be reached, or a timed-out request, is uncertain and ca
   const result = await completeGenerationTask(organizationId, "copy", input(record), depsFor({ resolver, transport, stored: async () => WRITER }));
   assert.ok(!result.ok);
   assert.equal(result.status, "uncertain");
-  assert.equal(result.error, "OpenRouter could not be reached. The call may have been billed, so it was not retried.");
+  assert.equal(result.error, "OpenRouter could not be reached. Whether it was billed is not known, so the hold stays on the ledger until an administrator releases it. It was not retried.");
   assert.equal(JSON.stringify(result).includes(KEY_A), false);
   const runs = await runsOf(organizationId, "copy-test");
   assert.equal(runs[0]?.status, "uncertain");
