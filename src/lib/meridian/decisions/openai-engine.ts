@@ -23,7 +23,7 @@
  * documented contract.
  */
 import { createHash } from "node:crypto";
-import { gatedFetch } from "../providers/capability.ts";
+import { gatedFetch, isCapabilityDisabledError } from "../providers/capability.ts";
 import { ACCEPTED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { secretForCategory } from "../credentials/resolve.ts";
 import { checkEvidenceSufficiency, minimizeJevState } from "../jev/client.ts";
@@ -480,6 +480,14 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
           signal: AbortSignal.timeout(config.timeoutMs),
         });
       } catch (error) {
+        // A disabled capability refused before transport. It sent nothing, so report the gate and return without retrying.
+        if (isCapabilityDisabledError(error)) {
+          return result({
+            answers: abstainAll(request, { status: "not_configured", reason: error.message, model: config.model, provider: PROVIDER }),
+            inputHash,
+            failure: { kind: "not_configured", message: error.message },
+          });
+        }
         const timedOut = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
         // A timed-out request may have been processed and billed, so it is not retried.
         if (timedOut) return fail("timeout", `OpenAI Decisions did not respond within ${config.timeoutMs} ms.`);
