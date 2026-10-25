@@ -15,10 +15,29 @@ env:
 jobs:
   ui-smoke:
     runs-on: ubuntu-latest
+    # The browser checks run against the production build, served by `npm run preview` (the server the Docker image runs), with a
+    # real Postgres. The earlier runs used the Vite dev server, which transforms modules on demand, and its module responses stalled
+    # under the baseline's load. A production build needs DATABASE_URL, so the job starts Postgres as a service.
     # The UI baseline captures every route at each width and theme: about 11 minutes locally, and longer on the runner. Its own
     # watchdog (scripts/ui-baseline.mjs) ends a stall first, at 75 minutes, and names the route it stopped on. This limit is the
     # backstop above that, so a stall never holds the job for the six-hour default.
     timeout-minutes: 90
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: meridian
+          POSTGRES_PASSWORD: meridian
+          POSTGRES_DB: meridian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meridian -d meridian"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://meridian:meridian@127.0.0.1:5432/meridian
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,21 +46,21 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
-      - run: npm run build
-      - name: Start the local app for browser smoke
+      - name: Build the app and migrate its database
+        run: npm run build
+      - name: Create the app's settings and secrets
+        run: npm run setup
+      - name: Start the built app for browser smoke
         run: |
           mkdir -p artifacts
-          # Pre-bundle first. A cold dev server answers before its optimizer has finished, and the bundling then competes with
-          # the first requests, so the browser checks start on a half-built server.
-          npx vite optimize
-          npm run dev > artifacts/dev-server.log 2>&1 &
+          npm run preview -- --host 127.0.0.1 --port 8080 --strictPort > artifacts/preview-server.log 2>&1 &
           for attempt in $(seq 1 60); do
             if curl --fail --silent http://127.0.0.1:8080/ > /dev/null; then
               exit 0
             fi
             sleep 1
           done
-          cat artifacts/dev-server.log
+          cat artifacts/preview-server.log
           exit 1
       - name: Capture UI baseline
         env:
