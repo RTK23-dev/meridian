@@ -7,7 +7,8 @@
 import type { Sql } from "../learning/store.ts";
 import { DECISION_ENGINE_LABELS, createDecisionEngines, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
-import { resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
+import { OPENROUTER_DECISIONS_MAX_IMAGES, resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
+import { decisionModelProfile } from "./decision-catalog.ts";
 import { readOpenRouterModel } from "./openrouter-settings.ts";
 import { DEFAULT_JEV_BACKEND, JEV_BACKENDS, JEV_BACKEND_LABELS, readJevBackend, type JevBackend } from "./jev-backend.ts";
 import {
@@ -86,6 +87,20 @@ async function openrouterModelFor(sql: Sql | undefined, organizationId: string |
   return resolved.ok ? { model: resolved.model, source: resolved.source } : { model: resolved.model, source: resolved.source, reason: resolved.reason };
 }
 
+/**
+ * JEV's capabilities depend on the backend the workspace chose. The engine's own declaration is the TypeSafe path, which takes text
+ * only. Through OpenRouter, JEV takes the images the chosen model's verified profile lists, so the status reports those.
+ */
+function jevCapabilitiesFor(declared: DecisionCapabilities, backend: JevBackend | null, model: string): DecisionCapabilities {
+  if (backend !== "openrouter") return declared;
+  const takesImages = model !== "" && (decisionModelProfile(model)?.inputModalities.includes("image") ?? false);
+  return {
+    ...declared,
+    inputModalities: takesImages ? ["text", "image"] : ["text"],
+    maxImages: takesImages ? OPENROUTER_DECISIONS_MAX_IMAGES : 0,
+  };
+}
+
 export async function getDecisionEngineStatus(
   sql: Sql | undefined,
   organizationId: string | undefined,
@@ -105,7 +120,7 @@ export async function getDecisionEngineStatus(
         // With a workspace in scope, each engine reports its readiness for that workspace. Without one, it cannot be READY.
         health: organizationId && engine.healthFor ? await engine.healthFor(organizationId) : await engine.health(),
         adapterVersion: engine.adapterVersion,
-        capabilities: engine.capabilities(),
+        capabilities: id === "jev" ? jevCapabilitiesFor(engine.capabilities(), jevBackend.backend, openrouterModel.model) : engine.capabilities(),
       };
     }),
   );

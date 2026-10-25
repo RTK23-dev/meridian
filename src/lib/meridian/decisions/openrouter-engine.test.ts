@@ -187,7 +187,8 @@ test("the result keeps the requested model, the model and provider the provider 
   assert.equal(result.providerRequestId, "gen-dec-fixture-1");
   assert.equal(result.usage?.inputTokens, 357);
   assert.equal(result.usage?.reportedCostUsd, 0.0000149);
-  assert.ok(Math.abs((result.usage?.ceilingUsd ?? 0) - 262144 * 0.000000042) < 1e-12, "the checked ceiling is kept beside the reported cost");
+  const ceiling = result.usage?.ceilingUsd ?? 0;
+  assert.ok(ceiling > 0 && ceiling < 262144 * 0.000000042, "the request's bound is kept beside the reported cost, and it is below the whole context");
   assert.equal(result.inputModality, "text");
   assert.equal(result.imageCount, 0);
   assert.equal(result.imagesOmitted, 0);

@@ -12,6 +12,18 @@ OpenRouter is used for five different jobs. They have different endpoints, diffe
 
 A decision never goes to the chat endpoint, and a chat call never goes to the Decisions endpoint. A decision is never produced by asking a chat model for JSON.
 
+## Three model classes
+
+OpenRouter models are not interchangeable across Meridian. Each class has its own catalogue, endpoint and settings, and a model belongs to one class only.
+
+| Class | Used for | Endpoint | Catalogue and settings |
+| --- | --- | --- | --- |
+| **Decision models** | Structured judgments: JEV and the Decisions engine. Typed questions, typed answers (`noul`, `choice`, `score`). Never a prompt, a brief or copy. | `POST https://openrouter.ai/api/alpha/decisions` | The live decisions catalogue, read without a key. Chosen per workspace (`decision_engine_openrouter_config`), with the JEV backend (`decision_engine_jev_config`). |
+| **Prompt and text-generation models** | Plans, scripts, copy and other text, and ordinary chat. | `POST https://openrouter.ai/api/v1/chat/completions` (`providers/chat.server.ts`) | Today this path reads only the deployment key and the deployment's `OPENROUTER_MODEL`. It is not workspace-keyed and not chosen per task. See "Not built" below. |
+| **Media models** | Image, video, speech and other modality-specific output. | Each adapter's own endpoint, through the engine gateway (`src/engine/gateway/`), which is the only place that makes these calls. | Capability-gated per adapter. Prices come from the provider's reported cost, not an estimate. |
+
+A decision never goes to the chat endpoint, a chat or media model is never sent to the Decisions endpoint, and a decision is never produced by asking a chat model for JSON.
+
 ## The keys
 
 - **`openrouter`** is the workspace's own OpenRouter key. A workspace saves it in Settings, with its masked fingerprint, and removes it there. The deployment's key is used for a workspace only when `OPENROUTER_SHARED_DEFAULT=deployment` is set. The resolver (`credentials/resolve.ts`) applies this precedence for every caller: a usable workspace key, then the deployment key only when shared, otherwise not configured. No call is made without a key.
@@ -28,6 +40,7 @@ Decision models come from OpenRouter's live model catalogue, read without a key 
 | Aliases (`~…`) | Refused everywhere. An alias moves to new builds, so its pinned target is what can be chosen. |
 | No usable input price | Excluded. The call's cost could not be bounded before it is sent. |
 | No context length | Excluded, for the same reason. |
+| No usable output price, or a priced output with no stated largest output | Excluded. A call's output cost could not be bounded before it is sent. |
 | No verified profile | Listed under "Not offered", with the reason. Meridian does not infer a model's questions or inputs from its name. |
 | Catalogue unavailable | No decision model is offered, and no decision is sent. A failed read is remembered for one minute. |
 
@@ -42,7 +55,13 @@ The other 25 decision models in the recorded catalogue (`nace-ai/…`, `perplexi
 
 ## The per-call ceiling
 
-Before a decision is sent, its most expensive case is computed: the model's whole context length at its catalogued input price. The call is refused if that ceiling is above the deployment's limit, `OPENROUTER_DECISION_MAX_USD_PER_CALL` (default `0.05`). A set value that is not a positive number is refused, so a mistyped limit cannot allow more than it says. The ceiling is stored with the provider-reported cost, so the two can be compared. It is a bound, not an estimate, and it is not a monthly budget: decision spend has no monthly limit yet.
+Before a decision is sent, its cost is bounded from the request it would send, and the call is refused if that bound is above the deployment's limit, `OPENROUTER_DECISION_MAX_USD_PER_CALL` (default `0.05`). The bound is:
+
+- **Input:** the request's UTF-8 byte count at the catalogued input price. A tokenizer produces at most one token per byte, so this is an upper bound on the input tokens. It is capped at the model's context length, because a model cannot bill more input than its context holds.
+- **A call with an image:** the whole context at the input price. The catalogue does not say how many tokens an image takes, so an image call is bounded by the most it could be.
+- **Output:** the model's largest output (`top_provider.max_completion_tokens`) at its output price. A model whose output is priced but whose largest output is not stated is not offered, because its output cost could not be bounded.
+
+The limit is a set of documented units: USD per token from the catalogue, and tokens from the request. A set value that is not a positive number is refused, so a mistyped limit cannot allow more than it says. The bound is stored with the provider-reported cost, so the two can be compared. It is a reservation, not an estimate, and it is not a monthly budget: decision spend has no monthly limit yet. The settings screen shows the most any call to a model can cost, which is its whole-context figure.
 
 ## Every path
 
@@ -50,10 +69,10 @@ Before a decision is sent, its most expensive case is computed: the model's whol
 | --- | --- | --- | --- | --- |
 | `src/lib/meridian/decisions/openrouter-engine.ts` | The OpenRouter Decisions engine (`openrouter-decisions`): one Decisions request per decision, typed answers read by question name. | **OpenRouter Decisions API, workspace-keyed engine.** | `openrouter`, per workspace | New in this change. Fixture-tested. Live call not yet recorded. |
 | `src/lib/meridian/decisions/openrouter-settings.ts` | Stores the workspace's chosen decision model and the results of explicit connection checks. | Storage for the decisions engine. | none | New. Scoped per workspace. |
-| `src/lib/meridian/decisions/jev-engine.ts`, `decisions/jev-backend.ts` | JEV. The workspace's JEV backend (migration 0133) chooses one service: TypeSafe System One directly (the default when no row exists), or the OpenRouter Decisions engine. Exactly one backend is called per decision, with no fallback. An unreadable setting makes no request. | **Decisions API, workspace-keyed, chosen per workspace.** | TypeSafe key for TypeSafe; `openrouter`, per workspace, for OpenRouter. | New in this change. Fixture-tested. No live call recorded. |
+| `src/lib/meridian/decisions/jev-engine.ts`, `decisions/jev-backend.ts` | JEV. The workspace's JEV backend (migration 0133) chooses one service: TypeSafe System One directly (the default when no row exists), or the OpenRouter Decisions engine. Exactly one backend is called per decision, with no fallback. An unreadable setting makes no request. Image evidence reaches JEV only through OpenRouter, and only for a model whose verified profile lists image input (`typesafe/jev-1.14` today). The gate resolves that once per decision and passes it to the adapter (`capabilities.ts`). The regression test runs the real gate and dispatcher (`jev-openrouter-images.test.ts`). | **Decisions API, workspace-keyed, chosen per workspace.** | TypeSafe key for TypeSafe; `openrouter`, per workspace, for OpenRouter. | Fixture-tested through the real gate. No live call recorded. |
 | `src/lib/meridian/jev/router.ts`, `jev/client.ts` | The TypeSafe provider (`api.typesafe.ai/v1/systemone`) and the shared JEV helpers: input hashing, evidence sufficiency, state minimization. The helpers make no network call. | TypeSafe transport and helpers. No OpenRouter call. | TypeSafe key, per workspace. | Existing. Comments corrected in this change: the router has no OpenRouter provider and no router modes. |
 | `src/components/jev-backend-controls.tsx` | The JEV backend control in Settings: each backend's readiness and the switch. | UI for the JEV backend. Shows state only, never a key. | — | New. Checked in a browser at 360, 390 and 1440 px. |
-| `src/lib/meridian/providers/chat.server.ts` | Ordinary chat (`openrouter`, `OPENROUTER_MODEL`). | Ordinary OpenRouter chat. | `openrouter_chat` (deployment only) | Existing, unchanged. It needs `OPENROUTER_SHARED_DEFAULT=deployment`. |
+| `src/lib/meridian/providers/chat.server.ts` | Ordinary chat (`openrouter`, `OPENROUTER_MODEL`), used by research, the Factory's image understanding, the studio's copy generation and readiness. It calls `chat/completions` directly and does not go through the engine gateway. | Prompt and text-generation (ordinary chat). | `openrouter_chat` (deployment only). A workspace's own key is not used. | Existing, unchanged in this change. Needs `OPENROUTER_SHARED_DEFAULT=deployment`. Its comment that OpenRouter is the sole gateway for JEV was out of date and is corrected. |
 | `src/engine/gateway/openrouter.ts` | Video generation through OpenRouter's video API, with the reported USD cost per job. | Model/generation gateway call. | `openrouter`, per workspace (through the gateway, `gateway/meridian.ts`) | Existing, unchanged. The engine rule holds: no `fetch` outside `gateway/transport.ts`, and keys come from the resolver. |
 | `src/engine/gateway/providers.ts` (`baseUrl https://openrouter.ai/api/v1`) | The provider table entry for the generation gateway. | Model/generation gateway. | as above | Existing. |
 | `src/engine/assets/providers/openrouterImage.ts`, `openrouterSpeech.ts`, `openrouterVideo.ts` | Image, speech and video providers. They call the gateway and hold no key. | Model/generation gateway, capability-gated. | as above | Existing. Each is offered only where its capability is verified. |
@@ -69,6 +88,17 @@ Before a decision is sent, its most expensive case is computed: the model's whol
 2. **Which model JEV uses through OpenRouter.** JEV through OpenRouter uses the workspace's OpenRouter decision model. Whether JEV should choose its own pinned model is a product decision.
 3. **Image input for `typesafe/jev-1.13`.** The catalogue lists it with image input; the recorded documentation does not. The question is whether TypeSafe's documentation says so, or a live check confirms it. Until then it stays text-only.
 4. **Image input for JEV at all.** JEV's input contract is text-only in its own documentation for the TypeSafe backend. Through OpenRouter, JEV receives image evidence only when the selected model's profile takes images, and only as image parts.
+
+## Not built
+
+These are deliberate gaps, not hidden ones. Each is stated in the product where it applies.
+
+- **Copy and prompt generation with a workspace key.** `providers/chat.server.ts` reads only the deployment key and `OPENROUTER_MODEL`. A workspace's own OpenRouter key is not used for it, and the model is not a workspace choice. Moving it means changing five callers (research, the Factory's vision decoding, the studio's copy generation, readiness and the chat provider) to take an organization and its selected model. It is an owner decision recorded in "Open decisions".
+- **Per-task model selection across the Content Factory.** Only the decision model is selectable. The orchestrator's model panel does not change the calls above.
+- **A monthly decision spend limit.** The per-call bound is the only limit.
+- **Live verification of any model.** See below.
+
+The status panel reports JEV's capabilities for the backend the workspace chose: text only through TypeSafe, and the chosen model's profile through OpenRouter.
 
 ## What was not verified
 

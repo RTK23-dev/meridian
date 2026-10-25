@@ -558,11 +558,6 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     if (!cap.ok) {
       return finish({ answers: abstainAll(request, { status: "unsupported", reason: cap.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "invalid_request", message: cap.reason } });
     }
-    const ceilingUsd = decisionCallCeilingUsd(listed);
-    if (ceilingUsd > cap.usd) {
-      const message = `The most this call can cost is $${ceilingUsd.toFixed(6)} (the model's whole context at its input price), above the $${cap.usd} per-call limit, so nothing was sent.`;
-      return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "budget_refused", message } });
-    }
     const verified = capabilitiesOfModel(model.model);
 
     // Images: each is checked by its own bytes and must be PNG or JPEG. A required image the model cannot take refuses the decision;
@@ -660,6 +655,14 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       : [text, ...usable.flatMap((image) => (image.label ? [image.label, { type: "image_url", image_url: { url: image.dataUrl } }] : [{ type: "image_url", image_url: { url: image.dataUrl } }]))];
     const questions = Object.fromEntries(asked.map((entry) => [entry.key, entry.wire]));
     const payload = JSON.stringify({ model: model.model, state, questions });
+    // The most this request can cost is bounded from the request itself, before anything is sent. A bound above the deployment's
+    // limit refuses the call, and the refusal says the numbers.
+    const requestBytes = new TextEncoder().encode(payload).length;
+    const ceilingUsd = decisionCallCeilingUsd(listed, { requestBytes, hasImages: usable.length > 0 });
+    if (ceilingUsd > cap.usd) {
+      const message = `The most this call can cost is $${ceilingUsd.toFixed(6)} (its ${requestBytes}-byte request at the input price, plus the model's largest output; a call with an image is bounded by the whole context), above the $${cap.usd} per-call limit, so nothing was sent.`;
+      return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "budget_refused", message } });
+    }
     const inputHash = await hashOf(`${model.model}\n${JSON.stringify(questions)}\n${text}\n${usable.map((image) => image.dataUrl).join("")}`);
 
     const fail = (kind: DecisionFailureKind, message: string): DecisionResult => {

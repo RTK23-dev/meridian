@@ -111,11 +111,11 @@ test("a model the live catalogue does not list is refused before any call", asyn
 
 test("a call whose ceiling is above the deployment's limit is refused before any call, with the numbers", async () => {
   const { fetchImpl, calls } = counting(answerBody);
-  const result = await withLimit("0.001", () => engineWith({ fetchImpl, catalog: recordedDecisionCatalogSource() }).decide(request()));
+  const result = await withLimit("0.000001", () => engineWith({ fetchImpl, catalog: recordedDecisionCatalogSource() }).decide(request()));
   assert.equal(calls.length, 0, "nothing is sent above the limit");
   assert.equal(result.failure?.kind, "budget_refused");
-  assert.match(result.failure?.message ?? "", /\$0\.011010/);
-  assert.match(result.failure?.message ?? "", /\$0\.001 per-call limit/);
+  assert.match(result.failure?.message ?? "", /The most this call can cost is \$0\.0000\d+ \(its \d+-byte request/);
+  assert.match(result.failure?.message ?? "", /\$0\.000001 per-call limit/);
   assert.equal(result.answers.refund?.status, "unsupported");
 });
 
@@ -124,7 +124,9 @@ test("a call within the limit is sent, and the ceiling it was checked against is
   const result = await withLimit(undefined, () => engineWith({ fetchImpl, catalog: recordedDecisionCatalogSource() }).decide(request()));
   assert.equal(calls.length, 1);
   assert.equal(result.failure, undefined);
-  assert.ok(Math.abs((result.usage?.ceilingUsd ?? 0) - 262144 * 0.000000042) < 1e-12);
+  // The bound is the request's own, so it is positive and below the whole context, which is the most any call can cost.
+  const ceiling = result.usage?.ceilingUsd ?? 0;
+  assert.ok(ceiling > 0 && ceiling < 262144 * 0.000000042, `the request's bound is kept, and it is below the whole context (got ${ceiling})`);
   assert.equal(result.usage?.reportedCostUsd, 0.0000051);
 });
 

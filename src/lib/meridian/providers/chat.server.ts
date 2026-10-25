@@ -89,7 +89,10 @@ export const openRouterProvider: ChatProvider = {
   },
 };
 
-/** OpenRouter is the sole external model gateway for JEV and vision tasks. */
+/**
+ * The deployment's ordinary-chat provider, used for research, vision, copy and readiness. JEV decisions do not use it: they go through
+ * the decision engines (decisions/), which call the OpenRouter Decisions API, not chat completions.
+ */
 export function activeChatProvider(): ChatProvider | null {
   if (openRouterProvider.configured()) return openRouterProvider;
   return null;

@@ -15,7 +15,7 @@ import { createDecisionEngines } from "../decisions/dispatcher.ts";
 import { isDecisionEngineId } from "../decisions/types.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
 import { OpenRouterDecisionsEngine, validateDecisionModel } from "../decisions/openrouter-engine.ts";
-import { decisionCallCeilingUsd, eligibleDecisionModels, liveDecisionCatalog } from "../decisions/decision-catalog.ts";
+import { decisionModelCeilingUsd, eligibleDecisionModels, liveDecisionCatalog } from "../decisions/decision-catalog.ts";
 import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
@@ -182,7 +182,7 @@ export const getOpenRouterDecisionModels = createServerFn({ method: "GET" })
         questionKinds: model.profile.questionKinds,
         contextLength: model.contextLength,
         promptUsdPerMillionTokens: model.promptUsdPerToken * 1_000_000,
-        callCeilingUsd: decisionCallCeilingUsd(model),
+        callCeilingUsd: decisionModelCeilingUsd(model),
       })),
       notOffered,
     };

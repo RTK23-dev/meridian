@@ -11,6 +11,7 @@ import {
   DecisionCatalogSource,
   decisionCallCapUsd,
   decisionCallCeilingUsd,
+  decisionModelCeilingUsd,
   decisionModelProfile,
   eligibleDecisionModels,
   parseDecisionCatalog,
@@ -62,10 +63,36 @@ test("a profile is a claim about the vendor's documentation, and jev-1.13 stays 
   assert.equal(decisionModelProfile("nace-ai/drex-max"), null, "a model with no profile has none, whatever its name");
 });
 
-test("the call ceiling is the whole context at the input price, a bound computed before the call and not an estimate", () => {
+test("the call ceiling is bounded by the request: its bytes at the input price, capped at the context, plus the largest output", () => {
   const jev = recordedRead().entries.find((entry) => entry.id === "typesafe/jev-1.14");
   assert.ok(jev);
-  assert.ok(Math.abs(decisionCallCeilingUsd(jev) - 262144 * 0.000000042) < 1e-12);
+  const wholeContext = 262144 * 0.000000042;
+  // A short request is bounded by its bytes, which is far below the whole context.
+  assert.ok(Math.abs(decisionCallCeilingUsd(jev, { requestBytes: 1000, hasImages: false }) - 1000 * 0.000000042) < 1e-12);
+  // A request longer than the context is bounded by the context.
+  assert.ok(Math.abs(decisionCallCeilingUsd(jev, { requestBytes: 10_000_000, hasImages: false }) - wholeContext) < 1e-12);
+  // An image call is bounded by the whole context, because an image's tokens are not stated in the catalogue.
+  assert.ok(Math.abs(decisionCallCeilingUsd(jev, { requestBytes: 1000, hasImages: true }) - wholeContext) < 1e-12);
+  // The whole-model figure shown beside the model is the image bound.
+  assert.ok(Math.abs(decisionModelCeilingUsd(jev) - wholeContext) < 1e-12);
+});
+
+test("the largest output adds to the bound at the output price, so a priced output is not left out", () => {
+  const priced = { contextLength: 1000, promptUsdPerToken: 0.000001, completionUsdPerToken: 0.000002, maxCompletionTokens: 500 };
+  assert.ok(Math.abs(decisionCallCeilingUsd(priced, { requestBytes: 100, hasImages: false }) - (100 * 0.000001 + 500 * 0.000002)) < 1e-12);
+});
+
+test("a model whose output is priced but whose largest output is not stated is excluded, since its cost cannot be bounded", () => {
+  const body = {
+    data: [
+      { id: "fixture/priced-output", architecture: { input_modalities: ["text"], output_modalities: ["decisions"] }, context_length: 1000, pricing: { prompt: "0.000001", completion: "0.000002" } },
+      { id: "fixture/free-output", architecture: { input_modalities: ["text"], output_modalities: ["decisions"] }, context_length: 1000, pricing: { prompt: "0.000001", completion: "0" } },
+    ],
+  };
+  const read = parseDecisionCatalog(body, { endpoint: "fixture", readAt: "2026-10-25T00:00:00Z" });
+  assert.ok(read.ok);
+  assert.deepEqual(read.entries.map((entry) => entry.id), ["fixture/free-output"]);
+  assert.match(read.excluded.find((item) => item.id === "fixture/priced-output")?.reason ?? "", /largest output/);
 });
 
 test("a malformed body fails the whole read; a malformed or unpriced entry is excluded with its reason and the rest is kept", () => {

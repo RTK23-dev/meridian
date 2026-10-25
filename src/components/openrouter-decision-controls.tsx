@@ -158,7 +158,7 @@ export function OpenRouterDecisionControls({
           </div>
           <div className="sm:col-span-2">
             <dt className="text-muted">Most one call can cost</dt>
-            <dd>${chosen.callCeilingUsd.toFixed(6)}, the whole context at the input price. A call above the deployment limit is refused before it is sent.</dd>
+            <dd>${chosen.callCeilingUsd.toFixed(6)} for a call that fills the whole context, at the input price plus the largest output. A smaller request costs less, and a call whose own bound is above the deployment limit is refused before it is sent.</dd>
           </div>
         </dl>
       ) : null}

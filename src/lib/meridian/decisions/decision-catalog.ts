@@ -64,6 +64,7 @@ const catalogEntrySchema = z.object({
   }),
   context_length: z.number().int().positive().nullable().optional(),
   pricing: z.object({ prompt: z.string().optional(), completion: z.string().optional() }).optional(),
+  top_provider: z.object({ max_completion_tokens: z.number().int().nonnegative().nullable().optional() }).optional(),
   alias_target: z.unknown().optional(),
 });
 
@@ -78,6 +79,10 @@ export type DecisionCatalogEntry = {
   contextLength: number;
   /** USD per input token, as the catalogue states it. */
   promptUsdPerToken: number;
+  /** USD per output token, as the catalogue states it. Zero when the catalogue prices output at zero. */
+  completionUsdPerToken: number;
+  /** Tokens. The largest output the model can return, which bounds a call's output cost. */
+  maxCompletionTokens: number;
 };
 
 export type DecisionCatalogExclusion = { id: string; reason: string };
@@ -129,6 +134,16 @@ export function parseDecisionCatalog(body: unknown, meta: { endpoint: string; re
       excluded.push({ id, reason: "The catalogue gives no context length, so the input size cannot be bounded." });
       continue;
     }
+    const completion = parseUsdPerToken(entry.pricing?.completion);
+    if (completion === null) {
+      excluded.push({ id, reason: "The catalogue gives no usable output price, so a call's output cost cannot be bounded before it is sent." });
+      continue;
+    }
+    const maxCompletionTokens = entry.top_provider?.max_completion_tokens ?? null;
+    if (completion > 0 && maxCompletionTokens === null) {
+      excluded.push({ id, reason: "The catalogue prices output but gives no largest output, so a call's output cost cannot be bounded." });
+      continue;
+    }
     entries.push({
       id: entry.id,
       canonicalSlug: entry.canonical_slug ?? null,
@@ -136,6 +151,8 @@ export function parseDecisionCatalog(body: unknown, meta: { endpoint: string; re
       inputModalities: entry.architecture.input_modalities,
       contextLength: entry.context_length,
       promptUsdPerToken: price,
+      completionUsdPerToken: completion,
+      maxCompletionTokens: maxCompletionTokens ?? 0,
     });
   }
   return { ok: true, entries, excluded, ...meta };
@@ -162,9 +179,27 @@ export function eligibleDecisionModels(read: Extract<DecisionCatalogRead, { ok: 
   return { eligible, notOffered };
 }
 
-/** The most a call can cost before it is sent: the whole context, billed at the input price. A reservation, not an estimate. */
-export function decisionCallCeilingUsd(entry: Pick<DecisionCatalogEntry, "contextLength" | "promptUsdPerToken">): number {
-  return entry.contextLength * entry.promptUsdPerToken;
+/**
+ * The most one call can cost, in USD, computed before the call is sent from the request it would send.
+ *
+ * Input: a tokenizer produces at most one token per byte, so the request's UTF-8 byte count bounds its input tokens, and the
+ * model's context bounds them too. A call with an image uses the whole context, because the tokens an image takes are not stated
+ * in the catalogue. Output: the model's largest output, at its output price. The result is a reservation, not an estimate, and
+ * it is never zero for a call that has input.
+ */
+export function decisionCallCeilingUsd(
+  entry: Pick<DecisionCatalogEntry, "contextLength" | "promptUsdPerToken" | "completionUsdPerToken" | "maxCompletionTokens">,
+  call: { requestBytes: number; hasImages: boolean },
+): number {
+  const inputTokens = call.hasImages ? entry.contextLength : Math.min(call.requestBytes, entry.contextLength);
+  return inputTokens * entry.promptUsdPerToken + entry.maxCompletionTokens * entry.completionUsdPerToken;
+}
+
+/** The most any call to the model can cost: its whole context at the input price, plus its largest output. Shown beside the model. */
+export function decisionModelCeilingUsd(
+  entry: Pick<DecisionCatalogEntry, "contextLength" | "promptUsdPerToken" | "completionUsdPerToken" | "maxCompletionTokens">,
+): number {
+  return decisionCallCeilingUsd(entry, { requestBytes: entry.contextLength, hasImages: true });
 }
 
 /** The default per-call ceiling, in USD. The deployment sets its own with OPENROUTER_DECISION_MAX_USD_PER_CALL. */

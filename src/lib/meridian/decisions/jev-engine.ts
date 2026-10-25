@@ -12,8 +12,9 @@
  * closed. The shared gate and dispatcher still record the decision's lineage.
  *
  * JEV's TypeSafe request carries text evidence only, so the TypeSafe path is declared text-only here, and a decision that requires
- * images is refused as unsupported there. The OpenRouter backend can take images, but the shared gate removes images before any
- * engine call for an engine declared text-only, so images do not reach it through JEV yet. That limit is documented in DECISIONS.md.
+ * images is refused as unsupported there. Through OpenRouter, JEV takes images when the workspace's chosen model's verified profile
+ * lists image input. The shared gate decides that once per decision (capabilities.ts, resolveImageSupport) and passes the resolved
+ * backend and model to this adapter, so the declaration below is not what decides whether an image is sent.
  */
 import { jevRouter, transportHealth } from "../jev/router.ts";
 import { resolveJevConfig } from "../jev/config.ts";
@@ -52,8 +53,8 @@ export class JevDecisionEngine implements DecisionEngine {
   }
 
   /**
-   * The capabilities of the TypeSafe path, which is the static declaration. The OpenRouter backend is reported by the
-   * `openrouter-decisions` engine, and the shared gate decides which evidence reaches JEV.
+   * The capabilities of the TypeSafe path, the static declaration. The gate does not read it to decide which evidence reaches JEV:
+   * it resolves image support per decision from the backend and model. The status panel reports the chosen backend's capabilities.
    */
   capabilities(): DecisionCapabilities {
     return {
