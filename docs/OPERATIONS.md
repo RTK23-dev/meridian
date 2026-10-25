@@ -140,6 +140,7 @@ is saved in Settings for each workspace, and its deployment value is used only w
 | `APP_URL` | deployment configuration | `storage/media-link.ts` (the public origin), `oauth/flow.server.ts` | The public origin of the deployment: `https`, with no path, query or credentials. A value that is set but not usable means no origin, so no link is signed. |
 | `PUBLIC_APP_URL` | deployment configuration (optional) | the same | A second public origin, used when `APP_URL` is blank. |
 | `OPENROUTER_API_KEY`, `OPENROUTER_SHARED_DEFAULT` | deployment fallback, with an opt-in | `credentials/resolve.ts`, `credentials/contract.ts` | The deployment's OpenRouter key, used for a workspace with no key of its own only when the opt-in is `deployment`. The video engine reads each workspace's key through the resolver. |
+| `OPENROUTER_DECISIONS_MODEL` | deployment configuration | `decisions/openrouter-engine.ts` | The default pinned decision model for the OpenRouter Decisions engine and for JEV's OpenRouter backend, used when a workspace has not chosen one. Only a verified, pinned model is accepted. Aliases with `~` are refused. |
 | `HEYGEN_API_KEY`, `HEYGEN_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the HeyGen key that the engine's cloud render uses. |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the Anthropic key. |
 

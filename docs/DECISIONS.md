@@ -5,7 +5,8 @@ AUTO_APPROVE, HUMAN_REVIEW or REJECT. The engine never decides the outcome by it
 
 ## Engines
 
-- **TypeSafe JEV** (`jev`). Calls the TypeSafe Direct endpoint with the workspace's key. Evidence is text only.
+- **TypeSafe JEV** (`jev`). JEV's questions and answer checks are fixed. The service that answers is the workspace's JEV backend: TypeSafe
+  System One directly with the workspace's key (the default), or OpenRouter Decisions. See "JEV backend" below. Evidence is text only.
 - **OpenAI Decisions** (`openai-decisions`). Calls the OpenAI API with the workspace's key. It accepts images, up to 128 per request,
   and answers in the same structured form. Its model is set with `OPENAI_DECISIONS_MODEL`.
 - **OpenRouter Decisions** (`openrouter-decisions`). Calls OpenRouter's Decisions API (`POST https://openrouter.ai/api/alpha/decisions`) with the
@@ -52,3 +53,15 @@ brief or creative it judged. The lineage links a creative back to the decision t
 - **Images.** A PNG or JPEG is sent as an image part, labelled as the evidence was labelled. A required image the model cannot take refuses the decision before any request. An optional one is left out, and the omission is recorded in the result and the lineage.
 - **Cost.** The run keeps the cost OpenRouter reports for a call, when it reports one, and the upstream provider and the provider's request id. Meridian has no price for this engine, so decision spend records its cost as unknown, never as zero.
 - **Policy.** The engine is advisory. Policy, evidence sufficiency, rights, integrity and human review stay authoritative. An OpenRouter result never approves, publishes, renders or spends anything.
+
+## JEV backend
+
+JEV chooses its service per workspace, in Settings, under the decision engine.
+
+- **Choices.** `typesafe_direct` (TypeSafe System One, with the workspace's TypeSafe key) and `openrouter` (OpenRouter Decisions, with the workspace's OpenRouter key and its decision model). A workspace with no saved choice uses `typesafe_direct`. The stored value is in `decision_engine_jev_config` (migration 0133). Any other value is refused, never guessed at.
+- **One backend, no fallback.** A decision calls exactly one backend. If it fails, the failure is reported as that failure, and the other backend is not tried. A paid call is never repeated on another route.
+- **Unreadable setting.** If the stored choice cannot be read, JEV makes no request to either backend and reports `not_configured` with the reason. Settings shows the choice as unknown, and does not show the default in its place.
+- **Switching.** A switch is saved only when the target backend reports READY, and the server checks that again when saving. A refused switch keeps the stored backend and says why. The OpenRouter backend is READY only after a passed connection test for its model and key (see "OpenRouter Decisions").
+- **Lineage.** A JEV decision through OpenRouter is recorded as a JEV decision (`engineId: jev`), with OpenRouter as the provider that served it, and the upstream provider and request id when OpenRouter reports them.
+- **Images.** JEV is declared text-only in the shared gate, so images are removed before either backend is called. A decision that requires an image is refused as unsupported. The OpenRouter engine can take images, and the limit is in JEV's declaration, not in OpenRouter. Lifting it changes JEV's input contract and needs an owner decision.
+- **Readiness with no workspace.** Without a workspace, nothing is checked and nothing is READY.

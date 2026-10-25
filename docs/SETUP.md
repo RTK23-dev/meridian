@@ -52,6 +52,8 @@ Keys are not set in `.env` for normal use. Open **Settings → General**:
 
 The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV, OpenAI Decisions or OpenRouter Decisions. OpenRouter also needs a decision model and a passed connection test before it can be chosen. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
 
+JEV also has a backend setting, in **Settings** under the decision engine: TypeSafe System One (the default) or OpenRouter Decisions. Choosing OpenRouter makes JEV's decisions use the OpenRouter key and decision model, and the switch is saved only when OpenRouter reports ready (DECISIONS.md, "JEV backend").
+
 ## Google Drive
 
 Drive stores artifacts and exports only. Postgres holds the data. Connect Drive with one of these, set in `.env`:

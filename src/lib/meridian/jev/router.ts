@@ -1,11 +1,9 @@
 /**
- * Dual JEV Provider Router
- * 
- * Supports both TypeSafe Direct and OpenRouter JEV routes:
- * - Direct TypeSafe AI JEV client (uses official direct endpoint/API key)
- * - OpenRouter-routed JEV (uses native Decisions API with typesafe/jev-1.13)
- * - Router modes: AUTO, TYPESAFE_DIRECT, OPENROUTER, COMPARE
- * 
+ * JEV Provider Router
+ *
+ * Holds the TypeSafe Direct provider: TypeSafe System One, with the workspace's TypeSafe key. The OpenRouter backend is not a
+ * provider here. decisions/jev-engine.ts chooses between the two per workspace, calls exactly one, and never falls back.
+ *
  * Rules:
  * - Truthfulness outranks completeness: if unconfigured, returns NOT_CONFIGURED.
  * - Never masquerade chat-completion as JEV.
@@ -37,8 +35,8 @@ import type { CredentialResolution } from "../credentials/contract.ts";
 export type JevCredentialLookup = (organizationId: string) => Promise<CredentialResolution>;
 
 /**
- * The transport's readiness for one workspace. TypeSafe checks the workspace's key. OpenRouter is deployment-only, and it
- * keeps its own health check.
+ * The transport's readiness for one workspace. TypeSafe checks the workspace's key, with no live request. The OpenRouter backend
+ * reports its own readiness through decisions/jev-engine.ts.
  */
 export async function transportHealth(provider: JevProvider, organizationId: string): Promise<JevProviderHealth> {
   const scoped = provider as JevProvider & { healthFor?: (organizationId: string) => Promise<JevProviderHealth> };
