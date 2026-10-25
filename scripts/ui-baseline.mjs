@@ -7,6 +7,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 import { settleAnimations } from "./page-settle.mjs";
 import { withDeadline } from "./page-deadline.mjs";
+import { captureStall, describeStall, recordPage } from "./page-diagnostics.mjs";
 
 const startedAt = Date.now();
 // The run prints a line before each capture, so a stall is visible and names the route it stopped on.
@@ -48,6 +49,13 @@ const testUser = {
 function routeLabel(url) {
   const parsed = new URL(url);
   return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+// What the page was doing when a call stopped answering: its recorded events, and a screenshot kept with the run.
+async function stallDetail(page, recorder, dir, name) {
+  mkdirSync(dir, { recursive: true });
+  const shot = await captureStall(page, join(dir, `${name}.png`));
+  return `${describeStall(recorder)}. ${shot}`;
 }
 
 function routeKey(url) {
@@ -227,11 +235,14 @@ try {
     // The app takes its theme from the saved choice (dark by default), not from the browser's colour scheme, so set the choice here.
     await context.addInitScript((value) => { try { localStorage.setItem("meridian-theme", value); } catch { /* storage off */ } }, theme);
     const page = await context.newPage();
+    const recorder = recordPage(page);
     for (const width of widths) {
       await page.setViewportSize({ width, height: 960 });
       for (const url of routes) {
         const label = `${theme} ${width}px ${routeLabel(url)}`;
         step(label);
+        // When a call stops answering, the failure says what the page was doing and keeps a screenshot with the run.
+        const onStall = () => stallDetail(page, recorder, join(outputDir, "stalled"), `${theme}-${width}-${routeKey(url)}`);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
         await page.waitForFunction(() => document.body.innerText.trim().length > 0, undefined, { timeout: 10_000 }).catch(() => undefined);
@@ -251,16 +262,16 @@ try {
               return `${element.tagName.toLowerCase()}.${String(element.className ?? "").split(/\s+/).slice(0, 3).join(".")} [${Math.round(rect.left)}..${Math.round(rect.right)}; ${element.clientWidth}/${element.scrollWidth}]`;
             });
           return { horizontal, elements };
-        }));
+        }), { onExpire: onStall });
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
           // Data loads after the first paint, and a section that mounts with its data starts its entrance fade then. Wait for the
           // requests to finish, so the settle below sees that fade and the scan measures the settled colours.
           await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-          await withDeadline(`${label}: the animation settle`, 60_000, settleAnimations(page));
+          await withDeadline(`${label}: the animation settle`, 60_000, settleAnimations(page), { onExpire: onStall });
           const { violations } = await withDeadline(`${label}: the accessibility scan`, 180_000, new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-            .analyze());
+            .analyze(), { onExpire: onStall });
           const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
           accessibility.push({ url, theme, violations: violations.length, serious: serious.length });
           if (serious.length) {

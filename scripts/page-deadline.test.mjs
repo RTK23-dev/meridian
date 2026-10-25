@@ -21,3 +21,20 @@ test("the wait is reported in seconds for a longer deadline", async () => {
     message: "the scan did not finish within 2 seconds",
   });
 });
+
+test("the detail from onExpire is added to the failure", async () => {
+  await assert.rejects(withDeadline("the check", 20, new Promise(() => {}), { onExpire: async () => "The page had no crash." }), {
+    message: "the check did not finish within 20 ms. The page had no crash.",
+  });
+});
+
+test("a failing onExpire is reported in the failure and does not replace it", async () => {
+  await assert.rejects(
+    withDeadline("the check", 20, new Promise(() => {}), {
+      onExpire: () => {
+        throw new Error("screenshot broke");
+      },
+    }),
+    { message: "the check did not finish within 20 ms. The diagnostic failed: screenshot broke" },
+  );
+});
