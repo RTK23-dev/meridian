@@ -72,8 +72,23 @@ jobs:
         run: |
           BROWSER_SMOKE_OUTPUT_ROOT="$GITHUB_WORKSPACE" \
             node scripts/browser-smoke.mjs http://127.0.0.1:8080/ "$GITHUB_WORKSPACE/artifacts/ui-smoke.png"
+      - name: Start the dev server for the design-system check
+        # The design system page is a development-only route: src/routes/[_design].tsx answers 404 in a production build. This one check
+        # therefore runs against the Vite dev server on its own port, and the preview above keeps serving the production build. The
+        # server is pre-bundled first, as a cold dev server answers before its optimizer has finished.
+        run: |
+          npx vite optimize
+          npm run dev -- --port 8081 --strictPort > artifacts/dev-server.log 2>&1 &
+          for attempt in $(seq 1 120); do
+            if curl --fail --silent http://127.0.0.1:8081/ > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat artifacts/dev-server.log
+          exit 1
       - name: Check design system accessibility
-        run: npm run ui:design-smoke
+        run: node scripts/design-system-smoke.mjs http://127.0.0.1:8081/_design
       - name: Check the public pages in a browser
         run: node scripts/public-site-smoke.mjs http://127.0.0.1:8080
       - uses: actions/upload-artifact@v4
