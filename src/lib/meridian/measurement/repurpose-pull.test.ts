@@ -49,7 +49,7 @@ async function publishedVariation(runId: string, key: string, externalId: string
 /** The organic observations stored for one creative. A linked metric is written to the unified telemetry table, keyed by its observation key. */
 async function observationsFor(creativeId: string): Promise<{ views: number | null; reach: number | null; average_watch_time_seconds: string | null }[]> {
   return db.sql`
-    select views, reach, metadata->>'averageWatchTimeSeconds' as average_watch_time_seconds
+    select views::integer as views, reach::integer as reach, metadata->>'averageWatchTimeSeconds' as average_watch_time_seconds
     from unified_performance_telemetry where creative_id = ${creativeId} and source_type = 'organic'
   `;
 }
