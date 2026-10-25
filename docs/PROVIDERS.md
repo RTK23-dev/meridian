@@ -186,7 +186,7 @@ rating, and nulling `type` would drop every hashtag result, so the fields are ke
 
 ## Engine choice
 
-Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. OpenRouter Decisions uses the workspace's OpenRouter key. Its decision model is chosen in Settings from OpenRouter's live catalogue, and only models with a verified profile are offered (OPENROUTER.md, "Decision models: the live catalogue"). `OPENROUTER_DECISIONS_MODEL` is the deployment default, used only when a workspace has not chosen one. A workspace's own choice takes precedence. `OPENROUTER_DECISION_MAX_USD_PER_CALL` caps what one decision may cost before it is sent.
+Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. OpenRouter Decisions uses the workspace's OpenRouter key. Its decision model is chosen in Settings from OpenRouter's live catalogue, and only models with a verified profile are offered (OPENROUTER.md, "Decision models: the live catalogue"). `OPENROUTER_DECISIONS_MODEL` is the deployment setting, used only when a workspace has not chosen one. A workspace's own choice takes precedence. When neither is set, decisions are refused: there is no built-in model. `OPENROUTER_DECISION_MAX_USD_PER_CALL` caps what one decision may cost before it is sent.
 
 JEV has its own backend choice per workspace, also made in Settings: TypeSafe System One (the default) or OpenRouter Decisions. JEV
 calls exactly one backend for a decision and never falls back to the other. Its questions and answer checks are the same either way.

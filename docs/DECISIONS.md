@@ -11,7 +11,7 @@ AUTO_APPROVE, HUMAN_REVIEW or REJECT. The engine never decides the outcome by it
   and answers in the same structured form. Its model is set with `OPENAI_DECISIONS_MODEL`.
 - **OpenRouter Decisions** (`openrouter-decisions`). Calls OpenRouter's Decisions API (`POST https://openrouter.ai/api/alpha/decisions`) with the
   workspace's OpenRouter key. It is not a chat completion. Its model is a pinned, verified decision model: the workspace's own choice, then
-  `OPENROUTER_DECISIONS_MODEL`, then `typesafe/jev-1.14`. See "OpenRouter Decisions" below.
+  `OPENROUTER_DECISIONS_MODEL`. With neither set, decisions are refused until a model is chosen; Meridian names no model of its own. See "OpenRouter Decisions" below.
 
 Exactly one is active for a workspace. The choice is made on the Setup page (`/setup`). When a workspace has not chosen, the deployment's
 `DECISION_ENGINE` applies, and then `jev`. An invalid `DECISION_ENGINE` value is reported, not guessed at. Switching is refused unless
