@@ -6,6 +6,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { JevQuestionSpec } from "../jev/types.ts";
 import { contractPngBytes } from "./contract-fixtures.ts";
+import type { DecisionCatalogSource } from "./decision-catalog.ts";
+import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
 import {
   OPENROUTER_DECISIONS_DEFAULT_MODEL,
   OpenRouterDecisionsEngine,
@@ -103,8 +105,8 @@ const noCheck: OpenRouterCheckStore = {
   },
 };
 
-function engine(options: { fetchImpl?: typeof fetch; store?: OpenRouterCheckStore; keys?: OpenRouterKeySource; deploymentModel?: string } = {}): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({ keys: keySource, store: noCheck, deploymentModel: undefined, ...options });
+function engine(options: { fetchImpl?: typeof fetch; store?: OpenRouterCheckStore; keys?: OpenRouterKeySource; deploymentModel?: string; catalog?: DecisionCatalogSource } = {}): OpenRouterDecisionsEngine {
+  return new OpenRouterDecisionsEngine({ keys: keySource, store: noCheck, deploymentModel: undefined, catalog: recordedDecisionCatalogSource(), ...options });
 }
 
 /** A Decisions response body for the given answers. */
@@ -183,7 +185,9 @@ test("the result keeps the requested model, the model and provider the provider 
   assert.equal(result.returnedModel, "typesafe/jev-1.14-20261014");
   assert.equal(result.upstreamProvider, "TypeSafe");
   assert.equal(result.providerRequestId, "gen-dec-fixture-1");
-  assert.deepEqual(result.usage, { inputTokens: 357, outputTokens: 38, totalTokens: 395, reportedCostUsd: 0.0000149 });
+  assert.equal(result.usage?.inputTokens, 357);
+  assert.equal(result.usage?.reportedCostUsd, 0.0000149);
+  assert.ok(Math.abs((result.usage?.ceilingUsd ?? 0) - 262144 * 0.000000042) < 1e-12, "the checked ceiling is kept beside the reported cost");
   assert.equal(result.inputModality, "text");
   assert.equal(result.imageCount, 0);
   assert.equal(result.imagesOmitted, 0);

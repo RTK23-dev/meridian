@@ -15,6 +15,7 @@ import { readLatestOpenRouterCheck, readOpenRouterModel, recordOpenRouterCheck, 
 import { persistDecisionLineage } from "./lineage.ts";
 import { resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
 import type { DecisionEngine, DecisionRequest, DecisionResult } from "./types.ts";
+import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "migrations", "0132_openrouter_decisions.sql");
 const ORG_A = "org_openrouter_selection_a";
@@ -183,6 +184,7 @@ describe("dispatch", () => {
     const failingFetch = (async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 })) as unknown as typeof fetch;
     const openrouter = new OpenRouterDecisionsEngine({
       fetchImpl: failingFetch,
+      catalog: recordedDecisionCatalogSource(),
       keys: { async keyFor() { return { secret: "sk-or-v1-dispatch-secret", fingerprint: "sk-or-…cret", reason: "" }; } },
       store: { async workspaceModel() { return null; }, async latestCheck() { return null; } },
     });

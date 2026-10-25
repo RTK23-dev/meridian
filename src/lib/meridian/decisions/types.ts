@@ -55,7 +55,14 @@ export type DecisionImageInput = {
 export type DecisionRequest = JevDecisionRequest & {
   images?: DecisionImageInput[];
   imagePolicy?: "required" | "optional";
-  /** Transport routing chosen by the caller, used by the JEV engine. Other engines ignore it. */
+  /**
+   * The backend and model the gate resolved for this decision, once. The engines use these values and do not read the settings again,
+   * so the image decision and the call are made from the same resolution. Absent when the caller has not resolved them.
+   */
+  resolved?: {
+    jevBackend?: "typesafe_direct" | "openrouter";
+    openrouterModel?: { model: string; source: "workspace" | "deployment" | "default" };
+  };
 };
 
 export type DecisionInputModality = "text" | "text+image";
@@ -88,6 +95,11 @@ export type DecisionUsage = {
   reasoningTokens?: number;
   cachedInputTokens?: number;
   /**
+   * The most this call could have cost before it was sent: the model's context length at its catalogued input price. Set only on a
+   * call that was sent, and checked against the per-call limit. It is a ceiling, not an estimate of what was billed.
+   */
+  ceilingUsd?: number;
+  /**
    * The cost the provider reported for this call, in USD, when it reports one. It is what the provider said, not Meridian's
    * price table, and it is absent when the provider reports nothing. Never estimated.
    */
@@ -105,6 +117,7 @@ export type DecisionFailureKind =
   | "provider_unavailable"
   | "invalid_response"
   | "unsupported_input"
+  | "budget_refused"
   | "network";
 
 /**

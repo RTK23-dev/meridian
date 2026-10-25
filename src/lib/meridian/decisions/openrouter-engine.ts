@@ -32,6 +32,13 @@ import {
   type DecisionResult,
   type DecisionUsage,
 } from "./types.ts";
+import {
+  DecisionCatalogSource,
+  DECISION_MODEL_PROFILES,
+  decisionCallCapUsd,
+  decisionCallCeilingUsd,
+  liveDecisionCatalog,
+} from "./decision-catalog.ts";
 
 export const OPENROUTER_DECISIONS_ADAPTER_VERSION = "openrouter-decisions-adapter.v1";
 export const OPENROUTER_DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
@@ -76,22 +83,16 @@ export type OpenRouterConnectionOutcome =
     };
 
 /**
- * The decision models Meridian has verified against the documented Decisions API, with the primitives and inputs each one is
- * documented to take. Anything not listed here is refused, and a model is added here only after its documentation says so.
- * `typesafe/jev-1.13` is listed for the text primitives only: its documentation states no image support, so none is claimed.
+ * The decision models Meridian has verified, derived from the profile table in decision-catalog.ts. Anything not listed here is refused.
+ * The catalogue decides which models exist; a profile decides what Meridian may ask them.
  */
-export const VERIFIED_DECISION_MODELS: Record<string, { questionKinds: DecisionQuestionKind[]; images: boolean; note: string }> = {
-  "typesafe/jev-1.14": {
-    questionKinds: ["predicate", "choice", "score"],
-    images: true,
-    note: "Takes text and PNG or JPEG images. Box is documented but Meridian sends none.",
-  },
-  "typesafe/jev-1.13": {
-    questionKinds: ["predicate", "choice", "score"],
-    images: false,
-    note: "Text only as documented. Rejects box requests, which Meridian does not send.",
-  },
-};
+export const VERIFIED_DECISION_MODELS: Record<string, { questionKinds: DecisionQuestionKind[]; images: boolean; note: string }> =
+  Object.fromEntries(
+    Object.entries(DECISION_MODEL_PROFILES).map(([model, profile]) => [
+      model,
+      { questionKinds: profile.questionKinds, images: profile.inputModalities.includes("image"), note: profile.source },
+    ]),
+  );
 
 export type OpenRouterModelResolution =
   | { ok: true; model: string; source: "workspace" | "deployment" | "default" }
@@ -313,6 +314,18 @@ export function normalizeOpenRouterAnswer(input: {
   };
 }
 
+/** The usage the provider reported, with the ceiling Meridian checked before the call. Both are kept so they can be reconciled. */
+function withCeiling(usage: DecisionUsage | undefined, ceilingUsd: number): DecisionUsage {
+  return { ...(usage ?? {}), ceilingUsd };
+}
+
+/** A model the gate already resolved for this decision, checked again here so a stored value cannot widen what is sent. */
+function resolvedModelOf(resolved: { model: string; source: "workspace" | "deployment" | "default" }): OpenRouterModelResolution {
+  const checked = validateDecisionModel(resolved.model);
+  if (!checked.ok) return { ok: false, model: resolved.model, source: resolved.source === "default" ? "deployment" : resolved.source, reason: checked.reason };
+  return { ok: true, model: checked.model, source: resolved.source };
+}
+
 function usageOf(decoded: Record<string, unknown>): DecisionUsage | undefined {
   const usage = decoded.usage;
   if (!usage || typeof usage !== "object") return undefined;
@@ -396,7 +409,10 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     store?: OpenRouterCheckStore;
     /** The deployment's OPENROUTER_DECISIONS_MODEL. Read from the environment when not given. */
     deploymentModel?: string;
+    /** The live model catalogue. A decision is refused unless its model is in it. */
+    catalog?: DecisionCatalogSource;
   } = {}) {
+    this.catalog = options.catalog ?? liveDecisionCatalog;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
     this.endpoint = options.endpoint ?? OPENROUTER_DECISIONS_ENDPOINT;
     this.timeoutMs = options.timeoutMs ?? OPENROUTER_DECISIONS_TIMEOUT_MS;
@@ -404,6 +420,8 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     this.store = options.store ?? databaseStore;
     this.deploymentModel = options.deploymentModel ?? process.env.OPENROUTER_DECISIONS_MODEL;
   }
+
+  private readonly catalog: DecisionCatalogSource;
 
   /** The capabilities across every verified model, since the model is chosen per workspace. Per decision, the model's own limits apply. */
   capabilities(): DecisionCapabilities {
@@ -496,7 +514,9 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     const started = Date.now();
     const runId = globalThis.crypto.randomUUID();
     const key = await this.keys.keyFor(request.organizationId);
-    const model = await this.modelFor(request.organizationId);
+    const model = request.resolved?.openrouterModel
+      ? resolvedModelOf(request.resolved.openrouterModel)
+      : await this.modelFor(request.organizationId);
     const requestedModel = model.model;
     const imageCount = request.images?.length ?? 0;
     const imagePolicy = request.imagePolicy ?? "required";
@@ -523,6 +543,25 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     }
     if (!model.ok) {
       return finish({ answers: abstainAll(request, { status: "unsupported", reason: model.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "unknown_model", message: model.reason } });
+    }
+    // The live catalogue decides whether the model exists for this endpoint, and its price bounds the call before it is sent.
+    const catalog = await this.catalog.read();
+    if (!catalog.ok) {
+      return finish({ answers: abstainAll(request, { status: "provider_error", reason: catalog.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "provider_unavailable", message: catalog.reason } });
+    }
+    const listed = catalog.entries.find((entry) => entry.id === model.model);
+    if (!listed) {
+      const message = `${model.model} is not in the live catalogue of decision models, so nothing was sent.`;
+      return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "unknown_model", message } });
+    }
+    const cap = decisionCallCapUsd();
+    if (!cap.ok) {
+      return finish({ answers: abstainAll(request, { status: "unsupported", reason: cap.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "invalid_request", message: cap.reason } });
+    }
+    const ceilingUsd = decisionCallCeilingUsd(listed);
+    if (ceilingUsd > cap.usd) {
+      const message = `The most this call can cost is $${ceilingUsd.toFixed(6)} (the model's whole context at its input price), above the $${cap.usd} per-call limit, so nothing was sent.`;
+      return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "budget_refused", message } });
     }
     const verified = capabilitiesOfModel(model.model);
 
@@ -687,7 +726,7 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       inputModality: usable.length > 0 ? "text+image" : "text",
       imagesOmitted: omitted,
       returnedModel,
-      usage: usageOf(decoded),
+      usage: withCeiling(usageOf(decoded), ceilingUsd),
       upstreamProvider: typeof decoded.provider === "string" ? decoded.provider : undefined,
       providerRequestId: typeof decoded.id === "string" ? decoded.id : undefined,
     });
