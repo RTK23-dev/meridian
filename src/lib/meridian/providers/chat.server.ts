@@ -1,13 +1,15 @@
 // Ordinary text generation: the studio's copy and scripts, the research analysis, the brand brain's suggestions and the Factory's image
-// labels. Every call is for one workspace (or, with none, for the deployment itself), and it goes through the engine gateway, which is
-// the one place a provider request is made. The gateway reads the workspace's own OpenRouter key through the credential resolver: a
-// usable saved key is used alone, an unusable one is never replaced by the deployment key, and the deployment key is used only with
-// OPENROUTER_SHARED_DEFAULT=deployment.
+// labels. Every call is for one workspace, and it goes through the engine gateway, which is the one place a provider request is made.
+// The gateway reads the workspace's own OpenRouter key through the credential resolver: a usable saved key is used alone, and an
+// unusable one is never replaced by the deployment key. The deployment-only key is never used here: a call needs a workspace.
 //
-// The model is the workspace's choice for the task (settings/generation-models.ts). A deployment default, OPENROUTER_MODEL, is used only
-// when the workspace has chosen nothing, and it is reported as the deployment's default. Before any paid request, the model is checked
-// against the live catalogue: a model the catalogue does not list as a text model for the task is refused, and nothing is sent. A
-// decision model is never a text model, so it cannot be used here.
+// The model is the workspace's choice for the task (settings/generation-models.ts). A deployment default, OPENROUTER_MODEL, serves a
+// text task the workspace has not chosen for, and it is reported as the deployment's. Image understanding has no default.
+//
+// Before a paid call, the call is bounded from the chosen model's stated prices (generation-ledger.ts) and refused when the bound is
+// above the per-call ceiling or does not fit the workspace's monthly budget. The call's budget hold is written before the request is
+// sent and settled once after it, with the cost OpenRouter reports. A call whose outcome is unknown is kept as an uncertain hold and is
+// never retried here.
 
 import { z } from "zod";
 import { createGateway, type Gateway } from "../../../engine/gateway/gateway.ts";
@@ -18,19 +20,40 @@ import type { Sql } from "../learning/store.ts";
 import { loadDefaultSql, resolveCredential, resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
 import type { CredentialResolution } from "../credentials/contract.ts";
 import { eligibleForTask, GENERATION_TASKS, storedGenerationModel, type GenerationTask } from "../settings/generation-models.ts";
+import {
+  boundGenerationCall,
+  generationCeilingUsd,
+  GENERATION_CEILING_ENV,
+  reserveGenerationCall,
+  settleGenerationCall,
+  type ContentPart,
+  type Settlement,
+} from "./generation-ledger.ts";
 
-export type ContentPart =
-  | { type: "text"; text: string }
-  | { type: "image_url"; image_url: { url: string } };
+export type { ContentPart } from "./generation-ledger.ts";
 
 /** How long a read of the live text catalogue is reused before the next paid call checks it again. */
 export const CATALOG_REUSE_MS = 60_000;
 
+/** HTTP statuses OpenRouter returns before it generates anything, so nothing is billed for them. Every other error may have been billed. */
+const NOT_BILLED_STATUSES = new Set([400, 401, 402, 403, 404, 422, 429]);
+
 /** The model a task will use, decided before the call. A task with no usable model sends nothing. */
 export type ModelDecision =
-  | { status: "ok"; model: string; source: "workspace" | "deployment"; catalogCheckedAt: string }
+  | { status: "ok"; model: string; source: "workspace" | "deployment"; catalogCheckedAt: string; choice: TextModelChoice }
   | { status: "unset"; reason: string }
   | { status: "unverified"; model: string; source: "workspace" | "deployment"; reason: string };
+
+/** Where a call's model run is recorded. The row is the call's budget hold, so it is written before the request is sent. */
+export type GenerationRecord = {
+  sql: Sql;
+  brandId: string | null;
+  correlationId: string;
+  operation: string;
+  promptId: string;
+  promptVersion: string;
+  inputRef: string;
+};
 
 export type GenerationInput = {
   system: string;
@@ -38,9 +61,14 @@ export type GenerationInput = {
   maxTokens: number;
   temperature?: number;
   timeoutMs?: number;
+  record: GenerationRecord;
 };
 
-/** The answer of one generation call. `model` is the model requested; `returnedModel` is the model OpenRouter reports it answered with. */
+/**
+ * The answer of one generation call. `model` is the model requested. `returnedModel` is the model OpenRouter reports it answered with.
+ * A failure is `failed` when OpenRouter refused the request before generating it, `uncertain` when the call may have been billed (a
+ * timeout, a server error, an unreadable reply), and `unavailable` when nothing was sent.
+ */
 export type GenerationResult =
   | {
       ok: true;
@@ -55,7 +83,7 @@ export type GenerationResult =
       /** The cost OpenRouter reported for this call, in USD. Null when it reported none. Never an estimate. */
       costUsd: number | null;
     }
-  | { ok: false; status: "unavailable" | "failed"; provider: "openrouter"; error: string; model: string | null };
+  | { ok: false; status: "unavailable" | "failed" | "uncertain"; provider: "openrouter"; error: string; model: string | null };
 
 /** The seams a call uses. Production leaves them unset; tests pass fakes. */
 export type GenerationDeps = {
@@ -136,7 +164,7 @@ export async function generationModelFor(organizationId: string | null, task: Ge
   }
   const eligible = eligibleForTask(task, choice);
   if (!eligible.ok) return { status: "unverified", model, source, reason: `${eligible.reason} Nothing is sent.` };
-  return { status: "ok", model, source, catalogCheckedAt: catalog.takenAt };
+  return { status: "ok", model, source, catalogCheckedAt: catalog.takenAt, choice };
 }
 
 const chatBodySchema = z.object({
@@ -154,15 +182,53 @@ const chatBodySchema = z.object({
 });
 
 /**
- * One text-generation call with the model given. The model must already have been checked by generationModelFor. A call is made only
- * with a usable key for the workspace (the gateway resolves it); without one, the answer says why and nothing is sent. The key is never
- * part of the answer or of any error.
+ * Records the settlement of a held call. A failure to write it is logged without the key or the reply, and the hold stays in flight:
+ * it still counts against the month, so an unrecorded outcome is never treated as free.
  */
+async function settleSafely(sql: Sql, holdId: string, settlement: Settlement): Promise<void> {
+  try {
+    await settleGenerationCall(sql, holdId, settlement);
+  } catch {
+    console.error(`generation: the outcome of hold ${holdId} could not be recorded; the hold stays in flight and counts against the month.`);
+  }
+}
+
+/** One text-generation call with the model given. The model must already have been checked by generationModelFor. */
 export async function completeWithModel(
   organizationId: string | null,
-  input: GenerationInput & { model: string; modelSource?: "workspace" | "deployment" | "explicit" },
+  input: GenerationInput & { model: string; modelSource?: "workspace" | "deployment" | "explicit"; choice: TextModelChoice },
   deps: GenerationDeps = {},
 ): Promise<GenerationResult> {
+  const unavailable = (error: string): GenerationResult => ({ ok: false, status: "unavailable", provider: "openrouter", error, model: input.model });
+  if (!organizationId) return unavailable("No workspace is in scope, so no budget can be held and nothing is sent.");
+
+  const bound = boundGenerationCall({ choice: input.choice, system: input.system, user: input.user, maxTokens: input.maxTokens });
+  if (!bound.ok) return unavailable(bound.reason);
+  const ceiling = generationCeilingUsd(deps.env);
+  if (!ceiling.ok) return unavailable(ceiling.reason);
+  if (bound.usd > ceiling.usd) {
+    return unavailable(`This call could cost up to $${bound.usd.toFixed(6)}, above the per-call ceiling of $${ceiling.usd.toFixed(6)} (${GENERATION_CEILING_ENV}). Nothing was sent.`);
+  }
+
+  const { sql, ...record } = input.record;
+  const hold = await reserveGenerationCall(
+    sql,
+    {
+      organizationId,
+      brandId: record.brandId,
+      correlationId: record.correlationId,
+      operation: record.operation,
+      promptId: record.promptId,
+      promptVersion: record.promptVersion,
+      inputRef: record.inputRef,
+      provider: "openrouter",
+      model: input.model,
+      modelSource: input.modelSource ?? "explicit",
+    },
+    bound.usd,
+  );
+  if (hold.status === "refused") return unavailable(hold.reason);
+
   const gateway = deps.gateway ?? defaultGateway();
   const started = Date.now();
   const body = {
@@ -174,6 +240,7 @@ export async function completeWithModel(
     max_tokens: input.maxTokens,
     ...(input.temperature === undefined ? {} : { temperature: input.temperature }),
   };
+  const uncertainError = "OpenRouter could not be reached. The call may have been billed, so it was not retried.";
   let result;
   try {
     result = await gateway.call({
@@ -186,14 +253,23 @@ export async function completeWithModel(
       timeoutMs: input.timeoutMs ?? 25_000,
     });
   } catch {
-    return { ok: false, status: "failed", provider: "openrouter", error: "OpenRouter could not be reached.", model: input.model };
+    await settleSafely(sql, hold.id, { status: "uncertain", error: uncertainError, latencyMs: Date.now() - started });
+    return { ok: false, status: "uncertain", provider: "openrouter", error: uncertainError, model: input.model };
   }
   if (result.status === "not_connected") {
-    return { ok: false, status: "unavailable", provider: "openrouter", error: `OpenRouter is not connected for this workspace: ${result.reason}`, model: input.model };
+    await settleSafely(sql, hold.id, { status: "failed", error: `Not sent: ${result.reason}`, latencyMs: 0 });
+    return unavailable(`OpenRouter is not connected for this workspace: ${result.reason}`);
   }
   const response = result.response;
+  const latencyMs = Date.now() - started;
   if (response.status < 200 || response.status >= 300) {
-    return { ok: false, status: "failed", provider: "openrouter", error: `OpenRouter returned ${response.status}.`, model: input.model };
+    const error = `OpenRouter returned ${response.status}.`;
+    if (NOT_BILLED_STATUSES.has(response.status)) {
+      await settleSafely(sql, hold.id, { status: "failed", error, latencyMs });
+      return { ok: false, status: "failed", provider: "openrouter", error, model: input.model };
+    }
+    await settleSafely(sql, hold.id, { status: "uncertain", error: `${error} The call may have been billed, so it was not retried.`, latencyMs });
+    return { ok: false, status: "uncertain", provider: "openrouter", error: `${error} The call may have been billed, so it was not retried.`, model: input.model };
   }
   let parsed: z.infer<typeof chatBodySchema>;
   try {
@@ -201,29 +277,55 @@ export async function completeWithModel(
     if (!safe.success) throw new Error("shape");
     parsed = safe.data;
   } catch {
-    return { ok: false, status: "failed", provider: "openrouter", error: "OpenRouter answered with an unexpected shape.", model: input.model };
+    const error = "OpenRouter answered with an unexpected shape. The call may have been billed, so it was not retried.";
+    await settleSafely(sql, hold.id, { status: "uncertain", error, latencyMs });
+    return { ok: false, status: "uncertain", provider: "openrouter", error, model: input.model };
   }
   const content = parsed.choices?.[0]?.message?.content ?? "";
+  const tokens = typeof parsed.usage?.total_tokens === "number" ? parsed.usage.total_tokens : null;
+  const costUsd = typeof parsed.usage?.cost === "number" ? parsed.usage.cost : null;
   if (!content.trim()) {
-    return { ok: false, status: "failed", provider: "openrouter", error: "OpenRouter returned an empty response.", model: input.model };
+    // The provider answered and billed the call, so the hold is settled as completed, with the failure recorded beside it.
+    const error = "OpenRouter returned an empty response.";
+    await settleSafely(sql, hold.id, {
+      status: "completed",
+      output: "",
+      latencyMs,
+      tokens,
+      returnedModel: parsed.model ?? null,
+      generationId: parsed.id ?? null,
+      costUsd,
+      error,
+    });
+    return { ok: false, status: "failed", provider: "openrouter", error, model: input.model };
   }
+  await settleSafely(sql, hold.id, {
+    status: "completed",
+    output: content,
+    latencyMs,
+    tokens,
+    returnedModel: parsed.model ?? null,
+    generationId: parsed.id ?? null,
+    costUsd,
+    error: "",
+  });
   return {
     ok: true,
     content,
-    latencyMs: Date.now() - started,
-    tokens: typeof parsed.usage?.total_tokens === "number" ? parsed.usage.total_tokens : null,
+    latencyMs,
+    tokens,
     provider: "openrouter",
     model: input.model,
     modelSource: input.modelSource ?? "explicit",
     returnedModel: parsed.model ?? null,
     generationId: parsed.id ?? null,
-    costUsd: typeof parsed.usage?.cost === "number" ? parsed.usage.cost : null,
+    costUsd,
   };
 }
 
 /**
- * One task's generation for one workspace: the model is chosen and checked first, then the call is made with it. A task with no usable
- * model returns the reason and sends nothing.
+ * One task's generation for one workspace: the model is chosen and checked first, then the call is bounded, held and made with it. A
+ * task with no usable model returns the reason and sends nothing.
  */
 export async function completeGenerationTask(organizationId: string | null, task: GenerationTask, input: GenerationInput, deps: GenerationDeps = {}): Promise<GenerationResult> {
   const decision = await generationModelFor(organizationId, task, deps);
@@ -236,7 +338,7 @@ export async function completeGenerationTask(organizationId: string | null, task
       model: decision.status === "unset" ? null : decision.model,
     };
   }
-  return completeWithModel(organizationId, { ...input, model: decision.model, modelSource: decision.source }, deps);
+  return completeWithModel(organizationId, { ...input, model: decision.model, modelSource: decision.source, choice: decision.choice }, deps);
 }
 
 /**

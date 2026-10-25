@@ -20,6 +20,7 @@ import {
 } from "./creative-dna.ts";
 import { semanticEmbed } from "../embeddings/semantic.ts";
 import { completeGenerationTask, extractJson } from "../providers/chat.server.ts";
+import type { Sql } from "../learning/store.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -63,6 +64,8 @@ export type DecodeVideoInput = {
   ffprobePath?: string;
   /** The workspace whose image-understanding model labels the keyframes. Without one, no labelling call is made. */
   organizationId?: string | null;
+  /** The database the labelling call's budget hold is written to. Without it, no labelling call is made. */
+  sql?: Sql;
   visionLabeller?: SceneVisionLabeller;
   ocrRunner?: SceneOcrRunner;
   embedder?: (text: string) => Promise<number[]>;
@@ -217,12 +220,16 @@ export async function detectScenes(
  * The model is the workspace's own choice for the vision task, and it must take images. The deployment default is never used for images.
  * Without a workspace (organizationId null) or a chosen model, nothing is sent and the keyframe gets no labels.
  */
+type VisionContext = { organizationId: string | null; sql: Sql | undefined; adId: string };
+
 async function defaultVisionLabeller(
-  organizationId: string | null,
+  context: VisionContext,
   keyframeBytes: Uint8Array,
   sceneIndex: number,
   second: number,
 ): Promise<SceneVisionLabels | null> {
+  // Without a workspace or a database to hold the call's budget in, nothing is sent.
+  if (!context.organizationId || !context.sql) return null;
   try {
     const base64 = Buffer.from(keyframeBytes).toString("base64");
     const imageUrl = `data:image/png;base64,${base64}`;
@@ -234,7 +241,7 @@ async function defaultVisionLabeller(
     ].join(" ");
 
     // The image URL is untrusted data, never a system instruction: it sits in the user message with the scene's text.
-    const result = await completeGenerationTask(organizationId, "vision", {
+    const result = await completeGenerationTask(context.organizationId, "vision", {
       system,
       user: [
         { type: "text", text: `Analyze scene ${sceneIndex} at second ${second}.` },
@@ -242,6 +249,15 @@ async function defaultVisionLabeller(
       ],
       temperature: 0,
       maxTokens: 300,
+      record: {
+        sql: context.sql,
+        brandId: null,
+        correlationId: context.adId,
+        operation: "factory.vision",
+        promptId: "factory.vision",
+        promptVersion: "v1",
+        inputRef: context.adId,
+      },
     });
 
     if (!result.ok) return null;
@@ -408,8 +424,8 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
   const sceneDnaList: SceneDna[] = [];
   const onScreenTextList: OnScreenTextItem[] = [];
 
-  const organizationId = input.organizationId ?? null;
-  const labeller = input.visionLabeller ?? ((bytes, index, second) => defaultVisionLabeller(organizationId, bytes, index, second));
+  const visionContext: VisionContext = { organizationId: input.organizationId ?? null, sql: input.sql, adId: input.adId };
+  const labeller = input.visionLabeller ?? ((bytes, index, second) => defaultVisionLabeller(visionContext, bytes, index, second));
 
   for (const scene of detectedScenes) {
     const second = Math.round(scene.startMs / 1000);

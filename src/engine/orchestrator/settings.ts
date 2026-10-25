@@ -19,6 +19,8 @@ export type TextModelChoice = {
   promptUsdPerToken: number;
   completionUsdPerToken: number;
   inputModalities: string[];
+  /** The context window in tokens as the listing states it, or null. Image input cannot be priced without it. */
+  contextLength: number | null;
 };
 
 /**
@@ -46,6 +48,7 @@ export function textChoices(catalog: Map<string, CatalogEntry>): TextModelChoice
       promptUsdPerToken,
       completionUsdPerToken,
       inputModalities: entry.input_modalities ?? [],
+      contextLength: entry.context_length ?? null,
     });
   }
   return choices.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));

@@ -26,6 +26,8 @@ export const catalogEntrySchema = z.object({
   kind: catalogKindSchema,
   input_modalities: z.array(z.string()).nullable(),
   output_modalities: z.array(z.string()).nullable(),
+  /** The context window in tokens, when the listing states it. A call whose input bound needs it is refused when it is null. */
+  context_length: z.number().positive().nullable().optional(),
   pricing: catalogPricingSchema,
 });
 export type CatalogEntry = z.infer<typeof catalogEntrySchema>;

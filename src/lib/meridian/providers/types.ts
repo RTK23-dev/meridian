@@ -14,4 +14,5 @@ export type ChatResult =
       generationId?: string | null;
       costUsd?: number | null;
     }
-  | { ok: false; error: string; status: "unavailable" | "failed"; provider: string };
+  /** `uncertain`: the request may have been billed and its outcome is unknown. Callers must not retry it blindly. */
+  | { ok: false; error: string; status: "unavailable" | "failed" | "uncertain"; provider: string };

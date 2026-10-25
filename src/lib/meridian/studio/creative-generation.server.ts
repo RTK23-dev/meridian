@@ -6,7 +6,6 @@ import { getSql } from "../../db.ts";
 import { renderGenerationPrompt } from "../brief/engine.ts";
 import { promptById } from "../prompts/registry.ts";
 import { completeGenerationTask, extractJson } from "../providers/chat.server.ts";
-import { recordGenerationRun } from "../providers/model-run.ts";
 import { asText, clip, ensurePromptRows, id, requireBrand } from "../machine-shared.ts";
 import { assertOpportunityClear } from "../opportunity/actions.ts";
 import { productionRefusalFor } from "./brief-status.ts";
@@ -29,23 +28,19 @@ export async function generateCreativeFor(userId: string, data: { brandId: strin
   if (!prompt) throw new Error("Creative prompt is not active.");
   const brief = briefDraftFromRow(briefRow);
   const rendered = renderGenerationPrompt(brief);
-  // The copy task's model is the workspace's own choice, checked against the live catalogue before anything is sent.
+  await ensurePromptRows(sql);
+  // The copy task's model is the workspace's own choice, checked against the live catalogue, bounded and held before anything is sent.
+  // The call's run is recorded by completeGenerationTask. A refusal before any call sends nothing and writes no run.
   const result = await completeGenerationTask(access.organizationId, "copy", {
     temperature: prompt.temperature,
     maxTokens: 900,
     system: rendered.system,
     user: rendered.user,
+    record: { sql, brandId: data.brandId, correlationId: id(), operation: "creative_script", promptId: prompt.id, promptVersion: prompt.version, inputRef: data.briefId },
   });
-  // A refusal before any call (no model, no key, an unchecked model) sends nothing, so nothing is recorded as a run.
   if (!result.ok && result.status === "unavailable") {
     return { status: "unavailable" as const, message: `${result.error} You can still write the script yourself.` };
   }
-  await ensurePromptRows(sql);
-  await recordGenerationRun(
-    sql,
-    { organizationId: access.organizationId, brandId: data.brandId, correlationId: id(), operation: "creative_script", promptId: prompt.id, promptVersion: prompt.version, inputRef: data.briefId },
-    result,
-  );
   if (!result.ok) return { status: "failed" as const, message: result.error };
   let copy: { hook: string; script: string; offer: string; cta: string; visualTreatment: string; claims: string[] };
   try {
