@@ -138,6 +138,35 @@ try {
   });
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+  await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Ads tab", async () => {
+    const main = await page.locator("main").innerText();
+    assert.match(main, /Make, review, publish and learn from your videos, images and ads in one place\./);
+    for (const label of ["Create", "Ideas", "Review", "Library", "Publish", "Results", "Ads"]) {
+      assert.equal(await page.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
+    }
+  });
+  await check("F2", "create presets show an unambiguous selected state", async () => {
+    const briefPreset = page.getByRole("radio", { name: /Video from a brief/ });
+    await briefPreset.waitFor();
+    assert.equal(await briefPreset.getAttribute("aria-checked"), "true");
+    const studioPreset = page.getByRole("radio", { name: /Images and videos in Studio/ });
+    assert.equal(await studioPreset.count(), 1);
+    await studioPreset.click();
+    assert.equal(await studioPreset.getAttribute("aria-checked"), "true");
+    await page.getByRole("heading", { name: "Create a brand first" }).waitFor();
+  });
+  await page.screenshot({ path: join(out, "content-workflow-desktop.png") });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+  await check("F3", "Content page fits a phone viewport without horizontal overflow", async () => {
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    assert.ok(overflow <= 0, `the Content page is ${overflow}px wider than the viewport`);
+  });
+  await page.screenshot({ path: join(out, "content-workflow-phone-390.png") });
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
     await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
     assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
