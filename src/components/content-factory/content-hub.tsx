@@ -57,6 +57,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   const pickBrand = routeBrandId === null && brands.length > 1;
   const activeBrandId =
     routeBrandId ?? (pickedBrandId !== null && brands.some((brand) => brand.id === pickedBrandId) ? pickedBrandId : (brands[0]?.id ?? null));
+  const activeBrand = brands.find((brand) => brand.id === activeBrandId) ?? null;
   // A section the person may not use is not shown, even when the link names it. Create is the fallback.
   const sections = sectionsFor(isAdmin);
   const current: ContentSection = search.section !== undefined && sections.includes(search.section) ? search.section : "create";
@@ -120,10 +121,16 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   else body = noBrand;
 
   const description = `Make, review, publish and learn from your videos, images and ads in one place.${pickBrand ? " Each section works on the brand you pick." : ""}`;
+  const headerContext = pickBrand ? brandPicker : (
+    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-muted">Brand</span>
+      <span className="max-w-48 truncate text-sm font-semibold text-fg">{activeBrand?.name ?? "Workspace"}</span>
+    </div>
+  );
 
   return (
     <div className="space-y-6">
-      <PageHeader title="Content" description={description} actions={brandPicker} />
+      <PageHeader title="Content" description={description} actions={headerContext} />
       <Tabs value={current} onValueChange={(value) => onSearchChange(searchForSection(search, sectionOf(value)), false)} className="space-y-5">
         <div className="rounded-xl border border-border bg-surface-2 p-1.5">
           <TabsList aria-label="Content workflow sections" className="w-full items-center justify-start gap-1 border-0 bg-transparent p-0">
