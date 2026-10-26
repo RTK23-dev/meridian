@@ -61,6 +61,7 @@ try {
   await page.getByRole("cell", { name: "Lather bar", exact: true }).waitFor();
 
   await page.goto(`${brandUrl}/brain`, { waitUntil: "networkidle" });
+  await page.locator("details.brain-optional").evaluateAll((nodes) => nodes.forEach((node) => { node.open = true; }));
   await page.getByRole("textbox", { name: "Positioning", exact: true }).fill("Cold-process soap. The point is the lather and the proof of a simple bar.");
   await page.getByLabel("Value proposition").fill("Show the lather. Show the proof. Do not invent a cure.");
   await page.getByLabel("Target customers").fill("People who already buy a plain bar of soap.");
@@ -68,6 +69,7 @@ try {
   await page.getByLabel("Preferred formats").fill("short ugc");
   await page.getByRole("button", { name: "Save brain" }).click();
   // Autosave writes its own versions as the fields change, so the manual save is not always "Version 2". Wait for the version the person saved.
+  await page.locator("summary", { hasText: /^Versions/ }).click();
   await page.getByText(/Version \d+ · Saved by a person/).waitFor();
 
   await page.goto(`${brandUrl}/market`, { waitUntil: "networkidle" });
