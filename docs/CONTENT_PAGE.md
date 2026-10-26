@@ -74,7 +74,7 @@ A section a person may not use falls back to Create.
 
 ## Checks
 
-- **Current-head CI:** [run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449), head `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b`, passed all 13 required jobs, including six test shards, PostgreSQL, sidecar, typecheck/lint/build, release acceptance, UI smoke/baseline, E2E and aggregate `check`. The final-head browser evidence is recorded in `docs/RELEASE_ACCEPTANCE.md`.
+- **Last fully verified code head CI:** [run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449), head `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b`, passed all 13 required jobs, including six test shards, PostgreSQL, sidecar, typecheck/lint/build, release acceptance, UI smoke/baseline, E2E and aggregate `check`. The final-head browser evidence is recorded in `docs/RELEASE_ACCEPTANCE.md`.
 - The release-acceptance browser flow uses a fresh embedded database, a fixture-only sealed dummy token, and local browser requests. It checks stale provider readiness without probing a provider; the 25-hour-old Meta card reads DEGRADED, never HEALTHY or live-verified.
 - The Content page browser checks passed for accessible workflow tabs, selected preset state, the no-brand empty state and phone-width overflow. Desktop and 390 px screenshots are attached to the same CI run.
 - Live provider behavior, real credentials, paid calls, publishing and external side effects are intentionally not exercised.
