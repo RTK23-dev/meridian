@@ -128,7 +128,7 @@ export function SetupGuide() {
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
-        <section aria-labelledby="setup-progress" className="surface-rise rounded-xl border border-border bg-gradient-to-br from-accent-muted/40 via-surface to-surface p-5 shadow-sm md:p-6">
+        <section aria-labelledby="setup-progress" className="surface-rise surface-glow rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
