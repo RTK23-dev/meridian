@@ -74,13 +74,10 @@ A section a person may not use falls back to Create.
 
 ## Checks
 
-- Typecheck: `npm run typecheck` passes after the rename.
-- Lint: `npx eslint` on the changed files has no errors or warnings after the rename. Across the repo, `npm run lint` had no errors and four warnings before the rename. All four are on the base branch.
-- Tests:
-  - After the rename: the content hub and navigation model test files, 30 pass, 0 fail.
-  - On `8b9a173d`, before the rename: scripts 160 pass, 0 fail. Src 6,251 tests, 6,210 pass, 0 fail, 41 skipped. The skips need `MERIDIAN_PG_TEST_URL` (the PostgreSQL paths) or a live Gemini key, so the PostgreSQL paths did not run.
-- Build: `vite build` passed on `8b9a173d` and regenerated `src/routeTree.gen.ts`. The rename changes no route path, so the route tree needs no regeneration.
-- Browser verification for this branch is tracked in PR #80 CI. The release-acceptance browser flow checks a seeded stale provider success on the actual Integrations screen and rejects any browser request that leaves the local origin. It does not call a provider. Content-page browser checks are added after the UI changes and must be run on the final head before this document is treated as complete.
+- The current source of truth for typecheck, lint, build, test shards, PostgreSQL, release acceptance and UI browser checks is the CI run for the current PR #80 head. The test counts and commit hashes from the 2026-10-24 checkpoint below this page's history are not current-head release evidence.
+- The release-acceptance browser flow uses a fresh embedded database, a fixture-only sealed dummy token, and local browser requests. It checks stale provider readiness without probing a provider.
+- The Content page browser checks exercise accessible workflow tabs, selected preset state, the no-brand empty state and phone-width overflow. The exact final result and screenshots must come from the CI run for the final head.
+- Live provider behavior, real credentials, paid calls, publishing and external side effects are intentionally not exercised.
 
 ## Remaining verification and boundaries
 
