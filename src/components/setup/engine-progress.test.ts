@@ -40,3 +40,13 @@ test("an unrelated failure is not a budget blocker, and claims nothing", () => {
 test("a budget message that does not say nothing was sent does not claim it", () => {
   assert.deepEqual(budgetBlocker("Set a monthly budget."), { blocked: true, nothingSent: false });
 });
+
+test("a saved-key engine never claims a live test, and names the engine that stays active until it is chosen", async () => {
+  const { savedKeyEngineProgress } = await import("./engine-progress.ts");
+  const keyOnly = savedKeyEngineProgress({ engineLabel: "TypeSafe JEV", keySaved: true, ready: true, active: false, activeLabel: "OpenAI Decisions" });
+  assert.equal(keyOnly.steps.map((step) => step.done).join(), "true,true,false");
+  assert.match(keyOnly.steps[1]?.label ?? "", /no request sent/);
+  assert.match(keyOnly.next, /Until then OpenAI Decisions receives every decision/);
+  const none = savedKeyEngineProgress({ engineLabel: "OpenAI Decisions", keySaved: false, ready: false, active: false, activeLabel: "TypeSafe JEV" });
+  assert.match(none.next, /Save your OpenAI Decisions key/);
+});

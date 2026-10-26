@@ -8,7 +8,7 @@ import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
-import { openRouterProgress } from "@/components/setup/engine-progress";
+import { openRouterProgress, savedKeyEngineProgress, type EngineProgress } from "@/components/setup/engine-progress";
 import { splitOperatorHint } from "@/components/settings/key-copy";
 
 /** What each engine does and what it needs, in plain words. */
@@ -123,7 +123,8 @@ export function EngineChoice({
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}
-              {engine.id === "openrouter-decisions" ? <OpenRouterSteps keySaved={keys.openrouter.fingerprint !== null} testPassed={ready} active={isActive} activeLabel={labelOf(activeId)} /> : null}
+              {engine.id === "openrouter-decisions" ? <EngineSteps label="OpenRouter" progress={openRouterProgress({ keySaved: keys.openrouter.fingerprint !== null, testPassed: ready, active: isActive, activeLabel: labelOf(activeId) })} /> : null}
+              {copy && engine.id !== "openrouter-decisions" && key ? <EngineSteps label={copy.title} progress={savedKeyEngineProgress({ engineLabel: copy.title, keySaved: key.fingerprint !== null, ready, active: isActive, activeLabel: labelOf(activeId) })} /> : null}
               {engine.id === "openrouter-decisions" && engines.openrouterModel ? (
                 <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={engines.openrouterModel} />
               ) : null}
@@ -148,10 +149,9 @@ export function EngineChoice({
 }
 
 /** Key saved, test passed and engine active, as three separate steps with the one next action. */
-function OpenRouterSteps(props: { keySaved: boolean; testPassed: boolean; active: boolean; activeLabel: string }) {
-  const progress = openRouterProgress(props);
+function EngineSteps({ label, progress }: { label: string; progress: EngineProgress }) {
   return (
-    <div className="space-y-2 rounded-md bg-surface-2 p-3" aria-label="OpenRouter setup progress">
+    <div className="space-y-2 rounded-md bg-surface-2 p-3" aria-label={`${label} setup progress`}>
       <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {progress.steps.map((step) => (
           <li key={step.id} className={step.done ? "font-semibold text-success" : "text-fg-muted"}>
