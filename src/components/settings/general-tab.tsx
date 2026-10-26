@@ -9,7 +9,7 @@ import { useWorkspace } from "@/components/workspace";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { GenerationModelSettings } from "@/components/generation-model-settings";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
-import { SetupPanel } from "./setup-panel";
+import { SetupPanel, VideoBudgetForm } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -78,6 +78,14 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {renameRaw ? <FormError message={plainServerError(renameRaw, "settings")} raw={renameRaw} /> : null}
       </section>
 
+      <section aria-labelledby="monthly-budget-title" className="panel">
+        <h2 id="monthly-budget-title" className="sr-only">Monthly budget</h2>
+        <VideoBudgetForm organizationId={organizationId} canAdmin={canAdmin} />
+      </section>
+
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">Create another workspace<span className="ml-2 text-sm font-normal text-fg-muted">A second one keeps its own brands, members and keys</span></summary>
+        <div className="mt-4">
       <section aria-labelledby="another-workspace-title" className="space-y-4 panel">
         <div>
           <h2 id="another-workspace-title" className="text-section font-semibold text-fg">Create another workspace</h2>
@@ -98,9 +106,19 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         />
         {createRaw ? <FormError message={plainServerError(createRaw, "workspace")} raw={createRaw} /> : null}
       </section>
+        </div>
+      </details>
 
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">Keys and connections<span className="ml-2 text-sm font-normal text-fg-muted">Every provider, its state and its key</span></summary>
+        <div className="mt-4">
       <SetupPanel organizationId={organizationId} canAdmin={canAdmin} />
+        </div>
+      </details>
 
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">Engine and provider settings<span className="ml-2 text-sm font-normal text-fg-muted">Decision engine, models and connection tests</span></summary>
+        <div className="mt-4">
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
           <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Engine, sources and provider settings</h2>
@@ -108,7 +126,12 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
       </section>
+        </div>
+      </details>
 
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">Text and image models<span className="ml-2 text-sm font-normal text-fg-muted">Which model each task uses</span></summary>
+        <div className="mt-4">
       <section aria-labelledby="generation-models-title" className="space-y-3">
         <div>
           <h2 id="generation-models-title" className="text-section font-semibold text-fg">Text and image models</h2>
@@ -119,9 +142,19 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
         <GenerationModelSettings organizationId={organizationId} canAdmin={canAdmin} />
       </section>
+        </div>
+      </details>
 
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">Google Drive<span className="ml-2 text-sm font-normal text-fg-muted">Where files are kept</span></summary>
+        <div className="mt-4">
       <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />
+        </div>
+      </details>
 
+      <details className="group rounded-xl border border-border bg-surface p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg">What is and is not connected<span className="ml-2 text-sm font-normal text-fg-muted">For whoever runs the server</span></summary>
+        <div className="mt-4">
       <section aria-labelledby="connected-title" className="space-y-3 panel">
         <h2 id="connected-title" className="text-section font-semibold text-fg">What is and is not connected</h2>
         <ul className="space-y-2 text-sm text-fg-muted">
@@ -132,6 +165,8 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
           <li>Calibration can propose a threshold. It changes nothing until an admin approves it on the learning page.</li>
         </ul>
       </section>
+        </div>
+      </details>
     </div>
   );
 }

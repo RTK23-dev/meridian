@@ -123,7 +123,6 @@ function GroupBlock({
           <SetupRowItem key={row.id} row={row} organizationId={organizationId} canAdmin={canAdmin} />
         ))}
       </ul>
-      {group === "video" ? <VideoBudgetForm organizationId={organizationId} canAdmin={canAdmin} /> : null}
     </div>
   );
 }
@@ -132,7 +131,7 @@ function GroupBlock({
  * The workspace's "Monthly video budget (USD)". Blank means no budget is set; there is no default. Only an admin can change
  * it, and the server checks the role again.
  */
-function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
   const budget = useVideoBudgetQuery(organizationId);
   const saved = budget.data?.monthlyVideoBudgetUsd ?? null;
   const [draft, setDraft] = useState<string | null>(null);
