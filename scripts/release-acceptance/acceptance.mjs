@@ -9,8 +9,9 @@ import assert from "node:assert/strict";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import { localAcceptanceBase } from "./local-base.mjs";
 
-const base = process.env.ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8080";
+const base = localAcceptanceBase(process.env.ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8080");
 const email = process.env.ACCEPTANCE_EMAIL ?? "acceptance-owner@example.com";
 const password = process.env.ACCEPTANCE_PASSWORD ?? "AcceptancePass-1";
 const out = process.env.ACCEPTANCE_OUT ?? "artifacts/release-acceptance";
@@ -33,9 +34,10 @@ try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
   page.setDefaultTimeout(30000);
   const external = [];
+  const localOrigin = new URL(base).origin;
   page.on("request", (request) => {
-    const host = new URL(request.url()).hostname;
-    if (host !== "127.0.0.1" && host !== "localhost") external.push(request.url());
+    const requestUrl = new URL(request.url());
+    if (requestUrl.origin !== localOrigin) external.push(request.url());
   });
 
   await page.goto(`${base}/login`, { waitUntil: "networkidle" });
