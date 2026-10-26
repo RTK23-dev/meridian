@@ -127,7 +127,18 @@ try {
     await row.screenshot({ path: join(out, "gemini-perception-stored-key-desktop.png") });
   });
 
-  await check("C1", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
+  await page.goto(`${base}/integrations`, { waitUntil: "networkidle" });
+  await check("C1", "a stored success older than 24 hours is shown as degraded, never healthy or live-verified", async () => {
+    const metaCard = page.getByRole("heading", { name: "Meta", exact: true }).locator("xpath=ancestor::li[1]");
+    await metaCard.waitFor();
+    const cardText = await metaCard.innerText();
+    assert.match(cardText, /degraded/i, "the actual Integrations card reports degraded");
+    assert.match(cardText, /last successful request is stale/i, "the actual card explains why it is degraded");
+    assert.doesNotMatch(cardText, /healthy|live verified|connected and tested/i, "a stale record is never presented as healthy");
+  });
+
+  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
     await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
     assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
   });

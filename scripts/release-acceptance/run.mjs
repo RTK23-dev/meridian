@@ -19,6 +19,7 @@ const email = process.env.ACCEPTANCE_EMAIL ?? "acceptance-owner@example.com";
 const password = process.env.ACCEPTANCE_PASSWORD ?? "AcceptancePass-1";
 const out = process.env.ACCEPTANCE_OUT ?? "artifacts/release-acceptance";
 const STEP_MS = 300_000;
+const ACCEPTANCE_ENCRYPTION_KEY = "acceptance-fixture-encryption-key-not-a-secret";
 const SERVER_MS = 240_000;
 
 mkdirSync(out, { recursive: true });
@@ -31,7 +32,7 @@ function startServer() {
   server = spawn("npm", ["run", "dev"], {
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
-    env: { ...process.env, MERIDIAN_TESTING_RUNTIME: "true", MERIDIAN_LOCAL_DATA_DIR: dataDir },
+    env: { ...process.env, TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY, MERIDIAN_TESTING_RUNTIME: "true", MERIDIAN_LOCAL_DATA_DIR: dataDir },
   });
   server.stdout.pipe(serverLog, { end: false });
   server.stderr.pipe(serverLog, { end: false });
@@ -123,7 +124,7 @@ try {
   await waitForServer();
   await createOwnerAccount();
   await stopServer();
-  const seeded = await run(process.execPath, ["scripts/release-acceptance/seed-holds.mjs", dataDir]);
+  const seeded = await run(process.execPath, ["scripts/release-acceptance/seed-holds.mjs", dataDir], { TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY });
   if (seeded !== 0) throw new Error("Seeding the uncertain holds failed.");
   startServer();
   await waitForServer();
