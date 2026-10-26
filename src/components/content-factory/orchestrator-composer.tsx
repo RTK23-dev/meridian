@@ -100,7 +100,7 @@ export function OrchestratorComposer({
       aria-labelledby="composer-heading"
       noValidate
       onSubmit={(event) => void planTheRun(event)}
-      className="flex flex-col gap-6 rounded-xl border border-border bg-surface p-4 sm:p-6"
+      className="surface-glow flex flex-col gap-6 rounded-xl border border-border bg-surface p-4 sm:p-6"
     >
       <header className="flex flex-col gap-2">
         <p className="eyebrow">Orchestrator</p>
