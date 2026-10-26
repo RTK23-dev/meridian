@@ -37,8 +37,8 @@ export type GuideStep = {
   detail: string;
 };
 
-/** Source connectors that take a key. Public web pages and uploads need none, so they are not in this list. */
-export const KEYED_SOURCE_IDS = ["meta_ad_library", "youtube", "search", "twitter", "linkedin", "pinterest", "tiktok", "instagram", "licensed"] as const;
+/** Sources a saved key makes search by phrase. Public web pages and uploads need none. TikTok, Instagram, X and the rest do nothing with a key in this release, so they are not here. */
+export const KEYED_SOURCE_IDS = ["meta_ad_library", "youtube", "search"] as const;
 
 export function isInUse(state: ProviderState | undefined): boolean {
   return state === "usable" || state === "deployment_shared_default";
@@ -64,7 +64,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "sources",
     title: "Pick where examples come from",
-    what: "Meridian learns from ads and posts that already work in your niche. Public web pages and your own uploads need no key. Ad libraries and video platforms need a key that you save on this page. For research beyond these, Agent Reach is a recommended, optional tool an operator runs on the host (docs/AGENT_REACH.md).",
+    what: "Meridian learns from ads and posts that already work in your niche. To start, paste one public page URL or upload an example. Neither needs a key. Searching by phrase is optional and uses your own developer key for Meta Ad Library, YouTube or Google search. Nothing here needs a login from the brands you study. For research beyond these, Agent Reach is a recommended, optional tool an operator runs on the host (docs/AGENT_REACH.md).",
     why: "Better examples give better grades. With no source at all, there is nothing to compare against.",
     required: false,
   },

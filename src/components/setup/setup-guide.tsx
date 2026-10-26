@@ -18,7 +18,6 @@ const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
   { id: "search", what: "Public pages that match a phrase, through a search API. Useful for finding pages to read." },
 ];
 
-const MORE_SOURCES = ["twitter", "linkedin", "pinterest", "tiktok", "instagram", "licensed"];
 const MEDIA_IDS = ["perception", "production", "hypit", "openrouter", "heygen", "anthropic", "deepgram"];
 // The shared button does not shrink, so a long label would widen a phone-width column. This lets it wrap inside the column.
 const ACTION = "max-w-full shrink whitespace-normal text-left";
@@ -234,8 +233,8 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
-          <p className="font-semibold text-fg">Public web pages</p>
-          <p className="text-sm text-fg-muted">No key. Meridian reads a page you name and stores its text as evidence. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
+          <p className="font-semibold text-fg">Read one public page</p>
+          <p className="text-sm text-fg-muted">No key. You paste one page URL, and Meridian reads that exact page and stores its text as evidence. This is not a search. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/market` as never}>Read a public page on Market</Link></Button> : null}
         </div>
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
@@ -245,12 +244,9 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
         </div>
       </div>
       <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
-      <details className="rounded-lg border border-border p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-fg">More connectors ({MORE_SOURCES.length})</summary>
-        <div className="mt-4">
-          <RowList ids={MORE_SOURCES} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} />
-        </div>
-      </details>
+      <p className="text-sm text-fg-muted">
+        Search by phrase is optional. TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release, and no key is needed for them. Upload the example or paste its text instead.
+      </p>
     </div>
   );
 }
