@@ -246,3 +246,63 @@ test("a human review of the creative is recorded on the same chain, and the revi
   assert.equal(chain.fallback.requests.length, 0, "no fallback backend is consulted at any link, the review included");
   assert.ok(chain.jev.requests.length > 0, "the chosen engine judged the brief");
 });
+
+test("a human rejection is recorded on the same lineage, with an audit and no fallback", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "lineage-reject");
+  const chain = await chainToCreative(sql, tenant);
+  assert.equal(chain.creativeDecision, "HUMAN_REVIEW", "the creative requires a human decision");
+  assert.equal(chain.fallback.requests.length, 0, "no fallback backend is consulted before review");
+
+  const [review] = await sql<{ id: string; status: string; decision_id: string }>`
+    select id, status, decision_id from reviews where creative_id = ${chain.creativeId} and organization_id = ${tenant.organizationId}
+  `;
+  assert.ok(review, "the creative has a review");
+  assert.equal(review.status, "open");
+
+  await applyReviewDecision(sql, {
+    organizationId: tenant.organizationId,
+    brandId: tenant.brandId,
+    userId: tenant.userId,
+    reviewId: review.id,
+    action: "reject",
+    reasonCode: "unsupported_claim",
+    note: "The claim is not supported by the supplied evidence.",
+  });
+
+  const [result] = await sql<{ review_status: string; reviewer_decision: string; reviewer_id: string; creative_status: string; decision_org: string; decision_brand: string }>`
+    select r.status as review_status, d.reviewer_decision, d.reviewer_id, c.status as creative_status,
+           d.organization_id as decision_org, d.brand_id as decision_brand
+    from reviews r
+    join jev_decisions d on d.id = r.decision_id
+    join creative_records c on c.id = r.creative_id
+    where r.id = ${review.id}
+  `;
+  assert.equal(result?.review_status, "rejected");
+  assert.equal(result?.reviewer_decision, "reject");
+  assert.equal(result?.reviewer_id, tenant.userId);
+  assert.equal(result?.creative_status, "rejected");
+  assert.equal(result?.decision_org, tenant.organizationId);
+  assert.equal(result?.decision_brand, tenant.brandId);
+
+  const rejections = await sql<{ organization_id: string; brand_id: string; creative_id: string; decision_id: string; reason_code: string; rejected_by: string }>`
+    select organization_id, brand_id, creative_id, decision_id, reason_code, rejected_by
+    from rejections where decision_id = ${review.decision_id}
+  `;
+  assert.equal(rejections.length, 1, "one rejection record is persisted");
+  assert.equal(rejections[0]?.organization_id, tenant.organizationId);
+  assert.equal(rejections[0]?.brand_id, tenant.brandId);
+  assert.equal(rejections[0]?.creative_id, chain.creativeId);
+  assert.equal(rejections[0]?.reason_code, "unsupported_claim");
+  assert.equal(rejections[0]?.rejected_by, tenant.userId);
+
+  const audits = await sql<{ organization_id: string; actor_id: string; object_id: string }>`
+    select organization_id, actor_id, object_id from audit_log
+    where action = 'review.rejected' and object_id = ${review.id}
+  `;
+  assert.equal(audits.length, 1, "the rejection is audited once");
+  assert.equal(audits[0]?.organization_id, tenant.organizationId);
+  assert.equal(audits[0]?.actor_id, tenant.userId);
+  assert.equal(audits[0]?.object_id, review.id);
+  assert.equal(chain.fallback.requests.length, 0, "review rejection does not invoke a fallback engine");
+});
