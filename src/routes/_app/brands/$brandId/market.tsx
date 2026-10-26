@@ -55,7 +55,6 @@ function MarketSection({ id, title, hint, children }: { id: string; title: strin
 }
 
 const MARKET_SECTIONS = [
-  { id: "market-discovery", label: "Discovery" },
   { id: "market-collect", label: "Collect evidence" },
   { id: "market-analyzed", label: "Analyzed ads" },
   { id: "market-competitors", label: "Competitors" },
@@ -234,9 +233,9 @@ function MarketPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
-        <h1 className="page-title">Market: examples that already work</h1>
+        <h1 className="page-title">Research public examples</h1>
         <p className="text-muted">
-          Add a public example, see what Meridian read and what is new, then review it. Nothing is invented: what could not be read is said so.
+          Start with one page URL. Meridian tells you what it read, what is new, and what a site would not allow. More research tools are optional.
         </p>
       </div>
       <details className="rounded-xl border border-border bg-surface p-4">
@@ -255,9 +254,12 @@ function MarketPage({ brandId }: { brandId: string }) {
       </details>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <nav aria-label="Market sections" className="flex flex-wrap gap-2 text-sm">
-        {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
-      </nav>
+      <details className="rounded-xl border border-border bg-surface px-4 py-3">
+        <summary className="cursor-pointer text-sm font-semibold text-fg">More market tools</summary>
+        <nav aria-label="More market tools" className="mt-3 flex flex-wrap gap-2 text-sm">
+          {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
+        </nav>
+      </details>
       <Card id="market-discovery">
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
