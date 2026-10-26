@@ -71,6 +71,8 @@ try {
   await page.getByText(/Version \d+ · Saved by a person/).waitFor();
 
   await page.goto(`${brandUrl}/market`, { waitUntil: "networkidle" });
+  // The lower Market sections start closed, so the first screen is the discovery card. Open them as a person does.
+  await page.evaluate(() => { for (const section of document.querySelectorAll("details[id^='market-']")) section.open = true; });
   await page.getByLabel("Name").fill("North Foam");
   await page.getByRole("button", { name: "Add competitor" }).click();
   await page.getByText("North Foam").first().waitFor();
