@@ -63,15 +63,18 @@ jobs:
           done
           cat artifacts/preview-server.log
           exit 1
+      # The smoke runs first. The baseline sends hundreds of requests to this server, and Better Auth's built-in limiter (a rolling
+      # 10 second window per client) answers the next requests with 429, which the smoke counts as a console error. A smoke run straight
+      # after the baseline failed on both viewports for that reason. Run first, it sees a fresh window. It needs only the running server.
+      - name: Run browser smoke
+        run: |
+          BROWSER_SMOKE_OUTPUT_ROOT="$GITHUB_WORKSPACE" \
+            node scripts/browser-smoke.mjs http://127.0.0.1:8080/ "$GITHUB_WORKSPACE/artifacts/ui-smoke.png"
       - name: Capture UI baseline
         env:
           UI_BASELINE_DIR: artifacts/ui-baseline
           UI_BASELINE_OUTPUT_ROOT: ${{ github.workspace }}
         run: npm run ui:baseline
-      - name: Run browser smoke
-        run: |
-          BROWSER_SMOKE_OUTPUT_ROOT="$GITHUB_WORKSPACE" \
-            node scripts/browser-smoke.mjs http://127.0.0.1:8080/ "$GITHUB_WORKSPACE/artifacts/ui-smoke.png"
       - name: Start the dev server for the design-system check
         # The design system page is a development-only route: src/routes/[_design].tsx answers 404 in a production build. This one check
         # therefore runs against the Vite dev server on its own port, and the preview above keeps serving the production build. The
