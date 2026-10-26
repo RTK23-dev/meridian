@@ -174,7 +174,8 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
   const Icon = mark.icon;
   const isCurrent = step.status === "current";
   // Only the step to do now, and a required step still waiting, shows its text and controls. A finished or optional step stays one line.
-  const compact = step.status === "done" || (!step.required && !isCurrent);
+  // Decided once, when the step first shows. A step the person just finished stays open, so the confirmation of their action stays visible.
+  const [compact] = useState(step.status === "done" || (!step.required && !isCurrent));
   return (
     <li id={`step-${step.id}`} className="scroll-mt-24">
       <article

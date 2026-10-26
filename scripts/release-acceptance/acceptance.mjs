@@ -301,6 +301,55 @@ try {
     assert.doesNotMatch(text, /DEPLOYMENT_|YOUTUBE_API_KEY=|META_AD_LIBRARY_TOKEN=/);
   });
 
+  await check("G11", "openrouter: no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does", async () => {
+    // The testing runtime reads a recorded catalogue and answers the test from a recorded transport. No key is real and nothing is spent.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const review = page.getByText("Review or change this step");
+    for (let i = await review.count(); i > 0; i -= 1) await review.nth(i - 1).click();
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
+    await page.getByLabel("OpenRouter Decisions key").fill("sk-or-v1-acceptance-fixture-0123456789abcdef");
+    await page.getByLabel("OpenRouter Decisions key").press("Enter");
+    await page.getByText(/OpenRouter Decisions key saved/).waitFor();
+    // A saved key is not a passed test and not the active engine.
+    const progress = page.getByLabel("OpenRouter setup progress").first();
+    assert.match(await progress.innerText(), /Test the connection below/);
+    const model = page.getByRole("combobox", { name: "Decision model" });
+    await model.waitFor();
+    const option = await model.locator("option").evaluateAll((nodes) => nodes.map((node) => node.value).find((value) => /typesafe\/jev/.test(value)));
+    assert.ok(option, "the recorded catalogue offers a TypeSafe decision model");
+    await model.selectOption(option);
+    await page.getByRole("button", { name: "Save model" }).click();
+    await page.getByText(/The OpenRouter decision model is now/).waitFor();
+    // No monthly budget: the test is refused before any request, and the way out is a link to the field.
+    await page.getByRole("button", { name: "Test the connection" }).click();
+    const link = page.getByRole("link", { name: /Set the monthly budget \(USD\)/ });
+    await link.waitFor();
+    assert.match(await page.locator("main").innerText(), /nothing was sent to OpenRouter and nothing was spent/);
+    assert.doesNotMatch(await progress.innerText(), /✓\s*Connection test passed/);
+    await link.click();
+    const budget = page.getByLabel("Monthly budget (USD)");
+    await budget.waitFor();
+    assert.equal(await budget.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    await budget.fill("5");
+    await page.getByRole("button", { name: "Save budget" }).click();
+    await page.getByText("Monthly budget saved.").waitFor();
+    // With a budget, the recorded transport answers. The test passes, and OpenRouter is still not active.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const review2 = page.getByText("Review or change this step");
+    for (let i = await review2.count(); i > 0; i -= 1) await review2.nth(i - 1).click();
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
+    await page.getByRole("button", { name: "Test the connection" }).click();
+    await page.getByText(/^Passed\./).waitFor();
+    const after = await page.getByLabel("OpenRouter setup progress").first().innerText();
+    assert.match(after, /Connection test passed/);
+    assert.match(after, /Until then TypeSafe JEV receives every decision/, "TypeSafe stays named as active until OpenRouter is chosen");
+    await page.getByRole("button", { name: "Use this engine" }).click();
+    await page.getByText(/is now the engine for this workspace\. Only it receives decisions/).waitFor({ timeout: 8000 }).catch(async (error) => {
+      const alerts = await page.locator("[role=alert], [role=status]").allInnerTexts();
+      throw new Error(`${error.message.split("\n")[0]} | page said: ${alerts.join(" / ").slice(0, 400)}`);
+    });
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });
