@@ -12,8 +12,9 @@ import { createWriteStream, mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { chromium } from "playwright";
+import { localAcceptanceBase } from "./local-base.mjs";
 
-const base = process.env.ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8080";
+const base = localAcceptanceBase(process.env.ACCEPTANCE_BASE_URL ?? "http://127.0.0.1:8080");
 const email = process.env.ACCEPTANCE_EMAIL ?? "acceptance-owner@example.com";
 const password = process.env.ACCEPTANCE_PASSWORD ?? "AcceptancePass-1";
 const out = process.env.ACCEPTANCE_OUT ?? "artifacts/release-acceptance";
