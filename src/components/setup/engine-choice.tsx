@@ -8,6 +8,7 @@ import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
+import { openRouterProgress } from "@/components/setup/engine-progress";
 
 /** What each engine does and what it needs, in plain words. */
 const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" }> = {
@@ -119,6 +120,7 @@ export function EngineChoice({
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}
+              {engine.id === "openrouter-decisions" ? <OpenRouterSteps keySaved={keys.openrouter.fingerprint !== null} testPassed={ready} active={isActive} activeLabel={labelOf(activeId)} /> : null}
               {engine.id === "openrouter-decisions" && engines.openrouterModel ? (
                 <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={engines.openrouterModel} />
               ) : null}
@@ -136,6 +138,25 @@ export function EngineChoice({
           {!unchanged && !selectedReady && !save.isPending ? <DisabledReason id="engine-unchanged">Save this engine's key on its card. The choice is saved only after the key is ready.</DisabledReason> : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/** Key saved, test passed and engine active, as three separate steps with the one next action. */
+function OpenRouterSteps(props: { keySaved: boolean; testPassed: boolean; active: boolean; activeLabel: string }) {
+  const progress = openRouterProgress(props);
+  return (
+    <div className="space-y-2 rounded-md bg-surface-2 p-3" aria-label="OpenRouter setup progress">
+      <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {progress.steps.map((step) => (
+          <li key={step.id} className={step.done ? "font-semibold text-success" : "text-fg-muted"}>
+            <span aria-hidden="true">{step.done ? "\u2713 " : "\u25CB "}</span>
+            {step.label}
+            <span className="sr-only">{step.done ? " (done)" : " (not yet)"}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-sm text-fg">{progress.next}</p>
     </div>
   );
 }
