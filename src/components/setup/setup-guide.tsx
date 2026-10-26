@@ -173,6 +173,8 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
   const mark = STEP_MARK[step.status];
   const Icon = mark.icon;
   const isCurrent = step.status === "current";
+  // Only the step to do now, and a required step still waiting, shows its text and controls. A finished or optional step stays one line.
+  const compact = step.status === "done" || (!step.required && !isCurrent);
   return (
     <li id={`step-${step.id}`} className="scroll-mt-24">
       <article
@@ -193,17 +195,23 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
                 {step.required ? "Required" : "Optional"} · {mark.label}
               </span>
             </div>
-            <p className="text-sm text-fg">{step.what}</p>
-            <StepDetail text={step.detail} />
-            {step.required || isCurrent ? (
-              <div className="pt-1">{body}</div>
-            ) : (
+            {compact ? (
               <details className="group pt-1">
                 <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                  Open this step
+                  {step.status === "done" ? "Review or change this step" : "Open this step"}
                 </summary>
-                <div className="mt-3">{body}</div>
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm text-fg">{step.what}</p>
+                  <StepDetail text={step.detail} />
+                  {body}
+                </div>
               </details>
+            ) : (
+              <>
+                <p className="text-sm text-fg">{step.what}</p>
+                <StepDetail text={step.detail} />
+                <div className="pt-1">{body}</div>
+              </>
             )}
           </div>
         </div>

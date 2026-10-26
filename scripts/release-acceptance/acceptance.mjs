@@ -270,6 +270,9 @@ try {
 
   await check("G8", "setup: OpenRouter shows key saved, test passed and active engine as separate steps, and names the engine in use", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // A finished step keeps its controls behind "Review or change this step", so a person opens it first.
+    const review = page.getByText("Review or change this step");
+    for (let i = await review.count(); i > 0; i -= 1) await review.nth(i - 1).click();
     // Only the chosen engine shows its details, so a person picks OpenRouter first.
     await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
     const progress = page.getByLabel("OpenRouter setup progress");
