@@ -287,8 +287,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       <MarketSection id="market-collect" title="Collect video-ad evidence (Meta Ad Library)" hint="Needs your own Meta developer token. Optional.">
       <Card>
         <div className="max-w-3xl">
-          <p className="eyebrow">JEV Research</p>
-          <h2 className="mt-2 text-2xl">Collect external video-ad evidence</h2>
+          <p className="text-sm font-semibold text-fg">Search the Meta Ad Library for video ads.</p>
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
@@ -461,7 +460,7 @@ function MarketPage({ brandId }: { brandId: string }) {
       </MarketSection>
       <MarketSection id="market-public-page" title="Another way to read a public page" hint="The older page form, with its stored pages">
       <Card>
-        <h2 className="text-2xl">Public page</h2>
+        <p className="text-sm font-semibold text-fg">Paste one page URL to read it.</p>
         <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
           <form

@@ -34,7 +34,7 @@ function Products({ brandId }: { brandId: string }) {
           <h1 className="page-title">Products</h1>
           {canEdit ? <Button type="button" onClick={() => setSheet({ open: true, product: null })}>Add product</Button> : null}
         </div>
-        <p className="max-w-2xl text-fg-muted">Allowed and prohibited claims are checked when a creative is saved. The guardian reports evidence. JEV applies the threshold.</p>
+        <p className="max-w-2xl text-fg-muted">Add what you sell, with the claims you may and may not make for it. Those claims are checked whenever a creative is saved.</p>
       </div>
 
       <ProductsTable
