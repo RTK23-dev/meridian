@@ -1,4 +1,5 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
+import { Check, ClipboardCheck, Lightbulb, Library, Megaphone, Send, Sparkles, TrendingUp } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button, EmptyState, PageHeader, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -63,8 +64,8 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   const preset = presets.find((item) => item.id === search.preset) ?? defaultPreset(isAdmin);
 
   const brandPicker = pickBrand ? (
-    <div className="w-56">
-      <label htmlFor="cc-brand" className="sr-only">Brand</label>
+    <div className="w-56 min-w-0 space-y-1.5">
+      <label htmlFor="cc-brand" className="block text-xs font-semibold uppercase tracking-wide text-muted">Brand</label>
       <SelectInput id="cc-brand" value={activeBrandId ?? ""} onChange={(event) => setPickedBrandId(event.target.value)}>
         {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
       </SelectInput>
@@ -94,10 +95,13 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
               role="radio"
               aria-checked={selected}
               onClick={() => onSearchChange({ section: "create", preset: item.id }, true)}
-              className={`rounded-md border bg-surface-2 p-3 text-left transition-colors ${selected ? "border-accent" : "border-border"}`}
+              className={`group relative flex min-h-32 flex-col rounded-xl border p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${selected ? "border-accent bg-surface shadow-sm ring-1 ring-accent" : "border-border bg-surface-2 hover:border-accent"}`}
             >
-              <span className="block text-sm font-semibold">{item.label}</span>
-              <span className="mt-1 block text-sm text-muted">{item.description}</span>
+              <span className="mb-3 flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{item.label}</span>
+                {selected ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-1 text-xs font-semibold text-on-accent"><Check aria-hidden="true" className="size-3.5" /> Selected</span> : null}
+              </span>
+              <span className="text-sm leading-relaxed text-muted">{item.description}</span>
             </button>
           );
         })}
@@ -120,12 +124,26 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   return (
     <div className="space-y-6">
       <PageHeader title="Content" description={description} actions={brandPicker} />
-      <Tabs value={current} onValueChange={(value) => onSearchChange(searchForSection(search, sectionOf(value)), false)} className="space-y-6">
-        <TabsList>
-          {sections.map((item) => (
-            <TabsTrigger key={item} value={item}>{CONTENT_SECTION_LABELS[item]}</TabsTrigger>
-          ))}
-        </TabsList>
+      <Tabs value={current} onValueChange={(value) => onSearchChange(searchForSection(search, sectionOf(value)), false)} className="space-y-5">
+        <div className="rounded-xl border border-border bg-surface-2 p-1.5">
+          <TabsList aria-label="Content workflow sections" className="w-full items-center justify-start gap-1 border-0 bg-transparent p-0">
+            {sections.map((item) => {
+              const Icon = SECTION_ICONS[item];
+              return (
+                <TabsTrigger
+                  key={item}
+                  value={item}
+                  className="min-h-11 rounded-lg px-3 text-sm data-[state=active]:bg-surface data-[state=active]:shadow-sm after:hidden focus-visible:ring-2 focus-visible:ring-accent"
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Icon aria-hidden="true" className="size-4 shrink-0" />
+                    <span>{CONTENT_SECTION_LABELS[item]}</span>
+                  </span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
         {/* Each tab has its own panel, so every tab's aria-controls points at a real element. Only the open section's content is mounted. */}
         {sections.map((item) => (
           <TabsContent key={item} value={item} forceMount className="min-w-0 data-[state=inactive]:hidden">
