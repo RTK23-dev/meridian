@@ -217,12 +217,15 @@ function MarketPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
-        <h1 className="page-title">What has actually been seen</h1>
+        <h1 className="page-title">Market: examples that already work</h1>
         <p className="text-muted">
-          Collect bounded public Meta video-ad records, preserve source and transcript evidence, and let JEV Research identify recurring structures. Missing media stays unavailable; no observations or outcomes are invented.
+          Add a public example, see what Meridian read and what is new, then review it. Nothing is invented: what could not be read is said so.
         </p>
       </div>
-      <ul className="grid gap-3 md:grid-cols-3">
+      <details className="rounded-xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-fg">How Meridian collects examples ({market.adapters.length} ways)</summary>
+        <p className="mt-2 text-xs text-fg-muted">Reading a public page and adding an example by hand need no setup. The others are optional, use your own developer key, and are never needed to read a page URL.</p>
+      <ul className="mt-3 grid gap-3 md:grid-cols-3">
         {market.adapters.map((adapter) => (
           <li key={adapter.id} className="rounded-lg border border-line bg-panel p-4">
             <p className="eyebrow">{adapter.status}</p>
@@ -232,6 +235,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           </li>
         ))}
       </ul>
+      </details>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       <nav aria-label="Market sections" className="flex flex-wrap gap-2 text-sm">
@@ -241,7 +245,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
           <h2 className="mt-2 text-2xl">Find public pages and posts</h2>
-          <p className="mt-2 text-sm text-muted">A public page is read as untrusted text and stored as evidence. A search phrase is searched only by a keyed source with a key saved for this workspace. A run where no source ran is reported as blocked, not completed.</p>
+          <p className="mt-2 text-sm text-muted">Start with one public page URL. Meridian reads it and stores the text as evidence you can review.</p>
         </div>
         <div className="mt-4">
           <DiscoveryStart

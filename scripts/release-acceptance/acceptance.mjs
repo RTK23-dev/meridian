@@ -154,7 +154,8 @@ try {
     assert.equal(await studioPreset.count(), 1);
     await studioPreset.click();
     assert.equal(await studioPreset.getAttribute("aria-checked"), "true");
-    await page.getByRole("heading", { name: "Create a brand first" }).waitFor();
+    // The workspace has a brand now, so the page offers the session form. It must not claim a brand is missing.
+    assert.equal(await page.getByRole("heading", { name: "Create a brand first" }).count(), 0);
   });
   await page.screenshot({ path: join(out, "content-workflow-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -170,6 +171,100 @@ try {
   await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
     await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
     assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
+  });
+
+  // The first-run journey of a person who has not read the code: Market, the three outcomes, the sources, the budget and the engine.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${base}/`, { waitUntil: "networkidle" });
+  const brandLink = page.getByRole("link", { name: /Acceptance Brand/ }).first();
+  await brandLink.waitFor();
+  const brandPath = new URL(await brandLink.getAttribute("href"), base).pathname.replace(/\/$/, "");
+  await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
+  const runsBlock = page.getByText("Recent discovery runs").locator("..");
+  await runsBlock.waitFor().catch(async (error) => {
+    await page.screenshot({ path: join(out, "market-not-found.png"), fullPage: true });
+    throw new Error(`${error.message.split("\n")[0]} at ${page.url()}: ${(await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+  });
+
+  await check("G1", "Market tells a person how to start: one exact page URL needs no setup, and a phrase search is a separate, optional thing", async () => {
+    const main = await page.locator("main").innerText();
+    assert.match(main, /Paste a public page URL\./);
+    assert.match(main, /No setup or key is needed/);
+    assert.match(main, /Or search by phrase\./);
+    assert.match(main, /It is optional/);
+    assert.ok((await page.getByRole("button", { name: /Read this page|Search/ }).count()) > 0);
+  });
+
+  await check("G2", "a run that stored new examples says so, and keeps the source rows behind a disclosure", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /3 new examples stored, 2 already stored/);
+    assert.match(text, /New examples/);
+    const details = runsBlock.locator("details").first();
+    assert.equal(await details.evaluate((node) => node.open), false, "source details must start closed");
+  });
+
+  await check("G3", "a duplicate-only run says nothing new was added and offers a next step, and sources not used are not failures", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /Nothing new\. The page was read, and all 5 of its examples were already stored\./);
+    assert.match(text, /add another page URL, or upload an example/);
+    assert.match(text, /0 failed, 2 not used/);
+  });
+
+  await check("G4", "a robots.txt-blocked page is reported as blocked, is not bypassed, and offers a supported alternative", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /Blocked/);
+    assert.match(text, /robots\.txt does not allow MeridianBot/);
+    assert.match(text, /does not work around them/);
+    assert.match(text, /paste the text, or upload/);
+  });
+
+  await check("G5", "the default Market view prints no per-source rows, and the details open on request", async () => {
+    const before = await runsBlock.innerText();
+    assert.doesNotMatch(before, /Not used for this input/);
+    await runsBlock.locator("details > summary").nth(1).click();
+    assert.match(await runsBlock.innerText(), /Not used for this input/);
+  });
+
+  await check("G6", "sources: only search sources ask for a key, and the unavailable ones say no key is needed", async () => {
+    const main = page.locator("main");
+    await main.getByText(/Optional: search by phrase/).click();
+    assert.match(await main.innerText(), /your own developer key/);
+    assert.match(await main.innerText(), /never needs the password or token of the brand you are studying|none of them needs the password or token of the brand you are studying/);
+    await main.getByText(/Not available in this release/).click();
+    const text = await main.innerText();
+    assert.match(text, /No key is needed for these, and saving one changes nothing/);
+    assert.match(text, /Instagram/);
+  });
+  await page.screenshot({ path: join(out, "market-first-run-desktop.png"), fullPage: true });
+
+  await check("G7", "the monthly budget is one named field that /settings#monthly-budget scrolls to and focuses", async () => {
+    await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
+    const field = page.getByLabel("Monthly budget (USD)");
+    await field.waitFor();
+    assert.equal(await field.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    const text = await page.locator("main").innerText();
+    assert.match(text, /not your OpenRouter account balance/);
+    assert.doesNotMatch(text, /Monthly video budget/);
+  });
+
+  await check("G8", "setup: OpenRouter shows key saved, test passed and active engine as separate steps, and names the engine in use", async () => {
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const progress = page.getByLabel("OpenRouter setup progress");
+    await progress.first().waitFor();
+    const text = await progress.first().innerText();
+    assert.match(text, /Key saved/);
+    assert.match(text, /Connection test passed/);
+    assert.match(text, /OpenRouter is the active engine/);
+    assert.match(text, /Save your OpenRouter key/);
+  });
+
+  await check("G9", "setup: the sources step does not ask for a key to read a page, and says TikTok, Instagram and the rest need none", async () => {
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const text = await page.locator("main").innerText();
+    assert.match(text, /Read one public page/);
+    assert.match(text, /This is not a search/);
+    assert.match(text, /TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release, and no key is needed/);
+    assert.doesNotMatch(text, /DEPLOYMENT_|YOUTUBE_API_KEY=|META_AD_LIBRARY_TOKEN=/);
   });
 
   await check("D1", "no request left the local server during the run", async () => {

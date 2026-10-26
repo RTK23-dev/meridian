@@ -14,7 +14,9 @@ Publish, Results and Ads.
    Empty fields stay empty; nothing is inferred.
 2. **Products.** The products the brand sells. A brief names one.
 3. **Market and research.** Public pages and the connected sources the deployment has configured. Each item keeps where it came from. A
-   source that is not configured is listed as such, with the reason.
+   source that is not configured is listed as such, with the reason. The default Market view starts with one public page URL, which
+   needs no key, and shows each run as one outcome: new examples, nothing new, blocked, partly worked, or nothing read. Per-source rows
+   sit behind "Show source details". Searching by phrase is separate and optional (PROVIDERS.md, "What a source key does on Market").
 4. **Opportunities.** Angles drawn from the evidence, each listing the evidence it cites.
 5. **Studio.** A brief is judged before anything is generated. An approved brief can make an image, or a video through Gemini Omni, Higgsfield, or a manual cloud folder. Hypit is not connected (see `docs/HYPIT_LICENSE.md`). A missing provider is shown as not connected. Each variant keeps its evidence, its decision, and its review.
 6. **Library.** The creatives that exist, with their media and their lineage. An export package for manual posting is made here.

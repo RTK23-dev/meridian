@@ -34,6 +34,21 @@ Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_S
 | TikTok | `TIKTOK_ACCESS_TOKEN` | `TIKTOK_SHARED_DEFAULT` |
 | Licensed data | `LICENSED_DATA_API_KEY`, `SENSOR_TOWER_API_KEY` | `LICENSED_SHARED_DEFAULT` |
 
+### What a source key does on Market
+
+A key is your own developer credential for that service. It is never the password or token of a brand you study. A saved key is not proof
+that a source works, and none of these is live-verified in this release.
+
+| Source | What it does with a key | Without a key |
+| --- | --- | --- |
+| Public page URL | Nothing. No key is used | Reads that one exact page, if the site's robots.txt allows it. A refusal or a bot check is reported, never worked around |
+| YouTube, Meta Ad Library, Search (SerpAPI) | Searches by phrase through the service's own API | Not used |
+| TikTok, Instagram, X, Facebook, Pinterest, LinkedIn, Licensed data | Nothing in this release. The adapter does not call the service's API, so the key changes nothing | Not available. Upload the example or paste its text |
+| Reddit | Nothing. The API is not connected | A public post URL can be read when the site allows it |
+
+Market shows a pasted URL as a page read and a phrase as a search, and these are different. A run that read a page and found only
+examples already stored says "nothing new". A run is never described as completed when it stored nothing.
+
 A source with no usable key is listed as not configured, with the reason. Public web pages need no key.
 Reddit's API is not connected in this release; direct post URLs are still read from their public pages.
 
