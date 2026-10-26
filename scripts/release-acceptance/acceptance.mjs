@@ -29,6 +29,15 @@ async function check(id, label, fn) {
   }
 }
 
+/** Opens Settings and opens each top-level section, as a person does by clicking it. General keeps most sections closed on arrival. */
+async function openSettings(page) {
+  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await page.locator("main").waitFor();
+  await page.evaluate(() => {
+    for (const details of document.querySelectorAll("main details")) if (!details.parentElement?.closest("details")) details.open = true;
+  });
+}
+
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
@@ -46,7 +55,7 @@ try {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => !url.pathname.endsWith("/login"));
 
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   const holds = page.locator('[aria-labelledby="uncertain-holds-title"]');
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
@@ -137,7 +146,7 @@ try {
     assert.doesNotMatch(cardText, /healthy|live verified|connected and tested/i, "a stale record is never presented as healthy");
   });
 
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
   await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Ads tab", async () => {
     const main = await page.locator("main").innerText();
@@ -167,9 +176,9 @@ try {
   await page.screenshot({ path: join(out, "content-workflow-phone-390.png") });
 
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
-    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    await openSettings(page);
     assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
   });
 
@@ -287,7 +296,7 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
   await check("E1", "phone width: no horizontal page scroll", async () => {
