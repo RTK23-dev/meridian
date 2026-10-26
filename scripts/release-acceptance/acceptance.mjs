@@ -270,6 +270,8 @@ try {
 
   await check("G8", "setup: OpenRouter shows key saved, test passed and active engine as separate steps, and names the engine in use", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // Only the chosen engine shows its details, so a person picks OpenRouter first.
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
     const progress = page.getByLabel("OpenRouter setup progress");
     await progress.first().waitFor();
     const text = await progress.first().innerText();
@@ -277,6 +279,9 @@ try {
     assert.match(text, /Connection test passed/);
     assert.match(text, /OpenRouter is the active engine/);
     assert.match(text, /Save your OpenRouter key/);
+    const setupText = await page.locator("main").innerText();
+    assert.doesNotMatch(setupText, /_SHARED_DEFAULT|OPENROUTER_DECISIONS_MODEL/, "server variable names must stay behind the operator note");
+    assert.doesNotMatch(setupText, /The model is \./, "the model line must not be empty");
   });
 
   await check("G9", "setup: the sources step does not ask for a key to read a page, and says TikTok, Instagram and the rest need none", async () => {

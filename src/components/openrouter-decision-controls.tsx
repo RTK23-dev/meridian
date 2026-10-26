@@ -32,7 +32,7 @@ type CatalogListing =
 
 const SOURCE_TEXT: Record<OpenRouterModelStatus["source"], string> = {
   workspace: "chosen for this workspace",
-  deployment: "set by the deployment (OPENROUTER_DECISIONS_MODEL)",
+  deployment: "set by the server",
   default: "the pinned default",
 };
 
@@ -95,9 +95,18 @@ export function OpenRouterDecisionControls({
       <div>
         <p className="font-semibold">OpenRouter decision model</p>
         <p className="text-sm text-muted">
-          The model is {SOURCE_TEXT[model.source]}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
+          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
         </p>
-        {model.reason ? <p className="mt-1 text-sm text-warning">{model.reason}</p> : null}
+        {model.reason ? (
+          <>
+            <p className="mt-1 text-sm text-warning">
+              {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? "No decision model is chosen for this workspace yet. Choose one below, then test the connection." : model.reason}
+            </p>
+            {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? (
+              <details className="text-xs text-muted"><summary className="cursor-pointer">For whoever runs the server</summary><p className="mt-1 font-mono [overflow-wrap:anywhere]">{model.reason}</p></details>
+            ) : null}
+          </>
+        ) : null}
       </div>
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}

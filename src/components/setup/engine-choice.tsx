@@ -9,6 +9,7 @@ import { qk } from "@/lib/query/keys";
 import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
 import { openRouterProgress } from "@/components/setup/engine-progress";
+import { splitOperatorHint } from "@/components/settings/key-copy";
 
 /** What each engine does and what it needs, in plain words. */
 const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" }> = {
@@ -115,14 +116,18 @@ export function EngineChoice({
                   {isActive ? "In use" : ready ? "Ready" : "Needs a key"}
                 </span>
               </div>
+              {selected === engine.id ? (
+                <div className="space-y-3">
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Needs: </span>{copy.needs}</p> : null}
-              {!ready && engine.health.message ? <p className="text-sm text-fg [overflow-wrap:anywhere]">{engine.health.message}</p> : null}
+              {!ready && engine.health.message ? <EngineReason message={engine.health.message} /> : null}
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}
               {engine.id === "openrouter-decisions" ? <OpenRouterSteps keySaved={keys.openrouter.fingerprint !== null} testPassed={ready} active={isActive} activeLabel={labelOf(activeId)} /> : null}
               {engine.id === "openrouter-decisions" && engines.openrouterModel ? (
                 <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={engines.openrouterModel} />
+              ) : null}
+                </div>
               ) : null}
             </div>
           );
@@ -157,6 +162,22 @@ function OpenRouterSteps(props: { keySaved: boolean; testPassed: boolean; active
         ))}
       </ol>
       <p className="text-sm text-fg">{progress.next}</p>
+    </div>
+  );
+}
+
+/** The engine's reason in plain words, with the server variable names for whoever runs the server kept out of the way. */
+function EngineReason({ message }: { message: string }) {
+  const reason = splitOperatorHint(message);
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-fg [overflow-wrap:anywhere]">{reason.plain}</p>
+      {reason.operator ? (
+        <details className="text-xs text-fg-muted">
+          <summary className="cursor-pointer">For whoever runs the server</summary>
+          <p className="mt-1 font-mono [overflow-wrap:anywhere]">{reason.operator}</p>
+        </details>
+      ) : null}
     </div>
   );
 }
