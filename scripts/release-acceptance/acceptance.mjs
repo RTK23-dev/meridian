@@ -1,8 +1,8 @@
 // The browser acceptance for the release review, run against a local dev server (testing runtime) on the database that
 // seed-holds.mjs prepares. It checks the uncertain-hold panel in Settings (the reason gate, keyboard release, focus, the notice, and
-// the audit row the release writes), a saved key that reads as stored but not live-verified, and blank configuration failing closed.
+// the audit row the release writes), a saved key that reads as saved but not live-verified, stale provider readiness, and blank configuration failing closed.
 // No provider request is sent: the key is a fixture, and the run fails if any request leaves the local server.
-// Stale readiness is not checked here: providers/stored-freshness.test.ts covers it, with the same function the screens call.
+// Stale readiness is checked below in the real Integrations card with a seeded 25-hour-old success and a fixture-only sealed token.
 // run.mjs does the whole sequence (the account, the seed, this pass and the database check); docs/RELEASE_ACCEPTANCE.md describes it.
 
 import assert from "node:assert/strict";
