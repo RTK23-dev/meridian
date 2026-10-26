@@ -9,7 +9,9 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { crawlLadderPage } from "./crawler.ts";
+import { BOT_CHECK_MESSAGE, ROBOTS_MESSAGE } from "../sources/crawl-policy.ts";
 import { sourceProvenance } from "./provenance.ts";
+import { summarizeRun } from "./run-summary.ts";
 import { sourceExternalId } from "./source-identity.ts";
 import { DiscoveryService, type PageCrawler } from "./service.ts";
 
@@ -259,4 +261,38 @@ test("a free-text niche names no page: no page is fetched, the website state say
   assert.match(website.reason, /free text/);
   assert.ok(!(run.progress.sources ?? []).some((state) => state.status === "ran"), "nothing ran");
   assert.match(run.caveat ?? "", /No source ran/);
+});
+
+/** A fetch that refuses the way the real reader does, so the run is driven through the service and read back through the summary. */
+function refusingCrawl(message: string): PageCrawler {
+  const fetchHtml = async (): Promise<{ url: string; html: string }> => { throw new Error(message); };
+  return ((url: string, runId: string, allowedHosts?: string[]) => crawlLadderPage(url, runId, allowedHosts, { fetchHtml })) as PageCrawler;
+}
+
+test("a robots refusal on a social URL runs through the service and reads as blocked, with no key suggested", async () => {
+  const sql = await getSql();
+  const { organizationId, brandId } = await tenant(sql);
+  const url = "https://www.instagram.com/example_brand/";
+  const service = new DiscoveryService(undefined, refusingCrawl(ROBOTS_MESSAGE));
+  const { run, items } = await service.startDiscoveryRun({ organizationId, brandId, scope: "url_list", seeds: [url], sql });
+
+  assert.equal(run.status, "blocked");
+  assert.equal(items.length, 0);
+  const summary = summarizeRun({ discoveredUrls: run.progress.discoveredUrls ?? 0, seenBefore: run.progress.seenBefore ?? 0, seeds: [url], sources: run.progress.sources ?? [] });
+  assert.equal(summary.outcome, "blocked");
+  assert.match(summary.blocker ?? "", /robots\.txt/);
+  assert.doesNotMatch(`${summary.headline} ${summary.nextStep ?? ""}`, /buy|subscribe|add a key/i);
+});
+
+test("a bot-check response runs through the service and reads as blocked, never as a pass", async () => {
+  const sql = await getSql();
+  const { organizationId, brandId } = await tenant(sql);
+  const service = new DiscoveryService(undefined, refusingCrawl(BOT_CHECK_MESSAGE));
+  const { run, items } = await service.startDiscoveryRun({ organizationId, brandId, scope: "url_list", seeds: [SPONGE], sql });
+
+  assert.equal(run.status, "blocked");
+  assert.equal(items.length, 0);
+  const summary = summarizeRun({ discoveredUrls: 0, seenBefore: 0, seeds: [SPONGE], sources: run.progress.sources ?? [] });
+  assert.equal(summary.outcome, "blocked");
+  assert.match(summary.blocker ?? "", /bot check/);
 });
