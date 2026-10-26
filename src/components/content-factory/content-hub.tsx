@@ -110,7 +110,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
             >
               <span className="mb-3 flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold">{item.label}</span>
-                {selected ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-1 text-xs font-semibold text-fg"><Check aria-hidden="true" className="size-3.5" /> Selected</span> : null}
+                {selected ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-1 text-xs font-semibold text-accent-fg"><Check aria-hidden="true" className="size-3.5" /> Selected</span> : null}
               </span>
               <span className="text-sm leading-relaxed text-muted">{item.description}</span>
             </button>
