@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { Button, DisabledReason, Field, Input, StatusBadge } from "@/components/ui";
+import { groupSources, SOURCE_CAPABILITIES } from "@/lib/meridian/discovery/source-capabilities";
 import { pageUrlForSeed } from "@/lib/meridian/sources/public-url";
 
 export type DiscoverySourceRow = {
@@ -27,7 +28,8 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
   const reasonId = useId();
   const trimmed = seed.trim();
   const isPage = pageUrlForSeed(trimmed) !== null;
-  const anyConnected = sources.some((source) => source.connected);
+  const groups = groupSources(sources);
+  const anyConnected = groups.search.some((source) => source.connected);
   const disabledReason = !trimmed
     ? "Enter a public page URL to read, or a search phrase."
     : !isPage && !anyConnected
@@ -67,23 +69,37 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
       <p className="text-xs text-fg-muted">Meridian reads each site's robots.txt first. When a site says no, or shows a bot check, that is reported and never worked around. You can upload an example or paste its text instead.</p>
       <details>
         <summary className="cursor-pointer text-sm text-fg-muted">
-          Optional search sources ({sources.filter((source) => source.connected).length} of {sources.length} connected)
+          Optional: search by phrase ({groups.search.filter((source) => source.connected).length} of {groups.search.length} connected)
         </summary>
         <p className="mt-2 text-xs text-fg-muted">
-          These search by phrase, using your own developer key for the service. They are never needed to read a page URL, and none of them needs the password or token of the brand you are studying.
+          These use your own developer key for the service to search public material. They are never needed to read a page URL, and none of them needs the password or token of the brand you are studying. A saved key is checked only when a search runs.
         </p>
         <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
-          {sources.map((source) => (
+          {groups.search.map((source) => (
             <li key={source.adapterId} className="border-t border-border py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{source.label}</span>
                 <StatusBadge status={source.connected ? "connected" : source.status === "failed" ? "failed" : "not_connected"} />
               </div>
-              {source.connected ? null : <p className="mt-1 text-xs text-fg-muted [overflow-wrap:anywhere]">{source.reason || "Not connected."}</p>}
+              <p className="mt-1 text-xs text-fg-muted">{SOURCE_CAPABILITIES[source.adapterId]?.summary}</p>
             </li>
           ))}
         </ul>
       </details>
+      {groups.unavailable.length > 0 ? (
+        <details>
+          <summary className="cursor-pointer text-sm text-fg-muted">Not available in this release ({groups.unavailable.length})</summary>
+          <p className="mt-2 text-xs text-fg-muted">No key is needed for these, and saving one changes nothing. Here is what to do instead.</p>
+          <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
+            {groups.unavailable.map((source) => (
+              <li key={source.adapterId} className="border-t border-border py-3">
+                <span className="font-semibold">{source.label}</span>
+                <p className="mt-1 text-xs text-fg-muted">{SOURCE_CAPABILITIES[source.adapterId]?.instead ?? SOURCE_CAPABILITIES[source.adapterId]?.summary}</p>
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
     </div>
   );
 }
