@@ -22,3 +22,20 @@ describe("what each discovery source can do", () => {
     }
   });
 });
+
+import { socialPlatformOf } from "./source-capabilities.ts";
+
+describe("a pasted social URL", () => {
+  test("is recognised by host, with or without a scheme or www", () => {
+    assert.equal(socialPlatformOf("https://www.instagram.com/p/abc/")?.id, "instagram");
+    assert.equal(socialPlatformOf("tiktok.com/@brand/video/1")?.id, "tiktok");
+    assert.equal(socialPlatformOf("https://x.com/brand/status/1")?.id, "twitter");
+    assert.equal(socialPlatformOf("m.facebook.com/brand")?.id, "facebook");
+  });
+
+  test("an ordinary shop URL, a phrase and a look-alike host are not social", () => {
+    assert.equal(socialPlatformOf("https://shop.example/sponge"), null);
+    assert.equal(socialPlatformOf("artisan sourdough"), null);
+    assert.equal(socialPlatformOf("https://notinstagram.com/p/1"), null);
+  });
+});

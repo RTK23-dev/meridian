@@ -1,6 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { Button, DisabledReason, Field, Input, StatusBadge } from "@/components/ui";
-import { groupSources, SOURCE_CAPABILITIES } from "@/lib/meridian/discovery/source-capabilities";
+import { groupSources, socialPlatformOf, SOURCE_CAPABILITIES } from "@/lib/meridian/discovery/source-capabilities";
 import { pageUrlForSeed } from "@/lib/meridian/sources/public-url";
 
 export type DiscoverySourceRow = {
@@ -29,6 +29,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
   const trimmed = seed.trim();
   const isPage = pageUrlForSeed(trimmed) !== null;
   const groups = groupSources(sources);
+  const social = isPage ? socialPlatformOf(trimmed) : null;
   const anyConnected = groups.search.some((source) => source.connected);
   const disabledReason = !trimmed
     ? "Enter a public page URL to read, or a search phrase."
@@ -64,6 +65,11 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
           {pending ? "Reading…" : isPage ? "Read this page" : "Search"}
         </Button>
       </form>
+      {social ? (
+        <p className="text-sm text-fg" role="status">
+          {social.label} has no connector in this release, and no key is needed or used. Meridian will try this as an ordinary public page, and {social.label} may refuse automated reads. If it does, the run says so, and you can upload the post or paste its text instead.
+        </p>
+      ) : null}
       {!canEdit ? <DisabledReason id={reasonId}>Only workspace members can start a discovery run.</DisabledReason> : null}
       {canEdit && disabledReason ? <DisabledReason id={reasonId}>{disabledReason}</DisabledReason> : null}
       <p className="text-xs text-fg-muted">Meridian reads each site's robots.txt first. When a site says no, or shows a bot check, that is reported and never worked around. You can upload an example or paste its text instead.</p>

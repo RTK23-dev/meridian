@@ -56,6 +56,7 @@ whether the run passes or fails.
 | G7 | `/settings#monthly-budget` focuses one field named "Monthly budget (USD)" | not yet run on CI |
 | G8 | Setup shows key saved, test passed and active engine as separate steps | not yet run on CI |
 | G9 | The Setup sources step does not ask for a key to read a page | not yet run on CI |
+| G10 | A pasted social URL says up front there is no connector and no key is used | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
 with a reason of at least ten characters, and the second hold still `uncertain`.

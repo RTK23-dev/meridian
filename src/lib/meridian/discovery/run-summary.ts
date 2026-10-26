@@ -1,3 +1,4 @@
+import { socialPlatformOf } from "./source-capabilities.ts";
 import type { SourceRunState } from "./types.ts";
 
 /** The plain outcome of one discovery run. Each one reads differently, and "completed" never stands for "found something new". */
@@ -6,6 +7,8 @@ export type RunOutcome = "new_evidence" | "nothing_new" | "blocked" | "partial" 
 export type RunSummaryInput = {
   discoveredUrls: number;
   seenBefore: number;
+  /** What was asked for. Optional, so a run without it reads as before. */
+  seeds?: readonly string[];
   sources: readonly SourceRunState[];
 };
 
@@ -62,6 +65,15 @@ export function summarizeRun(run: RunSummaryInput): RunSummary {
   }
   if (failed > 0) {
     const platform = blocker !== null && isPlatformBlock(blocker);
+    const social = (run.seeds ?? []).map(socialPlatformOf).find((found) => found !== null) ?? null;
+    if (social) {
+      return {
+        ...base,
+        outcome: "blocked",
+        headline: `${social.label} did not let Meridian read this page, so nothing was stored.`,
+        nextStep: `${social.label} has no connector in this release, and a key would not change that. Upload the post or paste its text instead. Meridian does not work around the block.`,
+      };
+    }
     return {
       ...base,
       outcome: "blocked",

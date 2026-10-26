@@ -37,3 +37,27 @@ export function groupSources<T extends { adapterId: string }>(sources: readonly 
   for (const source of sources) (SOURCE_CAPABILITIES[source.adapterId]?.searchesByPhrase ? search : unavailable).push(source);
   return { search, unavailable };
 }
+
+const SOCIAL_HOSTS: ReadonlyArray<{ id: string; label: string; hosts: readonly string[] }> = [
+  { id: "instagram", label: "Instagram", hosts: ["instagram.com"] },
+  { id: "tiktok", label: "TikTok", hosts: ["tiktok.com"] },
+  { id: "twitter", label: "X (Twitter)", hosts: ["twitter.com", "x.com"] },
+  { id: "facebook", label: "Facebook", hosts: ["facebook.com", "fb.com"] },
+  { id: "pinterest", label: "Pinterest", hosts: ["pinterest.com"] },
+  { id: "linkedin", label: "LinkedIn", hosts: ["linkedin.com"] },
+];
+
+/**
+ * The social platform a pasted URL belongs to, or null. None of these has a URL reader in this release: the page is tried as an ordinary
+ * public page, and the site's robots.txt or bot check decides. A key for the platform changes nothing, so none is ever asked for.
+ */
+export function socialPlatformOf(seed: string): { id: string; label: string } | null {
+  let host: string;
+  try {
+    host = new URL(/^[a-z]+:\/\//i.test(seed.trim()) ? seed.trim() : `https://${seed.trim()}`).hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+  const found = SOCIAL_HOSTS.find((platform) => platform.hosts.some((name) => host === name || host.endsWith(`.${name}`)));
+  return found ? { id: found.id, label: found.label } : null;
+}

@@ -47,3 +47,12 @@ describe("a discovery run in plain words", () => {
     assert.equal(summary.outcome, "nothing_ran");
   });
 });
+
+test("a blocked social URL names the platform, says there is no connector, and never asks for a key", () => {
+  const summary = summarizeRun({ discoveredUrls: 0, seenBefore: 0, seeds: ["https://www.instagram.com/p/abc/"], sources: [failed("This site's robots.txt does not allow MeridianBot to read this page, so the page was not read.")] });
+  assert.equal(summary.outcome, "blocked");
+  assert.match(summary.headline, /Instagram did not let Meridian read/);
+  assert.match(summary.nextStep ?? "", /no connector in this release/);
+  assert.match(summary.nextStep ?? "", /Upload the post or paste its text/);
+  assert.doesNotMatch(`${summary.headline} ${summary.nextStep}`, /add a key|save a key/i);
+});

@@ -214,8 +214,20 @@ try {
     const text = await runsBlock.innerText();
     assert.match(text, /Blocked/);
     assert.match(text, /robots\.txt does not allow MeridianBot/);
-    assert.match(text, /does not work around them/);
-    assert.match(text, /paste the text, or upload/);
+    assert.match(text, /Instagram did not let Meridian read this page/);
+    assert.match(text, /no connector in this release, and a key would not change that/);
+    assert.match(text, /does not work around the block/);
+    assert.match(text, /Upload the post or paste its text/);
+  });
+
+  await check("G10", "typing a social URL says up front that there is no connector and no key is used, before anything runs", async () => {
+    const input = page.getByPlaceholder(/shop\.example/);
+    await input.fill("https://www.instagram.com/p/abc/");
+    const note = page.getByText(/Instagram has no connector in this release, and no key is needed or used/);
+    await note.waitFor();
+    await input.fill("https://shop.example/sponge");
+    assert.equal(await page.getByText(/has no connector in this release, and no key is needed or used/).count(), 0);
+    await input.fill("");
   });
 
   await check("G5", "the default Market view prints no per-source rows, and the details open on request", async () => {
