@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason, Field, SelectInput } from "@/components/ui";
+import { budgetBlocker } from "@/components/setup/engine-progress";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { saveOpenRouterDecisionModel, testOpenRouterDecisionConnection } from "@/lib/meridian/settings/server-actions";
@@ -30,7 +32,7 @@ type CatalogListing =
 
 const SOURCE_TEXT: Record<OpenRouterModelStatus["source"], string> = {
   workspace: "chosen for this workspace",
-  deployment: "set by the deployment (OPENROUTER_DECISIONS_MODEL)",
+  deployment: "set by the server",
   default: "the pinned default",
 };
 
@@ -82,6 +84,9 @@ export function OpenRouterDecisionControls({
   });
   const saveError = save.error ? plainError(save.error) : null;
   const testError = runTest.error ? plainError(runTest.error) : null;
+  const blockerText = `${testError?.message ?? ""} ${test?.message ?? ""}`;
+  // The ledger refuses a call with this wording before it sends anything. Only claim it when the refusal says so.
+  const { blocked: budgetBlocked, nothingSent } = budgetBlocker(blockerText);
   const unchanged = draft.trim() === model.model;
   const savable = chosen !== null && !unchanged;
 
@@ -90,9 +95,18 @@ export function OpenRouterDecisionControls({
       <div>
         <p className="font-semibold">OpenRouter decision model</p>
         <p className="text-sm text-muted">
-          The model is {SOURCE_TEXT[model.source]}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
+          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
         </p>
-        {model.reason ? <p className="mt-1 text-sm text-warning">{model.reason}</p> : null}
+        {model.reason ? (
+          <>
+            <p className="mt-1 text-sm text-warning">
+              {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? "No decision model is chosen for this workspace yet. Choose one below, then test the connection." : model.reason}
+            </p>
+            {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? (
+              <details className="text-xs text-muted"><summary className="cursor-pointer">For whoever runs the server</summary><p className="mt-1 font-mono [overflow-wrap:anywhere]">{model.reason}</p></details>
+            ) : null}
+          </>
+        ) : null}
       </div>
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
@@ -181,6 +195,12 @@ export function OpenRouterDecisionControls({
           Testing the connection sends one real request to OpenRouter and may incur model usage. It changes no product data and no active engine.
         </p>
         {testError ? <PlainErrorMessage message={testError.message} raw={testError.raw} /> : null}
+        {budgetBlocked ? (
+          <p className="text-sm" role="status">
+            <Link to="/settings" hash="monthly-budget" className="font-semibold underline underline-offset-2">Set the monthly budget (USD)</Link>
+            , then test again.{nothingSent ? " The budget check ran before any request, so nothing was sent to OpenRouter and nothing was spent." : ""}
+          </p>
+        ) : null}
         {test ? (
           <p className={`text-sm ${test.status === "PASSED" ? "text-success" : "text-warning"}`} role="status">
             {test.status === "PASSED" ? "Passed. " : test.status === "FAILED" ? "Failed. " : "Not run. "}

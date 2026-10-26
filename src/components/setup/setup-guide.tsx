@@ -10,6 +10,8 @@ import { useDecisionEnginesQuery, useProviderSettingsQuery } from "@/lib/query/h
 import { guideFacts } from "@/lib/setup/facts";
 import { buildGuide, currentStep, guideSummary, type GuideStep } from "@/lib/setup/guide";
 import { EngineChoice } from "./engine-choice";
+import { splitOperatorHint } from "@/components/settings/key-copy";
+import { OperatorReason, OperatorVariables } from "@/components/settings/operator-note";
 
 /** The keyed sources people usually start with. The rest sit under "More connectors". */
 const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
@@ -18,7 +20,6 @@ const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
   { id: "search", what: "Public pages that match a phrase, through a search API. Useful for finding pages to read." },
 ];
 
-const MORE_SOURCES = ["twitter", "linkedin", "pinterest", "tiktok", "instagram", "licensed"];
 const MEDIA_IDS = ["perception", "production", "hypit", "openrouter", "heygen", "anthropic", "deepgram"];
 // The shared button does not shrink, so a long label would widen a phone-width column. This lets it wrap inside the column.
 const ACTION = "max-w-full shrink whitespace-normal text-left";
@@ -124,7 +125,7 @@ export function SetupGuide() {
       <div className="space-y-10">
         <PageHeader
           title="Set up Meridian"
-          description="Create a brand, then choose a decision engine and save its key. The other connections are on this page. Each one shows what it needs and saves it here."
+          description="Start with your brand and decision engine. To research examples, open Market and paste a public page URL—no extra key is needed. Set up other connections only when you need them."
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
@@ -160,8 +161,8 @@ export function SetupGuide() {
         </ol>
 
         <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
-          <h2 id="setup-advanced" className="font-semibold text-fg">Every provider in one list</h2>
-          <p className="mt-1 text-sm text-fg-muted">The same keys, states and reasons, with the server variables for each row, are on Settings → General.</p>
+          <h2 id="setup-advanced" className="font-semibold text-fg">Optional connections</h2>
+          <p className="mt-1 text-sm text-fg-muted">You do not need to connect every provider to start researching. Add a connection only for a task that needs it; advanced provider settings are available in Settings.</p>
           <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
         </section>
       </div>
@@ -173,6 +174,9 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
   const mark = STEP_MARK[step.status];
   const Icon = mark.icon;
   const isCurrent = step.status === "current";
+  // Only the step to do now, and a required step still waiting, shows its text and controls. A finished or optional step stays one line.
+  // Decided once, when the step first shows. A step the person just finished stays open, so the confirmation of their action stays visible.
+  const [compact] = useState(step.status === "done" || (!step.required && !isCurrent));
   return (
     <li id={`step-${step.id}`} className="scroll-mt-24">
       <article
@@ -193,17 +197,23 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
                 {step.required ? "Required" : "Optional"} · {mark.label}
               </span>
             </div>
-            <p className="text-sm text-fg">{step.what}</p>
-            <p className="text-sm text-fg-muted">{step.detail}</p>
-            {step.required || isCurrent ? (
-              <div className="pt-1">{body}</div>
-            ) : (
+            {compact ? (
               <details className="group pt-1">
                 <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                  Open this step
+                  {step.status === "done" ? "Review or change this step" : "Open this step"}
                 </summary>
-                <div className="mt-3">{body}</div>
+                <div className="mt-3 space-y-3">
+                  <p className="text-sm text-fg">{step.what}</p>
+                  <StepDetail text={step.detail} />
+                  {body}
+                </div>
               </details>
+            ) : (
+              <>
+                <p className="text-sm text-fg">{step.what}</p>
+                <StepDetail text={step.detail} />
+                <div className="pt-1">{body}</div>
+              </>
             )}
           </div>
         </div>
@@ -234,8 +244,8 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
-          <p className="font-semibold text-fg">Public web pages</p>
-          <p className="text-sm text-fg-muted">No key. Meridian reads a page you name and stores its text as evidence. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
+          <p className="font-semibold text-fg">Read one public page</p>
+          <p className="text-sm text-fg-muted">No key. You paste one page URL, and Meridian reads that exact page and stores its text as evidence. This is not a search. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/market` as never}>Read a public page on Market</Link></Button> : null}
         </div>
         <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
@@ -244,12 +254,16 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/library` as never}>Open Library</Link></Button> : null}
         </div>
       </div>
-      <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
       <details className="rounded-lg border border-border p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-fg">More connectors ({MORE_SOURCES.length})</summary>
-        <div className="mt-4">
-          <RowList ids={MORE_SOURCES} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} />
-        </div>
+        <summary className="cursor-pointer font-semibold text-fg">Optional: search by phrase</summary>
+        <p className="mt-2 text-sm text-fg-muted">
+          Open this only if you want Meridian to search for examples matching a phrase. To read one public page URL or use your own files, leave these connections alone.
+          These are your developer keys for the search services, not logins for the brands you study.
+        </p>
+        <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
+        <p className="mt-3 text-sm text-fg-muted">
+          TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release. Saving a key for them would change nothing. Upload the example or paste its text instead.
+        </p>
       </details>
     </div>
   );
@@ -286,7 +300,7 @@ function RowList({
               <div className="min-w-0 space-y-1">
                 <p className="font-semibold text-fg">{row.label}</p>
                 {descriptions?.[id] ? <p className="text-sm text-fg-muted">{descriptions[id]}</p> : null}
-                <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+                <OperatorReason text={row.reason} />
                 {row.fingerprint ? <p className="font-mono text-xs text-fg-muted">Stored key ends {row.fingerprint}</p> : null}
                 {row.note ? <p className="text-sm text-fg-muted">{row.note}</p> : null}
               </div>
@@ -326,14 +340,26 @@ function StorageAction({ row, loaded }: { row: SetupRow | undefined; loaded: boo
   if (!loaded || !row) return <p className="text-sm text-fg-muted">Loading the storage state...</p>;
   return (
     <div className="space-y-2 rounded-lg border border-border p-4">
-      <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+      <OperatorReason text={row.reason} />
       {row.save.kind === "deployment" ? (
-        <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">
-          Set on the server, not here: {row.save.variables.map((name, index) => (
-            <span key={name}>{index > 0 ? ", " : ""}<code className="font-mono text-xs text-fg">{name}</code></span>
-          ))}. No key is shown on this page.
-        </p>
+        <OperatorVariables names={row.save.variables} lead="This is set on the server, not here." />
       ) : null}
     </div>
+  );
+}
+
+/** A step's own status line. Server variable names are kept behind an operator note rather than shown to everyone. */
+function StepDetail({ text }: { text: string }) {
+  const detail = splitOperatorHint(text);
+  return (
+    <>
+      <p className="text-sm text-fg-muted">{detail.plain}</p>
+      {detail.operator ? (
+        <details className="text-xs text-fg-muted">
+          <summary className="cursor-pointer">For whoever runs the server</summary>
+          <p className="mt-1 font-mono [overflow-wrap:anywhere]">{detail.operator}</p>
+        </details>
+      ) : null}
+    </>
   );
 }

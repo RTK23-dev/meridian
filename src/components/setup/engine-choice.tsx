@@ -8,6 +8,8 @@ import { saveDecisionEngine } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
 import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
+import { openRouterProgress, savedKeyEngineProgress, type EngineProgress } from "@/components/setup/engine-progress";
+import { splitOperatorHint } from "@/components/settings/key-copy";
 
 /** What each engine does and what it needs, in plain words. */
 const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" }> = {
@@ -83,7 +85,9 @@ export function EngineChoice({
         {engines.engines.map((engine) => {
           const copy = ENGINE_COPY[engine.id];
           const ready = engine.health.status === "READY";
-          const isActive = engine.id === activeId && engines.active.source !== "default";
+          // The engine receiving decisions right now, whether it was chosen for this workspace or is the default.
+          const isActive = engine.id === activeId;
+          const isDefault = isActive && engines.active.source === "default";
           const key = copy ? keys[copy.keyCategory] : null;
           const inputId = `engine-${engine.id}`;
           return (
@@ -111,16 +115,22 @@ export function EngineChoice({
                   </label>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
-                  {isActive ? "In use" : ready ? "Ready" : "Needs a key"}
+                  {isActive ? (isDefault ? "In use (default)" : "In use") : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
                 </span>
               </div>
+              {selected === engine.id ? (
+                <div className="space-y-3">
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Needs: </span>{copy.needs}</p> : null}
-              {!ready && engine.health.message ? <p className="text-sm text-fg [overflow-wrap:anywhere]">{engine.health.message}</p> : null}
+              {!ready && engine.health.message ? <EngineReason message={engine.health.message} /> : null}
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}
+              {engine.id === "openrouter-decisions" ? <EngineSteps label="OpenRouter" progress={openRouterProgress({ keySaved: keys.openrouter.fingerprint !== null, testPassed: ready, active: isActive, activeLabel: labelOf(activeId) })} /> : null}
+              {copy && engine.id !== "openrouter-decisions" && key ? <EngineSteps label={copy.title} progress={savedKeyEngineProgress({ engineLabel: copy.title, keySaved: key.fingerprint !== null, ready, active: isActive, activeLabel: labelOf(activeId) })} /> : null}
               {engine.id === "openrouter-decisions" && engines.openrouterModel ? (
                 <OpenRouterDecisionControls organizationId={organizationId} canAdmin={canAdmin} model={engines.openrouterModel} />
+              ) : null}
+                </div>
               ) : null}
             </div>
           );
@@ -135,6 +145,40 @@ export function EngineChoice({
           {unchanged && !save.isPending ? <DisabledReason id="engine-unchanged">This engine is already in use.</DisabledReason> : null}
           {!unchanged && !selectedReady && !save.isPending ? <DisabledReason id="engine-unchanged">Save this engine's key on its card. The choice is saved only after the key is ready.</DisabledReason> : null}
         </div>
+      ) : null}
+    </div>
+  );
+}
+
+/** Key saved, test passed and engine active, as three separate steps with the one next action. */
+function EngineSteps({ label, progress }: { label: string; progress: EngineProgress }) {
+  return (
+    <div className="space-y-2 rounded-md bg-surface-2 p-3" aria-label={`${label} setup progress`}>
+      <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+        {progress.steps.map((step) => (
+          <li key={step.id} className={step.done ? "font-semibold text-success" : "text-fg-muted"}>
+            <span aria-hidden="true">{step.done ? "\u2713 " : "\u25CB "}</span>
+            {step.label}
+            <span className="sr-only">{step.done ? " (done)" : " (not yet)"}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="text-sm text-fg">{progress.next}</p>
+    </div>
+  );
+}
+
+/** The engine's reason in plain words, with the server variable names for whoever runs the server kept out of the way. */
+function EngineReason({ message }: { message: string }) {
+  const reason = splitOperatorHint(message);
+  return (
+    <div className="space-y-1">
+      <p className="text-sm text-fg [overflow-wrap:anywhere]">{reason.plain}</p>
+      {reason.operator ? (
+        <details className="text-xs text-fg-muted">
+          <summary className="cursor-pointer">For whoever runs the server</summary>
+          <p className="mt-1 font-mono [overflow-wrap:anywhere]">{reason.operator}</p>
+        </details>
       ) : null}
     </div>
   );

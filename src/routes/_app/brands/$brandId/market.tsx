@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { Button, Field, ErrorNotice, Card, ScreenSkeleton, SelectInput, Textarea, Input } from "@/components/ui";
@@ -37,8 +37,24 @@ import { ResearchRunPanel } from "@/components/market/research-run-panel";
 import { useResearchFilters } from "@/components/market/use-research-filters";
 import type { ResearchAdRow } from "@/components/market/research-model";
 
+/** A lower section of Market. It starts closed so the first screen is the discovery card, and a section link opens it. */
+function MarketSection({ id, title, hint, children }: { id: string; title: string; hint: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const openIfTargeted = () => { if (window.location.hash === `#${id}`) setOpen(true); };
+    openIfTargeted();
+    window.addEventListener("hashchange", openIfTargeted);
+    return () => window.removeEventListener("hashchange", openIfTargeted);
+  }, [id]);
+  return (
+    <details id={id} open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)} className="scroll-mt-24 rounded-xl border border-border bg-surface p-4">
+      <summary className="cursor-pointer text-base font-semibold text-fg">{title}<span className="ml-2 text-sm font-normal text-fg-muted">{hint}</span></summary>
+      <div className="mt-4 space-y-6">{children}</div>
+    </details>
+  );
+}
+
 const MARKET_SECTIONS = [
-  { id: "market-discovery", label: "Discovery" },
   { id: "market-collect", label: "Collect evidence" },
   { id: "market-analyzed", label: "Analyzed ads" },
   { id: "market-competitors", label: "Competitors" },
@@ -111,8 +127,8 @@ function MarketPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.market(brandId)],
     onSuccess: (result) => {
       setNote(result.status === "blocked"
-        ? "Discovery ran no source, so it has no results. The run is listed below with each source's reason."
-        : `Discovery run ${result.status}: ${result.itemsStored} item(s) stored. Each source's state is listed below.`);
+        ? "Nothing was read, so there are no results. The run below says what to do next."
+        : result.itemsStored > 0 ? `${result.itemsStored} new ${result.itemsStored === 1 ? "example" : "examples"} stored. See the run below.` : "Nothing new was stored. See the run below for why.");
     },
   });
   const addCompetitorMutation = useScopedMutation({
@@ -217,12 +233,15 @@ function MarketPage({ brandId }: { brandId: string }) {
       <UnsavedChangesGuard dirty={marketFormsDirty} />
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
-        <h1 className="page-title">What has actually been seen</h1>
+        <h1 className="page-title">Research public examples</h1>
         <p className="text-muted">
-          Collect bounded public Meta video-ad records, preserve source and transcript evidence, and let JEV Research identify recurring structures. Missing media stays unavailable; no observations or outcomes are invented.
+          Start with one page URL. Meridian tells you what it read, what is new, and what a site would not allow. More research tools are optional.
         </p>
       </div>
-      <ul className="grid gap-3 md:grid-cols-3">
+      <details className="rounded-xl border border-border bg-surface p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-fg">How Meridian collects examples ({market.adapters.length} ways)</summary>
+        <p className="mt-2 text-xs text-fg-muted">Reading a public page and adding an example by hand need no setup. The others are optional, use your own developer key, and are never needed to read a page URL.</p>
+      <ul className="mt-3 grid gap-3 md:grid-cols-3">
         {market.adapters.map((adapter) => (
           <li key={adapter.id} className="rounded-lg border border-line bg-panel p-4">
             <p className="eyebrow">{adapter.status}</p>
@@ -232,16 +251,20 @@ function MarketPage({ brandId }: { brandId: string }) {
           </li>
         ))}
       </ul>
+      </details>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <nav aria-label="Market sections" className="flex flex-wrap gap-2 text-sm">
-        {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
-      </nav>
+      <details className="rounded-xl border border-border bg-surface px-4 py-3">
+        <summary className="cursor-pointer text-sm font-semibold text-fg">More market tools</summary>
+        <nav aria-label="More market tools" className="mt-3 flex flex-wrap gap-2 text-sm">
+          {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
+        </nav>
+      </details>
       <Card id="market-discovery">
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
           <h2 className="mt-2 text-2xl">Find public pages and posts</h2>
-          <p className="mt-2 text-sm text-muted">A public page is read as untrusted text and stored as evidence. A search phrase is searched only by a keyed source with a key saved for this workspace. A run where no source ran is reported as blocked, not completed.</p>
+          <p className="mt-2 text-sm text-muted">Start with one public page URL. Meridian reads it and stores the text as evidence you can review.</p>
         </div>
         <div className="mt-4">
           <DiscoveryStart
@@ -261,10 +284,10 @@ function MarketPage({ brandId }: { brandId: string }) {
           <div className="mt-3"><StoredPages query={storedPages} canEdit={canEdit} onUse={prefillObservationFromPage} /></div>
         </div>
       </Card>
+      <MarketSection id="market-collect" title="Collect video-ad evidence (Meta Ad Library)" hint="Needs your own Meta developer token. Optional.">
       <Card>
         <div className="max-w-3xl">
-          <p className="eyebrow">JEV Research</p>
-          <h2 className="mt-2 text-2xl">Collect external video-ad evidence</h2>
+          <p className="text-sm font-semibold text-fg">Search the Meta Ad Library for video ads.</p>
           <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
@@ -292,7 +315,9 @@ function MarketPage({ brandId }: { brandId: string }) {
           {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="border-t border-line py-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
-      <Card id="market-analyzed">
+      </MarketSection>
+      <MarketSection id="market-analyzed" title="Analyzed ads" hint="What was collected, with its analysis state">
+      <Card>
         <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant="secondary" aria-pressed={researchView === "gallery"} className={researchView === "gallery" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant="secondary" aria-pressed={researchView === "table"} className={researchView === "table" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
@@ -308,7 +333,9 @@ function MarketPage({ brandId }: { brandId: string }) {
         {researchFilters.visible.length ? <div className="mt-4"><ResearchList view={researchView} ads={researchFilters.visible} onView={setSelectedAdId} /></div> : <p className="mt-4 text-sm text-muted">No ads match these filters.</p>}
         <ResearchDetailSheet ad={selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }} />
       </Card>
-      <Card id="market-competitors">
+      </MarketSection>
+      <MarketSection id="market-competitors" title="Competitors" hint="Who you compete with">
+      <Card>
         <h2 className="text-2xl">Competitors</h2>
         {market.competitors.filter((item) => item.status === "confirmed").length === 0 ? (
           <p className="mt-3 text-muted">No competitors yet. Add one you actually compete with.</p>
@@ -366,7 +393,9 @@ function MarketPage({ brandId }: { brandId: string }) {
           </form>
         ) : null}
       </Card>
-      <Card id="market-observed">
+      </MarketSection>
+      <MarketSection id="market-observed" title="Observed creatives" hint="The only competitor evidence the ranker uses">
+      <Card>
         <h2 className="text-2xl">Observed creatives</h2>
         <p className="mt-2 text-sm text-muted">These rows are the only competitor evidence the ranker will use.</p>
         {market.observations.length === 0 ? <p className="mt-3 text-muted">No observations stored.</p> : (
@@ -428,8 +457,10 @@ function MarketPage({ brandId }: { brandId: string }) {
           </form>
         ) : null}
       </Card>
-      <Card id="market-public-page">
-        <h2 className="text-2xl">Public page</h2>
+      </MarketSection>
+      <MarketSection id="market-public-page" title="Another way to read a public page" hint="The older page form, with its stored pages">
+      <Card>
+        <p className="text-sm font-semibold text-fg">Paste one page URL to read it.</p>
         <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
           <form
@@ -495,6 +526,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           </div>
         ) : null}
       </Card>
+      </MarketSection>
     </div>
   );
 }

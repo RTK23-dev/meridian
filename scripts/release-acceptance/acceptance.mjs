@@ -6,7 +6,7 @@
 // run.mjs does the whole sequence (the account, the seed, this pass and the database check); docs/RELEASE_ACCEPTANCE.md describes it.
 
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { localAcceptanceBase } from "./local-base.mjs";
@@ -29,6 +29,15 @@ async function check(id, label, fn) {
   }
 }
 
+/** Opens Settings and opens each top-level section, as a person does by clicking it. General keeps most sections closed on arrival. */
+async function openSettings(page) {
+  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await page.locator("main").waitFor();
+  await page.evaluate(() => {
+    for (const details of document.querySelectorAll("main details")) if (!details.parentElement?.closest("details")) details.open = true;
+  });
+}
+
 const browser = await chromium.launch({ headless: true });
 try {
   const page = await (await browser.newContext({ viewport: { width: 1280, height: 900 } })).newPage();
@@ -46,7 +55,7 @@ try {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => !url.pathname.endsWith("/login"));
 
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   const holds = page.locator('[aria-labelledby="uncertain-holds-title"]');
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
@@ -137,7 +146,7 @@ try {
     assert.doesNotMatch(cardText, /healthy|live verified|connected and tested/i, "a stale record is never presented as healthy");
   });
 
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
   await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Ads tab", async () => {
     const main = await page.locator("main").innerText();
@@ -154,7 +163,8 @@ try {
     assert.equal(await studioPreset.count(), 1);
     await studioPreset.click();
     assert.equal(await studioPreset.getAttribute("aria-checked"), "true");
-    await page.getByRole("heading", { name: "Create a brand first" }).waitFor();
+    // The workspace has a brand now, so the page offers the session form. It must not claim a brand is missing.
+    assert.equal(await page.getByRole("heading", { name: "Create a brand first" }).count(), 0);
   });
   await page.screenshot({ path: join(out, "content-workflow-desktop.png") });
   await page.setViewportSize({ width: 390, height: 844 });
@@ -166,10 +176,190 @@ try {
   await page.screenshot({ path: join(out, "content-workflow-phone-390.png") });
 
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
-    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    await openSettings(page);
     assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
+  });
+
+  // The first-run journey of a person who has not read the code: Market, the three outcomes, the sources, the budget and the engine.
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`${base}/`, { waitUntil: "networkidle" });
+  const brandLink = page.getByRole("link", { name: /Acceptance Brand/ }).first();
+  await brandLink.waitFor();
+  const brandPath = `/brands/${new URL(await brandLink.getAttribute("href"), base).pathname.match(/\/brands\/([^/]+)/)[1]}`;
+  await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
+  const runsBlock = page.getByText("Recent discovery runs").locator("..");
+  await runsBlock.waitFor().catch(async (error) => {
+    await page.screenshot({ path: join(out, "market-not-found.png"), fullPage: true });
+    throw new Error(`${error.message.split("\n")[0]} at ${page.url()}: ${(await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+  });
+
+  await check("G1", "Market tells a person how to start: one exact page URL needs no setup, and a phrase search is a separate, optional thing", async () => {
+    const main = await page.locator("main").innerText();
+    assert.match(main, /Paste a public page URL\./);
+    assert.match(main, /No setup or key is needed/);
+    assert.match(main, /Or search by phrase\./);
+    assert.match(main, /It is optional/);
+    assert.ok((await page.getByRole("button", { name: /Read this page|Search/ }).count()) > 0);
+  });
+
+  await check("G2", "a run that stored new examples says so, and keeps the source rows behind a disclosure", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /3 new examples stored, 2 already stored/);
+    assert.match(text, /New examples/);
+    const details = runsBlock.locator("details").first();
+    assert.equal(await details.evaluate((node) => node.open), false, "source details must start closed");
+  });
+
+  await check("G3", "a duplicate-only run says nothing new was added and offers a next step, and sources not used are not failures", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /Nothing new\. The page was read, and all 5 of its examples were already stored\./);
+    assert.match(text, /add another page URL, or upload an example/);
+    assert.match(text, /0 failed, 2 not used/);
+  });
+
+  await check("G4", "a robots.txt-blocked page is reported as blocked, is not bypassed, and offers a supported alternative", async () => {
+    const text = await runsBlock.innerText();
+    assert.match(text, /Blocked/);
+    assert.match(text, /robots\.txt does not allow MeridianBot/);
+    assert.match(text, /Instagram did not let Meridian read this page/);
+    assert.match(text, /no connector in this release, and a key would not change that/);
+    assert.match(text, /does not work around the block/);
+    assert.match(text, /Upload the post or paste its text/);
+  });
+
+  await check("G10", "typing a social URL says up front that there is no connector and no key is used, before anything runs", async () => {
+    const input = page.getByPlaceholder(/shop\.example/);
+    await input.fill("https://www.instagram.com/p/abc/");
+    const note = page.getByText(/Instagram has no connector in this release, and no key is needed or used/);
+    await note.waitFor();
+    await input.fill("https://shop.example/sponge");
+    assert.equal(await page.getByText(/has no connector in this release, and no key is needed or used/).count(), 0);
+    await input.fill("");
+  });
+
+  await check("G5", "the default Market view prints no per-source rows, and the details open on request", async () => {
+    const before = await runsBlock.innerText();
+    assert.doesNotMatch(before, /Not used for this input/);
+    await runsBlock.locator("details > summary").nth(1).click();
+    assert.match(await runsBlock.innerText(), /Not used for this input/);
+  });
+
+  await check("G6", "sources: only search sources ask for a key, and the unavailable ones say no key is needed", async () => {
+    const main = page.locator("main");
+    await main.getByText(/Optional: search by phrase/).click();
+    assert.match(await main.innerText(), /your own developer key/);
+    assert.match(await main.innerText(), /never needs the password or token of the brand you are studying|none of them needs the password or token of the brand you are studying/);
+    await main.getByText(/Not available in this release/).click();
+    const text = await main.innerText();
+    assert.match(text, /No key is needed for these, and saving one changes nothing/);
+    assert.match(text, /Instagram/);
+  });
+  await page.screenshot({ path: join(out, "market-first-run-desktop.png"), fullPage: true });
+
+  await check("G7", "the monthly budget is one named field that /settings#monthly-budget scrolls to and focuses", async () => {
+    await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
+    const field = page.getByLabel("Monthly budget (USD)");
+    await field.waitFor();
+    assert.equal(await field.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    const text = await page.locator("main").innerText();
+    assert.match(text, /not your OpenRouter account balance/);
+    assert.doesNotMatch(text, /Monthly video budget/);
+  });
+
+  await check("M1", "first-run pages stay short on a clean account: heights are recorded and bounded", async () => {
+    // Before this work: Settings 9110 px, Market 4226 px, Setup 3988 px, Brand brain 7726 px. Bounds are loose on purpose; the numbers go to the artifact.
+    const heights = {};
+    for (const [name, path, limit] of [["setup", "/setup", 3200], ["settings", "/settings", 3000], ["market", `${brandPath}/market`, 3000], ["brain", `${brandPath}/brain`, 5200]]) {
+      await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
+      heights[name] = await page.evaluate(() => document.documentElement.scrollHeight);
+      assert.ok(heights[name] < limit, `${name} is ${heights[name]} px, limit ${limit}`);
+    }
+    writeFileSync(join(out, "page-heights.json"), JSON.stringify(heights, null, 2));
+    console.log("page heights", JSON.stringify(heights));
+  });
+
+  await check("G8", "setup: OpenRouter shows key saved, test passed and active engine as separate steps, and names the engine in use", async () => {
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // A finished step keeps its controls behind "Review or change this step", so a person opens it first.
+    const review = page.getByText("Review or change this step");
+    for (let i = await review.count(); i > 0; i -= 1) await review.nth(i - 1).click();
+    // Only the chosen engine shows its details, so a person picks OpenRouter first.
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
+    const progress = page.getByLabel("OpenRouter setup progress");
+    await progress.first().waitFor();
+    const text = await progress.first().innerText();
+    assert.match(text, /Key saved/);
+    assert.match(text, /Connection test passed/);
+    assert.match(text, /OpenRouter is the active engine/);
+    assert.match(text, /Save your OpenRouter key/);
+    const setupText = await page.locator("main").innerText();
+    assert.doesNotMatch(setupText, /_SHARED_DEFAULT|OPENROUTER_DECISIONS_MODEL/, "server variable names must stay behind the operator note");
+    assert.doesNotMatch(setupText, /The model is \./, "the model line must not be empty");
+  });
+
+  await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // The sources step and its optional phrase-search keys are both behind clear disclosures.
+    const step = page.locator("li, section, article").filter({ hasText: "Pick where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
+    await step.getByText("Open this step").first().click();
+    assert.match(await page.locator("main").innerText(), /Read one public page/);
+    assert.match(await page.locator("main").innerText(), /This is not a search/);
+    await page.getByText("Optional: search by phrase", { exact: true }).click();
+    const text = await page.locator("main").innerText();
+    assert.match(text, /TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release/);
+    assert.match(text, /Saving a key for them would change nothing/);
+    assert.doesNotMatch(text, /DEPLOYMENT_|YOUTUBE_API_KEY=|META_AD_LIBRARY_TOKEN=/);
+  });
+
+  await check("G11", "openrouter: no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does", async () => {
+    // The testing runtime reads a recorded catalogue and answers the test from a recorded transport. No key is real and nothing is spent.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const review = page.getByText("Review or change this step");
+    for (let i = await review.count(); i > 0; i -= 1) await review.nth(i - 1).click();
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
+    await page.getByLabel("OpenRouter Decisions key").fill("sk-or-v1-acceptance-fixture-0123456789abcdef");
+    await page.getByLabel("OpenRouter Decisions key").press("Enter");
+    await page.getByText(/OpenRouter Decisions key saved/).waitFor();
+    // A saved key is not a passed test and not the active engine.
+    const progress = page.getByLabel("OpenRouter setup progress").first();
+    assert.match(await progress.innerText(), /Test the connection below/);
+    const model = page.getByRole("combobox", { name: "Decision model" });
+    await model.waitFor();
+    const option = await model.locator("option").evaluateAll((nodes) => nodes.map((node) => node.value).find((value) => /typesafe\/jev/.test(value)));
+    assert.ok(option, "the recorded catalogue offers a TypeSafe decision model");
+    await model.selectOption(option);
+    await page.getByRole("button", { name: "Save model" }).click();
+    await page.getByText(/The OpenRouter decision model is now/).waitFor();
+    // No monthly budget: the test is refused before any request, and the way out is a link to the field.
+    await page.getByRole("button", { name: "Test the connection" }).click();
+    const link = page.getByRole("link", { name: /Set the monthly budget \(USD\)/ });
+    await link.waitFor();
+    assert.match(await page.locator("main").innerText(), /nothing was sent to OpenRouter and nothing was spent/);
+    assert.doesNotMatch(await progress.innerText(), /✓\s*Connection test passed/);
+    await link.click();
+    const budget = page.getByLabel("Monthly budget (USD)");
+    await budget.waitFor();
+    assert.equal(await budget.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    await budget.fill("5");
+    await page.getByRole("button", { name: "Save budget" }).click();
+    await page.getByText("Monthly budget saved.").waitFor();
+    // With a budget, the recorded transport answers. The test passes, and OpenRouter is still not active.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const review2 = page.getByText("Review or change this step");
+    for (let i = await review2.count(); i > 0; i -= 1) await review2.nth(i - 1).click();
+    await page.getByRole("radio", { name: /OpenRouter Decisions/ }).check();
+    await page.getByRole("button", { name: "Test the connection" }).click();
+    await page.getByText(/^Passed\./).waitFor();
+    const after = await page.getByLabel("OpenRouter setup progress").first().innerText();
+    assert.match(after, /Connection test passed/);
+    assert.match(after, /Until then TypeSafe JEV receives every decision/, "TypeSafe stays named as active until OpenRouter is chosen");
+    await page.getByRole("button", { name: "Use this engine" }).click();
+    await page.getByText(/is now the engine for this workspace\. Only it receives decisions/).waitFor({ timeout: 8000 }).catch(async (error) => {
+      const alerts = await page.locator("[role=alert], [role=status]").allInnerTexts();
+      throw new Error(`${error.message.split("\n")[0]} | page said: ${alerts.join(" / ").slice(0, 400)}`);
+    });
   });
 
   await check("D1", "no request left the local server during the run", async () => {
@@ -177,7 +367,7 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  await openSettings(page);
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
   await check("E1", "phone width: no horizontal page scroll", async () => {

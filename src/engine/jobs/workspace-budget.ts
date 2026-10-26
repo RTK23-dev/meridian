@@ -15,12 +15,12 @@ export function workspaceBudgetFromSettings(read: MonthlyBudgetReader): Workspac
       try {
         usd = await read(organizationId);
       } catch {
-        return { status: "not_connected", reason: "the workspace monthly video budget could not be read, so nothing is reserved" };
+        return { status: "not_connected", reason: "the workspace monthly budget could not be read, so nothing is reserved" };
       }
       if (usd === null) {
         return {
           status: "not_connected",
-          reason: "no monthly video budget is set for this workspace; set \"Monthly video budget (USD)\" in Settings",
+          reason: "no monthly budget is set for this workspace; set \"Monthly budget (USD)\" in Settings",
         };
       }
       return { status: "known", usd };

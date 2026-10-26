@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -6,6 +6,8 @@ import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation, useVideoBudgetQuery } from "@/lib/query/hooks";
 import { removeProviderConfig, saveProviderConfig, saveVideoBudget, testProviderConnection } from "@/lib/meridian/settings/server-actions";
+import { keyOwnerNote, splitOperatorHint } from "./key-copy";
+import { OperatorVariables } from "./operator-note";
 import { parseMonthlyVideoBudget } from "@/lib/meridian/settings/video-budget-model";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
@@ -122,7 +124,6 @@ function GroupBlock({
           <SetupRowItem key={row.id} row={row} organizationId={organizationId} canAdmin={canAdmin} />
         ))}
       </ul>
-      {group === "video" ? <VideoBudgetForm organizationId={organizationId} canAdmin={canAdmin} /> : null}
     </div>
   );
 }
@@ -131,7 +132,7 @@ function GroupBlock({
  * The workspace's "Monthly video budget (USD)". Blank means no budget is set; there is no default. Only an admin can change
  * it, and the server checks the role again.
  */
-function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
   const budget = useVideoBudgetQuery(organizationId);
   const saved = budget.data?.monthlyVideoBudgetUsd ?? null;
   const [draft, setDraft] = useState<string | null>(null);
@@ -142,9 +143,22 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
     invalidate: () => [qk.videoBudget(organizationId)],
     onSuccess: (result) => {
       setDraft(null);
-      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly video budget cleared. No budget is set." : "Monthly video budget saved.");
+      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly budget cleared. No budget is set." : "Monthly budget saved.");
     },
   });
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  // A blocker elsewhere links here with #monthly-budget. Scroll to the field and focus it, on arrival and on a later hash change.
+  useEffect(() => {
+    const goToField = () => {
+      if (window.location.hash !== "#monthly-budget") return;
+      inputRef.current?.scrollIntoView({ block: "center" });
+      inputRef.current?.focus();
+    };
+    goToField();
+    window.addEventListener("hashchange", goToField);
+    return () => window.removeEventListener("hashchange", goToField);
+  }, [budget.isPending]);
 
   const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
   const parsed = parseMonthlyVideoBudget(shown);
@@ -158,14 +172,15 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
         : `The budget is ${saved.toFixed(2)} USD a month.`;
 
   return (
-    <div className="space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
+    <div id="monthly-budget" className="scroll-mt-24 space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
       <div className="space-y-1">
         <p className="font-semibold text-fg">Monthly budget (USD)</p>
         <p className="text-sm text-fg-muted">
-          The most this workspace may spend in a month, in US dollars, on all paid generation together: video, copy and
-          scripts, research analysis, brand brain suggestions, Factory image labels and OpenRouter JEV decisions. One cap
-          covers them all, and each one counts the others' spend. Blank means no budget is set, so paid generation is
-          blocked until one is saved. Each call is also capped on its own. There is no default. {current}
+          This workspace's hard monthly cap, in US dollars, on all paid generation together: video, copy and scripts,
+          research analysis, brand brain suggestions, Factory image labels and OpenRouter decisions. It is a limit Meridian
+          enforces, not your OpenRouter account balance. Blank means no budget is set, so paid generation, and the
+          OpenRouter connection test, are blocked until one is saved. Each call is also capped on its own. There is no
+          default. {current}
         </p>
       </div>
       {!canAdmin ? (
@@ -185,11 +200,12 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
           >
             <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
               <Field
-                label="Monthly video budget (USD)"
+                label="Monthly budget (USD)"
                 hint="A number of 0 or more, with at most two decimals. Leave blank for no budget."
                 error={parsed.ok ? undefined : parsed.message}
               >
                 <Input
+                  ref={inputRef}
                   inputMode="decimal"
                   value={shown}
                   onChange={(event) => setDraft(event.target.value)}
@@ -262,12 +278,20 @@ export function TestConnection({
 
 function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organizationId: string; canAdmin: boolean }) {
   const presentation = STATUS_PRESENTATION[row.status];
+  const reason = splitOperatorHint(row.reason);
   return (
     <li className="space-y-3 border-t border-border py-4 first:border-t-0 first:pt-0" data-row={row.id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-semibold text-fg">{row.label}</p>
-          <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+          <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{reason.plain}</p>
+          {reason.operator ? (
+            <details className="text-xs text-fg-muted">
+              <summary className="cursor-pointer">For whoever runs the server</summary>
+              <p className="mt-1 font-mono [overflow-wrap:anywhere]">{reason.operator}</p>
+            </details>
+          ) : null}
+          {row.save.kind === "form" ? <p className="text-xs text-fg-muted">{keyOwnerNote(row.label)}</p> : null}
           {row.fingerprint ? (
             <p className="font-mono text-xs text-fg-muted">Stored key: {row.fingerprint}</p>
           ) : null}
@@ -295,14 +319,7 @@ function RowAction({ row, organizationId, canAdmin }: { row: SetupRow; organizat
   }
   if (row.save.kind === "deployment") {
     return (
-      <p className="text-sm text-fg-muted">
-        Set {row.save.variables.map((name, index) => (
-          <span key={name}>
-            {index > 0 ? ", " : ""}
-            <code className="font-mono text-xs text-fg">{name}</code>
-          </span>
-        ))} on the server. This panel cannot save them, and no key is shown here.
-      </p>
+      <OperatorVariables names={row.save.variables} lead="This is set on the server. This panel cannot save it." />
     );
   }
   return <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />;

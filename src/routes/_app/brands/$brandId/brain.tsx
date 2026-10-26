@@ -139,6 +139,20 @@ function BrainEditor({ brandId }: { brandId: string }) {
     }
   }
 
+  // A link to a field inside a closed optional group opens the group first, so the field can take focus.
+  useEffect(() => {
+    function openForHash() {
+      const id = decodeURIComponent(window.location.hash.slice(1));
+      if (!id) return;
+      for (let node = document.getElementById(id); node; node = node.parentElement) {
+        if (node instanceof HTMLDetailsElement) node.open = true;
+      }
+    }
+    openForHash();
+    window.addEventListener("hashchange", openForHash);
+    return () => window.removeEventListener("hashchange", openForHash);
+  }, [formReady]);
+
   // Opens the brain at the section the person left off in. An address that names a section (a hash) wins over the stored one.
   useEffect(() => {
     if (!formReady || resumedRef.current) return;
@@ -223,7 +237,9 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
           <div className="min-w-0 space-y-10">
             <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
-              <dl className="grid gap-3 panel text-sm sm:grid-cols-2">
+              <details className="panel text-sm">
+              <summary className="cursor-pointer font-semibold">Brand facts from the overview</summary>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 {[
                   ["Brand name", detail.identity.name],
                   ["Category", detail.identity.category],
@@ -238,9 +254,10 @@ function BrainEditor({ brandId }: { brandId: string }) {
                   </div>
                 ))}
               </dl>
-              <p className="text-sm text-fg-muted">
+              <p className="mt-3 text-fg-muted">
                 These facts are edited on the <Link to="/brands/$brandId" params={{ brandId }} className="underline underline-offset-4">brand overview</Link>.
               </p>
+              </details>
               <FieldList keys={sectionFor("identity")?.keys ?? []} shared={shared} />
             </SectionFrame>
 
@@ -302,7 +319,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
       </form>
 
       <Card>
-        <h2 className="text-section font-semibold">Versions</h2>
+        <details>
+        <summary className="cursor-pointer text-section font-semibold">Versions ({detail.versions.length})</summary>
         {detail.versions.length === 0 ? <p className="mt-3 text-sm text-fg-muted">No versions stored yet.</p> : (
           <ul className="mt-3 space-y-2 text-sm">
             {detail.versions.map((version) => (
@@ -313,6 +331,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
             ))}
           </ul>
         )}
+        </details>
       </Card>
     </div>
   );
@@ -329,10 +348,25 @@ function SectionFrame({ id, label, progress, children }: { id: BrainSectionId; l
   </section>;
 }
 
+/** The required fields show at once. The optional ones sit behind one disclosure per section, so a first pass is short. */
 function FieldList({ keys, shared }: { keys: readonly BrainKey[]; shared: FormShared }) {
   if (keys.length === 0) return null;
+  const isRequired = (key: BrainKey) => BRAIN_FIELDS.find((field) => field.key === key)?.required === true;
+  const required = keys.filter(isRequired);
+  const optional = keys.filter((key) => !isRequired(key));
+  const filledOptional = optional.filter((key) => (shared.values[key] ?? "").trim().length > 0).length;
   return <div className="grid gap-4">
-    {keys.map((key) => <BrainTextField key={key} fieldKey={key} shared={shared} />)}
+    {required.map((key) => <BrainTextField key={key} fieldKey={key} shared={shared} />)}
+    {optional.length > 0 ? (
+      <details className="brain-optional rounded-lg border border-border px-4 py-3">
+        <summary className="cursor-pointer text-sm font-semibold">
+          {required.length > 0 ? "Optional fields" : "Fields"} ({filledOptional} of {optional.length} filled)
+        </summary>
+        <div className="mt-4 grid gap-4">
+          {optional.map((key) => <BrainTextField key={key} fieldKey={key} shared={shared} />)}
+        </div>
+      </details>
+    ) : null}
   </div>;
 }
 

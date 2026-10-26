@@ -7,7 +7,7 @@
 export const MAX_MONTHLY_VIDEO_BUDGET_USD = 9_999_999_999.99;
 
 export const VIDEO_BUDGET_MESSAGE =
-  "Enter the monthly video budget in US dollars: a number of 0 or more, with at most two decimals. Leave it blank for no budget.";
+  "Enter the monthly budget in US dollars: a number of 0 or more, with at most two decimals. Leave it blank for no budget.";
 
 export type VideoBudgetParse = { ok: true; value: number | null } | { ok: false; message: string };
 

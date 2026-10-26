@@ -30,7 +30,8 @@ The loop, in either case:
 
 | Screen | What it is for |
 | --- | --- |
-| **Setup guide** | A short path: create a brand, choose a decision engine and save its key. Optional connections sit behind "Open this step" |
+| **Setup guide** | A short path: create a brand, choose a decision engine and save its key. OpenRouter shows key saved, test passed and engine active as separate steps. Optional connections sit behind "Open this step" |
+| **Market** | Paste one public page URL, with no setup, and see what was read, what is new, what was blocked and what to do next. Searching by phrase is a separate, optional step with your own developer key |
 | **Content** | One page per brand. Create, Ideas, Review, Library, Publish, Results and Ads are its sections. Create starts a session from a brief, a reference, or Studio; the run planner is one click away under "Plan a run in detail" |
 | **Integrations** | Every connection, with what it needs and its state |
 | **Jobs & health** | Queued work, the worker and the scheduler |
@@ -81,6 +82,7 @@ This is a pre-release, `0.1.0-beta.16`. Everything was checked with fixtures, fa
 What still needs a key or a decision. The code path exists, and it stays not connected until the server has the credential or you set the number:
 
 - Live image and video calls, including OpenRouter, Deepgram, Drive, and a Hypit process
+- Phrase search through YouTube, Meta Ad Library and SerpAPI. TikTok, Instagram, X, Facebook, Pinterest and LinkedIn are not available as sources in this release, and a saved key for them does nothing; upload the example or paste its text instead. A site's robots.txt or bot check is reported and never worked around
 - Live publishing and performance for Meta, Google, TikTok, and YouTube
 - Shopify order webhooks, Apify discovery, and invitation email
 - Prices Meridian will not guess: HyperFrames per minute, Apify per 1,000 results, and `image.edit`

@@ -15,7 +15,8 @@ import { createDecisionEngines } from "../decisions/dispatcher.ts";
 import { isDecisionEngineId } from "../decisions/types.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
 import { OpenRouterDecisionsEngine, validateDecisionModel } from "../decisions/openrouter-engine.ts";
-import { decisionModelCeilingUsd, eligibleDecisionModels, liveDecisionCatalog } from "../decisions/decision-catalog.ts";
+import { decisionModelCeilingUsd, eligibleDecisionModels } from "../decisions/decision-catalog.ts";
+import { openRouterSeam } from "../decisions/test-seam.ts";
 import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
@@ -170,7 +171,7 @@ export const getOpenRouterDecisionModels = createServerFn({ method: "GET" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await requireMembership(sql, context.userId, data.organizationId, "viewer");
-    const catalog = await liveDecisionCatalog.read();
+    const catalog = await openRouterSeam().catalog.read();
     if (!catalog.ok) return { ok: false as const, reason: catalog.reason, endpoint: catalog.endpoint, readAt: catalog.readAt, eligible: [], notOffered: [] };
     const { eligible, notOffered } = eligibleDecisionModels(catalog);
     return {
@@ -243,13 +244,13 @@ export const saveOpenRouterDecisionModel = createServerFn({ method: "POST" })
     const checked = validateDecisionModel(data.model);
     if (!checked.ok) return { ok: false as const, reason: checked.reason };
     // The model must be in the live catalogue and have a verified profile. The catalogue is read here, so a model cannot be saved by typing its ID.
-    const catalog = await liveDecisionCatalog.read();
+    const catalog = await openRouterSeam().catalog.read();
     if (!catalog.ok) return { ok: false as const, reason: `${catalog.reason} The decision model is unchanged.` };
     if (!eligibleDecisionModels(catalog).eligible.some((model) => model.id === checked.model)) {
       return { ok: false as const, reason: `${checked.model} is not offered: it is not a decision model in the live catalogue with a verified profile. The decision model is unchanged.` };
     }
     await writeOpenRouterModel(sql, { organizationId: data.organizationId, actorId: context.userId, model: checked.model });
-    const health = await new OpenRouterDecisionsEngine().healthFor(data.organizationId);
+    const health = await new OpenRouterDecisionsEngine(openRouterSeam()).healthFor(data.organizationId);
     return { ok: true as const, model: checked.model, health };
   });
 
@@ -268,7 +269,7 @@ export const testOpenRouterDecisionConnection = createServerFn({ method: "POST" 
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await requireMembership(sql, context.userId, data.organizationId, "admin");
-    const engine = new OpenRouterDecisionsEngine();
+    const engine = new OpenRouterDecisionsEngine(openRouterSeam());
     const outcome = await engine.connectionCheck(data.organizationId);
     if (outcome.kind === "not_run") {
       return { ok: false as const, status: "NOT_RUN" as const, message: outcome.message, health: await engine.healthFor(data.organizationId) };

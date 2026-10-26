@@ -1,7 +1,7 @@
 // Runs the release browser acceptance end to end, the same way in CI and on a developer's machine:
 //   1. starts the dev server in the testing runtime on a fresh embedded database, and creates the owner account and workspace through
 //      the sign-up form;
-//   2. stops the server, seeds two uncertain holds into that database, and starts the server again;
+//   2. stops the server, seeds two uncertain holds and three discovery runs into that database, and starts the server again;
 //   3. runs the browser checks (acceptance.mjs);
 //   4. stops the server, and checks the database for the audited release (verify-release.mjs).
 // It sends no provider request. The server is stopped on every exit path, and each step has a time limit.
@@ -110,6 +110,12 @@ async function createOwnerAccount() {
     await page.getByLabel("Workspace name").fill("Acceptance workspace");
     await page.getByRole("button", { name: "Create workspace" }).click();
     await page.getByRole("heading", { name: "Workspace overview" }).waitFor();
+    // The first-run checks need a brand, made through the form as a person makes one.
+    await page.goto(`${base}/brands/new`, { waitUntil: "networkidle" });
+    await page.getByLabel("Brand name").fill("Acceptance Brand");
+    await page.getByLabel("What do you sell?").fill("Kitchen sponges");
+    await page.getByRole("button", { name: "Create brand" }).click();
+    await page.waitForURL((url) => /\/brands\/(?!new$)[^/]+\/?$/.test(url.pathname));
   } finally {
     await browser.close();
   }
@@ -126,6 +132,8 @@ try {
   await stopServer();
   const seeded = await run(process.execPath, ["scripts/release-acceptance/seed-holds.mjs", dataDir], { TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY });
   if (seeded !== 0) throw new Error("Seeding the uncertain holds failed.");
+  const seededFirstRun = await run(process.execPath, ["scripts/release-acceptance/seed-first-run.mjs", dataDir], { TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY });
+  if (seededFirstRun !== 0) throw new Error("Seeding the first-run discovery runs failed.");
   startServer();
   await waitForServer();
   const acceptance = await run(process.execPath, ["scripts/release-acceptance/acceptance.mjs"], { ACCEPTANCE_OUT: out });

@@ -59,11 +59,13 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
         </div>
       ) : null}
 
-      <div className="mt-4 space-y-3 border-t border-border pt-4">
-        <p className="text-sm font-semibold">Generation limits for this workspace</p>
-        <UsageMeter label="Runs in the last day" used={usage?.runsToday ?? null} limit={DAILY_GENERATION_LIMIT} unit="runs" />
-        <UsageMeter label="Runs in progress" used={usage?.running ?? null} limit={GENERATION_CONCURRENCY} unit="runs at once" />
-      </div>
+      <details className="mt-4 border-t border-border pt-4">
+        <summary className="cursor-pointer text-sm font-semibold">Generation limits for this workspace</summary>
+        <div className="mt-3 space-y-3">
+          <UsageMeter label="Runs in the last day" used={usage?.runsToday ?? null} limit={DAILY_GENERATION_LIMIT} unit="runs" />
+          <UsageMeter label="Runs in progress" used={usage?.running ?? null} limit={GENERATION_CONCURRENCY} unit="runs at once" />
+        </div>
+      </details>
 
       {canEdit && brief ? (
         <form className="mt-4 space-y-6" onSubmit={form.handleSubmit(onGenerate)} onKeyDown={(event) => submitOnShortcut(event)}>
