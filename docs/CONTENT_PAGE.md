@@ -74,18 +74,18 @@ A section a person may not use falls back to Create.
 
 ## Checks
 
-- The current source of truth for typecheck, lint, build, test shards, PostgreSQL, release acceptance and UI browser checks is the CI run for the current PR #80 head. The test counts and commit hashes from the 2026-10-24 checkpoint below this page's history are not current-head release evidence.
-- The release-acceptance browser flow uses a fresh embedded database, a fixture-only sealed dummy token, and local browser requests. It checks stale provider readiness without probing a provider.
-- The Content page browser checks exercise accessible workflow tabs, selected preset state, the no-brand empty state and phone-width overflow. The exact final result and screenshots must come from the CI run for the final head.
+- **Current-head CI:** [run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449), head `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b`, passed all 13 required jobs, including six test shards, PostgreSQL, sidecar, typecheck/lint/build, release acceptance, UI smoke/baseline, E2E and aggregate `check`. The final-head browser evidence is recorded in `docs/RELEASE_ACCEPTANCE.md`.
+- The release-acceptance browser flow uses a fresh embedded database, a fixture-only sealed dummy token, and local browser requests. It checks stale provider readiness without probing a provider; the 25-hour-old Meta card reads DEGRADED, never HEALTHY or live-verified.
+- The Content page browser checks passed for accessible workflow tabs, selected preset state, the no-brand empty state and phone-width overflow. Desktop and 390 px screenshots are attached to the same CI run.
 - Live provider behavior, real credentials, paid calls, publishing and external side effects are intentionally not exercised.
 
-## Remaining verification and boundaries
+## Remaining work and boundaries
 
-1. Run the authenticated Content page browser flow on the final PR head at desktop and phone widths; verify the tab/preset interactions, role-gated Ads tab, no horizontal overflow, and local-only requests. Capture screenshots from that same head.
-2. Keep the old section URLs as redirects and preserve URL-backed tab/preset/session state; these are compatibility behavior, not cleanup candidates.
-3. The Content page's Ads section remains admin-only. Each underlying section keeps its server-side role checks.
-4. Repurpose upload proof is fixture-only and uses an injected fake transport. The paused-ad proof creates and reads back an ad as `PAUSED`; it never activates or publishes it.
-5. Live providers, credentials, paid requests and external publishing remain outside automated browser verification.
-6. Backend unification, not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
-6. Calibration is still its own page.
-7. Line of record (which branch is the release line): owner decision.
+- **Browser verification is complete on the recorded head** `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` in [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449): the desktop/phone workflow checks, role-gated Ads tab, selected preset and local-only acceptance passed. A later code change must be rechecked on its own head.
+- Keep the old section URLs as redirects and preserve URL-backed tab/preset/session state; these are compatibility behavior, not cleanup candidates.
+- The Content page's Ads section remains admin-only. Each underlying section keeps its server-side role checks.
+- Repurpose upload proof is fixture-only and uses an injected fake transport. The paused-ad proof creates and reads back an ad as `PAUSED`; it never activates or publishes it.
+- Live providers, credentials, paid requests and external publishing remain outside automated browser verification.
+- Backend unification is not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
+- Calibration is still its own page.
+- Line of record (which branch is the release line): owner decision.
