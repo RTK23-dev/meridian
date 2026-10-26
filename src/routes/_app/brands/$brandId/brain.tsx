@@ -223,7 +223,9 @@ function BrainEditor({ brandId }: { brandId: string }) {
 
           <div className="min-w-0 space-y-10">
             <SectionFrame id="identity" label="Identity" progress={progressFor("identity")}>
-              <dl className="grid gap-3 panel text-sm sm:grid-cols-2">
+              <details className="panel text-sm">
+              <summary className="cursor-pointer font-semibold">Brand facts from the overview</summary>
+              <dl className="mt-3 grid gap-3 sm:grid-cols-2">
                 {[
                   ["Brand name", detail.identity.name],
                   ["Category", detail.identity.category],
@@ -238,9 +240,10 @@ function BrainEditor({ brandId }: { brandId: string }) {
                   </div>
                 ))}
               </dl>
-              <p className="text-sm text-fg-muted">
+              <p className="mt-3 text-fg-muted">
                 These facts are edited on the <Link to="/brands/$brandId" params={{ brandId }} className="underline underline-offset-4">brand overview</Link>.
               </p>
+              </details>
               <FieldList keys={sectionFor("identity")?.keys ?? []} shared={shared} />
             </SectionFrame>
 
@@ -302,7 +305,8 @@ function BrainEditor({ brandId }: { brandId: string }) {
       </form>
 
       <Card>
-        <h2 className="text-section font-semibold">Versions</h2>
+        <details>
+        <summary className="cursor-pointer text-section font-semibold">Versions ({detail.versions.length})</summary>
         {detail.versions.length === 0 ? <p className="mt-3 text-sm text-fg-muted">No versions stored yet.</p> : (
           <ul className="mt-3 space-y-2 text-sm">
             {detail.versions.map((version) => (
@@ -313,6 +317,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
             ))}
           </ul>
         )}
+        </details>
       </Card>
     </div>
   );
