@@ -2,12 +2,9 @@
 
 Dated 2026-10-24. This is the reference for the one content page: what it is, how it is wired, what was checked, and what comes next.
 
-## Checkpoint
+## Status (2026-10-26)
 
-- Code: `8b9a173d` on `feat/one-content-page`, one commit on top of `origin/main`.
-- Base: `97cba9a3` (`origin/main`). It holds RTK's PR #75 (`c5d6b6bf`) and PR #76 (`97cba9a3`), both merged on 2026-10-24.
-- The name change and this document are committed on top of the code. The branch `checkpoint/one-content-page-2026-10-24` points at the head of that commit.
-- Left out of the checkpoint: the work on `code/beautiful-cori-1zfk11` (37 commits from Claude sessions). The owner has paused its Meta paused-ad work and its Hypit bridge work. The Repurpose panel on that branch is not merged, and its status is still open.
+The single Content page is part of PR #80 on `fix/openrouter-model-routing-jev`. The checkpoint commit hashes and paused-work notes from 2026-10-24 were historical and are not a description of this branch's current head. Use the current PR head and its CI run for release evidence; this document describes the current route/component layout and user-facing behavior.
 
 ## Name
 
@@ -83,14 +80,15 @@ A section a person may not use falls back to Create.
   - After the rename: the content hub and navigation model test files, 30 pass, 0 fail.
   - On `8b9a173d`, before the rename: scripts 160 pass, 0 fail. Src 6,251 tests, 6,210 pass, 0 fail, 41 skipped. The skips need `MERIDIAN_PG_TEST_URL` (the PostgreSQL paths) or a live Gemini key, so the PostgreSQL paths did not run.
 - Build: `vite build` passed on `8b9a173d` and regenerated `src/routeTree.gen.ts`. The rename changes no route path, so the route tree needs no regeneration.
-- Not checked: the page in a browser (AGENTS.md rule 11), screenshots, the browser flow `scripts/content-factory-flow.mjs` (it needs a running server and a sign-in), and any live provider run.
+- Browser verification for this branch is tracked in PR #80 CI. The release-acceptance browser flow checks a seeded stale provider success on the actual Integrations screen and rejects any browser request that leaves the local origin. It does not call a provider. Content-page browser checks are added after the UI changes and must be run on the final head before this document is treated as complete.
 
-## Next, in order
+## Remaining verification and boundaries
 
-1. Check the page in a browser as an admin and as a member, at desktop and phone width. Capture before and after. Run `scripts/content-factory-flow.mjs` against a running server. Its page check now looks for the page description.
-2. Section headings: each embedded section still shows its own eyebrow and page title under the page title. Make them section headings.
-3. Move the brand overview's stage and next-action links (`src/components/brand-overview/pipeline.ts`) and the home attention links to the section links. They work now through the redirects.
-4. Repurpose panel: owner decision needed. The Meta paused-ad work and the Hypit bridge work stay paused.
-5. Backend unification, not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
+1. Run the authenticated Content page browser flow on the final PR head at desktop and phone widths; verify the tab/preset interactions, role-gated Ads tab, no horizontal overflow, and local-only requests. Capture screenshots from that same head.
+2. Keep the old section URLs as redirects and preserve URL-backed tab/preset/session state; these are compatibility behavior, not cleanup candidates.
+3. The Content page's Ads section remains admin-only. Each underlying section keeps its server-side role checks.
+4. Repurpose upload proof is fixture-only and uses an injected fake transport. The paused-ad proof creates and reads back an ad as `PAUSED`; it never activates or publishes it.
+5. Live providers, credentials, paid requests and external publishing remain outside automated browser verification.
+6. Backend unification, not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
 6. Calibration is still its own page.
 7. Line of record (which branch is the release line): owner decision.
