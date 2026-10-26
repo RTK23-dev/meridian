@@ -24,3 +24,8 @@ export function openRouterProgress(input: { keySaved: boolean; testPassed: boole
         : "Nothing more to do. OpenRouter receives decisions.";
   return { steps, next, activeLabel: input.activeLabel };
 }
+
+/** Whether a blocker text is the missing monthly budget, and whether it says nothing was sent. The claim is made only when the text makes it. */
+export function budgetBlocker(text: string): { blocked: boolean; nothingSent: boolean } {
+  return { blocked: /monthly budget/i.test(text), nothingSent: /nothing was sent/i.test(text) };
+}

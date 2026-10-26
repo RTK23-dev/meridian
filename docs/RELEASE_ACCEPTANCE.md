@@ -47,6 +47,15 @@ whether the run passes or fails.
 | F1 | Content workflow tabs are accessible and the admin sees Ads | PASS on run 40263991449 (head b4b94ea) |
 | F2 | Create presets expose the selected state and no-brand empty state | PASS on run 40263991449 (head b4b94ea) |
 | F3 | Content page at 390 px has no horizontal overflow | PASS on run 40263991449 (head b4b94ea) |
+| G1 | Market explains one exact page URL (no setup) versus an optional phrase search | not yet run on CI |
+| G2 | A run that stored new examples says so, with source rows closed | not yet run on CI |
+| G3 | A duplicate-only run says nothing new, offers a next step, and counts unused sources as not failures | not yet run on CI |
+| G4 | A robots.txt-blocked page is reported as blocked, not bypassed, with a supported alternative | not yet run on CI |
+| G5 | The default view prints no per-source rows; the details open on request | not yet run on CI |
+| G6 | Only search sources ask for a key; unavailable sources say no key is needed | not yet run on CI |
+| G7 | `/settings#monthly-budget` focuses one field named "Monthly budget (USD)" | not yet run on CI |
+| G8 | Setup shows key saved, test passed and active engine as separate steps | not yet run on CI |
+| G9 | The Setup sources step does not ask for a key to read a page | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
 with a reason of at least ten characters, and the second hold still `uncertain`.
@@ -68,7 +77,17 @@ A stored key shows the status "Saved, not checked live", with the reason "The wo
 been checked against the provider with it." The setup flow has no live-verified state: the Check key action reads the key and calls no
 provider. The HEALTHY phase in the connection rows is the only live-verified state, and it needs a recorded successful provider request.
 
+## The first-run journey (G checks)
+
+`seed-first-run.mjs` stores three finished discovery runs for a brand the run creates through the form: new examples, every example
+already stored, and a page the site's robots.txt did not allow. They are stored states. No page is fetched, because a local address is
+refused by design and this run sends no request to a live site. The real page read, the duplicate count and the robots refusal are
+covered by the server tests (`public-page-run.test.ts`). The G checks prove what a person is shown for each state.
+
 ## What is not covered
+
+- **The budget blocker link inside the OpenRouter test.** Reaching it needs the live OpenRouter model catalogue. The link target is
+  checked (G7), and the text that triggers the link is a pure function with a unit test.
 
 - **Live provider behaviour.** Nothing here calls a provider, so this proves the screens and the fixtures, not the providers.
 - **Server-side outbound calls.** The browser can see only the requests the page makes. A request the server makes on its own is not

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason, Field, SelectInput } from "@/components/ui";
+import { budgetBlocker } from "@/components/setup/engine-progress";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { saveOpenRouterDecisionModel, testOpenRouterDecisionConnection } from "@/lib/meridian/settings/server-actions";
@@ -84,9 +85,8 @@ export function OpenRouterDecisionControls({
   const saveError = save.error ? plainError(save.error) : null;
   const testError = runTest.error ? plainError(runTest.error) : null;
   const blockerText = `${testError?.message ?? ""} ${test?.message ?? ""}`;
-  const budgetBlocked = /monthly budget/i.test(blockerText);
   // The ledger refuses a call with this wording before it sends anything. Only claim it when the refusal says so.
-  const nothingSent = /nothing was sent/i.test(blockerText);
+  const { blocked: budgetBlocked, nothingSent } = budgetBlocker(blockerText);
   const unchanged = draft.trim() === model.model;
   const savable = chosen !== null && !unchanged;
 

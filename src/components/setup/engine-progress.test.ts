@@ -25,3 +25,18 @@ test("only an active, tested, saved engine reads as finished", () => {
 test("no key says to save one first", () => {
   assert.match(openRouterProgress(base).next, /Save your OpenRouter key/);
 });
+
+import { budgetBlocker } from "./engine-progress.ts";
+import { NO_MONTHLY_BUDGET_REASON } from "../../lib/meridian/providers/generation-ledger.ts";
+
+test("the ledger's own refusal is read as a missing budget, with nothing sent", () => {
+  assert.deepEqual(budgetBlocker(NO_MONTHLY_BUDGET_REASON), { blocked: true, nothingSent: true });
+});
+
+test("an unrelated failure is not a budget blocker, and claims nothing", () => {
+  assert.deepEqual(budgetBlocker("The provider rejected the key."), { blocked: false, nothingSent: false });
+});
+
+test("a budget message that does not say nothing was sent does not claim it", () => {
+  assert.deepEqual(budgetBlocker("Set a monthly budget."), { blocked: true, nothingSent: false });
+});

@@ -178,7 +178,7 @@ try {
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
   const brandLink = page.getByRole("link", { name: /Acceptance Brand/ }).first();
   await brandLink.waitFor();
-  const brandPath = new URL(await brandLink.getAttribute("href"), base).pathname.replace(/\/$/, "");
+  const brandPath = `/brands/${new URL(await brandLink.getAttribute("href"), base).pathname.match(/\/brands\/([^/]+)/)[1]}`;
   await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
   const runsBlock = page.getByText("Recent discovery runs").locator("..");
   await runsBlock.waitFor().catch(async (error) => {
