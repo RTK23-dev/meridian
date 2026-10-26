@@ -244,10 +244,17 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/library` as never}>Open Library</Link></Button> : null}
         </div>
       </div>
-      <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
-      <p className="text-sm text-fg-muted">
-        Search by phrase is optional. TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release, and no key is needed for them. Upload the example or paste its text instead.
-      </p>
+      <details className="rounded-lg border border-border p-4">
+        <summary className="cursor-pointer font-semibold text-fg">Optional: search by phrase</summary>
+        <p className="mt-2 text-sm text-fg-muted">
+          Open this only if you want Meridian to search for examples matching a phrase. To read one public page URL or use your own files, leave these connections alone.
+          These are your developer keys for the search services, not logins for the brands you study.
+        </p>
+        <RowList ids={PRIMARY_SOURCES.map((source) => source.id)} rowById={rowById} loaded={loaded} canAdmin={canAdmin} organizationId={organizationId} descriptions={Object.fromEntries(PRIMARY_SOURCES.map((source) => [source.id, source.what]))} />
+        <p className="mt-3 text-sm text-fg-muted">
+          TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release. Saving a key for them would change nothing. Upload the example or paste its text instead.
+        </p>
+      </details>
     </div>
   );
 }
