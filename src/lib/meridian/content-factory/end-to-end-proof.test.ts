@@ -16,7 +16,8 @@ import { fakeMeta, type FakeMeta } from "../testing/meta-paused-fake.ts";
 import { startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { createRepurposedPausedAd, type CreatePausedAdOutcome } from "./repurpose-paused-ad.ts";
-import { sqlRepurposeUploadStore } from "./repurpose-upload.ts";
+import { uploadRepurposeVariantToMeta } from "./repurpose-upload-service.ts";
+import type { Transport } from "../providers/http.ts";
 
 const WS = "ws_proof";
 const BRAND = "brand_proof";
@@ -148,19 +149,51 @@ describe("a repurposed cut, from a delivered session to a paused Meta ad", () =>
     assert.equal(reviews[variantKey]?.status, "approved");
   });
 
-  test("the cut's Meta upload receipt is stored for the saved ad account, and only for it", async () => {
-    const store = sqlRepurposeUploadStore(db.sql);
-    await store.save({
-      id: "upl_proof_1",
-      organizationId: WS,
-      brandId: BRAND,
-      variantId,
-      platformAccountId: AD_ACCOUNT,
-      externalId: UPLOAD_VIDEO_ID,
-      idempotencyKey: `${BRAND}:${runId}:${variantKey}:${AD_ACCOUNT}:meta_ad_video`,
-    });
-    assert.equal((await store.find(WS, variantId, AD_ACCOUNT))?.externalId, UPLOAD_VIDEO_ID);
-    assert.equal(await store.find(WS, variantId, "act_other"), null, "another ad account has no receipt");
+  test("the real upload orchestration persists a fake-transport receipt idempotently, without publishing", async () => {
+    const uploadRequests: Array<{ method: string; url: string }> = [];
+    const uploadTransport: Transport = async (request) => {
+      uploadRequests.push({ method: request.method, url: request.url });
+      // The fake answers only the Meta video-list and upload endpoints. Any other upload-path request is an error,
+      // and nothing can leave this injected transport.
+      if (request.method === "GET" && request.url.includes("/advideos?")) {
+        return { status: 200, body: JSON.stringify({ data: [] }), headers: {} };
+      }
+      if (request.method === "POST" && request.url.endsWith("/advideos")) {
+        return { status: 200, body: JSON.stringify({ id: UPLOAD_VIDEO_ID }), headers: {} };
+      }
+      throw new Error(`unexpected request from upload orchestration: ${request.method} ${request.url}`);
+    };
+    const uploadOptions = {
+      env: { TOKEN_ENCRYPTION_KEY: ENCRYPTION_KEY },
+      readVideo: async (artifactId: string) => {
+        assert.equal(artifactId, RENDERED_ARTIFACT, "the service reads this variation's rendered artifact");
+        return new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112]);
+      },
+      transport: uploadTransport,
+    };
+    const outcome = await uploadRepurposeVariantToMeta(db.sql, ADMIN, { sessionId: SESSION, runId, variantKey }, uploadOptions);
+    assert.equal(outcome.status, "uploaded", "the real service and upload orchestration complete against the fake transport");
+    if (outcome.status !== "uploaded") throw new Error("upload receipt was not persisted");
+    assert.equal(outcome.receipt.externalId, UPLOAD_VIDEO_ID);
+    assert.equal(outcome.receipt.variantId, variantId);
+    assert.equal(outcome.receipt.platformAccountId, AD_ACCOUNT);
+
+    const repeated = await uploadRepurposeVariantToMeta(db.sql, ADMIN, { sessionId: SESSION, runId, variantKey }, uploadOptions);
+    assert.equal(repeated.status, "already_uploaded", "a repeated request returns the persisted receipt");
+    if (repeated.status !== "already_uploaded") throw new Error("idempotent receipt was not returned");
+    assert.equal(repeated.receipt.id, outcome.receipt.id);
+    assert.equal(uploadRequests.length, 2, "the repeated request sends no additional upload or reconciliation calls");
+    assert.deepEqual(uploadRequests.map((request) => request.method), ["GET", "POST"]);
+    assert.ok(uploadRequests.every((request) => request.url.startsWith("https://graph.facebook.com/v21.0/")));
+    assert.equal(uploadRequests.some((request) => request.url.endsWith("/ads") || request.url.endsWith("/adcreatives")), false,
+      "the upload flow makes no ad creation or publish/activation call");
+    const stored = await db.sql<{ external_id: string; idempotency_key: string }>`
+      select external_id, idempotency_key from content_factory_repurpose_publications
+      where organization_id = ${WS} and variant_id = ${variantId} and platform_account_id = ${AD_ACCOUNT} and kind = 'meta_ad_video'
+    `;
+    assert.equal(stored.length, 1, "exactly one upload receipt is persisted");
+    assert.equal(stored[0]?.external_id, UPLOAD_VIDEO_ID);
+    assert.equal(stored[0]?.idempotency_key, outcome.receipt.idempotencyKey);
   });
 
   test("the paused ad is created once, in the chosen ad set, PAUSED, and reads back as PAUSED", async () => {
