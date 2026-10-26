@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason, Field, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -82,6 +83,10 @@ export function OpenRouterDecisionControls({
   });
   const saveError = save.error ? plainError(save.error) : null;
   const testError = runTest.error ? plainError(runTest.error) : null;
+  const blockerText = `${testError?.message ?? ""} ${test?.message ?? ""}`;
+  const budgetBlocked = /monthly budget/i.test(blockerText);
+  // The ledger refuses a call with this wording before it sends anything. Only claim it when the refusal says so.
+  const nothingSent = /nothing was sent/i.test(blockerText);
   const unchanged = draft.trim() === model.model;
   const savable = chosen !== null && !unchanged;
 
@@ -181,6 +186,12 @@ export function OpenRouterDecisionControls({
           Testing the connection sends one real request to OpenRouter and may incur model usage. It changes no product data and no active engine.
         </p>
         {testError ? <PlainErrorMessage message={testError.message} raw={testError.raw} /> : null}
+        {budgetBlocked ? (
+          <p className="text-sm" role="status">
+            <Link to="/settings" hash="monthly-budget" className="font-semibold underline underline-offset-2">Set the monthly budget (USD)</Link>
+            , then test again.{nothingSent ? " The budget check ran before any request, so nothing was sent to OpenRouter and nothing was spent." : ""}
+          </p>
+        ) : null}
         {test ? (
           <p className={`text-sm ${test.status === "PASSED" ? "text-success" : "text-warning"}`} role="status">
             {test.status === "PASSED" ? "Passed. " : test.status === "FAILED" ? "Failed. " : "Not run. "}

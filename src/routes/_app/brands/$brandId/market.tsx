@@ -111,8 +111,8 @@ function MarketPage({ brandId }: { brandId: string }) {
     invalidate: () => [qk.market(brandId)],
     onSuccess: (result) => {
       setNote(result.status === "blocked"
-        ? "Discovery ran no source, so it has no results. The run is listed below with each source's reason."
-        : `Discovery run ${result.status}: ${result.itemsStored} item(s) stored. Each source's state is listed below.`);
+        ? "Nothing was read, so there are no results. The run below says what to do next."
+        : result.itemsStored > 0 ? `${result.itemsStored} new ${result.itemsStored === 1 ? "example" : "examples"} stored. See the run below.` : "Nothing new was stored. See the run below for why.");
     },
   });
   const addCompetitorMutation = useScopedMutation({

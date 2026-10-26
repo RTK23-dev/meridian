@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -142,9 +142,22 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
     invalidate: () => [qk.videoBudget(organizationId)],
     onSuccess: (result) => {
       setDraft(null);
-      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly video budget cleared. No budget is set." : "Monthly video budget saved.");
+      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly budget cleared. No budget is set." : "Monthly budget saved.");
     },
   });
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  // A blocker elsewhere links here with #monthly-budget. Scroll to the field and focus it, on arrival and on a later hash change.
+  useEffect(() => {
+    const goToField = () => {
+      if (window.location.hash !== "#monthly-budget") return;
+      inputRef.current?.scrollIntoView({ block: "center" });
+      inputRef.current?.focus();
+    };
+    goToField();
+    window.addEventListener("hashchange", goToField);
+    return () => window.removeEventListener("hashchange", goToField);
+  }, [budget.isPending]);
 
   const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
   const parsed = parseMonthlyVideoBudget(shown);
@@ -158,14 +171,15 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
         : `The budget is ${saved.toFixed(2)} USD a month.`;
 
   return (
-    <div className="space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
+    <div id="monthly-budget" className="scroll-mt-24 space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
       <div className="space-y-1">
         <p className="font-semibold text-fg">Monthly budget (USD)</p>
         <p className="text-sm text-fg-muted">
-          The most this workspace may spend in a month, in US dollars, on all paid generation together: video, copy and
-          scripts, research analysis, brand brain suggestions, Factory image labels and OpenRouter JEV decisions. One cap
-          covers them all, and each one counts the others' spend. Blank means no budget is set, so paid generation is
-          blocked until one is saved. Each call is also capped on its own. There is no default. {current}
+          This workspace's hard monthly cap, in US dollars, on all paid generation together: video, copy and scripts,
+          research analysis, brand brain suggestions, Factory image labels and OpenRouter decisions. It is a limit Meridian
+          enforces, not your OpenRouter account balance. Blank means no budget is set, so paid generation, and the
+          OpenRouter connection test, are blocked until one is saved. Each call is also capped on its own. There is no
+          default. {current}
         </p>
       </div>
       {!canAdmin ? (
@@ -185,11 +199,12 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
           >
             <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
               <Field
-                label="Monthly video budget (USD)"
+                label="Monthly budget (USD)"
                 hint="A number of 0 or more, with at most two decimals. Leave blank for no budget."
                 error={parsed.ok ? undefined : parsed.message}
               >
                 <Input
+                  ref={inputRef}
                   inputMode="decimal"
                   value={shown}
                   onChange={(event) => setDraft(event.target.value)}

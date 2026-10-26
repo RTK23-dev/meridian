@@ -29,9 +29,9 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
   const isPage = pageUrlForSeed(trimmed) !== null;
   const anyConnected = sources.some((source) => source.connected);
   const disabledReason = !trimmed
-    ? "Enter a search phrase or a public page URL to start a run."
+    ? "Enter a public page URL to read, or a search phrase."
     : !isPage && !anyConnected
-      ? "No discovery source is connected for this workspace. Save a YouTube, SerpAPI or Meta Ad Library key in the Setup guide, or enter a public page URL instead."
+      ? "No discovery source is connected for this workspace. To search by phrase, save a search source key in the Setup guide. Or enter a public page URL, which needs none."
       : null;
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -43,25 +43,35 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
 
   return (
     <div className="space-y-4">
+      <div className="grid gap-3 text-sm md:grid-cols-2">
+        <p><span className="font-semibold">Paste a public page URL.</span> Meridian reads that one page. No setup or key is needed. The result is the examples on that page.</p>
+        <p><span className="font-semibold">Or search by phrase.</span> This asks a connected search source, with your own key, for matching examples. It is optional.</p>
+      </div>
       <form className="grid gap-3 md:grid-cols-[1fr_auto] md:items-end" onSubmit={submit}>
-        <Field label="Search phrase or public page URL" hint="A page URL or domain is read as one page. Any other text is searched by the connected keyed sources.">
+        <Field label="Public page URL, or a search phrase" hint="A page URL or domain is read as one page. Any other text is searched by a connected search source.">
           <Input
             value={seed}
             onChange={(event) => setSeed(event.target.value)}
             maxLength={200}
-            placeholder="artisan sourdough, or shop.example/sponge"
+            placeholder="shop.example/sponge, or artisan sourdough"
             aria-describedby={disabledReason ? reasonId : undefined}
             disabled={!canEdit}
           />
         </Field>
         <Button type="submit" disabled={!canEdit || pending || disabledReason !== null} aria-describedby={disabledReason ? reasonId : undefined}>
-          {pending ? "Running discovery…" : "Start discovery"}
+          {pending ? "Reading…" : isPage ? "Read this page" : "Search"}
         </Button>
       </form>
       {!canEdit ? <DisabledReason id={reasonId}>Only workspace members can start a discovery run.</DisabledReason> : null}
       {canEdit && disabledReason ? <DisabledReason id={reasonId}>{disabledReason}</DisabledReason> : null}
-      <div>
-        <h3 className="text-lg">Sources for this workspace</h3>
+      <p className="text-xs text-fg-muted">Meridian reads each site's robots.txt first. When a site says no, or shows a bot check, that is reported and never worked around. You can upload an example or paste its text instead.</p>
+      <details>
+        <summary className="cursor-pointer text-sm text-fg-muted">
+          Optional search sources ({sources.filter((source) => source.connected).length} of {sources.length} connected)
+        </summary>
+        <p className="mt-2 text-xs text-fg-muted">
+          These search by phrase, using your own developer key for the service. They are never needed to read a page URL, and none of them needs the password or token of the brand you are studying.
+        </p>
         <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
           {sources.map((source) => (
             <li key={source.adapterId} className="border-t border-border py-3">
@@ -73,8 +83,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
             </li>
           ))}
         </ul>
-        <p className="mt-2 text-xs text-fg-muted">Public pages need no key. Meridian reads each site's robots.txt first, and a bot check is reported, never bypassed. Keyed sources read the key saved for this workspace only. A key is checked when a request is made.</p>
-      </div>
+      </details>
     </div>
   );
 }
