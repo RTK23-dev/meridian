@@ -6,6 +6,7 @@ import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation, useVideoBudgetQuery } from "@/lib/query/hooks";
 import { removeProviderConfig, saveProviderConfig, saveVideoBudget, testProviderConnection } from "@/lib/meridian/settings/server-actions";
+import { keyOwnerNote, splitOperatorHint } from "./key-copy";
 import { parseMonthlyVideoBudget } from "@/lib/meridian/settings/video-budget-model";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
@@ -277,12 +278,20 @@ export function TestConnection({
 
 function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organizationId: string; canAdmin: boolean }) {
   const presentation = STATUS_PRESENTATION[row.status];
+  const reason = splitOperatorHint(row.reason);
   return (
     <li className="space-y-3 border-t border-border py-4 first:border-t-0 first:pt-0" data-row={row.id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <p className="font-semibold text-fg">{row.label}</p>
-          <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+          <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{reason.plain}</p>
+          {reason.operator ? (
+            <details className="text-xs text-fg-muted">
+              <summary className="cursor-pointer">For whoever runs the server</summary>
+              <p className="mt-1 font-mono [overflow-wrap:anywhere]">{reason.operator}</p>
+            </details>
+          ) : null}
+          {row.save.kind === "form" ? <p className="text-xs text-fg-muted">{keyOwnerNote(row.label)}</p> : null}
           {row.fingerprint ? (
             <p className="font-mono text-xs text-fg-muted">Stored key: {row.fingerprint}</p>
           ) : null}
