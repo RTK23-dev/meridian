@@ -106,7 +106,7 @@ try {
     assert.ok(await release.first().isDisabled());
   });
 
-  await check("B1", "a stored key reads as stored and usable, and nothing claims a live verification", async () => {
+  await check("B1", "a stored key reads as saved and not checked live, and nothing claims a live verification", async () => {
     const anchor = page.getByText("Gemini perception", { exact: true }).first();
     const row = anchor.locator("xpath=ancestor::li[1]");
     await row.scrollIntoViewIfNeeded();
