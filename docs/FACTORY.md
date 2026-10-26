@@ -500,6 +500,8 @@ and the master cut is never changed. The steps, each a separate action:
 4. **Library.** A reviewed, rights-cleared variation becomes one derived creative with its own asset. The asset points at the variation's stored video,
    so no file is copied. The creative is linked to its variation, and the link is made once.
 5. **Upload to the ad account.** The rendered video is uploaded to the brand's saved Meta ad account, and the upload is recorded by Meta's video id.
+
+   The fixture proof in `content-factory/end-to-end-proof.test.ts` calls the real upload service and orchestration with an injected fake transport. It checks the Meta video-list/upload requests, one persisted receipt, idempotent replay without another request, and the subsequent paused-ad path. The production default remains gated and is tested separately to refuse before transport; no live Meta request or ad activation occurs.
 6. **Paused Meta ad.** One paused ad per variation and ad account, inside an ad set the admin chose and confirmed a second time, under a Page saved for the
    brand. Meridian sends nothing that activates it. A paused ad is not delivery.
 7. **Facebook Page post.** An explicit action posts the variation to one Facebook Page the workspace connected, as an organic video. It is recorded as an
