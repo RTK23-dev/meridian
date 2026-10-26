@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Check, ClipboardCheck, Lightbulb, Library, Megaphone, Send, Sparkles, TrendingUp } from "lucide-react";
+import { Check, ClipboardCheck, Lightbulb, Library as LibraryIcon, Megaphone, Send, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button, EmptyState, PageHeader, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -24,6 +24,16 @@ const Library = lazy(() => import("./sections/library").then((module) => ({ defa
 const BrandAccounts = lazy(() => import("./sections/accounts").then((module) => ({ default: module.BrandAccounts })));
 const Learning = lazy(() => import("./sections/learning").then((module) => ({ default: module.Learning })));
 const FactoryPage = lazy(() => import("./sections/factory").then((module) => ({ default: module.FactoryPage })));
+
+const SECTION_ICONS: Record<ContentSection, LucideIcon> = {
+  create: Sparkles,
+  ideas: Lightbulb,
+  review: ClipboardCheck,
+  library: LibraryIcon,
+  publish: Send,
+  results: TrendingUp,
+  ads: Megaphone,
+};
 
 type Props = {
   /** The brand in the URL. Null on the workspace-level page, which then offers a brand picker. */
