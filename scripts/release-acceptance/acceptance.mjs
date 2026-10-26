@@ -260,6 +260,9 @@ try {
 
   await check("G9", "setup: the sources step does not ask for a key to read a page, and says TikTok, Instagram and the rest need none", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // An optional step keeps its body behind "Open this step", so open the one for sources as a person would.
+    const step = page.locator("li, section, article").filter({ hasText: "Pick where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
+    await step.getByText("Open this step").first().click();
     const text = await page.locator("main").innerText();
     assert.match(text, /Read one public page/);
     assert.match(text, /This is not a search/);
