@@ -41,7 +41,10 @@ whether the run passes or fails.
 | C1 | A stored provider success older than 24 hours is shown as DEGRADED, never HEALTHY/live-verified | PASS |
 | C2 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
 | D1 | No request left the local server | PASS |
-| E1 | Settings phone width (390 px): no horizontal scroll | PASS on run 40260336932; current head pending |\n| F1 | Content workflow tabs are accessible and the admin sees Ads | PENDING on current head |\n| F2 | Create presets expose the selected state and no-brand empty state | PENDING on current head |\n| F3 | Content page at 390 px has no horizontal overflow | PENDING on current head |
+| E1 | Settings phone width (390 px): no horizontal scroll | PASS on run 40260336932; current head pending |
+| F1 | Content workflow tabs are accessible and the admin sees Ads | PENDING on current head |
+| F2 | Create presets expose the selected state and no-brand empty state | PENDING on current head |
+| F3 | Content page at 390 px has no horizontal overflow | PENDING on current head |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
 with a reason of at least ten characters, and the second hold still `uncertain`.
