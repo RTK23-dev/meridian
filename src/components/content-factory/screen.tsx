@@ -116,8 +116,17 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
         </>
       ) : null}
-      <OrchestratorPlans />
-      <OrchestratorModelPanel organizationId={organizationId} />
+      {/* The planner is the advanced path. It stays one click away so the first view is the session, not every control at once. */}
+      <details className="group rounded-xl border border-border bg-surface">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <span>Plan a run in detail (advanced)</span>
+          <span className="text-xs font-normal text-fg-muted">Draw the steps and see the price before anything runs</span>
+        </summary>
+        <div className="flex flex-col gap-6 border-t border-border p-4 sm:p-6">
+          <OrchestratorPlans />
+          <OrchestratorModelPanel organizationId={organizationId} />
+        </div>
+      </details>
     </div>
   );
 }
