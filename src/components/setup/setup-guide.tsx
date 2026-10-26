@@ -10,6 +10,7 @@ import { useDecisionEnginesQuery, useProviderSettingsQuery } from "@/lib/query/h
 import { guideFacts } from "@/lib/setup/facts";
 import { buildGuide, currentStep, guideSummary, type GuideStep } from "@/lib/setup/guide";
 import { EngineChoice } from "./engine-choice";
+import { splitOperatorHint } from "@/components/settings/key-copy";
 
 /** The keyed sources people usually start with. The rest sit under "More connectors". */
 const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
@@ -193,7 +194,7 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
               </span>
             </div>
             <p className="text-sm text-fg">{step.what}</p>
-            <p className="text-sm text-fg-muted">{step.detail}</p>
+            <StepDetail text={step.detail} />
             {step.required || isCurrent ? (
               <div className="pt-1">{body}</div>
             ) : (
@@ -331,5 +332,21 @@ function StorageAction({ row, loaded }: { row: SetupRow | undefined; loaded: boo
         </p>
       ) : null}
     </div>
+  );
+}
+
+/** A step's own status line. Server variable names are kept behind an operator note rather than shown to everyone. */
+function StepDetail({ text }: { text: string }) {
+  const detail = splitOperatorHint(text);
+  return (
+    <>
+      <p className="text-sm text-fg-muted">{detail.plain}</p>
+      {detail.operator ? (
+        <details className="text-xs text-fg-muted">
+          <summary className="cursor-pointer">For whoever runs the server</summary>
+          <p className="mt-1 font-mono [overflow-wrap:anywhere]">{detail.operator}</p>
+        </details>
+      ) : null}
+    </>
   );
 }
