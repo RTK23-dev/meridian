@@ -30,6 +30,8 @@ whether the run passes or fails.
 
 ## What the run checks
 
+**Current-head evidence:** [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449) on `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` completed with all 13 required jobs successful. The release-acceptance job reported 13 pass, 0 fail; its screenshots and logs are attached as the `release-acceptance` artifact.
+
 | ID | Check | Result |
 | --- | --- | --- |
 | A1 | Two uncertain holds are listed with their operation and model | PASS |
@@ -41,10 +43,10 @@ whether the run passes or fails.
 | C1 | A stored provider success older than 24 hours is shown as DEGRADED, never HEALTHY/live-verified | PASS |
 | C2 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
 | D1 | No request left the local server | PASS |
-| E1 | Settings phone width (390 px): no horizontal scroll | PASS on run 40260336932; current head pending |
-| F1 | Content workflow tabs are accessible and the admin sees Ads | PENDING on current head |
-| F2 | Create presets expose the selected state and no-brand empty state | PENDING on current head |
-| F3 | Content page at 390 px has no horizontal overflow | PENDING on current head |
+| E1 | Settings phone width (390 px): no horizontal scroll | PASS on run 40263991449 (head b4b94ea) |
+| F1 | Content workflow tabs are accessible and the admin sees Ads | PASS on run 40263991449 (head b4b94ea) |
+| F2 | Create presets expose the selected state and no-brand empty state | PASS on run 40263991449 (head b4b94ea) |
+| F3 | Content page at 390 px has no horizontal overflow | PASS on run 40263991449 (head b4b94ea) |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
 with a reason of at least ten characters, and the second hold still `uncertain`.
