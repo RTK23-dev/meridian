@@ -38,7 +38,8 @@ whether the run passes or fails.
 | A4 | Keyboard: Enter releases the hold, the notice names it, and only that hold leaves the list | PASS |
 | A5 | The second, unreleased hold keeps its release disabled | PASS |
 | B1 | A stored key reads as "Saved, not checked live", and nothing on the row or the page claims a live verification | PASS |
-| C1 | A stored provider success older than 24 hours is shown as DEGRADED, never HEALTHY/live-verified | PASS |\n| C2 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
+| C1 | A stored provider success older than 24 hours is shown as DEGRADED, never HEALTHY/live-verified | PASS |
+| C2 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
 | D1 | No request left the local server | PASS |
 | E1 | Phone width (390 px): no horizontal scroll | PASS |
 
