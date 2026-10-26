@@ -1,8 +1,9 @@
+import { gatedTransport } from "./capability.ts";
 import { liveTransport, type Transport } from "./http.ts";
 import { probeAdLibrary, probeMeta, publishMetaPaused } from "./meta.ts";
 import { probeGoogleAds, publishGoogleFlow } from "./google-ads.ts";
 import { probeTikTok, publishTikTokFlow } from "./tiktok.ts";
-import { connectionPhase, type ConnectionPhase } from "./phase.ts";
+import { connectionPhase, successIsStale, type ConnectionPhase } from "./phase.ts";
 import { DEPLOYMENT_ONLY_KEY_ENV } from "../credentials/contract.ts";
 import type { ProviderCredentialState } from "./access-token.ts";
 
@@ -76,6 +77,8 @@ export function phaseForProbe(input: {
   disconnected: boolean;
   env?: NodeJS.ProcessEnv;
   configured: boolean;
+  /** True when a recorded success is older than the freshness window. A probe that ran now is never stale. */
+  stale?: boolean;
 }): { phase: ConnectionPhase; detail: string } {
   return connectionPhase({
     configured: input.configured,
@@ -83,7 +86,7 @@ export function phaseForProbe(input: {
     probing: false,
     syncing: false,
     lastOk: input.ok,
-    stale: false,
+    stale: input.stale === true,
     lastError: input.error,
   });
 }
@@ -91,7 +94,7 @@ export function phaseForProbe(input: {
 /**
  * The phase of a stored connection. The workspace's credential decides whether there is a credential at all. An unusable
  * credential is a failure with its reason, so an earlier success never shows HEALTHY. Otherwise the phase follows the recorded
- * provider result, as it always has. DISCONNECTED comes first.
+ * provider result. A recorded success older than PROVIDER_SUCCESS_FRESH_MS is DEGRADED, not HEALTHY. DISCONNECTED comes first.
  */
 export function phaseForStoredConnection(input: {
   provider: LiveProvider;
@@ -108,6 +111,8 @@ export function phaseForStoredConnection(input: {
     error: unusable ? input.credential.reason : input.lastError,
     disconnected: input.disconnected,
     configured: input.credential.state !== "not_configured",
+    // A recorded success older than the window is DEGRADED, so a stored success never reads HEALTHY indefinitely.
+    stale: successIsStale(input.lastSuccessAt),
   });
 }
 
@@ -161,7 +166,9 @@ export async function publishPausedStages(input: {
   transport?: Transport;
 }): Promise<PausedStage[]> {
   const env = input.env ?? process.env;
-  const transport = input.transport ?? liveTransport();
+  // A paused publish writes ads to the provider. Its default transport is gated per provider, so nothing is sent until that write is guarded.
+  const writeCapability = input.provider === "meta" ? "ads.meta_write" : input.provider === "tiktok" ? "ads.tiktok_write" : "ads.google_ads_write";
+  const transport = input.transport ?? gatedTransport(writeCapability);
   const token = input.accessToken?.trim() ?? "";
   if (!token) {
     // No stored token means nothing is sent. Every stage is reported as not connected, with the reason.

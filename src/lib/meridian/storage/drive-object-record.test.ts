@@ -104,7 +104,7 @@ test("a file written to Drive with storageRecord has exactly one storage_objects
     const drive = stubDrive();
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
-      const client = new GoogleDriveClient({ recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
+      const client = new GoogleDriveClient({ fetch: globalThis.fetch, recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
       const meta = await client.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } });
 
       const rows = await rowsFor(sql, orgId, brandId, path);
@@ -131,7 +131,7 @@ test("writing the same file again keeps one row, and the Drive file it already h
     const drive = stubDrive();
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
-      const client = new GoogleDriveClient({ recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
+      const client = new GoogleDriveClient({ fetch: globalThis.fetch, recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
       const first = await client.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } });
       const second = await client.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } });
       assert.equal(second.fileId, first.fileId, "Drive returns the existing file");
@@ -150,7 +150,7 @@ test("a put without storageRecord writes no row: the caller that owns the record
     const drive = stubDrive();
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
-      await new GoogleDriveClient().put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST });
+      await new GoogleDriveClient({ fetch: globalThis.fetch }).put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST });
       assert.equal((await rowsFor(sql, orgId, brandId, path)).length, 0);
     } finally {
       drive.restore();
@@ -166,7 +166,7 @@ test("a failed Drive write leaves no row pointing at nothing", async () => {
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
       const recorded: DriveObjectRecord[] = [];
-      const client = new GoogleDriveClient({ recordObject: async (record) => void recorded.push(record) });
+      const client = new GoogleDriveClient({ fetch: globalThis.fetch, recordObject: async (record) => void recorded.push(record) });
       await assert.rejects(
         client.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } }),
         /HTTP 500|upload failed/i,
@@ -187,6 +187,7 @@ test("when Drive accepted the file but its row could not be saved, the caller is
     try {
       const path = `production/inputs/prod_mc_${randomUUID()}/manifest.json`;
       const failing = new GoogleDriveClient({
+        fetch: globalThis.fetch,
         recordObject: async () => {
           throw new Error("connection reset");
         },
@@ -197,7 +198,7 @@ test("when Drive accepted the file but its row could not be saved, the caller is
       );
       assert.equal((await rowsFor(sql, orgId, brandId, path)).length, 0);
 
-      const working = new GoogleDriveClient({ recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
+      const working = new GoogleDriveClient({ fetch: globalThis.fetch, recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
       await working.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } });
       assert.equal((await rowsFor(sql, orgId, brandId, path)).length, 1);
       assert.equal(drive.uploads.length, 1, "the retry found the Drive file and did not upload it again");
@@ -226,7 +227,7 @@ test("a different file under a key that already has a row is refused, and the ex
         sha256: "0".repeat(64),
         lifecycle: "stored",
       });
-      const client = new GoogleDriveClient({ recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
+      const client = new GoogleDriveClient({ fetch: globalThis.fetch, recordObject: (record) => recordDriveObject(sql, record).then(() => undefined) });
       await assert.rejects(
         client.put({ organizationId: orgId, brandId, path, mimeType: "application/json", bytes: MANIFEST, storageRecord: { lifecycle: "stored" } }),
         /already exists under this key with a different file/,

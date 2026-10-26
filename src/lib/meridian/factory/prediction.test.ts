@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
@@ -139,6 +140,7 @@ function seamsWith(jev: FixtureDecisionEngine, openai?: FixtureDecisionEngine): 
     decisionEngines: {
       jev,
       "openai-decisions": openai ?? new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }),
+      "openrouter-decisions": unselectedOpenRouterEngine(),
     },
   };
 }
@@ -222,6 +224,7 @@ test("with no decision engine ready, the pick is recorded as observed only, and 
     decisionEngines: {
       jev: new FixtureDecisionEngine({ id: "jev", health: NOT_CONFIGURED }),
       "openai-decisions": new FixtureDecisionEngine({ id: "openai-decisions", health: NOT_CONFIGURED }),
+      "openrouter-decisions": unselectedOpenRouterEngine(),
     },
   };
   assert.equal(await runGrade(sql, notReady), "graded:1");

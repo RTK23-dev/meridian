@@ -2,7 +2,8 @@ import type { Sql } from "../learning/store.ts";
 import { handoffToHypit } from "../hypit/handoff.ts";
 import { sqlHypitLedger, storeHypitArtifact } from "../hypit/store.ts";
 import type { HypitDecisionSnapshot, HypitHandoffInput } from "../hypit/contract.ts";
-import { liveTransport, type Transport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport } from "../providers/http.ts";
 import { publishStoredHypitAsset, sqlPublishLedger } from "../publishing/hypit-asset.ts";
 import { normalizeReviewerDecision } from "../jev/reviewer-decision.ts";
 
@@ -51,7 +52,7 @@ export async function generateHypitStudioVideo(
   };
   const result = await handoffToHypit(handoff, {
     env: options.env,
-    transport: options.transport ?? liveTransport(),
+    transport: options.transport ?? gatedTransport("hypit.client"),
     ledger: sqlHypitLedger(sql),
   });
   if (!result.ok || !result.job.artifact || !result.artifactBytes) {

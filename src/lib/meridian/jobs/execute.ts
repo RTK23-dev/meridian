@@ -9,7 +9,7 @@ import { videoQa } from "../video/provider.ts";
 import { allocateTraffic, type TrafficVariant } from "../experiments/allocate.ts";
 import { deliverAlert } from "../alerts/deliver.ts";
 import { deliveryPlan, deliveryUrlAllowed } from "../alerts/lifecycle.ts";
-import { liveTransport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
 
 export type ExecutableJob = {
   id: string;
@@ -266,7 +266,7 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
         acknowledged: false,
       },
       target,
-      liveTransport(),
+      gatedTransport("alerts.webhook"),
     );
     await sql`
       insert into delivery_attempts (id, organization_id, alert_id, status, detail)

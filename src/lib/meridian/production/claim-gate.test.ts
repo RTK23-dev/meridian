@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
@@ -117,6 +118,7 @@ test("a copy claim with no engine configured is reported not judged, and is neve
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", notConfigured, calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy({ ...input(CLEAN_COPY, "guaranteed", engines), selection: { engineId: "jev", source: "default" } });
   assert.equal(judged.claim.judgment, "not_judged");
@@ -132,6 +134,7 @@ test("an uncalibrated engine answer on a claim routes to review and does not pas
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", answerEvery(0.99, "uncalibrated"), calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy(input(CLEAN_COPY, "guaranteed", engines));
   assert.equal(judged.claim.judgment, "review", "an uncalibrated pass is judged, but it is routed to review");
@@ -144,6 +147,7 @@ test("a calibrated passing answer passes the claim, and the copy still waits for
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", answerEvery(0.97, "calibrated")),
     "openai-decisions": forbiddenEngine("openai-decisions", []),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy(input(CLEAN_COPY, "guaranteed", engines));
   assert.equal(judged.claim.judgment, "passed");
@@ -156,6 +160,7 @@ test("a calibrated engine answer that violates the claim rejects the copy as an 
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", answerEvery(0.2, "calibrated")),
     "openai-decisions": forbiddenEngine("openai-decisions", []),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy(input(CLEAN_COPY, "guaranteed", engines));
   assert.equal(judged.claim.judgment, "rejected");
@@ -168,6 +173,7 @@ test("a deterministic claim rule still rejects with no engine call, whatever the
   const engines: DecisionEngineRegistry = {
     jev: forbiddenEngine("jev", calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy(input("Acme Cleanser is a guaranteed fix.", "guaranteed", engines));
   assert.equal(judged.decision.decision, "REJECT");
@@ -182,6 +188,7 @@ test("a check with no brand asks no claim question, so its claim is not judged a
   const engines: DecisionEngineRegistry = {
     jev: forbiddenEngine("jev", calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy({ ...input(CLEAN_COPY, "guaranteed", engines), brandId: null });
   assert.equal(judged.claim.judgment, "not_judged");
@@ -195,6 +202,7 @@ test("a brand with no stored prohibited claims gives the claim question no evide
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", answerEvery(0.99, "calibrated"), calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy(input(CLEAN_COPY, "", engines));
   assert.equal(judged.claim.judgment, "not_judged", "a question that lacks its brand evidence abstains, and abstaining is not a pass");
@@ -207,6 +215,7 @@ test("stored allowed claims are enough for the claim question when no prohibited
   const engines: DecisionEngineRegistry = {
     jev: answeringEngine("jev", answerEvery(0.97, "calibrated"), calls),
     "openai-decisions": forbiddenEngine("openai-decisions", calls),
+    "openrouter-decisions": unselectedOpenRouterEngine(),
   };
   const judged = await judgeCopy({ ...input(CLEAN_COPY, "", engines), copy: { ...input(CLEAN_COPY, "", engines).copy, allowedClaims: "lifts grease" } });
   assert.equal(judged.claim.judgment, "passed");

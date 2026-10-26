@@ -9,6 +9,7 @@
 import type { Sql } from "../learning/store.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenAiDecisionsEngine } from "./openai-engine.ts";
+import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
 import { persistDecisionLineage } from "./lineage.ts";
 import { resolveActiveEngine, type EngineSelection } from "./selection.ts";
 import type { JevProviderRouter } from "../jev/types.ts";
@@ -25,16 +26,21 @@ export type DecisionEngineRegistry = Record<DecisionEngineId, DecisionEngine>;
 export const DECISION_ENGINE_LABELS: Record<DecisionEngineId, string> = {
   jev: "TypeSafe JEV",
   "openai-decisions": "OpenAI Decisions",
+  "openrouter-decisions": "OpenRouter Decisions",
 };
 
 /** Builds one instance of each engine. `jevRouter` lets JEV keep the transport the existing router already uses. */
 export function createDecisionEngines(options: {
   jevRouter?: JevProviderRouter;
   openai?: OpenAiDecisionsEngine;
+  openrouter?: OpenRouterDecisionsEngine;
 } = {}): DecisionEngineRegistry {
+  // One OpenRouter engine serves both the decisions engine and JEV's OpenRouter backend, so they share keys and settings.
+  const openrouter = options.openrouter ?? new OpenRouterDecisionsEngine();
   return {
-    jev: new JevDecisionEngine(options.jevRouter),
+    jev: new JevDecisionEngine(options.jevRouter, { openrouter }),
     "openai-decisions": options.openai ?? new OpenAiDecisionsEngine(),
+    "openrouter-decisions": openrouter,
   };
 }
 

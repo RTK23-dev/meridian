@@ -11,6 +11,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { gatedFetch } from "../providers/capability.ts";
 import type { AssetLifecycle } from "./object-store.ts";
 import { uploadArtifactToDrive, type ArtifactUploadPolicy, type ArtifactUploadStore } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
@@ -53,6 +54,8 @@ export type GoogleDriveClientOptions = {
   uploadStore?: () => Promise<ArtifactUploadStore>;
   /** Upload overrides: chunk size, retry cap, backoff and sleep. Defaults are 8 MiB chunks and six failures in a row. */
   upload?: ArtifactUploadPolicy;
+  /** The fetch for Drive writes: folder creation, small and resumable uploads, and deletes. Tests pass a fixture. Production passes nothing, so the disabled write path refuses. */
+  fetch?: typeof fetch;
   /** Writes the storage_objects row for a file put with `storageRecord`. Default: the shared database connection. */
   recordObject?: (record: DriveObjectRecord) => Promise<void>;
 };
@@ -72,9 +75,9 @@ export type DriveWriteInput = {
 };
 
 /** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
-function driveTransportFor(organizationId: string): ResumableTransport {
+function driveTransportFor(organizationId: string, fetchImpl: typeof fetch = gatedFetch("drive.write")): ResumableTransport {
   return {
-    fetch: (input, init) => globalThis.fetch(input, init),
+    fetch: fetchImpl,
     accessToken: async () => {
       const access = await resolveDriveAccess(organizationId);
       if (!access.ok) throw new DriveUploadError(access.reason, null, false);
@@ -117,6 +120,11 @@ export class GoogleDriveClient {
   private async tokenOrNull(organizationId?: string): Promise<string | null> {
     const access = await resolveDriveAccess(organizationId);
     return access.ok ? access.token : null;
+  }
+
+  /** The fetch for every Drive write. Production passes none, so the drive.write gate refuses each write before any request is sent. */
+  private writeFetch(): typeof fetch {
+    return this.options.fetch ?? gatedFetch("drive.write");
   }
 
   /** Drive's reachability for this workspace's credential, or for the deployment's when no workspace is named. */
@@ -213,7 +221,7 @@ export class GoogleDriveClient {
       body.parents = [parentId];
     }
 
-    const createRes = await fetch("https://www.googleapis.com/drive/v3/files", {
+    const createRes = await this.writeFetch()("https://www.googleapis.com/drive/v3/files", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
@@ -369,7 +377,7 @@ export class GoogleDriveClient {
         {
           ...this.options.upload,
           store,
-          transport: driveTransportFor(input.organizationId),
+          transport: driveTransportFor(input.organizationId, this.options.fetch),
           onUnauthorized: () => invalidateGoogleDriveAccessToken(),
         },
         {
@@ -406,7 +414,7 @@ export class GoogleDriveClient {
     const closePart = Buffer.from(closeDelimiter);
     const multipartBody = Buffer.concat([metaPart, Buffer.from(input.bytes), closePart]);
 
-    const res = await fetch(
+    const res = await this.writeFetch()(
       "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name,mimeType,size,webViewLink",
       {
         method: "POST",
@@ -477,7 +485,7 @@ export class GoogleDriveClient {
   async delete(fileId: string, organizationId?: string): Promise<void> {
     const token = await this.requireToken(organizationId);
 
-    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+    const res = await this.writeFetch()(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` },
     });

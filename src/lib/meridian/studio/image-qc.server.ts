@@ -10,6 +10,7 @@
  *   fit, claim compliance on the copy, and, for images, visual quality and product visibility. A semantic question
  *   that needs an image is refused when the engine cannot see one, and routes to human review.
  */
+import { resolveImageSupport } from "../decisions/capabilities.ts";
 import type { Sql } from "../learning/store.ts";
 import type { loadBrandContext } from "../context/load.ts";
 import { decisionRecordFields } from "../jev/decision-record.ts";
@@ -274,6 +275,8 @@ function creativeTextEvidence(facts: MediaFacts): GateEvidenceInput[] {
 export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Promise<CreativeJudgment> {
   const visual = input.visual ?? NO_VISUAL_EVIDENCE;
   const selection = input.selection ?? (await resolveActiveEngine(sql, input.organizationId));
+  // Whether the engine this creative is judged by can see its images, resolved once for this check (for JEV, from its backend and model).
+  const engineSeesImages = (await resolveImageSupport({ selection, sql, organizationId: input.organizationId })).takesImages;
   const policies = await loadAppliedPolicies(sql, input.organizationId);
   // Local checks decide only the deterministic questions. The lexical brand and opportunity checks are not authorities.
   const local = judgeMedia(input.facts, policies).filter((decision) => !ENGINE_REPLACED_MEDIA_QUESTIONS.has(decision.questionId));
@@ -291,7 +294,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
   let perceptionEvidence: GateEvidenceInput[] = [];
   let perceptionRunId: string | null = null;
   let perceptionOutcome: PerceptionRunOutcome | undefined;
-  if (selection.engineId === "openai-decisions") {
+  if (engineSeesImages) {
     // Each image is tied to its evidence item by name, so it reaches only the questions whose scope holds that item.
     images = visual.media.map((item) => ({
       bytes: item.bytes,
@@ -348,7 +351,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
     gate: "creative_qa",
     subject: { type: "creative", id: input.creativeId },
     description: `${input.facts.kind === "video" ? "Video" : "Image"} creative. Judge only the evidence provided.`,
-    questions: creativeGateQuestionsFor({ engineSeesImages: selection.engineId === "openai-decisions", perception: perceptionOutcome, hasMedia: visual.media.length > 0 }),
+    questions: creativeGateQuestionsFor({ engineSeesImages, perception: perceptionOutcome, hasMedia: visual.media.length > 0 }),
     // How much of the creative was analysed is evidence for the visual questions only, under either engine.
     evidence: [
       ...creativeTextEvidence(input.facts),

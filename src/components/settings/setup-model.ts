@@ -63,6 +63,7 @@ export type SetupRow = {
 export type SetupEngines = {
   active: { engineId: string; source: "workspace" | "deployment" | "default"; invalidDeploymentValue?: string };
   engines: ReadonlyArray<{ id: string; label: string; health: { status: string; message?: string } }>;
+  openrouterModel?: { model: string; source: "workspace" | "deployment" | "default"; reason?: string };
 };
 
 export type SetupInput = {
@@ -124,10 +125,10 @@ function keyedRow(category: CredentialCategory, summary: ProviderConfigSummary):
   let reason: string;
   if (workspaceKey) {
     status = "usable";
-    reason = "The workspace's own saved key is in use.";
+    reason = "The workspace's own key is saved and can be read. Nothing has been checked against the provider with it.";
   } else if (state === "usable") {
     status = "deployment_shared_default";
-    reason = `The deployment's key is in use, because ${shared.variable}=${shared.accepts} is set. This workspace has no key of its own.`;
+    reason = `The deployment's key is saved and can be read, because ${shared.variable}=${shared.accepts} is set. This workspace has no key of its own. Nothing has been checked against the provider with it.`;
   } else if (state === "unusable") {
     status = "unusable";
     reason = summary.credentialReason ?? "The saved key cannot be used. Save it again.";

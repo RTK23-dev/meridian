@@ -5,7 +5,8 @@
 import { readArtifact, readMediaBytes } from "../../../engine/jobs/artifact-store.ts";
 import type { Sql } from "../learning/store.ts";
 import { engineObjectStore } from "../storage/engine-media-link.ts";
-import { liveTransport, type Transport } from "../providers/http.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import type { Transport } from "../providers/http.ts";
 import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
 import { providerAccessToken } from "../providers/access-token.ts";
 import { uploadMetaVideo } from "../providers/meta.ts";
@@ -20,7 +21,12 @@ export async function uploadRepurposeVariantToMeta(
   sql: Sql,
   userId: string,
   input: UploadRepurposeVariantInput,
-  options: { env: { TOKEN_ENCRYPTION_KEY?: string }; transport?: Transport },
+  options: {
+    env: { TOKEN_ENCRYPTION_KEY?: string };
+    transport?: Transport;
+    /** Reads the variation's rendered video. Tests pass fixture bytes; production reads the engine's object store. */
+    readVideo?: (artifactId: string) => Promise<Uint8Array | null>;
+  },
 ): Promise<UploadRepurposedVariantOutcome> {
   const session = await sessionAccess(sql, userId, input.sessionId);
   const brandId = session.brand_id;
@@ -45,8 +51,9 @@ export async function uploadRepurposeVariantToMeta(
   let bytes: Uint8Array | null = null;
   if (variant.rendered_artifact_id) {
     try {
-      const stored = await readArtifact(sql, { organizationId, artifactId: variant.rendered_artifact_id });
-      bytes = await readMediaBytes(engineObjectStore(sql), { organizationId, brandId, stored });
+      bytes = options.readVideo
+        ? await options.readVideo(variant.rendered_artifact_id)
+        : await readRenderedVideo(sql, { organizationId, brandId, artifactId: variant.rendered_artifact_id });
     } catch {
       bytes = null;
     }
@@ -91,7 +98,13 @@ export async function uploadRepurposeVariantToMeta(
     {
       store: sqlRepurposeUploadStore(sql),
       upload: uploadMetaVideo,
-      transport: options.transport ?? liveTransport(),
+      transport: options.transport ?? gatedTransport("publish.meta_video_upload"),
     },
   );
+}
+
+/** The rendered video's bytes from the engine's object store, checked against the stored hash and size by readMediaBytes. */
+async function readRenderedVideo(sql: Sql, input: { organizationId: string; brandId: string; artifactId: string }): Promise<Uint8Array> {
+  const stored = await readArtifact(sql, { organizationId: input.organizationId, artifactId: input.artifactId });
+  return readMediaBytes(engineObjectStore(sql), { organizationId: input.organizationId, brandId: input.brandId, stored });
 }

@@ -122,6 +122,14 @@ Members and roles are managed in the Accounts and Settings screens. Every mutati
 - **Sleep mode did not run a night.** Sleep mode must be on, with a niche, and the scheduler (`npm run scheduler`) must run. The night's
   result is in the morning summary on the Factory's Learnings tab.
 
+## Browser checks in CI
+
+The `ui-smoke` job in `.github/workflows/ci.yml` tests the production build. It builds the app, starts a Postgres 16 service, runs `npm run setup` (which migrates the database and creates the local secrets), and serves the build with `npm run preview`, the same server the Docker image runs. The UI baseline, the browser smoke, the design-system scan and the public-page scan all run against that server.
+
+The browser baseline and smoke checks do not use the Vite dev server. In the runs that stalled, the dev server's module responses had not completed under the baseline's load, and the dev server transforms modules on demand, so those checks serve the build instead. The cause on the dev-server side is not confirmed. A production build refuses the embedded database, which is why the job starts Postgres.
+
+One check does use the dev server. The design-system page (`/_design`) is development-only: `src/routes/[_design].tsx` answers 404 in a production build. The job therefore starts a dev server on port 8081, after `npx vite optimize`, and runs `scripts/design-system-smoke.mjs` against it. That check runs in its own step, so a stall there does not affect the baseline.
+
 ## Environment variables
 
 The variables below are read by the code added in this release. Each row gives its kind, as `.env.example` does. A **per-workspace key**
@@ -140,6 +148,11 @@ is saved in Settings for each workspace, and its deployment value is used only w
 | `APP_URL` | deployment configuration | `storage/media-link.ts` (the public origin), `oauth/flow.server.ts` | The public origin of the deployment: `https`, with no path, query or credentials. A value that is set but not usable means no origin, so no link is signed. |
 | `PUBLIC_APP_URL` | deployment configuration (optional) | the same | A second public origin, used when `APP_URL` is blank. |
 | `OPENROUTER_API_KEY`, `OPENROUTER_SHARED_DEFAULT` | deployment fallback, with an opt-in | `credentials/resolve.ts`, `credentials/contract.ts` | The deployment's OpenRouter key, used for a workspace with no key of its own only when the opt-in is `deployment`. The video engine reads each workspace's key through the resolver. |
+| `OPENROUTER_MODEL` | deployment configuration | `providers/chat.server.ts` | An optional default text model for ordinary generation, used only for a text task the workspace has chosen no model for. It is named as the deployment's default in the result. It never serves image understanding. Blank means no default. |
+| `OPENROUTER_GENERATION_MAX_USD_PER_CALL` | deployment configuration | `providers/generation-ledger.ts` | The most one ordinary OpenRouter text or image-understanding call may cost before it is sent, in USD. Blank uses 0.05. A value that is not a positive number refuses every such call. |
+| `OPENROUTER_DECISION_MAX_USD_PER_CALL` | deployment configuration | `decisions/decision-catalog.ts` | The most one OpenRouter decision may cost before it is sent, in USD. The ceiling is the model's whole context at its catalogued input price; a call above the limit is refused. Blank uses 0.05. A value that is not a positive number refuses every decision. |
+| `UI_BASELINE_WATCHDOG_MS` | developer tooling | `scripts/ui-baseline.mjs` | How long the UI baseline may run before it stops and names its last step. Blank uses 75 minutes. |
+| `OPENROUTER_DECISIONS_MODEL` | deployment configuration | `decisions/openrouter-engine.ts` | A pinned decision model for the OpenRouter Decisions engine and for JEV's OpenRouter backend, used when a workspace has not chosen one. Blank means no model: a workspace must choose one, or its decisions are refused. Only a verified, pinned model is accepted. Aliases with `~` are refused. |
 | `HEYGEN_API_KEY`, `HEYGEN_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the HeyGen key that the engine's cloud render uses. |
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_SHARED_DEFAULT` | deployment fallback, with an opt-in | the same | The same rule for the Anthropic key. |
 

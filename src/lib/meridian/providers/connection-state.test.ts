@@ -14,7 +14,8 @@ const KEY = "connection-state-test-key";
 const SEALED_VALUE = "sealed-token-test-value";
 const SAVED_VALUE = "saved-key-test-value";
 const ENV_VALUE = "env-token-test-value";
-const SUCCESS_AT = "2026-10-20T10:00:00.000Z";
+// A success recorded an hour ago: inside the freshness window, so the phase is HEALTHY. A fixed past date would now be stale.
+const SUCCESS_AT = new Date(Date.now() - 60 * 60 * 1000).toISOString();
 
 const USABLE: ProviderCredentialState = { state: "usable", reason: "The stored access token can be opened." };
 const NOT_CONFIGURED: ProviderCredentialState = {
@@ -153,7 +154,7 @@ test("the most recent probe decides: a failure after an earlier success is FAILE
   // A successful probe clears last_error and records a new last_success_at (connect.ts saveProbe).
   const succeededLatest = await statusFor(
     workspaceDb({
-      connections: [{ provider: "tiktok", last_success_at: "2026-10-21T10:00:00.000Z", last_error: "", disconnected_at: null }],
+      connections: [{ provider: "tiktok", last_success_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), last_error: "", disconnected_at: null }],
       vault: [savedKeyRow(SAVED_VALUE)],
     }),
     "org-1",
@@ -181,6 +182,16 @@ test("a usable saved key with a recorded success is HEALTHY through the stored-c
   });
   const phase = await statusFor(db, "org-1", "tiktok");
   assert.equal(phase.phase, "HEALTHY");
+}));
+
+test("a usable saved key whose recorded success is 90 days old is DEGRADED through the stored-connection path, never HEALTHY", withEncryptionKey(async () => {
+  const db = workspaceDb({
+    connections: [{ provider: "tiktok", last_success_at: new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString(), last_error: "", disconnected_at: null }],
+    vault: [savedKeyRow(SAVED_VALUE)],
+  });
+  const phase = await statusFor(db, "org-1", "tiktok");
+  assert.equal(phase.phase, "DEGRADED");
+  assert.equal(phase.detail, "The last successful request is stale.");
 }));
 
 test("no stored credential and no shared default is NOT_CONFIGURED with the credentials detail", withEncryptionKey(async () => {

@@ -1,3 +1,4 @@
+import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
@@ -6,6 +7,8 @@ import { contractRequest } from "./contract-fixtures.ts";
 import { createDecisionEngines, decideWithActiveEngine, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { parseDeploymentEngine, resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";
+import { memoryDecisionHolds } from "./holds.ts";
+import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
 
 // Counting stub engines: they show which engine was called, and that the other one was not.
 function countingEngine(id: DecisionEngineId, options: { fail?: boolean } = {}) {
@@ -52,7 +55,7 @@ function countingEngine(id: DecisionEngineId, options: { fail?: boolean } = {}) 
 }
 
 function registry(jev: ReturnType<typeof countingEngine>, openai: ReturnType<typeof countingEngine>): DecisionEngineRegistry {
-  return { jev: jev.engine, "openai-decisions": openai.engine };
+  return { jev: jev.engine, "openai-decisions": openai.engine, "openrouter-decisions": unselectedOpenRouterEngine() };
 }
 
 test("the workspace setting outranks the deployment default, which outranks jev", () => {
@@ -195,7 +198,7 @@ test("a saved switch is recorded with its previous and new engine, and does not 
 });
 
 test("the real registry reports both engines with their health, capabilities, and versions", async () => {
-  const engines = createDecisionEngines();
+  const engines = createDecisionEngines({ openrouter: new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds() }) });
   const jevHealth = await engines.jev.health();
   assert.ok(["READY", "DEGRADED", "NOT_CONFIGURED", "UNAVAILABLE"].includes(jevHealth.status));
   assert.equal(engines["openai-decisions"].id, "openai-decisions");

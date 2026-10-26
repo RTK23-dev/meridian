@@ -10,6 +10,7 @@ section 1, for the rules.
 | --- | --- | --- | --- | --- |
 | TypeSafe JEV | Decisions (the JEV engine) | JEV | `TYPESAFE_JEV_API_KEY` or `TYPESAFE_API_KEY`, with `JEV_SHARED_DEFAULT=deployment` | Not configured. No decision is made |
 | OpenAI | Decisions (the OpenAI engine) | OpenAI | `OPENAI_API_KEY`, with `OPENAI_SHARED_DEFAULT=deployment` | Not configured. No decision is made |
+| OpenRouter | Decisions (the OpenRouter engine, and JEV when its backend is OpenRouter), and video, image and speech generation | OpenRouter | `OPENROUTER_API_KEY`, with `OPENROUTER_SHARED_DEFAULT=deployment` | Not configured. No decision is made and nothing is generated |
 | Deepgram | Speech-to-text for the video engine: reference analysis and the held-call reconciler | Deepgram | `DEEPGRAM_API_KEY`, with `DEEPGRAM_SHARED_DEFAULT=deployment` | Not configured. No speech-to-text request is sent |
 | Gemini perception | Reading images and video | Perception | Google key aliases in `config/resolver.ts`, with `PERCEPTION_SHARED_DEFAULT=gemini` | Not configured |
 | Gemini production | Omni video and image generation | Production | `MERIDIAN_GEMINI_API_KEY` or the Google aliases, with `PRODUCTION_SHARED_DEFAULT=deployment` | Not configured. Nothing is generated |
@@ -36,8 +37,10 @@ Sources keep one key per connector. Each has its own opt-in, named `<CATEGORY>_S
 A source with no usable key is listed as not configured, with the reason. Public web pages need no key.
 Reddit's API is not connected in this release; direct post URLs are still read from their public pages.
 
-OpenRouter is used only for copy generation, and only from the deployment: `OPENROUTER_API_KEY`, with
-`OPENROUTER_SHARED_DEFAULT=deployment`. It is never a decision engine.
+A workspace's own OpenRouter key is saved in Settings and is used for decisions and for ordinary text generation (copy, research analysis,
+brand brain suggestions and Factory image labels). A workspace chooses each task's model in Settings. The deployment's
+`OPENROUTER_API_KEY`, with `OPENROUTER_SHARED_DEFAULT=deployment`, is deployment-only: a workspace cannot save it, and no ordinary
+generation path uses it. OPENROUTER.md lists every path that calls OpenRouter.
 
 ## Shopify orders (sales attribution)
 
@@ -183,8 +186,10 @@ rating, and nulling `type` would drop every hashtag result, so the fields are ke
 
 ## Engine choice
 
-Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. A workspace's own choice,
-made in Settings, takes precedence.
+Decisions use one engine per workspace (DECISIONS.md). `DECISION_ENGINE` sets the deployment default. OpenRouter Decisions uses the workspace's OpenRouter key. Its decision model is chosen in Settings from OpenRouter's live catalogue, and only models with a verified profile are offered (OPENROUTER.md, "Decision models: the live catalogue"). `OPENROUTER_DECISIONS_MODEL` is the deployment setting, used only when a workspace has not chosen one. A workspace's own choice takes precedence. When neither is set, decisions are refused: there is no built-in model. `OPENROUTER_DECISION_MAX_USD_PER_CALL` caps what one decision may cost before it is sent.
+
+JEV has its own backend choice per workspace, also made in Settings: TypeSafe System One (the default) or OpenRouter Decisions. JEV
+calls exactly one backend for a decision and never falls back to the other. Its questions and answer checks are the same either way.
 
 ## Inbound webhooks
 

@@ -1,40 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { activeChatProvider, providerStatus } from "./chat.server.ts";
 import { generateNanoBananaImage } from "./nano-banana.server.ts";
 import { videoGenerationStatus } from "../video/provider.ts";
 
-test("OpenRouter alone is selected even when the legacy xAI key is present, once the deployment opts in", () => {
-  const before = { open: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL, xai: process.env.XAI_API_KEY, optIn: process.env.OPENROUTER_SHARED_DEFAULT };
-  process.env.OPENROUTER_API_KEY = "router-test-key";
-  process.env.OPENROUTER_MODEL = "provider/test-model";
-  process.env.OPENROUTER_SHARED_DEFAULT = "deployment";
-  process.env.XAI_API_KEY = "legacy-key-must-not-select";
-  try {
-    assert.equal(activeChatProvider()?.id, "openrouter");
-    assert.deepEqual(providerStatus(), { configured: true, provider: "openrouter", model: "provider/test-model" });
-  } finally {
-    if (before.open === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = before.open;
-    if (before.model === undefined) delete process.env.OPENROUTER_MODEL; else process.env.OPENROUTER_MODEL = before.model;
-    if (before.xai === undefined) delete process.env.XAI_API_KEY; else process.env.XAI_API_KEY = before.xai;
-    if (before.optIn === undefined) delete process.env.OPENROUTER_SHARED_DEFAULT; else process.env.OPENROUTER_SHARED_DEFAULT = before.optIn;
-  }
-});
-
-test("a key without an OpenRouter model is explicitly disconnected", () => {
-  const before = { open: process.env.OPENROUTER_API_KEY, model: process.env.OPENROUTER_MODEL, xai: process.env.XAI_API_KEY };
-  process.env.OPENROUTER_API_KEY = "router-test-key";
-  delete process.env.OPENROUTER_MODEL;
-  process.env.XAI_API_KEY = "legacy-key-must-not-be-used";
-  try {
-    assert.equal(activeChatProvider(), null);
-    assert.deepEqual(providerStatus(), { configured: false, provider: "none", model: "" });
-  } finally {
-    if (before.open === undefined) delete process.env.OPENROUTER_API_KEY; else process.env.OPENROUTER_API_KEY = before.open;
-    if (before.model === undefined) delete process.env.OPENROUTER_MODEL; else process.env.OPENROUTER_MODEL = before.model;
-    if (before.xai === undefined) delete process.env.XAI_API_KEY; else process.env.XAI_API_KEY = before.xai;
-  }
-});
+// The OpenRouter chat path's selection and model checks are in generation.test.ts. This file keeps the other providers.
 
 test("Nano Banana without credentials is optional and returns no image", async () => {
   const result = await generateNanoBananaImage({ prompt: "test", promptVersion: "test", env: {} });

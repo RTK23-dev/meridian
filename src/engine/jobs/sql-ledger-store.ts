@@ -8,6 +8,7 @@ import { EngineError, providerRefSchema, roundUsd, type BudgetReservation, type 
 import type { AppendResult, LedgerRow, LedgerStore, MonthTotals } from "../budget/store.ts";
 import type { CallTelemetryStore } from "../gateway/telemetry.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
+import { textHeldUsdForMonth } from "../../lib/meridian/providers/generation-ledger.ts";
 import { transaction } from "./orchestrator-sql.ts";
 import { callTelemetryInTransaction } from "./call-telemetry-sql.ts";
 
@@ -225,7 +226,10 @@ export function sqlLedgerStore(sql: Sql, organizationId: string): LedgerStore {
         select coalesce(sum(actual_usd), 0) as total from engine_ledger
         where organization_id = ${organizationId} and to_char(at at time zone 'UTC', 'YYYY-MM') = ${month}
       `;
-      return { reservedUsd: roundUsd(Number(reserved[0]?.total ?? 0)), actualUsd: roundUsd(Number(actual[0]?.total ?? 0)) };
+      // The text ledger's held spend for the month is committed money too, so one monthly cap covers video and text. It is read in this
+      // same transaction, under the workspace lock both paths take (providers/generation-ledger.ts).
+      const text = await textHeldUsdForMonth(sql, organizationId, month);
+      return { reservedUsd: roundUsd(Number(reserved[0]?.total ?? 0) + text), actualUsd: roundUsd(Number(actual[0]?.total ?? 0)) };
     },
   };
 }

@@ -1,8 +1,8 @@
 /**
- * TypeSafe JEV Client
+ * JEV client helpers
  *
- * Primary decision engine client communicating with TypeSafe JEV models
- * via OpenRouter's Decisions API at POST https://openrouter.ai/api/alpha/decisions.
+ * The parts of JEV that every backend shares. This module makes no network call. TypeSafe System One is called through
+ * jev/router.ts, and OpenRouter's Decisions API through decisions/openrouter-engine.ts; the workspace's JEV backend chooses one.
  *
  * Implements:
  * - Structured decision primitives: noul (probability), choice (one-of-N), score (ordered degree)

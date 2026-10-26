@@ -119,7 +119,8 @@ export function fakeMeta(options: FakeMetaOptions = {}): FakeMeta {
     }
 
     const url = request.url;
-    const adSetMatch = url.match(new RegExp(`^${GRAPH}/(as_[\\w-]+)\\?`));
+    // Meta's ad set ids are numeric; the `as_` form is the fake's own, kept for the recovery tests.
+    const adSetMatch = url.match(new RegExp(`^${GRAPH}/(as_[\\w-]+|\\d+)\\?`));
     if (adSetMatch) return json(200, { id: adSetMatch[1], account_id: adSetAccount, name: "set", status: "PAUSED", campaign_id: "cmp" });
 
     const accountList = url.match(new RegExp(`^${GRAPH}/(act_\\d+)/(ads|adcreatives|adsets)\\?`));

@@ -5,7 +5,7 @@
 import { getSql } from "../../db.ts";
 import { renderGenerationPrompt } from "../brief/engine.ts";
 import { promptById } from "../prompts/registry.ts";
-import { activeChatProvider, extractJson, providerStatus } from "../providers/chat.server.ts";
+import { completeGenerationTask, extractJson } from "../providers/chat.server.ts";
 import { asText, clip, ensurePromptRows, id, requireBrand } from "../machine-shared.ts";
 import { assertOpportunityClear } from "../opportunity/actions.ts";
 import { productionRefusalFor } from "./brief-status.ts";
@@ -26,31 +26,21 @@ export async function generateCreativeFor(userId: string, data: { brandId: strin
   if (opportunityId) await assertOpportunityClear(sql, opportunityId);
   const prompt = promptById("creative_script");
   if (!prompt) throw new Error("Creative prompt is not active.");
-  const provider = activeChatProvider();
-  const status = providerStatus();
-  if (!provider) return { status: "unavailable" as const, message: "No text model is configured. You can still write the script yourself." };
   const brief = briefDraftFromRow(briefRow);
   const rendered = renderGenerationPrompt(brief);
-  const result = await provider.complete({
-    model: status.model,
+  await ensurePromptRows(sql);
+  // The copy task's model is the workspace's own choice, checked against the live catalogue, bounded and held before anything is sent.
+  // The call's run is recorded by completeGenerationTask. A refusal before any call sends nothing and writes no run.
+  const result = await completeGenerationTask(access.organizationId, "copy", {
     temperature: prompt.temperature,
     maxTokens: 900,
     system: rendered.system,
     user: rendered.user,
+    record: { sql, brandId: data.brandId, correlationId: id(), operation: "creative_script", promptId: prompt.id, promptVersion: prompt.version, inputRef: data.briefId },
   });
-  const correlationId = id();
-  await ensurePromptRows(sql);
-  await sql`
-    insert into model_runs (
-      id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version,
-      input_ref, output, latency_ms, tokens, status, error
-    ) values (
-      ${id()}, ${access.organizationId}, ${data.brandId}, ${correlationId}, 'creative_script',
-      ${result.ok ? result.provider : provider.id}, ${status.model}, ${prompt.id}, ${prompt.version},
-      ${data.briefId}, ${result.ok ? result.content.slice(0, 8000) : ""}, ${result.ok ? result.latencyMs : 0},
-      ${result.ok ? result.tokens : null}, ${result.ok ? "completed" : result.status}, ${result.ok ? "" : result.error}
-    )
-  `;
+  if (!result.ok && result.status === "unavailable") {
+    return { status: "unavailable" as const, message: `${result.error} You can still write the script yourself.` };
+  }
   if (!result.ok) return { status: "failed" as const, message: result.error };
   let copy: { hook: string; script: string; offer: string; cta: string; visualTreatment: string; claims: string[] };
   try {

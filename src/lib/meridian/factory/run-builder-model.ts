@@ -40,6 +40,7 @@ export const ENGINE_LABELS: Record<DecisionEngineChoice, string> = {
   workspace_default: "The workspace's engine",
   jev: "TypeSafe JEV",
   "openai-decisions": "OpenAI Decisions",
+  "openrouter-decisions": "OpenRouter Decisions",
 };
 
 export const FORMAT_LABELS: Record<Format, string> = { image: "Image", video: "Video", carousel: "Carousel" };

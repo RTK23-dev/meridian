@@ -20,7 +20,7 @@ import {
 } from "./setup-model";
 
 const STATUS_PRESENTATION: Record<SetupStatus, { label: string; className: string }> = {
-  usable: { label: "Usable", className: "bg-success-soft text-success" },
+  usable: { label: "Saved, not checked live", className: "bg-success-soft text-success" },
   deployment_shared_default: { label: "Deployment shared default", className: "bg-info-soft text-info" },
   unusable: { label: "Unusable", className: "bg-danger-soft text-danger" },
   not_configured: { label: "Not configured", className: "bg-surface-2 text-fg-muted" },
@@ -160,10 +160,12 @@ function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string;
   return (
     <div className="space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
       <div className="space-y-1">
-        <p className="font-semibold text-fg">Monthly video budget (USD)</p>
+        <p className="font-semibold text-fg">Monthly budget (USD)</p>
         <p className="text-sm text-fg-muted">
-          The most this workspace's video engine may spend in a month, in US dollars. Blank means no budget is
-          set, and there is no default. {current}
+          The most this workspace may spend in a month, in US dollars, on all paid generation together: video, copy and
+          scripts, research analysis, brand brain suggestions, Factory image labels and OpenRouter JEV decisions. One cap
+          covers them all, and each one counts the others' spend. Blank means no budget is set, so paid generation is
+          blocked until one is saved. Each call is also capped on its own. There is no default. {current}
         </p>
       </div>
       {!canAdmin ? (

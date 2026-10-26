@@ -5,7 +5,7 @@ How to run Meridian on a laptop or a server. What the product does is in the [RE
 ## Requirements
 
 - Node.js 22 (CI uses 22). Nothing else for a local trial.
-- PostgreSQL 16 for a real deployment. A local trial needs no database server: it uses an embedded PostgreSQL (PGlite), kept on disk.
+- PostgreSQL 16 with the pgvector extension for a real deployment (migration 0019 creates the `vector` extension). A local trial needs no database server: it uses an embedded PostgreSQL (PGlite), kept on disk.
 
 ## Install and first run
 
@@ -50,7 +50,9 @@ Keys are not set in `.env` for normal use. Open **Settings → General**:
   encrypted and is never shown again; the screen shows its last four characters.
 - **Google Drive** shows whether Drive is connected, and what is missing if it is not.
 
-The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV or OpenAI Decisions. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
+The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV, OpenAI Decisions or OpenRouter Decisions. OpenRouter also needs a decision model and a passed connection test before it can be chosen. The decision model is picked from OpenRouter's live list of decision models, which shows what each one takes, its price and the most one call can cost; a model that is not on that list cannot be saved. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
+
+JEV also has a backend setting, in **Settings** under the decision engine: TypeSafe System One (the default) or OpenRouter Decisions. Choosing OpenRouter makes JEV's decisions use the OpenRouter key and decision model, and the switch is saved only when OpenRouter reports ready (DECISIONS.md, "JEV backend").
 
 ## Google Drive
 
@@ -120,7 +122,7 @@ A Factory run waits at each step that spends or publishes, unless its automation
 
 ## Deploying
 
-1. Create a PostgreSQL 16 database and set `DATABASE_URL`.
+1. Create a PostgreSQL 16 database with the pgvector extension available (the `pgvector/pgvector:pg16` image includes it; a plain `postgres:16` does not), and set `DATABASE_URL`.
 2. Set `BETTER_AUTH_URL` to the public address, and `BETTER_AUTH_SECRET` and `TOKEN_ENCRYPTION_KEY` to long random values.
    Keep `TOKEN_ENCRYPTION_KEY` safe: saved keys cannot be read without it.
 3. Set `NODE_ENV=production`. Do not set `MERIDIAN_TESTING_RUNTIME`; it enables the test providers.
@@ -130,7 +132,7 @@ A Factory run waits at each step that spends or publishes, unless its automation
 
 ## Docker Compose (not yet verified)
 
-`docker-compose.yml` runs the whole stack: `web` (port 8080), `worker`, `scheduler`, and `postgres` (PostgreSQL 16, with a healthcheck).
+`docker-compose.yml` runs the whole stack: `web` (port 8080), `worker`, `scheduler`, and `postgres` (PostgreSQL 16 with pgvector, with a healthcheck).
 The three Meridian services use one image, built from `Dockerfile` (Node 22), and each reads `.env`. Compose sets `DATABASE_URL` for
 each of them to the `postgres` service, so `.env` does not need a database URL.
 

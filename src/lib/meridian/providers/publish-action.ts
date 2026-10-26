@@ -47,7 +47,7 @@ export async function publishPausedForBrand(
     transport?: Transport;
   },
 ): Promise<PublishView> {
-  const { liveTransport } = await import("./http.ts");
+  const { gatedTransport } = await import("./capability.ts");
   const { publishPausedStages } = await import("./live.ts");
   const { stageWrites } = await import("./stages.ts");
   const { providerAccessToken } = await import("./access-token.ts");
@@ -116,7 +116,7 @@ export async function publishPausedForBrand(
     }
   }
   const bodies: string[] = [];
-  const transport = input.transport ?? liveTransport();
+  const transport = input.transport ?? gatedTransport("publish.paused_action");
   const recording: Transport = async (request) => {
     const response = await transport(request);
     bodies.push(redactSecrets(response.body).slice(0, 500));

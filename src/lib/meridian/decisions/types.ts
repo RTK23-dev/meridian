@@ -17,7 +17,7 @@ import type {
   JevQuestionType,
 } from "../jev/types.ts";
 
-export const DECISION_ENGINE_IDS = ["jev", "openai-decisions"] as const;
+export const DECISION_ENGINE_IDS = ["jev", "openai-decisions", "openrouter-decisions"] as const;
 export type DecisionEngineId = (typeof DECISION_ENGINE_IDS)[number];
 
 export function isDecisionEngineId(value: unknown): value is DecisionEngineId {
@@ -55,7 +55,14 @@ export type DecisionImageInput = {
 export type DecisionRequest = JevDecisionRequest & {
   images?: DecisionImageInput[];
   imagePolicy?: "required" | "optional";
-  /** Transport routing chosen by the caller, used by the JEV engine. Other engines ignore it. */
+  /**
+   * The backend and model the gate resolved for this decision, once. The engines use these values and do not read the settings again,
+   * so the image decision and the call are made from the same resolution. Absent when the caller has not resolved them.
+   */
+  resolved?: {
+    jevBackend?: "typesafe_direct" | "openrouter";
+    openrouterModel?: { model: string; source: "workspace" | "deployment" | "none" };
+  };
 };
 
 export type DecisionInputModality = "text" | "text+image";
@@ -87,6 +94,16 @@ export type DecisionUsage = {
   totalTokens?: number;
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  /**
+   * The most this call could have cost before it was sent: the model's context length at its catalogued input price. Set only on a
+   * call that was sent, and checked against the per-call limit. It is a ceiling, not an estimate of what was billed.
+   */
+  ceilingUsd?: number;
+  /**
+   * The cost the provider reported for this call, in USD, when it reports one. It is what the provider said, not Meridian's
+   * price table, and it is absent when the provider reports nothing. Never estimated.
+   */
+  reportedCostUsd?: number;
 };
 
 /** Why a whole request failed. Per-question states live on each answer. */
@@ -100,11 +117,19 @@ export type DecisionFailureKind =
   | "provider_unavailable"
   | "invalid_response"
   | "unsupported_input"
+  | "budget_refused"
   | "network";
 
+/**
+ * Readiness, in the vocabulary the rest of Settings uses. CONFIGURED means the credentials and settings are present but no live
+ * connection test has passed for them, so it is not a READY: READY needs a recorded successful check. UNSUPPORTED means the
+ * engine cannot do what Meridian needs with the configured settings (for example an unverified model), and nothing is sent.
+ */
 export type DecisionEngineHealth =
   | { status: "READY"; message?: string }
+  | { status: "CONFIGURED"; message: string }
   | { status: "NOT_CONFIGURED"; message: string }
+  | { status: "UNSUPPORTED"; message: string }
   | { status: "DEGRADED" | "UNAVAILABLE"; message: string };
 
 /**
@@ -117,6 +142,10 @@ export type DecisionResult = JevDecisionResponse & {
   requestedModel: string;
   /** The model the provider reported. Equal to the requested model when the provider does not report one. */
   returnedModel: string;
+  /** The provider the engine's model is served by, as the provider reported it (for example the model's author). */
+  upstreamProvider?: string;
+  /** The provider's own request id for this call, kept for support and audit. */
+  providerRequestId?: string;
   inputModality: DecisionInputModality;
   imageCount: number;
   /** Images supplied but not sent because the engine cannot take them (imagePolicy "optional"). */

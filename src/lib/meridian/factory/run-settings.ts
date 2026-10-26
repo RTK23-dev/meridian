@@ -15,7 +15,7 @@ export type Intent = (typeof INTENTS)[number];
 export const FORMATS = ["image", "video", "carousel"] as const;
 export type Format = (typeof FORMATS)[number];
 
-export const DECISION_ENGINE_CHOICES = ["workspace_default", "jev", "openai-decisions"] as const;
+export const DECISION_ENGINE_CHOICES = ["workspace_default", "jev", "openai-decisions", "openrouter-decisions"] as const;
 export type DecisionEngineChoice = (typeof DECISION_ENGINE_CHOICES)[number];
 
 /**

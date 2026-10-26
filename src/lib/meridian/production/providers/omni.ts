@@ -17,6 +17,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { gatedFetch, isCapabilityDisabledError } from "../../providers/capability.ts";
 import {
   providerPromptOf,
   type CreativeSpec,
@@ -179,7 +180,7 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
     env?: CredentialEnv;
     lookup?: (organizationId: string) => Promise<CredentialResolution>;
   }) {
-    this.fetchImpl = options?.fetchImpl || globalThis.fetch;
+    this.fetchImpl = options?.fetchImpl || gatedFetch("generation.gemini_omni");
     this.sql = options?.sql;
     this.env = options?.env;
     this.lookup = options?.lookup;
@@ -432,15 +433,17 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
         updatedAt: new Date().toISOString(),
       };
     } catch (err: any) {
+      // A refused send sent nothing, so the job failed; it is not of unknown outcome. Any other error may follow an accepted submission.
+      const refused = isCapabilityDisabledError(err);
       return {
         jobId: "",
         organizationId: spec.organizationId,
         brandId: spec.brandId,
         creativeSpec: spec,
         providerId: this.id,
-        status: "SUBMISSION_UNKNOWN",
+        status: refused ? "FAILED" : "SUBMISSION_UNKNOWN",
         costEstimateUsd: costEstimate,
-        error: `Failed to submit Omni job: ${err.message}`,
+        error: refused ? err.message : `Failed to submit Omni job: ${err.message}`,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };

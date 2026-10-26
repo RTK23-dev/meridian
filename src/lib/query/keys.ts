@@ -40,6 +40,10 @@ export const qk = {
   alerts: (organizationId: string) => ["alerts", organizationId] as const,
   providerSettings: (organizationId: string) => ["provider-settings", organizationId] as const,
   decisionEngines: (organizationId: string) => ["decision-engines", organizationId] as const,
+  openRouterDecisionModels: (organizationId: string) => ["openrouter-decision-models", organizationId] as const,
+  generationModels: (organizationId: string) => ["generation-models", organizationId] as const,
+  generationCatalogue: (organizationId: string) => ["generation-catalogue", organizationId] as const,
+  uncertainHolds: (organizationId: string) => ["uncertain-holds", organizationId] as const,
   videoBudget: (organizationId: string) => ["video-budget", organizationId] as const,
 };
 

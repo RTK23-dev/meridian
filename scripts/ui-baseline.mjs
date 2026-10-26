@@ -6,6 +6,28 @@ import { chromium } from "playwright";
 import AxeBuilder from "@axe-core/playwright";
 import { checkedOutputPath, checkedUrl } from "./browser-guard.mjs";
 import { settleAnimations } from "./page-settle.mjs";
+import { withDeadline } from "./page-deadline.mjs";
+import { captureStall, describeStall, recordPage } from "./page-diagnostics.mjs";
+
+const startedAt = Date.now();
+// The run prints a line before each capture, so a stall is visible and names the route it stopped on.
+let lastStep = "starting";
+const step = (label) => {
+  lastStep = label;
+  console.log(`[ui-baseline ${Math.round((Date.now() - startedAt) / 1000)}s] ${label}`);
+};
+// Some page calls have no timeout of their own (a page evaluate, the accessibility scan). They wait for as long as the page's
+// script takes to answer, so each one has a deadline that names the call (scripts/page-deadline.mjs). The watchdog stays as the
+// backstop for anything else, with the last step named, so a stall fails with its route in the log instead of holding the job
+// until its limit.
+// About 11 minutes locally, and about 21 with the CPU throttled four times. The default leaves room for a slower runner, and it ends
+// a real stall before the ui-smoke job's own limit.
+const WATCHDOG_MS = Number(process.env.UI_BASELINE_WATCHDOG_MS || 75 * 60_000);
+const watchdog = setTimeout(() => {
+  const limit = WATCHDOG_MS >= 60_000 ? `${Math.round(WATCHDOG_MS / 60_000)} minutes` : `${Math.round(WATCHDOG_MS / 1000)} seconds`;
+  console.error(`UI baseline stopped after ${limit} without finishing. Last step: ${lastStep}`);
+  process.exit(1);
+}, WATCHDOG_MS);
 
 const baseUrl = checkedUrl(process.env.UI_BASELINE_URL || "http://127.0.0.1:8080/");
 const root = resolve(process.env.UI_BASELINE_DIR || "docs/ui-baseline");
@@ -22,6 +44,19 @@ const testUser = {
   email: process.env.UI_BASELINE_EMAIL || "ui-baseline@meridian.invalid",
   password: process.env.UI_BASELINE_PASSWORD || "BaselinePass123!",
 };
+
+// The path with its query and hash, so two variants of one path are told apart in the progress lines and the failure messages.
+function routeLabel(url) {
+  const parsed = new URL(url);
+  return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+}
+
+// What the page was doing when a call stopped answering: its recorded events, and a screenshot kept with the run.
+async function stallDetail(page, recorder, dir, name) {
+  mkdirSync(dir, { recursive: true });
+  const shot = await captureStall(page, join(dir, `${name}.png`));
+  return `${describeStall(recorder)}. ${shot}`;
+}
 
 function routeKey(url) {
   const path = new URL(url).pathname;
@@ -179,7 +214,9 @@ const browser = await chromium.launch({ headless: true, args: ["--no-sandbox", "
 try {
   const discoveryContext = await browser.newContext({ viewport: { width: 1440, height: 960 } });
   const discoveryPage = await discoveryContext.newPage();
+  step("signing in and preparing the fixture workspace");
   const seededBrandId = await prepareFixtureWorkspace(discoveryPage);
+  step("discovering routes");
   const discoveredRoutes = await discoverRoutes(discoveryPage, seededBrandId);
   const captureFilter = (process.env.UI_BASELINE_CAPTURE_ROUTES || "").split(",").map((route) => route.trim()).filter(Boolean);
   const routes = captureFilter.length
@@ -191,19 +228,29 @@ try {
 
   const captures = [];
   const accessibility = [];
-  for (const theme of themes) {
+  // The two themes capture the same routes independently, each in its own browser context, so they run side by side. Each theme keeps
+  // every width and route, and the accessibility scan still runs at 1440 px in both.
+  await Promise.all(themes.map(async (theme) => {
     const context = await browser.newContext({ colorScheme: theme, storageState });
     // The app takes its theme from the saved choice (dark by default), not from the browser's colour scheme, so set the choice here.
     await context.addInitScript((value) => { try { localStorage.setItem("meridian-theme", value); } catch { /* storage off */ } }, theme);
     const page = await context.newPage();
+    const recorder = recordPage(page);
     for (const width of widths) {
       await page.setViewportSize({ width, height: 960 });
       for (const url of routes) {
+        const label = `${theme} ${width}px ${routeLabel(url)}`;
+        step(label);
+        // When a call stops answering, the failure says what the page was doing and keeps a screenshot with the run.
+        const onStall = () => stallDetail(page, recorder, join(outputDir, "stalled"), `${theme}-${width}-${routeKey(url)}`);
         await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45_000 }).catch(() => undefined);
         await page.waitForTimeout(700);
         await page.waitForFunction(() => document.body.innerText.trim().length > 0, undefined, { timeout: 10_000 }).catch(() => undefined);
-        const overflow = await page.evaluate(() => {
+        const overflow = await withDeadline(`${label}: the overflow check`, 120_000, page.evaluate(() => {
           const viewport = document.documentElement.clientWidth;
+          const horizontal = document.documentElement.scrollWidth > viewport + 1;
+          // The offending elements are only named in the failure message below, so they are measured only when the page overflows.
+          if (!horizontal) return { horizontal, elements: [] };
           const elements = [...document.querySelectorAll("body *")]
             .filter((element) => {
               const rect = element.getBoundingClientRect();
@@ -214,17 +261,17 @@ try {
               const rect = element.getBoundingClientRect();
               return `${element.tagName.toLowerCase()}.${String(element.className ?? "").split(/\s+/).slice(0, 3).join(".")} [${Math.round(rect.left)}..${Math.round(rect.right)}; ${element.clientWidth}/${element.scrollWidth}]`;
             });
-          return { horizontal: document.documentElement.scrollWidth > viewport + 1, elements };
-        });
+          return { horizontal, elements };
+        }), { onExpire: onStall });
         if (overflow.horizontal) throw new Error(`Route ${new URL(url).pathname} overflows horizontally at ${width}px (${theme}). Elements: ${overflow.elements.join("; ")}`);
         if (width === 1440) {
           // Data loads after the first paint, and a section that mounts with its data starts its entrance fade then. Wait for the
           // requests to finish, so the settle below sees that fade and the scan measures the settled colours.
           await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => undefined);
-          await settleAnimations(page);
-          const { violations } = await new AxeBuilder({ page })
+          await withDeadline(`${label}: the animation settle`, 60_000, settleAnimations(page), { onExpire: onStall });
+          const { violations } = await withDeadline(`${label}: the accessibility scan`, 180_000, new AxeBuilder({ page })
             .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-            .analyze();
+            .analyze(), { onExpire: onStall });
           const serious = violations.filter((violation) => violation.impact === "serious" || violation.impact === "critical");
           accessibility.push({ url, theme, violations: violations.length, serious: serious.length });
           if (serious.length) {
@@ -239,8 +286,9 @@ try {
       }
     }
     await context.close();
-  }
+  }));
   console.log(JSON.stringify({ ok: true, routes: routes.length, captureCount: captures.length, accessibility, outputDir, captures }, null, 2));
 } finally {
+  clearTimeout(watchdog);
   await browser.close();
 }

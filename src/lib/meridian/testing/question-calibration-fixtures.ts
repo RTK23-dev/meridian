@@ -122,7 +122,7 @@ export async function gradeResearchAd(
     questions: [{ key: "graded", spec: GRADED_QUESTION, needsImage: false, evidenceScope: ["copy"] }],
     evidence: [COPY_EVIDENCE],
     selection: { engineId: "jev", source: "workspace" },
-    engines: { jev: probabilityEngine("jev", input.probability), "openai-decisions": probabilityEngine("openai-decisions", null) },
+    engines: { jev: probabilityEngine("jev", input.probability), "openai-decisions": probabilityEngine("openai-decisions", null), "openrouter-decisions": probabilityEngine("openrouter-decisions", null) },
   });
   const grade: GradeRecord = {
     jev_status: "engine",

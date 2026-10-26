@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { liveTransport, type Transport, type TransportRequest } from "../providers/http.ts";
+import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
+import type { Transport, TransportRequest } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, TRIAL_GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
 import { INSTAGRAM_PUBLISH_SCOPE } from "./connection.ts";
@@ -51,7 +52,7 @@ export class InstagramReelsChannel implements DistributionChannel {
 
   constructor(options: InstagramOptions = {}) {
     this.options = {
-      transport: options.transport ?? liveTransport(),
+      transport: options.transport ?? gatedTransport("publish.instagram"),
       sleep: options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
       polls: options.polls ?? 20,
       pollIntervalMs: options.pollIntervalMs ?? 3000,
@@ -134,7 +135,9 @@ async function send(transport: Transport, request: TransportRequest, uploadStart
   let response;
   try {
     response = await transport(request);
-  } catch {
+  } catch (error) {
+    // A disabled path sent nothing, so there is no unknown outcome to check on Instagram.
+    if (isCapabilityDisabledError(error)) return { ok: false, receipt: failure("instagram", "NOT_CONNECTED", error.message) };
     return { ok: false, receipt: failure("instagram", "UNCONFIRMED", unconfirmed(LABEL, "no response arrived")) };
   }
   const json = parseJsonBody(response.body);

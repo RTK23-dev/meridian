@@ -7,6 +7,7 @@ import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useWorkspace } from "@/components/workspace";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
+import { GenerationModelSettings } from "@/components/generation-model-settings";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
 import { SetupPanel } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
@@ -106,6 +107,17 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
           <p className="mt-1 text-sm text-fg-muted">Each provider's settings and connection test. Keys are entered once, in Setup above.</p>
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
+      </section>
+
+      <section aria-labelledby="generation-models-title" className="space-y-3">
+        <div>
+          <h2 id="generation-models-title" className="text-section font-semibold text-fg">Text and image models</h2>
+          <p className="mt-1 text-sm text-fg-muted">
+            The model each task uses: copy and scripts, research analysis, brand brain suggestions and Factory image labels. Each choice is checked
+            against the live OpenRouter catalogue before any paid call.
+          </p>
+        </div>
+        <GenerationModelSettings organizationId={organizationId} canAdmin={canAdmin} />
       </section>
 
       <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />

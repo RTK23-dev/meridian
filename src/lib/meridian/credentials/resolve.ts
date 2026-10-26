@@ -217,13 +217,13 @@ export async function resolveCredential(
 export async function secretForCategory(
   category: CredentialCategory,
   organizationId: string | undefined,
-): Promise<{ secret: string | null; reason: string }> {
+): Promise<{ secret: string | null; reason: string; fingerprint?: string }> {
   const scope = organizationId?.trim() ?? "";
   if (!scope) return { secret: null, reason: `No workspace is in scope, so no ${CATEGORY_LABEL[category]} key can be used.` };
   try {
     const sql = await loadDefaultSql();
     const resolution = await resolveCredential(sql, scope, category);
-    if (resolution.status === "ready") return { secret: resolution.secret, reason: "" };
+    if (resolution.status === "ready") return { secret: resolution.secret, reason: "", fingerprint: resolution.fingerprint };
     return { secret: null, reason: resolution.reason };
   } catch {
     return { secret: null, reason: `The saved ${CATEGORY_LABEL[category]} credential could not be checked, so no request is made.` };

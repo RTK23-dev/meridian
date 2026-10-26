@@ -27,7 +27,8 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
 import { qk, userScopedQueryKey } from "./keys";
@@ -167,6 +168,20 @@ export const providerSettingsQueryOptions = (userId: string | null | undefined, 
 export const decisionEnginesQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.decisionEngines(organizationId)),
   queryFn: () => getDecisionEngines({ data: { organizationId } }),
+});
+export const openRouterDecisionModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.openRouterDecisionModels(organizationId)),
+  queryFn: () => getOpenRouterDecisionModels({ data: { organizationId } }),
+});
+export const generationModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.generationModels(organizationId)),
+  queryFn: () => getGenerationModels({ data: { organizationId } }),
+});
+export const generationCatalogueQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.generationCatalogue(organizationId)),
+  queryFn: () => getGenerationCatalogue({ data: { organizationId } }),
+  // The catalogue is read live when the page opens. A stale list is replaced on the next focus, and a save reads it again.
+  staleTime: 0,
 });
 export const videoBudgetQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
@@ -395,6 +410,34 @@ export const useProviderSettingsQuery = (organizationId: string, enabled = true)
 export const useDecisionEnginesQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...decisionEnginesQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** The decision models this workspace may choose from. Read from the live catalogue on the server; nothing is cached as a connection check. */
+export const useOpenRouterDecisionModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...openRouterDecisionModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useGenerationModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...generationModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useGenerationCatalogueQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...generationCatalogueQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** Uncertain budget holds for an administrator's review. Only an admin of the workspace can read them; the server refuses anyone else. */
+export const uncertainHoldsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.uncertainHolds(organizationId)),
+  queryFn: () => getUncertainGenerationHolds({ data: { organizationId } }),
+  staleTime: 0,
+});
+
+export const useUncertainHoldsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...uncertainHoldsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {

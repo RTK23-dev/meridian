@@ -6,7 +6,7 @@ import { loadReusableResearchAnalysis, persistMetaAd, persistResearchVideo, pers
 import { transcribeVideo, type TranscriptionResult } from "./transcription.ts";
 import { collectMetaAdLibrary } from "../providers/meta-research.ts";
 import { liveTransport } from "../providers/http.ts";
-import { activeChatProvider, providerStatus } from "../providers/chat.server.ts";
+import { completeWithModel, generationModelFor } from "../providers/chat.server.ts";
 import { fetchPublicHtml, fetchPublicMedia } from "../sources/fetch-page.server.ts";
 import type { Sql } from "../learning/store.ts";
 import type { ExecutableJob } from "../jobs/execute.ts";
@@ -169,13 +169,13 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
     if (transcript.status === "no_speech") continue;
     await sql`update research_ads set media_duration_ms = ${transcript.durationMs} where id = ${adId} and organization_id = ${job.organization_id} and brand_id = ${job.brand_id}`;
     const reusable = await loadReusableResearchAnalysis(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, videoHash: sha256(bytes) });
-    const provider = reusable ? null : activeChatProvider();
-    const model = reusable ? null : providerStatus();
-    if (!reusable && !provider) {
-      await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: "NOT_CONNECTED", message: "No JEV Research chat model is configured. The transcript was stored; analysis was not created." });
+    // The analysis model is the workspace's own choice, checked against the live catalogue before any call. A reused analysis calls nothing.
+    const decision = reusable ? null : await generationModelFor(job.organization_id, "research_analysis");
+    if (decision && decision.status !== "ok") {
+      await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: "NOT_CONNECTED", message: `${decision.reason} The transcript was stored; analysis was not created.` });
       continue;
     }
-    const startedAt = Date.now();
+    const chosen = decision?.status === "ok" ? decision : null;
     let analysis: Awaited<ReturnType<typeof analyzeResearchTranscript>>;
     if (reusable) {
       analysis = { status: "analyzed", analysis: reusable.analysis, key: reusable.cacheKey, provider: reusable.provider, model: reusable.model, latencyMs: reusable.latencyMs, tokens: reusable.tokens };
@@ -184,34 +184,47 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
         sourceId: adId,
         transcript: transcript.transcript,
         segments: transcript.segments,
-        provider: provider!.id,
-        model: model!.model,
-        complete: (request) => provider!.complete(request),
+        provider: "openrouter",
+        // An empty model makes the analysis report NOT_CONNECTED before any call, so a missing choice still sends nothing.
+        model: chosen?.model ?? "",
+        complete: (request) => {
+          if (!chosen) {
+            return Promise.resolve({ ok: false as const, status: "unavailable" as const, provider: "openrouter" as const, error: "No research analysis model is chosen.", model: null });
+          }
+          // The call is held, sent and settled by completeWithModel, which writes its model run. Nothing else records the call.
+          return completeWithModel(job.organization_id, {
+            ...request,
+            modelSource: chosen.source,
+            choice: chosen.choice,
+            record: {
+              sql,
+              brandId: job.brand_id,
+              correlationId: runId,
+              operation: "jev.research.analysis",
+              promptId: "jev.research.analysis",
+              promptVersion: RESEARCH_SCHEMA_VERSION,
+              inputRef: adId,
+            },
+          });
+        },
       });
     } catch (error) {
+      // A throw here came before the request was sent (the budget step or the analysis itself), so nothing was billed and a retry is safe.
       const message = error instanceof Error ? error.message : "JEV Research analysis failed.";
-      await sql`
-        insert into model_runs (id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version, input_ref, latency_ms, status, error)
-        values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', ${RESEARCH_SCHEMA_VERSION}, ${adId}, ${Date.now() - startedAt}, 'failed', ${message.slice(0, 500)})
-      `;
       await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: "failed", message });
       return retryCollection(sql, job, runId, message);
     }
     if (analysis.status !== "analyzed") {
-      await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: analysis.status, message: analysis.error });
-      if (analysis.status === "failed") {
-        await sql`
-          insert into model_runs (id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version, input_ref, latency_ms, status, error)
-          values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${provider!.id}, ${model!.model}, 'jev.research.analysis', ${RESEARCH_SCHEMA_VERSION}, ${adId}, ${Date.now() - startedAt}, 'failed', ${analysis.error.slice(0, 500)})
-        `;
-        return retryCollection(sql, job, runId, analysis.error);
+      if (analysis.status === "uncertain") {
+        // The provider may have billed this call, and its outcome is unknown. It is not retried: the ad is marked failed with the reason, its
+        // hold stays on the ledger, and the job goes on to the next ad. Running the research again is a new decision by the person.
+        await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: "failed", message: `${analysis.error} Not retried.` });
+        continue;
       }
+      await recordAdFailure(sql, { organizationId: job.organization_id, brandId: job.brand_id, adId, stage: "analysis", status: analysis.status, message: analysis.error });
+      if (analysis.status === "failed") return retryCollection(sql, job, runId, analysis.error);
       continue;
     }
-    if (!reusable) await sql`
-      insert into model_runs (id, organization_id, brand_id, correlation_id, operation, provider, model, prompt_id, prompt_version, input_ref, output, latency_ms, tokens, status, error)
-      values (${randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${runId}, 'jev.research.analysis', ${analysis.provider}, ${analysis.model}, 'jev.research.analysis', ${analysis.analysis.schemaVersion}, ${adId}, ${JSON.stringify(analysis.analysis)}, ${analysis.latencyMs}, ${analysis.tokens}, 'succeeded', '')
-    `;
     await saveResearchAnalysis(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, cacheKey: analysis.key, provider: analysis.provider, model: analysis.model, promptVersion: analysis.analysis.schemaVersion, latencyMs: analysis.latencyMs, tokens: analysis.tokens, analysis: analysis.analysis });
     const creativeId = await upsertResearchCreative(sql, { organizationId: job.organization_id, brandId: job.brand_id, researchAdId: adId, analysis: analysis.analysis });
     const { embedWithProvider } = await import("../embeddings/select.ts");

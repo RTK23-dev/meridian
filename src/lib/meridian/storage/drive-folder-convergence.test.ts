@@ -70,7 +70,7 @@ test("concurrent requests for one folder share a single lookup and create it onc
   withDriveEnv(async () => {
     const drive = fakeDrive();
     try {
-      const client = new GoogleDriveClient();
+      const client = new GoogleDriveClient({ fetch: globalThis.fetch });
       const [first, second] = await Promise.all([client.findOrCreateFolder("tenants"), client.findOrCreateFolder("tenants")]);
       assert.equal(first, second);
       assert.equal(drive.creates.length, 1, "the folder was created once");
@@ -87,7 +87,7 @@ test("when several folders already share a name, every caller settles on the ear
     ];
     const drive = fakeDrive({ seed });
     try {
-      const id = await new GoogleDriveClient().findOrCreateFolder("brands", "parent-1");
+      const id = await new GoogleDriveClient({ fetch: globalThis.fetch }).findOrCreateFolder("brands", "parent-1");
       assert.equal(id, "early");
       assert.equal(drive.creates.length, 0, "no new folder is created when one exists");
     } finally {
@@ -101,7 +101,7 @@ test("a duplicate created by another process during our create is resolved to th
       duplicateDuringCreate: { id: "other-process", name: "brands", parent: "parent-2", createdTime: "2026-10-10T06:59:00Z" },
     });
     try {
-      const id = await new GoogleDriveClient().findOrCreateFolder("brands", "parent-2");
+      const id = await new GoogleDriveClient({ fetch: globalThis.fetch }).findOrCreateFolder("brands", "parent-2");
       assert.equal(id, "other-process", "both processes settle on the same folder");
     } finally {
       drive.restore();

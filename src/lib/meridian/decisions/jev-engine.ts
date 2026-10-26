@@ -1,21 +1,26 @@
 /**
- * TypeSafe JEV engine adapter.
+ * JEV decision engine adapter.
  *
- * JEV keeps its real structured-decision interface: the existing router sends registry questions to TypeSafe System
- * One directly or through OpenRouter's Decisions route, unchanged. This adapter only puts that router behind the shared
- * `DecisionEngine` contract and adds the lineage every engine records.
+ * JEV is Meridian's semantic decision layer: its question registry, evidence rules, answer validation, abstentions and calibration
+ * stance stay the same whichever model service answers. The workspace chooses that service (decisions/jev-backend.ts):
  *
- * Within JEV, the transport is chosen by the existing JEV configuration. Moving to the other transport after a failure
- * happens only when MERIDIAN_JEV_FALLBACK_ENABLED=true. Compare mode, which calls both transports for one decision,
- * runs only when it is configured and MERIDIAN_DECISION_SHADOW_ENABLED=true; otherwise the preferred transport alone
- * is called.
+ *   typesafe_direct  TypeSafe System One directly, through the existing JEV router, with the workspace's TypeSafe key. The default.
+ *   openrouter       OpenRouter's Decisions API, through the OpenRouter Decisions engine, with the workspace's OpenRouter key and
+ *                    its selected decision model.
  *
- * The JEV client sends text evidence only. JEV is therefore declared text-only here: a decision that requires images is
- * refused as unsupported, and optional images are recorded as not seen.
+ * Exactly one backend is called for a decision. There is no fallback between backends, and an unreadable backend setting fails
+ * closed. The shared gate and dispatcher still record the decision's lineage.
+ *
+ * JEV's TypeSafe request carries text evidence only, so the TypeSafe path is declared text-only here, and a decision that requires
+ * images is refused as unsupported there. Through OpenRouter, JEV takes images when the workspace's chosen model's verified profile
+ * lists image input. The shared gate decides that once per decision (capabilities.ts, resolveImageSupport) and passes the resolved
+ * backend and model to this adapter, so the declaration below is not what decides whether an image is sent.
  */
 import { jevRouter, transportHealth } from "../jev/router.ts";
 import { resolveJevConfig } from "../jev/config.ts";
 import type { JevProviderRouter } from "../jev/types.ts";
+import { DEFAULT_JEV_BACKEND, databaseJevBackendStore, type JevBackend, type JevBackendStore } from "./jev-backend.ts";
+import { OpenRouterDecisionsEngine } from "./openrouter-engine.ts";
 import {
   abstainAll,
   type DecisionCapabilities,
@@ -27,15 +32,30 @@ import {
 
 export const JEV_ADAPTER_VERSION = "jev-adapter.v1";
 
+export type JevEngineOptions = {
+  /** The OpenRouter Decisions engine, used when the workspace's JEV backend is OpenRouter. The registry passes its own. */
+  openrouter?: OpenRouterDecisionsEngine;
+  /** How the workspace's JEV backend is read. The database by default. */
+  backends?: JevBackendStore;
+};
+
 export class JevDecisionEngine implements DecisionEngine {
   readonly id = "jev" as const;
   readonly adapterVersion = JEV_ADAPTER_VERSION;
   private readonly router: JevProviderRouter;
+  private readonly openrouter: OpenRouterDecisionsEngine;
+  private readonly backends: JevBackendStore;
 
-  constructor(router: JevProviderRouter = jevRouter) {
+  constructor(router: JevProviderRouter = jevRouter, options: JevEngineOptions = {}) {
     this.router = router;
+    this.openrouter = options.openrouter ?? new OpenRouterDecisionsEngine();
+    this.backends = options.backends ?? databaseJevBackendStore;
   }
 
+  /**
+   * The capabilities of the TypeSafe path, the static declaration. The gate does not read it to decide which evidence reaches JEV:
+   * it resolves image support per decision from the backend and model. The status panel reports the chosen backend's capabilities.
+   */
   capabilities(): DecisionCapabilities {
     return {
       engineId: this.id,
@@ -54,29 +74,86 @@ export class JevDecisionEngine implements DecisionEngine {
     };
   }
 
-  /** Without a workspace, no JEV key can be checked, so this never reports READY. The keys are saved per workspace. */
+  /** Without a workspace, no backend or key can be checked, so this never reports READY. */
   async health(): Promise<DecisionEngineHealth> {
     return {
       status: "NOT_CONFIGURED",
-      message: "JEV keys are saved per workspace. No workspace was given, so no JEV key was checked.",
+      message: "JEV keys and its backend are saved per workspace. No workspace was given, so nothing was checked.",
     };
   }
 
   /**
-   * Readiness for one workspace. The TypeSafe transport uses the workspace's own key, by the same resolution a decision
-   * uses. No live request is made.
+   * Readiness for one workspace, for the backend that workspace has chosen. No live request is made. An unreadable backend
+   * setting is UNAVAILABLE, never a silent default.
    */
   async healthFor(organizationId: string): Promise<DecisionEngineHealth> {
+    const backend = await this.backendFor(organizationId);
+    if (!backend.ok) return { status: "UNAVAILABLE", message: backend.reason };
+    return this.healthForBackend(organizationId, backend.backend);
+  }
+
+  /**
+   * Readiness of one named backend for a workspace, without changing the stored choice. It is what a switch to that backend is
+   * checked against. No live request is made.
+   */
+  async healthForBackend(organizationId: string, backend: JevBackend): Promise<DecisionEngineHealth> {
+    if (backend === "openrouter") {
+      const health = await this.openrouter.healthFor(organizationId);
+      return { ...health, message: `JEV via OpenRouter. ${health.message}` } as DecisionEngineHealth;
+    }
     const health = await transportHealth(this.router.getProvider("typesafe_direct"), organizationId);
     if (health.status === "READY") return { status: "READY", message: `JEV via TypeSafe. ${health.message ?? ""}`.trim() };
     return { status: "NOT_CONFIGURED", message: health.message ?? "No TypeSafe key is saved for this workspace." };
   }
 
+
   async decide(request: DecisionRequest): Promise<DecisionResult> {
+    // The gate resolves the backend once for the decision. It is read here only when a caller did not resolve it.
+    const backend: { ok: true; backend: "typesafe_direct" | "openrouter" } | { ok: false; reason: string } = request.resolved?.jevBackend
+      ? { ok: true, backend: request.resolved.jevBackend }
+      : await this.backendFor(request.organizationId);
+    if (!backend.ok) {
+      // The backend is unknown, so nothing is sent to any service. The decision is refused, and no other backend is tried.
+      const requestedModel = request.model ?? "";
+      return {
+        runId: globalThis.crypto.randomUUID(),
+        model: requestedModel,
+        provider: "jev",
+        inputHash: "not_sent",
+        cached: false,
+        latencyMs: 0,
+        answers: abstainAll(request, { status: "not_configured", reason: backend.reason, model: requestedModel, provider: "jev" }),
+        engineId: this.id,
+        adapterVersion: this.adapterVersion,
+        requestedModel,
+        returnedModel: requestedModel,
+        inputModality: "text",
+        imageCount: 0,
+        imagesOmitted: 0,
+        failure: { kind: "not_configured", message: backend.reason },
+      };
+    }
+    if (backend.backend === "openrouter") {
+      // JEV through OpenRouter: the same request, answered by the OpenRouter Decisions engine with the workspace's model. The
+      // result is recorded as a JEV decision, with OpenRouter as the provider that served it.
+      const result = await this.openrouter.decide(request);
+      return { ...result, engineId: this.id, adapterVersion: this.adapterVersion };
+    }
+    return this.decideWithTypeSafe(request);
+  }
+
+  /** The workspace's JEV backend. An unset backend is the documented default, TypeSafe; an unreadable one is a refusal. */
+  private async backendFor(organizationId: string | undefined): Promise<{ ok: true; backend: "typesafe_direct" | "openrouter" } | { ok: false; reason: string }> {
+    if (!organizationId) return { ok: true, backend: DEFAULT_JEV_BACKEND };
+    const read = await this.backends.read(organizationId);
+    if (!read.ok) return { ok: false, reason: read.reason };
+    return { ok: true, backend: read.backend ?? DEFAULT_JEV_BACKEND };
+  }
+
+  private async decideWithTypeSafe(request: DecisionRequest): Promise<DecisionResult> {
     const config = resolveJevConfig();
     const requestedModel = request.model ?? config.typesafe.model;
     const imageCount = request.images?.length ?? 0;
-
     if (imageCount > 0 && request.imagePolicy === "required") {
       const reason = "JEV takes text evidence only; this decision requires images.";
       return {

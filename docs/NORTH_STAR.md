@@ -8,7 +8,7 @@ rules in `ARCHITECTURE_CONTRACTS.md` still hold. The dated build record is under
 ## 1. The product in one paragraph
 
 Meridian is a content and advertising factory that learns. It **gathers** what is working in a niche (ads and regular
-posts, from every source it can reach), **grades** it with the TypeSafe JEV grading engine (or OpenAI Decisions), **makes**
+posts, from every source it can reach), **grades** it with the JEV grading engine (TypeSafe, or OpenRouter, as the workspace chooses; or OpenAI Decisions), **makes**
 new content for the brand's products in the format the person chose (image, video or carousel; organic post or paid ad)
 with the generation provider the person chose, **publishes** it, **measures** what happened, and **learns** from both organic
 and paid results so the next round is better. Every step can run manually, semi-automatically or automatically.
@@ -37,7 +37,7 @@ These were decided by the owner. Do not reopen them in code, docs or PRs.
    later phase of the other.
 4. **Gather everything it can.** The crawler, the social scraper, the source adapters, the research collector and uploads
    all feed one evidence store. More sources are added behind the same adapter interface.
-5. **The JEV grading engine must work.** Grading through TypeSafe JEV (and OpenAI Decisions as the alternative engine) is
+5. **The JEV grading engine must work.** Grading through JEV, on the backend the workspace chose (TypeSafe or OpenRouter), and OpenAI Decisions as the alternative engine, is
    a core path, not an optional extra. Factory grading must use it.
 6. **Generation providers are options.** Gemini Omni is one video provider among several (Higgsfield, Hypit, image
    providers, manual upload, and others later). The person chooses a provider or lets the capability matrix choose. No
@@ -75,7 +75,7 @@ Replace them with one **run settings** object. A brand has defaults; each Factor
 | Setting               | Values                                            | Notes                                                                                                                                                                                                                           |
 | --------------------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `automation`          | `manual`, `semi`, `full`                          | manual: a person approves every step that spends or publishes · semi: the system runs every step and stops for a person before publish or spend · full: runs end to end inside caps; gates and the calibration gate still block |
-| `decisionEngine`      | `workspace_default`, `jev`, `openai-decisions`    | defaults to the workspace engine; contract 2 still applies (one engine per decision, no fallback)                                                                                                                               |
+| `decisionEngine`      | `workspace_default`, `jev`, `openai-decisions`, `openrouter-decisions` | defaults to the workspace engine; contract 2 still applies (one engine per decision, no fallback)                                                                                                                               |
 | `intent`              | `organic`, `ad`, `both`                           | decides which publish path and which metrics                                                                                                                                                                                    |
 | `formats`             | `image`, `video`, `carousel` (one or more)        |                                                                                                                                                                                                                                 |
 | `platforms`           | e.g. `facebook`, `instagram`, `youtube`, `tiktok` | a platform with no connection is listed as not connected, never hidden                                                                                                                                                          |

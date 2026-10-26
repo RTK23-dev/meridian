@@ -4,6 +4,25 @@
 
 Nothing yet.
 
+## 0.1.0-beta.16 — prerelease
+
+OpenRouter decision routing with a live catalogue and a per-call ceiling, JEV image evidence, a stored-success freshness rule, disabled-by-default paths for every paid or side-effecting call that has no guard, a browser release acceptance, a guided setup, and a gate that requires every CI job. Tests use fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider call is recorded in this release.** Live provider behavior, real credentials, billing and publishing are unverified.
+
+**Upgrade notes.** Six migrations are new since 0.1.0-beta.15: `0132_openrouter_decisions.sql`, `0133_jev_backend.sql`, `0134_generation_task_models.sql`, `0135_model_run_provenance.sql`, `0136_generation_holds.sql` and `0137_hold_releases.sql`. No new packages.
+
+- **Decisions.** OpenRouter Decisions is a decision engine beside TypeSafe JEV and OpenAI Decisions. The model is chosen from the live catalogue and must have a verified profile. Each decision is held in the ledger before it is sent, is bounded by a per-call ceiling and the shared monthly budget, and is never retried.
+- **Holds.** A call whose outcome is unknown (a timeout, an error status, an unreadable reply) keeps its hold and counts against the month. OpenRouter states no billing rule for these outcomes, so nothing releases a hold on a status code. An administrator releases one in Settings with a reason of at least ten characters, and the release is audited.
+- **Provider readiness.** A recorded provider success is healthy for 24 hours. An older one, or one whose time cannot be read, is degraded. A saved key reads "Saved, not checked live".
+- **Disabled paths.** Twenty paid or side-effecting paths refuse before any request and are never retried until they have an idempotency guard and a test. The list is in `docs/OUTBOUND_REQUESTS.md`. A refused Higgsfield, Omni, Gemini perception, Hypit or OpenAI call is reported as refused, not as an unknown outcome.
+- **Setup and Content.** The Setup guide shows the required steps first and keeps optional ones behind "Open this step". The Content page's run planner is one click away under "Plan a run in detail". The setup progress card and the planner form share a soft static glow.
+- **Release acceptance.** A browser acceptance of the Settings screens runs in CI against a seeded local app. It refuses any target that is not a loopback address and fails if a request leaves the local server.
+- **CI gate.** The aggregate `check` requires every test shard, the static checks, the sidecar tests, the PostgreSQL money checks, the release acceptance, the UI smoke and the product-loop end to end, and fails if any was skipped. The browser smoke runs before the UI baseline, because the baseline's request volume trips Better Auth's rate limiter.
+- **Docs.** The README describes what Meridian is meant to be, and the document index lists the release acceptance, outbound request and OpenRouter documents.
+
+**Known issues.**
+- No live run of any provider, publish, paid call or billing path has been made. The live steps are for the owner to run.
+- An OpenRouter request that errors or times out may have been billed. Its hold stays until an administrator releases it.
+
 ## 0.1.0-beta.15 — prerelease
 
 The cost and time record for paid engine calls, a bound on how often held bills are read, the 2026-10-22 review fixes from main, and the orchestrator's text steps. Tests use fixtures. No live provider call is recorded in this release. The owner's live check of the OpenRouter bill field and the token figures is still to run.

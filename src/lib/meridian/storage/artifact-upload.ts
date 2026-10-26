@@ -1,3 +1,5 @@
+import { isCapabilityDisabledError } from "../providers/capability.ts";
+
 /**
  * Resumable upload of artifact bytes to Google Drive, with the upload's state recorded in Postgres.
  *
@@ -216,6 +218,8 @@ function assertSameContent(session: ArtifactUploadSession, sha256: string, total
 }
 
 function isRetryable(err: unknown): boolean {
+  // A disabled capability sent nothing, so repeating it cannot help.
+  if (isCapabilityDisabledError(err)) return false;
   return err instanceof DriveUploadError ? err.retryable : true;
 }
 

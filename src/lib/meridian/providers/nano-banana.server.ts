@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { gatedFetch, isCapabilityDisabledError } from "./capability.ts";
 import { inspectImage } from "../assets/images.ts";
 import type { ImageResult } from "./media.ts";
 import { ProviderConfigResolver } from "../config/resolver.ts";
@@ -117,7 +118,7 @@ export async function generateNanoBananaImage(input: {
     };
   }
   const started = Date.now();
-  const fetchImpl = input.fetchImpl ?? fetch;
+  const fetchImpl = input.fetchImpl ?? gatedFetch("generation.gemini_image");
 
   try {
     const response = await fetchImpl(ENDPOINT, {
@@ -232,6 +233,8 @@ export async function generateNanoBananaImage(input: {
       costCents: null,
     };
   } catch (err: unknown) {
+    // A disabled capability sent nothing. It is not a failed call, so no caller holds a budget for a request that never left.
+    if (isCapabilityDisabledError(err)) return { status: "NOT_CONNECTED", provider: "google:nano-banana", error: err.message };
     const message = err instanceof Error ? err.message : String(err);
     return {
       status: "failed",

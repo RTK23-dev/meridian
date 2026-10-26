@@ -43,6 +43,10 @@ try {
 
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle", timeout: 90000 });
   await settleAnimations(page);
+  // The planner and the model panel sit behind a disclosure. Open it once here, so the page text and the Plan the run button below
+  // are both visible. Clicking it again would close it.
+  const disclosure = page.getByText("Plan a run in detail", { exact: false }).first();
+  if ((await disclosure.count()) > 0) await disclosure.click();
   const main = (await page.locator("main").innerText()).replace(/\s+/g, " ");
   check("shows the Content page", main.includes("Make, review, publish and learn"));
   await page.screenshot({ path: checkedOutputPath(resolve(outDir, "01-page.png"), [outDir], "screenshot") });
