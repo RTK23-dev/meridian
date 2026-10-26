@@ -85,7 +85,9 @@ export function EngineChoice({
         {engines.engines.map((engine) => {
           const copy = ENGINE_COPY[engine.id];
           const ready = engine.health.status === "READY";
-          const isActive = engine.id === activeId && engines.active.source !== "default";
+          // The engine receiving decisions right now, whether it was chosen for this workspace or is the default.
+          const isActive = engine.id === activeId;
+          const isDefault = isActive && engines.active.source === "default";
           const key = copy ? keys[copy.keyCategory] : null;
           const inputId = `engine-${engine.id}`;
           return (
@@ -113,7 +115,7 @@ export function EngineChoice({
                   </label>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
-                  {isActive ? "In use" : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
+                  {isActive ? (isDefault ? "In use (default)" : "In use") : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
                 </span>
               </div>
               {selected === engine.id ? (

@@ -18,3 +18,10 @@ test("the key note says whose key it is and that the studied brand's login is ne
   assert.match(note, /your own developer key/);
   assert.match(note, /never needs a password or token from any brand you study/);
 });
+
+test("a shared-default reason keeps the variable name out of the plain text", () => {
+  const split = splitOperatorHint("The deployment's key is saved and can be read, because YOUTUBE_SHARED_DEFAULT=deployment is set. This workspace has no key of its own.");
+  assert.doesNotMatch(split.plain, /[A-Z]+_SHARED_DEFAULT/);
+  assert.match(split.plain, /This workspace has no key of its own/);
+  assert.match(split.operator ?? "", /YOUTUBE_SHARED_DEFAULT=deployment is set/);
+});

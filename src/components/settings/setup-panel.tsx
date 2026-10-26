@@ -7,6 +7,7 @@ import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation, useVideoBudgetQuery } from "@/lib/query/hooks";
 import { removeProviderConfig, saveProviderConfig, saveVideoBudget, testProviderConnection } from "@/lib/meridian/settings/server-actions";
 import { keyOwnerNote, splitOperatorHint } from "./key-copy";
+import { OperatorVariables } from "./operator-note";
 import { parseMonthlyVideoBudget } from "@/lib/meridian/settings/video-budget-model";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
@@ -318,14 +319,7 @@ function RowAction({ row, organizationId, canAdmin }: { row: SetupRow; organizat
   }
   if (row.save.kind === "deployment") {
     return (
-      <p className="text-sm text-fg-muted">
-        Set {row.save.variables.map((name, index) => (
-          <span key={name}>
-            {index > 0 ? ", " : ""}
-            <code className="font-mono text-xs text-fg">{name}</code>
-          </span>
-        ))} on the server. This panel cannot save them, and no key is shown here.
-      </p>
+      <OperatorVariables names={row.save.variables} lead="This is set on the server. This panel cannot save it." />
     );
   }
   return <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />;

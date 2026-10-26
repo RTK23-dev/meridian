@@ -5,7 +5,15 @@ export type SplitReason = { plain: string; operator: string | null };
 // The resolver appends "Set NAME=value to use the deployment key." to a reason. It is for whoever runs the server.
 const OPERATOR_TAIL = /\s*Set [A-Z][A-Z0-9_]*=\S+ to use the deployment key\.?\s*$/;
 
+// A shared-default row says which variable made it usable: ", because NAME=value is set". The name is for whoever runs the server.
+const OPERATOR_BECAUSE = /,?\s*because ([A-Z][A-Z0-9_]*=\S+) is set\./;
+
 export function splitOperatorHint(reason: string): SplitReason {
+  const because = OPERATOR_BECAUSE.exec(reason);
+  if (because) {
+    const plain = (reason.slice(0, because.index) + "." + reason.slice(because.index + because[0].length)).replace(/\s+/g, " ").trim();
+    return { plain, operator: `${because[1]} is set on the server.` };
+  }
   const match = OPERATOR_TAIL.exec(reason);
   if (!match) return { plain: reason, operator: null };
   return { plain: reason.slice(0, match.index).replace(/the deployment does not share one\.?$/i, "no shared key is set up.").trim(), operator: match[0].trim() };

@@ -11,6 +11,7 @@ import { guideFacts } from "@/lib/setup/facts";
 import { buildGuide, currentStep, guideSummary, type GuideStep } from "@/lib/setup/guide";
 import { EngineChoice } from "./engine-choice";
 import { splitOperatorHint } from "@/components/settings/key-copy";
+import { OperatorReason, OperatorVariables } from "@/components/settings/operator-note";
 
 /** The keyed sources people usually start with. The rest sit under "More connectors". */
 const PRIMARY_SOURCES: ReadonlyArray<{ id: string; what: string }> = [
@@ -299,7 +300,7 @@ function RowList({
               <div className="min-w-0 space-y-1">
                 <p className="font-semibold text-fg">{row.label}</p>
                 {descriptions?.[id] ? <p className="text-sm text-fg-muted">{descriptions[id]}</p> : null}
-                <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+                <OperatorReason text={row.reason} />
                 {row.fingerprint ? <p className="font-mono text-xs text-fg-muted">Stored key ends {row.fingerprint}</p> : null}
                 {row.note ? <p className="text-sm text-fg-muted">{row.note}</p> : null}
               </div>
@@ -339,13 +340,9 @@ function StorageAction({ row, loaded }: { row: SetupRow | undefined; loaded: boo
   if (!loaded || !row) return <p className="text-sm text-fg-muted">Loading the storage state...</p>;
   return (
     <div className="space-y-2 rounded-lg border border-border p-4">
-      <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.reason}</p>
+      <OperatorReason text={row.reason} />
       {row.save.kind === "deployment" ? (
-        <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">
-          Set on the server, not here: {row.save.variables.map((name, index) => (
-            <span key={name}>{index > 0 ? ", " : ""}<code className="font-mono text-xs text-fg">{name}</code></span>
-          ))}. No key is shown on this page.
-        </p>
+        <OperatorVariables names={row.save.variables} lead="This is set on the server, not here." />
       ) : null}
     </div>
   );
