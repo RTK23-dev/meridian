@@ -30,7 +30,7 @@ whether the run passes or fails.
 
 ## What the run checks
 
-**Current-head evidence:** [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449) on `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` completed with all 13 required jobs successful. The release-acceptance job reported 13 pass, 0 fail; its screenshots and logs are attached as the `release-acceptance` artifact.
+**Last fully verified code head:** [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449) on `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` completed with all 13 required jobs successful. The release-acceptance job reported 13 pass, 0 fail; its screenshots and logs are attached as the `release-acceptance` artifact.
 
 | ID | Check | Result |
 | --- | --- | --- |
