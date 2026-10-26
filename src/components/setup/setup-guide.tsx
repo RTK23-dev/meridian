@@ -124,7 +124,7 @@ export function SetupGuide() {
       <div className="space-y-10">
         <PageHeader
           title="Set up Meridian"
-          description="Create a brand, then choose a decision engine and save its key. The other connections are on this page. Each one shows what it needs and saves it here."
+          description="Start with your brand and decision engine. To research examples, open Market and paste a public page URL—no extra key is needed. Set up other connections only when you need them."
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
@@ -160,8 +160,8 @@ export function SetupGuide() {
         </ol>
 
         <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
-          <h2 id="setup-advanced" className="font-semibold text-fg">Every provider in one list</h2>
-          <p className="mt-1 text-sm text-fg-muted">The same keys, states and reasons, with the server variables for each row, are on Settings → General.</p>
+          <h2 id="setup-advanced" className="font-semibold text-fg">Optional connections</h2>
+          <p className="mt-1 text-sm text-fg-muted">You do not need to connect every provider to start researching. Add a connection only for a task that needs it; advanced provider settings are available in Settings.</p>
           <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
         </section>
       </div>
