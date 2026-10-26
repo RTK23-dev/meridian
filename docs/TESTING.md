@@ -75,12 +75,12 @@ Playwright's Chromium is needed for the browser checks. CI installs it with `npx
 | `static` | `npm run typecheck`, `npm run lint`, `npm run build` |
 | `sidecar` | the sourcing sidecar's Python tests |
 | `postgres` | the money checks on a real PostgreSQL server: the migrator on an empty database and its upgrade from one migration behind, then the ledger, hold, review and shared-cap tests with `MERIDIAN_PG_TEST_URL` set, including the concurrency cases |
-| `check` | requires `tests`, `static`, `sidecar` and `postgres` to succeed |
+| `check` | the merge gate: requires `tests`, `static`, `sidecar`, `postgres`, `release-acceptance`, `ui-smoke` and `e2e` to all succeed, and fails if any was skipped |
 | `ui-smoke` | `npm run build`, starts the app, `npm run ui:baseline`, `npm run ui:design-smoke`, and a browser smoke |
 | `e2e` | `npm run e2e` against the running app |
 
-Only the `check` job's results decide whether code is safe to merge on its own. The browser jobs catch what unit tests cannot:
-overflow, dead controls and broken flows. Some PostgreSQL branches skip on the embedded run. The `postgres` job is where they run in CI,
+Only the `check` job's result decides whether code is safe to merge, and it includes the browser jobs, which catch what unit tests cannot:
+overflow, dead controls and broken flows. `e2e` starts only after the other jobs have succeeded, and `check` waits for it. Some PostgreSQL branches skip on the embedded run. The `postgres` job is where they run in CI,
 so a change to a money path is not proved by the shards alone.
 
 ## Writing tests
