@@ -6,7 +6,7 @@
 // run.mjs does the whole sequence (the account, the seed, this pass and the database check); docs/RELEASE_ACCEPTANCE.md describes it.
 
 import assert from "node:assert/strict";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { chromium } from "playwright";
 import { localAcceptanceBase } from "./local-base.mjs";
@@ -266,6 +266,18 @@ try {
     const text = await page.locator("main").innerText();
     assert.match(text, /not your OpenRouter account balance/);
     assert.doesNotMatch(text, /Monthly video budget/);
+  });
+
+  await check("M1", "first-run pages stay short on a clean account: heights are recorded and bounded", async () => {
+    // Before this work: Settings 9110 px, Market 4226 px, Setup 3988 px, Brand brain 7726 px. Bounds are loose on purpose; the numbers go to the artifact.
+    const heights = {};
+    for (const [name, path, limit] of [["setup", "/setup", 3200], ["settings", "/settings", 3000], ["market", `${brandPath}/market`, 3000], ["brain", `${brandPath}/brain`, 5200]]) {
+      await page.goto(`${base}${path}`, { waitUntil: "networkidle" });
+      heights[name] = await page.evaluate(() => document.documentElement.scrollHeight);
+      assert.ok(heights[name] < limit, `${name} is ${heights[name]} px, limit ${limit}`);
+    }
+    writeFileSync(join(out, "page-heights.json"), JSON.stringify(heights, null, 2));
+    console.log("page heights", JSON.stringify(heights));
   });
 
   await check("G8", "setup: OpenRouter shows key saved, test passed and active engine as separate steps, and names the engine in use", async () => {
