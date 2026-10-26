@@ -284,15 +284,17 @@ try {
     assert.doesNotMatch(setupText, /The model is \./, "the model line must not be empty");
   });
 
-  await check("G9", "setup: the sources step does not ask for a key to read a page, and says TikTok, Instagram and the rest need none", async () => {
+  await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
-    // An optional step keeps its body behind "Open this step", so open the one for sources as a person would.
+    // The sources step and its optional phrase-search keys are both behind clear disclosures.
     const step = page.locator("li, section, article").filter({ hasText: "Pick where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
     await step.getByText("Open this step").first().click();
+    assert.match(await page.locator("main").innerText(), /Read one public page/);
+    assert.match(await page.locator("main").innerText(), /This is not a search/);
+    await page.getByText("Optional: search by phrase", { exact: true }).click();
     const text = await page.locator("main").innerText();
-    assert.match(text, /Read one public page/);
-    assert.match(text, /This is not a search/);
-    assert.match(text, /TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release, and no key is needed/);
+    assert.match(text, /TikTok, Instagram, X, Facebook, Pinterest, LinkedIn and licensed data are not available in this release/);
+    assert.match(text, /Saving a key for them would change nothing/);
     assert.doesNotMatch(text, /DEPLOYMENT_|YOUTUBE_API_KEY=|META_AD_LIBRARY_TOKEN=/);
   });
 
