@@ -10,7 +10,7 @@ A run stores the settings it started with, so a later change to the brand does n
 | Setting | Values | Meaning |
 | --- | --- | --- |
 | `automation` | `manual`, `semi`, `full` | Where a run waits for a person (see the stop points below). Default `manual`. |
-| `decisionEngine` | `workspace_default`, `jev`, `openai-decisions`, `openrouter-decisions` | Which engine decides. Default `workspace_default`. | Default `workspace_default`. |
+| `decisionEngine` | `workspace_default`, `jev`, `openai-decisions`, `openrouter-decisions` | Which engine decides. Default `workspace_default`. |
 | `intent` | `organic`, `ad`, `both` | Which publish path and which metrics. Default `organic`. |
 | `formats` | `image`, `video`, `carousel` (one or more) | What the run makes. Default `video`. |
 | `platforms` | for example `instagram`, `facebook`, `youtube`, `tiktok` | A platform with no connection is reported as not connected. |
