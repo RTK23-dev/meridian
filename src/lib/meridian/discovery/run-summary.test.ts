@@ -56,3 +56,19 @@ test("a blocked social URL names the platform, says there is no connector, and n
   assert.match(summary.nextStep ?? "", /Upload the post or paste its text/);
   assert.doesNotMatch(`${summary.headline} ${summary.nextStep}`, /add a key|save a key/i);
 });
+
+test("one source that ran with nothing new and another that failed is a partial run, never blocked and never plain nothing-new", () => {
+  const sources = [
+    { adapterId: "website", status: "ran", itemsFound: 0 },
+    { adapterId: "youtube", status: "failed", reason: "The API answered 500." },
+  ] as never;
+  const dupes = summarizeRun({ discoveredUrls: 0, seenBefore: 3, sources });
+  assert.equal(dupes.outcome, "partial");
+  assert.equal(dupes.failed, 1);
+  assert.equal(dupes.alreadyStored, 3);
+  const empty = summarizeRun({ discoveredUrls: 0, seenBefore: 0, sources });
+  assert.equal(empty.outcome, "partial");
+  assert.match(empty.headline, /Another source did not work/);
+  const none = summarizeRun({ discoveredUrls: 0, seenBefore: 0, sources: [{ adapterId: "website", status: "failed", reason: "no" }] as never });
+  assert.equal(none.outcome, "blocked");
+});

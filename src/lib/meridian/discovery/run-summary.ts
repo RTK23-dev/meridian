@@ -55,6 +55,18 @@ export function summarizeRun(run: RunSummaryInput): RunSummary {
       nextStep: partial ? "Some sources did not work. Open the source details to see which." : "Review what was stored below.",
     };
   }
+  // A source ran and another failed: the run is partial, and the failure keeps its next action. Blocked means no source ran.
+  if (ran > 0 && failed > 0) {
+    const read = run.seenBefore > 0
+      ? `A source was read, and all ${run.seenBefore} of its examples were already stored.`
+      : "A source was read, and it returned no new examples.";
+    return {
+      ...base,
+      outcome: "partial",
+      headline: `${read} Another source did not work.`,
+      nextStep: "Open the source details to see which source failed and why. Add another page URL or upload an example if you need more.",
+    };
+  }
   if (ran > 0 && run.seenBefore > 0) {
     return {
       ...base,
