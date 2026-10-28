@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -148,17 +148,21 @@ export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: 
   });
 
   const inputRef = useRef<HTMLInputElement>(null);
-  // A blocker elsewhere links here with #monthly-budget. Scroll to the field and focus it, on arrival and on a later hash change.
+  // A blocker elsewhere links here with #monthly-budget. Read the router's location as well as the browser URL:
+  // client-side navigation uses history.pushState, which does not dispatch a native hashchange event.
+  const routeHash = useRouterState({ select: (state) => state.location.hash });
   useEffect(() => {
-    const goToField = () => {
-      if (window.location.hash !== "#monthly-budget") return;
-      inputRef.current?.scrollIntoView({ block: "center" });
-      inputRef.current?.focus();
-    };
-    goToField();
-    window.addEventListener("hashchange", goToField);
-    return () => window.removeEventListener("hashchange", goToField);
-  }, [budget.isPending]);
+    const hash = routeHash.replace(/^#/, "");
+    if (hash !== "monthly-budget" && window.location.hash !== "#monthly-budget") return;
+    // Let the destination commit before focusing; the input can initially be disabled while its saved value loads.
+    const frame = window.requestAnimationFrame(() => {
+      const field = inputRef.current;
+      if (!field) return;
+      field.scrollIntoView({ block: "center" });
+      field.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [budget.isPending, routeHash]);
 
   const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
   const parsed = parseMonthlyVideoBudget(shown);
