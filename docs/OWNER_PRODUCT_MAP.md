@@ -12,9 +12,9 @@ The intended job, as understood from the owner's description, is:
 
 **Use research and reference videos to find a repeatable content format → make many original short videos in that format → review them → export them.**
 
-The current codebase is much broader. It is an advertising operating system for a brand: workspace and brand management, source collection, evidence analysis, decision engines, creative generation, review, library, publishing, ads, results, learning/calibration, account connections, job operations, team roles, audit trails, and spend controls. It also contains a substantial video-engine pipeline.
+The current codebase is much broader. It is an advertising operating system for a brand: workspace and brand management, source collection, evidence analysis, decision engines, creative generation, review, library, publishing, ads, results, learning/calibration, account connections, job operations, team roles, audit trails, and spend controls. It also contains a substantial video-engine pipeline. The repository even has a blueprint (`docs/design/KATANA_REDESIGN_PLAN.md`) for five clear places—Home, Create, Library, Insights and Settings—but the live navigation has not been simplified to that map.
 
-That is why it feels like a different product: the interface exposes multiple concepts and workflows before it gets the owner to the single result they care about. The current Content page also contains distinct ways to create content, while the research-led Factory is in a separate Ads section. Those paths are not yet presented as one simple research-to-batch-video experience.
+That is why it feels like a different product: the interface exposes multiple concepts and workflows before it gets the owner to the single result they care about. The current Content page contains several ways to create. The research-led Factory was hidden behind an admin-only Ads tab, and its initial view opened on a technical Pipeline Editor while the run builder sat under Discover. This change renames the owner-facing tab to Batch and makes its first view Make a batch. The two creative paths—research-led Factory and direct creation from a reference—are still not one guided workflow.
 
 This mismatch is not the owner's failure to understand the interface. The product currently asks the owner to learn the software's internal architecture before they can reach the desired outcome.
 
@@ -24,7 +24,7 @@ This mismatch is not the owner's failure to understand the interface. The produc
 | --- | --- | --- |
 | Workspace and brands | Accounts, workspaces, brand facts, products, roles, audit history | That a brand is configured with the right facts for this owner's actual content |
 | Market and research | URL-based collection, source adapters, uploads, stored evidence, analysis and opportunity ranking | That any given social URL is readable, that a blocked source can be reached, or that the desired research source works live |
-| Content and Studio | A unified Content page with Create, Ideas, Review, Library, Publish and Results sections; different brief/reference/Studio entry modes | That a new user can tell which path to use or that an end-to-end video can be produced with the current server configuration |
+| Content and Studio | A unified Content page with Create, Ideas, Review, Library, Publish, Results and Batch sections; distinct brief/reference/Studio entry modes; the Batch tab now opens directly on the run builder | That a new user can combine their reference and research in one workflow, or that an end-to-end video can be produced with the current server configuration |
 | Research-led Factory | A staged pipeline for gathering, grading, picking, planning, producing, gating, approvals, and learning, with variant and budget concepts | That the whole pipeline has completed a live research-to-many-videos run |
 | Video engine | Typed artifacts and staged jobs for reference analysis, script and scene planning, shot production, editing/composition, gates, and output manifests | That the engine has passed a real end-to-end run on paid providers or rendered a usable result for this workspace |
 | Publishing and ads | Interfaces and guarded paths for organic posts, paused paid ads, measurements, and repurposing | That publishing, account permissions, billing, metrics or live receipts have been verified |
@@ -39,7 +39,7 @@ Paths below are from the route and navigation definitions, not screenshots of a 
 3. **Brand brain and Products**: enter brand positioning, audience, tone, prohibited claims and products.
 4. **Market** (/brands/:id/market): collect accessible evidence. A URL is not a guarantee that a source will permit automated reading.
 5. **Intelligence**: inspect analysis/opportunities.
-6. **Content** (/brands/:id/content, or /content-factory): one page with several sections. Create offers multiple entry modes; Ideas, Review, Library, Publish and Results are other tabs. Admins also see Ads, where the research-led Factory lives.
+6. **Content** (/brands/:id/content, or /content-factory): one page with several sections. Create offers multiple entry modes; Ideas, Review, Library, Publish and Results are other tabs. Admins also see Batch, where the research-led Factory lives. Its first tab is now Make a batch; Factory Line, Templates, Production, Review, Live tests and Learnings remain advanced tabs.
 7. **Settings, Integrations, Jobs & health**: configure and diagnose the system. They are operational support, not the desired daily creative workflow.
 
 The underlying code also has separate concepts for a decision engine and a video-production provider. The decision engine judges/reasons over inputs; it is not necessarily the system that generates the video. This distinction is technically valid but is too much for the primary user journey.
