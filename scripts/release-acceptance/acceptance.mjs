@@ -151,7 +151,9 @@ try {
   await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Batch tab", async () => {
     const main = await page.locator("main").innerText();
     assert.match(main, /Make, review, publish and learn from your videos, images and ads in one place\./);
-    for (const label of ["Create", "Ideas", "Review", "Library", "Publish", "Results", "Batch"]) {
+    const contentTabs = await page.getByRole("tab").allInnerTexts();
+    assert.equal(contentTabs[1], "Batch", "Batch is directly beside Create for admins");
+    for (const label of ["Create", "Batch", "Ideas", "Review", "Library", "Publish", "Results"]) {
       assert.equal(await page.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
     }
     await page.getByRole("tab", { name: "Batch", exact: true }).click();
