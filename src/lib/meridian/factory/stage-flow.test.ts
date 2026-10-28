@@ -14,7 +14,7 @@ import {
   stubImageProvider,
   studioTenant,
   type FactoryTenant,
-} from "../testing/produce-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 
 // The testing runtime enables the image double and the testing artifact store. Production never selects either.
 process.env.MERIDIAN_TESTING_RUNTIME = "true";

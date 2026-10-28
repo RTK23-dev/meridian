@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { getSql } from "../../db.ts";
-import { createTenantFixture } from "../testing/production-fixtures.ts";
+import { createTenantFixture } from "../../../test-support/lib/meridian/testing/production-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import { CREDENTIAL_VAULT_TYPE } from "../credentials/contract.ts";
 import { GeminiOmniVideoProvider } from "./providers/omni.ts";

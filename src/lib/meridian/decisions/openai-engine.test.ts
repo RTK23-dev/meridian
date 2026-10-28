@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { OpenAiDecisionsEngine, OPENAI_DECISIONS_MAX_IMAGES, toWireQuestion } from "./openai-engine.ts";
-import { CONTRACT_CHOICE, CONTRACT_KEYS, CONTRACT_SCORE, contractPngBytes, contractRequest } from "./contract-fixtures.ts";
+import { CONTRACT_CHOICE, CONTRACT_KEYS, CONTRACT_SCORE, contractPngBytes, contractRequest } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 
 // These tests use fixtures shaped like the documented Decisions contract. They do not call the live API.
 

@@ -3,7 +3,7 @@ import test from "node:test";
 import { JevDecisionService } from "./service.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "./router.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
-import { fixedLookup } from "../credentials/fixtures.ts";
+import { fixedLookup } from "../../../test-support/lib/meridian/credentials/fixtures.ts";
 
 const sampleCompleteBundle: EvidenceBundle = {
   id: "bundle-integration-123",

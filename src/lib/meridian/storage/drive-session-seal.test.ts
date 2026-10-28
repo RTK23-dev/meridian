@@ -4,7 +4,7 @@ import test from "node:test";
 import { getSql, type Sql } from "../../db.ts";
 import { uploadArtifactToDrive, type ArtifactUploadDeps, type ArtifactUploadRequest } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
-import { fakeDriveUpload, FAKE_DRIVE_SESSION_PREFIX, patternBytes, type ChunkAction } from "./fake-drive-upload.ts";
+import { fakeDriveUpload, FAKE_DRIVE_SESSION_PREFIX, patternBytes, type ChunkAction } from "../../../test-support/lib/meridian/storage/fake-drive-upload.ts";
 import { SessionSealError } from "./session-seal.ts";
 
 // A resumable upload's session URI is sealed in Postgres and opened only by the upload loop. A process that dies mid-upload

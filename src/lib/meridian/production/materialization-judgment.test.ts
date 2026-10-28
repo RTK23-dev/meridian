@@ -8,8 +8,8 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { saveWorkspaceEngine } from "../decisions/selection.ts";
 import type { ArtifactDrive } from "../storage/artifact-drive.ts";
-import { registryWith, stubEngine } from "../testing/brief-fixtures.ts";
-import { PNG, imagePlan, insertExecutingPlan, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { registryWith, stubEngine } from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
+import { PNG, imagePlan, insertExecutingPlan, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { materializeImageArtifact } from "./materialization.ts";
 
 const PROMPT = "GENERATION-PROMPT-ONLY-TEXT-7731";

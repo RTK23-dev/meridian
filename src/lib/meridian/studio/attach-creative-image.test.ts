@@ -5,8 +5,8 @@ import { getSql } from "../../db.ts";
 import { CREDENTIAL_VAULT_TYPE } from "../credentials/contract.ts";
 import type { Sql } from "../learning/store.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
-import { PNG, PNG_BASE64, studioTenant } from "../testing/durable-image-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { PNG, PNG_BASE64, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 
 // Used only by this test process: the vault encrypts saved keys with this master key.

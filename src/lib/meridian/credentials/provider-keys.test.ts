@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { resolveCredential, resolveDeploymentOnlyKey } from "./resolve.ts";
 import { CREDENTIAL_VAULT_TYPE, type CredentialResolution } from "./contract.ts";
-import { openTestBackends, withEnv } from "./test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 
 // Used only by this test process: the vault encrypts saved keys with this master key.

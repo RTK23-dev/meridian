@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { resolveCredential, resolveDeploymentOnlyKey, sharedDefaultOptedIn } from "./resolve.ts";
 import { CREDENTIAL_VAULT_TYPE, SHARED_DEFAULT_ENV, VIDEO_ENGINE_CREDENTIAL_CATEGORIES, credentialStateOf, type VideoEngineCredentialCategory } from "./contract.ts";
-import { openTestBackends, vaultRowId, withEnv } from "./test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, vaultRowId, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import {
   getWorkspaceProviderSettings,

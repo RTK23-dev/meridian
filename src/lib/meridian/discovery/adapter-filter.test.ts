@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DiscoveryService } from "./service.ts";
-import { fixtureSourceRegistry, makeFactoryTestSql } from "../testing/factory-fixtures.ts";
+import { fixtureSourceRegistry, makeFactoryTestSql } from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 
 test("a niche run plans only the adapters it names, and records no state for the others", async () => {
   const sql = await makeFactoryTestSql();

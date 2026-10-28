@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { getDefaultPipelineConfig, validatePipelineConfig, type FactoryPipelineConfig } from "./pipeline-config.ts";
 import { loadFactoryPipelineConfig } from "./pipeline-config-store.ts";
-import { openTestBackends } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import type { Sql } from "../learning/store.ts";
 
 const backends = await openTestBackends();

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import type { JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
-import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from "./recorded-decision-catalog.ts";
 import { resolveImageSupport } from "./capabilities.ts";
 import { DecisionCatalogSource } from "./decision-catalog.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { MultimodalPerceptionProvider, PerceptionMedia } from "../perception/types.ts";
-import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { PNG, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { checkVisualReadBytes, readVisualMedia, VISUAL_READ_MAX_BYTES } from "./vision.server.ts";
 
 // The shared perception credential is set for this process only, as production resolves it: the deployment's shared default.

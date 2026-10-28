@@ -15,7 +15,7 @@ import { readLatestOpenRouterCheck, readOpenRouterModel, recordOpenRouterCheck, 
 import { persistDecisionLineage } from "./lineage.ts";
 import { resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
 import type { DecisionEngine, DecisionRequest, DecisionResult } from "./types.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import { memoryDecisionHolds } from "./holds.ts";
 
 const MIGRATION = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "migrations", "0132_openrouter_decisions.sql");

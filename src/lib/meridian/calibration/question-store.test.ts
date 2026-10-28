@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import {
   GRADED_QUESTION,
   gradeResearchAd,
@@ -10,7 +10,7 @@ import {
   seedPick,
   seedResearchAd,
   type Tenant,
-} from "../testing/question-calibration-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/question-calibration-fixtures.ts";
 import { predictionFingerprint } from "../factory/prediction.ts";
 import { QUESTION_CALIBRATION_METHOD } from "./question-method.ts";
 import { buildQuestionOutcomes, questionKeyOf } from "./question-outcomes.ts";

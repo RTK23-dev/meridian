@@ -3,10 +3,10 @@
  * injected credential and fetch) and against the OpenAI Decisions engine (the real adapter, with an injected fetch). No live
  * request is made. Keys come from credentials/fixtures.ts.
  */
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fixedLookup } from "../credentials/fixtures.ts";
+import { fixedLookup } from "../../../test-support/lib/meridian/credentials/fixtures.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "../jev/router.ts";
 import type { JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
 import { evaluateDecisionPolicy, evaluateQuestionPolicies, policyForQuestion, type DecisionPolicy } from "./policy.ts";
@@ -14,7 +14,7 @@ import { runEngineGate, type GateQuestion } from "./gate.ts";
 import { decideWithActiveEngine } from "./dispatcher.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OPENAI_DECISIONS_MAX_IMAGES, OpenAiDecisionsEngine } from "./openai-engine.ts";
-import { CONTRACT_CHOICE, CONTRACT_EXPECTED, CONTRACT_KEYS, CONTRACT_PREDICATE, contractPngBytes, contractRequest } from "./contract-fixtures.ts";
+import { CONTRACT_CHOICE, CONTRACT_EXPECTED, CONTRACT_KEYS, CONTRACT_PREDICATE, contractPngBytes, contractRequest } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import type { DecisionRequest, DecisionResult } from "./types.ts";
 
 type Mode = "ok" | "http_error" | "timeout";

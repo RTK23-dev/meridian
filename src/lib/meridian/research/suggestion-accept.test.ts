@@ -6,10 +6,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
-import { openTestBackends, type TestBackend } from "../credentials/test-databases.ts";
+import { openTestBackends, type TestBackend } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 import type { Sql } from "../learning/store.ts";
 import { saveBrainChanges } from "../brand/brain-store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { acceptBrainSuggestion } from "./suggestion-accept.ts";
 
 const backends: TestBackend[] = await openTestBackends();

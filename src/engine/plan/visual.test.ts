@@ -6,7 +6,7 @@ import { budgetReservationFixture, FIXTURE_IDS, productKitFixture, scenePlanFixt
 import { estimatePlan } from "../budget/estimate.ts";
 import { RECIPES, isGeneratedType } from "./tables.ts";
 import { decideVisuals, type ShotChoice, type VisualDecisionInput } from "./visual.ts";
-import { fixtureDecisionInput, fixtureKits, fixtureShots, fixtureStyle } from "./fixtureInputs.ts";
+import { fixtureDecisionInput, fixtureKits, fixtureShots, fixtureStyle } from "../test/plan-fixture-inputs.ts";
 import { mustAllowedTypes } from "./filter.ts";
 import type { ShotInput } from "./types.ts";
 

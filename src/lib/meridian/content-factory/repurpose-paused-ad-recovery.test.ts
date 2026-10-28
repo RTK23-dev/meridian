@@ -8,7 +8,7 @@ import { after, before, describe, test } from "node:test";
 import { startEngineRequest } from "../../../engine/jobs/orchestrator-sql.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { createPausedCreative } from "../providers/meta-paused-ad.ts";
-import { fakeMeta, type FakeMeta, type FakeMetaOptions } from "../testing/meta-paused-fake.ts";
+import { fakeMeta, type FakeMeta, type FakeMetaOptions } from "../../../test-support/lib/meridian/testing/meta-paused-fake.ts";
 import {
   PAUSED_AD_LEASE_MS,
   bindingFingerprint,

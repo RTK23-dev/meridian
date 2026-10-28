@@ -3,13 +3,13 @@
  * Each question sees only its own scope. Evidence for one question never satisfies another. Approval needs a calibrated answer,
  * an explicit policy, and a threshold. A whole-call failure stops the later scopes, and the engine is never switched.
  */
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
-import { registryWith, stubEngine } from "../testing/brief-fixtures.ts";
+import { PNG, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { registryWith, stubEngine } from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import type { DecisionEngineRegistry } from "./dispatcher.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateImage, type GateQuestion } from "./gate.ts";

@@ -6,10 +6,10 @@
 
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { setMonthlyBudget } from "../testing/monthly-budget.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import { monthlyHeldUsd, reserveGenerationCall, type HoldInput } from "../providers/generation-ledger.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 import { ledgerHoldsOn, memoryDecisionHolds, type DecisionHolds } from "./holds.ts";

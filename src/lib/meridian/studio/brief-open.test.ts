@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { BRAIN, BRIEF, approvesBriefCalibrated, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { BRAIN, BRIEF, approvesBriefCalibrated, registryWith, stubEngine } from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
 import {
   failingSql,
   seedBrandBrain,
   seedCompetitorCreative,
   seedOpportunity,
-} from "../testing/opportunity-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+} from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import type { BriefGateOptions } from "./brief-service.server.ts";
 import { briefGateJudge, createGatedBrief } from "./brief-service.server.ts";
 import type { BriefRecord } from "./brief-service.contract.ts";

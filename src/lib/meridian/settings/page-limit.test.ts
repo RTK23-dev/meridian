@@ -4,8 +4,8 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
 import { getWorkspaceProviderSettings, saveWorkspaceProviderConfig } from "./provider-config.ts";
-import { openTestBackends } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 
 test("a page limit is a whole number of pages, 1 or more", () => {
   assert.equal(parsePageLimit(1), 1);

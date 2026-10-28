@@ -1,4 +1,4 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -7,7 +7,7 @@ import { evaluateJevGate } from "../jev/reviewer-decision.ts";
 import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
 import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRequest, type DecisionResult } from "../decisions/types.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { BRIEF_QUESTIONS } from "../jev/questions/brief.ts";
 import { briefDeterministicRejections, judgeBriefFit, writeBriefDecision, type BriefBrain, type BriefForGate } from "./brief-gate.server.ts";
 import { creativeJudgmentsFromStoredDecision } from "./jev-context.ts";
