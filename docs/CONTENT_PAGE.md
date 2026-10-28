@@ -37,12 +37,12 @@ The connect-account flow returns to `/brands/:id/accounts`, the only brand path 
 | Section | What it shows | Who sees it |
 | --- | --- | --- |
 | Create | Starting-mode cards, then the engine or Studio | Everyone. Engine presets are admin-only. |
+| Batch | The research-led production run builder and its status; opens on Make a batch | Admins only |
 | Ideas | Ranked opportunities | Everyone |
 | Review | Holds waiting for a person | Everyone |
 | Library | Stored creatives | Everyone |
 | Publish | Connected accounts | Everyone. The screen checks its own roles. |
 | Results | Learning: patterns, performance, schedule, sharing | Everyone |
-| Batch | The research-led production run builder and its status | Admins only |
 
 A section a person may not use falls back to Create.
 
