@@ -211,8 +211,9 @@ export function FactoryPage({ brandId }: { brandId: string }) {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Factory</p>
-          <h1 className="page-title">Watch, copy the framework, never the ad</h1>
-          <p className="text-muted">{board.levelDetail} Autopilot is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (ceiling {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}).</p>
+          <h1 className="page-title">Make a research-led batch</h1>
+          <p className="text-muted">Choose a topic, output format and number of variations. Meridian gathers evidence and plans original creatives. Video production stops until a provider and cost cap are configured.</p>
+          <p className="text-sm text-muted">{board.levelDetail} Automation is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (maximum {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}). Advanced controls stay in Factory Line.</p>
         </div>
         {killOn ? <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}
       </header>
@@ -220,10 +221,10 @@ export function FactoryPage({ brandId }: { brandId: string }) {
       {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
 
-      <Tabs defaultValue="pipeline" className="space-y-6">
+      <Tabs defaultValue="discover" className="space-y-6">
         <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-7">
-          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm font-medium" value="pipeline">Factory Line</TabsTrigger>
-          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="discover">Discover</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm font-medium" value="discover">Make a batch</TabsTrigger>
+          <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="pipeline">Factory Line</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="templates">Templates</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="production">Production</TabsTrigger>
           <TabsTrigger className="px-2 text-xs sm:px-3 sm:text-sm" value="review">Review</TabsTrigger>
