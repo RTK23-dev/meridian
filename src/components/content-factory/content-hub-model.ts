@@ -12,7 +12,7 @@ export const CONTENT_SECTION_LABELS: Record<ContentSection, string> = {
   library: "Library",
   publish: "Publish",
   results: "Results",
-  ads: "Ads",
+  ads: "Batch",
 };
 
 // Only an admin of the workspace sees these sections. The screens behind them still check their own roles.
