@@ -12,8 +12,10 @@ The intended primary job is to use research and reference examples to choose a r
 
 There are two ways to start, and they share one backend: the same brands, evidence, plans, assets, runs, reviews, publishing receipts, measurements and learning.
 
-- **Research-led.** The factory gathers and grades evidence about the niche, proposes an angle, plans, produces, checks, and asks for approval.
+- **Research-led.** Batch gathers and grades evidence about the niche, proposes an angle, plans, produces, checks, and asks for approval.
 - **Direct.** You bring a brief, a reference video, or your own upload, and the Content page plans, generates, revises and reviews it.
+
+These are still separate entry paths in the interface. Research collected in Market is not yet presented together with a reference-led video batch in one guided project.
 
 The loop, in either case:
 
@@ -32,7 +34,7 @@ The loop, in either case:
 | --- | --- |
 | **Setup guide** | A short path: create a brand, choose a decision engine and save its key. OpenRouter shows key saved, test passed and engine active as separate steps. Optional connections sit behind "Open this step" |
 | **Market** | Paste one public page URL, with no setup, and see what was read, what is new, what was blocked and what to do next. Searching by phrase is a separate, optional step with your own developer key |
-| **Content** | One page per brand. Create, Ideas, Review, Library, Publish, Results and Batch are its sections. Create starts from a brief, a reference, or Studio; Batch starts the research-led production builder. The research-to-video handoff still needs a simpler guided path. |
+| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Create starts from a brief, a reference, or Studio. Batch opens directly on the research-led run builder; technical Factory Line controls are still available separately. The research-to-video handoff still needs a unified guided path. |
 | **Integrations** | Every connection, with what it needs and its state |
 | **Jobs & health** | Queued work, the worker and the scheduler |
 | **Settings** | The workspace, its members, scoring weights, alerts, learning, and the uncertain model-call holds |
