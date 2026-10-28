@@ -56,7 +56,7 @@ test("every screen that moved into the content page opens its section, and Studi
   }
   assert.deepEqual(LEGACY_CONTENT_ROUTES.studio, { section: "create", preset: "studio" });
   assert.equal(LEGACY_CONTENT_ROUTES.accounts.section, "publish", "connected accounts are the Publish section");
-  assert.equal(LEGACY_CONTENT_ROUTES.factory.section, "ads", "the factory is the Ads section, which only admins see");
+  assert.equal(LEGACY_CONTENT_ROUTES.factory.section, "ads", "the factory opens the admin-only Batch section");
 });
 
 test("moving between sections keeps the chosen starting mode and drops the engine session", () => {
