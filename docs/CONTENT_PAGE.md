@@ -8,7 +8,7 @@ The single Content page is part of PR #80 on `fix/openrouter-model-routing-jev`.
 
 ## Name
 
-The page is called **Content**. It was "Content Factory" until 2026-10-24. The Ads section keeps its name, because ads are a form of content. The engine's pipeline keeps the name Content Factory in its own docs and code (`src/lib/meridian/content-factory`). The route stays at `/content-factory`, so existing links keep working.
+The page is called **Content**. It was "Content Factory" until 2026-10-24. The owner-facing section previously called Ads is now Batch, because its main job is to start a research-led production run. The engine's pipeline keeps the name Content Factory in its own docs and code (`src/lib/meridian/content-factory`). The route stays at `/content-factory`, so existing links keep working.
 
 ## What the page is
 
@@ -28,7 +28,7 @@ One page per brand where a person makes, reviews, publishes and reads results fo
 | `/brands/:id/library` | Library |
 | `/brands/:id/accounts` | Publish |
 | `/brands/:id/learning` | Results |
-| `/brands/:id/factory` | Ads |
+| `/brands/:id/factory` | Batch |
 
 The connect-account flow returns to `/brands/:id/accounts`, the only brand path the OAuth return allows, so it lands on Publish.
 
@@ -42,7 +42,7 @@ The connect-account flow returns to `/brands/:id/accounts`, the only brand path 
 | Library | Stored creatives | Everyone |
 | Publish | Connected accounts | Everyone. The screen checks its own roles. |
 | Results | Learning: patterns, performance, schedule, sharing | Everyone |
-| Ads | The research-led Factory runs | Admins only |
+| Batch | The research-led production run builder and its status | Admins only |
 
 A section a person may not use falls back to Create.
 
@@ -81,9 +81,9 @@ A section a person may not use falls back to Create.
 
 ## Remaining work and boundaries
 
-- **Browser verification is complete on the recorded head** `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` in [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449): the desktop/phone workflow checks, role-gated Ads tab, selected preset and local-only acceptance passed. A later code change must be rechecked on its own head.
+- **Browser verification is complete on the recorded head** `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` in [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449): the desktop/phone workflow checks, role-gated Batch tab, selected preset and local-only acceptance passed. A later code change must be rechecked on its own head.
 - Keep the old section URLs as redirects and preserve URL-backed tab/preset/session state; these are compatibility behavior, not cleanup candidates.
-- The Content page's Ads section remains admin-only. Each underlying section keeps its server-side role checks.
+- The Content page's Batch section remains admin-only. Its default subtab is Make a batch, with the run builder visible; Factory Line and other technical panels remain available as advanced tabs. Each underlying section keeps its server-side role checks.
 - Repurpose upload proof is fixture-only and uses an injected fake transport. The paused-ad proof creates and reads back an ad as `PAUSED`; it never activates or publishes it.
 - Live providers, credentials, paid requests and external publishing remain outside automated browser verification.
 - Backend unification is not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
