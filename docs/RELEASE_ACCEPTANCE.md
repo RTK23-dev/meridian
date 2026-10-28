@@ -44,9 +44,10 @@ whether the run passes or fails.
 | C2 | Blank configuration fails closed: the decision engine says it cannot answer | PASS |
 | D1 | No request left the local server | PASS |
 | E1 | Settings phone width (390 px): no horizontal scroll | PASS on run 40263991449 (head b4b94ea) |
-| F1 | Content workflow tabs are accessible and the admin sees Ads | PASS on run 40263991449 (head b4b94ea) |
+| F1 | Content workflow tabs were accessible and the admin saw Ads (legacy label) | PASS on run 40263991449 (head b4b94ea) |
 | F2 | Create presets expose the selected state and no-brand empty state | PASS on run 40263991449 (head b4b94ea) |
 | F3 | Content page at 390 px has no horizontal overflow | PASS on run 40263991449 (head b4b94ea) |
+| F4 | The admin-only Batch tab opens on Make a batch with the run builder visible | Added in product-recovery PR; verify against its current-head CI run |
 | G1 | Market explains one exact page URL (no setup) versus an optional phrase search | not yet run on CI |
 | G2 | A run that stored new examples says so, with source rows closed | not yet run on CI |
 | G3 | A duplicate-only run says nothing new, offers a next step, and counts unused sources as not failures | not yet run on CI |
