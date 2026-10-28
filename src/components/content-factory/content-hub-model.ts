@@ -1,7 +1,7 @@
 // The one content page: the sections it has, the modes a person can start in, and the search values that open it.
 // Pure, so these rules are tested without a screen. Each section's screen keeps its own role checks.
 
-export const CONTENT_SECTIONS = ["create", "ideas", "review", "library", "publish", "results", "ads"] as const;
+export const CONTENT_SECTIONS = ["create", "ads", "ideas", "review", "library", "publish", "results"] as const;
 
 export type ContentSection = (typeof CONTENT_SECTIONS)[number];
 
