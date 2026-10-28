@@ -148,12 +148,17 @@ try {
 
   await openSettings(page);
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
-  await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Ads tab", async () => {
+  await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Batch tab", async () => {
     const main = await page.locator("main").innerText();
     assert.match(main, /Make, review, publish and learn from your videos, images and ads in one place\./);
-    for (const label of ["Create", "Ideas", "Review", "Library", "Publish", "Results", "Ads"]) {
+    for (const label of ["Create", "Ideas", "Review", "Library", "Publish", "Results", "Batch"]) {
       assert.equal(await page.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
     }
+    await page.getByRole("tab", { name: "Batch", exact: true }).click();
+    const makeBatch = page.getByRole("tab", { name: "Make a batch", exact: true });
+    await makeBatch.waitFor();
+    assert.equal(await makeBatch.getAttribute("aria-selected"), "true", "the Batch section opens directly on Make a batch");
+    await page.getByRole("heading", { name: "Start a run", exact: true }).waitFor();
   });
   await check("F2", "create presets show an unambiguous selected state", async () => {
     const briefPreset = page.getByRole("radio", { name: /Video from a brief/ });
