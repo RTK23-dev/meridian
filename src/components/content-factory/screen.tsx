@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { Button, Card, CardDescription, CardHeader, CardTitle, EmptyState, Input, PageHeader, ScreenSkeleton, SelectInput, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
@@ -77,7 +78,14 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
       {guided ? (
         <div className="space-y-2">
           <h2 className="text-section font-semibold">Make and review video batches</h2>
-          <p className="max-w-3xl text-sm text-fg-muted">Create a draft for each video. In the brief, attach a reference Reel and any useful Market research. When you have drafts, group them into a batch with one shared budget. No video is marked complete unless the engine records the output.</p>
+          <p className="max-w-3xl text-sm text-fg-muted">Research a topic, then make many original videos from what you find. No video is marked complete unless the engine records the output.</p>
+          <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg">
+            <li>Fill in your brand details{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/brain` as never} className="font-semibold underline underline-offset-4">Brand brain</Link></> : null}. Four fields are required.</li>
+            <li>Collect research{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/market` as never} className="font-semibold underline underline-offset-4">Market</Link></> : null}: paste public page URLs of examples that work.</li>
+            <li>Make one draft below. Upload your reference as a video file, attach the research, and write what the videos should be about.</li>
+            <li>Choose how many videos and one total budget under <strong>Create video variations</strong>. This makes the drafts and starts nothing.</li>
+            <li>Read the list, then press <strong>Start the batch</strong>. Each video shows its real state. Open a video to approve or export it.</li>
+          </ol>
         </div>
       ) : null}
       {embedded && newSession ? <div className="flex justify-end">{newSession}</div> : null}
