@@ -125,3 +125,18 @@ Append-only. One entry per unit of work, newest at the bottom.
 ## 2026-10-29 05:45 UTC: T4 batch 1 tests
 
 - The studio and session-importing suites, 35 files: 238 tests, 228 pass, 0 fail, 10 skipped. The skips are the suites' own gates, and none is new.
+
+## 2026-10-29 05:39 UTC: T4 batch 2, the execution and review actions
+
+- Split the rest of `studio/session.server.ts` (1,462 lines after batch 1) into three modules, and the original keeps its public names:
+  - `session-jev.server.ts` (61 lines): the stored JEV decision and `loadGatedJevDecision`.
+  - `session-execute.server.ts` (857 lines): `executeApprovedCreativePlan` and its helpers (`planReservationShares`, `errorText`, `markImageJobUnknown`, `insertImageJobRow`, `releaseUnheldReservations`).
+  - `session-review.server.ts` (340 lines): `approveAndExecuteCreativePlan`, `rejectCreativePlan`, `reviewStudioVariant`, `publishStudioVariant` and `recordStudioTestPerformance`.
+  - `session.server.ts` (238 lines): `persistCreativePlanRow`, `generateStudioVariants`, and the re-exports of every public name.
+- Each moved declaration is unchanged. Every non-blank line of the old file survives in the four files, except two import lines whose names were narrowed to what each module uses.
+- Two tests read `studio/session.server.ts` as text. `jev/decision.test.ts` looks for the call `decide(publishingReadiness`, which now sits in `session-review.server.ts`, so the first run had 227 of 228 passing. `creative/state-transition.server.test.ts` forbids `update creative_plans` in that file. Both now read every `studio/session*.server.ts` module, with the same assertions. The state-transition test also asserts that the session module is found, so a bad path cannot pass. No moved module contains the forbidden pattern.
+- Checks: eslint clean on the five source files and the two tests, after one unused import in `session-jev.server.ts` was removed (eslint found it); typecheck exit 0; the 35 studio and session-importing suites, 238 tests, 228 pass, 0 fail, 10 skipped, the same as batch 1.
+- Not run here: the full source-test set, because the local gate stops (Q10). CI on the pushed head is the verification of record, and the next wake-up checks it.
+- Size: the largest file is `session-execute.server.ts` at 857 lines, under the 1,000-line limit. T4 is done.
+- CI on `7b5010a` (batch 1 head): every job green except `e2e`, which was still running at 05:28. Its result is checked at the next wake-up.
+- Wake-up: the stale 05:39 wake (`trig_01PhmhKbwd91VHjJVRrYpKkr`) was deleted. `STATE.md` had named `trig_017Di61wAqwLV4VRuEbwzrzh`, which was not listed. The next wake is `trig_01UUXHovuLik9EkhypJbjg85`, at 06:00:00Z.

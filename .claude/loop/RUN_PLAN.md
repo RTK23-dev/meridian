@@ -37,7 +37,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: no `process.env` read remains outside the config module and the resolver, and a test enforces it. The readiness report output is unchanged (a snapshot test). Test counts equal the baseline.
 
 ### T4: Split `src/lib/meridian/studio/session.server.ts` (1,807 lines)
-- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record).
+- Status: `done`, in two batches: the loading block (9bb1a0b), then the execution and review actions (836b370). The largest file is now `session-execute.server.ts`, at 857 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record).
 - Split by responsibility. Keep the original path re-exporting the public names, so no caller changes in this task. One commit per split.
 - Acceptance: no resulting file over 1,000 lines. Test counts equal the baseline.
 
