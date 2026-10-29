@@ -113,6 +113,20 @@ This starts the web app, a worker, a scheduler and PostgreSQL 16. It is **not ve
 the base image needs registry access). Run it once on a machine with registry access and record the result. The CI `postgres` job already
 runs the money and migration checks against a real PostgreSQL with pgvector.
 
+## 9. Owner checklist
+
+Tick each line when it is done. The questions are in `.claude/loop/OPEN_QUESTIONS.md`, with what each one blocks.
+
+- [ ] **Q2, the dry-run policy.** Choose step 6, option 1 (set the HyperFrames price) or option 2 (report the bill check as not proven offline).
+- [ ] **Q10, Q11 and Q13, decided by the loop.** Confirm each, or reverse it. Q10 is how the gate runs the source tests locally. Q11 is the hook-timing decisions. Q13 is the asset router's closure, which stays whole.
+- [ ] **Q12, where the five secret reads live.** Today they stay where they are, and the ratchet holds at 38 direct reads.
+- [ ] **Q6 and Q8, the pull request.** Merge PR #85 when it is ready, or keep it open, or split it. The run's commits stack on its branch until you decide.
+- [ ] **Q9, the permission rules.** Add the rules to `.claude/settings.json`, or run the session in Auto mode, before any unattended run.
+- [ ] **Q1, Q3, Q4, Q5 and Q7.** The preset contract change, the 45 test-only modules, the E6 server functions, the export package, and the reference reels. Each one is open, and nothing depends on it until you answer.
+- [ ] **Step 4, the keys.** Save each provider's key in Settings and set the monthly budget. Set the budget before any live step.
+- [ ] **Step 7, the first live run.** Run one brief, end to end, with one reference video. Record the request id, the artifact ids, each step's cost (estimate, reserved, billed), and the output's file, size and duration in `docs/engine/PHASE_LOG.md`.
+- [ ] **Step 8, Postgres mode.** Run `docker compose up --build` once on a machine with registry access, and record the result.
+
 ## What not to do
 
 - Do not run a live step without the keys and the budget set. The budget caps are the owner's safety net.
