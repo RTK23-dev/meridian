@@ -55,6 +55,7 @@ export async function createVariations(
   const split = splitBudget(input.totalBudgetUsd, input.count);
   if (!split.ok) throw new Error(split.reason);
   const source = await sessionAccess(sql, userId, input.sourceSessionId);
+  if (source.source_session_id !== null) throw new Error("Choose the original reusable draft, not a video variation, as the source.");
   if (source.brand_id === null) throw new Error("The source draft has no brand, so variations cannot be made from it.");
   const access = await requireBrand(sql, userId, source.brand_id, "admin");
   if (access.organizationId !== source.organization_id) throw new Error(SESSION_REFUSAL);
@@ -64,11 +65,12 @@ export async function createVariations(
 
   await withTransaction(sql, async (tx) => {
     // The source is locked for the rest of the transaction, so a start or an edit cannot land between the check and the copies.
-    const [locked] = await tx<{ status: string; brand_id: string | null; title: string; max_seconds: number | null; language: string | null; priority: string | null; keep_genes: string }>`
-      select status, brand_id, title, max_seconds, language, priority, keep_genes
+    const [locked] = await tx<{ status: string; brand_id: string | null; source_session_id: string | null; title: string; max_seconds: number | null; language: string | null; priority: string | null; keep_genes: string }>`
+      select status, brand_id, source_session_id, title, max_seconds, language, priority, keep_genes
       from content_factory_sessions where id = ${source.id} and organization_id = ${organizationId} for update
     `;
     if (!locked) throw new Error(SESSION_REFUSAL);
+    if (locked.source_session_id !== null) throw new Error("Choose the original reusable draft, not a video variation, as the source.");
     if (locked.brand_id === null) throw new Error("The source draft has no brand, so variations cannot be made from it.");
     if (locked.brand_id !== brandId) throw new Error("The source brand changed. Reload the page and try again.");
     const lockedAccess = await requireBrand(tx, userId, locked.brand_id, "admin");
