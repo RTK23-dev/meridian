@@ -32,7 +32,7 @@ const contentFactoryKeys = {
 
 type BrandOption = { id: string; name: string };
 
-export function ContentFactoryScreen({ initialSessionId = null, embedded = false }: { initialSessionId?: string | null; embedded?: boolean } = {}) {
+export function ContentFactoryScreen({ initialSessionId = null, embedded = false, guided = false, initialBrandId = null }: { initialSessionId?: string | null; embedded?: boolean; guided?: boolean; initialBrandId?: string | null } = {}) {
   const { data: workspace } = useWorkspace();
   const { user, isPending } = useCurrentUserState();
   const organizationId = workspace?.active?.id ?? "";
@@ -47,7 +47,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
   const [creating, setCreating] = useState(false);
   const list = sessions.data ?? [];
-  const selected = list.find((item) => item.id === selectedId) ?? list[0] ?? null;
+  const selected = list.find((item) => item.id === selectedId) ?? (initialBrandId ? list.find((item) => item.brandId === initialBrandId) : null) ?? list[0] ?? null;
 
   if (!workspace?.active) return null;
   // Inside the content page the page header belongs to the page, so the screen shows only its own New session button.
@@ -68,6 +68,12 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   return (
     <div className="space-y-6">
       {header}
+      {guided ? (
+        <div className="space-y-2">
+          <h2 className="text-section font-semibold">Make and review video batches</h2>
+          <p className="max-w-3xl text-sm text-fg-muted">Create a draft for each video. In the brief, attach a reference Reel and any useful Market research. When you have drafts, group them into a batch with one shared budget. No video is marked complete unless the engine records the output.</p>
+        </div>
+      ) : null}
       {embedded && newSession ? <div className="flex justify-end">{newSession}</div> : null}
       {list.length === 0 ? (
         <EmptyState
