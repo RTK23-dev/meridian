@@ -8,7 +8,7 @@ The single Content page is part of PR #80 on `fix/openrouter-model-routing-jev`.
 
 ## Name
 
-The page is called **Content**. It was "Content Factory" until 2026-10-24. The owner-facing section previously called Ads is now Batch, because its main job is to start a research-led production run. The engine's pipeline keeps the name Content Factory in its own docs and code (`src/lib/meridian/content-factory`). The route stays at `/content-factory`, so existing links keep working.
+The page is called **Content**. It was "Content Factory" until 2026-10-24. The owner-facing section previously called Ads is now **Batch**. Batch's primary subtab is **Video batches** for reference-and-research draft variations; the existing research-led production run is preserved under **Research-led runs (advanced)**. The engine's pipeline keeps the name Content Factory in its own docs and code (`src/lib/meridian/content-factory`). The route stays at `/content-factory`, so existing links keep working.
 
 ## What the page is
 
@@ -74,7 +74,7 @@ A section a person may not use falls back to Create.
 
 ## Checks
 
-- **Last fully verified code head CI:** [run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449), head `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b`, passed all 13 required jobs, including six test shards, PostgreSQL, sidecar, typecheck/lint/build, release acceptance, UI smoke/baseline, E2E and aggregate `check`. The final-head browser evidence is recorded in `docs/RELEASE_ACCEPTANCE.md`.
+- **Earlier baseline:** [run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449), head `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b`, passed all required jobs before the product-recovery PR. The Batch-first UI itself then passed all jobs in [run 40851115375](https://github.com/RTK23-dev/meridian/actions/runs/40851115375), including 25/25 release-browser checks. The reference-to-variation implementation has a separate current-head CI run; update this section with its final result before merge.
 - The release-acceptance browser flow uses a fresh embedded database, a fixture-only sealed dummy token, and local browser requests. It checks stale provider readiness without probing a provider; the 25-hour-old Meta card reads DEGRADED, never HEALTHY or live-verified.
 - The Content page browser checks passed for accessible workflow tabs, selected preset state, the no-brand empty state and phone-width overflow. Desktop and 390 px screenshots are attached to the same CI run.
 - Live provider behavior, real credentials, paid calls, publishing and external side effects are intentionally not exercised.
@@ -83,7 +83,7 @@ A section a person may not use falls back to Create.
 
 - **Browser verification is complete on the recorded head** `b4b94ea984caf9ab3b524fd2999a9f8fbb49678b` in [CI run 40263991449](https://github.com/RTK23-dev/meridian/actions/runs/40263991449): the desktop/phone workflow checks, role-gated Batch tab, selected preset and local-only acceptance passed. A later code change must be rechecked on its own head.
 - Keep the old section URLs as redirects and preserve URL-backed tab/preset/session state; these are compatibility behavior, not cleanup candidates.
-- The Content page's Batch section remains admin-only. Its default subtab is Make a batch, with the run builder visible; Factory Line and other technical panels remain available as advanced tabs. Each underlying section keeps its server-side role checks.
+- The Content page's Batch section remains admin-only. Its default subtab is Video batches. Research-led runs (advanced) preserves the previous Factory workflow, and its own first tab opens on Make a batch. Each underlying section keeps its server-side role checks.
 - Repurpose upload proof is fixture-only and uses an injected fake transport. The paused-ad proof creates and reads back an ad as `PAUSED`; it never activates or publishes it.
 - Live providers, credentials, paid requests and external publishing remain outside automated browser verification.
 - Backend unification is not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
