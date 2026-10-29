@@ -30,7 +30,7 @@ async function counts() {
   return row ?? { sessions: "-", batches: "-", items: "-", messages: "-", attachments: "-", requests: "-", audits: "-" };
 }
 
-type SourceOptions = { id: string; status?: string; reference?: boolean; market?: boolean; instruction?: string | null; script?: boolean; brand?: string | null };
+type SourceOptions = { id: string; status?: string; reference?: boolean; referenceMediaType?: string; referenceKey?: string; market?: boolean; marketSnapshot?: string; instruction?: string | null; script?: boolean; brand?: string | null };
 
 /** A source draft: one instruction (carrying the Market record), one reference file message, and optionally a script line. */
 async function source(options: SourceOptions): Promise<string> {
@@ -51,13 +51,13 @@ async function source(options: SourceOptions): Promise<string> {
   if (options.reference !== false) {
     await db.sql`
       insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_key, media_type, byte_size, sha256)
-      values (${`${id}_ref`}, ${WS}, ${id}, ${`${id}_m2`}, 'file', 'reference_video', 'reference.mp4', ${`fixtures/${id}/reference.mp4`}, 'video/mp4', 1024, ${"a".repeat(64)})
+      values (${`${id}_ref`}, ${WS}, ${id}, ${`${id}_m2`}, 'file', 'reference_video', 'reference.mp4', ${options.referenceKey ?? `fixtures/${id}/reference.mp4`}, ${options.referenceMediaType ?? 'video/mp4'}, 1024, ${"a".repeat(64)})
     `;
   }
   if (options.market !== false) {
     await db.sql`
       insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
-      values (${`${id}_mkt`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'market', ${BRAND}, ${`rec_${id}`}, ${"A competitor opens on the problem."})
+      values (${`${id}_mkt`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'market', ${BRAND}, ${`rec_${id}`}, ${options.marketSnapshot ?? "A competitor opens on the problem."})
     `;
   }
   return id;
@@ -80,7 +80,10 @@ after(async () => {
 test("every refusal writes nothing: count, budget, role, workspace, and a source that is not ready", async () => {
   const ok = await source({ id: "s_ok" });
   const noRef = await source({ id: "s_noref", reference: false });
+  const wrongMimeReference = await source({ id: "s_ref_wrong_mime", referenceMediaType: "application/pdf" });
+  const missingKeyReference = await source({ id: "s_ref_no_key", referenceKey: "" });
   const noMarket = await source({ id: "s_nomkt", market: false });
+  const emptyMarket = await source({ id: "s_market_empty", marketSnapshot: "   " });
   const noInstruction = await source({ id: "s_noins", instruction: "short" });
   const scripted = await source({ id: "s_script", script: true });
   const noBrand = await source({ id: "s_nobrand", brand: null });
@@ -94,7 +97,10 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   await assert.rejects(createVariations(db.sql, OUTSIDER, { sourceSessionId: ok, count: 3, totalBudgetUsd: 10 }), /not available to you/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: "nope", count: 3, totalBudgetUsd: 10 }), /not available to you/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noRef, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: wrongMimeReference, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: missingKeyReference, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noMarket, count: 3, totalBudgetUsd: 10 }), /Market research/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: emptyMarket, count: 3, totalBudgetUsd: 10 }), /Market research/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noInstruction, count: 3, totalBudgetUsd: 10 }), /plain-language instruction/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: scripted, count: 3, totalBudgetUsd: 10 }), /script lines/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noBrand, count: 3, totalBudgetUsd: 10 }), /no brand/);
