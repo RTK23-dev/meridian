@@ -114,3 +114,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Ratchet: 44 down to 38. The non-secret reads are now all routed, except NODE_ENV, DATABASE_URL, BETTER_AUTH_URL and MERIDIAN_LOCAL_DATA_DIR, which stay on purpose.
 - The secret reads remain (25 reads, five names). Q12 asks where they should live.
 - Checks: eslint clean; typecheck exit 0; 351 tests, 350 passing, 1 skipped, none failing, across the settings, environment-contract, Cyclone, Drive and decisions suites.
+
+## 2026-10-29 05:20 UTC: T4 batch 1, the session loading block
+
+- Moved 13 declarations, lines 56 to 387 of `studio/session.server.ts`, unchanged, to `studio/session-load.server.ts` (352 lines): the stored session, the run policy, the usage counts and the helpers they use.
+- `studio/session.server.ts` re-exports every public name it had from the loading block (`StudioSession`, `generationUsage`, `getStudioSession`, `loadSession`, `storedProbability`, `studioAutonomyDefault`, `studioBrandRunPolicy`). No caller changed.
+- Size: 1,807 to 1,462 lines in the original, which still needs T4's later batches. The execution function is about 700 lines, and the review functions are at the bottom.
+- Checks: eslint 0 warnings on both files; typecheck exit 0. The studio and session-importing suites (35 files) are running in the background; their totals will be in the next entry.
