@@ -69,7 +69,8 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 
 ## Q10: The local source-tests step stops without a verdict
 - Kind: technical ambiguity. Status: `decided by loop, confirm`.
-- Blocks: T1's local verdict. Nothing else.
+- Blocks: T1's local verdict. Nothing else, once the decision in the next line stands.
+- Decision (02:57 UTC): the local gate stopped in four runs, including the six-group run, with no verdict. The loop starts T3 to T9 now, and CI is their verification of record. Each unit runs the focused tests for the area it touches, and CI on the pushed head is checked at the next wake-up. The local gate verdict stays open under T1.
 - What happened: the full gate stopped during the source-tests step three times (00:30, 00:43, 00:55). Each time the log had no stop message, so the process was killed hard. Memory was not short. CI runs the same tests in six shards, and they pass on the same head.
 - Decision by the loop: the gate runs the source tests in the six shard groups that CI uses, one after another, and writes each group's totals. Each group is a smaller process. The gate's total must still reach the baseline of 6,649 passing tests.
 - Reason: the single process is the only step that has stopped, and CI already runs it in six groups.

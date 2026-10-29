@@ -73,3 +73,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Tests: `hookTiming.test.ts` (eight cases: pass at zero, late at 3.5 s, late at 7 s, no hook beat, no covering shot, no script, the sourced values, the longest-shot note). Focused run 71 of 71. Gate and planner suites 377 of 377. Orchestrator and plan-handler suites 173 of 173. Jobs suites, including the brief pipeline, 333 of 333. eslint and typecheck are clean.
 - Not done: the on-screen text rate, which needs word timing on caption lines. The T12 acceptance also named cut-time fixtures within 2 frames. Those belong to the reference grammar (Bible 6.2), which has its own tests, so they were not added here.
 - Decisions to confirm are in Q11.
+
+## 2026-10-29 02:57 UTC: gate run 5 stopped in source group 0; T3 starts on CI
+
+- Run 5 (six source groups, started 02:29) passed typecheck, lint, the scripts tests and the group 0 listing, then stopped during source group 0 with no stop message and no verdict. This is the fourth run to stop, and the first in a smaller group, so the single process was not the only cause. Nothing else was running. Memory was not short.
+- CI on `3828402` (run 40806678439): all 13 jobs passed, and CodeRabbit was skipped.
+- Decision (Q10, decided by loop, confirm): T3 to T9 start now. CI is their verification of record. Each unit runs focused tests for the area it changes, and CI on the pushed head is checked at the next wake-up. The local gate verdict stays open under T1, and its cause is not yet known.
+- Next unit: T3, typed configuration for the non-secret settings read outside `src/engine/`.

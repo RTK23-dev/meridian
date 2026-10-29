@@ -31,32 +31,32 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: every claim has a dated source link, or is labelled `hypothesis`. Note in the document that no owner reference reels were analysed (Q7).
 
 ### T3: Typed configuration for non-secret settings
-- Status: `pending`. Depends on: T1.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record).
 - Put every non-secret `process.env` read outside `src/engine/` into one typed module under `src/lib/meridian/config/`, parsed once. Secret reads stay with the credential resolver, which is the allowlisted reader in `src/lib/meridian/credentials/resolve.test.ts`. Engine config readers are a follow-up task, not part of this one.
 - Work in batches of about 20 files, each batch green on its own.
 - Acceptance: no `process.env` read remains outside the config module and the resolver, and a test enforces it. The readiness report output is unchanged (a snapshot test). Test counts equal the baseline.
 
 ### T4: Split `src/lib/meridian/studio/session.server.ts` (1,807 lines)
-- Status: `pending`. Depends on: T1.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record).
 - Split by responsibility. Keep the original path re-exporting the public names, so no caller changes in this task. One commit per split.
 - Acceptance: no resulting file over 1,000 lines. Test counts equal the baseline.
 
 ### T5: Split `src/lib/meridian/factory/worker.ts` (1,070 lines)
-- Status: `pending`. Depends on: T1. Same rules as T4.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
 
 ### T6: Split `src/lib/meridian/content-factory/service.ts` (1,097 lines)
-- Status: `pending`. Depends on: T1. Same rules as T4.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
 
 ### T7: Split `src/engine/jobs/orchestrator.ts` (1,722 lines)
-- Status: `pending`. Depends on: T1.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record).
 - `advance(state, event)` stays pure and keeps its behaviour. Move each event family into its own module and keep the public exports. No contract change.
 - Acceptance: no file over 1,000 lines. The orchestrator and PGlite tests pass and keep their counts.
 
 ### T8: Split `src/engine/api/index.ts` (1,506 lines)
-- Status: `pending`. Depends on: T1. Same rules as T7.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
 
 ### T9: Split `src/engine/assets/router.ts` (1,179) and `src/engine/jobs/handlers/produce-shot.ts` (1,052)
-- Status: `pending`. Depends on: T1. Same rules as T7.
+- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
 
 ### T10: Preset inventory and proposal (document only)
 - Status: `done`, in `docs/engine/PRESET_MODEL_PROPOSAL.md` (commit in the run log, 01:20 UTC). Depends on: none.
