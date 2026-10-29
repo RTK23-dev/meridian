@@ -23,9 +23,30 @@ const BASELINE = {
   acceptancePass: 25,
 };
 
+/** The step that is running now, so a stop can say where it happened. */
+let current = "before the first step";
+
+// A stop from outside is recorded, so a run that is cut short says where, instead of leaving an empty log.
+for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+  process.on(signal, () => {
+    console.log(`gate: stopped by ${signal} during ${current}; no verdict`);
+    process.exit(130);
+  });
+}
+
+/** Writes one step's full output to artifacts/gate/ as soon as the step ends, so a stop keeps every finished step. */
+function finish(name, code, output) {
+  mkdirSync(LOG_DIR, { recursive: true });
+  writeFileSync(join(LOG_DIR, `${name.replaceAll(" ", "-")}.log`), output);
+  console.log(`gate: finished ${name} (exit ${code})`);
+  return { name, code, output };
+}
+
 /** Runs one command from the repository root and resolves with its exit code and everything it printed. */
 function run(name, command, args, env = process.env) {
   return new Promise((resolve) => {
+    current = name;
+    console.log(`gate: running ${name}`);
     const child = spawn(command, args, { cwd: ROOT, env });
     let output = "";
     child.stdout.on("data", (chunk) => {
@@ -34,8 +55,8 @@ function run(name, command, args, env = process.env) {
     child.stderr.on("data", (chunk) => {
       output += chunk;
     });
-    child.once("error", (error) => resolve({ name, code: 1, output: `${output}${error.message}` }));
-    child.once("exit", (code) => resolve({ name, code, output }));
+    child.once("error", (error) => resolve(finish(name, 1, `${output}${error.message}`)));
+    child.once("close", (code) => resolve(finish(name, code, output)));
   });
 }
 
@@ -147,11 +168,6 @@ if (acceptanceCounts.notRun) {
 const dryRun = await run("engine dry run", "npm", ["run", "engine:e1", "--", "--dry-run"]);
 const dryRunLine = dryRun.output.match(/^E1 acceptance .*$/m)?.[0] ?? "no verdict line printed";
 
-mkdirSync(LOG_DIR, { recursive: true });
-for (const step of [...steps, { name: "engine dry run", result: dryRun }]) {
-  const file = join(LOG_DIR, `${step.name.replaceAll(" ", "-")}.log`);
-  writeFileSync(file, step.result.output);
-}
 
 const width = Math.max(...steps.map((step) => step.name.length));
 for (const step of steps) {
