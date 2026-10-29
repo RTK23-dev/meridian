@@ -34,7 +34,7 @@ The loop, in either case:
 | --- | --- |
 | **Setup guide** | A short path: create a brand, choose a decision engine and save its key. OpenRouter shows key saved, test passed and engine active as separate steps. Optional connections sit behind "Open this step" |
 | **Market** | Paste one public page URL, with no setup, and see what was read, what is new, what was blocked and what to do next. Searching by phrase is a separate, optional step with your own developer key |
-| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Create starts from a brief, a reference, or Studio. Batch opens directly on the research-led run builder; technical Factory Line controls are still available separately. The research-to-video handoff still needs a unified guided path. |
+| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Batch opens on Video batches: use an uploaded reference video and attached Market evidence in a reusable draft, create 2–20 original draft variations with a bounded total budget, then explicitly start the batch and review/export each video. The research-led run builder remains an advanced option. Live provider generation and owner acceptance are not yet verified. |
 | **Integrations** | Every connection, with what it needs and its state |
 | **Jobs & health** | Queued work, the worker and the scheduler |
 | **Settings** | The workspace, its members, scoring weights, alerts, learning, and the uncertain model-call holds |
