@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
 import { assertSameTenant } from "../domain.ts";
 import { opportunityScore, DEFAULT_WEIGHTS } from "../scoring.ts";
@@ -240,7 +240,11 @@ test("ranking and JEV judgment are numerically separate", () => {
 });
 
 test("the signed-in paths call this engine instead of a hardcoded decision", () => {
-  const session = readFileSync(new URL("../studio/session.server.ts", import.meta.url), "utf8");
+  // The studio session is split across session*.server.ts, so the checks read the whole family and a call moved between them still counts.
+  const session = readdirSync(new URL("../studio/", import.meta.url))
+    .filter((file) => /^session(-[a-z]+)?\.server\.ts$/.test(file))
+    .map((file) => readFileSync(new URL(`../studio/${file}`, import.meta.url), "utf8"))
+    .join("\n");
   const imageQc = readFileSync(new URL("../studio/image-qc.server.ts", import.meta.url), "utf8");
   const opportunity = readFileSync(new URL("../opportunity/actions.ts", import.meta.url), "utf8");
   const studio = readFileSync(new URL("../studio/creative-actions.ts", import.meta.url), "utf8");
