@@ -120,21 +120,52 @@ steps.push({
   detail: `${scriptTotals.tests} tests: ${scriptTotals.pass} pass, ${scriptTotals.fail} fail, ${scriptTotals.skipped} skipped (baseline ${BASELINE.scriptsPass} pass)`,
 });
 
-const source = await run(
-  "source tests",
-  "node",
-  ["--experimental-strip-types", "--test", "--test-reporter=tap", "src/**/*.test.ts"],
-  { ...process.env, NODE_ENV: "development" },
+// The source tests run in the six groups CI uses (scripts/test-shard.mjs), one group after another. A single process for the whole suite
+// stopped without a verdict three times (Q10), and each group is a smaller process. Every group's output is kept in artifacts/gate/.
+const SOURCE_GROUPS = 6;
+const sourceGroups = [];
+for (let index = 0; index < SOURCE_GROUPS; index += 1) {
+  const listing = await run(`source group ${index} list`, "node", [
+    "scripts/test-shard.mjs",
+    "--group",
+    "src",
+    "--index",
+    String(index),
+    "--count",
+    String(SOURCE_GROUPS),
+  ]);
+  const files = listing.output
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.endsWith(".test.ts"));
+  const groupRun =
+    listing.code !== 0 || files.length === 0
+      ? { name: `source group ${index}`, code: 1, output: `the group has no test files\n${listing.output}` }
+      : await run(`source group ${index}`, "node", ["--experimental-strip-types", "--test", "--test-reporter=tap", ...files], {
+          ...process.env,
+          NODE_ENV: "development",
+        });
+  sourceGroups.push({ index, run: groupRun, totals: tapTotals(groupRun.output) });
+}
+const sourceTotals = sourceGroups.reduce(
+  (sum, group) => ({
+    tests: sum.tests + (group.totals.tests ?? 0),
+    pass: sum.pass + (group.totals.pass ?? 0),
+    fail: sum.fail + group.totals.fail,
+    cancelled: sum.cancelled + group.totals.cancelled,
+    skipped: sum.skipped + (group.totals.skipped ?? 0),
+  }),
+  { tests: 0, pass: 0, fail: 0, cancelled: 0, skipped: 0 },
 );
-const sourceTotals = tapTotals(source.output);
+const everyGroupRan = sourceGroups.every((group) => group.run.code === 0);
 steps.push({
   name: "source tests",
-  result: source,
+  result: { output: sourceGroups.map((group) => `== group ${group.index}\n${group.run.output}`).join("\n") },
   status:
-    source.code === 0 && sourceTotals.fail === 0 && sourceTotals.cancelled === 0 && sourceTotals.pass >= BASELINE.sourcePass
+    everyGroupRan && sourceTotals.fail === 0 && sourceTotals.cancelled === 0 && sourceTotals.pass >= BASELINE.sourcePass
       ? "pass"
       : "fail",
-  detail: `${sourceTotals.tests} tests: ${sourceTotals.pass} pass, ${sourceTotals.fail} fail, ${sourceTotals.skipped} skipped (baseline ${BASELINE.sourcePass} pass)`,
+  detail: `${sourceTotals.tests} tests in ${SOURCE_GROUPS} groups: ${sourceTotals.pass} pass, ${sourceTotals.fail} fail, ${sourceTotals.skipped} skipped (baseline ${BASELINE.sourcePass} pass)`,
 });
 
 const build = await run("build", "npm", ["run", "build"]);
