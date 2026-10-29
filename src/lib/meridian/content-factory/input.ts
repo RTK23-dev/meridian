@@ -288,3 +288,18 @@ export function pausedAdInput(input: unknown): {
 export function pausedAdChoicesInput(input: unknown): { sessionId: string } {
   return { sessionId: idOf(fields(input).sessionId, "session") };
 }
+
+/** The request to make several original draft sessions from a reference-and-research source draft. */
+export function createVariationsBatchInput(input: unknown): { sessionId: string; count: number; totalBudgetUsd: number } {
+  const body = fields(input);
+  const count = numberOrNull(body.count, "the number of variations");
+  const totalBudgetUsd = numberOrNull(body.totalBudgetUsd, "the total batch budget");
+  if (count === null || !Number.isInteger(count) || count < 2 || count > 20) {
+    throw new Error("Choose between 2 and 20 video variations.");
+  }
+  if (totalBudgetUsd === null || !Number.isFinite(totalBudgetUsd) || totalBudgetUsd <= 0) {
+    throw new Error("Enter a total batch budget above $0.");
+  }
+  return { sessionId: idOf(body.sessionId, "source draft"), count, totalBudgetUsd };
+}
+
