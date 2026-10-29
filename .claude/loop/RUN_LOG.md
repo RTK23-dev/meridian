@@ -154,3 +154,18 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: eslint clean on the five files, after two unused imports in `worker-variants.ts` were removed; typecheck exit 0; 64 suites that import the worker or cover the factory: 407 tests, 407 pass, 0 fail, 0 skipped. The full suite is for CI to confirm (Q10).
 - Commit `ba2ad93`. T5 is done, and the largest file is 399 lines.
 - Wake-up: the 06:00 wake (`trig_01UUXHovuLik9EkhypJbjg85`) was deleted, and the next is armed as `trig_01PjbgefPCt4H6jaAUGCU3xj`, at 06:08:00Z.
+
+## 2026-10-29 05:52 UTC: CI on the T4 heads, and T6, the Content Factory service split
+
+- CI on `836b370` (the T4 split, run 40824615629) finished with success. CI on `aa858c2` (run 40824706536) finished with success. CI on `ba2ad93` (T5) and `943fff2` was still running at this wake-up. Their results are checked at the next wake-up.
+- Split `src/lib/meridian/content-factory/service.ts` (1,097 lines) into five responsibility modules. `service.ts` is now a re-export of every public name, 27 lines, so the callers keep their imports.
+  - `service-core.ts` (190 lines): the refusals, the session row and its mapping, the access checks and the small helpers.
+  - `service-sessions.ts` (376 lines): list, create, brief, read, message, settings, uploads and sources.
+  - `service-run.ts` (201 lines): start and revise a run, and read it.
+  - `service-delivery.ts` (201 lines): the hook history, the economics, the delivered link and the delivery approval.
+  - `service-shots.ts` (134 lines): remake, the clip, and the shot decisions.
+- The header comment that states the service's role, tenancy and engine rules stays at the top of `service.ts`. A first version of the script dropped it. A line check against the old file caught the loss, and it was restored before the commit.
+- Each moved declaration is unchanged, apart from an export added where another module uses it. The removed lines are the multi-line imports, rewritten by usage, and those declarations.
+- Checks: eslint clean with no warnings on the six files; typecheck exit 0. The 27 Content Factory and service-importing suites: 235 tests, 235 pass, 0 fail, 0 skipped. The full suite is for CI to confirm (Q10).
+- Commit `7ff6f76`. T6 is done. The largest module is `service-sessions.ts` at 376 lines.
+- Wake-up: the 06:08 wake (`trig_01PjbgefPCt4H6jaAUGCU3xj`) was deleted, and the next is armed as `trig_01BHPGG4o3ancKi2EB2dJjak`, at 06:13:00Z.
