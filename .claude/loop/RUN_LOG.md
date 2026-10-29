@@ -88,3 +88,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Ratchet: `server-settings.test.ts` pins direct `process.env.` reads in non-test code under `src/lib` and `src/routes` at 76. It may fall as readers move, and may not rise.
 - Checks: eslint clean; typecheck exit 0; `server-settings`, `runtime-mode`, `telemetry`, `telemetry-bridge` and `env-example` tests, 29 of 29; the tests that cover the migrated flags, 175 of 175.
 - Verification of record is CI (Q10). CI on the pushed head is checked at the next wake-up.
+
+## 2026-10-29 03:55 UTC: T3 batch 2, five deployment settings
+
+- `server-settings.ts` gained five accessors, `hypitBaseUrlSetting`, `cycloneGatewayUrlSetting`, `ffmpegPathSetting`, `ffprobePathSetting` and `hfHomeSetting`. Each returns the raw value, as the reader got it before, so each reader keeps its own rule for blank and unset.
+- Routed through them: 17 reads in nine files (`research/transcription.ts`, `discovery/cyclone-scout-adapter.ts`, `settings/provider-config.ts`, `hypit/client.ts`, `video/sample-frames.ts`, `video/engine.ts`, `factory/decode.ts`, `embeddings/semantic.ts`, `routes/api/health.ts`).
+- Two spots needed a local value, because a function call does not narrow a type: the Cyclone adapter reads its gateway URL once in the constructor, and the HF_HOME helper reads once, then trims. Results are the same.
+- Ratchet: 76 down to 59.
+- Not in this batch, on purpose: secrets (`TOKEN_ENCRYPTION_KEY`, the API keys, `WEBHOOK_SECRET`), `DATABASE_URL`, `BETTER_AUTH_URL` (auth origin) and `NODE_ENV`.
+- Checks: eslint clean; typecheck exit 0; the nine files' tests, 93 of 93; the settings, environment-contract and runtime tests, 22 of 22 and 10 of 10 for the new accessors.

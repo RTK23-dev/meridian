@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import type { ResearchSegment } from "./schema.ts";
+import { ffmpegPathSetting, ffprobePathSetting } from "../config/server-settings.ts";
 
 const execFile = promisify(execFileCallback);
 const MAX_VIDEO_BYTES = 80_000_000;
@@ -33,7 +34,7 @@ async function runWhisperX(audioBytes: Uint8Array, options: { model: string; dev
   }
 }
 
-export async function extractAudioWithFfmpeg(videoBytes: Uint8Array, ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg"): Promise<{ bytes: Uint8Array; durationMs: number | null }> {
+export async function extractAudioWithFfmpeg(videoBytes: Uint8Array, ffmpegPath = ffmpegPathSetting() || "ffmpeg"): Promise<{ bytes: Uint8Array; durationMs: number | null }> {
   if (!videoBytes.byteLength || videoBytes.byteLength > MAX_VIDEO_BYTES) throw new Error("The video is empty or larger than 80 MB.");
   const folder = await mkdtemp(join(tmpdir(), "meridian-research-"));
   const input = join(folder, "source.mp4");
@@ -42,7 +43,7 @@ export async function extractAudioWithFfmpeg(videoBytes: Uint8Array, ffmpegPath 
     await writeFile(input, videoBytes);
     let probe: string;
     try {
-      const result = await execFile(process.env.FFPROBE_PATH || "ffprobe", [
+      const result = await execFile(ffprobePathSetting() || "ffprobe", [
         "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0", input,
       ], { timeout: 30_000, maxBuffer: 1024 * 1024 });
       probe = result.stdout.trim();
@@ -52,7 +53,7 @@ export async function extractAudioWithFfmpeg(videoBytes: Uint8Array, ffmpegPath 
     if (!probe) throw new Error("The source video has no audio stream.");
     let durationMs: number | null = null;
     try {
-      const result = await execFile(process.env.FFPROBE_PATH || "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input], { timeout: 30_000, maxBuffer: 1024 * 1024 });
+      const result = await execFile(ffprobePathSetting() || "ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input], { timeout: 30_000, maxBuffer: 1024 * 1024 });
       const seconds = Number(result.stdout.trim());
       if (Number.isFinite(seconds) && seconds > 0) durationMs = Math.round(seconds * 1000);
     } catch { /* Duration is optional metadata; extraction still validates the media. */ }

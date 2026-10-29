@@ -3,7 +3,16 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { syntheticTelemetryAllowed, testingRuntimeFlag, trustProxyHeaders } from "./server-settings.ts";
+import {
+  cycloneGatewayUrlSetting,
+  ffmpegPathSetting,
+  ffprobePathSetting,
+  hfHomeSetting,
+  hypitBaseUrlSetting,
+  syntheticTelemetryAllowed,
+  testingRuntimeFlag,
+  trustProxyHeaders,
+} from "./server-settings.ts";
 
 const ACCESSORS = [
   ["testingRuntimeFlag", testingRuntimeFlag, "MERIDIAN_TESTING_RUNTIME"],
@@ -29,11 +38,28 @@ describe("the server setting accessors", () => {
   });
 });
 
+describe("the deployment setting accessors return the raw value", () => {
+  const SETTINGS = [
+    ["hypitBaseUrlSetting", hypitBaseUrlSetting, "HYPIT_BASE_URL"],
+    ["cycloneGatewayUrlSetting", cycloneGatewayUrlSetting, "CYCLONE_GATEWAY_URL"],
+    ["ffmpegPathSetting", ffmpegPathSetting, "FFMPEG_PATH"],
+    ["ffprobePathSetting", ffprobePathSetting, "FFPROBE_PATH"],
+    ["hfHomeSetting", hfHomeSetting, "HF_HOME"],
+  ] as const;
+
+  for (const [name, accessor, variable] of SETTINGS) {
+    it(`${name} returns ${variable} as it is set, and undefined when it is not`, () => {
+      assert.equal(accessor({ [variable]: " /opt/bin/x " }), " /opt/bin/x ");
+      assert.equal(accessor({}), undefined);
+    });
+  }
+});
+
 // The ratchet. Direct reads of process.env in the app code (src/lib and src/routes, outside tests) may not rise. A setting that a reader
 // needs goes through an accessor in this folder, and when a reader moves its count comes down here too, so the number only falls.
 const RATCHET_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const APP_ROOTS = ["src/lib", "src/routes"];
-const DIRECT_READS_MAX = 76;
+const DIRECT_READS_MAX = 59;
 
 function appSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

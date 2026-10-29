@@ -31,7 +31,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: every claim has a dated source link, or is labelled `hypothesis`. Note in the document that no owner reference reels were analysed (Q7).
 
 ### T3: Typed configuration for non-secret settings
-- Status: `active`, batch 1 done (three flags through `config/server-settings.ts`, ratchet at 76 direct reads in src/lib and src/routes). Depends on: T1 (relaxed by Q10: CI is the verification of record).
+- Status: `active`. Batch 1 (three flags) and batch 2 (five deployment settings, 17 reads in nine files) are done. The ratchet stands at 59 direct reads in src/lib and src/routes. Secrets (keys, tokens, webhook secrets), DATABASE_URL, BETTER_AUTH_URL and NODE_ENV are not in these batches.
 - Put every non-secret `process.env` read outside `src/engine/` into one typed module under `src/lib/meridian/config/`, parsed once. Secret reads stay with the credential resolver, which is the allowlisted reader in `src/lib/meridian/credentials/resolve.test.ts`. Engine config readers are a follow-up task, not part of this one.
 - Work in batches of about 20 files, each batch green on its own.
 - Acceptance: no `process.env` read remains outside the config module and the resolver, and a test enforces it. The readiness report output is unchanged (a snapshot test). Test counts equal the baseline.

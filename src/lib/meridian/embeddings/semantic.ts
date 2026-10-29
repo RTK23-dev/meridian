@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { env, pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 import { cosineSimilarity, retrieveSimilar, type EmbeddingVector, type VectorHit } from "./provider.ts";
+import { hfHomeSetting } from "../config/server-settings.ts";
 
 export const SEMANTIC_MODEL = "Xenova/all-MiniLM-L6-v2";
 export const SEMANTIC_PROVIDER = "local-minilm";
@@ -11,7 +12,8 @@ const cache = new Map<string, EmbeddingVector>();
 let extractorPromise: Promise<FeatureExtractionPipeline> | null = null;
 
 function cacheDir(): string {
-  if (process.env.HF_HOME?.trim()) return process.env.HF_HOME.trim();
+  const home = hfHomeSetting()?.trim();
+  if (home) return home;
   return join(tmpdir(), "meridian-hf");
 }
 

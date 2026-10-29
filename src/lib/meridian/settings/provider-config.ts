@@ -36,6 +36,7 @@ import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
+import { cycloneGatewayUrlSetting, hypitBaseUrlSetting } from "../config/server-settings.ts";
 
 /**
  * Every provider category the settings summary and the save path know. The keyed categories are the resolver's categories:
@@ -230,7 +231,7 @@ export async function getWorkspaceProviderSettings(
   const genericCategories = KEYED_PROVIDER_CATEGORIES.filter((category) => !SPECIFIC_KEYED.has(category));
   const genericStates = await Promise.all(genericCategories.map((category) => credentialStateFor(sql, organizationId, category)));
   const genericSummaries = genericCategories.map((category, index) =>
-    keyedSummary(category, genericStates[index], category === "hypit" ? { baseUrlConfigured: Boolean(process.env.HYPIT_BASE_URL?.trim()) } : {}),
+    keyedSummary(category, genericStates[index], category === "hypit" ? { baseUrlConfigured: Boolean(hypitBaseUrlSetting()?.trim()) } : {}),
   );
   const metaAdState = genericStates[genericCategories.indexOf("meta_ad_library")];
 
@@ -262,7 +263,7 @@ export async function getWorkspaceProviderSettings(
     settings: {
       // The same resolution the studio routes a run with (production/cost-mode.ts).
       costPreference: resolveCostMode(productionSettings.costPreference),
-      hypitConfigured: Boolean(process.env.HYPIT_BASE_URL),
+      hypitConfigured: Boolean(hypitBaseUrlSetting()),
     },
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
   };
@@ -284,14 +285,14 @@ export async function getWorkspaceProviderSettings(
   // 7. Cyclone Scout Category
   const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
   const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
-  const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || process.env.CYCLONE_GATEWAY_URL;
+  const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || cycloneGatewayUrlSetting();
   const cycloneApiKey = cycloneCreds?.apiKey || process.env.CYCLONE_API_KEY;
   const cycloneConfigured = Boolean(cycloneGatewayUrl);
 
   const cycloneSummary: ProviderConfigSummary = {
     category: "cyclone",
     configured: cycloneConfigured,
-    source: cycloneCreds?.apiKey || cycloneCreds?.customFields?.gatewayUrl ? "workspace" : (process.env.CYCLONE_GATEWAY_URL ? "deployment" : "default"),
+    source: cycloneCreds?.apiKey || cycloneCreds?.customFields?.gatewayUrl ? "workspace" : (cycloneGatewayUrlSetting() ? "deployment" : "default"),
     keyFingerprint: fingerprint(cycloneApiKey),
     settings: {
       gatewayUrl: cycloneGatewayUrl || "http://127.0.0.1:4000",
@@ -591,7 +592,7 @@ export async function testWorkspaceProviderConnection(
     if (input.category === "cyclone") {
       const credType = vaultTypeForCategory("cyclone");
       const rows = await sql<{ id: string }>`select id from credential_vault where organization_id = ${input.organizationId} and credential_type = ${credType} limit 1`;
-      let gatewayUrl = process.env.CYCLONE_GATEWAY_URL || "http://127.0.0.1:4000";
+      let gatewayUrl = cycloneGatewayUrlSetting() || "http://127.0.0.1:4000";
       if (rows[0]) {
         const creds = await retrieveVaultCredential(sql, input.organizationId, rows[0].id);
         if (creds?.customFields?.gatewayUrl) {

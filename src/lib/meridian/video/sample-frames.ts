@@ -10,6 +10,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { ffmpegPathSetting } from "../config/server-settings.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -49,7 +50,7 @@ export function isPng(bytes: Uint8Array): boolean {
   return bytes.byteLength >= PNG_SIGNATURE.length && PNG_SIGNATURE.every((byte, index) => bytes[index] === byte);
 }
 
-export function ffmpegExtractor(ffmpegPath = process.env.FFMPEG_PATH || "ffmpeg"): FrameExtractor {
+export function ffmpegExtractor(ffmpegPath = ffmpegPathSetting() || "ffmpeg"): FrameExtractor {
   return async (containerPath, timestampMs) => {
     // Output seeking (-ss after -i) is accurate to the frame, so the frame is the one at the recorded time.
     const seconds = (timestampMs / 1000).toFixed(3);

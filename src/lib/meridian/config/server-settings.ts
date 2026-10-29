@@ -16,3 +16,31 @@ export function trustProxyHeaders(env: NodeJS.ProcessEnv = process.env): boolean
 export function syntheticTelemetryAllowed(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.ALLOW_SYNTHETIC_TELEMETRY === "true";
 }
+
+// Deployment settings the readers used directly. Each returns the raw value, as the reader got it before, so the reader keeps its own
+// rule for blank and unset. Each reads the environment when it is called.
+
+/** The Hypit base URL. Callers treat a blank value as not set. */
+export function hypitBaseUrlSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.HYPIT_BASE_URL;
+}
+
+/** The Cyclone gateway URL. */
+export function cycloneGatewayUrlSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.CYCLONE_GATEWAY_URL;
+}
+
+/** The ffmpeg binary, when the deployment names one. */
+export function ffmpegPathSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.FFMPEG_PATH;
+}
+
+/** The ffprobe binary, when the deployment names one. */
+export function ffprobePathSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.FFPROBE_PATH;
+}
+
+/** The folder the embedding model's cache lives in. */
+export function hfHomeSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.HF_HOME;
+}
