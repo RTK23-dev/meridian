@@ -11,6 +11,8 @@ import { getBatch, type BatchSummary } from "./batch-service.ts";
 import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES } from "./variations.ts";
 
 const TITLE_MAX = 120;
+/** A request that repeats an identical one within this many seconds returns that batch instead of making another. */
+const REPLAY_WINDOW_SECONDS = 20;
 
 type SourceMessage = { id: string; text: string; beat_role: string | null };
 type SourceAttachment = {
@@ -61,7 +63,7 @@ export async function createVariations(
   if (access.organizationId !== source.organization_id) throw new Error(SESSION_REFUSAL);
   const brandId = source.brand_id;
   const organizationId = source.organization_id;
-  const batchId = randomUUID();
+  let batchId: string = randomUUID();
 
   await withTransaction(sql, async (tx) => {
     // The source is locked for the rest of the transaction, so a start or an edit cannot land between the check and the copies.
@@ -101,6 +103,27 @@ export async function createVariations(
     if (problem !== null) throw new Error(problem);
     if (attachments.some((item) => item.kind === "source" && item.source_brand_id !== locked.brand_id)) {
       throw new Error("All attached source records must belong to this brand before the draft can be reused.");
+    }
+
+    // A repeated request (a double click, a replay) must not make a second batch. The source row is locked, so the second request waits for the
+    // first, then finds its batch: the same person, the same count and total, made from this source moments ago.
+    const totalCents = split.cents.reduce((sum, cents) => sum + cents, 0);
+    const [recent] = await tx<{ id: string }>`
+      select b.id
+      from content_factory_batches b
+      where b.organization_id = ${organizationId} and b.brand_id = ${brandId} and b.created_by = ${userId}
+        and b.created_at > now() - (${REPLAY_WINDOW_SECONDS} * interval '1 second')
+        and round(b.budget_usd * 100) = ${totalCents}
+        and (select count(*) from content_factory_batch_items i where i.batch_id = b.id) = ${input.count}
+        and not exists (
+          select 1 from content_factory_batch_items i join content_factory_sessions s on s.id = i.session_id
+          where i.batch_id = b.id and s.source_session_id is distinct from ${source.id}
+        )
+      order by b.created_at desc limit 1
+    `;
+    if (recent) {
+      batchId = recent.id;
+      return;
     }
 
     const title = clip((input.title ?? "").trim() || `${locked.title}: ${input.count} variations`, TITLE_MAX);

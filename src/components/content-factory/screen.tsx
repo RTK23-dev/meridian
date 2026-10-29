@@ -25,7 +25,7 @@ import { SettingsPanel } from "./settings-panel";
 const RUN_POLL_MS = 4_000;
 
 const contentFactoryKeys = {
-  sessions: (organizationId: string) => ["content-factory", organizationId] as const,
+  sessions: (organizationId: string, brandId: string | null = null) => ["content-factory", organizationId, brandId ?? "all"] as const,
   session: (sessionId: string) => ["content-factory-session", sessionId] as const,
   run: (sessionId: string) => ["content-factory-run", sessionId] as const,
 };
@@ -40,8 +40,9 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   const canAdmin = hasRole(role, "admin");
   const brands: BrandOption[] = (workspace?.brands ?? []).map((brand) => ({ id: brand.id, name: brand.name }));
   const sessions = useQuery({
-    queryKey: userScopedQueryKey(user?.id, contentFactoryKeys.sessions(organizationId)),
-    queryFn: () => listContentFactorySessions({ data: { organizationId } }),
+    // The guided Batch view reads one brand's sessions, so a brand's older drafts and templates are not crowded out by other brands.
+    queryKey: userScopedQueryKey(user?.id, contentFactoryKeys.sessions(organizationId, guided ? initialBrandId : null)),
+    queryFn: () => listContentFactorySessions({ data: { organizationId, brandId: guided ? initialBrandId : null } }),
     enabled: !isPending && !!user && canAdmin && !!organizationId,
   });
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);

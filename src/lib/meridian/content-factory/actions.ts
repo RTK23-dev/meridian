@@ -23,7 +23,7 @@ import {
   settingsInput,
   sourceSearchInput,
   uploadInput,
-  workspaceInput,
+  sessionsListInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { createVariations } from "./variation-service.ts";
@@ -41,7 +41,7 @@ import { attachSource, brandEconomics, brandHookHistory, briefFromOpportunity, c
 // and a session's workspace is read from the session. These functions only take the signed-in user and the database.
 
 export const listContentFactorySessions = createServerFn({ method: "POST" })
-  .validator((input: unknown) => workspaceInput(input))
+  .validator((input: unknown) => sessionsListInput(input))
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => listSessions(await getSql(), context.userId, data));
 

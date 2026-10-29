@@ -197,3 +197,33 @@ test("a source with a record from another brand is refused and writes nothing", 
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: foreign, count: 3, totalBudgetUsd: 10 }), /must belong to this brand/);
   assert.deepEqual(await counts(), before);
 });
+
+test("an identical repeated request returns the same batch, and a changed or later request makes a new one", async () => {
+  const id = await source({ id: "s_replay" });
+  const first = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  const before = await counts();
+  const again = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  assert.equal(again.id, first.id, "a double click or a replay returns the batch already made");
+  assert.deepEqual(await counts(), before, "and writes nothing");
+
+  const changed = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 11 });
+  assert.notEqual(changed.id, first.id, "a different total is a different request");
+  await db.sql`update content_factory_batches set created_at = now() - interval '1 hour' where id = ${first.id}`;
+  await db.sql`update content_factory_batches set created_at = now() - interval '1 hour' where id = ${changed.id}`;
+  const later = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  assert.notEqual(later.id, first.id, "the same request an hour later is a new batch");
+});
+
+test("a brand's session list is scoped to the brand and is not cut at the workspace-wide 100", async () => {
+  const { listSessions, BRAND_SESSION_LIST_LIMIT } = await import("./service.ts");
+  for (let i = 0; i < 130; i += 1) {
+    await db.sql`insert into content_factory_sessions (id, organization_id, brand_id, title) values (${`s_many_${i}`}, ${WS}, ${BRAND}, ${`Many ${i}`})`;
+  }
+  const workspaceWide = await listSessions(db.sql, ADMIN, { organizationId: WS });
+  assert.equal(workspaceWide.length, 100, "the workspace-wide list keeps its limit");
+  const brandWide = await listSessions(db.sql, ADMIN, { organizationId: WS, brandId: BRAND });
+  assert.ok(brandWide.length > 130 && brandWide.length <= BRAND_SESSION_LIST_LIMIT);
+  assert.ok(brandWide.every((item) => item.brandId === BRAND));
+  const none = await listSessions(db.sql, ADMIN, { organizationId: WS, brandId: "brand_nope" });
+  assert.deepEqual(none, []);
+});
