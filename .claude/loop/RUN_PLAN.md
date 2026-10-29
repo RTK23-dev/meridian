@@ -70,7 +70,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: one test per preset. The compose snapshots are unchanged. A grep shows no second look table.
 
 ### T12: Hook timing rules as configuration
-- Status: `pending`. Depends on: T2.
+- Status: `done`, with decisions in Q11. The plan gate has two hook checks, and the longest-shot rule is a note. Depends on: T2.
 - The planner gate checks the hook window and the re-hook interval at plan time. The values come from configuration, with defaults taken from the T2 note. Each default is marked `hypothesis` unless T2 gives a source.
 - Acceptance: fixture tests on hand-labelled cuts, as Bible 6.2 requires (cut times within 2 frames). A plan with a late hook fails the gate on a fixture.
 

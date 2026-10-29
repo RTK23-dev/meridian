@@ -74,3 +74,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Decision by the loop: the gate runs the source tests in the six shard groups that CI uses, one after another, and writes each group's totals. Each group is a smaller process. The gate's total must still reach the baseline of 6,649 passing tests.
 - Reason: the single process is the only step that has stopped, and CI already runs it in six groups.
 - What would change if you chose otherwise: if you would rather the gate report CI's verdict as the local verdict, say so, and T1 closes with that.
+
+## Q11: Decisions the loop took in T12, for the lead to confirm
+- Kind: technical decisions. Status: `decided by loop, confirm`.
+- Blocks: nothing. Each decision is easy to reverse.
+- What the loop did, and what would change if the lead chose otherwise:
+  1. The 7-second longest-shot rule is a note, not a gate check, because it is a hypothesis (research note, section 4). Change: make it a gate check.
+  2. The three hook values (`thresholds.hook`) are tunables with bounds the loop proposed: window 2 to 4 s, latest 4 to 8 s, longest shot 4 to 10 s. The lead confirms the bounds. The config test now counts 82 tunables (was 79).
+  3. `thresholds@3` is unchanged. The lead decides whether this section warrants `thresholds@4`.
+  4. A request with no script fails both hook checks as not evaluated (fail closed). The review status file says a brief's beat checks are not run. Question for the lead: can a brief reach the plan gate without a script? If it can, the hook checks should be skipped for it rather than failed.
+  5. The on-screen text rate (5 to 10 words per second) is not checked, because the plan has no word timing on caption lines. It needs that timing first.

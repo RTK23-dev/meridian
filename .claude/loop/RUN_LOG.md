@@ -65,3 +65,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Local: the acceptance passed 25 of 25 before the change, and again after it. The failure did not reproduce.
 - Likely cause, not reproduced: the budget field takes focus in a React effect that runs after the field appears (`setup-panel.tsx`, around line 151). The check read focus as soon as the field was visible, so on a slower runner the read can come before the focus. The same read is in G7.
 - Change: `scripts/release-acceptance/acceptance.mjs` waits up to five seconds for the focus to land, in G7 and G11, before the same assertion. A field that never takes focus still fails the check.
+
+## 2026-10-29 02:45 UTC: T12 done, hook timing at plan time
+
+- `src/engine/review/gates/hookTiming.ts`: the plan gate checks the shots carrying the script's hook beat against two sourced windows, the proposition by 3 s and a hook by 6 s. A late hook names its own shots. The longest-shot rule (7 s) is a hypothesis, so it is a note and never fails the gate.
+- `src/engine/config/thresholds.ts`: a `hook` section with three tunables and bounds. `thresholds@3` is unchanged. `config.test.ts` counts 82 tunables (was 79).
+- Tests: `hookTiming.test.ts` (eight cases: pass at zero, late at 3.5 s, late at 7 s, no hook beat, no covering shot, no script, the sourced values, the longest-shot note). Focused run 71 of 71. Gate and planner suites 377 of 377. Orchestrator and plan-handler suites 173 of 173. Jobs suites, including the brief pipeline, 333 of 333. eslint and typecheck are clean.
+- Not done: the on-screen text rate, which needs word timing on caption lines. The T12 acceptance also named cut-time fixtures within 2 frames. Those belong to the reference grammar (Bible 6.2), which has its own tests, so they were not added here.
+- Decisions to confirm are in Q11.
