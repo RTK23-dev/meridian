@@ -98,32 +98,32 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           </div>
           {selected.brandId ? (
             <>
-              <HookHistoryCard
+              {!guided ? <HookHistoryCard
                 organizationId={organizationId}
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
-              <EconomicsCard
+              /> : null}
+              {!guided ? <EconomicsCard
                 organizationId={organizationId}
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
+              /> : null}
               <BatchCard
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
                 drafts={list.filter((item) => item.brandId === selected.brandId && item.status === "draft").map((item) => ({ id: item.id, title: item.title }))}
+                onOpenSession={setSelectedId}
               />
-              <GovernanceCard
+              {!guided ? <GovernanceCard
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
+              /> : null}
             </>
           ) : null}
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
         </>
       ) : null}
-      {/* The planner is the advanced path. It stays one click away so the first view is the session, not every control at once. */}
-      <details className="group rounded-xl border border-border bg-surface">
+      {!guided ? <details className="group rounded-xl border border-border bg-surface">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <span>Plan a run in detail (advanced)</span>
           <span className="text-xs font-normal text-fg-muted">Draw the steps and see the price before anything runs</span>
@@ -132,7 +132,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           <OrchestratorPlans />
           <OrchestratorModelPanel organizationId={organizationId} />
         </div>
-      </details>
+      </details> : null}
     </div>
   );
 }
