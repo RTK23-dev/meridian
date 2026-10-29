@@ -85,8 +85,16 @@ export async function createVariations(
     const problem = sourceProblem({
       status: locked.status,
       brandId: locked.brand_id,
-      hasReferenceVideo: attachments.some((item) => item.kind === "file" && item.purpose === "reference_video"),
-      marketAttachments: attachments.filter((item) => item.kind === "source" && item.source_page === "market").length,
+      hasReferenceVideo: attachments.some((item) =>
+        item.kind === "file" &&
+        item.purpose === "reference_video" &&
+        (item.media_type === "video/mp4" || item.media_type === "video/quicktime" || item.media_type === "video/webm") &&
+        typeof item.storage_key === "string" &&
+        item.storage_key.trim().length > 0,
+      ),
+      marketAttachments: attachments.filter(
+        (item) => item.kind === "source" && item.source_page === "market" && typeof item.snapshot === "string" && item.snapshot.trim().length > 0,
+      ).length,
       instructions: messages.filter((item) => item.beat_role === null).map((item) => item.text),
       scriptLines: messages.filter((item) => item.beat_role !== null).length,
     });
