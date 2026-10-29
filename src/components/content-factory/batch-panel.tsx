@@ -215,8 +215,9 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brand
                   <p className="text-fg-muted">{item.reason}</p>
                   {item.budgetUsd === null ? <p className="text-fg-muted">No budget set on this video.</p> : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <Badge variant={STATE_VARIANT[item.state]}>{STATE_LABEL[item.state]}</Badge>
+                  <Button type="button" variant="quiet" size="sm" onClick={() => onOpenSession(item.sessionId)}>Open video<span className="sr-only"> {item.title}</span></Button>
                   {item.retryable ? (
                     <Button type="button" variant="quiet" size="sm" disabled={busy} onClick={() => void retry(item.sessionId)}>
                       Retry this video<span className="sr-only"> {item.title}</span>
