@@ -6,7 +6,7 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 - branch: claude/nice-tesla-zrf6un
 - pr: RTK23-dev/meridian#85 (draft, stacked on main at 0aa3301)
 - started: 2026-10-29 00:09 UTC
-- current_task: T4, batch 1 (session loading block moved to studio/session-load.server.ts; session.server.ts is 1,462 lines, so the execution and review parts still need to move). Studio test run in progress (studio-tests.tap in the scratchpad split folder).
+- current_task: T4, batch 2 (the execution function and the review functions still in studio/session.server.ts, 1,462 lines). Batch 1 tests: 238 run, 228 pass, 0 fail, 10 skipped.
 - units_done: 6 (T10, T11, T2, the acceptance fix, T12, T3 non-secret reads)
 - next_wake_at: 2026-10-29T05:39:00Z
 - wake_trigger: trig_017Di61wAqwLV4VRuEbwzrzh
