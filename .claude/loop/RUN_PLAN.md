@@ -26,7 +26,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: the gate runs on the current head and prints the baseline counts. Record its output summary in `RUN_LOG.md`.
 
 ### T2: Short-form research note
-- Status: `pending`. Depends on: none.
+- Status: `done`, in `docs/engine/RESEARCH_SHORT_FORM_2026-10.md`. Depends on: none. The note's claims come from search summaries, and the source pages were not opened, so each platform figure is to be checked on its page before it is quoted outside the engine.
 - Write `docs/engine/RESEARCH_SHORT_FORM_2026-10.md`. Sources: public creator documentation from TikTok, YouTube Shorts and Instagram Reels, and published short-form editing research, found with WebSearch. Copy the genes, never the content.
 - Acceptance: every claim has a dated source link, or is labelled `hypothesis`. Note in the document that no owner reference reels were analysed (Q7).
 
