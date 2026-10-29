@@ -166,6 +166,7 @@ test("three variations are drafts with lineage, copied instructions and attachme
   assert.equal(sourceAttachments?.n, "2");
 
   await assert.rejects(createBatch(db.sql, ADMIN, { brandId: BRAND, title: "Template", budgetUsd: 10, sessionIds: [id] }), /template other videos were made from/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: rows[0]?.id ?? "", count: 2, totalBudgetUsd: 5 }), /original reusable draft/);
   const second = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 5 });
   assert.equal(second.items.length, 2, "the template can be used again");
   assert.notEqual(second.id, batch.id);
