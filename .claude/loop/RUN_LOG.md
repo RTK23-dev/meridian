@@ -233,3 +233,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: eslint clean; typecheck exit 0. The handler's suite and the 39 suites that import it or exercise the API, ops and handlers: 276 tests, 276 pass. The whole `engine/jobs` and `engine/jobs/handlers` folders: 523 tests, 523 pass, 0 fail, 0 skipped. No test reads the handler source as text.
 - Commit `baa3a64`. T9 is done: T9a in `6730129`, T9b in `baa3a64`.
 - Wake-up: the 06:41 wake (`trig_01Q79eZB6fucyTHDQAvq96NG`) was deleted, and the next is armed as `trig_01XkfeBiekhg9bq6cmApDoDF`, at 06:50:00Z.
+
+## 2026-10-29 06:33 UTC: T13, the browser and UI checks
+
+- CI, read from the workflow runs: `70c97af` (T9a state, run 40828676334) and `6730129` (T9a, run 40828606332) each finished with success. `baa3a64` (T9b) was still running at this wake-up, and its result is checked at the next wake-up.
+- T13: `node scripts/release-acceptance/run.mjs` run locally, exit 0. Result: 25 PASS, 0 FAIL, and the release verified (`VERIFIED the audited release and the untouched second hold`). That matches the baseline of 25 of 25. The checks include the Content page's workflow sections, the keyboard and focus checks, the phone-width checks, and the no-request check (`D1`, no request left the local server). The run sends no provider request.
+- How it ran: the repo's Playwright expects a Chromium build that this sandbox does not have. The preinstalled build 1194 was used through the session's launch wrapper, which changes only the executable path. The wrapper is in the session scratchpad, outside the repo, and nothing was installed. Screenshots and the server log are in `artifacts/release-acceptance/`, which is git-ignored.
+- The script's dev server was not left running. No file in the repo changed.
+- T13 is done. T14, the handoff, is next.
+- Wake-up: the 06:50 wake (`trig_01XkfeBiekhg9bq6cmApDoDF`) was deleted, and the next is armed as `trig_01WaFgf31tufcrw4mKfVdkPb`, at 06:54:00Z.

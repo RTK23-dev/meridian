@@ -75,7 +75,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: fixture tests on hand-labelled cuts, as Bible 6.2 requires (cut times within 2 frames). A plan with a late hook fails the gate on a fixture.
 
 ### T13: Browser and UI checks
-- Status: `pending`. Depends on: T4, T5, T6, T11 and T12, or after each UI-touching split.
+- Status: `done`. The release acceptance ran locally with the preinstalled Chromium: 25 PASS, 0 FAIL, and the release verified, as the baseline says. Depends on: T4, T5, T6, T11 and T12, or after each UI-touching split.
 - Run `node scripts/release-acceptance/run.mjs`. Keep the Content Factory board and its keyboard and contrast checks working.
 - Acceptance: 25 of 25, or `not run: browser` with the reason.
 
