@@ -19,6 +19,7 @@
     "build:dev": "node scripts/with-app-env.mjs vite build --mode development",
     "preview": "node scripts/with-app-env.mjs vite preview",
     "typecheck": "tsc --noEmit",
+    "gate": "node scripts/gate.mjs",
     "check:auth": "node scripts/check-auth-invariant.mjs",
     "test": "NODE_ENV=development node --test \"scripts/**/*.test.mjs\" && NODE_ENV=development node --experimental-strip-types --test \"src/**/*.test.ts\"",
     "lint": "eslint .",
