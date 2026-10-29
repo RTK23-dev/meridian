@@ -2,6 +2,7 @@ import type { Transport } from "../providers/http.ts";
 import { gatedTransport } from "../providers/capability.ts";
 import { sendWithRetry } from "../providers/http.ts";
 import type { EmbeddingVector } from "./provider.ts";
+import { externalSemanticDimensionsSetting, externalSemanticModelSetting, externalSemanticUrlSetting } from "../config/server-settings.ts";
 
 export type ExternalSemanticEnv = {
   url?: string;
@@ -11,11 +12,11 @@ export type ExternalSemanticEnv = {
 };
 
 function envFromProcess(): ExternalSemanticEnv {
-  const dimensions = Number(process.env.EXTERNAL_SEMANTIC_DIMENSIONS ?? "");
+  const dimensions = Number(externalSemanticDimensionsSetting() ?? "");
   return {
-    url: process.env.EXTERNAL_SEMANTIC_URL,
+    url: externalSemanticUrlSetting(),
     key: process.env.EXTERNAL_SEMANTIC_KEY,
-    model: process.env.EXTERNAL_SEMANTIC_MODEL,
+    model: externalSemanticModelSetting(),
     dimensions: Number.isFinite(dimensions) && dimensions > 0 ? dimensions : undefined,
   };
 }

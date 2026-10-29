@@ -8,7 +8,7 @@ import { accountProviderState } from "@/lib/meridian/providers/boundaries";
 import { videoGenerationStatus } from "@/lib/meridian/video/provider";
 import { pickActiveOrganization } from "@/lib/meridian/storage/media-access";
 import { healthResult, loadHealthDetail } from "@/lib/meridian/observability/health";
-import { hypitBaseUrlSetting } from "@/lib/meridian/config/server-settings.ts";
+import { externalSemanticUrlSetting, hypitBaseUrlSetting } from "@/lib/meridian/config/server-settings.ts";
 
 /** Which integrations this deployment has configured. It carries no key, and no count. Shown only to a workspace admin. */
 function deploymentStatus() {
@@ -17,7 +17,7 @@ function deploymentStatus() {
     localSemantic: localSemanticModel().kind,
     // Only the presence of a resolved key is passed. The key itself never reaches the status function.
     externalEmbeddings: embeddingProviderState({
-      url: process.env.EXTERNAL_SEMANTIC_URL,
+      url: externalSemanticUrlSetting(),
       key: process.env.EXTERNAL_SEMANTIC_KEY?.trim() ? "resolved" : undefined,
     }).status,
     providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider).status),

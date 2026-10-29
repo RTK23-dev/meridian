@@ -6,6 +6,7 @@ import { emailDeliveryState, isoOrNull } from "./notifications/email-state.ts";
 import { CHANNEL_PUBLISHING_DETAIL, publishingProviderStatus } from "./publishing/provider.ts";
 import { OAUTH_METRIC_PROVIDERS, providerCredentialState, type ProviderCredentialState } from "./providers/access-token.ts";
 import { isLiveProvider, phaseForProbe, phaseForStoredConnection, type LiveProvider } from "./providers/live.ts";
+import { emailApiUrlSetting, externalSemanticUrlSetting } from "./config/server-settings.ts";
 
 const CONNECTION_PROVIDERS = ["meta", "tiktok", "google", "ad_library"] as const;
 
@@ -31,7 +32,7 @@ function ageMs(value: unknown, now: number): number | null {
  * only for a member of the workspace. No account state is read from the environment.
  */
 export async function readSystemStatus(input: { userId: string; organizationId: string; loadSql: () => Promise<Sql> }) {
-  const embeddings = embeddingProviderState({ url: process.env.EXTERNAL_SEMANTIC_URL, key: process.env.EXTERNAL_SEMANTIC_KEY });
+  const embeddings = embeddingProviderState({ url: externalSemanticUrlSetting(), key: process.env.EXTERNAL_SEMANTIC_KEY });
   const publishing = { ...publishingProviderStatus(), detail: CHANNEL_PUBLISHING_DETAIL };
   const objectStorage = objectStorageStatus();
   const now = Date.now();
@@ -150,7 +151,7 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
     },
     embeddings,
     // Only the state is returned. The values of the email variables never leave the server.
-    email: emailDeliveryState({ url: process.env.EMAIL_API_URL, key: process.env.EMAIL_API_KEY }),
+    email: emailDeliveryState({ url: emailApiUrlSetting(), key: process.env.EMAIL_API_KEY }),
     localSemantic: localSemanticModel(),
     publishing,
     connections,

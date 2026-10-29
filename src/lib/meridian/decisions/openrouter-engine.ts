@@ -41,6 +41,7 @@ import {
   decisionCallCeilingUsd,
   liveDecisionCatalog,
 } from "./decision-catalog.ts";
+import { openRouterDecisionsModelSetting } from "../config/server-settings.ts";
 
 export const OPENROUTER_DECISIONS_ADAPTER_VERSION = "openrouter-decisions-adapter.v1";
 export const OPENROUTER_DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
@@ -433,7 +434,7 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     this.timeoutMs = options.timeoutMs ?? OPENROUTER_DECISIONS_TIMEOUT_MS;
     this.keys = options.keys ?? databaseKeys;
     this.store = options.store ?? databaseStore;
-    this.deploymentModel = options.deploymentModel ?? process.env.OPENROUTER_DECISIONS_MODEL;
+    this.deploymentModel = options.deploymentModel ?? openRouterDecisionsModelSetting();
   }
 
   private readonly catalog: DecisionCatalogSource;

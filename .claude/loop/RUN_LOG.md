@@ -97,3 +97,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Ratchet: 76 down to 59.
 - Not in this batch, on purpose: secrets (`TOKEN_ENCRYPTION_KEY`, the API keys, `WEBHOOK_SECRET`), `DATABASE_URL`, `BETTER_AUTH_URL` (auth origin) and `NODE_ENV`.
 - Checks: eslint clean; typecheck exit 0; the nine files' tests, 93 of 93; the settings, environment-contract and runtime tests, 22 of 22 and 10 of 10 for the new accessors.
+
+## 2026-10-29 04:17 UTC: T3 batch 3, nine model, URL and list settings
+
+- `server-settings.ts` gained nine accessors: WhisperX model, perception model, Higgsfield model, email API URL, external embedding URL, model and dimensions, OpenRouter Decisions model, and the artifact host allowlist. Each returns the raw value, as the reader got it before.
+- Routed through them: 15 reads in 12 files (`research/worker.ts`, `settings/provider-config.ts`, `perception/multimodal.ts`, `production/providers/higgsfield.ts`, `notifications/email.ts`, `system-status.ts`, `embeddings/external.ts`, `routes/api/health.ts`, `decisions/capabilities.ts`, `decisions/openrouter-engine.ts`, `decisions/status.ts`, `production/artifact-finalizer.ts`). Readers that already imported the module now import the new names alongside the old ones.
+- Ratchet: 59 to 44.
+- Not moved, on purpose: the two money caps (`OPENROUTER_DECISION_MAX_USD_PER_CALL`, `CYCLONE_OBSERVATION_BUDGET`), which need a careful look first; `MERIDIAN_LOCAL_DATA_DIR` in `db.ts`; `DATABASE_URL`, `BETTER_AUTH_URL` and `NODE_ENV`; and all secrets.
+- Checks: eslint clean; typecheck exit 0; the 52 suites that cover the touched modules and the settings module, 458 of 458 passing (3 skipped, 0 failing).

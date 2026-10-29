@@ -1,6 +1,7 @@
 import type { Transport } from "../providers/http.ts";
 import { gatedTransport } from "../providers/capability.ts";
 import { sendWithRetry } from "../providers/http.ts";
+import { emailApiUrlSetting } from "../config/server-settings.ts";
 
 export type EmailMessage = {
   to: string;
@@ -33,7 +34,7 @@ export function realEmailProvider(env?: { url?: string; key?: string }, transpor
   return {
     id: "real:email",
     async send(message) {
-      const url = (env?.url ?? process.env.EMAIL_API_URL)?.trim() ?? "";
+      const url = (env?.url ?? emailApiUrlSetting())?.trim() ?? "";
       const key = (env?.key ?? process.env.EMAIL_API_KEY)?.trim() ?? "";
       if (!url || !key) {
         return { status: "NOT_CONFIGURED", provider: "real:email", error: "Email delivery is not configured." };

@@ -4,14 +4,23 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
+  artifactHostAllowlistSetting,
   cycloneGatewayUrlSetting,
+  emailApiUrlSetting,
+  externalSemanticDimensionsSetting,
+  externalSemanticModelSetting,
+  externalSemanticUrlSetting,
   ffmpegPathSetting,
   ffprobePathSetting,
   hfHomeSetting,
+  higgsfieldModelSetting,
   hypitBaseUrlSetting,
+  openRouterDecisionsModelSetting,
+  perceptionModelSetting,
   syntheticTelemetryAllowed,
   testingRuntimeFlag,
   trustProxyHeaders,
+  whisperxModelSetting,
 } from "./server-settings.ts";
 
 const ACCESSORS = [
@@ -45,6 +54,15 @@ describe("the deployment setting accessors return the raw value", () => {
     ["ffmpegPathSetting", ffmpegPathSetting, "FFMPEG_PATH"],
     ["ffprobePathSetting", ffprobePathSetting, "FFPROBE_PATH"],
     ["hfHomeSetting", hfHomeSetting, "HF_HOME"],
+    ["whisperxModelSetting", whisperxModelSetting, "WHISPERX_MODEL"],
+    ["perceptionModelSetting", perceptionModelSetting, "PERCEPTION_MODEL"],
+    ["higgsfieldModelSetting", higgsfieldModelSetting, "HIGGSFIELD_MODEL"],
+    ["emailApiUrlSetting", emailApiUrlSetting, "EMAIL_API_URL"],
+    ["externalSemanticUrlSetting", externalSemanticUrlSetting, "EXTERNAL_SEMANTIC_URL"],
+    ["externalSemanticModelSetting", externalSemanticModelSetting, "EXTERNAL_SEMANTIC_MODEL"],
+    ["externalSemanticDimensionsSetting", externalSemanticDimensionsSetting, "EXTERNAL_SEMANTIC_DIMENSIONS"],
+    ["openRouterDecisionsModelSetting", openRouterDecisionsModelSetting, "OPENROUTER_DECISIONS_MODEL"],
+    ["artifactHostAllowlistSetting", artifactHostAllowlistSetting, "MERIDIAN_ARTIFACT_HOST_ALLOWLIST"],
   ] as const;
 
   for (const [name, accessor, variable] of SETTINGS) {
@@ -59,7 +77,7 @@ describe("the deployment setting accessors return the raw value", () => {
 // needs goes through an accessor in this folder, and when a reader moves its count comes down here too, so the number only falls.
 const RATCHET_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const APP_ROOTS = ["src/lib", "src/routes"];
-const DIRECT_READS_MAX = 59;
+const DIRECT_READS_MAX = 44;
 
 function appSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

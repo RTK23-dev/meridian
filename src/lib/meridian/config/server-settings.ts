@@ -44,3 +44,48 @@ export function ffprobePathSetting(env: NodeJS.ProcessEnv = process.env): string
 export function hfHomeSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
   return env.HF_HOME;
 }
+
+/** The WhisperX model name for transcription. Callers default a blank value. */
+export function whisperxModelSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.WHISPERX_MODEL;
+}
+
+/** The perception model name. Callers default a blank value. */
+export function perceptionModelSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.PERCEPTION_MODEL;
+}
+
+/** The Higgsfield model name. */
+export function higgsfieldModelSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.HIGGSFIELD_MODEL;
+}
+
+/** The email delivery API URL. */
+export function emailApiUrlSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.EMAIL_API_URL;
+}
+
+/** The external embedding service URL. */
+export function externalSemanticUrlSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.EXTERNAL_SEMANTIC_URL;
+}
+
+/** The external embedding model name. */
+export function externalSemanticModelSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.EXTERNAL_SEMANTIC_MODEL;
+}
+
+/** The external embedding dimensions, as text. The reader turns it into a number. */
+export function externalSemanticDimensionsSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.EXTERNAL_SEMANTIC_DIMENSIONS;
+}
+
+/** The deployment's OpenRouter Decisions model. */
+export function openRouterDecisionsModelSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.OPENROUTER_DECISIONS_MODEL;
+}
+
+/** The hosts an artifact may be fetched from, as the deployment lists them. */
+export function artifactHostAllowlistSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.MERIDIAN_ARTIFACT_HOST_ALLOWLIST;
+}
