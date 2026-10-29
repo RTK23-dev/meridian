@@ -92,3 +92,10 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Question: should these secret reads move behind one accessor in the credential folder, the same way the non-secret ones now go through `config/server-settings.ts`? The names are TOKEN_ENCRYPTION_KEY, EXTERNAL_SEMANTIC_KEY, EMAIL_API_KEY, CYCLONE_API_KEY and WEBHOOK_SECRET.
 - Recommendation: yes. The credential resolver is the allowlisted reader for keys (AGENTS rule 4). The move changes no value, and each accessor returns the raw value, as the readers get it today. A test can then pin the set of secret readers.
 - Options: (a) move them into a secret accessor in `src/lib/meridian/credentials/`, and extend the resolver allowlist; (b) leave them where they are, and the ratchet keeps counting them; (c) something else you name.
+
+## Q13: The asset router's closure stays whole
+- Kind: technical ambiguity. Status: `decided by loop, confirm`.
+- Blocks: nothing. T9a is done.
+- What the loop did: `engine/assets/router.ts` keeps `createAssetRouter` whole, the closure that runs submit, settle and produce over one shared state (about 770 lines). Only its types and pure helpers moved, to `router-types.ts` and `router-helpers.ts`. `router.ts` is now 831 lines.
+- Reason: the three entry points share the closure's state, so splitting them apart would change how that state is shared, not only where the code sits.
+- What would change if you chose otherwise: split the closure into submit, settle and produce modules that receive the shared state as a parameter. That is a behaviour-sensitive refactor, and it needs its own unit, with the retry and ambiguity tests as the check.

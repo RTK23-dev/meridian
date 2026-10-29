@@ -205,3 +205,15 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not updated: `src/engine/api/STATUS.md` still names `index.ts` for some functions. That is a documentation pass, as with the orchestrator.
 - Commit `acaf1e8`. T8 is done. The largest module is `remake.ts` at 655 lines.
 - Wake-up: the 06:25 wake (`trig_01Ppxabe2F6az1BUpwfZnszt`) was deleted, and the next is armed as `trig_016G7vtYeJjYyQDAgE726sb9`, at 06:32:00Z.
+
+## 2026-10-29 06:20 UTC: CI on the T7 heads, and T9a, the asset router
+
+- CI, read from the workflow runs: `1354ef0` (T7, run 40827042013) finished with success, and so did `375c695` (T7 state, run 40827090739). `acaf1e8` (T8, run 40827669769) was still in progress at 06:12. Its result is checked at the next wake-up.
+- Observation: `9acb760`, a state-only commit, has no workflow run attached. Its only check on the PR is CodeRabbit, which was skipped. The state-only heads `943fff2`, `d45cf3d` and `375c695` did run CI, so this one is not explained by a path filter. The next wake-up checks whether CI runs on the state commits.
+- T9 covers two files. Under the size rule it is split into T9a (`engine/assets/router.ts`, 1,179 lines) and T9b (`engine/jobs/handlers/produce-shot.ts`, 1,052 lines).
+- T9a: `router.ts` keeps `createAssetRouter` whole, the closure that runs submit, settle and produce over one shared state. The types, settings and constants move to `router-types.ts` (248 lines), and the pure helpers to `router-helpers.ts` (133 lines). `router.ts` is 831 lines. Question Q13 asks the owner to confirm the decision to keep the closure whole.
+- The splitter's first run treated a spread, `...defaultRouterSettings()`, as a property access, so the import was dropped. Typecheck caught it, and the check was fixed before the commit. The same check is what the earlier splits relied on, and their typecheck runs passed.
+- Survival check against the old file: every missing line is a declaration that gained an `export`, or a member of a multi-line import rewritten by usage. No code line is missing.
+- Checks: eslint clean; typecheck exit 0. The 23 asset router and dependent engine suites: 210 tests, 210 pass, 0 fail, 0 skipped. No test reads the router source as text.
+- Commit `6730129`. T9a is done. T9b, `produce-shot.ts`, is next.
+- Wake-up: the 06:32 wake (`trig_016G7vtYeJjYyQDAgE726sb9`) was deleted, and the next is armed as `trig_01Q79eZB6fucyTHDQAvq96NG`, at 06:41:00Z.
