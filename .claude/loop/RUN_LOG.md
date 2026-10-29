@@ -169,3 +169,22 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: eslint clean with no warnings on the six files; typecheck exit 0. The 27 Content Factory and service-importing suites: 235 tests, 235 pass, 0 fail, 0 skipped. The full suite is for CI to confirm (Q10).
 - Commit `7ff6f76`. T6 is done. The largest module is `service-sessions.ts` at 376 lines.
 - Wake-up: the 06:08 wake (`trig_01PjbgefPCt4H6jaAUGCU3xj`) was deleted, and the next is armed as `trig_01BHPGG4o3ancKi2EB2dJjak`, at 06:13:00Z.
+
+## 2026-10-29 06:04 UTC: CI on the T5 head, and T7, the orchestrator split
+
+- CI on `ba2ad93` (the T5 split, run 40825370942) finished with every job green, `e2e` and the aggregate `check` included.
+- Split `src/engine/jobs/orchestrator.ts` (1,722 lines) by event family. The pure core is unchanged: `advance(state, event)` still takes the state and the event and returns the next state, the jobs and the effects.
+  - `orchestrator.ts` (263 lines): `advance`, the dispatcher, the start and control events (dead, resume, human choice), and the re-exports of every public name.
+  - `orchestrator-state.ts` (429 lines): the state shapes, the limits and the checks and lookups that more than one family uses.
+  - `orchestrator-single.ts` (148 lines): intake, the script, the plan, the estimate, the gates and delivery.
+  - `orchestrator-shots.ts` (216 lines): produce, hold, the take check, the rounds and the shot escalations.
+  - `orchestrator-branch.ts` (199 lines): edit, compose, the pre-render and post-render reviews, and the revisions.
+  - `orchestrator-variants.ts` (139 lines): the variant runs, their produce and check, and the assembly.
+  - `orchestrator-remake.ts` (177 lines): the remake events.
+  - `orchestrator-schedule.ts` (233 lines): scheduling.
+- The split was checked against the old file, line by line. Every removed line is a multi-line import rewritten by usage, or a declaration that gained an `export`. Its usage check ignores comments and strings, so a word such as "schedule" in a comment does not count as a use. The first run counted those words and reported false cycles.
+- No contract is touched, and no version changes. `src/engine/jobs/README.md` lists the new files.
+- Checks: eslint clean; typecheck exit 0. The 28 engine suites that import or exercise the orchestrator, including the PGlite tests on recorded fixtures: 257 tests, 257 pass, 0 fail, 0 skipped. `e2e.test.ts` in that set is fixture-only, and its transport fails on any request it was not told to expect. No test reads the orchestrator source as text.
+- Not updated: the STATUS files in `src/engine/jobs/` and `handlers/` still name some functions as living in `orchestrator.ts`. That is a documentation pass, not part of this unit.
+- Commit `1354ef0`. T7 is done. The largest module is `orchestrator-state.ts` at 429 lines.
+- Wake-up: the 06:13 wake (`trig_01BHPGG4o3ancKi2EB2dJjak`) was deleted, and the next is armed as `trig_01Ppxabe2F6az1BUpwfZnszt`, at 06:25:00Z.

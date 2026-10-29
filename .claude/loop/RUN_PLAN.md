@@ -48,7 +48,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Status: `done` in `7ff6f76`. `service.ts` is now a re-export, and the largest module is 376 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
 
 ### T7: Split `src/engine/jobs/orchestrator.ts` (1,722 lines)
-- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record).
+- Status: `done` in `1354ef0`. `orchestrator.ts` is now 263 lines, and the largest module is 429 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record).
 - `advance(state, event)` stays pure and keeps its behaviour. Move each event family into its own module and keep the public exports. No contract change.
 - Acceptance: no file over 1,000 lines. The orchestrator and PGlite tests pass and keep their counts.
 
