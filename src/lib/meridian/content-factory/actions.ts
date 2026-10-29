@@ -5,7 +5,6 @@ import {
   attachSourceInput,
   brandHookInput,
   createSessionInput,
-  createVariationsBatchInput,
   opportunityBriefInput,
   messageInput,
   repurposeInput,
@@ -26,7 +25,7 @@ import {
   uploadInput,
   workspaceInput,
 } from "./input.ts";
-import { createBatch, createVariationsBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
+import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { createVariations } from "./variation-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
@@ -121,12 +120,6 @@ export const createContentVariations = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createVariations(await getSql(), context.userId, data));
-
-/** Creates draft variations from a reusable reference-and-research session. This stores drafts only; it does not start the engine. */
-export const createContentFactoryVariationsBatch = createServerFn({ method: "POST" })
-  .validator((input: unknown) => createVariationsBatchInput(input))
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => createVariationsBatch(await getSql(), context.userId, data));
 
 export const startContentBatch = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
