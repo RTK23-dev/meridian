@@ -47,7 +47,7 @@ whether the run passes or fails.
 | F1 | Content workflow tabs were accessible and the admin saw Ads (legacy label) | PASS on run 40263991449 (head b4b94ea) |
 | F2 | Create presets expose the selected state and no-brand empty state | PASS on run 40263991449 (head b4b94ea) |
 | F3 | Content page at 390 px has no horizontal overflow | PASS on run 40263991449 (head b4b94ea) |
-| F4 | The admin-only Batch tab opens on Make a batch with the run builder visible | Added in product-recovery PR; verify against its current-head CI run |
+| F4 | The admin-only Batch tab opens on Video batches; Research-led runs (advanced) opens on Make a batch | PASS on run 40855263261 (head 60d49282); current-head rerun required after later source guards/docs changes |
 | G1 | Market explains one exact page URL (no setup) versus an optional phrase search | not yet run on CI |
 | G2 | A run that stored new examples says so, with source rows closed | not yet run on CI |
 | G3 | A duplicate-only run says nothing new, offers a next step, and counts unused sources as not failures | not yet run on CI |
@@ -59,7 +59,7 @@ whether the run passes or fails.
 | G9 | The Setup sources step does not ask for a key to read a page | not yet run on CI |
 | G10 | A pasted social URL says up front there is no connector and no key is used | not yet run on CI |
 | G11 | OpenRouter walk through the real actions with a recorded catalogue and transport (testing runtime only): no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does | not yet run on CI |
-| G12 | Video variations: one seeded source draft becomes a bounded batch of Ready drafts in the browser; a budget that cannot cover the count is refused with the reason; the template is not offered as a draft to pick; Start the batch is still waiting; no request leaves the local server | not yet run on CI |
+| G12 | Video variations: one seeded source draft becomes a bounded batch of Ready drafts in the browser; a budget that cannot cover the count is refused with the reason; the template is not offered as a draft to pick; Start the batch is still waiting; no request leaves the local server | PASS on run 40855263261 (head 60d49282), 26 checks pass / 0 fail; current-head rerun required after later source guards/docs changes |
 | M1 | Page heights on a clean account are recorded to `page-heights.json` and bounded (Setup, Settings, Market, Brand brain) | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,
