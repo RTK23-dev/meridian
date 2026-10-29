@@ -80,3 +80,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - CI on `3828402` (run 40806678439): all 13 jobs passed, and CodeRabbit was skipped.
 - Decision (Q10, decided by loop, confirm): T3 to T9 start now. CI is their verification of record. Each unit runs focused tests for the area it changes, and CI on the pushed head is checked at the next wake-up. The local gate verdict stays open under T1, and its cause is not yet known.
 - Next unit: T3, typed configuration for the non-secret settings read outside `src/engine/`.
+
+## 2026-10-29 03:25 UTC: T3 batch 1, three flags through one typed module
+
+- `src/lib/meridian/config/server-settings.ts`: three accessors, `testingRuntimeFlag`, `trustProxyHeaders` and `syntheticTelemetryAllowed`. Each reads the environment on each call and is on only for the exact value "true", as the readers were before. Secrets are not read here.
+- Migrated: `runtime-mode.ts` (MERIDIAN_TESTING_RUNTIME), `security/limits.ts` (MERIDIAN_TRUST_PROXY_HEADERS, two reads), `learning/telemetry-engine.ts` (ALLOW_SYNTHETIC_TELEMETRY). `DATABASE_URL` and `NODE_ENV` reads stay where they are.
+- Ratchet: `server-settings.test.ts` pins direct `process.env.` reads in non-test code under `src/lib` and `src/routes` at 76. It may fall as readers move, and may not rise.
+- Checks: eslint clean; typecheck exit 0; `server-settings`, `runtime-mode`, `telemetry`, `telemetry-bridge` and `env-example` tests, 29 of 29; the tests that cover the migrated flags, 175 of 175.
+- Verification of record is CI (Q10). CI on the pushed head is checked at the next wake-up.

@@ -20,6 +20,7 @@ import {
   type BetaParams,
 } from "../stats/beta.ts";
 import { applyLearnedPatterns } from "./store.ts";
+import { syntheticTelemetryAllowed } from "../config/server-settings.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -148,7 +149,7 @@ function telemetryRecordOf(input: TelemetryRecordInput, halfLifeDays: number): T
     (input as any).simulated === true;
 
   if (isSynthetic) {
-    if (process.env.NODE_ENV === "production" || process.env.ALLOW_SYNTHETIC_TELEMETRY !== "true") {
+    if (process.env.NODE_ENV === "production" || !syntheticTelemetryAllowed()) {
       throw new Error("Synthetic or simulated telemetry cannot be ingested into production learning.");
     }
   }
