@@ -390,6 +390,8 @@ try {
     await form.getByLabel("Total batch budget (USD)").fill("6");
     await form.getByRole("button", { name: "Create video variations" }).click();
     await page.getByText(/Created 3 draft videos in one batch\. Nothing has started/).waitFor();
+    // The batch detail loads after the notice, so wait for its first item before reading the list.
+    await page.getByText("Acceptance reference draft: Problem first", { exact: true }).first().waitFor();
     const text = await page.locator("main").innerText();
     for (const label of ["Problem first", "Result first", "Myth bust"]) assert.match(text, new RegExp(`Acceptance reference draft: ${label}`));
     assert.equal(await page.getByText("Ready", { exact: true }).count() >= 3, true, "each new video is Ready, not running");
