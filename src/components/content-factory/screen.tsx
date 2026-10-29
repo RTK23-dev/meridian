@@ -120,7 +120,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
               /> : null}
             </>
           ) : null}
-          <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
+          <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} guided={guided} />
         </>
       ) : null}
       {!guided ? <details className="group rounded-xl border border-border bg-surface">
@@ -170,7 +170,7 @@ function NewSessionForm({ organizationId, brands, initialBrandId = null, onCreat
   );
 }
 
-function SessionView({ session, brands, userId }: { session: SessionSummary; brands: BrandOption[]; userId: string | null }) {
+function SessionView({ session, brands, userId, guided = false }: { session: SessionSummary; brands: BrandOption[]; userId: string | null; guided?: boolean }) {
   const queryClient = useQueryClient();
   const detail = useQuery({
     queryKey: userScopedQueryKey(userId, contentFactoryKeys.session(session.id)),
@@ -207,7 +207,7 @@ function SessionView({ session, brands, userId }: { session: SessionSummary; bra
         {data.status === "draft" ? <SettingsPanel session={data} brands={brands} hasFiles={hasFiles} onSaved={refresh} /> : null}
       </div>
       <div className="min-w-0">
-        <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} />
+        <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} guided={guided} />
         {data.status === "started" ? <RepurposePanel sessionId={data.id} /> : null}
       </div>
     </div>
