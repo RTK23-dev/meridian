@@ -182,3 +182,15 @@ test("twenty variations split a budget exactly in cents, and the batch holds onl
   const [stored] = await db.sql<{ budget_usd: string }>`select budget_usd from content_factory_batches where id = ${batch.id}`;
   assert.equal(Number(stored?.budget_usd), 12.34);
 });
+
+test("a source with a record from another brand is refused and writes nothing", async () => {
+  await db.sql`insert into brands (id, organization_id, name, created_by) values ('brand_var_other', ${WS}, 'Other brand', 'test') on conflict (id) do nothing`;
+  const foreign = await source({ id: "s_foreign", market: false });
+  await db.sql`
+    insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
+    values ('s_foreign_mkt', ${WS}, ${foreign}, 's_foreign_m2', 'source', 'market', 'brand_var_other', 'rec_foreign', 'Another brand record.')
+  `;
+  const before = await counts();
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: foreign, count: 3, totalBudgetUsd: 10 }), /must belong to this brand/);
+  assert.deepEqual(await counts(), before);
+});
