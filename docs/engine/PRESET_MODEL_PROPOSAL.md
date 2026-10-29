@@ -1,6 +1,6 @@
 # Preset model: inventory and proposal
 
-Status: proposal, written by the coding loop as task T10 of `.claude/loop/RUN_PLAN.md`. It changes no code. Every reference below was read from the file at the commit it was written on. The open decision it depends on is Q1 in `.claude/loop/OPEN_QUESTIONS.md`.
+Status: proposal, written by the coding loop as task T10 of `.claude/loop/RUN_PLAN.md`. T10 changed no code. T11 has since moved the look overlay table to `src/engine/compose/looks.ts`, and the compiler reads it through `resolveLook` (see `src/engine/compose/STATUS.md`). The rest of this proposal is unchanged. Every reference below was read from the file at the commit it was written on. The open decision it depends on is Q1 in `.claude/loop/OPEN_QUESTIONS.md`.
 
 ## 1. What counts as a preset here
 
@@ -36,7 +36,7 @@ Two capabilities are listed as unavailable with a reason (`UNAVAILABLE_CAPABILIT
 
 ## 2. The duplication this proposal removes
 
-- The look data lives in two places: the enum in `edl.ts:17` and the overlay table in `compiler.ts:48`. Adding a look means editing both, and a missing overlay is a compile error rather than a missing feature. That is good, but the table could sit beside the registry instead of inside the compiler.
+- The look data lived in two places: the enum in `edl.ts:17` and the overlay table in `compiler.ts:48`. Resolved by T11: the table is in `looks.ts`, keyed by the contract's enum, so a look without an overlay does not compile.
 - The repurpose catalogue and the look table both name the same four looks. Nothing checks that they stay in step.
 - Caption styles and the style kit are separate lists with no shared shape.
 

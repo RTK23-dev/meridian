@@ -64,7 +64,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: the list is complete against a grep, and any contract change is named as a question for Q1.
 
 ### T11: One preset registry, on the existing contracts
-- Status: `pending`, unblocked by T10. Depends on: T10.
+- Status: `done`. The look overlays are in `src/engine/compose/looks.ts`, and the compiler reads them through `resolveLook`. Depends on: T10.
 - One registry module that every look and option resolves through. An unknown preset is refused with a typed error (fail closed). The look table in the compiler is replaced by the registry.
 - No contract change in this task. Fields the proposal says are missing are not added here (Q1).
 - Acceptance: one test per preset. The compose snapshots are unchanged. A grep shows no second look table.

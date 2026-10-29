@@ -6,12 +6,12 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 - branch: claude/nice-tesla-zrf6un
 - pr: RTK23-dev/meridian#85 (draft, stacked on main at 0aa3301)
 - started: 2026-10-29 00:09 UTC
-- current_task: T11 (pending, unblocked by T10). T1 is active with its verdict blocked; see Q10.
-- units_done: 1 (T10, the preset proposal, 4f9e986)
-- next_wake_at: 2026-10-29T01:36:00Z
-- wake_trigger: trig_018kSFsMBtGBFogE3GWFwDu7
+- current_task: T2 (pending, no dependencies). T1 is active with its verdict blocked; see Q10.
+- units_done: 2 (T10 at 4f9e986; T11, the look registry, in the next commit)
+- next_wake_at: 2026-10-29T02:00:00Z
+- wake_trigger: trig_01GGPb79J616eDjNzyE2ksYh
 - watchdog_trigger: trig_0174D5CQELhAv3TcJVN654NM (every two hours, fires into this session)
-- last_entry: RUN_LOG.md, 2026-10-29 01:20 UTC (T10 done; T1 blocked on the local source step)
+- last_entry: RUN_LOG.md, 2026-10-29 01:40 UTC (T11 done: look registry)
 - open_questions: 9 (see OPEN_QUESTIONS.md)
 - permissions: `.claude/settings.json` was not written. See Q9. Until it is, use Auto mode or expect permission prompts.
 - sandbox: the gate's browser step needs `GATE_ACCEPTANCE_NODE_OPTIONS` set to the Chromium path wrapper in the session scratchpad (`harness/patch-chromium.mjs`). Without it the step reports `not run: browser`.
