@@ -150,7 +150,7 @@ try {
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
   await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Batch tab", async () => {
     const main = await page.locator("main").innerText();
-    assert.match(main, /Batch starts research-led runs\. Create makes a video from a brief or reference\. The two paths are still separate\./);
+    assert.match(main, /Start from a reference video and Market research, make video drafts, and group them into a budget-limited batch\. Research-led production is available as an advanced option\./);
     const contentTabList = page.getByRole("tablist").first();
     const contentTabs = await contentTabList.getByRole("tab").allInnerTexts();
     assert.equal(contentTabs[1], "Batch", "Batch is directly beside Create for admins");
@@ -159,9 +159,15 @@ try {
       assert.equal(await contentTabList.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
     }
     await contentTabList.getByRole("tab", { name: "Batch", exact: true }).click();
+    const videoBatches = page.getByRole("tab", { name: "Video batches", exact: true });
+    await videoBatches.waitFor();
+    assert.equal(await videoBatches.getAttribute("aria-selected"), "true", "the Batch section opens on Video batches");
+    await page.getByRole("heading", { name: "Make and review video batches", exact: true }).waitFor();
+    // The research-led run builder is the advanced tab, and it opens on Make a batch, not on the technical Factory Line.
+    await page.getByRole("tab", { name: "Research-led runs (advanced)", exact: true }).click();
     const makeBatch = page.getByRole("tab", { name: "Make a batch", exact: true });
     await makeBatch.waitFor();
-    assert.equal(await makeBatch.getAttribute("aria-selected"), "true", "the Batch section opens directly on Make a batch");
+    assert.equal(await makeBatch.getAttribute("aria-selected"), "true", "the research-led view opens on Make a batch");
     await page.getByRole("heading", { name: "Start a run", exact: true }).waitFor();
   });
   await check("F2", "create presets show an unambiguous selected state", async () => {

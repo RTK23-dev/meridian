@@ -87,6 +87,12 @@ export function contentSearchOf(search: Record<string, unknown>): ContentSearch 
   return out;
 }
 
+// The section a page opens in when the address names none. Admins start in Batch, but an address that names an engine session is
+// a link to that session (an opportunity's brief makes one), and a session lives in Create, so it opens there.
+export function defaultSectionFor(isAdmin: boolean, search: ContentSearch): ContentSection {
+  return isAdmin && search.session === undefined ? "ads" : "create";
+}
+
 // Moving between sections keeps the starting mode the person chose. The engine session belongs to Create, so it is dropped.
 export function searchForSection(current: ContentSearch, section: ContentSection): ContentSearch {
   return current.preset === undefined ? { section } : { section, preset: current.preset };

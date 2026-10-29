@@ -8,6 +8,7 @@ import { ContentFactoryScreen } from "./screen";
 import {
   CONTENT_SECTION_LABELS,
   defaultPreset,
+  defaultSectionFor,
   presetsFor,
   searchForSection,
   sectionOf,
@@ -90,7 +91,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   // A section the person may not use is not shown, even when the link names it. Create is the fallback.
   const sections = sectionsFor(isAdmin);
   // Admins can start the research-led run from Batch; members who cannot see it start in Create.
-  const defaultSection: ContentSection = isAdmin ? "ads" : "create";
+  const defaultSection: ContentSection = defaultSectionFor(isAdmin, search);
   const current: ContentSection = search.section !== undefined && sections.includes(search.section) ? search.section : defaultSection;
   const presets = presetsFor(isAdmin);
   const preset = presets.find((item) => item.id === search.preset) ?? defaultPreset(isAdmin);

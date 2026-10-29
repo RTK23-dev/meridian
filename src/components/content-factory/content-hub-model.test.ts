@@ -74,3 +74,12 @@ test("the search values the page accepts are kept, and anything else is dropped"
   assert.deepEqual(contentSearchOf({ preset: "x".repeat(41) }), {});
   assert.deepEqual(contentSearchOf({ session: "s".repeat(81) }), {});
 });
+
+test("admins open Batch by default, but a link to an engine session opens Create, and members always open Create", async () => {
+  const { defaultSectionFor } = await import("./content-hub-model.ts");
+  assert.equal(defaultSectionFor(true, {}), "ads");
+  assert.equal(defaultSectionFor(true, { session: "sess_1" }), "create", "an opportunity's brief links to its session in Create");
+  assert.equal(defaultSectionFor(true, { preset: "studio" }), "ads");
+  assert.equal(defaultSectionFor(false, {}), "create");
+  assert.equal(defaultSectionFor(false, { session: "sess_1" }), "create");
+});

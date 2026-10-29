@@ -46,7 +46,9 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   });
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
   const [creating, setCreating] = useState(false);
-  const list = sessions.data ?? [];
+  // In the guided Batch view a brand's batch shows only that brand's drafts, never another brand's session.
+  const listed = sessions.data ?? [];
+  const list = guided && initialBrandId ? listed.filter((item) => item.brandId === initialBrandId) : listed;
   const selected = list.find((item) => item.id === selectedId) ?? (initialBrandId ? list.find((item) => item.brandId === initialBrandId) : null) ?? list[0] ?? null;
 
   if (!workspace?.active) return null;
