@@ -56,7 +56,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Status: `done` in `acaf1e8`. `index.ts` is now a re-export of 20 lines, and the largest module is `remake.ts` at 655 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
 
 ### T9: Split `src/engine/assets/router.ts` (1,179) and `src/engine/jobs/handlers/produce-shot.ts` (1,052)
-- Status: `active`. Split into two units under the size rule. T9a, the asset router, is `done` in `6730129`: `router.ts` is 831 lines, with its types and helpers moved out, and the closure kept whole (Q13). T9b, `produce-shot.ts`, is `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
+- Status: `done`, in two units under the size rule. T9a, the asset router, is `done` in `6730129`: `router.ts` is 831 lines, with its types and helpers moved out, and the closure kept whole (Q13). T9b, the produce_shot handler, is `done` in `baa3a64`: `produce-shot.ts` is 224 lines, and the largest of its new modules is 325 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
 
 ### T10: Preset inventory and proposal (document only)
 - Status: `done`, in `docs/engine/PRESET_MODEL_PROPOSAL.md` (commit in the run log, 01:20 UTC). Depends on: none.

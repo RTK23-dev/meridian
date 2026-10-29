@@ -217,3 +217,19 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: eslint clean; typecheck exit 0. The 23 asset router and dependent engine suites: 210 tests, 210 pass, 0 fail, 0 skipped. No test reads the router source as text.
 - Commit `6730129`. T9a is done. T9b, `produce-shot.ts`, is next.
 - Wake-up: the 06:32 wake (`trig_016G7vtYeJjYyQDAgE726sb9`) was deleted, and the next is armed as `trig_01Q79eZB6fucyTHDQAvq96NG`, at 06:41:00Z.
+
+## 2026-10-29 06:29 UTC: CI on the T8 and T9a heads, and T9b, the produce_shot split
+
+- CI, read from the workflow runs. `acaf1e8` (T8, run 40827669769) finished with success. `9acb760` (the T8 state, run 40827839244) also finished with success.
+- Correction to the earlier entry: the state commit `9acb760` did have a workflow run. The run was created at 06:12:38, after the runs list I read at the wake before it. The observation that it had no run was a timing gap, not a missing run. The CI on state-only heads does run.
+- `6730129` (T9a, the asset router) is pushed, and its run was still to be checked at this wake.
+- T9b: `engine/jobs/handlers/produce-shot.ts` (1,052 lines) keeps the handler, `createProduceShotHandler`, and its two re-exports of chain-store names. Its declarations move to four modules by responsibility:
+  - `produce-shot-types.ts` (109 lines): the constants, the production shapes and the ports.
+  - `produce-shot-take.ts` (314 lines): making a take from a production, and storing it.
+  - `produce-shot-spec.ts` (153 lines): the shot's asset spec, its prompt, its plan and model choices, and the reservation the stage needs.
+  - `produce-shot-chain.ts` (325 lines): driving a shot made in several calls.
+- The splitter now keeps bare `export { x };` statements of imported names in the handler, where the imports live. Its check also treats a one-line doc comment as a comment. Both were caught in the dry run, before any write.
+- Survival check against the old file: every missing line is a declaration that gained an `export`, or a member of a multi-line import rewritten by usage. No code line is missing.
+- Checks: eslint clean; typecheck exit 0. The handler's suite and the 39 suites that import it or exercise the API, ops and handlers: 276 tests, 276 pass. The whole `engine/jobs` and `engine/jobs/handlers` folders: 523 tests, 523 pass, 0 fail, 0 skipped. No test reads the handler source as text.
+- Commit `baa3a64`. T9 is done: T9a in `6730129`, T9b in `baa3a64`.
+- Wake-up: the 06:41 wake (`trig_01Q79eZB6fucyTHDQAvq96NG`) was deleted, and the next is armed as `trig_01XkfeBiekhg9bq6cmApDoDF`, at 06:50:00Z.
