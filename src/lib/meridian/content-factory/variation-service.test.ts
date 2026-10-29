@@ -10,6 +10,7 @@ import { createVariations } from "./variation-service.ts";
 const WS = "org_variations";
 const OTHER_WS = "org_variations_other";
 const BRAND = "brand_variations";
+const OTHER_BRAND = "brand_variations_other";
 const ADMIN = "user_var_admin";
 const MEMBER = "user_var_member";
 const OUTSIDER = "user_var_outsider";
@@ -30,7 +31,7 @@ async function counts() {
   return row ?? { sessions: "-", batches: "-", items: "-", messages: "-", attachments: "-", requests: "-", audits: "-" };
 }
 
-type SourceOptions = { id: string; status?: string; reference?: boolean; market?: boolean; instruction?: string | null; script?: boolean; brand?: string | null };
+type SourceOptions = { id: string; status?: string; reference?: boolean; market?: boolean; instruction?: string | null; script?: boolean; brand?: string | null; marketBrand?: string };
 
 /** A source draft: one instruction (carrying the Market record), one reference file message, and optionally a script line. */
 async function source(options: SourceOptions): Promise<string> {
@@ -57,7 +58,7 @@ async function source(options: SourceOptions): Promise<string> {
   if (options.market !== false) {
     await db.sql`
       insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
-      values (${`${id}_mkt`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'market', ${BRAND}, ${`rec_${id}`}, ${"A competitor opens on the problem."})
+      values (${`${id}_mkt`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'market', ${options.marketBrand ?? BRAND}, ${`rec_${id}`}, ${"A competitor opens on the problem."})
     `;
   }
   return id;
@@ -71,6 +72,7 @@ before(async () => {
     await db.sql`insert into "user" (id, name, email, "emailVerified") values (${id}, ${id}, ${`${id}@fixture.example`}, true)`;
     await db.sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${id}`}, ${org}, ${id}, ${role})`;
   }
+  await db.sql`insert into brands (id, organization_id, name, created_by) values (${OTHER_BRAND}, ${WS}, "Other brand", ${ADMIN})`;
 });
 
 after(async () => {
@@ -84,6 +86,7 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   const noInstruction = await source({ id: "s_noins", instruction: "short" });
   const scripted = await source({ id: "s_script", script: true });
   const noBrand = await source({ id: "s_nobrand", brand: null });
+  const crossBrandResearch = await source({ id: "s_cross_brand_market", marketBrand: OTHER_BRAND });
   const before = await counts();
 
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 1, totalBudgetUsd: 10 }), /between 2 and 20/);
@@ -98,6 +101,7 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noInstruction, count: 3, totalBudgetUsd: 10 }), /plain-language instruction/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: scripted, count: 3, totalBudgetUsd: 10 }), /script lines/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noBrand, count: 3, totalBudgetUsd: 10 }), /no brand/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: crossBrandResearch, count: 3, totalBudgetUsd: 10 }), /All attached source records must belong to this brand/);
 
   assert.deepEqual(await counts(), before, "no session, message, attachment, batch, item, audit or engine request was written");
 });
