@@ -70,7 +70,7 @@ const BRAND_VIEWS: Record<Exclude<ContentSection, "create">, (brandId: string) =
   library: (brandId) => <Library brandId={brandId} />,
   publish: (brandId) => <BrandAccounts brandId={brandId} />,
   results: (brandId) => <Learning brandId={brandId} />,
-  ads: (brandId) => <BatchWorkspace brandId={brandId} />,
+  ads: (brandId) => <BatchWorkspace key={brandId} brandId={brandId} />,
 };
 
 /** The one content page: creation, video batches, review, library, publishing and results for a brand. */
