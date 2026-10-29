@@ -9,7 +9,7 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 - current_task: T3 (typed configuration for non-secret settings). T1 stays open; see Q10 for the decision that lets T3 to T9 start on CI.
 - units_done: 5 (T10, T11, T2, the acceptance fix, T12); run 5 of the gate stopped, no verdict
 - next_wake_at: 2026-10-29T03:17:00Z
-- wake_trigger: trig_01FoAh9PDj1MYwoki8zJVct3
+- wake_trigger: trig_01WRHpAVC9WRHyLtrqhBNLJZ
 - watchdog_trigger: trig_0174D5CQELhAv3TcJVN654NM (every two hours, fires into this session)
 - last_entry: RUN_LOG.md, 2026-10-29 02:57 UTC (run 5 stopped; Q10 decision; T3 next)
 - open_questions: 9 (see OPEN_QUESTIONS.md)
