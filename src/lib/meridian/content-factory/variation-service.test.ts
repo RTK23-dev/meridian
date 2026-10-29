@@ -72,7 +72,7 @@ before(async () => {
     await db.sql`insert into "user" (id, name, email, "emailVerified") values (${id}, ${id}, ${`${id}@fixture.example`}, true)`;
     await db.sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${id}`}, ${org}, ${id}, ${role})`;
   }
-  await db.sql`insert into brands (id, organization_id, name, created_by) values (${OTHER_BRAND}, ${WS}, "Other brand", ${ADMIN})`;
+  await db.sql`insert into brands (id, organization_id, name, created_by) values (${OTHER_BRAND}, ${WS}, 'Other brand', ${ADMIN})`;
 });
 
 after(async () => {
