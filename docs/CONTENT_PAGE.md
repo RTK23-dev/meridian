@@ -103,3 +103,13 @@ A **reusable format** is a draft session with an uploaded reference video, at le
 - Batch reads one brand's sessions (up to 500, newest first). The workspace-wide list stays at 100, so a brand's older templates and drafts are not crowded out by other brands. Past 500 sessions in one brand, the oldest still drop out of the list.
 - A batch shows its videos by state and can download a **batch summary (CSV)**: one row per video with its angle, the state the engine reports, the reason and the budget. The CSV holds no video file and no link, a video that is not delivered is never marked finished, and cells that start like a spreadsheet formula are prefixed so they stay text.
 
+## Pattern-finding (the format found in your research)
+
+The brand's analyzed ads already carry model labels for structure, opening move, hook mechanism and call to action, and Meridian stores how often each repeats (`research_patterns`). **What your research shows** (Batch → Video batches → Create video variations) reads those counts for the brand and shows them as "problem solution (4 of 9)".
+
+- Needs at least 3 analyzed ads and a structure that at least 2 of them share. Otherwise it says why, and the videos use the fixed angles. "Other", "unclear" and "none" labels and free-text topics are left out.
+- Ticking **Base the videos on these patterns** builds the first angles from the most common structure and opening pairs, most common first; the fixed angles fill any that remain. Asking for it when there is no format is refused with the reason and writes nothing.
+- The angles use only the schema's label words and counts, never text from an ad. They still say to write new wording and visuals and never to copy footage, words, voice or music.
+- These are counts of labels a model gave, so they are INFERRED. They show what is common, not what works. They are read per brand and per workspace; another brand's patterns are never used.
+- Not verified live: the labels come from the existing analysis step, which has not been run against a live provider in this repository.
+

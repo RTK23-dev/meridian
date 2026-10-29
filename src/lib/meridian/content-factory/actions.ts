@@ -26,7 +26,7 @@ import {
   sessionsListInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
-import { createVariations } from "./variation-service.ts";
+import { createVariations, researchFormatOf } from "./variation-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
@@ -116,10 +116,22 @@ export const createContentVariations = createServerFn({ method: "POST" })
       count: typeof body.count === "number" ? body.count : Number.NaN,
       totalBudgetUsd: typeof body.totalBudgetUsd === "number" ? body.totalBudgetUsd : Number.NaN,
       title: typeof body.title === "string" ? body.title.slice(0, 200) : "",
+      useResearchFormat: body.useResearchFormat === true,
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createVariations(await getSql(), context.userId, data));
+
+/** The format found in a brand's analyzed research (counts of model labels), or why there is none. Admins of the brand's workspace only. */
+export const getContentResearchFormat = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const brandId = typeof body.brandId === "string" ? body.brandId.trim().slice(0, 80) : "";
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => researchFormatOf(await getSql(), context.userId, data));
 
 export const startContentBatch = createServerFn({ method: "POST" })
   .validator((input: unknown) => {

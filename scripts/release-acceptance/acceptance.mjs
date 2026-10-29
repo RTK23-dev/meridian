@@ -410,6 +410,28 @@ try {
     assert.doesNotMatch(csv, /delivered/i);
   });
 
+  await check("G13", "pattern-finding: the research format is shown with its counts, and ticking it bases the videos on those patterns", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    const panel = page.getByLabel("What your research shows");
+    await panel.waitFor();
+    const shown = await panel.innerText();
+    assert.match(shown, /Structure: problem solution \(4 of 9\), listicle \(2 of 9\)/);
+    assert.match(shown, /Opening: question \(3 of 9\)/);
+    assert.match(shown, /show what is common, not what works/);
+    await panel.getByRole("checkbox").check();
+    await form.getByLabel("Number of videos").fill("4");
+    await form.getByLabel("Total batch budget (USD)").fill("8");
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 4 draft videos in one batch\. Nothing has started/).waitFor();
+    await page.getByText("Acceptance reference draft: Problem solution, question opening", { exact: true }).first().waitFor();
+    const text = await page.locator("main").innerText();
+    assert.match(text, /Acceptance reference draft: Listicle, question opening/);
+    assert.match(text, /Acceptance reference draft: Problem first/, "the fixed angles fill the rest");
+    assert.doesNotMatch(text, /Started \d+ videos?\./);
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });

@@ -54,6 +54,18 @@ try {
     [`${source}_mkt`, brand.org, source, `${source}_m2`, brand.id],
   );
   console.log("Seeded one reusable source draft.");
+
+  // Stored research patterns, as the pattern builder writes them from analyzed ads: model-labelled counts, INFERRED. No ad is stored or read.
+  const patterns = [["structure", "problem_solution", 4], ["structure", "listicle", 2], ["openingMove", "question", 3], ["cta", "learn_more", 3]];
+  for (const [dimension, value, samples] of patterns) {
+    await db.query(`delete from research_patterns where brand_id = $1 and dimension = $2 and value = $3`, [brand.id, dimension, value]);
+    await db.query(
+      `insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, summary)
+       values ($1, $2, $3, 'brand', $4, $5, 'INFERRED', $6, 9, $7, 0.8, 'Model-labelled. Frequency only.')`,
+      [`pat_accept_${dimension}_${value}`, brand.org, brand.id, dimension, value, samples, samples / 9],
+    );
+  }
+  console.log(`Seeded ${patterns.length} research patterns.`);
 } finally {
   await db.close();
 }

@@ -4,8 +4,9 @@ import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Field, Inp
 import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentBatch, createContentVariations, getContentBatch, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
+import { createContentBatch, createContentVariations, getContentBatch, getContentResearchFormat, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import { batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { describeFormat } from "@/lib/meridian/content-factory/research-format";
 import { DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget } from "@/lib/meridian/content-factory/variations";
 
 const STATE_LABEL: Record<BatchItemState, string> = {
@@ -63,11 +64,16 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
   const [count, setCount] = useState(String(DEFAULT_VARIATIONS));
   const [total, setTotal] = useState("");
   const [variationError, setVariationError] = useState<string | null>(null);
+  const [useResearch, setUseResearch] = useState(false);
   const queryClient = useQueryClient();
 
   const batches = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batches", brandId]),
     queryFn: () => listContentBatches({ data: { brandId } }),
+  });
+  const format = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "research-format", brandId]),
+    queryFn: () => getContentResearchFormat({ data: { brandId } }),
   });
   const detail = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batch", selectedId]),
@@ -111,7 +117,7 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
     setNotice(null);
     setItemError(null);
     try {
-      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal } });
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true } });
       setSelectedId(made.id);
       setTotal("");
       await batches.refetch();
@@ -212,6 +218,21 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
                   {sources.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
                 </SelectInput>
               </Field>
+              <div className="space-y-1 rounded-md border border-border p-3 text-sm" aria-label="What your research shows">
+                <p className="font-semibold">What your research shows</p>
+                {format.isPending ? <p className="text-fg-muted">Reading your analyzed research...</p> : format.data?.ok ? (
+                  <>
+                    <ul className="list-disc pl-5">{describeFormat(format.data.format).map((line) => <li key={line}>{line}</li>)}</ul>
+                    <p className="text-fg-muted">These are counts of labels a model gave your analyzed ads. They show what is common, not what works.</p>
+                    <label className="inline-flex min-h-11 items-center gap-2">
+                      <input type="checkbox" checked={useResearch} onChange={(event) => setUseResearch(event.target.checked)} />
+                      Base the videos on these patterns (the rest use the fixed angles)
+                    </label>
+                  </>
+                ) : (
+                  <p className="text-fg-muted">{format.data?.ok === false ? format.data.reason : "The research format could not be read."} The videos will use the fixed angles.</p>
+                )}
+              </div>
               <Input id="variations-count" type="number" min={MIN_VARIATIONS} max={MAX_VARIATIONS} step="1" label="Number of videos" hint={`Between ${MIN_VARIATIONS} and ${MAX_VARIATIONS}.`} value={count} onChange={(event) => setCount(event.target.value)} />
               <Input
                 id="variations-budget"

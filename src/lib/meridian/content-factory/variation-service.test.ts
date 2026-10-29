@@ -227,3 +227,55 @@ test("a brand's session list is scoped to the brand and is not cut at the worksp
   const none = await listSessions(db.sql, ADMIN, { organizationId: WS, brandId: "brand_nope" });
   assert.deepEqual(none, []);
 });
+
+async function seedPatterns(brand: string, rows: Array<[string, string, number]>, corpus = 9): Promise<void> {
+  for (const [dimension, value, samples] of rows) {
+    await db.sql`
+      insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, summary)
+      values (${`pat_${brand}_${dimension}_${value}`}, ${WS}, ${brand}, 'brand', ${dimension}, ${value}, 'INFERRED', ${samples}, ${corpus}, ${samples / corpus}, 0.8, 'Model-labelled.')
+    `;
+  }
+}
+
+test("research-based variations use the brand's own patterns first, fixed angles for the rest, and refuse when there is no format", async () => {
+  const { researchFormatOf } = await import("./variation-service.ts");
+  const id = await source({ id: "s_research" });
+  const before = await counts();
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, useResearchFormat: true }), /Pattern-finding needs at least 3/);
+  assert.deepEqual(await counts(), before, "a refusal writes nothing and does not fall back to the fixed angles");
+  const empty = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
+  assert.equal(empty.ok, false);
+  await assert.rejects(researchFormatOf(db.sql, MEMBER, { brandId: BRAND }));
+
+  await seedPatterns(BRAND, [["structure", "problem_solution", 4], ["structure", "listicle", 2], ["openingMove", "question", 3], ["cta", "learn_more", 3]]);
+  const found = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
+  assert.ok(found.ok);
+
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10, useResearchFormat: true });
+  assert.equal(batch.items.length, 4);
+  const angles = batch.items.map((item) => item.angle ?? "");
+  assert.equal(angles.filter((angle) => angle.startsWith("res_")).length, 2, "two structures with one opening each");
+  assert.deepEqual(angles.slice(2), ["problem_first", "result_first"], "the fixed angles fill the rest, in order");
+  assert.match(batch.items[0]?.title ?? "", /Problem solution, question opening/);
+  const [message] = await db.sql<{ text: string }>`
+    select m.text from content_factory_messages m join content_factory_sessions s on s.id = m.session_id
+    where s.id = ${batch.items[0]?.sessionId ?? ""} and m.text like 'Variation angle:%'
+  `;
+  assert.match(message?.text ?? "", /4 of 9 analyzed ads/);
+  assert.match(message?.text ?? "", /Never copy its footage, words, voice or music/);
+  const [audit] = await db.sql<{ metadata: string }>`select metadata from audit_log where object_id = ${batch.id} and action = 'content_factory.variations_batch_created'`;
+  assert.match(String(audit?.metadata ?? ""), /"researchAngles":"2"/);
+
+  // The same count and total without the research format is a different request, not a replay of this one.
+  const plain = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10 });
+  assert.notEqual(plain.id, batch.id);
+  assert.ok(plain.items.every((item) => !(item.angle ?? "").startsWith("res_")));
+});
+
+test("another brand's research patterns are never used", async () => {
+  await db.sql`insert into brands (id, organization_id, name, created_by) values ('brand_var_pat_other', ${WS}, 'Pattern other', 'test') on conflict (id) do nothing`;
+  await seedPatterns("brand_var_pat_other", [["structure", "testimonial", 5]]);
+  const { researchFormatOf } = await import("./variation-service.ts");
+  const own = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
+  assert.ok(own.ok && !own.format.structures.some((item) => item.value === "testimonial"));
+});

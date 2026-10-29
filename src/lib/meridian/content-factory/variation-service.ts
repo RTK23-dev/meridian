@@ -8,7 +8,8 @@ import { requireBrand } from "../brand-membership.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { SESSION_REFUSAL, sessionAccess } from "./service.ts";
 import { getBatch, type BatchSummary } from "./batch-service.ts";
-import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES } from "./variations.ts";
+import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES, type VariationAngle } from "./variations.ts";
+import { formatFromPatterns, researchAngles, type FormatOutcome, type StoredPattern } from "./research-format.ts";
 
 const TITLE_MAX = 120;
 /** A request that repeats an identical one within this many seconds returns that batch instead of making another. */
@@ -33,6 +34,21 @@ type SourceAttachment = {
   content: string | null;
 };
 
+/** A brand's stored research patterns, read by brand and workspace. Nothing else is read. */
+async function brandPatterns(sql: Sql, organizationId: string, brandId: string): Promise<StoredPattern[]> {
+  const rows = await sql<{ dimension: string; value: string; sample_count: number; corpus_size: number; prevalence: number; confidence: number }>`
+    select dimension, value, sample_count, corpus_size, prevalence, confidence from research_patterns
+    where organization_id = ${organizationId} and brand_id = ${brandId} and scope = 'brand' and state in ('INFERRED', 'VALIDATED')
+  `;
+  return rows.map((row) => ({ dimension: row.dimension, value: row.value, sampleCount: Number(row.sample_count), corpusSize: Number(row.corpus_size), prevalence: Number(row.prevalence), confidence: Number(row.confidence) }));
+}
+
+/** The format found in the brand's research, or why there is none. Admins of the brand's workspace only. */
+export async function researchFormatOf(sql: Sql, userId: string, input: { brandId: string }): Promise<FormatOutcome> {
+  const access = await requireBrand(sql, userId, input.brandId, "admin");
+  return formatFromPatterns(await brandPatterns(sql, access.organizationId, input.brandId));
+}
+
 function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max - 1).trimEnd()}…`;
 }
@@ -52,7 +68,7 @@ async function audit(sql: Sql, entry: { organizationId: string; brandId: string;
 export async function createVariations(
   sql: Sql,
   userId: string,
-  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string },
+  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean },
 ): Promise<BatchSummary> {
   const split = splitBudget(input.totalBudgetUsd, input.count);
   if (!split.ok) throw new Error(split.reason);
@@ -119,12 +135,27 @@ export async function createVariations(
           select 1 from content_factory_batch_items i join content_factory_sessions s on s.id = i.session_id
           where i.batch_id = b.id and s.source_session_id is distinct from ${source.id}
         )
+        and (exists (
+          select 1 from content_factory_batch_items i join content_factory_sessions s on s.id = i.session_id
+          where i.batch_id = b.id and left(s.variation_angle, 4) = 'res_'
+        )) = ${input.useResearchFormat === true}
       order by b.created_at desc limit 1
     `;
     if (recent) {
       batchId = recent.id;
       return;
     }
+
+    // Angles: the brand's research format when asked for, then the fixed angles for any that remain. Asking for the research format when there
+    // is none is refused with the reason; it never falls back to the fixed angles without saying so.
+    let fromResearch: VariationAngle[] = [];
+    if (input.useResearchFormat) {
+      const outcome = formatFromPatterns(await brandPatterns(tx, organizationId, brandId));
+      if (!outcome.ok) throw new Error(outcome.reason);
+      fromResearch = researchAngles(outcome.format, input.count);
+    }
+    const fixed = VARIATION_ANGLES.filter((angle) => !fromResearch.some((found) => found.id === angle.id));
+    const angles: VariationAngle[] = [...fromResearch, ...fixed].slice(0, input.count);
 
     const title = clip((input.title ?? "").trim() || `${locked.title}: ${input.count} variations`, TITLE_MAX);
     const totalUsd = split.cents.reduce((sum, cents) => sum + cents, 0) / 100;
@@ -134,7 +165,7 @@ export async function createVariations(
     `;
 
     for (let index = 0; index < input.count; index += 1) {
-      const angle = VARIATION_ANGLES[index];
+      const angle = angles[index];
       const cents = split.cents[index];
       if (!angle || cents === undefined) throw new Error("The variations could not be planned.");
       const sessionId = randomUUID();
@@ -176,7 +207,7 @@ export async function createVariations(
       action: "content_factory.variations_batch_created",
       objectType: "content_factory_batch",
       objectId: batchId,
-      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2) },
+      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length) },
     });
   });
   return getBatch(sql, userId, { batchId });
