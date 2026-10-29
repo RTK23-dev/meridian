@@ -69,6 +69,10 @@ export async function createVariations(
       from content_factory_sessions where id = ${source.id} and organization_id = ${organizationId} for update
     `;
     if (!locked) throw new Error(SESSION_REFUSAL);
+    if (locked.brand_id === null) throw new Error("The source draft has no brand, so variations cannot be made from it.");
+    if (locked.brand_id !== brandId) throw new Error("The source brand changed. Reload the page and try again.");
+    const lockedAccess = await requireBrand(tx, userId, locked.brand_id, "admin");
+    if (lockedAccess.organizationId !== organizationId) throw new Error(SESSION_REFUSAL);
     const messages = await tx<SourceMessage>`
       select id, text, beat_role from content_factory_messages where session_id = ${source.id} and organization_id = ${organizationId} order by created_at asc, id asc
     `;
@@ -85,6 +89,9 @@ export async function createVariations(
       scriptLines: messages.filter((item) => item.beat_role !== null).length,
     });
     if (problem !== null) throw new Error(problem);
+    if (attachments.some((item) => item.kind === "source" && item.source_brand_id !== locked.brand_id)) {
+      throw new Error("All attached source records must belong to this brand before the draft can be reused.");
+    }
 
     const title = clip((input.title ?? "").trim() || `${locked.title}: ${input.count} variations`, TITLE_MAX);
     const totalUsd = split.cents.reduce((sum, cents) => sum + cents, 0) / 100;
