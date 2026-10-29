@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
@@ -151,18 +151,16 @@ export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: 
   // A blocker elsewhere links here with #monthly-budget. Read the router's location as well as the browser URL:
   // client-side navigation uses history.pushState, which does not dispatch a native hashchange event.
   const routeHash = useRouterState({ select: (state) => state.location.hash });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const hash = routeHash.replace(/^#/, "");
     if (hash !== "monthly-budget" && window.location.hash !== "#monthly-budget") return;
-    // Let the destination commit before focusing; the input can initially be disabled while its saved value loads.
-    const frame = window.requestAnimationFrame(() => {
-      const field = inputRef.current;
-      if (!field) return;
-      field.scrollIntoView({ block: "center" });
-      field.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [budget.isPending, routeHash]);
+    const field = inputRef.current;
+    if (!field) return;
+    field.scrollIntoView({ block: "center" });
+    // The field is disabled while its saved value loads. This effect runs again when loading ends,
+    // and layout-effect timing makes the focus visible before the client-side navigation settles.
+    if (!field.disabled) field.focus();
+  }, [budget.isPending, budget.isError, routeHash]);
 
   const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
   const parsed = parseMonthlyVideoBudget(shown);
