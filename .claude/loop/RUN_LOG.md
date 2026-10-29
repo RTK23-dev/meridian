@@ -188,3 +188,20 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not updated: the STATUS files in `src/engine/jobs/` and `handlers/` still name some functions as living in `orchestrator.ts`. That is a documentation pass, not part of this unit.
 - Commit `1354ef0`. T7 is done. The largest module is `orchestrator-state.ts` at 429 lines.
 - Wake-up: the 06:13 wake (`trig_01BHPGG4o3ancKi2EB2dJjak`) was deleted, and the next is armed as `trig_01Ppxabe2F6az1BUpwfZnszt`, at 06:25:00Z.
+
+## 2026-10-29 06:11 UTC: CI on the T6 and T7 heads, and T8, the engine API split
+
+- CI, read from the workflow runs: `943fff2` (T5 state, run 40825418790), `7ff6f76` (T6, run 40825860016) and `d45cf3d` (T6 state, run 40825911975) each finished with success. `1354ef0` (T7, run 40827042013) and `375c695` (T7 state, run 40827090739) were still running at this wake-up, and their results are checked at the next wake-up.
+- Split `src/engine/api/index.ts` (1,506 lines) into a re-export of its public names, 20 lines, and six modules next to it.
+  - `start.ts` (214 lines): start a request, read its status, read a delivered master, and the problems a request has.
+  - `remake.ts` (655 lines): remake a shot, quote it, replace it with a clip, decide it, and read its take.
+  - `spend.ts` (72 lines): the spend on a request's ledger, and the pause of its reservations.
+  - `review.ts` (63 lines): the open review items of a brand.
+  - `readiness.ts` (91 lines): whether the engine can run, and the production ports.
+  - `feed.ts` (452 lines): the request feed.
+- The leading comment, with the API's rules, stays at the top of `index.ts`. The first draft had two faults, which the check caught before the commit. A type declared under a doc comment was re-exported as a value, and an alias was not found under its local name. The usage check also counted property accesses such as `envelope.contentHash`, which are not uses. Each is fixed in the splitter, and the split was rerun from a clean original.
+- Survival check against the old file: every missing line is an import statement rewritten by usage, or a declaration that gained no change beyond `export`. No code line is missing.
+- Checks: eslint clean; typecheck exit 0. The 35 engine API, ops and API-importing suites: 608 tests, 608 pass, 0 fail, 0 skipped. No test reads the API source as text.
+- Not updated: `src/engine/api/STATUS.md` still names `index.ts` for some functions. That is a documentation pass, as with the orchestrator.
+- Commit `acaf1e8`. T8 is done. The largest module is `remake.ts` at 655 lines.
+- Wake-up: the 06:25 wake (`trig_01Ppxabe2F6az1BUpwfZnszt`) was deleted, and the next is armed as `trig_016G7vtYeJjYyQDAgE726sb9`, at 06:32:00Z.

@@ -53,7 +53,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: no file over 1,000 lines. The orchestrator and PGlite tests pass and keep their counts.
 
 ### T8: Split `src/engine/api/index.ts` (1,506 lines)
-- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
+- Status: `done` in `acaf1e8`. `index.ts` is now a re-export of 20 lines, and the largest module is `remake.ts` at 655 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
 
 ### T9: Split `src/engine/assets/router.ts` (1,179) and `src/engine/jobs/handlers/produce-shot.ts` (1,052)
 - Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T7.
