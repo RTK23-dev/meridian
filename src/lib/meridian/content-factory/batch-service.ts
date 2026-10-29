@@ -27,6 +27,8 @@ export type BatchItemSummary = {
   attempts: number;
   /** Whether the video is still a draft. Only a draft is started by a batch start. */
   draft: boolean;
+  /** The fixed angle a video variation was made with, or null for a video made by hand. */
+  angle: string | null;
 };
 
 export type BatchSummary = {
@@ -52,6 +54,7 @@ type ItemRow = {
   last_refusal: unknown;
   budget_usd: string | number | null;
   engine_request_id: string | null;
+  variation_angle: string | null;
 };
 
 function refusalsOf(value: unknown): string[] {
@@ -77,7 +80,7 @@ async function loadBatch(sql: Sql, batchId: string): Promise<{ batch: BatchRow; 
   const batch = batches[0];
   if (!batch) throw new Error("That batch is not found.");
   const items = await sql<ItemRow>`
-    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id
+    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle
     from content_factory_batch_items i
     join content_factory_sessions s on s.id = i.session_id
     where i.batch_id = ${batchId}
@@ -106,6 +109,7 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       retryable: view.retryable,
       attempts: view.attempts,
       draft: item.session_status === "draft",
+      angle: item.variation_angle,
     };
   }));
   return {

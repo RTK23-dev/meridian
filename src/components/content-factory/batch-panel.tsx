@@ -5,7 +5,7 @@ import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentBatch, createContentVariations, getContentBatch, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
-import type { BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
 import { DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget } from "@/lib/meridian/content-factory/variations";
 
 const STATE_LABEL: Record<BatchItemState, string> = {
@@ -123,6 +123,19 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
     } finally {
       setBusy(false);
     }
+  }
+
+  function downloadSummary() {
+    if (!detail.data) return;
+    const csv = batchSummaryCsv(detail.data, detail.data.items.map((item) => ({ position: item.position, title: item.title, angle: item.angle, state: item.state, reason: item.reason, budgetUsd: item.budgetUsd, attempts: item.attempts })));
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${detail.data.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "batch"}-summary.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   async function start() {
@@ -281,6 +294,9 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
           <p className="text-sm text-fg-muted">
             Budget {money.format(detail.data.budgetUsd)} · committed {money.format(detail.data.committedUsd)} by the videos the engine has taken.
           </p>
+          <p className="text-sm" aria-label="Videos by state">
+            {stateCounts(items).map((entry, index) => <span key={entry.state}>{index > 0 ? " · " : ""}{entry.count} {STATE_LABEL[entry.state].toLowerCase()}</span>)}
+          </p>
           <ol className="divide-y divide-border text-sm">
             {items.map((item) => (
               <li key={item.sessionId} className="flex flex-wrap items-start justify-between gap-3 py-3">
@@ -301,7 +317,11 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
               </li>
             ))}
           </ol>
-          <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
+            <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadSummary}>Download batch summary (CSV)</Button>
+          </div>
+          <p className="text-sm text-fg-muted">The summary lists each video with the state the engine reports. It holds no video files, and a video that is not delivered is never shown as finished.</p>
           {!canStart ? <p className="text-sm text-fg-muted">Nothing in this batch is a draft, so there is nothing to start.</p> : null}
         </section>
       ) : null}

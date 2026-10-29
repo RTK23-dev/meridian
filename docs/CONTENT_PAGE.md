@@ -101,3 +101,5 @@ A **reusable format** is a draft session with an uploaded reference video, at le
 - Not verified: no live run. The result is draft videos and their budgets, not finished videos.
 - An identical request repeated within 20 seconds (a double click, a replay) returns the batch already made instead of making a second one. A changed count or total, or the same request later, makes a new batch.
 - Batch reads one brand's sessions (up to 500, newest first). The workspace-wide list stays at 100, so a brand's older templates and drafts are not crowded out by other brands. Past 500 sessions in one brand, the oldest still drop out of the list.
+- A batch shows its videos by state and can download a **batch summary (CSV)**: one row per video with its angle, the state the engine reports, the reason and the budget. The CSV holds no video file and no link, a video that is not delivered is never marked finished, and cells that start like a spreadsheet formula are prefixed so they stay text.
+

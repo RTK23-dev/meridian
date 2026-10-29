@@ -89,3 +89,29 @@ export function fitsBatchBudget(input: { batchBudgetUsd: number; committedUsd: n
   }
   return { ok: true };
 }
+
+export type BatchRowForExport = { position: number; title: string; angle: string | null; state: BatchItemState; reason: string; budgetUsd: number | null; attempts: number };
+
+/** Counts by state, only for states that occur, in the order the states are listed. */
+export function stateCounts(items: ReadonlyArray<{ state: BatchItemState }>): Array<{ state: BatchItemState; count: number }> {
+  return BATCH_ITEM_STATES.map((state) => ({ state, count: items.filter((item) => item.state === state).length })).filter((entry) => entry.count > 0);
+}
+
+/** One CSV cell. A cell that starts like a formula is prefixed so a spreadsheet shows it as text. Quotes are doubled. */
+export function csvCell(value: string | number | null): string {
+  const text = value === null ? "" : String(value);
+  const safe = /^[=+\-@\t\r]/.test(text) ? `'${text}` : text;
+  return /[",\n\r]/.test(safe) ? `"${safe.replaceAll('"', '""')}"` : safe;
+}
+
+/**
+ * The batch as a spreadsheet: one row per video with the state the engine reports, the reason and the budget. It lists what is recorded and
+ * nothing else; it holds no video file and no link, and a video that has not been delivered is not shown as finished.
+ */
+export function batchSummaryCsv(batch: { title: string; budgetUsd: number }, rows: readonly BatchRowForExport[]): string {
+  const header = ["Batch", "Position", "Video", "Angle", "State", "Reason", "Budget (USD)", "Attempts"].map(csvCell).join(",");
+  const lines = rows.map((row) =>
+    [batch.title, row.position + 1, row.title, row.angle, row.state, row.reason, row.budgetUsd === null ? null : row.budgetUsd.toFixed(2), row.attempts].map(csvCell).join(","),
+  );
+  return `${[header, ...lines].join("\r\n")}\r\n`;
+}

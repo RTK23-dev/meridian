@@ -63,3 +63,22 @@ test("a batch budget is a hard limit: an item that fits starts, one that would p
   assert.equal(unbounded.ok, false);
   assert.equal(unbounded.ok === false && unbounded.overBudget, false, "an unbounded item is refused without stopping the batch");
 });
+
+test("the batch summary lists each video's recorded state, escapes cells, and never turns a cell into a spreadsheet formula", async () => {
+  const { batchSummaryCsv, csvCell, stateCounts } = await import("./batch.ts");
+  assert.equal(csvCell(null), "");
+  assert.equal(csvCell('say "hi", now'), '"say ""hi"", now"');
+  assert.equal(csvCell("=HYPERLINK(1)"), "'=HYPERLINK(1)");
+  assert.equal(csvCell("-1+1"), "'-1+1");
+  const rows = [
+    { position: 0, title: "Video A", angle: "problem_first", state: "ready" as const, reason: "Ready to start.", budgetUsd: 3.34, attempts: 1 },
+    { position: 1, title: "=Evil", angle: null, state: "blocked" as const, reason: "Not started: no, budget", budgetUsd: null, attempts: 1 },
+  ];
+  const csv = batchSummaryCsv({ title: "Spring", budgetUsd: 10 }, rows);
+  const lines = csv.trimEnd().split("\r\n");
+  assert.equal(lines[0], "Batch,Position,Video,Angle,State,Reason,Budget (USD),Attempts");
+  assert.equal(lines[1], "Spring,1,Video A,problem_first,ready,Ready to start.,3.34,1");
+  assert.equal(lines[2], `Spring,2,'=Evil,,blocked,"Not started: no, budget",,1`);
+  assert.deepEqual(stateCounts(rows), [{ state: "ready", count: 1 }, { state: "blocked", count: 1 }]);
+  assert.doesNotMatch(csv, /delivered/, "nothing is marked delivered that the engine did not report");
+});

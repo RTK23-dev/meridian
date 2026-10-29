@@ -399,6 +399,15 @@ try {
     // The reusable template is not offered as a draft to pick by hand, and the Start batch action is still waiting for a person.
     await page.getByRole("checkbox", { name: "Acceptance reference draft" }).waitFor({ state: "detached", timeout: 10000 });
     await page.getByRole("button", { name: "Start the batch" }).waitFor();
+    // The batch summary lists the recorded state of each video and holds no video file.
+    assert.match(await page.getByLabel("Videos by state").innerText(), /3 ready/);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    const { readFile } = await import("node:fs/promises");
+    const csv = await readFile(await download.path(), "utf8");
+    assert.match(csv, /^Batch,Position,Video,Angle,State,Reason,Budget \(USD\),Attempts/);
+    assert.match(csv, /Acceptance reference draft: Problem first,problem_first,ready/);
+    assert.equal(csv.trimEnd().split("\r\n").length, 4, "a header and three videos");
+    assert.doesNotMatch(csv, /delivered/i);
   });
 
   await check("D1", "no request left the local server during the run", async () => {
