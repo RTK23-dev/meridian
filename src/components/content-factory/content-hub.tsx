@@ -1,5 +1,5 @@
 import { lazy, Suspense, useState, type ReactNode } from "react";
-import { Check, ClipboardCheck, Lightbulb, Library as LibraryIcon, Megaphone, Send, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
+import { Check, ClipboardCheck, Film, Lightbulb, Library as LibraryIcon, Send, Sparkles, TrendingUp, type LucideIcon } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import { Button, EmptyState, PageHeader, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
@@ -32,8 +32,27 @@ const SECTION_ICONS: Record<ContentSection, LucideIcon> = {
   library: LibraryIcon,
   publish: Send,
   results: TrendingUp,
-  ads: Megaphone,
+  ads: Film,
 };
+
+function BatchWorkspace({ brandId }: { brandId: string }) {
+  return (
+    <div className="space-y-5">
+      <Tabs defaultValue="videos" className="space-y-5">
+        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:w-auto">
+          <TabsTrigger value="videos">Video batches</TabsTrigger>
+          <TabsTrigger value="research">Research-led runs (advanced)</TabsTrigger>
+        </TabsList>
+        <TabsContent value="videos">
+          <ContentFactoryScreen embedded guided initialBrandId={brandId} />
+        </TabsContent>
+        <TabsContent value="research">
+          <FactoryPage brandId={brandId} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
 
 type Props = {
   /** The brand in the URL. Null on the workspace-level page, which then offers a brand picker. */
@@ -51,10 +70,10 @@ const BRAND_VIEWS: Record<Exclude<ContentSection, "create">, (brandId: string) =
   library: (brandId) => <Library brandId={brandId} />,
   publish: (brandId) => <BrandAccounts brandId={brandId} />,
   results: (brandId) => <Learning brandId={brandId} />,
-  ads: (brandId) => <FactoryPage brandId={brandId} />,
+  ads: (brandId) => <BatchWorkspace brandId={brandId} />,
 };
 
-/** The one content page: ideas, create, review, library, publish, results and ads for a brand, in one place. */
+/** The one content page: creation, video batches, review, library, publishing and results for a brand. */
 export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Props) {
   const { data: workspace } = useWorkspace();
   const role = workspace?.active?.role ?? "viewer";
@@ -132,7 +151,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   else if (activeBrandId) body = BRAND_VIEWS[current](activeBrandId);
   else body = noBrand;
 
-  const description = `Batch starts research-led runs. Create makes a video from a brief or reference. The two paths are still separate.${pickBrand ? " Each section works on the brand you pick." : ""}`;
+  const description = `Start from a reference video and Market research, make video drafts, and group them into a budget-limited batch. Research-led production is available as an advanced option.${pickBrand ? " Each section works on the brand you pick." : ""}`;
   const headerContext = pickBrand ? brandPicker : (
     <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2">
       <span className="text-xs font-semibold uppercase tracking-wide text-muted">Brand</span>
