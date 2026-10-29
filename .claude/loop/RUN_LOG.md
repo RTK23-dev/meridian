@@ -242,3 +242,9 @@ Append-only. One entry per unit of work, newest at the bottom.
 - The script's dev server was not left running. No file in the repo changed.
 - T13 is done. T14, the handoff, is next.
 - Wake-up: the 06:50 wake (`trig_01XkfeBiekhg9bq6cmApDoDF`) was deleted, and the next is armed as `trig_01WaFgf31tufcrw4mKfVdkPb`, at 06:54:00Z.
+
+## 2026-10-29 06:55 UTC: CI on the T9 to T13 heads, and the gate for T14
+
+- CI, read from the workflow runs. All four recent heads finished with success: `baa3a64` (T9b, run 40829497422), `3d3b5f8` (T9b state, run 40829549939), `180a7d8` (T13 state, run 40829949061) and `3bbdcab` (the owner checklist, run 40830071076). `6730129` (T9a, run 40828606332) and `70c97af` (T9a state, run 40828676334) also succeeded earlier.
+- The gate for T14 (`npm run gate`) was started in the background on `180a7d8`, the last commit with code changes. The later commits change only loop state and `docs/FIRST_TEST_RUN.md`. At this wake: typecheck, lint, the scripts tests and source groups 0 to 3 have each exited 0, and source group 4 was running. The log is `artifacts/gate/gate-run-T14.log` (git-ignored). The gate's totals are read at the next wake, and section 10 of `docs/STATE_2026-10-28.md` is written from them.
+- Wake-up: the 06:54 wake (`trig_01WaFgf31tufcrw4mKfVdkPb`) had fired and was one-shot. The next is armed as `trig_01BsYDhUqhKXPiASoeyVSgku`, at 07:16:00Z.
