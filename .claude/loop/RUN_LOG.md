@@ -140,3 +140,17 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Size: the largest file is `session-execute.server.ts` at 857 lines, under the 1,000-line limit. T4 is done.
 - CI on `7b5010a` (batch 1 head): every job green except `e2e`, which was still running at 05:28. Its result is checked at the next wake-up.
 - Wake-up: the stale 05:39 wake (`trig_01PhmhKbwd91VHjJVRrYpKkr`) was deleted. `STATE.md` had named `trig_017Di61wAqwLV4VRuEbwzrzh`, which was not listed. The next wake is `trig_01UUXHovuLik9EkhypJbjg85`, at 06:00:00Z.
+
+## 2026-10-29 05:47 UTC: CI on the batch 1 head, and T5, the factory worker split
+
+- CI on `7b5010a` (the batch 1 head, run 40822849599) finished with every job green, `e2e` included, and the aggregate `check` green. The check suite notification at 05:32 was for this head.
+- CI on the batch 2 head `aa858c2` (run 40824706536) was still running when T5 was pushed. Its result is checked at the next wake-up. It is not red in any finished job.
+- Split `src/lib/meridian/factory/worker.ts` (1,070 lines) into five files. Each moved declaration is unchanged, except that an export was added where another module uses it.
+  - `worker.ts` (399 lines): `executeFactoryJob`, the `FactorySeams` type, `decodeStoredAds`, `guessFormat`. It re-exports `variantGateVerdicts`, `creativeQaVerdict`, `regateVariantsForCreative` and `regateVariantById` from `worker-gate.ts`, so no caller changes.
+  - `worker-shared.ts` (28 lines): `text`, `parseList` and `killSwitchPaused`, the helpers the other modules share. Moving them out keeps the graph free of cycles.
+  - `worker-grade.ts` (307 lines): the grade types, `gradeStoredAds` and its helpers.
+  - `worker-variants.ts` (189 lines): the plan settings, `savedPlanLine`, `persistTemplates`, `variantsMadeToday` and `persistVariants`.
+  - `worker-gate.ts` (165 lines): the claim rules, the gate verdicts, `gateVariants` and the regate entry points.
+- Checks: eslint clean on the five files, after two unused imports in `worker-variants.ts` were removed; typecheck exit 0; 64 suites that import the worker or cover the factory: 407 tests, 407 pass, 0 fail, 0 skipped. The full suite is for CI to confirm (Q10).
+- Commit `ba2ad93`. T5 is done, and the largest file is 399 lines.
+- Wake-up: the 06:00 wake (`trig_01UUXHovuLik9EkhypJbjg85`) was deleted, and the next is armed as `trig_01PjbgefPCt4H6jaAUGCU3xj`, at 06:08:00Z.

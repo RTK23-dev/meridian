@@ -42,7 +42,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: no resulting file over 1,000 lines. Test counts equal the baseline.
 
 ### T5: Split `src/lib/meridian/factory/worker.ts` (1,070 lines)
-- Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
+- Status: `done` in `ba2ad93`. The largest file is now `worker.ts`, at 399 lines. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
 
 ### T6: Split `src/lib/meridian/content-factory/service.ts` (1,097 lines)
 - Status: `pending`. Depends on: T1 (relaxed by Q10: CI is the verification of record). Same rules as T4.
