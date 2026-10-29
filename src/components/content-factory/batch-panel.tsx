@@ -46,7 +46,7 @@ function budgetOf(text: string): number | null {
  * on its video and the batch goes on, and a start that would pass the budget stops the batch. Each video shows its own state, read from the
  * engine, and a failed one can be retried alone; its siblings are not changed.
  */
-export function BatchCard({ brandId, brandName, drafts }: { brandId: string; brandName: string; drafts: Array<{ id: string; title: string }> }) {
+export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brandId: string; brandName: string; drafts: Array<{ id: string; title: string }>; onOpenSession: (sessionId: string) => void }) {
   const { user } = useCurrentUserState();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
