@@ -11,7 +11,7 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 - next_wake_at: 2026-10-29T07:16:00Z
 - wake_trigger: trig_01BsYDhUqhKXPiASoeyVSgku
 - watchdog_trigger: trig_0174D5CQELhAv3TcJVN654NM (every two hours, fires into this session)
-- last_entry: RUN_LOG.md, 2026-10-29 06:55 UTC (CI green on the T9 to T13 heads; the T14 gate is at source group 4, and its totals are read at the next wake-up)
+- last_entry: RUN_LOG.md, 2026-10-29 07:12 UTC (the first T14 gate stopped silently at source group 4; group 4 passes alone; the gate is running again, detached, as artifacts/gate/gate-run-T14b.log)
 - open_questions: 10 (see OPEN_QUESTIONS.md; Q13 is decided by the loop and asks for confirmation)
 - permissions: `.claude/settings.json` was not written. See Q9. Until it is, use Auto mode or expect permission prompts.
 - sandbox: the gate's browser step needs `GATE_ACCEPTANCE_NODE_OPTIONS` set to the Chromium path wrapper in the session scratchpad (`harness/patch-chromium.mjs`). Without it the step reports `not run: browser`.
