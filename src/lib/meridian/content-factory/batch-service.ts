@@ -185,6 +185,11 @@ export async function createBatch(sql: Sql, userId: string, input: { brandId: st
       if (row.status !== "draft") throw new Error("Only a draft video can join a batch. A video that has started is already in production.");
       const [taken] = await tx<{ batch_id: string }>`select batch_id from content_factory_batch_items where session_id = ${sessionId} limit 1`;
       if (taken) throw new Error("A video can belong to one batch only.");
+      // A draft that variations were made from is a reusable template. It stays out of every batch so it can be reused.
+      const [template] = await tx<{ id: string }>`
+        select id from content_factory_sessions where organization_id = ${access.organizationId} and source_session_id = ${sessionId} limit 1
+      `;
+      if (template) throw new Error("This draft is the template other videos were made from. It stays out of batches so it can be used again.");
     }
     await tx`
       insert into content_factory_batches (id, organization_id, brand_id, title, budget_usd, created_by)

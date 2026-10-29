@@ -26,6 +26,7 @@ import {
   workspaceInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
+import { createVariations } from "./variation-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
@@ -104,6 +105,21 @@ export const createContentBatch = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createBatch(await getSql(), context.userId, data));
+
+export const createContentVariations = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const sourceSessionId = typeof body.sourceSessionId === "string" ? body.sourceSessionId.trim().slice(0, 80) : "";
+    if (!sourceSessionId) throw new Error("Choose the source draft.");
+    return {
+      sourceSessionId,
+      count: typeof body.count === "number" ? body.count : Number.NaN,
+      totalBudgetUsd: typeof body.totalBudgetUsd === "number" ? body.totalBudgetUsd : Number.NaN,
+      title: typeof body.title === "string" ? body.title.slice(0, 200) : "",
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => createVariations(await getSql(), context.userId, data));
 
 export const startContentBatch = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
