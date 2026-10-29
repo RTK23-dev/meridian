@@ -378,6 +378,27 @@ try {
     });
   });
 
+  await check("G12", "variations: one source draft becomes a bounded batch of ready drafts, the template stays out of the batch list, and nothing starts", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    assert.match(await form.innerText(), /Nothing starts until you press Start batch/);
+    // A budget that cannot cover the count says why, and the button stays off.
+    await form.getByLabel("Total batch budget (USD)").fill("1");
+    await page.getByText(/cannot cover 3 videos/).waitFor();
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
+    await form.getByLabel("Total batch budget (USD)").fill("6");
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 3 draft videos in one batch\. Nothing has started/).waitFor();
+    const text = await page.locator("main").innerText();
+    for (const label of ["Problem first", "Result first", "Myth bust"]) assert.match(text, new RegExp(`Acceptance reference draft: ${label}`));
+    assert.equal(await page.getByText("Ready", { exact: true }).count() >= 3, true, "each new video is Ready, not running");
+    assert.doesNotMatch(text, /Started \d+ videos?\./, "creating the variations starts nothing");
+    // The reusable template is not offered as a draft to pick by hand, and the Start batch action is still waiting for a person.
+    await page.getByRole("checkbox", { name: "Acceptance reference draft" }).waitFor({ state: "detached", timeout: 10000 });
+    await page.getByRole("button", { name: "Start the batch" }).waitFor();
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });

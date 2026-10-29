@@ -49,6 +49,9 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   // In the guided Batch view a brand's batch shows only that brand's drafts, never another brand's session.
   const listed = sessions.data ?? [];
   const list = guided && initialBrandId ? listed.filter((item) => item.brandId === initialBrandId) : listed;
+  // The manual "pick draft videos" list leaves out a reusable template (videos were made from it) and the variations, which already sit in a batch.
+  const templateIds = new Set(listed.map((item) => item.sourceSessionId).filter((id): id is string => id !== null));
+  const manualDrafts = listed.filter((item) => item.status === "draft" && item.sourceSessionId === null && !templateIds.has(item.id));
   const selected = list.find((item) => item.id === selectedId) ?? (initialBrandId ? list.find((item) => item.brandId === initialBrandId) : null) ?? list[0] ?? null;
 
   if (!workspace?.active) return null;
@@ -113,7 +116,9 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
               <BatchCard
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-                drafts={list.filter((item) => item.brandId === selected.brandId && item.status === "draft").map((item) => ({ id: item.id, title: item.title }))}
+                drafts={manualDrafts.filter((item) => item.brandId === selected.brandId).map((item) => ({ id: item.id, title: item.title }))}
+                sources={listed.filter((item) => item.brandId === selected.brandId && item.status === "draft" && item.sourceSessionId === null).map((item) => ({ id: item.id, title: item.title }))}
+                onBatchCreated={() => void sessions.refetch()}
                 onOpenSession={setSelectedId}
               />
               {!guided ? <GovernanceCard

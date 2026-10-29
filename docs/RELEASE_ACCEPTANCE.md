@@ -59,6 +59,7 @@ whether the run passes or fails.
 | G9 | The Setup sources step does not ask for a key to read a page | not yet run on CI |
 | G10 | A pasted social URL says up front there is no connector and no key is used | not yet run on CI |
 | G11 | OpenRouter walk through the real actions with a recorded catalogue and transport (testing runtime only): no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does | not yet run on CI |
+| G12 | Video variations: one seeded source draft becomes a bounded batch of Ready drafts in the browser; a budget that cannot cover the count is refused with the reason; the template is not offered as a draft to pick; Start the batch is still waiting; no request leaves the local server | not yet run on CI |
 | M1 | Page heights on a clean account are recorded to `page-heights.json` and bounded (Setup, Settings, Market, Brand brain) | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,

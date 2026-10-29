@@ -106,13 +106,14 @@ type SessionRow = {
   priority: string | null;
   keep_genes: string;
   last_refusal: string;
+  source_session_id: string | null;
   started_at: unknown;
   created_at: unknown;
   updated_at: unknown;
 };
 
 const SESSION_COLUMNS = `s.id, s.organization_id, s.brand_id, s.title, s.status, s.engine_request_id, s.revision, s.prior_request_ids,
-  s.budget_usd, s.max_seconds, s.language, s.priority, s.keep_genes, s.last_refusal, s.started_at, s.created_at, s.updated_at`;
+  s.budget_usd, s.max_seconds, s.language, s.priority, s.keep_genes, s.last_refusal, s.source_session_id, s.started_at, s.created_at, s.updated_at`;
 
 function iso(value: unknown): string {
   return new Date(value as string | Date).toISOString();
@@ -138,6 +139,7 @@ function summaryOf(row: SessionRow): SessionSummary {
     brandId: row.brand_id,
     status: row.status === "started" ? "started" : "draft",
     engineRequestId: row.engine_request_id,
+    sourceSessionId: row.source_session_id,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };

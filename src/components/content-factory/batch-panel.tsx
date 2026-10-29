@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Input } from "@/components/ui";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Field, Input, SelectInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentBatch, getContentBatch, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
+import { createContentBatch, createContentVariations, getContentBatch, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import type { BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget } from "@/lib/meridian/content-factory/variations";
 
 const STATE_LABEL: Record<BatchItemState, string> = {
   ready: "Ready",
@@ -46,7 +47,9 @@ function budgetOf(text: string): number | null {
  * on its video and the batch goes on, and a start that would pass the budget stops the batch. Each video shows its own state, read from the
  * engine, and a failed one can be retried alone; its siblings are not changed.
  */
-export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brandId: string; brandName: string; drafts: Array<{ id: string; title: string }>; onOpenSession: (sessionId: string) => void }) {
+type DraftOption = { id: string; title: string };
+
+export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSession, onBatchCreated }: { brandId: string; brandName: string; drafts: DraftOption[]; sources?: DraftOption[]; onOpenSession: (sessionId: string) => void; onBatchCreated?: () => void }) {
   const { user } = useCurrentUserState();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -56,6 +59,10 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brand
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [itemError, setItemError] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState("");
+  const [count, setCount] = useState(String(DEFAULT_VARIATIONS));
+  const [total, setTotal] = useState("");
+  const [variationError, setVariationError] = useState<string | null>(null);
   const queryClient = useQueryClient();
 
   const batches = useQuery({
@@ -87,6 +94,32 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brand
       void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "The batch could not be made. Nothing was changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const chosenSource = sources.some((item) => item.id === sourceId) ? sourceId : (sources[0]?.id ?? "");
+  const variationCount = Number(count);
+  const variationTotal = total.trim() === "" ? Number.NaN : Number(total);
+  const variationSplit = splitBudget(variationTotal, variationCount);
+  const canVary = !busy && chosenSource !== "" && variationSplit.ok;
+
+  async function vary() {
+    setBusy(true);
+    setVariationError(null);
+    setNotice(null);
+    setItemError(null);
+    try {
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal } });
+      setSelectedId(made.id);
+      setTotal("");
+      await batches.refetch();
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
+      onBatchCreated?.();
+      setNotice(`Created ${made.items.length} draft videos in one batch. Nothing has started. Read the list, open any video, then press Start batch when you are ready.`);
+    } catch (error) {
+      setVariationError(error instanceof Error ? error.message : "The variations could not be made. Nothing was changed.");
     } finally {
       setBusy(false);
     }
@@ -143,6 +176,47 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession }: { brand
           Make a batch from draft videos and start them together under one budget. A start the engine refuses stays on its video with the reason. A start that would pass the budget stops the batch. A failed video can be retried alone.
         </CardDescription>
       </CardHeader>
+
+      <form
+        className="mt-4 space-y-3 border-b border-border pb-4"
+        aria-label="Create video variations"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canVary) void vary();
+        }}
+      >
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-semibold">Create video variations</legend>
+          <p className="text-sm text-fg-muted">
+            Pick a draft that has an uploaded reference video, attached Market research and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
+          </p>
+          {sources.length === 0 ? (
+            <p className="text-sm text-fg-muted">There is no draft to use as a source yet. Make a draft video with a reference, Market research and an instruction first.</p>
+          ) : (
+            <>
+              <Field label="Source draft" hint="The source stays as it is and can be used again.">
+                <SelectInput value={chosenSource} onChange={(event) => setSourceId(event.target.value)}>
+                  {sources.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                </SelectInput>
+              </Field>
+              <Input id="variations-count" type="number" min={MIN_VARIATIONS} max={MAX_VARIATIONS} step="1" label="Number of videos" hint={`Between ${MIN_VARIATIONS} and ${MAX_VARIATIONS}.`} value={count} onChange={(event) => setCount(event.target.value)} />
+              <Input
+                id="variations-budget"
+                type="number"
+                min="0"
+                step="0.01"
+                label="Total batch budget (USD)"
+                hint={`Split equally across the videos. Each needs at least $${(minItemCents() / 100).toFixed(2)}.`}
+                value={total}
+                onChange={(event) => setTotal(event.target.value)}
+              />
+            </>
+          )}
+        </fieldset>
+        {variationError !== null ? <p role="alert" className="text-sm text-danger">{variationError}</p> : null}
+        {sources.length > 0 && total.trim() !== "" && !variationSplit.ok ? <p className="text-sm text-danger">{variationSplit.reason}</p> : null}
+        <Button type="submit" disabled={!canVary}>Create video variations</Button>
+      </form>
 
       <form
         className="mt-4 space-y-3"

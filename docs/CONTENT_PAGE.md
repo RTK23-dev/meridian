@@ -37,7 +37,7 @@ The connect-account flow returns to `/brands/:id/accounts`, the only brand path 
 | Section | What it shows | Who sees it |
 | --- | --- | --- |
 | Create | Starting-mode cards, then the engine or Studio | Everyone. Engine presets are admin-only. |
-| Batch | The research-led production run builder and its status; opens on Make a batch | Admins only |
+| Batch | Video batches (create video variations from one reusable source draft, group drafts, start under one budget) and, as an advanced tab, the research-led run builder (opens on Make a batch) | Admins only |
 | Ideas | Ranked opportunities | Everyone |
 | Review | Holds waiting for a person | Everyone |
 | Library | Stored creatives | Everyone |
@@ -89,3 +89,13 @@ A section a person may not use falls back to Create.
 - Backend unification is not started: one run record, one ledger, one approval path, one provider router, one planner, one publish door.
 - Calibration is still its own page.
 - Line of record (which branch is the release line): owner decision.
+
+## Video variations
+
+A **reusable format** is a draft session with an uploaded reference video, at least one attached Market research record and a plain-language instruction (10 characters or more). **Create video variations** (Batch → Video batches) makes 2 to 20 original draft videos from it and groups them into one batch:
+
+- Each new draft copies the source's instructions and attachments by value. The reference video is shared by its storage record; no bytes are copied. It gets one of 20 fixed, distinct structural angles. Every angle's instruction says to use the reference only for structure and pacing, to make new wording and visuals, never to copy footage, words, voice or music, and to leave out claims the evidence does not support.
+- The batch budget is split exactly in cents. Each video needs at least the master cost floor (`MASTER_COST_FLOOR_USD`) and at most $1,000.
+- The server refuses, and writes nothing, when the source is not an admin-accessible draft in a brand, has no uploaded reference file (a post link is not a video), has no Market attachment, has no plain instruction, or has hand-written script lines (a copy would repeat them word for word). The checks run again under the source row lock.
+- Creating variations starts nothing: no engine request, no provider call. A person presses **Start the batch** after reading the list. The source stays unchanged and out of the batch (`createBatch` refuses a draft that videos were made from), so it can be used again. Each variation records its source (`source_session_id`) and angle (`variation_angle`).
+- Not verified: no live run. The result is draft videos and their budgets, not finished videos.

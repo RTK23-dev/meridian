@@ -107,6 +107,8 @@ export type SessionSummary = {
   brandId: string | null;
   status: SessionStatus;
   engineRequestId: string | null;
+  /** The reusable draft this video was made from by "Create video variations", or null. */
+  sourceSessionId: string | null;
   createdAt: string;
   updatedAt: string;
 };
