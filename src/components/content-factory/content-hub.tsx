@@ -152,7 +152,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   else if (activeBrandId) body = BRAND_VIEWS[current](activeBrandId);
   else body = noBrand;
 
-  const description = `Batch starts research-led runs. Create makes a video from a brief or reference. The two paths are still separate.${pickBrand ? " Each section works on the brand you pick." : ""}`;
+  const description = `Start from a reference video and Market research, make video drafts, and group them into a budget-limited batch. Research-led production is available as an advanced option.${pickBrand ? " Each section works on the brand you pick." : ""}`;
   const headerContext = pickBrand ? brandPicker : (
     <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2">
       <span className="text-xs font-semibold uppercase tracking-wide text-muted">Brand</span>
