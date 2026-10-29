@@ -120,10 +120,11 @@ const build = await run("build", "npm", ["run", "build"]);
 steps.push({ name: "build", result: build, status: build.code === 0 ? "pass" : "fail", detail: "npm run build" });
 
 // GATE_ACCEPTANCE_NODE_OPTIONS applies to this step only, for example a Chromium path wrapper on a machine whose browser build differs.
-const acceptance = await run("acceptance", "node", ["scripts/release-acceptance/run.mjs"], {
-  ...process.env,
-  NODE_OPTIONS: process.env.GATE_ACCEPTANCE_NODE_OPTIONS ?? process.env.NODE_OPTIONS ?? "",
-});
+const acceptanceEnv = { ...process.env };
+if (process.env.GATE_ACCEPTANCE_NODE_OPTIONS) {
+  acceptanceEnv.NODE_OPTIONS = process.env.GATE_ACCEPTANCE_NODE_OPTIONS;
+}
+const acceptance = await run("acceptance", "node", ["scripts/release-acceptance/run.mjs"], acceptanceEnv);
 const acceptanceCounts = acceptanceTotals(acceptance.output);
 if (acceptanceCounts.notRun) {
   steps.push({
