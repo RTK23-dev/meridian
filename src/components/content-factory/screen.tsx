@@ -78,14 +78,14 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"
-          reason="A session is one chat about one video. Give it a title to start. A brand is optional, but files are kept in a brand's Google Drive folder, so a session needs a brand to take files."
-          action={<NewSessionForm organizationId={organizationId} brands={brands} onCreated={(created) => { setSelectedId(created.id); }} />}
+          reason={guided ? "Start with one video draft. Give it a title, keep it on the current brand, and attach a reference Reel plus Market research in the brief. Create more drafts in the same format, then group them into one batch." : "A session is one chat about one video. Give it a title to start. A brand is optional, but files are kept in a brand folder, so a session needs a brand to take files."}
+          action={<NewSessionForm organizationId={organizationId} brands={brands} initialBrandId={initialBrandId} onCreated={(created) => { setSelectedId(created.id); }} />}
         />
       ) : null}
       {list.length > 0 && creating ? (
         <Card>
-          <CardHeader><CardTitle>New session</CardTitle><CardDescription>One chat, then one video.</CardDescription></CardHeader>
-          <NewSessionForm organizationId={organizationId} brands={brands} onCreated={(created) => { setSelectedId(created.id); setCreating(false); }} />
+          <CardHeader><CardTitle>New video draft</CardTitle><CardDescription>One draft contains one video brief and its references.</CardDescription></CardHeader>
+          <NewSessionForm organizationId={organizationId} brands={brands} initialBrandId={initialBrandId} onCreated={(created) => { setSelectedId(created.id); setCreating(false); }} />
         </Card>
       ) : null}
       {selected ? (
@@ -137,10 +137,10 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   );
 }
 
-function NewSessionForm({ organizationId, brands, onCreated }: { organizationId: string; brands: BrandOption[]; onCreated: (session: SessionSummary) => void }) {
+function NewSessionForm({ organizationId, brands, initialBrandId = null, onCreated }: { organizationId: string; brands: BrandOption[]; initialBrandId?: string | null; onCreated: (session: SessionSummary) => void }) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
-  const [brandId, setBrandId] = useState("");
+  const [brandId, setBrandId] = useState(initialBrandId ?? "");
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
