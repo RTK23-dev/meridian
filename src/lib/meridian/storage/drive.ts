@@ -18,6 +18,7 @@ import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { DriveUploadError, type ResumableTransport } from "./drive-resumable.ts";
 import type { DriveObjectRecord } from "./drive-object-record.ts";
 import { invalidateGoogleDriveAccessToken, resolveDriveAccess } from "./google-auth.ts";
+import { driveFolderIdSetting } from "../config/server-settings.ts";
 
 export type DriveFileMetadata = {
   fileId: string;
@@ -107,7 +108,7 @@ export class GoogleDriveClient {
   }
 
   private getRootFolderId(): string | undefined {
-    return process.env.MERIDIAN_DRIVE_FOLDER_ID?.trim();
+    return driveFolderIdSetting()?.trim();
   }
 
   /** The access token for a call, or an error that says why there is none. */

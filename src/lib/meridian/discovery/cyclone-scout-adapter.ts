@@ -24,7 +24,7 @@ import type {
   RawArtifact,
   DiscoveryQuery,
 } from "../sources/types.ts";
-import { cycloneGatewayUrlSetting } from "../config/server-settings.ts";
+import { cycloneDeviceIdSetting, cycloneGatewayUrlSetting } from "../config/server-settings.ts";
 
 export interface CycloneGatewayConfig {
   gatewayUrl: string;
@@ -84,13 +84,14 @@ export class CycloneScoutSourceAdapter implements SourceAdapter {
   constructor(options?: { config?: CycloneGatewayConfig; fetchFn?: typeof fetch }) {
     this.fetchFn = options?.fetchFn ?? globalThis.fetch;
     const gatewayUrl = cycloneGatewayUrlSetting();
+    const deviceId = cycloneDeviceIdSetting();
     if (options?.config) {
       this.config = options.config;
-    } else if (gatewayUrl && process.env.CYCLONE_DEVICE_ID) {
+    } else if (gatewayUrl && deviceId) {
       this.config = {
         gatewayUrl,
         apiKey: process.env.CYCLONE_API_KEY,
-        deviceId: process.env.CYCLONE_DEVICE_ID,
+        deviceId,
       };
     }
   }

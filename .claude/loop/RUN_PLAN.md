@@ -31,7 +31,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: every claim has a dated source link, or is labelled `hypothesis`. Note in the document that no owner reference reels were analysed (Q7).
 
 ### T3: Typed configuration for non-secret settings
-- Status: `active`. Batches 1 to 3 are done: 3 flags, 5 deployment settings, and 9 model, URL and list settings (32 reads in all). The ratchet stands at 44 direct reads in src/lib and src/routes. Secrets, DATABASE_URL, BETTER_AUTH_URL, NODE_ENV, LOCAL_DATA_DIR in db.ts and the two money caps are not moved yet.
+- Status: `active`. Batches 1 to 4 route every non-secret read in src/lib and src/routes through `config/server-settings.ts`, except three kept on purpose: NODE_ENV, DATABASE_URL and BETTER_AUTH_URL (the auth origin), plus MERIDIAN_LOCAL_DATA_DIR in db.ts. The secret reads (TOKEN_ENCRYPTION_KEY, EXTERNAL_SEMANTIC_KEY, EMAIL_API_KEY, CYCLONE_API_KEY, WEBHOOK_SECRET) remain: 25 reads, decision Q12. The ratchet stands at 38.
 - Put every non-secret `process.env` read outside `src/engine/` into one typed module under `src/lib/meridian/config/`, parsed once. Secret reads stay with the credential resolver, which is the allowlisted reader in `src/lib/meridian/credentials/resolve.test.ts`. Engine config readers are a follow-up task, not part of this one.
 - Work in batches of about 20 files, each batch green on its own.
 - Acceptance: no `process.env` read remains outside the config module and the resolver, and a test enforces it. The readiness report output is unchanged (a snapshot test). Test counts equal the baseline.

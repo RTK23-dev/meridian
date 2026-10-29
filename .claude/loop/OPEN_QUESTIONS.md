@@ -85,3 +85,10 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
   3. `thresholds@3` is unchanged. The lead decides whether this section warrants `thresholds@4`.
   4. A request with no script fails both hook checks as not evaluated (fail closed). The review status file says a brief's beat checks are not run. Question for the lead: can a brief reach the plan gate without a script? If it can, the hook checks should be skipped for it rather than failed.
   5. The on-screen text rate (5 to 10 words per second) is not checked, because the plan has no word timing on caption lines. It needs that timing first.
+
+## Q12: Where the secret reads should live
+- Kind: owner decision. Status: `open`.
+- Blocks: the last step of T3 (the 25 direct reads of the secret names in src/lib and src/routes). Nothing else.
+- Question: should these secret reads move behind one accessor in the credential folder, the same way the non-secret ones now go through `config/server-settings.ts`? The names are TOKEN_ENCRYPTION_KEY, EXTERNAL_SEMANTIC_KEY, EMAIL_API_KEY, CYCLONE_API_KEY and WEBHOOK_SECRET.
+- Recommendation: yes. The credential resolver is the allowlisted reader for keys (AGENTS rule 4). The move changes no value, and each accessor returns the raw value, as the readers get it today. A test can then pin the set of secret readers.
+- Options: (a) move them into a secret accessor in `src/lib/meridian/credentials/`, and extend the resolver allowlist; (b) leave them where they are, and the ratchet keeps counting them; (c) something else you name.

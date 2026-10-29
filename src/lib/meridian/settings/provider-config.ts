@@ -36,7 +36,7 @@ import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
-import { cycloneGatewayUrlSetting, hypitBaseUrlSetting, perceptionModelSetting } from "../config/server-settings.ts";
+import { cycloneDeviceIdSetting, cycloneGatewayUrlSetting, cycloneObservationBudgetSetting, hypitBaseUrlSetting, perceptionModelSetting } from "../config/server-settings.ts";
 
 /**
  * Every provider category the settings summary and the save path know. The keyed categories are the resolver's categories:
@@ -296,8 +296,8 @@ export async function getWorkspaceProviderSettings(
     keyFingerprint: fingerprint(cycloneApiKey),
     settings: {
       gatewayUrl: cycloneGatewayUrl || "http://127.0.0.1:4000",
-      deviceId: cycloneCreds?.customFields?.deviceId || process.env.CYCLONE_DEVICE_ID || "",
-      observationBudget: Number(cycloneCreds?.customFields?.observationBudget || process.env.CYCLONE_OBSERVATION_BUDGET || 20),
+      deviceId: cycloneCreds?.customFields?.deviceId || cycloneDeviceIdSetting() || "",
+      observationBudget: Number(cycloneCreds?.customFields?.observationBudget || cycloneObservationBudgetSetting() || 20),
       readOnlyMode: true,
     },
     capabilities: ["device_discovery", "page_card_observation", "session_binding", "zero_mutation_research"],

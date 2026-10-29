@@ -105,3 +105,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Ratchet: 59 to 44.
 - Not moved, on purpose: the two money caps (`OPENROUTER_DECISION_MAX_USD_PER_CALL`, `CYCLONE_OBSERVATION_BUDGET`), which need a careful look first; `MERIDIAN_LOCAL_DATA_DIR` in `db.ts`; `DATABASE_URL`, `BETTER_AUTH_URL` and `NODE_ENV`; and all secrets.
 - Checks: eslint clean; typecheck exit 0; the 52 suites that cover the touched modules and the settings module, 458 of 458 passing (3 skipped, 0 failing).
+
+## 2026-10-29 04:50 UTC: T3 batch 4, the last non-secret reads
+
+- `server-settings.ts` gained four accessors: the Cyclone device id, the Cyclone observation budget, the OpenRouter per-call ceiling, and the Drive folder id. Each returns the raw value.
+- The two money caps were looked at before they moved. Only the read moved. `decisionCallCapUsd` keeps its parsing and its refusal (a value that is not a positive number sends nothing), and the Cyclone observation budget keeps its default of 20. The read is the only change.
+- Routed through them: 6 reads in four files (`discovery/cyclone-scout-adapter.ts`, `settings/provider-config.ts`, `decisions/decision-catalog.ts`, `storage/drive.ts`). The Cyclone adapter reads its device id once in the constructor, because a call does not narrow the type.
+- Ratchet: 44 down to 38. The non-secret reads are now all routed, except NODE_ENV, DATABASE_URL, BETTER_AUTH_URL and MERIDIAN_LOCAL_DATA_DIR, which stay on purpose.
+- The secret reads remain (25 reads, five names). Q12 asks where they should live.
+- Checks: eslint clean; typecheck exit 0; 351 tests, 350 passing, 1 skipped, none failing, across the settings, environment-contract, Cyclone, Drive and decisions suites.

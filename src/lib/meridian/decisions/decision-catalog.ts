@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import type { DecisionQuestionKind } from "./types.ts";
+import { openRouterDecisionMaxUsdPerCallSetting } from "../config/server-settings.ts";
 
 export const OPENROUTER_MODELS_ENDPOINT = "https://openrouter.ai/api/v1/models";
 export const DECISION_CATALOG_TIMEOUT_MS = 15_000;
@@ -210,7 +211,7 @@ export const DEFAULT_DECISION_MAX_USD_PER_CALL = 0.05;
  * refused, so a mistyped limit can never allow more than it says.
  */
 export function decisionCallCapUsd(): { ok: true; usd: number } | { ok: false; reason: string } {
-  const raw = process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
+  const raw = openRouterDecisionMaxUsdPerCallSetting();
   if (raw === undefined || raw.trim() === "") return { ok: true, usd: DEFAULT_DECISION_MAX_USD_PER_CALL };
   const usd = Number(raw);
   if (!Number.isFinite(usd) || usd <= 0) {

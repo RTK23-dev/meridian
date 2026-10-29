@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   artifactHostAllowlistSetting,
+  cycloneDeviceIdSetting,
   cycloneGatewayUrlSetting,
+  cycloneObservationBudgetSetting,
+  driveFolderIdSetting,
+  openRouterDecisionMaxUsdPerCallSetting,
   emailApiUrlSetting,
   externalSemanticDimensionsSetting,
   externalSemanticModelSetting,
@@ -63,6 +67,10 @@ describe("the deployment setting accessors return the raw value", () => {
     ["externalSemanticDimensionsSetting", externalSemanticDimensionsSetting, "EXTERNAL_SEMANTIC_DIMENSIONS"],
     ["openRouterDecisionsModelSetting", openRouterDecisionsModelSetting, "OPENROUTER_DECISIONS_MODEL"],
     ["artifactHostAllowlistSetting", artifactHostAllowlistSetting, "MERIDIAN_ARTIFACT_HOST_ALLOWLIST"],
+    ["cycloneDeviceIdSetting", cycloneDeviceIdSetting, "CYCLONE_DEVICE_ID"],
+    ["cycloneObservationBudgetSetting", cycloneObservationBudgetSetting, "CYCLONE_OBSERVATION_BUDGET"],
+    ["openRouterDecisionMaxUsdPerCallSetting", openRouterDecisionMaxUsdPerCallSetting, "OPENROUTER_DECISION_MAX_USD_PER_CALL"],
+    ["driveFolderIdSetting", driveFolderIdSetting, "MERIDIAN_DRIVE_FOLDER_ID"],
   ] as const;
 
   for (const [name, accessor, variable] of SETTINGS) {
@@ -77,7 +85,7 @@ describe("the deployment setting accessors return the raw value", () => {
 // needs goes through an accessor in this folder, and when a reader moves its count comes down here too, so the number only falls.
 const RATCHET_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const APP_ROOTS = ["src/lib", "src/routes"];
-const DIRECT_READS_MAX = 44;
+const DIRECT_READS_MAX = 38;
 
 function appSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
