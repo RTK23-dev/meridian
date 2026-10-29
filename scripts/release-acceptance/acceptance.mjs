@@ -258,10 +258,22 @@ try {
   });
   await page.screenshot({ path: join(out, "market-first-run-desktop.png"), fullPage: true });
 
+  // The budget field takes focus in a React effect that runs after the field appears, so a read made the moment the field is visible can
+  // come before the focus. Wait up to five seconds for the focus to land. A field that never takes focus still fails the check below.
+  const waitForBudgetFocus = () =>
+    page
+      .waitForFunction(
+        () => document.activeElement?.tagName === "INPUT" && document.getElementById("monthly-budget")?.contains(document.activeElement) === true,
+        undefined,
+        { timeout: 5000 },
+      )
+      .catch(() => {});
+
   await check("G7", "the monthly budget is one named field that /settings#monthly-budget scrolls to and focuses", async () => {
     await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
     const field = page.getByLabel("Monthly budget (USD)");
     await field.waitFor();
+    await waitForBudgetFocus();
     assert.equal(await field.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
     const text = await page.locator("main").innerText();
     assert.match(text, /not your OpenRouter account balance/);
@@ -341,6 +353,7 @@ try {
     await link.click();
     const budget = page.getByLabel("Monthly budget (USD)");
     await budget.waitFor();
+    await waitForBudgetFocus();
     assert.equal(await budget.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
     await budget.fill("5");
     await page.getByRole("button", { name: "Save budget" }).click();

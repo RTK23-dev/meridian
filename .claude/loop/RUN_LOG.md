@@ -58,3 +58,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Gaps recorded: no official Shorts, Reels or TikTok organic retention benchmark; no peer-reviewed study of the first three seconds; the Dost paper's findings not read; no owner reference reels analysed (Q7).
 - The proposed defaults for T12 are in section 4 of the note, each with its label.
 - Next unit: T12, the hook timing rules, as configuration with these defaults.
+
+## 2026-10-29 02:12 UTC: release acceptance failed in CI on b00266c, G11
+
+- CI: `release-acceptance` failed on b00266c (run 40803990814). The failing check was G11: "the budget field must have focus" (`false !== true`). The same check passed on 268bc27 and on earlier heads, and the commit under test changes only docs and loop state.
+- Local: the acceptance passed 25 of 25 before the change, and again after it. The failure did not reproduce.
+- Likely cause, not reproduced: the budget field takes focus in a React effect that runs after the field appears (`setup-panel.tsx`, around line 151). The check read focus as soon as the field was visible, so on a slower runner the read can come before the focus. The same read is in G7.
+- Change: `scripts/release-acceptance/acceptance.mjs` waits up to five seconds for the focus to land, in G7 and G11, before the same assertion. A field that never takes focus still fails the check.
