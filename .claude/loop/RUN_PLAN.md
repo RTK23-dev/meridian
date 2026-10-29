@@ -21,7 +21,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 ## Tasks
 
 ### T1: Stability gate
-- Status: `active`, verdict blocked. The gate runs typecheck, lint and the scripts tests, and each passes. The source-tests step stopped without a verdict three times (gate-run2, gate-run3, gate-run4), and CI is green on the same head (run 40797459592 on b9483a5). Decision Q10 changes how the source tests run locally. Depends on: none.
+- Status: `parked` (three failed tries, and then more; see Q10). The gate has stopped without a verdict twice more: at 06:49:55, at the start of source group 4, and at 07:14:00, in source group 0 of a detached re-run. Each group was run on its own and passes, and the steps are recorded in section 10 of `docs/STATE_2026-10-28.md`. The single-process verdict is open. The gate runs typecheck, lint and the scripts tests, and each passes. The source-tests step stopped without a verdict three times (gate-run2, gate-run3, gate-run4), and CI is green on the same head (run 40797459592 on b9483a5). Decision Q10 changes how the source tests run locally. Depends on: none.
 - Add `scripts/gate.mjs` and an `npm run gate` script. It runs, in order: typecheck, lint, the scripts tests, the source tests, the build, and the release acceptance. It prints each count and compares it with the baseline above. The engine dry run is reported on its own line as `known red (Q2)`.
 - Acceptance: the gate runs on the current head and prints the baseline counts. Record its output summary in `RUN_LOG.md`.
 
@@ -80,7 +80,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Acceptance: 25 of 25, or `not run: browser` with the reason.
 
 ### T14: Handoff
-- Status: `pending`. Depends on: all tasks above.
+- Status: `done`. Section 10 of `docs/STATE_2026-10-28.md` carries the measured numbers, and `docs/FIRST_TEST_RUN.md` section 9 is the owner checklist. The gate's single-process verdict stays open under T1. Depends on: all tasks above.
 - Update `docs/STATE_2026-10-28.md` section 10 with the new numbers. Update `docs/FIRST_TEST_RUN.md` with an owner checklist for the live steps. Run the gate once more on the final commit and record it.
 
 ## Parked (owner decisions)

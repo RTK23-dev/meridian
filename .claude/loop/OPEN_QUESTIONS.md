@@ -75,6 +75,7 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Decision by the loop: the gate runs the source tests in the six shard groups that CI uses, one after another, and writes each group's totals. Each group is a smaller process. The gate's total must still reach the baseline of 6,649 passing tests.
 - Reason: the single process is the only step that has stopped, and CI already runs it in six groups.
 - What would change if you chose otherwise: if you would rather the gate report CI's verdict as the local verdict, say so, and T1 closes with that.
+- Update, 07:22 UTC: the single-process gate stopped without a verdict twice more: at 06:49:55, at the start of source group 4, and at 07:14:00, in source group 0 of a detached re-run. Each group passes when run on its own, with the gate's own arguments, and no test process signals its group. The question stands. Your answer closes T1 on CI's verdict, or keeps the local gate open.
 
 ## Q11: Decisions the loop took in T12, for the lead to confirm
 - Kind: technical decisions. Status: `decided by loop, confirm`.
