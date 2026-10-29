@@ -66,3 +66,11 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
   - Deny: force pushes, `git reset --hard`, rebase, amend, `npm run e2e*`, `npm run engine:e1` without `--dry-run`, `npm publish`, installs and `npm add`/`uninstall`, docker, and reads or writes of `.env` files.
 - Alternative: run the session in Auto mode from the mode dropdown, if your organisation allows it.
 - Options: (a) add the rules above; (b) run in Auto mode; (c) keep approving prompts as they come.
+
+## Q10: The local source-tests step stops without a verdict
+- Kind: technical ambiguity. Status: `decided by loop, confirm`.
+- Blocks: T1's local verdict. Nothing else.
+- What happened: the full gate stopped during the source-tests step three times (00:30, 00:43, 00:55). Each time the log had no stop message, so the process was killed hard. Memory was not short. CI runs the same tests in six shards, and they pass on the same head.
+- Decision by the loop: the gate runs the source tests in the six shard groups that CI uses, one after another, and writes each group's totals. Each group is a smaller process. The gate's total must still reach the baseline of 6,649 passing tests.
+- Reason: the single process is the only step that has stopped, and CI already runs it in six groups.
+- What would change if you chose otherwise: if you would rather the gate report CI's verdict as the local verdict, say so, and T1 closes with that.

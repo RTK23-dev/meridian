@@ -21,7 +21,7 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 ## Tasks
 
 ### T1: Stability gate
-- Status: `pending`. Depends on: none.
+- Status: `active`, verdict blocked. The gate runs typecheck, lint and the scripts tests, and each passes. The source-tests step stopped without a verdict three times (gate-run2, gate-run3, gate-run4), and CI is green on the same head (run 40797459592 on b9483a5). Decision Q10 changes how the source tests run locally. Depends on: none.
 - Add `scripts/gate.mjs` and an `npm run gate` script. It runs, in order: typecheck, lint, the scripts tests, the source tests, the build, and the release acceptance. It prints each count and compares it with the baseline above. The engine dry run is reported on its own line as `known red (Q2)`.
 - Acceptance: the gate runs on the current head and prints the baseline counts. Record its output summary in `RUN_LOG.md`.
 
@@ -59,12 +59,12 @@ The browser step needs the preinstalled Chromium. If it cannot launch, the check
 - Status: `pending`. Depends on: T1. Same rules as T7.
 
 ### T10: Preset inventory and proposal (document only)
-- Status: `pending`. Depends on: none.
+- Status: `done`, in `docs/engine/PRESET_MODEL_PROPOSAL.md` (commit in the run log, 01:20 UTC). Depends on: none.
 - Write `docs/engine/PRESET_MODEL_PROPOSAL.md`. List every look (`LOOK_PRESETS` in `src/engine/contracts/edl.ts`, and the overlay table in `src/engine/compose/compiler.ts`), every repurpose category and option (`src/engine/repurpose/catalog.ts`), and the caption and grammar fields that behave like presets. Each entry gets a file and line reference. Say which parts need a contract change. Do not edit `src/`.
 - Acceptance: the list is complete against a grep, and any contract change is named as a question for Q1.
 
 ### T11: One preset registry, on the existing contracts
-- Status: `pending`. Depends on: T10.
+- Status: `pending`, unblocked by T10. Depends on: T10.
 - One registry module that every look and option resolves through. An unknown preset is refused with a typed error (fail closed). The look table in the compiler is replaced by the registry.
 - No contract change in this task. Fields the proposal says are missing are not added here (Q1).
 - Acceptance: one test per preset. The compose snapshots are unchanged. A grep shows no second look table.
