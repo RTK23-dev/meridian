@@ -5,10 +5,10 @@ import { PlainErrorState } from "@/components/plain-error";
 import { BatchReview } from "./batch-review";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentBatch, createContentVariations, getContentBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
-import { batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
-import { describeFormat } from "@/lib/meridian/content-factory/research-format";
-import { DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget } from "@/lib/meridian/content-factory/variations";
+import { createContentBatch, createContentVariations, getContentBatch, createContentDemoBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
+import { batchManifestJson, batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { describeFormat, researchAngles } from "@/lib/meridian/content-factory/research-format";
+import { angleInstruction, DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget, VARIATION_ANGLES } from "@/lib/meridian/content-factory/variations";
 
 const STATE_LABEL: Record<BatchItemState, string> = {
   ready: "Ready",
@@ -66,6 +66,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const [total, setTotal] = useState("");
   const [variationError, setVariationError] = useState<string | null>(null);
   const [useResearch, setUseResearch] = useState(false);
+  const [approvedSample, setApprovedSample] = useState(false);
   const queryClient = useQueryClient();
 
   const batches = useQuery({
@@ -118,7 +119,11 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const variationCount = Number(count);
   const variationTotal = total.trim() === "" ? Number.NaN : Number(total);
   const variationSplit = splitBudget(variationTotal, variationCount);
-  const canVary = !busy && chosenSource !== "" && variationSplit.ok;
+  const canVary = !busy && chosenSource !== "" && variationSplit.ok && approvedSample;
+
+  // The first video as it would be made: its angle, its share of the budget and the exact instruction it is given. Nothing is generated.
+  const sampleAngle = (useResearch && format.data?.ok ? researchAngles(format.data.format, Math.max(1, variationCount || 1))[0] : undefined) ?? VARIATION_ANGLES[0];
+  const sampleShare = variationSplit.ok ? (variationSplit.cents[0] ?? 0) / 100 : null;
 
   async function vary() {
     setBusy(true);
@@ -126,9 +131,10 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
     setNotice(null);
     setItemError(null);
     try {
-      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true } });
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample } });
       setSelectedId(made.id);
       setTotal("");
+      setApprovedSample(false);
       await batches.refetch();
       void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
       onBatchCreated?.();
@@ -151,6 +157,39 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+  }
+
+  function download(name: string, type: string, text: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadManifest() {
+    if (!detail.data) return;
+    download(`${detail.data.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "batch"}-manifest.json`, "application/json", batchManifestJson(detail.data, new Date().toISOString()));
+  }
+
+  async function tryDemo() {
+    setBusy(true);
+    setFormError(null);
+    setNotice(null);
+    try {
+      const made = await createContentDemoBatch({ data: { brandId } });
+      setSelectedId(made.id);
+      await batches.refetch();
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
+      setNotice("The demo batch is open below. It is fixture data: no video was made and nothing was spent.");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "The demo could not be opened.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function start() {
@@ -204,6 +243,11 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
           Make a batch from draft videos and start them together under one budget. A start the engine refuses stays on its video with the reason. A start that would pass the budget stops the batch. A failed video can be retried alone.
         </CardDescription>
       </CardHeader>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-dashed border-border p-3 text-sm">
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => void tryDemo()}>Try a demo batch</Button>
+        <p className="min-w-0 flex-1 text-fg-muted">Opens a batch of fixture videos so you can try review and export with no key and no cost. Every part is marked DEMO. No video is made.</p>
+      </div>
 
       <form
         className="mt-4 space-y-3 border-b border-border pb-4"
@@ -260,6 +304,22 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                 value={total}
                 onChange={(event) => setTotal(event.target.value)}
               />
+              {chosenSource !== "" ? (
+                <div className="space-y-2 rounded-md border border-border p-3 text-sm" aria-label="Sample of the first video">
+                  <p className="font-semibold">Sample of the first video</p>
+                  <p className="text-fg-muted">This is what the first draft would be. Nothing is made yet, and the other videos differ only in their angle.</p>
+                  <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
+                    <dt className="text-fg-muted">Angle</dt><dd className="font-semibold">{sampleAngle?.label}</dd>
+                    <dt className="text-fg-muted">Budget</dt><dd>{sampleShare === null ? "Enter a total budget to see each video's share." : `${money.format(sampleShare)} of the total`}</dd>
+                    <dt className="text-fg-muted">Copied from the source</dt><dd>Its plain instructions, its Market research records and its reference video file (shared, not copied).</dd>
+                    <dt className="text-fg-muted">Added instruction</dt><dd className="[overflow-wrap:anywhere]">{sampleAngle ? angleInstruction(sampleAngle) : ""}</dd>
+                  </dl>
+                  <label className="inline-flex min-h-11 items-center gap-2 font-semibold">
+                    <input type="checkbox" checked={approvedSample} onChange={(event) => setApprovedSample(event.target.checked)} />
+                    I have read the sample and approve this format
+                  </label>
+                </div>
+              ) : null}
             </>
           )}
         </fieldset>
@@ -328,6 +388,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
       {detail.data ? (
         <section aria-labelledby="batch-detail-title" className="mt-5 space-y-3">
           <h3 id="batch-detail-title" className="text-sm font-semibold">{detail.data.title}</h3>
+          {detail.data.demo ? <p role="note" className="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm font-semibold">DEMO: fixture data. No video was rendered and no provider was called. Nothing here is a real result.</p> : null}
           <p className="text-sm text-fg-muted">
             Budget {money.format(detail.data.budgetUsd)} · committed {money.format(detail.data.committedUsd)} by the videos the engine has taken.
           </p>
@@ -338,7 +399,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
             {items.map((item) => (
               <li key={item.sessionId} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0 space-y-1">
-                  <p className="font-semibold">{item.title}</p>
+                  <p className="font-semibold">{item.title}{item.demo ? <Badge variant="warning" className="ml-2">DEMO</Badge> : null}</p>
                   <p className="text-fg-muted">{item.reason}</p>
                   {item.budgetUsd === null ? <p className="text-fg-muted">No budget set on this video.</p> : null}
                 </div>
@@ -358,8 +419,9 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
             <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadSummary}>Download batch summary (CSV)</Button>
+            <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadManifest}>Download batch manifest (JSON)</Button>
           </div>
-          <p className="text-sm text-fg-muted">The summary lists each video with the state the engine reports. It holds no video files, and a video that is not delivered is never shown as finished.</p>
+          <p className="text-sm text-fg-muted">The summary lists each video with the state the engine reports. It holds no video files, and a video that is not delivered is never shown as finished. The manifest lists the engine and manifest ids of each delivered video; open a video to read its delivered file.</p>
           {!canStart ? <p className="text-sm text-fg-muted">Nothing in this batch is a draft, so there is nothing to start.</p> : null}
         </section>
       ) : null}

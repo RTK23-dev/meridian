@@ -113,3 +113,9 @@ The brand's analyzed ads already carry model labels for structure, opening move,
 - These are counts of labels a model gave, so they are INFERRED. They show what is common, not what works. They are read per brand and per workspace; another brand's patterns are never used.
 - Not verified live: the labels come from the existing analysis step, which has not been run against a live provider in this repository.
 
+## Format sample, demo mode and export
+
+- **Sample and approval.** Before the variations are made, the form shows a sample of the first video: its angle, its share of the budget, what it copies from the source, and the exact instruction it is given. Nothing is generated. The batch cannot be made until the person ticks "I have read the sample and approve this format", and the server refuses a request without that approval and writes nothing.
+- **Demo mode.** **Try a demo batch** opens a batch of fixture videos (two "delivered", one draft) with no key, no provider and no cost. Every row is marked demo (`demo = true`), titled "DEMO (fixture)", and the page, the CSV and the manifest all say so. No video file exists for them. Hook history and economics leave demo rows out. A brand has one demo batch.
+- **Export.** A batch downloads as a CSV summary and as a JSON manifest (`meridian.batch-manifest`): each video's position, title, angle, state, reason, approval, budget, attempts, engine request id and delivered manifest id. It holds no video file and no link, because a delivered file is read from its own video screen. Finished MP4s and captions are therefore not bundled here yet: that needs a live run to verify.
+

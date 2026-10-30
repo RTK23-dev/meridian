@@ -47,7 +47,7 @@ export async function readStartedHooks(sql: Sql, organizationId: string, brandId
         where a.organization_id = s.organization_id and a.request_id = s.engine_request_id and a.type = 'production_request'
         order by a.created_at desc limit 1) as requested
     from content_factory_sessions s
-    where s.organization_id = ${organizationId} and s.brand_id = ${brandId} and s.status = 'started'
+    where s.organization_id = ${organizationId} and s.brand_id = ${brandId} and s.status = 'started' and not s.demo
     order by s.started_at desc nulls last, s.id
   `;
   return rows.map((row) => ({

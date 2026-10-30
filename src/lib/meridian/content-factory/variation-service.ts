@@ -68,8 +68,10 @@ async function audit(sql: Sql, entry: { organizationId: string; brandId: string;
 export async function createVariations(
   sql: Sql,
   userId: string,
-  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean },
+  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean },
 ): Promise<BatchSummary> {
+  // The person reads a sample of the format first and approves it. Without that approval nothing is written.
+  if (input.approvedSample !== true) throw new Error("Read the sample video and approve the format first. Nothing was created.");
   const split = splitBudget(input.totalBudgetUsd, input.count);
   if (!split.ok) throw new Error(split.reason);
   const source = await sessionAccess(sql, userId, input.sourceSessionId);
@@ -207,7 +209,7 @@ export async function createVariations(
       action: "content_factory.variations_batch_created",
       objectType: "content_factory_batch",
       objectId: batchId,
-      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length) },
+      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true" },
     });
   });
   return getBatch(sql, userId, { batchId });

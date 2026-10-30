@@ -27,6 +27,7 @@ import {
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
 import { createVariations, researchFormatOf, variationSourcesOf } from "./variation-service.ts";
+import { createDemoBatch } from "./demo-batch.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
@@ -117,10 +118,22 @@ export const createContentVariations = createServerFn({ method: "POST" })
       totalBudgetUsd: typeof body.totalBudgetUsd === "number" ? body.totalBudgetUsd : Number.NaN,
       title: typeof body.title === "string" ? body.title.slice(0, 200) : "",
       useResearchFormat: body.useResearchFormat === true,
+      approvedSample: body.approvedSample === true,
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createVariations(await getSql(), context.userId, data));
+
+/** A batch of fixture videos for trying review and export with no key and no cost. Every row is marked demo. Admins of the brand's workspace only. */
+export const createContentDemoBatch = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const brandId = typeof body.brandId === "string" ? body.brandId.trim().slice(0, 80) : "";
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => createDemoBatch(await getSql(), context.userId, data));
 
 /** The brand's drafts that variations could be made from, each with the reason it cannot be (or null). Admins of the brand's workspace only. */
 export const getContentVariationSources = createServerFn({ method: "POST" })

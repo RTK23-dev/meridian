@@ -391,6 +391,11 @@ try {
     await page.getByText(/cannot cover 3 videos/).waitFor();
     assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
     await form.getByLabel("Total batch budget (USD)").fill("6");
+    // The sample of the first video is shown, and the batch cannot be made until the person approves it.
+    await form.getByLabel("Sample of the first video").waitFor();
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Angle\s*Problem first/);
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true, "no approval, no batch");
+    await form.getByLabel("I have read the sample and approve this format").check();
     await form.getByRole("button", { name: "Create video variations" }).click();
     await page.getByText(/Created 3 draft videos in one batch\. Nothing has started/).waitFor();
     // The batch detail loads after the notice, so wait for its first item before reading the list.
@@ -427,6 +432,8 @@ try {
     await panel.getByRole("checkbox").check();
     await form.getByLabel("Number of videos").fill("4");
     await form.getByLabel("Total batch budget (USD)").fill("8");
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Angle\s*Problem solution, question opening/);
+    await form.getByLabel("I have read the sample and approve this format").check();
     await form.getByRole("button", { name: "Create video variations" }).click();
     await page.getByText(/Created 4 draft videos in one batch\. Nothing has started/).waitFor();
     await page.getByText("Acceptance reference draft: Problem solution, question opening", { exact: true }).first().waitFor();
@@ -472,6 +479,53 @@ try {
     assert.match(await main.innerText(), /Google Drive/);
     assert.match(await main.innerText(), /Uploading needs Google Drive to be connected/);
     assert.equal(await page.getByLabel("Choose files").count() >= 1, true, "the upload control is still there");
+  });
+
+  await check("G16", "one journey: Setup, Market, research format, sample, approve, batch, demo review, export, with nothing started and nothing leaving the server", async () => {
+    // Start: the two required steps and what to skip.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const setupText = await page.locator("main").innerText();
+    assert.match(setupText, /What to fill in, and what to skip/);
+    assert.match(setupText, /Create your first brand/);
+    assert.match(setupText, /Choose a decision engine/);
+    // Research: Market explains the page URL, and shows what each run did.
+    await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
+    assert.match(await page.locator("main").innerText(), /Read this page|exact page/i);
+    // Format and sample, then approval gates the batch.
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    assert.match(await page.getByLabel("What your research shows").innerText(), /Structure: problem solution/);
+    await form.getByLabel("Number of videos").fill("2");
+    await form.getByLabel("Total batch budget (USD)").fill("3");
+    await form.getByLabel("Sample of the first video").waitFor();
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 2 draft videos in one batch\. Nothing has started/).waitFor();
+    assert.match(await page.getByLabel("Videos by state").innerText(), /2 ready/);
+    // Demo: the fixture batch is opened from the page itself, marked DEMO, reviewed and exported.
+    await page.getByRole("button", { name: "Try a demo batch" }).click();
+    await page.getByRole("heading", { name: "DEMO (fixture) batch" }).waitFor();
+    await page.getByRole("note").filter({ hasText: /DEMO: fixture data/ }).waitFor();
+    const review = page.getByRole("region", { name: "Review delivered videos" });
+    await review.waitFor();
+    const before = await review.innerText();
+    if (!/Approved/.test(before)) await review.getByRole("button", { name: /Approve DEMO \(fixture\) video A/ }).click();
+    await review.getByText("Approved", { exact: true }).first().waitFor();
+    // Export: the CSV and the manifest hold ids and states, no file or link, and say DEMO.
+    const { readFile } = await import("node:fs/promises");
+    const [csvDownload] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    assert.match(await readFile(await csvDownload.path(), "utf8"), /DEMO \(fixture\) video A/);
+    const [manifestDownload] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch manifest (JSON)" }).click()]);
+    const manifest = JSON.parse(await readFile(await manifestDownload.path(), "utf8"));
+    assert.equal(manifest.kind, "meridian.batch-manifest");
+    assert.equal(manifest.demo, true);
+    assert.match(manifest.notice, /^DEMO: fixture data/);
+    assert.ok(manifest.videos.every((video) => video.demo === true));
+    assert.doesNotMatch(JSON.stringify(manifest), /https?:/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 
   await check("D1", "no request left the local server during the run", async () => {

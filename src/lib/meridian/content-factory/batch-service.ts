@@ -32,6 +32,10 @@ export type BatchItemSummary = {
   angle: string | null;
   /** The person's decision on a delivered video: approved, rejected or not decided. Null while the video is not delivered. */
   approval: "approved" | "rejected" | "not_decided" | null;
+  /** The engine request and delivered manifest ids, when the engine has them. Null otherwise. */
+  engineRequestId: string | null;
+  manifestId: string | null;
+  demo: boolean;
 };
 
 export type BatchSummary = {
@@ -39,6 +43,8 @@ export type BatchSummary = {
   brandId: string;
   title: string;
   budgetUsd: number;
+  /** True for the fixture batch from demo mode. Its videos are not real. */
+  demo: boolean;
   /** The budgets of the items the engine has taken. Never more than the batch budget. */
   committedUsd: number;
   items: BatchItemSummary[];
@@ -46,7 +52,7 @@ export type BatchSummary = {
 
 export type BatchStartOutcome = { started: number; refused: number; stoppedAtBudget: boolean; batch: BatchSummary };
 
-type BatchRow = { id: string; organization_id: string; brand_id: string; title: string; budget_usd: string | number };
+type BatchRow = { id: string; organization_id: string; brand_id: string; title: string; budget_usd: string | number; demo: boolean };
 
 type ItemRow = {
   session_id: string;
@@ -58,6 +64,7 @@ type ItemRow = {
   budget_usd: string | number | null;
   engine_request_id: string | null;
   variation_angle: string | null;
+  demo: boolean;
 };
 
 function refusalsOf(value: unknown): string[] {
@@ -78,12 +85,12 @@ function budgetOf(value: string | number | null): number | null {
 
 async function loadBatch(sql: Sql, batchId: string): Promise<{ batch: BatchRow; items: ItemRow[] }> {
   const batches = await sql<BatchRow>`
-    select id, organization_id, brand_id, title, budget_usd from content_factory_batches where id = ${batchId} limit 1
+    select id, organization_id, brand_id, title, budget_usd, demo from content_factory_batches where id = ${batchId} limit 1
   `;
   const batch = batches[0];
   if (!batch) throw new Error("That batch is not found.");
   const items = await sql<ItemRow>`
-    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle
+    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle, s.demo
     from content_factory_batch_items i
     join content_factory_sessions s on s.id = i.session_id
     where i.batch_id = ${batchId}
@@ -130,6 +137,9 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       attempts: view.attempts,
       draft: item.session_status === "draft",
       angle: item.variation_angle,
+      engineRequestId: item.engine_request_id,
+      manifestId: engine?.status === "delivered" ? engine.manifestId : null,
+      demo: item.demo === true,
       approval: view.state === "delivered" && engine?.status === "delivered" && item.engine_request_id !== null
         ? approvalStateFor(approvals.get(item.session_id) ?? [], item.engine_request_id, engine.manifestId).status
         : null,
@@ -140,6 +150,7 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
     brandId: batch.brand_id,
     title: batch.title,
     budgetUsd: Number(batch.budget_usd),
+    demo: batch.demo === true,
     committedUsd: committedUsd(items.map(spendOf)),
     items: views,
   };

@@ -89,21 +89,21 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   const noBrand = await source({ id: "s_nobrand", brand: null });
   const before = await counts();
 
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 1, totalBudgetUsd: 10 }), /between 2 and 20/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 21, totalBudgetUsd: 100 }), /between 2 and 20/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 3, totalBudgetUsd: 0.5 }), /cannot cover 3 videos/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 3, totalBudgetUsd: Number.NaN }), /positive amount/);
-  await assert.rejects(createVariations(db.sql, MEMBER, { sourceSessionId: ok, count: 3, totalBudgetUsd: 10 }));
-  await assert.rejects(createVariations(db.sql, OUTSIDER, { sourceSessionId: ok, count: 3, totalBudgetUsd: 10 }), /not available to you/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: "nope", count: 3, totalBudgetUsd: 10 }), /not available to you/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noRef, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: wrongMimeReference, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: missingKeyReference, count: 3, totalBudgetUsd: 10 }), /uploaded reference video/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noMarket, count: 3, totalBudgetUsd: 10 }), /Market research/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: emptyMarket, count: 3, totalBudgetUsd: 10 }), /Market research/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noInstruction, count: 3, totalBudgetUsd: 10 }), /plain-language instruction/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: scripted, count: 3, totalBudgetUsd: 10 }), /script lines/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noBrand, count: 3, totalBudgetUsd: 10 }), /no brand/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 1, totalBudgetUsd: 10, approvedSample: true }), /between 2 and 20/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 21, totalBudgetUsd: 100, approvedSample: true }), /between 2 and 20/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 3, totalBudgetUsd: 0.5, approvedSample: true }), /cannot cover 3 videos/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 3, totalBudgetUsd: Number.NaN, approvedSample: true }), /positive amount/);
+  await assert.rejects(createVariations(db.sql, MEMBER, { sourceSessionId: ok, count: 3, totalBudgetUsd: 10, approvedSample: true }));
+  await assert.rejects(createVariations(db.sql, OUTSIDER, { sourceSessionId: ok, count: 3, totalBudgetUsd: 10, approvedSample: true }), /not available to you/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: "nope", count: 3, totalBudgetUsd: 10, approvedSample: true }), /not available to you/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noRef, count: 3, totalBudgetUsd: 10, approvedSample: true }), /uploaded reference video/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: wrongMimeReference, count: 3, totalBudgetUsd: 10, approvedSample: true }), /uploaded reference video/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: missingKeyReference, count: 3, totalBudgetUsd: 10, approvedSample: true }), /uploaded reference video/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noMarket, count: 3, totalBudgetUsd: 10, approvedSample: true }), /Market research/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: emptyMarket, count: 3, totalBudgetUsd: 10, approvedSample: true }), /Market research/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noInstruction, count: 3, totalBudgetUsd: 10, approvedSample: true }), /plain-language instruction/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: scripted, count: 3, totalBudgetUsd: 10, approvedSample: true }), /script lines/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noBrand, count: 3, totalBudgetUsd: 10, approvedSample: true }), /no brand/);
 
   assert.deepEqual(await counts(), before, "no session, message, attachment, batch, item, audit or engine request was written");
 });
@@ -112,7 +112,7 @@ test("a started source is refused", async () => {
   await db.sql`insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state, current_stage) values ('req_var_src', ${WS}, ${BRAND}, 'fmt', 'normal', 'running', '{}', 'intake')`;
   await db.sql`insert into content_factory_sessions (id, organization_id, brand_id, created_by, title, status, engine_request_id, started_at) values ('s_started_real', ${WS}, ${BRAND}, ${ADMIN}, 'Started', 'started', 'req_var_src', now())`;
   const before = await counts();
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: "s_started_real", count: 3, totalBudgetUsd: 10 }), /Only a draft/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: "s_started_real", count: 3, totalBudgetUsd: 10, approvedSample: true }), /Only a draft/);
   assert.deepEqual(await counts(), before);
 });
 
@@ -121,7 +121,7 @@ test("three variations are drafts with lineage, copied instructions and attachme
   const before = await counts();
   const [sourceBefore] = await db.sql<{ title: string; status: string; budget_usd: unknown; updated_at: unknown }>`select title, status, budget_usd, updated_at from content_factory_sessions where id = ${id}`;
 
-  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true });
   assert.equal(batch.items.length, 3);
   assert.deepEqual(batch.items.map((item) => item.state), ["ready", "ready", "ready"], "nothing is started");
   assert.ok(batch.items.every((item) => item.draft));
@@ -168,15 +168,15 @@ test("three variations are drafts with lineage, copied instructions and attachme
   assert.equal(sourceAttachments?.n, "2");
 
   await assert.rejects(createBatch(db.sql, ADMIN, { brandId: BRAND, title: "Template", budgetUsd: 10, sessionIds: [id] }), /template other videos were made from/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: rows[0]?.id ?? "", count: 2, totalBudgetUsd: 5 }), /original reusable draft/);
-  const second = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 5 });
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: rows[0]?.id ?? "", count: 2, totalBudgetUsd: 5, approvedSample: true }), /original reusable draft/);
+  const second = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 5, approvedSample: true });
   assert.equal(second.items.length, 2, "the template can be used again");
   assert.notEqual(second.id, batch.id);
 });
 
 test("twenty variations split a budget exactly in cents, and the batch holds only the new videos", async () => {
   const id = await source({ id: "s_twenty" });
-  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 20, totalBudgetUsd: 12.34 });
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 20, totalBudgetUsd: 12.34, approvedSample: true });
   assert.equal(batch.items.length, 20);
   const cents = batch.items.map((item) => Math.round((item.budgetUsd ?? 0) * 100));
   assert.equal(cents.reduce((sum, value) => sum + value, 0), 1234);
@@ -194,23 +194,23 @@ test("a source with a record from another brand is refused and writes nothing", 
     values ('s_foreign_mkt', ${WS}, ${foreign}, 's_foreign_m2', 'source', 'market', 'brand_var_other', 'rec_foreign', 'Another brand record.')
   `;
   const before = await counts();
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: foreign, count: 3, totalBudgetUsd: 10 }), /must belong to this brand/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: foreign, count: 3, totalBudgetUsd: 10, approvedSample: true }), /must belong to this brand/);
   assert.deepEqual(await counts(), before);
 });
 
 test("an identical repeated request returns the same batch, and a changed or later request makes a new one", async () => {
   const id = await source({ id: "s_replay" });
-  const first = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  const first = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true });
   const before = await counts();
-  const again = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  const again = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true });
   assert.equal(again.id, first.id, "a double click or a replay returns the batch already made");
   assert.deepEqual(await counts(), before, "and writes nothing");
 
-  const changed = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 11 });
+  const changed = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 11, approvedSample: true });
   assert.notEqual(changed.id, first.id, "a different total is a different request");
   await db.sql`update content_factory_batches set created_at = now() - interval '1 hour' where id = ${first.id}`;
   await db.sql`update content_factory_batches set created_at = now() - interval '1 hour' where id = ${changed.id}`;
-  const later = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 });
+  const later = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true });
   assert.notEqual(later.id, first.id, "the same request an hour later is a new batch");
 });
 
@@ -241,7 +241,7 @@ test("research-based variations use the brand's own patterns first, fixed angles
   const { researchFormatOf } = await import("./variation-service.ts");
   const id = await source({ id: "s_research" });
   const before = await counts();
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, useResearchFormat: true }), /Pattern-finding needs at least 3/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, useResearchFormat: true, approvedSample: true }), /Pattern-finding needs at least 3/);
   assert.deepEqual(await counts(), before, "a refusal writes nothing and does not fall back to the fixed angles");
   const empty = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
   assert.equal(empty.ok, false);
@@ -251,7 +251,7 @@ test("research-based variations use the brand's own patterns first, fixed angles
   const found = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
   assert.ok(found.ok);
 
-  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10, useResearchFormat: true });
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10, useResearchFormat: true, approvedSample: true });
   assert.equal(batch.items.length, 4);
   const angles = batch.items.map((item) => item.angle ?? "");
   assert.equal(angles.filter((angle) => angle.startsWith("res_")).length, 2, "two structures with one opening each");
@@ -267,7 +267,7 @@ test("research-based variations use the brand's own patterns first, fixed angles
   assert.match(String(audit?.metadata ?? ""), /"researchAngles":"2"/);
 
   // The same count and total without the research format is a different request, not a replay of this one.
-  const plain = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10 });
+  const plain = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 10, approvedSample: true });
   assert.notEqual(plain.id, batch.id);
   assert.ok(plain.items.every((item) => !(item.angle ?? "").startsWith("res_")));
 });
@@ -293,4 +293,12 @@ test("the source list says which drafts are ready and why each other one is not,
   assert.ok(list.every((item) => !item.title.includes(": Problem first") && !item.title.includes(": Result first")));
   await assert.rejects(variationSourcesOf(db.sql, MEMBER, { brandId: BRAND }));
   assert.deepEqual(await variationSourcesOf(db.sql, ADMIN, { brandId: "brand_nope" }).catch(() => "refused"), "refused");
+});
+
+test("without the person's approval of the sample, nothing is created", async () => {
+  const id = await source({ id: "s_unapproved" });
+  const before = await counts();
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10 }), /approve the format first/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: false }), /approve the format first/);
+  assert.deepEqual(await counts(), before);
 });
