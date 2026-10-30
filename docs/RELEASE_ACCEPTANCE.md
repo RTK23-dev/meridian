@@ -62,6 +62,7 @@ whether the run passes or fails.
 | G12 | Video variations: one seeded source draft becomes a bounded batch of Ready drafts in the browser; a budget that cannot cover the count is refused with the reason; the template is not offered as a draft to pick; Start the batch is still waiting; no request leaves the local server | PASS on run 40855263261 (head 60d49282), 26 checks pass / 0 fail; current-head rerun required after later source guards/docs changes |
 | G12b | The batch shows counts by state and downloads a CSV summary of each video's recorded state, with no file and nothing marked delivered | not yet run on CI |
 | G13 | Pattern-finding: the research format (structure, opening, hook, call to action with counts) is shown, and ticking it bases the videos on those patterns, with fixed angles filling the rest | not yet run on CI |
+| G14 | Demo run on seeded fixture data (titled DEMO): a batch with two delivered videos and one draft is reviewed in the browser, one approved, one rejected with a reason, and summarised; a draft is never offered for review | not yet run on CI |
 | M1 | Page heights on a clean account are recorded to `page-heights.json` and bounded (Setup, Settings, Market, Brand brain) | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,

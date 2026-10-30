@@ -8,6 +8,7 @@ import { engineRequestStatus } from "../../../engine/api/index.ts";
 import { requireBrand } from "../brand-membership.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { reviseSession, startRun } from "./service.ts";
+import { approvalStateFor, isApprovalDecision, type ApprovalRecord } from "./approval.ts";
 import { committedUsd, fitsBatchBudget, itemStateOf, MAX_BATCH_ITEMS, type BatchItemState } from "./batch.ts";
 
 const TITLE_MAX = 120;
@@ -29,6 +30,8 @@ export type BatchItemSummary = {
   draft: boolean;
   /** The fixed angle a video variation was made with, or null for a video made by hand. */
   angle: string | null;
+  /** The person's decision on a delivered video: approved, rejected or not decided. Null while the video is not delivered. */
+  approval: "approved" | "rejected" | "not_decided" | null;
 };
 
 export type BatchSummary = {
@@ -93,7 +96,24 @@ function spendOf(item: ItemRow): { started: boolean; budgetUsd: number | null } 
   return { started: item.session_status === "started", budgetUsd: budgetOf(item.budget_usd) };
 }
 
+async function approvalRecordsOf(sql: Sql, organizationId: string, sessionIds: string[]): Promise<Map<string, ApprovalRecord[]>> {
+  const bySession = new Map<string, ApprovalRecord[]>();
+  if (sessionIds.length === 0) return bySession;
+  const rows = await sql<{ session_id: string; engine_request_id: string; manifest_id: string | null; decision: string; reason: string; actor_id: string; created_at: unknown }>`
+    select session_id, engine_request_id, manifest_id, decision, reason, actor_id, created_at from content_factory_approvals
+    where organization_id = ${organizationId} and session_id = any(${sessionIds}) order by created_at asc
+  `;
+  for (const row of rows) {
+    if (!isApprovalDecision(row.decision)) continue;
+    const list = bySession.get(row.session_id) ?? [];
+    list.push({ engineRequestId: row.engine_request_id, manifestId: row.manifest_id, decision: row.decision, reason: row.reason, actorId: row.actor_id, createdAt: new Date(row.created_at as string | Date).toISOString(), rightsRecordIds: [] });
+    bySession.set(row.session_id, list);
+  }
+  return bySession;
+}
+
 async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<BatchSummary> {
+  const approvals = await approvalRecordsOf(sql, batch.organization_id, items.map((item) => item.session_id));
   const views = await Promise.all(items.map(async (item) => {
     const engine = item.session_status === "started" && item.engine_request_id !== null
       ? await engineRequestStatus(sql, batch.organization_id, item.engine_request_id)
@@ -110,6 +130,9 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       attempts: view.attempts,
       draft: item.session_status === "draft",
       angle: item.variation_angle,
+      approval: view.state === "delivered" && engine?.status === "delivered" && item.engine_request_id !== null
+        ? approvalStateFor(approvals.get(item.session_id) ?? [], item.engine_request_id, engine.manifestId).status
+        : null,
     };
   }));
   return {

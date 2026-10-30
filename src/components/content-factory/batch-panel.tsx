@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Field, Input, SelectInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { BatchReview } from "./batch-review";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentBatch, createContentVariations, getContentBatch, getContentResearchFormat, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
@@ -338,6 +339,7 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
               </li>
             ))}
           </ol>
+          <BatchReview items={items} busy={busy} onOpen={onOpenSession} onDecided={async () => { await detail.refetch(); }} />
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
             <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadSummary}>Download batch summary (CSV)</Button>

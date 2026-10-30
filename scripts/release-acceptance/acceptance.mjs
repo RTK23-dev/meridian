@@ -384,6 +384,7 @@ try {
     await form.waitFor();
     assert.match(await form.innerText(), /Nothing starts until you press Start batch/);
     // A budget that cannot cover the count says why, and the button stays off.
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await form.getByLabel("Total batch budget (USD)").fill("1");
     await page.getByText(/cannot cover 3 videos/).waitFor();
     assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
@@ -420,6 +421,7 @@ try {
     assert.match(shown, /Structure: problem solution \(4 of 9\), listicle \(2 of 9\)/);
     assert.match(shown, /Opening: question \(3 of 9\)/);
     assert.match(shown, /show what is common, not what works/);
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await panel.getByRole("checkbox").check();
     await form.getByLabel("Number of videos").fill("4");
     await form.getByLabel("Total batch budget (USD)").fill("8");
@@ -430,6 +432,34 @@ try {
     assert.match(text, /Acceptance reference draft: Listicle, question opening/);
     assert.match(text, /Acceptance reference draft: Problem first/, "the fixed angles fill the rest");
     assert.doesNotMatch(text, /Started \d+ videos?\./);
+  });
+
+  await check("G14", "demo run: a batch with two delivered fixture videos is reviewed in the browser, approved, rejected with a reason, and summarised", async () => {
+    // The batch is seeded fixture data titled DEMO. No video was rendered and no provider was called; this walks the review screen only.
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: /DEMO \(fixture\) batch/ }).click();
+    await page.getByRole("heading", { name: "DEMO (fixture) batch" }).waitFor();
+    assert.match(await page.getByLabel("Videos by state").innerText(), /1 ready · 2 delivered/);
+    const review = page.getByRole("region", { name: "Review delivered videos" });
+    await review.waitFor();
+    assert.match(await review.innerText(), /0 of 2 decided/);
+    assert.equal(await review.getByText("Not decided yet").count(), 2);
+    assert.doesNotMatch(await review.innerText(), /video C/, "a draft is never offered for review");
+    await review.getByRole("button", { name: /Approve DEMO \(fixture\) video A/ }).click();
+    await review.getByText("Approved", { exact: true }).waitFor();
+    assert.match(await review.innerText(), /1 of 2 decided/);
+    await review.getByRole("button", { name: /Reject DEMO \(fixture\) video B/ }).click();
+    const submit = review.getByRole("button", { name: "Reject with this reason" });
+    assert.equal(await submit.isDisabled(), true, "a rejection needs its reason");
+    await review.getByLabel("Why is it rejected?").fill("The pacing is too slow for the format.");
+    await submit.click();
+    await review.getByText("Rejected", { exact: true }).waitFor();
+    assert.match(await review.innerText(), /2 of 2 decided/);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    const { readFile } = await import("node:fs/promises");
+    const csv = await readFile(await download.path(), "utf8");
+    assert.match(csv, /DEMO \(fixture\) video A,,delivered/);
+    assert.match(csv, /DEMO \(fixture\) video C \(draft\),,ready/);
   });
 
   await check("D1", "no request left the local server during the run", async () => {
