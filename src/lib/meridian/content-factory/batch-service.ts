@@ -96,12 +96,12 @@ function spendOf(item: ItemRow): { started: boolean; budgetUsd: number | null } 
   return { started: item.session_status === "started", budgetUsd: budgetOf(item.budget_usd) };
 }
 
-async function approvalRecordsOf(sql: Sql, organizationId: string, sessionIds: string[]): Promise<Map<string, ApprovalRecord[]>> {
+async function approvalRecordsOf(sql: Sql, organizationId: string, batchId: string): Promise<Map<string, ApprovalRecord[]>> {
   const bySession = new Map<string, ApprovalRecord[]>();
-  if (sessionIds.length === 0) return bySession;
   const rows = await sql<{ session_id: string; engine_request_id: string; manifest_id: string | null; decision: string; reason: string; actor_id: string; created_at: unknown }>`
-    select session_id, engine_request_id, manifest_id, decision, reason, actor_id, created_at from content_factory_approvals
-    where organization_id = ${organizationId} and session_id = any(${sessionIds}) order by created_at asc
+    select a.session_id, a.engine_request_id, a.manifest_id, a.decision, a.reason, a.actor_id, a.created_at
+    from content_factory_approvals a join content_factory_batch_items i on i.session_id = a.session_id
+    where a.organization_id = ${organizationId} and i.batch_id = ${batchId} order by a.created_at asc
   `;
   for (const row of rows) {
     if (!isApprovalDecision(row.decision)) continue;
@@ -113,7 +113,7 @@ async function approvalRecordsOf(sql: Sql, organizationId: string, sessionIds: s
 }
 
 async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<BatchSummary> {
-  const approvals = await approvalRecordsOf(sql, batch.organization_id, items.map((item) => item.session_id));
+  const approvals = await approvalRecordsOf(sql, batch.organization_id, batch.id);
   const views = await Promise.all(items.map(async (item) => {
     const engine = item.session_status === "started" && item.engine_request_id !== null
       ? await engineRequestStatus(sql, batch.organization_id, item.engine_request_id)
