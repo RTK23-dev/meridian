@@ -462,6 +462,16 @@ try {
     assert.match(csv, /DEMO \(fixture\) video C \(draft\),,ready/);
   });
 
+  await check("G15", "upload: with no Google Drive connected, the draft says why a reference cannot be stored, instead of failing silently", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Open video Acceptance reference draft" }).first().click().catch(() => undefined);
+    const main = page.locator("main");
+    await main.getByText(/Files cannot be stored yet\./).first().waitFor();
+    assert.match(await main.innerText(), /Google Drive/);
+    assert.match(await main.innerText(), /Uploading needs Google Drive to be connected/);
+    assert.equal(await page.getByLabel("Choose files").count() >= 1, true, "the upload control is still there");
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });

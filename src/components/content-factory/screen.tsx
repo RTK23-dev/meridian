@@ -82,7 +82,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg">
             <li>Fill in your brand details{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/brain` as never} className="font-semibold underline underline-offset-4">Brand brain</Link></> : null}. Four fields are required.</li>
             <li>Collect research{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/market` as never} className="font-semibold underline underline-offset-4">Market</Link></> : null}: paste public page URLs of examples that work.</li>
-            <li>Make one draft below. Upload your reference as a video file, attach the research, and write what the videos should be about.</li>
+            <li>Make one draft below. Upload your reference as a video file, attach the research, and write what the videos should be about. Uploading needs Google Drive to be connected for this workspace; if it is not, the draft says so next to the upload button.</li>
             <li>Choose how many videos and one total budget under <strong>Create video variations</strong>. This makes the drafts and starts nothing.</li>
             <li>Read the list, then press <strong>Start the batch</strong>. Each video shows its real state. Open a video to approve or export it.</li>
           </ol>
