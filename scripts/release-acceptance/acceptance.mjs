@@ -318,7 +318,7 @@ try {
   await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
     // The sources step and its optional phrase-search keys are both behind clear disclosures.
-    const step = page.locator("li, section, article").filter({ hasText: "Pick where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
+    const step = page.locator("li, section, article").filter({ hasText: "Where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
     await step.getByText("Open this step").first().click();
     assert.match(await page.locator("main").innerText(), /Read one public page/);
     assert.match(await page.locator("main").innerText(), /This is not a search/);

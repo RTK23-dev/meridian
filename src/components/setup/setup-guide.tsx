@@ -125,9 +125,18 @@ export function SetupGuide() {
       <div className="space-y-10">
         <PageHeader
           title="Set up Meridian"
-          description="Start with your brand and decision engine. To research examples, open Market and paste a public page URL—no extra key is needed. Set up other connections only when you need them."
+          description="Two steps get you started: create a brand, then choose a decision engine. Everything else is optional or only needed for one job."
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
+
+        <section aria-labelledby="setup-plain" className="rounded-xl border border-border bg-surface p-5">
+          <h2 id="setup-plain" className="text-lg font-semibold text-fg">What to fill in, and what to skip</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg">
+            <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one decision engine key.</li>
+            <li><strong>Fill in when you need it:</strong> a video maker key to render videos, and Google Drive to upload a reference video.</li>
+            <li><strong>Skip for now:</strong> search keys, publishing, and everything under Optional connections. Pasting a public page URL on Market needs no key.</li>
+          </ul>
+        </section>
 
         <section aria-labelledby="setup-progress" className="surface-rise surface-glow rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -197,12 +206,14 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
                 {step.required ? "Required" : "Optional"} · {mark.label}
               </span>
             </div>
+            {compact ? <p className="text-sm text-fg-muted">{step.when}</p> : null}
             {compact ? (
               <details className="group pt-1">
                 <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                   {step.status === "done" ? "Review or change this step" : "Open this step"}
                 </summary>
                 <div className="mt-3 space-y-3">
+                  <p className="text-sm font-semibold text-fg">{step.when}</p>
                   <p className="text-sm text-fg">{step.what}</p>
                   <StepDetail text={step.detail} />
                   {body}
@@ -210,6 +221,7 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
               </details>
             ) : (
               <>
+                <p className="text-sm font-semibold text-fg">{step.when}</p>
                 <p className="text-sm text-fg">{step.what}</p>
                 <StepDetail text={step.detail} />
                 <div className="pt-1">{body}</div>
