@@ -317,9 +317,8 @@ try {
 
   await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
-    // The sources step and its optional phrase-search keys are both behind clear disclosures.
-    const step = page.locator("li, section, article").filter({ hasText: "Where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
-    await step.getByText("Open this step").first().click();
+    // An optional step is one closed row, and its phrase-search keys are behind a second disclosure. Open both as a person does.
+    await page.locator("summary").filter({ hasText: "Where examples come from" }).click();
     assert.match(await page.locator("main").innerText(), /Read one public page/);
     assert.match(await page.locator("main").innerText(), /This is not a search/);
     await page.getByText("Optional: search by phrase", { exact: true }).click();
@@ -384,6 +383,9 @@ try {
     await form.waitFor();
     assert.match(await form.innerText(), /Nothing starts until you press Start batch/);
     // A budget that cannot cover the count says why, and the button stays off.
+    // Only a draft that is ready can be chosen as the source: the DEMO draft has no reference, so it is not offered.
+    const offered = await form.getByLabel("Source draft").locator("option").allInnerTexts();
+    assert.deepEqual(offered, ["Acceptance reference draft"]);
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await form.getByLabel("Total batch budget (USD)").fill("1");
     await page.getByText(/cannot cover 3 videos/).waitFor();

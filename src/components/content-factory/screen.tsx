@@ -126,7 +126,6 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
                 drafts={manualDrafts.filter((item) => item.brandId === selected.brandId).map((item) => ({ id: item.id, title: item.title }))}
-                sources={listed.filter((item) => item.brandId === selected.brandId && item.status === "draft" && item.sourceSessionId === null).map((item) => ({ id: item.id, title: item.title }))}
                 onBatchCreated={() => void sessions.refetch()}
                 onOpenSession={setSelectedId}
               />

@@ -5,7 +5,7 @@ import { PlainErrorState } from "@/components/plain-error";
 import { BatchReview } from "./batch-review";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentBatch, createContentVariations, getContentBatch, getContentResearchFormat, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
+import { createContentBatch, createContentVariations, getContentBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import { batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
 import { describeFormat } from "@/lib/meridian/content-factory/research-format";
 import { DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget } from "@/lib/meridian/content-factory/variations";
@@ -51,7 +51,7 @@ function budgetOf(text: string): number | null {
  */
 type DraftOption = { id: string; title: string };
 
-export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSession, onBatchCreated }: { brandId: string; brandName: string; drafts: DraftOption[]; sources?: DraftOption[]; onOpenSession: (sessionId: string) => void; onBatchCreated?: () => void }) {
+export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCreated }: { brandId: string; brandName: string; drafts: DraftOption[]; onOpenSession: (sessionId: string) => void; onBatchCreated?: () => void }) {
   const { user } = useCurrentUserState();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -71,6 +71,10 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
   const batches = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batches", brandId]),
     queryFn: () => listContentBatches({ data: { brandId } }),
+  });
+  const sourceList = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "variation-sources", brandId]),
+    queryFn: () => getContentVariationSources({ data: { brandId } }),
   });
   const format = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "research-format", brandId]),
@@ -106,6 +110,10 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
     }
   }
 
+  // Only a draft that is ready can be chosen. The others are listed below with what each one still needs.
+  const allSources = sourceList.data ?? [];
+  const sources: DraftOption[] = allSources.filter((item) => item.problem === null).map((item) => ({ id: item.id, title: item.title }));
+  const notReady = allSources.filter((item) => item.problem !== null);
   const chosenSource = sources.some((item) => item.id === sourceId) ? sourceId : (sources[0]?.id ?? "");
   const variationCount = Number(count);
   const variationTotal = total.trim() === "" ? Number.NaN : Number(total);
@@ -211,7 +219,14 @@ export function BatchCard({ brandId, brandName, drafts, sources = [], onOpenSess
             Pick a draft that has an uploaded reference video, attached Market research and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
           </p>
           {sources.length === 0 ? (
-            <p className="text-sm text-fg-muted">There is no draft to use as a source yet. Make a draft video with a reference, Market research and an instruction first.</p>
+            <div className="space-y-1 text-sm text-fg-muted">
+              <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research and a plain instruction."}</p>
+              {notReady.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg">{item.title}</span>: {item.problem}</li>)}
+                </ul>
+              ) : null}
+            </div>
           ) : (
             <>
               <Field label="Source draft" hint="The source stays as it is and can be used again.">

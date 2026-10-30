@@ -279,3 +279,18 @@ test("another brand's research patterns are never used", async () => {
   const own = await researchFormatOf(db.sql, ADMIN, { brandId: BRAND });
   assert.ok(own.ok && !own.format.structures.some((item) => item.value === "testimonial"));
 });
+
+test("the source list says which drafts are ready and why each other one is not, and leaves derived variations out", async () => {
+  const { variationSourcesOf } = await import("./variation-service.ts");
+  await source({ id: "s_list_ok" });
+  await source({ id: "s_list_noref", reference: false });
+  await source({ id: "s_list_script", script: true });
+  const list = await variationSourcesOf(db.sql, ADMIN, { brandId: BRAND });
+  const byId = new Map(list.map((item) => [item.id, item.problem]));
+  assert.equal(byId.get("s_list_ok"), null);
+  assert.match(byId.get("s_list_noref") ?? "", /uploaded reference video/);
+  assert.match(byId.get("s_list_script") ?? "", /script lines/);
+  assert.ok(list.every((item) => !item.title.includes(": Problem first") && !item.title.includes(": Result first")));
+  await assert.rejects(variationSourcesOf(db.sql, MEMBER, { brandId: BRAND }));
+  assert.deepEqual(await variationSourcesOf(db.sql, ADMIN, { brandId: "brand_nope" }).catch(() => "refused"), "refused");
+});

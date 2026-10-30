@@ -212,3 +212,44 @@ export async function createVariations(
   });
   return getBatch(sql, userId, { batchId });
 }
+
+export type VariationSource = { id: string; title: string; problem: string | null };
+
+/**
+ * The brand's draft sessions that variations could be made from, each with the first reason it cannot be, or null when it can. Derived
+ * variations are not listed (a variation is never a template). Admins of the brand's workspace only. Read-only.
+ */
+export async function variationSourcesOf(sql: Sql, userId: string, input: { brandId: string }): Promise<VariationSource[]> {
+  const access = await requireBrand(sql, userId, input.brandId, "admin");
+  const drafts = await sql<{ id: string; title: string; status: string }>`
+    select id, title, status from content_factory_sessions
+    where organization_id = ${access.organizationId} and brand_id = ${input.brandId} and source_session_id is null and status = 'draft'
+    order by updated_at desc, id desc limit 200
+  `;
+  if (drafts.length === 0) return [];
+  const attachments = await sql<{ session_id: string; reference: number; market: number }>`
+    select a.session_id,
+      count(*) filter (where a.kind = 'file' and a.purpose = 'reference_video')::int as reference,
+      count(*) filter (where a.kind = 'source' and a.source_page = 'market')::int as market
+    from content_factory_attachments a join content_factory_sessions s on s.id = a.session_id
+    where s.organization_id = ${access.organizationId} and s.brand_id = ${input.brandId} and s.source_session_id is null and s.status = 'draft'
+    group by a.session_id
+  `;
+  const messages = await sql<{ session_id: string; text: string; beat_role: string | null }>`
+    select m.session_id, m.text, m.beat_role from content_factory_messages m join content_factory_sessions s on s.id = m.session_id
+    where s.organization_id = ${access.organizationId} and s.brand_id = ${input.brandId} and s.source_session_id is null and s.status = 'draft'
+  `;
+  return drafts.map((draft) => {
+    const counts = attachments.find((row) => row.session_id === draft.id);
+    const own = messages.filter((row) => row.session_id === draft.id);
+    const problem = sourceProblem({
+      status: draft.status,
+      brandId: input.brandId,
+      hasReferenceVideo: (counts?.reference ?? 0) > 0,
+      marketAttachments: counts?.market ?? 0,
+      instructions: own.filter((row) => row.beat_role === null).map((row) => row.text),
+      scriptLines: own.filter((row) => row.beat_role !== null).length,
+    });
+    return { id: draft.id, title: draft.title, problem };
+  });
+}

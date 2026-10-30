@@ -26,7 +26,7 @@ import {
   sessionsListInput,
 } from "./input.ts";
 import { createBatch, getBatch, listBatches, retryBatchItem, startBatch } from "./batch-service.ts";
-import { createVariations, researchFormatOf } from "./variation-service.ts";
+import { createVariations, researchFormatOf, variationSourcesOf } from "./variation-service.ts";
 import { repurposeOutputLink, repurposePreview, startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { checkInterruptedRepurposeRender } from "./repurpose-status.ts";
@@ -121,6 +121,17 @@ export const createContentVariations = createServerFn({ method: "POST" })
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => createVariations(await getSql(), context.userId, data));
+
+/** The brand's drafts that variations could be made from, each with the reason it cannot be (or null). Admins of the brand's workspace only. */
+export const getContentVariationSources = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = (input && typeof input === "object" ? input : {}) as Record<string, unknown>;
+    const brandId = typeof body.brandId === "string" ? body.brandId.trim().slice(0, 80) : "";
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => variationSourcesOf(await getSql(), context.userId, data));
 
 /** The format found in a brand's analyzed research (counts of model labels), or why there is none. Admins of the brand's workspace only. */
 export const getContentResearchFormat = createServerFn({ method: "POST" })
