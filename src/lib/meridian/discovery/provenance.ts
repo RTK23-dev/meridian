@@ -19,6 +19,11 @@ export interface SourceProvenance {
   lastObservedAt: string | null;
 }
 
+/** A stored timestamp as ISO text, the way the discovered-items list writes it (a Date becomes ISO text, not its long form). */
+function timestampText(value: unknown): string {
+  return value instanceof Date ? value.toISOString() : String(value ?? "");
+}
+
 /**
  * Every run that observed a source, in observation order: the run that stored the item, and each later run that matched it.
  * Read from the sightings, so a repeat run is listed without a second stored item. Scoped to one organization and brand,
@@ -40,7 +45,7 @@ export async function sourceProvenance(
   const observations: SourceObservation[] = rows.map((row) => ({
     runId: String(row.run_id),
     itemId: String(row.record_id),
-    discoveredAt: String(row.observed_at),
+    discoveredAt: timestampText(row.observed_at),
     sourceLocation: String(row.source_location ?? ""),
     cardType: String(row.card_type),
     seenBefore: row.seen_before === true,

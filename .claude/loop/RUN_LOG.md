@@ -395,3 +395,16 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `discovery/provenance.ts`: a read-only, brand-scoped query of which runs saw each source. Not wired this wake. It is the next unit: it needs a server function with the same brand-access check as `listDiscoveredItemsFor`, a small line on the Market stored-pages list, and PGlite tests. It does not change scoring or publishing, so it needs no owner decision.
 - Decided by the loop: none. Q25 is an owner decision and is open.
 - Still open in R5: the rest of the list in section 6A, after provenance.
+
+## 2026-10-31 17:52 UTC: round 2, R5 unit: discovery provenance wired on the Market page
+
+- Wake: the scheduled wake (`trig_01E7AfPHGf2YAgUTW1RinqDT`) fired at 17:46:30Z. CI on `38331e6` (run 41224535929) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `discovery/provenance.ts`. Wired:
+  - `src/lib/meridian/discovery/provenance-view.ts`: `itemProvenanceFor` checks brand access with `requireBrand` (viewer), finds the page's source key among its sightings in that brand, and reads the runs with `sourceProvenance`. A page of another brand, or a missing page, gives no record.
+  - `src/lib/meridian/discovery/item-actions.ts`: `getDiscoveredItemProvenance`, a server function with input checks and the auth middleware.
+  - `src/components/market/stored-pages.tsx`: a "Where it was seen" disclosure per page. It loads only when opened, shows "Seen in N runs" and each run's stored-or-found-again date, in plain text. `market.tsx` passes the brand id.
+- Fix in the same change: `provenance.ts` wrote a Date's long form for each sighting time. It now writes ISO text, the same as the discovered-items list. The existing `source-provenance.test.ts` still passes.
+- Checks, run here: `provenance-view.test.ts` 1 of 1 (member sees both runs in order, seen-before flags, ISO times, a stranger refused, another brand and a missing page give no record). `source-provenance.test.ts` 3 of 3. `item-list.test.ts` 2 of 2. `discovery-source-rows.test.ts` 3 of 3. `npx eslint` on the changed files: exit 0. `npm run typecheck`: exit 0.
+- Not checked here: the Market page in a browser (AGENTS rule 11). CI's `ui-smoke` job covers the brand pages.
+- Decided by the loop: none. No owner decision needed (read-only, no scoring or publishing change).
+- Still open in R5: the rest of section 6A. Next: `storage/filesystem.ts` and `vision/logo.ts`.

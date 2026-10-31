@@ -281,7 +281,7 @@ function MarketPage({ brandId }: { brandId: string }) {
         <div className="mt-6">
           <h3 className="text-xl">Stored pages and posts</h3>
           <p className="mt-1 text-sm text-muted">Each one is evidence you can read. Ranking reads a page only after a member stores it as a competitor observation, so the angle and hook stay a person's decision.</p>
-          <div className="mt-3"><StoredPages query={storedPages} canEdit={canEdit} onUse={prefillObservationFromPage} /></div>
+          <div className="mt-3"><StoredPages brandId={brandId} query={storedPages} canEdit={canEdit} onUse={prefillObservationFromPage} /></div>
         </div>
       </Card>
       <MarketSection id="market-collect" title="Collect video-ad evidence (Meta Ad Library)" hint="Needs your own Meta developer token. Optional.">
