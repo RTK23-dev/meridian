@@ -119,9 +119,9 @@ Tick each line when it is done. The questions are in `.claude/loop/OPEN_QUESTION
 
 - [ ] **Q2, the dry-run policy.** Choose step 6, option 1 (set the HyperFrames price) or option 2 (report the bill check as not proven offline).
 - [ ] **Q10, Q11 and Q13, decided by the loop.** Confirm each, or reverse it. Q10 is how the gate runs the source tests locally. Q11 is the hook-timing decisions. Q13 is the asset router's closure, which stays whole.
-- [ ] **Q12, where the five secret reads live.** Today they stay where they are, and the ratchet holds at 38 direct reads.
+- [ ] **Q12, where the secret reads live.** The secret values are read through the accessors in `src/lib/meridian/credentials/secret-settings.ts`. The ratchet in `server-settings.test.ts` now holds at 14 direct reads (it was 38).
 - [ ] **Q6 and Q8, the pull request.** Merge PR #85 when it is ready, or keep it open, or split it. The run's commits stack on its branch until you decide.
-- [ ] **Q9, the permission rules.** Add the rules to `.claude/settings.json`, or run the session in Auto mode, before any unattended run.
+- [x] **Q9, the permission rules.** Written to `.claude/settings.json`: full coding permissions, with the hard stops (env files, publishing, live provider runs, force pushes, merges) denied.
 - [ ] **Q1, Q3, Q4, Q5 and Q7.** The preset contract change, the 45 test-only modules, the E6 server functions, the export package, and the reference reels. Each one is open, and nothing depends on it until you answer.
 - [ ] **Step 4, the keys.** Save each provider's key in Settings and set the monthly budget. Set the budget before any live step.
 - [ ] **Step 7, the first live run.** Run one brief, end to end, with one reference video. Record the request id, the artifact ids, each step's cost (estimate, reserved, billed), and the output's file, size and duration in `docs/engine/PHASE_LOG.md`.
