@@ -426,3 +426,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `factory/cost.ts`: no caller at all (exact import check; the grep hit `engine/plan/cost.ts`, a different module). Its budget check is a spend control, so wiring it is the owner's decision (Q27).
 - Decided by the loop: none. Q27 is an owner decision and is open.
 - Still open in R5: `factory/render.ts` and `factory/benchmark-harness.ts` next, then the rest of section 6A.
+
+## 2026-10-31 18:56 UTC: round 2, R5 group: factory/render.ts and factory/benchmark-harness.ts
+
+- Wake: the scheduled wake (`trig_015CU8h521HJkvNnEW1jwrWj`) fired at 18:53:59Z. CI on `cccff51` (run 41229976673) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `factory/render.ts` and `factory/benchmark-harness.ts`. No code changed.
+- `factory/render.ts`: no caller (exact import check). Its clips come from the fixture helpers in `video/inspect.ts`, so wiring it would show fixture clips as a render. Recorded as Q28.
+- `factory/benchmark-harness.ts`: used by its own test (`benchmark-harness.test.ts`), which checks the opportunity ranking against a hand-labelled gold set. Same treatment as `a11y/contrast.ts`: a test tool, no product change. The package has no benchmark script.
+- Decided by the loop: none. Q28 is an owner decision and is open.
+- Still open in R5: the engine modules still on the list (`engine/assets/firstLastFrame.ts`, `engine/jobs/review-decision.ts`, `engine/render/recorded.ts`, `engine/review/take/gold.ts`), then `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, and `render/splice-run.ts`.

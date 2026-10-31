@@ -223,6 +223,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) show the stage-cost rollup on the factory board, read-only, and leave the budget check out. (b) Wire the budget check too, with the cap you set. (c) Delete the file.
 - The loop recommends (a). The rollup is a read of costs already recorded, so it shows spend without changing any run.
 
+## Q28: A timeline builder that renders fixture clips: delete it?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. `src/lib/meridian/factory/render.ts` stays as it is, with no caller.
+- What it does, in plain words: `buildTimelineComposition` lays out clips on a timeline for the four aspect ratios (9:16, 4:5, 1:1, 16:9). Its clips come from `video/inspect.ts` (`buildFixtureClip`, `solidFrame`), which are test helpers. The real render path is the engine's render adapter, which the video engine uses.
+- Why it is a question: wiring it would produce a composition from fixture clips, so a user could mistake a fixture for a real render. That is the no-fake-success rule.
+- Options: (a) delete it, since the engine's render adapter is the real path. (b) Keep it as a test helper and say so in its header. (c) Connect it to real clips from storage, after the storage decision (Q26).
+- The loop recommends (a).
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
