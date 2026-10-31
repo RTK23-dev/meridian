@@ -11,8 +11,8 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 - units_done: 14 in round 1; round 3: K0, K1, K2, K3, K4, K5, K6, K7, K8, K9, K10 (logic), K11, K12, K13 (partly), K14, K15 (partly), K16 (partly), K17 (partly), K21 (stat.counter, partly), K22 (partly), K24, K25 (partly), K26, K27, K28 (partly), K30 (guide written; PR refresh pending).
 - units_done (earlier): 14 in round 1 (T10, T11, T2, the acceptance fix, T12, T3 non-secret reads, T4, T5, T6, T7, T8, T9a, T9b, T13). Round 2: R1, R2, R3 (browser check pending), R4 done; R5 at 6 wired and 34 explained (26 modules, plus the 8-file organic group) of the 45 listed, and 2 found in use by tests (contrast, benchmark); R7 done as a proposal.
 - owner_requests_done: the preset preview (two original renders, preset version 2, the nan loudness fix) and the cookbook plan (round 3 in RUN_PLAN.md, Q31). Done 20:30 UTC.
-- next_wake_at: 2026-10-31T23:04:00Z
-- wake_trigger: trig_0196rn15kKmyCu9oC82CDF75 (the previous one, trig_01EJf7Xf6Xn2qm85p6DQFQXJ, fired at 22:41 and was replaced)
+- next_wake_at: 2026-10-31T23:26:00Z
+- wake_trigger: trig_015XkYKjrGnEXVeTmG2kXwqL (the previous one, trig_0196rn15kKmyCu9oC82CDF75, fired at 23:04 and was replaced)
 - watchdog_trigger: trig_013BHUFk1JYN8Lkt1nFRh3Fd (every two hours, fires into this session; recreated for round 2)
 - last_entry: RUN_LOG.md, final entry (the run ends; the gate's stops are in the 07:12 and final entries)
 - open_questions: 10 (see OPEN_QUESTIONS.md; Q13 is decided by the loop and asks for confirmation)
