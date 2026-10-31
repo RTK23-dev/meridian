@@ -53,7 +53,8 @@ export function factoryPresetCookbook(presetName: (typeof FACTORY_PRESET_NAMES)[
   const stages = DEFAULT_STAGES;
 
   const steps: Step[] = stages.map((stage, index) => {
-    const after = index === 0 ? [] : [stages[index - 1]?.id ?? ""].filter((id) => id !== "");
+    const previous = stages[index - 1];
+    const after = previous ? [previous.id] : [];
     const params: Step["params"] = { category: stage.category, description: stage.description };
     if (stage.id === "produce") {
       Object.assign(params, {
