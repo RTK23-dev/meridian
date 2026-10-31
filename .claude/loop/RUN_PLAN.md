@@ -190,7 +190,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Done when: the component variables and cookbook controls share one type.
 
 #### K2: The cookbook schema and validator
-- Status: `pending`. Depends on: K1.
+- Status: `done` (`cookbooks/schema.ts` and `validate.ts`, 18 tests: each rule has a failing case; a component path binds only with its declaration and a step that uses the component). Depends on: K1.
 - `cookbooks/schema.ts` (`meridian.cookbook/v1`: meta, modes, ingredients, steps, instructions, style, grammar, controls, checks) and
   `cookbooks/validate.ts` (`validateCookbook`): the six rules of the design's section 3 (paths exist, ranges inside engine bounds,
   unique ids, no cycles, no expressions, bounded instruction text, unknown prices stay unknown).

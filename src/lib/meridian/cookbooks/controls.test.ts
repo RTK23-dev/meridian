@@ -23,7 +23,7 @@ test("every compose component's declaration reads into controls", () => {
       assert.ok(result.controls.length > 0, `${name} declares no controls`);
       for (const control of result.controls) {
         assert.ok(control.id.startsWith(`${name}.`), `${control.id} is not named for its component`);
-        assert.deepEqual(control.binds, [{ set: `component.${control.id.slice(name.length + 1)}` }]);
+        assert.deepEqual(control.binds, [{ set: `component.${control.id}` }]);
       }
     }
   }

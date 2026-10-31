@@ -187,7 +187,7 @@ export function declarationOf(html: string): string | null {
 }
 
 /**
- * Reads one component's declaration into controls. Each control binds to `component.<variable id>`, so a cookbook can set it.
+ * Reads one component's declaration into controls. Each control binds to `component.<component name>.<variable id>`, so a cookbook can set it.
  * Every problem is returned with the component, the entry and the field that failed. Nothing is guessed.
  */
 export function controlsOfComponent(componentName: string, html: string): ParseResult {
@@ -214,7 +214,7 @@ export function controlsOfComponent(componentName: string, html: string): ParseR
     }
     const variable = parsed.data;
     const id = `${componentName}.${variable.id}`;
-    const binds = [{ set: `component.${variable.id}` }];
+    const binds = [{ set: `component.${componentName}.${variable.id}` }];
     const candidate = toControl(variable, id, binds);
     const checked = controlSchema.safeParse(candidate);
     if (!checked.success) {
