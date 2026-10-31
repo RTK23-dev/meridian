@@ -80,3 +80,53 @@ list of what stays unknown until one live analysis runs.
 | A screen to install a preset | A button on the theme page, once the owner confirms presets as a product feature |
 
 These are recorded as Q30 in `.claude/loop/OPEN_QUESTIONS.md`.
+
+## 7. Test: an original video made from the preset (2026-10-31)
+
+The owner asked for a video made from scratch with the preset, to see how close it gets and what the preset lacks. Meridian's rule is to
+copy genes, never content, so the test video has its own subject and script ("scientists count animals from space": penguin colonies
+found by their stains on the sea ice, elephants counted in satellite photos, whales seen at about 30 cm per pixel). It keeps the
+preset's beat structure, cut times, zoom jumps, palette, fonts, caption style and loudness.
+
+How it was made: `scripts/engine/preset-preview/` draws the 3D scenes as WebGL shaders (sea ice, savanna, ocean, a globe, a dark data
+room and a satellite prop) with HTML overlays (title, counters, pills, panels, captions), in the local Chromium, frame by frame. The
+preset is injected into the page, so the colours, caption look, cut times and zoom jumps come from it. No provider was called and
+nothing was spent. There is no voice-over: speech is a paid provider call, so the captions carry the script and the sound is a
+synthesised bed at the preset's loudness. The output is in `artifacts/preset-preview/` (not in git).
+
+### First render, measured against the reference
+
+`compare.ts` runs the same media handlers on both files:
+
+| Measure | Reference | Render 1 | Read |
+| --- | --- | --- | --- |
+| First cut | 6.77 s | 6.80 s | Matched |
+| Hard cuts | 9 | 5 | 4 planned cuts did not register: both sides looked alike |
+| Shot length p25, p50, p75 | 3.2, 4.1, 6.5 s | 4.3, 8.2, 10.6 s | Follows from the missing cuts |
+| Zoom jumps | 8 | 8 | Matched |
+| Punch-ins per 10 s, median scale | 1.17, 1.52 | 0.83, 1.32 | Close; two jumps were drawn as camera moves |
+| Pattern interrupt median | 2.7 s | 2.6 s | Matched |
+| Mean motion | 0.020 | 0.005 | 4 times too calm |
+| Mean brightness | 0.39 | 0.43 | Close |
+| Loudness | -14.1 LUFS, 2.8 LU range | -14.1 LUFS, 0.4 LU range | Level matched; no voice, so no dynamics |
+| Loop distance | 0.101 (no loop) | 0.053 (no loop) | Same verdict |
+
+Motion per tenth (timeline motion): reference 0.12, 0.08, 0.09, 0.08, 0.11, 0.10, 0.08, 0.06, 0.06, 0.10; render 1: 0.06, 0.09, 0.08,
+0.02, 0.04, 0.04, 0.02, 0.03, 0.02, 0.09. The hook and the ending were close; the data room, the savanna and the ocean moved far too little.
+
+### What the preset lacked, and what changed (preset version 2)
+
+| Gap found by the render | Change |
+| --- | --- |
+| Overlay positions and sizes (title, counter, pills, captions, follow button) had to be chosen by hand | A `layout` block, as fractions of the frame, read from the reference; the renderer now reads it |
+| Zoom jumps carried no context: a 1.64 punch at 4.4 s stacked on the pull-up to orbit and blew the globe up | `layout.zoomJumpKinds`: each jump is a `punch` or part of a `camera_move` |
+| One motion number for the whole video, so the camera speed per section was a guess | `grammar.measured.motionTenths`, the reference's motion per tenth |
+| Cut times without the rule that makes a cut register | `grammar.read.cutRule`: a cut must change place, scale or set; same-scene cuts do not count |
+| The accent font role is missing (the serif accent rendered small) | Still a contract gap (Q1, Q30 part B); the renderer scales the accent words up |
+| Up-green and the follow-button blue were not sampled | Still open; the render used a chosen blue |
+| No counter, pill, chart or boxed-caption components in the compose library | Still open (Q30 part C); the preview draws them in its own page |
+
+### Second render
+
+The renderer was re-tuned with the version 2 fields: faster camera moves in the data room, savanna and ocean, and cuts that change scale
+or set. Its measures are in section 8.

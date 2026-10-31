@@ -227,40 +227,40 @@
         mix: m, objs: objs(STAINS, function (i) { return i < 7 ? 1 - seg(u, 0, 0.5) : 0; }) };
     } },
     { t0: 6.767, t1: 9.867, f: function (u) {
-      var v = lookAt(-40 + u * 14, 40, 330, 0.9, 0.35 + u * 0.03);
+      var v = lookAt(-60 + u * 40, 40, 330, 0.9, 0.3 + u * 0.09);
       return { A: { scene: ICE, cam: v.cam, rot: v.rot }, objs: objs(STAINS, function () { return smooth(seg(u, 0.3, 0.8)); }) };
     } },
     { t0: 9.867, t1: 13.3, f: function (u) {
-      return { A: { scene: ICE, cam: [20, 40, 150 - u * 10], rot: [0, 0.2 + u * 0.04] }, objs: objs(STAINS, function (i) { return i === 4 ? smooth(seg(u, 0.8, 1.3)) : 0; }) };
+      return { A: { scene: ICE, cam: [20, 40, 95 - u * 9], rot: [0, 0.2 + u * 0.16] }, objs: objs(STAINS, function (i) { return i === 4 ? smooth(seg(u, 0.8, 1.3)) : 0; }) };
     } },
     { t0: 13.3, t1: 16.333, f: function (u) {
-      var v = lookAt(0, 0, 1500 + u * 90, 0.45, -0.3 + u * 0.02);
+      var v = lookAt(0, 0, 1500 + u * 260, 0.45, -0.3 + u * 0.09);
       return { A: { scene: ICE, cam: v.cam, rot: v.rot }, objs: objs(STAINS, function () { return 1; }) };
     } },
-    { t0: 16.333, t1: 21.967, room: "charts", f: function (u) { return { A: { scene: ROOM, cam: [u * 0.5, 0, 0] } }; } },
-    { t0: 21.967, t1: 26.0, room: "figure", f: function (u) { return { A: { scene: ROOM, cam: [3 + u * 0.4, 0, 0] } }; } },
+    { t0: 16.333, t1: 21.967, room: "charts", f: function (u) { return { A: { scene: ROOM, cam: [u * 2.2, 0, 0] } }; } },
+    { t0: 21.967, t1: 26.0, room: "figure", f: function (u) { return { A: { scene: ROOM, cam: [3 + u * 2.4, 0, 0.6] } }; } },
     { t0: 26.0, t1: 30.0, f: function (u) {
       var m = smooth(seg(u, 3.4, 4.0));
       var v = lookAt(40, 10, 260, 1.0, 0.3);
-      return { A: { scene: ROOM, cam: [5 + u * 0.3, lerp(2.2, 0.6, smooth(seg(u, 0, 1.2))), 0] }, B: { scene: SAVANNA, cam: v.cam, rot: v.rot },
-        mix: m, sat: smooth(seg(u, 0, 0.3)), satYaw: 0.6 + u * 0.45, objs: objs(ELEPHANTS, null) };
+      return { A: { scene: ROOM, cam: [5 + u * 1.6, lerp(2.6, 0.4, smooth(seg(u, 0, 1.6))), 0] }, B: { scene: SAVANNA, cam: v.cam, rot: v.rot },
+        mix: m, sat: smooth(seg(u, 0, 0.3)), satYaw: 0.6 + u * 1.1, objs: objs(ELEPHANTS, null) };
     } },
     { t0: 30.0, t1: 38.7, f: function (u) {
       u0 = u;
-      var v = lookAt(40, 10, 260 - u * 6, 1.0, 0.3 + u * 0.07);
+      var v = lookAt(40, 10, 260 - u * 12, 1.0, 0.3 + u * 0.2);
       return { A: { scene: SAVANNA, cam: v.cam, rot: v.rot }, objs: objs(ELEPHANTS, rings(2.0, 0.35, 12)) };
     } },
     { t0: 38.7, t1: 43.367, f: function (u) {
-      return { A: { scene: SAVANNA, cam: [40, 10, 330 - u * 8], rot: [0, 0.9 + u * 0.01] }, objs: objs(ELEPHANTS, function () { return 1; }) };
+      return { A: { scene: SAVANNA, cam: [120 + u * 8, 10 + u * 6, 270 - u * 14], rot: [0, 0.9 + u * 0.09] }, objs: objs(ELEPHANTS, function () { return 1; }) };
     } },
     { t0: 43.367, t1: 54.4, f: function (u) {
-      var h = 700 * Math.exp(-u * 0.065);
-      return { A: { scene: OCEAN, cam: [10 + u * 1.5, 10 + u * 2, h], rot: [0, -0.4 + u * 0.01] },
+      var h = 700 * Math.exp(-u * 0.11);
+      return { A: { scene: OCEAN, cam: [10 + u * 4, 10 + u * 5, h], rot: [0, -0.4 + u * 0.05] },
         objs: objs(WHALES, function (i) { return smooth(seg(u, 4.7 + i * 0.5, 5.2 + i * 0.5)); }) };
     } },
-    { t0: 54.4, t1: 56.467, room: "tiles", f: function (u) { return { A: { scene: ROOM, cam: [8 + u * 0.4, 0, 0] } }; } },
+    { t0: 54.4, t1: 56.467, room: "tiles", f: function (u) { return { A: { scene: ROOM, cam: [8 + u * 2.4, 0, 0] } }; } },
     { t0: 56.467, t1: 60.009, f: function (u) {
-      return { A: { scene: ICE, cam: [-30 + u * 4, 30 + u * 6, 860 - u * 25], rot: [0, 0.12 + u * 0.01] }, objs: objs(STAINS, function (i) { return i < 7 ? 1 : 0; }) };
+      return { A: { scene: ICE, cam: [-30 + u * 12, 30 + u * 16, 860 - u * 60], rot: [0, 0.12 + u * 0.05] }, objs: objs(STAINS, function (i) { return i < 7 ? 1 : 0; }) };
     } },
   ];
 
@@ -323,7 +323,7 @@
       show(BIG, r === "figure" ? smooth(seg(u, 0.1, 0.4)) : 0); show(BIG2, r === "figure" ? smooth(seg(u, 0.9, 1.2)) : 0);
       show(TILES, r === "tiles" ? 1 : 0);
       if (r === "charts") { bars(P1, seg(u, 0.3, 2.2)); line(P2, seg(u, 1.6, 4.0)); }
-      roomInner.style.transform = "translateZ(" + lerp(-80, 0, smooth(seg(u, 0, 5))) + "px) rotateY(" + lerp(-9, -4, seg(u, 0, 5)) + "deg)";
+      roomInner.style.transform = "translateZ(" + lerp(-220, 0, smooth(seg(u, 0, 5))) + "px) rotateY(" + lerp(-14, 6, seg(u, 0, 5)) + "deg) translateY(" + (Math.sin(u * 1.3) * 18) + "px)";
     }
   }
 

@@ -84,6 +84,9 @@ export const threeDDataExplainer: StylePreset = {
       punchInScale: 1.52,
       patternInterruptMedianMs: 2700,
       meanMotion: 0.02,
+      // The motion series of the timeline function, averaged per tenth of the video. Added in version 2: the first render matched the
+      // overall cut rhythm but moved 2 to 4 times less in tenths 4 to 9, because the preset held only one motion number.
+      motionTenths: [0.124, 0.077, 0.088, 0.084, 0.108, 0.096, 0.083, 0.057, 0.059, 0.101],
       flickerScore: 0.013,
       integratedLufs: -14.1,
       truePeakDbtp: -1.1,
@@ -110,6 +113,10 @@ export const threeDDataExplainer: StylePreset = {
         "region, slow orbits around single objects. That is why 9 hard cuts carry about 17 pattern interrupts.",
       transitions:
         "Mostly camera moves and match cuts between scenes of the same kind (aerial to aerial, panel to panel). No flashes or whips seen.",
+      cutRule:
+        "Each measured cut changes the picture enough to pass the scene-cut score of 0.3: a new place, a new scale or a new set. A cut " +
+        "between two similar views of the same scene (ice to ice at the same height) does not register, so it does not count as a cut. " +
+        "The 16.7 s stretch from 22.0 s to 38.7 s has no cut at all: it moves through the data room, a prop and a new place by camera moves.",
       endsOnLoopNote:
         "The last shot returns to the opening scene (the parking lot), but the frames differ (distance 0.101, the loop test needs " +
         "at most 0.04), so the engine reads it as no loop. It is a thematic loop, not a frame loop.",

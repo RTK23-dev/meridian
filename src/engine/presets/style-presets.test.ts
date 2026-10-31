@@ -57,8 +57,20 @@ test("the measured grammar is consistent and nothing unknown is filled in", () =
   assert.equal(measured.hookFirstCutMs, measured.cutsMs[0]);
   assert.ok(measured.shotLengthMs.p25 <= measured.shotLengthMs.p50 && measured.shotLengthMs.p50 <= measured.shotLengthMs.p75);
   assert.equal(measured.endsOnLoop, measured.loopDistance <= 0.04);
+  const tenths = (threeDDataExplainer.grammar.measured as { motionTenths: number[] }).motionTenths;
+  assert.equal(tenths.length, 10);
+  assert.ok(tenths.every((value) => value >= 0 && value <= 1));
   assert.deepEqual(threeDDataExplainer.styleKit.musicGenres, [], "music was not measured, so no genre is named");
   assert.ok(threeDDataExplainer.grammar.unknown.length > 0);
+});
+
+test("the layout names every measured zoom jump, and a layout that misses one has a problem", () => {
+  assert.ok(threeDDataExplainer.layout !== undefined);
+  const layout = threeDDataExplainer.layout;
+  const broken: StylePreset = { ...threeDDataExplainer, layout: { ...layout, zoomJumpKinds: layout.zoomJumpKinds.slice(1) } };
+  assert.ok(presetProblems(broken).some((problem) => problem.includes("zoomJumpKinds")));
+  const outside: StylePreset = { ...threeDDataExplainer, layout: { ...layout, captions: { ...layout.captions, topFrac: 1.4 } } };
+  assert.ok(presetProblems(outside).some((problem) => problem.includes("captions.topFrac")));
 });
 
 test("a preset whose beats leave a gap, or whose shot uses a banned type, has problems", () => {
