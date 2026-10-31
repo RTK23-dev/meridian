@@ -48,7 +48,7 @@ export const threeDDataExplainerKit: StyleKit = {
 
 export const threeDDataExplainer: StylePreset = {
   presetId: "3d_data_explainer",
-  version: 1,
+  version: 2,
   label: "3D satellite data explainer",
   summary:
     "A calm, documentary explainer: slow 3D camera flights over satellite and aerial scenes, numbers anchored in the scene, a dark " +
@@ -120,6 +120,44 @@ export const threeDDataExplainer: StylePreset = {
       "genome: the genes in the reference's own terms (the genome role was not run)",
       "shakeOnImpact and speedRamps (the frame_reader role was not run)",
       "music, tempo, energy curve and sound effects per 10 s (they need the speech spans to separate music from voice)",
+    ],
+  },
+  // Version 2: the layout the first render from this preset had to choose (docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md, section 7).
+  // Positions and sizes were read from the reference's frames and are approximate; "chosen" marks a value the reference did not give.
+  layout: {
+    title: {
+      topFrac: 0.075,
+      sizeFracOfWidth: 0.07,
+      accent: "the last words of the second line, in an italic serif, in the accent colour",
+      visibleUntilMs: 4300,
+      source: "read",
+    },
+    counter: {
+      topFrac: 0.2,
+      sizeFracOfWidth: 0.09,
+      behaviour: "counts up the objects marked in the shot, with a pill label under the number",
+      source: "read",
+    },
+    pill: { background: "#485058", sizeFracOfWidth: 0.021, letterSpacingEm: 0.15, source: "read" },
+    captions: { topFrac: 0.72, sizeFracOfWidth: 0.047, highlight: "box", upcomingOpacity: 0.45, source: "read" },
+    rings: { colourRole: "secondary", strokeFracOfWidth: 0.004, glow: true, appearEveryMs: 400, source: "chosen" },
+    room: {
+      background: "#000010",
+      lightStrips: "narrow white ceiling strips receding to a vanishing point above the panels",
+      panel: "navy panel, thin light border, bold white title on the left, small grey label on the right",
+      bigNumberColourRole: "accent",
+      source: "read",
+    },
+    follow: { fromEndMs: 2000, colour: null, source: "read" },
+    zoomJumpKinds: [
+      { atMs: 4400, kind: "camera_move" },
+      { atMs: 22600, kind: "punch" },
+      { atMs: 23900, kind: "punch" },
+      { atMs: 25200, kind: "punch" },
+      { atMs: 26000, kind: "camera_move" },
+      { atMs: 51200, kind: "punch" },
+      { atMs: 52700, kind: "punch" },
+      { atMs: 55300, kind: "punch" },
     ],
   },
   structure: [

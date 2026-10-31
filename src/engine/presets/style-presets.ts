@@ -38,11 +38,31 @@ export type StylePreset = {
     /** What was not measured, and why. Never filled with a guess. */
     unknown: string[];
   };
+  /**
+   * Where and how the overlays sit (added in version 2, after the first render from the preset had to choose all of it). Positions and
+   * sizes are fractions of the frame, so they hold at any resolution. Each block says its source.
+   */
+  layout?: PresetLayout;
   structure: Array<{ role: BeatRole; fromMs: number; toMs: number; intent: string; visual: string }>;
   genes: { keep: GeneId[]; change: string[]; notTransferable: string[] };
   shots: Array<{ id: string; visualType: VisualType; want: string }>;
   /** What the preset cannot express or draw today, and what each needs. */
   gaps: Array<{ what: string; why: string; needs: string }>;
+};
+
+/** A value's origin: measured by the engine, read from the reference's frames by a person or agent, or chosen to fill a gap. */
+export type ValueSource = "measured" | "read" | "chosen";
+
+export type PresetLayout = {
+  title: { topFrac: number; sizeFracOfWidth: number; accent: string; visibleUntilMs: number; source: ValueSource };
+  counter: { topFrac: number; sizeFracOfWidth: number; behaviour: string; source: ValueSource };
+  pill: { background: string; sizeFracOfWidth: number; letterSpacingEm: number; source: ValueSource };
+  captions: { topFrac: number; sizeFracOfWidth: number; highlight: "box" | "colour"; upcomingOpacity: number; source: ValueSource };
+  rings: { colourRole: "primary" | "secondary" | "accent"; strokeFracOfWidth: number; glow: boolean; appearEveryMs: number; source: ValueSource };
+  room: { background: string; lightStrips: string; panel: string; bigNumberColourRole: "accent" | "text"; source: ValueSource };
+  follow: { fromEndMs: number; colour: string | null; source: ValueSource };
+  /** Each measured zoom jump, with what it belongs to: a punch-in on a held shot, or part of a camera move or a scene change. */
+  zoomJumpKinds: Array<{ atMs: number; kind: "punch" | "camera_move" }>;
 };
 
 export const STYLE_PRESETS: readonly StylePreset[] = [threeDDataExplainer];
@@ -74,6 +94,28 @@ export function presetProblems(preset: StylePreset): string[] {
   }
   if (preset.structure.length > 0 && previousEnd !== preset.reference.durationMs) {
     problems.push(`structure: the beats end at ${previousEnd} ms, not at the reference's ${preset.reference.durationMs} ms`);
+  }
+  if (preset.layout !== undefined) {
+    const layout = preset.layout;
+    const fracs: Array<[string, number]> = [
+      ["title.topFrac", layout.title.topFrac],
+      ["title.sizeFracOfWidth", layout.title.sizeFracOfWidth],
+      ["counter.topFrac", layout.counter.topFrac],
+      ["counter.sizeFracOfWidth", layout.counter.sizeFracOfWidth],
+      ["pill.sizeFracOfWidth", layout.pill.sizeFracOfWidth],
+      ["captions.topFrac", layout.captions.topFrac],
+      ["captions.sizeFracOfWidth", layout.captions.sizeFracOfWidth],
+      ["captions.upcomingOpacity", layout.captions.upcomingOpacity],
+      ["rings.strokeFracOfWidth", layout.rings.strokeFracOfWidth],
+    ];
+    for (const [name, value] of fracs) {
+      if (!(value > 0 && value <= 1)) problems.push(`layout: ${name} must be above 0 and at most 1`);
+    }
+    const measuredJumps = (preset.grammar.measured.zoomJumps as Array<{ atMs: number }> | undefined) ?? [];
+    const kinds = layout.zoomJumpKinds.map((jump) => jump.atMs).join(",");
+    if (kinds !== measuredJumps.map((jump) => jump.atMs).join(",")) {
+      problems.push("layout: zoomJumpKinds must name every measured zoom jump, in order");
+    }
   }
   for (const shot of preset.shots) {
     if (preset.styleKit.bannedTypes.includes(shot.visualType)) problems.push(`shots: ${shot.id} uses the banned type ${shot.visualType}`);
