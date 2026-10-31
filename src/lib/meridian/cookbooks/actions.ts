@@ -7,6 +7,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
 import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import { chooseCookbookFor } from "../content-factory/cookbook-choice.ts";
 
 function clip(value: unknown, max = 120): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -165,4 +166,28 @@ export const proposeCookbookAction = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     return proposeFor(sql, { organizationId: access.organizationId, brandId: data.brandId, inputs: data.inputs, lengthMs: data.lengthMs, port: null });
+  });
+
+/**
+ * Records the person's choice of cookbook for a draft run (K18a). The session's own access rule applies (an admin, as for starting a run), and a
+ * started run keeps its record. The selector's port is not connected in this build, so the choice is made from the eligible list.
+ */
+export const chooseCookbookForRunAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectOf(input);
+    const sessionId = clip(body.sessionId, 80);
+    const cookbookId = clip(body.cookbookId, 80);
+    const version = typeof body.version === "number" && Number.isInteger(body.version) && body.version >= 1 ? body.version : NaN;
+    if (!sessionId || !cookbookId || !Number.isFinite(version)) throw new Error("Choose a run, a cookbook and its version.");
+    const values = objectOf(body.values);
+    const cleaned: Record<string, string | number | boolean> = {};
+    for (const [id, value] of Object.entries(values)) {
+      if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") cleaned[id.slice(0, 80)] = value;
+    }
+    return { sessionId, choice: { cookbookId, version, values: cleaned } };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return chooseCookbookFor(sql, { userId: context.userId, sessionId: data.sessionId, choice: data.choice, port: null });
   });
