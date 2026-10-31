@@ -170,6 +170,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) delete `flow/nodes.ts`, since the Factory covers those stages. (b) Keep `priors.ts` as the labelled registry, and wire it into scoring only with a calibration report. (c) Reconcile the speech-pace range (140 to 180, or 140 to 185) before either module uses it.
 - The loop recommends (a), (b) and (c).
 
+## Q22: Two duplicate modules: delete them?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one is, in plain words:
+  - `src/lib/meridian/intelligence/cluster.ts` groups creatives by similarity, with a threshold of 0.72. The product already groups them in `intelligence/whitespace.ts` (`clusterFingerprints`), which the opportunity engine and the studio loop use. This file is a second grouping of the same kind.
+  - `src/lib/meridian/jev/calibration.ts` computes Brier score, log loss and reliability. The product already computes these in `calibration/report.ts` and `learning/calibration-report.ts`, which the calibration screens use. This file is a second copy of that work.
+- Options: (a) delete `cluster.ts` and `jev/calibration.ts`, and keep the product versions. (b) Keep them only as test references, and say so in their headers. (c) Compare the two versions on recorded data first, and merge only if they disagree.
+- The loop recommends (a). Nothing is deleted until you decide.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

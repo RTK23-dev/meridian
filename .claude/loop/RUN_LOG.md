@@ -356,3 +356,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Finding: the speech-pace range differs. Here it is 140 to 185 words a minute. `production/voice-director.ts` uses 140 to 180 with a 160 baseline. The two should agree before either is used (Q21).
 - Decided by the loop: none. Q21 is an owner decision and is open.
 - Still open in R5: 27 modules. Next group: `intelligence/cluster.ts` and `jev/calibration.ts` (JEV logic: check AGENTS rule 6 before touching it).
+
+## 2026-10-31 16:20 UTC: round 2, R5 group: intelligence/cluster.ts and jev/calibration.ts, explained
+
+- Wake: the scheduled wake (`trig_01EcxPBFzTUUfKCntNb5epkA`) fired at 16:18:28Z. CI on `b6e30cf` finished with all 13 check runs successful, CodeRabbit skipped (watchdog at 16:09 found the chain alive). PR #85 is clean and still a draft.
+- Task: R5, `intelligence/cluster.ts` and `jev/calibration.ts`. No code changed.
+- Checked: neither file has a caller outside tests. The grep first matched other calibration modules by name; the exact import check found none for `jev/calibration.ts`. So both are test-only, as the inventory says.
+- `cluster.ts` duplicates the grouping in `intelligence/whitespace.ts` (`clusterFingerprints`), which the opportunity engine and the studio loop use.
+- `jev/calibration.ts` duplicates the Brier, log-loss and reliability code in `calibration/report.ts` and `learning/calibration-report.ts`, which the calibration screens use.
+- Decided by the loop: none. Q22 is an owner decision and is open. The loop recommends deleting both.
+- Still open in R5: 25 modules. Next group: the `organic/*` modules.
