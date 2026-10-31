@@ -473,3 +473,17 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K14: `engine-contracts@12`, approved by D1: the optional cookbook reference on the request, with the Bible note (6 tests; all 299 engine contract tests pass).
 - K15 (partly): `scriptwriter@3` reads the cookbook block; a run without a cookbook keeps version 2 (28 tests across the role, the prompt pins and the handler). The planner, critic and editor remain.
 - Typecheck and lint are clean for every changed file. Each unit was committed and pushed.
+
+## 2026-10-31 21:55 UTC: round 3, K16 to K28 (most units)
+
+- K16 (partly): a cookbook's template becomes a plan skeleton the orchestrator's schema accepts; edits are kept and marked; a plan is sent only with the right selection (3 tests).
+- K17 (partly): the settings panel's model (4 tests) and component. Not on a screen yet.
+- K21 (partly): `stat.counter`, a count-up component, registered; the component contract tests pass (112). Its look is unverified here: the GSAP script loads from a CDN this sandbox cannot reach.
+- K22 (partly): checks against targets, with unknown never a pass (3 tests).
+- K24: the `cookbook-video` skill for agent-mode videos. K30 (guide): `docs/COOKBOOKS.md`, in plain words.
+- K25 (partly): a draft cookbook from a reference's measures; what was not measured is unknown (3 tests).
+- K26, K27: a UGC product cookbook and a voice-led list (5 tests). Finding a gap while testing them: a step that makes a paid visual was not priced unless an ingredient named it, so agent mode could be offered for a paid run. Fixed: such a step is priced, takes the run out of agent mode, and a coded graphics step is free. Each paid cost is counted once.
+- K28 (partly): results by cookbook and setting, with unknown never averaged in as 0 (4 tests).
+- The wake of 20:56 fired into a separate session, which made no commit on this branch. The next wake is armed for 22:15.
+- Checks at each unit: the cookbook suites, the component and compose suites, the engine contract suite, typecheck and lint.
+- Not run here: the browser checks (ui-smoke in CI) and the look of the components.
