@@ -1,7 +1,7 @@
 # Cookbook presets: coding plan
 
-Status: plan, written 2026-10-31 at the owner's request. Nothing in it is built yet. The owner decisions it needs are in section 10 and
-in `.claude/loop/OPEN_QUESTIONS.md` (Q31). The coding loop runs it as round 3 of `.claude/loop/RUN_PLAN.md` once they are answered.
+Status: approved plan, 2026-10-31. The owner answered the decisions (section 10). The task list the coding loop works from is round 3 of
+`.claude/loop/RUN_PLAN.md` (K0 to K30); the C numbers in section 9 map onto it.
 
 ## 1. The idea in one paragraph
 
@@ -201,13 +201,26 @@ Each task is one loop unit or less, with its own tests (fixture-based, PGlite wh
 Order: C1 to C4 first (pure, no decisions needed), then C6, C7, C9 and C10 (a working product path in phase A), then C11 to C13 (agent
 mode and quality checks), then C5, C8, C14, C15 and C17, and C16 when D1 is answered.
 
-## 10. Decisions for the owner
+## 10. Decisions (answered by the owner, 2026-10-31)
 
-| Id | Question | Recommendation |
-| --- | --- | --- |
-| D1 | Phase B: add a cookbook field to the engine request (a contract change, `engine-contracts@12`) so the planner, critic and editor follow cookbook instructions too? This is Q1 in a concrete form | Yes, after phase A works |
-| D2 | Agent mode: may a video made fully by a Claude Code session go through the normal review, disclosure and publish gates like an engine video? | Yes, with the same gates and a label saying how it was made |
-| D3 | Who can see a custom cookbook: the brand, the whole workspace, or both by choice? | Both, by choice; default to the brand |
-| D4 | Retire the factory pipeline presets (stored but never applied today) once they exist as cookbooks? | Yes |
-| D5 | Who may edit instructions, given that they reach model prompts: editors, or admins only? | Editors for their own cookbooks; admins for copies of built-ins |
-| D6 | Record option values with run results for the research agents? | Yes; they are the main signal for which settings pay |
+| Id | Answer |
+| --- | --- |
+| D1 | Yes, with automatic selection: the engine picks the cookbook from the inputs with a small decision-model call (`cookbook_selector`). In normal use the person sees the pick, can change the cookbook and its settings, and then sends the final request to the orchestrator; in an automated loop the pick is accepted and recorded as auto-accepted. The contract field (`engine-contracts@12`) is approved. This settles Q1 |
+| D2 | Yes: same gates, labelled "made in agent mode" |
+| D3 | Both: brand or whole workspace, by the creator's choice; brand by default |
+| D4 | Replace and improve, do not scrap: upgrade the existing preset code, migrate its data, keep its tests, and remove a module only once its replacement covers it |
+| D5 | Agreed |
+| D6 | Yes |
+
+## 11. Automatic selection (D1)
+
+1. **Eligibility** (pure, `cookbooks/eligibility.ts`): from the inputs (brief, reference and its Video DNA, product kit, uploads, budget,
+   run kind), keep the cookbooks that can run, each with the reason the others cannot.
+2. **Selector** (`cookbook_selector` role, small model, through `runRole`, the gateway and the ledger): reads the eligible cookbooks and the
+   inputs as delimited data, and answers with up to three ranked picks, starting values and a one-line reason each. An answer outside the
+   eligible list or a control's range is refused. Not connected means `NOT_CONNECTED`, and the person picks.
+3. **Resolve**: the pick and its values go through `resolveCookbook`, giving needs, estimate and modes.
+4. **Confirm**: in normal runs the Content Factory shows the proposal with its alternatives and the settings panel; nothing goes to the
+   orchestrator until the person confirms, after any change. In automated loops the proposal is accepted as is.
+5. **Record**: the run stores the cookbook, version, values and how it was chosen (auto, auto-accepted, changed by a person). That is the
+   data the research agents learn from (D6).

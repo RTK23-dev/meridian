@@ -134,8 +134,294 @@ no merging, no force-push, no contract change without the owner's approval, no n
 ### R8: New pull request (Q6, Q8)
 - Status: `pending`. Open one new draft pull request once R5 and R6 are settled, and leave PR #85 unchanged. The owner said: when the changes are done.
 
-## Round 3: cookbook presets (planned 2026-10-31, not started)
+## Round 3: cookbook presets (the owner's go, 2026-10-31)
 
-The plan is `docs/planning/COOKBOOK_PRESETS_PLAN.md`: tasks C1 to C17. C1 to C4 (control schema, cookbook schema and validator,
-resolver, the 3D data explainer as the first built-in) need no owner decision and can start once round 2 ends. C14 waits on D4, C15 on
-Q21, and C16 on D1 (Q1). The owner decisions are Q31 in OPEN_QUESTIONS.md.
+The design is `docs/planning/COOKBOOK_PRESETS_PLAN.md`. This section is the task list the loop works from, top to bottom, one unit per
+wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
+
+### The owner's answers (Q31, 2026-10-31)
+
+- D1, engine integration: yes, with a new requirement. The engine picks the right cookbook from the inputs with a small decision-model
+  call. In normal use (not a fully automated loop) the person sees the pick, can change the cookbook and adjust its settings, and only
+  then sends the final request to the orchestrator. In an automated loop the pick is accepted as is and recorded as auto-accepted. The
+  contract change this needs (`engine-contracts@12`: a cookbook reference, its values and per-role instructions on the request) is
+  approved as part of this answer. This also settles Q1.
+- D2: yes. Agent-mode videos pass the same review, disclosure and publish gates, labelled with how they were made.
+- D3: both. A custom cookbook is visible to its brand or to the whole workspace, by the creator's choice; brand by default.
+- D4: replace and improve, do not scrap. The factory pipeline presets, the pipeline editor, the preset bar, the content hub's start
+  modes, the style presets, the repurpose catalog and the unused flow modules are upgraded into the cookbook system, and their useful
+  parts and tests are kept. Old data is migrated, not dropped. A module is removed only after its replacement covers it and its tests
+  have moved.
+- D5: agreed. Editors edit their own cookbooks' instructions; admins edit copies of built-ins.
+- D6: yes. Option values are recorded with run results for the research agents.
+
+### Rules for this round
+
+- The hard stops still apply: no live provider call, no spend, no publishing, no merging, no force-push, no new dependency without
+  approval, no secret printed. The contract change in K14 is approved (D1). Any other contract change still needs the owner.
+- Every model call in this round is a role through `runRole`, tested with recorded answers. The selector's live run is the owner's.
+- Fail closed: when the selector is not connected, the screen says so and the person picks; nothing is picked for them by a guess.
+- Each task ends green: focused tests, `npx eslint` on the changed files, `npm run typecheck`. CI on the pushed head is the
+  verification of record (Q10). UI tasks add or extend a ui-smoke path and check the page in a browser when one can launch.
+- Every new screen keeps role checks (`hasRole`) on mutations and tenancy checks on every server function.
+
+### Stage 0: finish round 2
+
+#### K0: The last four test-only modules (R5)
+- Status: `pending`. Depends on: none.
+- `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`: check each with exact
+  import patterns; wire it if it is a read or a test-gate fit with no owner decision, otherwise explain it with a question.
+  `lib/create/steps.ts` (brief, plan, review steps) is a candidate for the K17 selection step: note it there rather than deleting it.
+- Done when: R5 is `done` with every module wired or explained; RUN_PLAN, STATE and the PR #85 description carry the final count.
+
+### Stage 1: the cookbook core (pure code, no storage)
+
+#### K1: One control schema
+- Status: `pending`. Depends on: K0.
+- `src/lib/meridian/cookbooks/controls.ts`: zod schemas for `toggle`, `slider`, `select`, `text` and `colour` controls (section 3 of
+  the design). A parser turns each compose component's `data-composition-variables` (enum, number, string) into the same schema.
+- Tests: every `component.html` in `src/engine/compose/components/` parses; a malformed declaration fails with its field named.
+- Done when: the component variables and cookbook controls share one type.
+
+#### K2: The cookbook schema and validator
+- Status: `pending`. Depends on: K1.
+- `cookbooks/schema.ts` (`meridian.cookbook/v1`: meta, modes, ingredients, steps, instructions, style, grammar, controls, checks) and
+  `cookbooks/validate.ts` (`validateCookbook`): the six rules of the design's section 3 (paths exist, ranges inside engine bounds,
+  unique ids, no cycles, no expressions, bounded instruction text, unknown prices stay unknown).
+- Tests: one passing and one failing case per rule.
+
+#### K3: The resolver
+- Status: `pending`. Depends on: K2.
+- `cookbooks/resolve.ts`, `resolveCookbook(cookbook, values, context)`, pure. It fills defaults and applies the bindings, then works out:
+  - the requirements with their cost class (free, paid or unknown), from `engine/plan/tables.ts` RECIPES, `plan/cost.ts` and
+    `config/prices.ts`;
+  - the estimate, with unknown lines named;
+  - the modes the values allow (agent, engine);
+  - the badge.
+- Its outputs: `request` (fields for `buildProductionRequest`), `planTemplate` (orchestrator nodes) and `agentBrief`.
+- Tests: golden outputs per built-in and values set. The same input gives the same output byte for byte. An unknown control or an
+  out-of-range value is refused as `invalid_input`. A missing price stays `null`.
+
+#### K4: The 3D data explainer as the first built-in cookbook
+- Status: `pending`. Depends on: K3.
+- `cookbooks/builtin/3d-data-explainer.ts`, built from `src/engine/presets/three-d-data-explainer.ts` (version 2), with:
+  - the options in section 1 of the design (voice-over, music, pace, camera energy, data panels, hook counter, length, caption
+    highlight);
+  - its instructions;
+  - checks from the measured targets.
+- `src/engine/presets/` stays the source of the style and grammar data; the cookbook reads it rather than copying it.
+- Tests: it validates. Turning on "Voice-over: AI voice" removes agent mode and adds a voice line.
+
+#### K5: Bring the existing presets in (D4)
+- Status: `pending`. Depends on: K3.
+- Each of the five factory pipeline presets (`viral_ugc`, `problem_solution`, `strict_quality`, `manual_cloud`, `custom`) becomes a
+  built-in cookbook through an adapter: stages become steps, the four prompt texts become step instructions, and the generation params
+  and thresholds become controls with the same ranges the validator enforces today.
+- The content hub's start modes (brief, reference, studio) become the three "blank" cookbooks.
+- The repurpose catalog's `packs` capability becomes available, pointing at cookbooks.
+- Tests: each old preset, resolved through its cookbook, gives the same stages, prompts and params as `getPresetConfig` gives today
+  (the old tests keep passing).
+
+### Stage 2: storage and server functions
+
+#### K6: The cookbooks table and store
+- Status: `pending`. Depends on: K2.
+- Migration `migrations/0140_cookbooks.sql`. Columns: `id`, `organization_id`, `brand_id` (null when visible to the whole
+  workspace, D3), `cookbook_id`, `version`, `parent_cookbook_id`, `parent_version`, `body jsonb`, `content_hash`, `created_by`,
+  `created_at`, `archived_at`. Unique on `(organization_id, cookbook_id, version)`.
+- `cookbooks/store.ts`: list (built-ins, plus this workspace's, plus this brand's), get (latest or a version), save the next version,
+  fork, and archive. Rows are immutable.
+- Tests (PGlite): versions are immutable; a fork keeps its parent; a brand cookbook is invisible to another brand and visible across
+  the workspace when shared; an archived cookbook is not listed but still resolves for old runs.
+
+#### K7: Server functions and roles
+- Status: `pending`. Depends on: K6.
+- `cookbooks/actions.ts`: `listCookbooks`, `getCookbook`, `resolveCookbookFor` (no writes), `saveCookbook`, `forkCookbook`,
+  `archiveCookbook`, each with `authMiddleware`, `requireBrand` and role checks (viewer reads; editor saves and forks their own; admin
+  edits copies of built-ins, D5).
+- Tests: each role on each action.
+
+#### K8: Migrate the saved pipeline configs (D4)
+- Status: `pending`. Depends on: K5, K6.
+- Each `factory_pipeline_configs` row becomes a brand cookbook (forked from its preset's built-in, with its saved values as defaults),
+  and `loadFactoryPipelineConfig` reads through the cookbook. The old table stays, read only, until K20 moves its editor; the
+  migration is idempotent.
+- Tests (PGlite): a saved config round-trips to the same `FactoryPipelineConfig`.
+
+### Stage 3: automatic selection with a person in the loop (D1)
+
+#### K9: Eligibility from the inputs
+- Status: `pending`. Depends on: K3.
+- `cookbooks/eligibility.ts`, pure: from the request inputs, decide which cookbooks can run and why the others cannot. The inputs are:
+  - the brief text and its length;
+  - a reference video, and its Video DNA when cached;
+  - a product kit;
+  - uploaded footage or a voice recording;
+  - the budget;
+  - the run kind (normal or automated loop).
+- Example: no presenter footage and no avatar budget rules out a UGC cookbook that requires one.
+- Tests: one case per ingredient kind.
+
+#### K10: The cookbook selector role
+- Status: `pending`. Depends on: K9.
+- A new Claude role, `cookbook_selector`. It uses a small model through `runRole` and the gateway, with a budget line in the ledger.
+  - Its prompt is `src/engine/prompts/cookbook_selector@1.md`.
+  - It receives the eligible cookbooks (id, label, summary, needs, controls) and the inputs as delimited data.
+  - It answers with a ranked choice of up to three, starting values for the controls, and a one-line reason each, validated by zod.
+- Fail closed: an answer naming a cookbook outside the eligible list, or a value outside a control, is refused. When the role is not
+  connected, the result is `NOT_CONNECTED` and the screen asks the person to pick.
+- Tests: recorded answers (a good pick, an ineligible pick refused, an out-of-range value refused, not connected).
+
+#### K11: Selection in the request flow
+- Status: `pending`. Depends on: K7, K10.
+- `cookbooks/select.ts`: `proposeCookbook(inputs)`, which runs eligibility, then the selector, then the resolver, and returns the
+  proposal: the cookbook, the values, the requirements, the estimate, the reason and the alternatives.
+- Normal runs: the proposal is shown and nothing is sent until the person confirms, optionally after changing the cookbook or
+  its values.
+- Automated loops: the proposal is accepted and recorded as `auto_accepted`.
+- The chosen cookbook, its version, its values and how it was chosen (auto, auto-accepted, changed by a person) are stored with the run.
+- Tests: both paths, and a changed choice recorded as changed.
+
+### Stage 4: engine integration (contract approved by D1)
+
+#### K12: Phase A wiring through existing fields
+- Status: `pending`. Depends on: K3.
+- `content-factory/request.ts` `buildProductionRequest` takes a resolved cookbook and maps it onto existing fields: `page.styleKitId`
+  (installed through `installStylePreset` or the kit store), `format.keep`, `visualRequests`, `constraints`, and a delimited
+  "Cookbook instructions" section in `brief.text`.
+- Tests: a request fixture for each built-in.
+
+#### K13: Record the cookbook on runs (D6)
+- Status: `pending`. Depends on: K11, K12.
+- The content factory run and the engine request record `cookbook_id`, `version`, the values, the mode and the selection kind
+  (migration). The export package includes them.
+- Tests (PGlite).
+
+#### K14: `engine-contracts@12`
+- Status: `pending`. Depends on: K12.
+- `productionRequestSchema` gains an optional `cookbook: { id, version, valuesHash, instructions: partial record of role to text }`.
+  Optional, so earlier requests parse unchanged.
+- Version bump in `contracts/version.ts`, and a migration note in Bible section 4 (`docs/engine/VIDEO_ENGINE_BIBLE.md`).
+- Tests: v12 fixtures; a v11 request still parses; instruction text over the bound is refused.
+
+#### K15: Roles that read cookbook instructions
+- Status: `pending`. Depends on: K14.
+- New prompt versions for the script writer, the planner, the critic and the editor (`<role>@<n+1>.md`) with a delimited "cookbook
+  instructions" block, which is data and never overrides the rules or the gates. The roles pin the new versions; the old files stay
+  unchanged (their hashes are pinned).
+- Tests: the prompt hash pins for the new versions; recorded-answer tests show the block reaching each role; gates still fail a bad
+  output whatever the instructions say.
+
+#### K16: The orchestrator takes a cookbook as its plan template
+- Status: `pending`. Depends on: K11, K14.
+- `engine/orchestrator/planner.ts` takes the resolved `planTemplate` as the starting plan; the person can still edit nodes on the
+  canvas, and the plan records which nodes came from the cookbook.
+- "Send to orchestrator" sends only after the selection step is confirmed (normal runs).
+- Tests: a planner fixture per built-in; an edited node keeps its edit.
+
+### Stage 5: screens
+
+#### K17: The cookbook settings panel
+- Status: `pending`. Depends on: K1, K3.
+- `src/components/cookbooks/settings-panel.tsx`: renders any cookbook's controls from the schema with `Switch`, `Slider`,
+  `SelectInput`, `RadioGroup` and the kit colour roles. Requirements and estimate update live through `resolveCookbook`.
+- Accessibility: a label on every control, keyboard use, visible focus, reduced motion.
+- `lib/create/steps.ts` (K0) is reused for the brief, plan and review step header if it fits.
+- Tests: component tests for each control kind; a ui-smoke path.
+
+#### K18: The selection step in the Content Factory
+- Status: `pending`. Depends on: K11, K17.
+- After the inputs, the hub shows the proposal: the pick with its reason, two alternatives, the settings panel, and the needs and
+  estimate. The person can change the cookbook and adjust it, then press "Send to orchestrator".
+- When the selector is not connected, the hub says so and shows the picker.
+- The three start modes become the "blank" cookbooks (K5).
+- Tests: ui-smoke covers pick, change and send.
+
+#### K19: The cookbook library and detail screens
+- Status: `pending`. Depends on: K7, K17.
+- `/brands/$brandId/cookbooks`: cards with badge, needs and estimate; filters by family and "free in agent mode"; detail with the
+  settings panel, "Use in Content Factory" (`?cookbook=`), "Save as my cookbook" (fork, brand or workspace, D3) and the version
+  history.
+- Navigation entry, with the navigation tests updated.
+
+#### K20: The pipeline editor becomes the cookbook editor (D4)
+- Status: `pending`. Depends on: K8, K19.
+- `pipeline-editor.tsx` and `preset-bar.tsx` are upgraded, not replaced: the preset bar lists cookbooks, and the editor edits a
+  cookbook's steps, per-role instructions (D5 roles) and controls. Validation errors show next to their fields.
+- `factory_pipeline_configs` is no longer written; its rows were migrated in K8.
+- Tests: the existing pipeline-model tests move to the cookbook model and keep their cases.
+
+### Stage 6: components, agent mode and checks
+
+#### K21: Compose components for data explainers
+- Status: `pending`. Depends on: K1.
+- One component per unit, each with `props.ts`, golden snapshots and declared variables in the K1 schema:
+  - `captions.boxed` (in the contract already; the spoken word in a filled box, the words to come dimmed);
+  - `stat.counter` (a number that counts up, with a pill label);
+  - `label.pill` (place and date);
+  - `panel.bars`, `panel.line` and `panel.tiles` (data panels in the room style);
+  - `cta.follow`.
+
+#### K22: The checks module
+- Status: `pending`. Depends on: K2.
+- `cookbooks/checks.ts`: measure an output with the media functions and compare it with the cookbook's targets (pass, near, miss).
+  It generalises `scripts/engine/preset-preview/compare.ts`.
+- The safe-zone check from `gates/slop-craft-gates.ts` moves here and into the engine's post-render gate as a note (Q32, option a). The
+  rest of that file is retired after its tests move.
+- Tests: recorded measures.
+
+#### K23: The agent-mode renderer
+- Status: `pending`. Depends on: K4, K21, K22.
+- `scripts/engine/cookbook-render/`: generalises `scripts/engine/preset-preview/` to read a resolved cookbook and draw it with the K21
+  components and the shader scenes, frame by frame, in the local Chromium, and to run the K22 checks on the result. No provider is
+  called.
+- The preview script stays as a thin wrapper.
+- Done when: the 3D data explainer renders from its cookbook and its check report is in the run log.
+
+#### K24: A cookbook as a Claude Code skill
+- Status: `pending`. Depends on: K23.
+- `.claude/skills/cookbook-video/SKILL.md` and an export function: a session makes an agent-mode video from any cookbook that allows
+  agent mode (script, scenes, render, checks), with the hard stops above.
+- Agent-mode videos enter review with the label "made in agent mode" and pass the same disclosure and publish gates (D2).
+- Tests: the export for each built-in; the label reaches the review item.
+
+#### K25: From a reference video to a draft cookbook
+- Status: `pending`. Depends on: K4, K22.
+- `cookbooks/from-reference.ts` automates what was done by hand on 2026-10-31. From a reference's free measures (media functions),
+  and its Video DNA when the paid analysis has run, it writes a draft cookbook: kit, layout, grammar targets, cut rule, structure and
+  gaps.
+- Values that were read rather than measured are labelled `read`, and unknown stays unknown.
+- Tests: the 3D explainer's recorded measures give a draft that validates and matches K4's grammar targets.
+
+### Stage 7: more built-ins, learning, finish
+
+#### K26: A UGC product cookbook
+- Status: `pending`. Depends on: K4.
+- Ingredients: presenter (avatar, paid, or upload); product kit (required).
+- Options: hook type, product shots, presenter, captions.
+- Tests: the badges and modes for each presenter choice.
+
+#### K27: A voice-led listicle cookbook
+- Status: `pending`. Depends on: K4.
+- Ingredients: voice (AI voice, paid, or my recording); kinetic type and stock.
+- Agent mode is allowed with a recording.
+
+#### K28: Results by cookbook and option (D6)
+- Status: `pending`. Depends on: K13.
+- `learning/cookbook-results.ts` and a view: results per cookbook, version and option value, from recorded runs and their published
+  measurements, with unknowns as unknown, plus an export for the research agents next to `docs/data/`.
+- Scores stay scores until a calibration report says otherwise.
+
+#### K29: Retire what the cookbooks replaced (D4)
+- Status: `pending`. Depends on: K20, K22, K24.
+- Remove only what is now covered: the unused `flow/nodes.ts` and `flow/connector.ts`, after their node kinds and tests are checked
+  against cookbook steps (Q21); the old pipeline preset constants, after K5's equivalence tests pass; and the rest of
+  `slop-craft-gates.ts`, after K22.
+- Tests: the full suite keeps its counts, minus the removed tests, which are listed in the log.
+
+#### K30: Owner guide and the pull request
+- Status: `pending`. Depends on: every task above, apart from parked ones.
+- Write `docs/COOKBOOKS.md`, a guide in plain words: picking, changing, saving and sharing cookbooks, what each badge means, agent
+  mode against engine mode, and what the owner's live steps are (the selector's first live call, a paid render).
+- Refresh the PR description, and run the release acceptance and a browser pass over the new screens.
+- Then end the run (the skill's End of run).

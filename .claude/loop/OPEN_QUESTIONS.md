@@ -5,7 +5,7 @@ Every question the loop could not settle alone. Each one says what it blocks and
 Status: `open`, `decided by loop` (the loop chose, and you can confirm or reverse it) or `answered`.
 
 ## Q1: Contract change for preset fields
-- Kind: owner decision. Status: `open`.
+- Kind: owner decision. Status: `answered` (2026-10-31, through Q31 D1): approved as `engine-contracts@12`, a cookbook reference with its values and per-role instructions (round 3, K14).
 - Blocks: any new preset field in `src/engine/contracts/`. No task in this run needs one unless you approve it.
 - Default taken: none. The run works on the existing contracts (T11).
 - Question: if the preset inventory (T10) finds fields that presets need, do you approve `engine-contracts@12`, with a Bible section 4 migration note?
@@ -251,7 +251,7 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - The loop recommends A (it is the only way to get the real grammar), C and D, and B only together with Q1.
 
 ## Q31: Cookbook presets: six decisions
-- Kind: owner decision. Status: `open`.
+- Kind: owner decision. Status: `answered` (2026-10-31): D1 yes, with automatic selection by a small decision-model call and a person's confirmation in normal runs; the contract field is approved. D2 yes. D3 both. D4 replace and improve, do not scrap. D5 agreed. D6 yes. Recorded in RUN_PLAN.md round 3.
 - Context: the owner asked for a plan for cookbook presets (recipes with their own instructions, needs and options). The plan is `docs/planning/COOKBOOK_PRESETS_PLAN.md`, section 10.
 - Blocks: C16 (D1), C14 (D4); the rest of round 3 can start without answers.
 - D1: add a cookbook field to the engine request (contract change, `engine-contracts@12`) so the planner, critic and editor follow cookbook instructions? Recommended: yes, after phase A works. This settles Q1.
