@@ -168,7 +168,13 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 0: finish round 2
 
 #### K0: The last four test-only modules (R5)
-- Status: `pending`. Depends on: none.
+- Status: `done`. Depends on: none. Result (2026-10-31, exact import checks):
+  - `lib/progress/step-url.ts` is already used by `components/home/home-model.ts`, so it is wired. Its siblings: `step-state.ts` is used only by `lib/create/steps.ts`; `debounce.ts` and `draft-store.ts` have no product caller.
+  - `lib/create/steps.ts` (the Create step bar) has no caller: the `/create` routes do not exist. Explained, not wired (Q33).
+  - `components/settings/connection-state.ts` is a second connection-label mapping next to `integrationCards` on `/integrations`. Wiring it would change the labels people see. Explained, not wired (Q33).
+  - `engine/render/splice-run.ts` runs a splice render whose only window renderer returns `not_connected` (honest, but nothing calls it). Explained, not wired (Q33).
+  - `debounce.ts` and `draft-store.ts` (saved drafts that survive a reload, 600 ms debounce) are the right tools for the cookbook settings panel and editor. They are wired in K17 and K20, not here, so this task does not add browser storage to a screen by itself.
+- Done when: met. R5 reads 6 wired, 34 explained, 4 of them listed in Q33, and K17 and K20 pick up `draft-store` and `debounce`.
 - `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`: check each with exact
   import patterns; wire it if it is a read or a test-gate fit with no owner decision, otherwise explain it with a question.
   `lib/create/steps.ts` (brief, plan, review steps) is a candidate for the K17 selection step: note it there rather than deleting it.

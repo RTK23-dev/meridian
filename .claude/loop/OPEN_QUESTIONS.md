@@ -269,6 +269,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) move the safe-zone check (`validateReelsSafeZones`) into the engine's post-render gate once overlay boxes are measured, and delete the rest; (b) keep the file until a vision role can measure the four slop signs (paid); (c) delete it.
 - The loop recommends (a). Nothing is changed or deleted.
 
+## Q33: Four remaining test-only modules: which display and which screen?
+- Kind: owner decision. Status: `open`.
+- `components/settings/connection-state.ts`: a second connection-label mapping next to `integrationCards` on `/integrations`. Decide: keep the integrations model and delete this one, or replace the integrations labels with it (this changes what people see).
+- `lib/create/steps.ts`: the Create step bar. There are no `/create` routes. Decide: build the Create screen, or delete the file.
+- `engine/render/splice-run.ts`: a splice render that needs a window renderer; the only one returns `not_connected`. Decide: keep it for the splice render, or delete it.
+- `lib/progress/debounce.ts` and `draft-store.ts`: used by K17 and K20 when they are built (unless you decide otherwise).
+- Blocks: nothing in round 3.
+- The loop recommends: delete `lib/create/steps.ts` and `splice-run.ts` (no screen or pipeline needs them yet), keep the integrations model, and keep the debounce and draft-store modules for K17 and K20.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
