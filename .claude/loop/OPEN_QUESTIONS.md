@@ -142,6 +142,16 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) build a live run you start yourself, with the budget cap set first, and show each step's cost. (b) Keep both as harnesses for the tests, and say so on the page. (c) Delete them later.
 - The loop recommends (b) for now. Nothing in the product should show their output as a result.
 
+## Q19: Three production planners: wire them, or keep them out?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. The three modules stay as they are, with no caller, until you decide.
+- What each one does, in plain words:
+  - `src/lib/meridian/production/route.ts` combines a text decision and a vision decision for one creative. Any REJECT rejects; any HUMAN_REVIEW sends it to a person; otherwise it is approved. Wiring it changes which creatives are approved, so it is an approval decision for you.
+  - `src/lib/meridian/production/rework-engine.ts` plans 10 to 30 short reels from one creator's footage pack, by a formula card. It needs footage whose rights are known, which is the question from R4 (whether any footage counts as real). It also has a placeholder default music asset (`asset://audio/music-bed-upbeat-01.mp3`) that is not a real file.
+  - `src/lib/meridian/production/voice-director.ts` plans speech tempo, energy and pauses for voiceover, targeting about 160 words a minute. It needs a voice: real creator audio, or a consented synthetic voice. The voice vendor is still an open decision.
+- Options: (a) decide the footage-rights question (R4) and the voice vendor, then wire the rework engine and the voice plan behind them. (b) Wire `route.ts` as the approval rule, once you confirm that is the rule you want. (c) Keep all three out of the product and delete them later.
+- The loop recommends (a) for the voice and the rework engine, after the footage and voice decisions, and (b) only if you confirm the rule.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

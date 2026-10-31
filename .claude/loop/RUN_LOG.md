@@ -327,3 +327,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `study/deep-study-service.ts`: `conductDeepStudy` calls `jevService.evaluateEvidence` for eight model-backed JEV questions. Wiring it would start model calls (a live provider call, a hard stop) and use JEV judgment, which AGENTS rule 6 keeps unchanged without a task that names it.
 - Decided by the loop: none. Q18 is an owner decision and is open.
 - Still open in R5: 34 modules. Next group: `production/route.ts`, `production/rework-engine.ts` and `production/voice-director.ts`.
+
+## 2026-10-31 15:15 UTC: round 2, R5 group: the three production planners, explained
+
+- Wake: the scheduled wake (`trig_01JC26gmF1ZKDnkMkoRYGshP`) fired at 15:13:14Z. CI on `59b4679` (run 41212121361) finished with every check run successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `production/route.ts`, `production/rework-engine.ts`, `production/voice-director.ts`. None has a caller outside tests. No code changed.
+- `route.ts`: approval routing (any REJECT rejects, then HUMAN_REVIEW, else approve). Wiring it changes approvals, which is the owner's decision.
+- `rework-engine.ts`: needs footage with known rights (the R4 question) and has a placeholder default music asset. Its cost estimate comes from the source ladder, so it is not invented here, but the feature is not decided.
+- `voice-director.ts`: needs a voice (creator audio or consented synthetic) and a voice vendor, which is still open.
+- Decided by the loop: none. Q19 is an owner decision and is open.
+- Still open in R5: 31 modules. Next group: `jobs/durable.ts` and `video/scene-frames.ts`.
