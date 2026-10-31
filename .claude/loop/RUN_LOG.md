@@ -318,3 +318,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - The one with a real risk: `guardrails` finds test and fixture records. I checked the learning and measurement code for any other filter of that kind: none exists. So test rows could reach learning today. This is recorded as a finding for the owner, not fixed here.
 - Decided by the loop: none. Q17 is an owner decision and is open.
 - Still open in R5: 36 modules, handled one group at a time, next `studio/loop.ts` and `study/deep-study-service.ts`.
+
+## 2026-10-31 14:52 UTC: round 2, R5 group: studio/loop.ts and study/deep-study-service.ts, explained
+
+- Wake: the scheduled wake (`trig_011Zj65RUJCdwjuYEDL2ie9q`) fired at 14:50:57Z. CI on `3c1ddac` (run 41210358492) finished with every check run successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, two modules with no caller outside tests. No code changed.
+- `studio/loop.ts`: `runCoreLoop` runs on `testImageProvider`, `startTestVideo` and `testLoopEmbedding`, and a fake publisher. Its exported helpers (retry, dead image, calibration) demonstrate those fakes. Wiring it would show fixture results as real, which the no-fake-success rule forbids.
+- `study/deep-study-service.ts`: `conductDeepStudy` calls `jevService.evaluateEvidence` for eight model-backed JEV questions. Wiring it would start model calls (a live provider call, a hard stop) and use JEV judgment, which AGENTS rule 6 keeps unchanged without a task that names it.
+- Decided by the loop: none. Q18 is an owner decision and is open.
+- Still open in R5: 34 modules. Next group: `production/route.ts`, `production/rework-engine.ts` and `production/voice-director.ts`.

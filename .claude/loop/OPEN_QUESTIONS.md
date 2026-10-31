@@ -133,6 +133,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) wire `guardrails` first as a filter on learning input, and show on the learning page how many rows it would exclude, so you can see whether test data is in use. (b) Show `fatigue` as a suggestion only. (c) Leave all four out and delete them later.
 - The loop recommends (a). It changes nothing until you see the count.
 
+## Q18: The studio core loop and the deep study: keep as harnesses, or wire them to live providers?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one does, in plain words:
+  - `src/lib/meridian/studio/loop.ts` runs the studio's core loop (brief, image, video, review, publish). It runs on test image and video providers, a test embedding and a fake publisher. Its helpers (retry, dead image, calibration) show what those fakes do. Wiring it into the product now would show fixture output as real results, which the no-fake-success rule forbids. The parts it uses (whitespace, judgment, calibration) are product code and already have their own tests.
+  - `src/lib/meridian/study/deep-study-service.ts` runs a deep study: a contrast analysis, then model-backed JEV judgment on eight questions, then a concept genome and an opportunity rating. Wiring it means model calls, which need your keys and your budget, and the rules keep those for a live run you start.
+- Options: (a) build a live run you start yourself, with the budget cap set first, and show each step's cost. (b) Keep both as harnesses for the tests, and say so on the page. (c) Delete them later.
+- The loop recommends (b) for now. Nothing in the product should show their output as a result.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
