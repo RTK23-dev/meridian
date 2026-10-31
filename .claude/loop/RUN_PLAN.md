@@ -402,13 +402,13 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 7: more built-ins, learning, finish
 
 #### K26: A UGC product cookbook
-- Status: `pending`. Depends on: K4.
+- Status: `done` (`cookbooks/builtin/more-built-ins.ts`: the presenter (AI, paid, or the person's footage, free), the product kit, product shots, an end card, and a hook parameter; the AI presenter and product shots turn agent mode off; 4 tests in `more-built-ins.test.ts`).
 - Ingredients: presenter (avatar, paid, or upload); product kit (required).
 - Options: hook type, product shots, presenter, captions.
 - Tests: the badges and modes for each presenter choice.
 
 #### K27: A voice-led listicle cookbook
-- Status: `pending`. Depends on: K4.
+- Status: `done` (the same file: the voice (AI, priced per character so unknown until counted, or the person's recording, free), kinetic type (coded) and optional stock clips (paid, turn agent mode off); the default recording runs free).
 - Ingredients: voice (AI voice, paid, or my recording); kinetic type and stock.
 - Agent mode is allowed with a recording.
 

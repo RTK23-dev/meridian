@@ -75,7 +75,8 @@ export function buildThreeDDataExplainerCookbook(preset: StylePreset = threeDDat
         kind: "visual",
         label: "Draw the scenes",
         after: ["script"],
-        uses: { visualType: "cinematic" },
+        // The paid aerial shots come from the scenes ingredient, so the step names no visual of its own (no cost is counted twice).
+        uses: {},
         params: { pace: 1, length_ms: 60000 },
       },
       {

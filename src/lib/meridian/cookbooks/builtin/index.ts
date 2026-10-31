@@ -4,10 +4,13 @@
 import type { Cookbook } from "../schema.ts";
 import { FACTORY_PRESET_NAMES, blankCookbook, factoryPresetCookbook } from "./factory-presets.ts";
 import { threeDDataExplainerCookbook } from "./three-d-data-explainer.ts";
+import { ugcProductCookbook, voiceListicleCookbook } from "./more-built-ins.ts";
 
 export function builtinCookbooks(): Cookbook[] {
   return [
     threeDDataExplainerCookbook,
+    ugcProductCookbook,
+    voiceListicleCookbook,
     ...FACTORY_PRESET_NAMES.map((name) => factoryPresetCookbook(name)),
     blankCookbook("brief"),
     blankCookbook("reference"),

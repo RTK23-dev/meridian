@@ -9,6 +9,7 @@ import { randomUUID } from "node:crypto";
 import { contentHash } from "../../../engine/contracts/hash.ts";
 import type { Sql } from "../learning/store.ts";
 import { validateCookbook, type ValidationContext } from "./validate.ts";
+import { isBuiltinId } from "./builtin/index.ts";
 import type { Cookbook } from "./schema.ts";
 
 /** Ids that belong to built-in cookbooks. A workspace cookbook cannot use them. */
@@ -75,7 +76,7 @@ function fromRow(row: Row, context: ValidationContext = {}): StoredCookbook {
 }
 
 function isReserved(cookbookId: string): boolean {
-  return RESERVED_PREFIXES.some((prefix) => cookbookId.startsWith(prefix));
+  return isBuiltinId(cookbookId) || RESERVED_PREFIXES.some((prefix) => cookbookId.startsWith(prefix));
 }
 
 /**

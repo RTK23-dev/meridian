@@ -269,3 +269,21 @@ test("a cookbook that fails validation is not resolved", () => {
 test("a video length must be positive", () => {
   assert.equal(resolveCookbook(fixture(), { lengthMs: 0 }).ok, false);
 });
+
+test("a step that makes a paid visual is priced even when no ingredient names it, and it takes the run out of agent mode", () => {
+  const cookbook = fixture();
+  cookbook.controls.push({ id: "shots", kind: "toggle", label: "Product shots", default: false, binds: [{ enable: "product_shots" }] });
+  cookbook.steps.push({ id: "product_shots", kind: "visual", label: "Product shots", after: ["script"], when: { control: "shots", equals: true }, uses: { visualType: "product_hero" }, params: {} });
+  const off = resolved(cookbook, { shots: false, voice_way: "none", scenes_way: "coded" });
+  assert.deepEqual(off.modes, ["agent", "engine"]);
+  const on = resolved(cookbook, { shots: true, voice_way: "none", scenes_way: "coded" });
+  assert.deepEqual(on.modes, ["engine"], "a paid shot is never run in agent mode");
+  assert.ok(on.estimate.knownUsd > 0 || on.estimate.unknown.length > 0, "the shot is priced, or its price is named as unknown");
+  assert.ok(on.requirements.some((line) => line.startsWith("Product shots:")));
+});
+
+test("a coded graphics step costs nothing, so it does not take the run out of agent mode", () => {
+  const cookbook = fixture();
+  cookbook.steps.push({ id: "graphics", kind: "compose", label: "Graphics", after: ["script"], uses: { visualType: "coded_graphics" }, params: {} });
+  assert.deepEqual(resolved(cookbook, { voice_way: "none", scenes_way: "coded" }).modes, ["agent", "engine"]);
+});

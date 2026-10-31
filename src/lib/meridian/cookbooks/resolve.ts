@@ -16,6 +16,7 @@ import { contentHash } from "../../../engine/contracts/hash.ts";
 import type { LookPreset } from "../../../engine/contracts/edl.ts";
 import { shotCost } from "../../../engine/plan/cost.ts";
 import { priceFor, prices } from "../../../engine/config/prices.ts";
+import { RECIPES } from "../../../engine/plan/tables.ts";
 import type { Control, ControlValue, CookbookRole, Scalar } from "./controls.ts";
 import { fitsControl, validateCookbook, type ValidationContext } from "./validate.ts";
 import type { Check, Cookbook, CookbookGrammar, Ingredient, Instruction, Step, Way } from "./schema.ts";
@@ -46,6 +47,8 @@ export type ResolvedStep = {
 };
 
 export type CookbookMode = "agent" | "engine";
+
+type ResolvedStepCost = { stepId: string; label: string; cost: CostLine };
 
 export type ResolvedCookbook = {
   cookbookId: string;
@@ -211,10 +214,28 @@ export function resolveCookbook(input: unknown, options: ResolveOptions): Resolv
   }
   if (total > MAX_INSTRUCTIONS_CHARS) return { ok: false, issues: [`instructions: ${total} characters, over the ${MAX_INSTRUCTIONS_CHARS} limit`] };
 
-  // 5. Ingredients: the choice, its cost class, and the requirement in words.
-  const ingredients: ResolvedIngredient[] = [];
   const estimateUnknown: string[] = [];
   let knownUsd = 0;
+  // 4b. Steps that make a paid visual or call a model are priced too, even when no ingredient names them (a product-shot step, for example).
+  // An enabled step that costs money, or whose cost is unknown, takes the run out of agent mode.
+  const stepLines: ResolvedStepCost[] = [];
+  for (const step of steps) {
+    if (!step.enabled) continue;
+    if (step.uses.visualType === undefined && step.uses.modelClass === undefined) continue;
+    const synthetic: Way = {
+      id: step.id,
+      label: step.label,
+      ...(step.uses.visualType === undefined ? {} : { visualType: step.uses.visualType }),
+      ...(step.uses.modelClass === undefined ? {} : { modelClass: step.uses.modelClass }),
+    };
+    const cost = costOf(synthetic, options.lengthMs, options.voiceCharacters);
+    stepLines.push({ stepId: step.id, label: step.label, cost });
+    if (cost.kind === "paid") knownUsd += cost.usd;
+    if (cost.kind === "unknown") estimateUnknown.push(`${step.label}: ${cost.reason}`);
+  }
+
+  // 5. Ingredients: the choice, its cost class, and the requirement in words.
+  const ingredients: ResolvedIngredient[] = [];
   for (const ingredient of cookbook.ingredients) {
     const chosen = choices.get(ingredient.id);
     if (chosen === undefined) {
@@ -249,7 +270,8 @@ export function resolveCookbook(input: unknown, options: ResolveOptions): Resolv
   const needsChoice = ingredients.filter((item) => item.status === "needs_choice");
   const agentAllowed =
     cookbook.modes.includes("agent") &&
-    ingredients.every((item) => item.status !== "needs_choice" && (item.cost === null || item.cost.kind === "free"));
+    ingredients.every((item) => item.status !== "needs_choice" && (item.cost === null || item.cost.kind === "free")) &&
+    stepLines.every((line) => line.cost.kind === "free");
   const engineAllowed = cookbook.modes.includes("engine") && needsChoice.length === 0;
   const modes: CookbookMode[] = [];
   if (agentAllowed) modes.push("agent");
@@ -260,6 +282,7 @@ export function resolveCookbook(input: unknown, options: ResolveOptions): Resolv
     .filter((item) => item.way !== null)
     .map((item) => `${item.label}: ${item.way?.label ?? ""}${costWords(item.cost)}`);
   for (const item of needsChoice) requirements.push(`${item.label}: choose one`);
+  for (const line of stepLines) requirements.push(`${line.label}:${costWords(line.cost)}`);
 
   const badge = badgeFor({ needsChoice, unknown: estimateUnknown.length > 0, knownUsd, agentAllowed });
 
@@ -348,6 +371,8 @@ function holds(condition: { control: string; equals?: unknown; in?: unknown[]; a
 /** A way's cost class. A coded component and an upload cost nothing; a visual type and a model class are priced; the rest is unknown. */
 function costOf(way: Way, lengthMs: number, voiceCharacters: number | undefined): CostLine {
   if (way.coded === true || way.upload === true) return { kind: "free" };
+  // A component visual (coded graphics) is drawn in code: no model call, so it costs nothing.
+  if (way.visualType !== undefined && RECIPES[way.visualType].kind === "component") return { kind: "free" };
   if (way.visualType !== undefined) {
     const shot = shotCost(way.visualType, lengthMs);
     if (!shot.known) return { kind: "unknown", reason: shot.reason };
