@@ -209,7 +209,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
   out-of-range value is refused as `invalid_input`. A missing price stays `null`.
 
 #### K4: The 3D data explainer as the first built-in cookbook
-- Status: `pending`. Depends on: K3.
+- Status: `done` (`cookbooks/builtin/three-d-data-explainer.ts`, built from the preset: style, structure, cut rule and checks are read from it; 11 tests, including the agent-mode default, the voice-over and generated-shot changes, length, toggles and the plan template). The validator also gained a lookup-table map (a select sets a number through a table), tested.
 - `cookbooks/builtin/3d-data-explainer.ts`, built from `src/engine/presets/three-d-data-explainer.ts` (version 2), with:
   - the options in section 1 of the design (voice-over, music, pace, camera energy, data panels, hook counter, length, caption
     highlight);

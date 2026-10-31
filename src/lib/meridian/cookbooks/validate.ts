@@ -97,7 +97,18 @@ export function validateCookbook(input: unknown, context: ValidationContext = {}
           issues.push(`${where}: ${target}`);
           return;
         }
-        if (typeOfControl(control) !== target.type) {
+        if (bind.map && "table" in bind.map) {
+          // A lookup table: the control picks a key (a select), and every table value must be the type the path takes.
+          if (control.kind !== "select") issues.push(`${where}: a table map needs a select, and ${control.id} is a ${control.kind}`);
+          for (const [key, value] of Object.entries(bind.map.table)) {
+            if (typeOfScalar(value) !== target.type) issues.push(`${where}: table entry ${key} is not a ${target.type}`);
+          }
+          if (control.kind === "select") {
+            for (const option of control.options) {
+              if (!(option.value in bind.map.table)) issues.push(`${where}: option ${option.value} has no table entry`);
+            }
+          }
+        } else if (typeOfControl(control) !== target.type) {
           issues.push(`${where}: ${control.id} is a ${control.kind}, and ${bind.set} takes a ${target.type}`);
         }
         if (control.kind === "slider" && target.bound) {
@@ -109,7 +120,7 @@ export function validateCookbook(input: unknown, context: ValidationContext = {}
             issues.push(`${where}: the mapped output ${linear.out.join(" to ")} is outside ${target.bound.min} to ${target.bound.max}`);
           }
         }
-        if (control.kind === "select" && target.options) {
+        if (control.kind === "select" && target.options && !(bind.map && "table" in bind.map)) {
           for (const option of control.options) {
             if (!target.options.includes(option.value)) issues.push(`${where}: option ${option.value} is not allowed for ${bind.set}`);
           }
@@ -197,6 +208,12 @@ function targetOf(path: string, cookbook: Cookbook, context: ValidationContext):
     return { type: "string" };
   }
   return `path ${path} is not settable: use step.<id>.<parameter>, style.look.strength, style.look.preset or component.<name>.<variable>`;
+}
+
+function typeOfScalar(value: unknown): Target["type"] {
+  if (typeof value === "boolean") return "boolean";
+  if (typeof value === "number") return "number";
+  return "string";
 }
 
 function typeOfControl(control: Control): Target["type"] {

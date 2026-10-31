@@ -198,19 +198,24 @@ test("the requirements read in plain words, one line per chosen ingredient", () 
   assert.deepEqual(result.requirements, ["Voice: My recording (free)", "Scenes: Coded scenes (free)"]);
 });
 
-test("an unknown table entry is refused rather than guessed", () => {
+test("a lookup table sets the parameter for the chosen option, and an option with no entry is refused", () => {
   const cookbook = fixture();
   cookbook.controls.push({
     id: "mood",
     kind: "select",
     label: "Mood",
-    options: [{ value: "calm", label: "Calm" }],
+    options: [
+      { value: "calm", label: "Calm" },
+      { value: "bold", label: "Bold" },
+    ],
     default: "calm",
-    binds: [{ set: "step.script.beats", map: { table: { calm: 4 } } }],
+    binds: [{ set: "step.script.beats", map: { table: { calm: 4, bold: 7 } } }],
   });
-  // The select's default is a value the table has. A value it does not have is refused by the control, so the table is consulted only
-  // for values the control allows.
-  assert.equal(resolveCookbook(cookbook, { lengthMs: LENGTH }).ok, false, "a select bound to a number parameter is a type error");
+  const calm = resolved(cookbook, { mood: "bold" });
+  assert.equal(calm.steps.find((step) => step.id === "script")?.params.beats, 7);
+  const missing = structuredClone(cookbook);
+  missing.controls[missing.controls.length - 1].options.push({ value: "wild", label: "Wild" });
+  assert.equal(resolveCookbook(missing, { lengthMs: LENGTH }).ok, false, "an option with no table entry is refused before any run");
 });
 
 test("the plan template is a list the orchestrator's own schema accepts", () => {

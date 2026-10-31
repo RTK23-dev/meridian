@@ -248,3 +248,25 @@ test("a component variable needs a step that uses its component", () => {
   });
   assert.ok(issuesOf(cookbook, CONTEXT).some((issue) => issue.includes("needs a step that uses component captions.karaoke")));
 });
+
+test("a select with a lookup table sets a number, when every option has an entry of that type", () => {
+  const cookbook = base();
+  cookbook.controls.push({
+    id: "length",
+    kind: "select",
+    label: "Length",
+    options: [
+      { value: "30", label: "30 s" },
+      { value: "60", label: "60 s" },
+    ],
+    default: "60",
+    binds: [{ set: "step.script.beats", map: { table: { "30": 3, "60": 5 } } }],
+  });
+  assert.equal(validateCookbook(cookbook).ok, true, JSON.stringify(validateCookbook(cookbook).ok));
+  const missing = structuredClone(cookbook);
+  missing.controls[missing.controls.length - 1].options.push({ value: "45", label: "45 s" });
+  assert.ok(issuesOf(missing).some((issue) => issue.includes("option 45 has no table entry")));
+  const wrongType = structuredClone(cookbook);
+  wrongType.controls[wrongType.controls.length - 1].binds = [{ set: "step.script.beats", map: { table: { "30": "three", "60": 5 } } }];
+  assert.ok(issuesOf(wrongType).some((issue) => issue.includes("table entry 30 is not a number")));
+});
