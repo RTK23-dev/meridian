@@ -189,6 +189,24 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) approve a small, budgeted Apify run that you start, with the cap set first and each cost shown, then wire the gather. (b) Keep the group out until the learning bridge's effect on scoring is decided. (c) Delete `control-sets.ts` now, since nothing uses it, and keep the rest.
 - The loop recommends (b) for the bridge, and (a) only with a cap you set. Nothing is run and nothing is deleted.
 
+## Q24: Evidence freshness labels, and tracked reel links at publish
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one does, in plain words:
+  - `src/lib/meridian/quality/evidence.ts` labels a piece of evidence as fresh, aging (over 30 days) or stale (over 90 days), as a duplicate, or as weak (under 40 characters). It rewrites no text. No screen shows these labels yet. Showing them changes what a reader sees, not any score.
+  - `src/lib/meridian/shopify/reel-attribution.ts` gives each published reel a tracked link (UTM tags) and a unique 8-character keyword for direct messages, stored once per reel (migration 0092). Its own header says the publish step should call it, and that the publish files belong to another workstream. Wiring it changes the caption or bio link of every reel published from then on. That is an outward change, so it needs your approval.
+- Options: (a) show the freshness labels on the research evidence list. (b) Approve the tracked links in the publish step, for new reels first. (c) Keep both out for now.
+- The loop recommends (a), and (b) once you have confirmed the link text.
+
+
+## Q25: A third calibration implementation: delete it?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. `src/lib/meridian/calibration/report.ts` stays as it is, with no caller.
+- What it does, in plain words: `calibrationReport(rows)` builds bins, a reliability curve, a Brier score and an expected calibration error from stored reviewer scores. It says in its own result that it is not applied to any threshold (`appliedToThresholds: false`), which matches AGENTS rule 9.
+- Why it is a question: the calibration screen already uses `learning/calibration-report.ts`, which also computes Brier. `jev/calibration.ts` is a third copy (Q22). Having three calibration implementations means they can disagree.
+- Options: (a) keep `learning/calibration-report.ts` and delete the other two. (b) Move the expected-calibration-error and reliability curve from this file into `learning/calibration-report.ts`, then delete this one. (c) Keep all three until the owner chooses which report the screen should show.
+- The loop recommends (b), which keeps the one screen's report and the extra measure, and removes the copies.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
@@ -204,14 +222,3 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Q11: answered: confirmed as decided by the loop.
 - Q12: answered: move the five secret reads behind one accessor. Done in `src/lib/meridian/credentials/secret-settings.ts`.
 - Q13: answered: keep the asset router whole, as decided.
-
-## Q24: Evidence freshness labels, and tracked reel links at publish
-- Kind: owner decision. Status: `open`.
-- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
-- What each one does, in plain words:
-  - `src/lib/meridian/quality/evidence.ts` labels a piece of evidence as fresh, aging (over 30 days) or stale (over 90 days), as a duplicate, or as weak (under 40 characters). It rewrites no text. No screen shows these labels yet. Showing them changes what a reader sees, not any score.
-  - `src/lib/meridian/shopify/reel-attribution.ts` gives each published reel a tracked link (UTM tags) and a unique 8-character keyword for direct messages, stored once per reel (migration 0092). Its own header says the publish step should call it, and that the publish files belong to another workstream. Wiring it changes the caption or bio link of every reel published from then on. That is an outward change, so it needs your approval.
-- Options: (a) show the freshness labels on the research evidence list. (b) Approve the tracked links in the publish step, for new reels first. (c) Keep both out for now.
-- The loop recommends (a), and (b) once you have confirmed the link text.
-
-## Owner answers, 2026-10-31

@@ -386,3 +386,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Correction to the 16:43 and 17:03 entries: I first wrote that `calibration/report.ts` is used by the calibration screen. The exact import check shows no product file imports it. The screen uses `learning/calibration-report.ts`. Q22 is corrected.
 - Decided by the loop: none. Q24 is an owner decision and is open.
 - Still open in R5: the rest of the list in section 6A. Next group: `calibration/report.ts` (no caller, verified), and `discovery/provenance.ts`.
+
+## 2026-10-31 17:26 UTC: round 2, R5: calibration/report.ts explained; discovery/provenance.ts planned
+
+- Wake: the scheduled wake (`trig_01Jiamxx3Hrr49LRJic8hhgf`) fired at 17:24:55Z. CI on `fe06b3c` (run 41222695925) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `calibration/report.ts` and `discovery/provenance.ts`. No code changed.
+- `calibration/report.ts`: a third calibration implementation (bins, reliability, Brier, expected calibration error). No caller (exact import check). It says it is not applied to thresholds. Recorded as Q25 for the owner to choose one calibration report.
+- `discovery/provenance.ts`: a read-only, brand-scoped query of which runs saw each source. Not wired this wake. It is the next unit: it needs a server function with the same brand-access check as `listDiscoveredItemsFor`, a small line on the Market stored-pages list, and PGlite tests. It does not change scoring or publishing, so it needs no owner decision.
+- Decided by the loop: none. Q25 is an owner decision and is open.
+- Still open in R5: the rest of the list in section 6A, after provenance.
