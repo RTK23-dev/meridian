@@ -487,3 +487,9 @@ Append-only. One entry per unit of work, newest at the bottom.
 - The wake of 20:56 fired into a separate session, which made no commit on this branch. The next wake is armed for 22:15.
 - Checks at each unit: the cookbook suites, the component and compose suites, the engine contract suite, typecheck and lint.
 - Not run here: the browser checks (ui-smoke in CI) and the look of the components.
+
+## 2026-10-31 22:19 UTC: wake: K18 component
+
+- Wake (22:18): CI on 17d050c all green (typecheck, lint, tests, e2e, ui-smoke, release acceptance). The branch matched the pushed head; no foreign commits.
+- K18: `cookbook-selection-step.tsx` draws the selection view (typecheck and lint clean). Not mounted yet: mounting it in the hub needs the run path and the browser check.
+- Next: mount in the hub (K18), then K19 (library screen; the route tree is generated, so the route needs the generator and the navigation tests).
