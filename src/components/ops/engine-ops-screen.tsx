@@ -119,7 +119,7 @@ export function EngineOpsScreen() {
       <section aria-labelledby="dead-heading" className="space-y-4">
         <h2 id="dead-heading" className="text-section font-semibold">Jobs that stopped for good</h2>
         <p className="text-small text-fg-muted">Paste a request ID to see its dead jobs. A request ID is shown on its content page.</p>
-        <Field label="Request ID" hint="For example, the ID from the content page.">
+        <Field id="engine-request-id" label="Request ID" hint="For example, the ID from the content page.">
           <form
             className="flex flex-wrap gap-2"
             onSubmit={(event) => {
