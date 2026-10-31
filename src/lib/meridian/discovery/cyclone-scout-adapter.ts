@@ -13,6 +13,7 @@
  * - Zero-fabrication: unobserved URLs, dates, views, and external IDs remain undefined
  */
 
+import { cycloneApiKey } from "../credentials/secret-settings.ts";
 import { createHash } from "node:crypto";
 import type { DiscoveredReelItem, DiscoveredAudioTrend } from "./types.ts";
 import type {
@@ -90,7 +91,7 @@ export class CycloneScoutSourceAdapter implements SourceAdapter {
     } else if (gatewayUrl && deviceId) {
       this.config = {
         gatewayUrl,
-        apiKey: process.env.CYCLONE_API_KEY,
+        apiKey: cycloneApiKey(),
         deviceId,
       };
     }

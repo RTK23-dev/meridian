@@ -1,3 +1,4 @@
+import { emailApiKey } from "../credentials/secret-settings.ts";
 import type { Transport } from "../providers/http.ts";
 import { gatedTransport } from "../providers/capability.ts";
 import { sendWithRetry } from "../providers/http.ts";
@@ -35,7 +36,7 @@ export function realEmailProvider(env?: { url?: string; key?: string }, transpor
     id: "real:email",
     async send(message) {
       const url = (env?.url ?? emailApiUrlSetting())?.trim() ?? "";
-      const key = (env?.key ?? process.env.EMAIL_API_KEY)?.trim() ?? "";
+      const key = (env?.key ?? emailApiKey())?.trim() ?? "";
       if (!url || !key) {
         return { status: "NOT_CONFIGURED", provider: "real:email", error: "Email delivery is not configured." };
       }

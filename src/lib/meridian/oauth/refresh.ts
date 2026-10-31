@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -29,14 +30,14 @@ export const refreshStoredToken = createServerFn({ method: "POST" })
     `;
     const sealed = rows[0]?.sealed_refresh ?? "";
     if (!sealed) return { status: "missing" as const, detail: "No refresh token is stored. Connect again. Nothing was rotated." };
-    const opened = openSecret(sealed, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+    const opened = openSecret(sealed, tokenEncryptionKey() ?? "");
     if (typeof opened !== "string") return { status: "missing" as const, detail: opened.error };
     const provider = data.provider === "meta" || data.provider === "tiktok" || data.provider === "google" ? data.provider : null;
     if (!provider) throw new Error("Unknown provider.");
     const refreshed = await refreshOauthToken(provider, { refreshToken: opened, env: process.env }, liveTransport());
     if ("error" in refreshed) return { status: "failed" as const, detail: refreshed.error };
-    const next = sealSecret(refreshed.accessToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");
-    const nextRefresh = sealSecret(refreshed.refreshToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+    const next = sealSecret(refreshed.accessToken, tokenEncryptionKey() ?? "");
+    const nextRefresh = sealSecret(refreshed.refreshToken, tokenEncryptionKey() ?? "");
     if (typeof next !== "string" || typeof nextRefresh !== "string") {
       return { status: "failed" as const, detail: "TOKEN_ENCRYPTION_KEY is not configured. The token was not replaced." };
     }

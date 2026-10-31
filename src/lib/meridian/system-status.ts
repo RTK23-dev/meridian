@@ -1,3 +1,4 @@
+import { emailApiKey, externalSemanticKey, tokenEncryptionKey } from "./credentials/secret-settings.ts";
 import type { Sql } from "./learning/store.ts";
 import { embeddingProviderState, localSemanticModel } from "./embeddings/provider.ts";
 import { INTEGRATIONS } from "./providers/integrations.ts";
@@ -32,7 +33,7 @@ function ageMs(value: unknown, now: number): number | null {
  * only for a member of the workspace. No account state is read from the environment.
  */
 export async function readSystemStatus(input: { userId: string; organizationId: string; loadSql: () => Promise<Sql> }) {
-  const embeddings = embeddingProviderState({ url: externalSemanticUrlSetting(), key: process.env.EXTERNAL_SEMANTIC_KEY });
+  const embeddings = embeddingProviderState({ url: externalSemanticUrlSetting(), key: externalSemanticKey() });
   const publishing = { ...publishingProviderStatus(), detail: CHANNEL_PUBLISHING_DETAIL };
   const objectStorage = objectStorageStatus();
   const now = Date.now();
@@ -77,7 +78,7 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
         const secrets = await sql<{ provider: string; sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
           select provider, sealed_token, sealed_refresh, expires_at from provider_secrets where organization_id = ${input.organizationId}
         `;
-        const encryptionKey = process.env.TOKEN_ENCRYPTION_KEY ?? "";
+        const encryptionKey = tokenEncryptionKey() ?? "";
         const credentials: Record<string, ProviderCredentialState> = {};
         for (const provider of CONNECTION_PROVIDERS) {
           const stored = secrets.find((item) => item.provider === provider);
@@ -151,7 +152,7 @@ export async function readSystemStatus(input: { userId: string; organizationId: 
     },
     embeddings,
     // Only the state is returned. The values of the email variables never leave the server.
-    email: emailDeliveryState({ url: emailApiUrlSetting(), key: process.env.EMAIL_API_KEY }),
+    email: emailDeliveryState({ url: emailApiUrlSetting(), key: emailApiKey() }),
     localSemantic: localSemanticModel(),
     publishing,
     connections,

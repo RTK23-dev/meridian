@@ -17,6 +17,7 @@
  * - Audits all credential mutations without logging secret values.
  */
 
+import { cycloneApiKey as cycloneApiKeyFromEnv } from "../credentials/secret-settings.ts";
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { withTransaction } from "../learning/store.ts";
@@ -286,7 +287,7 @@ export async function getWorkspaceProviderSettings(
   const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
   const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
   const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || cycloneGatewayUrlSetting();
-  const cycloneApiKey = cycloneCreds?.apiKey || process.env.CYCLONE_API_KEY;
+  const cycloneApiKey = cycloneCreds?.apiKey || cycloneApiKeyFromEnv();
   const cycloneConfigured = Boolean(cycloneGatewayUrl);
 
   const cycloneSummary: ProviderConfigSummary = {

@@ -1,3 +1,4 @@
+import { externalSemanticKey } from "../credentials/secret-settings.ts";
 import type { Transport } from "../providers/http.ts";
 import { gatedTransport } from "../providers/capability.ts";
 import { sendWithRetry } from "../providers/http.ts";
@@ -15,7 +16,7 @@ function envFromProcess(): ExternalSemanticEnv {
   const dimensions = Number(externalSemanticDimensionsSetting() ?? "");
   return {
     url: externalSemanticUrlSetting(),
-    key: process.env.EXTERNAL_SEMANTIC_KEY,
+    key: externalSemanticKey(),
     model: externalSemanticModelSetting(),
     dimensions: Number.isFinite(dimensions) && dimensions > 0 ? dimensions : undefined,
   };

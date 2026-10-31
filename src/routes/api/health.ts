@@ -1,3 +1,4 @@
+import { externalSemanticKey } from "../../lib/meridian/credentials/secret-settings.ts";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql, type Sql } from "@/lib/db";
 import { auth } from "@/lib/auth/server";
@@ -18,7 +19,7 @@ function deploymentStatus() {
     // Only the presence of a resolved key is passed. The key itself never reaches the status function.
     externalEmbeddings: embeddingProviderState({
       url: externalSemanticUrlSetting(),
-      key: process.env.EXTERNAL_SEMANTIC_KEY?.trim() ? "resolved" : undefined,
+      key: externalSemanticKey()?.trim() ? "resolved" : undefined,
     }).status,
     providers: (["meta", "tiktok", "google", "ad_library"] as const).map((provider) => accountProviderState(provider).status),
     video: videoGenerationStatus({ baseUrl: hypitBaseUrlSetting() }).status,

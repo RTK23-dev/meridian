@@ -5,6 +5,7 @@
  * The session URI is stored sealed with TOKEN_ENCRYPTION_KEY (session-seal.ts). The store seals it on the way in and opens
  * it on the way out, so the upload loop receives the plain URI and the database never holds it.
  */
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import type { Sql } from "../learning/store.ts";
 import { isoTimestamp } from "../observability/timestamps.ts";
 import type {
@@ -63,7 +64,7 @@ function toSession(row: SessionRow, masterKey: string): ArtifactUploadSession {
 }
 
 export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadStoreOptions = {}): ArtifactUploadStore {
-  const masterKey = options.masterKey ?? (() => process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  const masterKey = options.masterKey ?? (() => tokenEncryptionKey() ?? "");
   return {
     async findActive(scope: ArtifactUploadScope, storageKey: string) {
       const rows = await sql.query<SessionRow>(

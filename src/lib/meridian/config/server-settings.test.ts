@@ -85,7 +85,7 @@ describe("the deployment setting accessors return the raw value", () => {
 // needs goes through an accessor in this folder, and when a reader moves its count comes down here too, so the number only falls.
 const RATCHET_ROOT = fileURLToPath(new URL("../../../../", import.meta.url));
 const APP_ROOTS = ["src/lib", "src/routes"];
-const DIRECT_READS_MAX = 38;
+const DIRECT_READS_MAX = 14;
 
 function appSourceFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
