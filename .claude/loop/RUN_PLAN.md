@@ -336,7 +336,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: component tests for each control kind; a ui-smoke path.
 
 #### K18: The selection step in the Content Factory
-- Status: `pending`. Depends on: K11, K17.
+- Status: `partly done`. Done: the view model `src/components/content-factory/cookbook-selection-model.ts` (4 tests): a proposed pick shows its title, reason, needs, badge, estimate (unknown parts named) and the alternatives; nothing eligible says why; a selector that is not connected offers the picker; a failed call and a refused answer are shown as what they are. Remaining: the component that draws this view, mounting it in the hub with the settings panel (K17), the draft save of the values through draft-store with debounce, and the browser check (ui-smoke).
 - After the inputs, the hub shows the proposal: the pick with its reason, two alternatives, the settings panel, and the needs and
   estimate. The person can change the cookbook and adjust it, then press "Send to orchestrator".
 - When the selector is not connected, the hub says so and shows the picker.
