@@ -8,6 +8,7 @@ import { engineRequestStatus } from "../../../engine/api/index.ts";
 import { requireBrand } from "../brand-membership.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { reviseSession, startRun } from "./service.ts";
+import { approvalStateFor, isApprovalDecision, type ApprovalRecord } from "./approval.ts";
 import { committedUsd, fitsBatchBudget, itemStateOf, MAX_BATCH_ITEMS, type BatchItemState } from "./batch.ts";
 
 const TITLE_MAX = 120;
@@ -27,6 +28,14 @@ export type BatchItemSummary = {
   attempts: number;
   /** Whether the video is still a draft. Only a draft is started by a batch start. */
   draft: boolean;
+  /** The fixed angle a video variation was made with, or null for a video made by hand. */
+  angle: string | null;
+  /** The person's decision on a delivered video: approved, rejected or not decided. Null while the video is not delivered. */
+  approval: "approved" | "rejected" | "not_decided" | null;
+  /** The engine request and delivered manifest ids, when the engine has them. Null otherwise. */
+  engineRequestId: string | null;
+  manifestId: string | null;
+  demo: boolean;
 };
 
 export type BatchSummary = {
@@ -34,6 +43,8 @@ export type BatchSummary = {
   brandId: string;
   title: string;
   budgetUsd: number;
+  /** True for the fixture batch from demo mode. Its videos are not real. */
+  demo: boolean;
   /** The budgets of the items the engine has taken. Never more than the batch budget. */
   committedUsd: number;
   items: BatchItemSummary[];
@@ -41,7 +52,7 @@ export type BatchSummary = {
 
 export type BatchStartOutcome = { started: number; refused: number; stoppedAtBudget: boolean; batch: BatchSummary };
 
-type BatchRow = { id: string; organization_id: string; brand_id: string; title: string; budget_usd: string | number };
+type BatchRow = { id: string; organization_id: string; brand_id: string; title: string; budget_usd: string | number; demo: boolean };
 
 type ItemRow = {
   session_id: string;
@@ -52,6 +63,8 @@ type ItemRow = {
   last_refusal: unknown;
   budget_usd: string | number | null;
   engine_request_id: string | null;
+  variation_angle: string | null;
+  demo: boolean;
 };
 
 function refusalsOf(value: unknown): string[] {
@@ -72,12 +85,12 @@ function budgetOf(value: string | number | null): number | null {
 
 async function loadBatch(sql: Sql, batchId: string): Promise<{ batch: BatchRow; items: ItemRow[] }> {
   const batches = await sql<BatchRow>`
-    select id, organization_id, brand_id, title, budget_usd from content_factory_batches where id = ${batchId} limit 1
+    select id, organization_id, brand_id, title, budget_usd, demo from content_factory_batches where id = ${batchId} limit 1
   `;
   const batch = batches[0];
   if (!batch) throw new Error("That batch is not found.");
   const items = await sql<ItemRow>`
-    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id
+    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle, s.demo
     from content_factory_batch_items i
     join content_factory_sessions s on s.id = i.session_id
     where i.batch_id = ${batchId}
@@ -90,7 +103,24 @@ function spendOf(item: ItemRow): { started: boolean; budgetUsd: number | null } 
   return { started: item.session_status === "started", budgetUsd: budgetOf(item.budget_usd) };
 }
 
+async function approvalRecordsOf(sql: Sql, organizationId: string, batchId: string): Promise<Map<string, ApprovalRecord[]>> {
+  const bySession = new Map<string, ApprovalRecord[]>();
+  const rows = await sql<{ session_id: string; engine_request_id: string; manifest_id: string | null; decision: string; reason: string; actor_id: string; created_at: unknown }>`
+    select a.session_id, a.engine_request_id, a.manifest_id, a.decision, a.reason, a.actor_id, a.created_at
+    from content_factory_approvals a join content_factory_batch_items i on i.session_id = a.session_id
+    where a.organization_id = ${organizationId} and i.batch_id = ${batchId} order by a.created_at asc
+  `;
+  for (const row of rows) {
+    if (!isApprovalDecision(row.decision)) continue;
+    const list = bySession.get(row.session_id) ?? [];
+    list.push({ engineRequestId: row.engine_request_id, manifestId: row.manifest_id, decision: row.decision, reason: row.reason, actorId: row.actor_id, createdAt: new Date(row.created_at as string | Date).toISOString(), rightsRecordIds: [] });
+    bySession.set(row.session_id, list);
+  }
+  return bySession;
+}
+
 async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<BatchSummary> {
+  const approvals = await approvalRecordsOf(sql, batch.organization_id, batch.id);
   const views = await Promise.all(items.map(async (item) => {
     const engine = item.session_status === "started" && item.engine_request_id !== null
       ? await engineRequestStatus(sql, batch.organization_id, item.engine_request_id)
@@ -106,6 +136,13 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       retryable: view.retryable,
       attempts: view.attempts,
       draft: item.session_status === "draft",
+      angle: item.variation_angle,
+      engineRequestId: item.engine_request_id,
+      manifestId: engine?.status === "delivered" ? engine.manifestId : null,
+      demo: item.demo === true,
+      approval: view.state === "delivered" && engine?.status === "delivered" && item.engine_request_id !== null
+        ? approvalStateFor(approvals.get(item.session_id) ?? [], item.engine_request_id, engine.manifestId).status
+        : null,
     };
   }));
   return {
@@ -113,6 +150,7 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
     brandId: batch.brand_id,
     title: batch.title,
     budgetUsd: Number(batch.budget_usd),
+    demo: batch.demo === true,
     committedUsd: committedUsd(items.map(spendOf)),
     items: views,
   };
@@ -183,6 +221,11 @@ export async function createBatch(sql: Sql, userId: string, input: { brandId: st
       if (row.status !== "draft") throw new Error("Only a draft video can join a batch. A video that has started is already in production.");
       const [taken] = await tx<{ batch_id: string }>`select batch_id from content_factory_batch_items where session_id = ${sessionId} limit 1`;
       if (taken) throw new Error("A video can belong to one batch only.");
+      // A draft that variations were made from is a reusable template. It stays out of every batch so it can be reused.
+      const [template] = await tx<{ id: string }>`
+        select id from content_factory_sessions where organization_id = ${access.organizationId} and source_session_id = ${sessionId} limit 1
+      `;
+      if (template) throw new Error("This draft is the template other videos were made from. It stays out of batches so it can be used again.");
     }
     await tx`
       insert into content_factory_batches (id, organization_id, brand_id, title, budget_usd, created_by)
@@ -205,6 +248,7 @@ export async function createBatch(sql: Sql, userId: string, input: { brandId: st
   });
   return getBatch(sql, userId, { batchId: id });
 }
+
 
 /**
  * Takes the batch row's lock for the rest of the transaction. Every start and retry of a batch runs under it, so two requests cannot each

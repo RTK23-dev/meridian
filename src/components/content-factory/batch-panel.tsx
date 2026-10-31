@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Input } from "@/components/ui";
+import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, Field, Input, SelectInput } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
+import { BatchReview } from "./batch-review";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
-import { createContentBatch, getContentBatch, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
-import type { BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { createContentBatch, createContentVariations, getContentBatch, createContentDemoBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
+import { batchManifestJson, batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { describeFormat, researchAngles } from "@/lib/meridian/content-factory/research-format";
+import { angleInstruction, DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget, VARIATION_ANGLES } from "@/lib/meridian/content-factory/variations";
 
 const STATE_LABEL: Record<BatchItemState, string> = {
   ready: "Ready",
@@ -46,7 +49,9 @@ function budgetOf(text: string): number | null {
  * on its video and the batch goes on, and a start that would pass the budget stops the batch. Each video shows its own state, read from the
  * engine, and a failed one can be retried alone; its siblings are not changed.
  */
-export function BatchCard({ brandId, brandName, drafts }: { brandId: string; brandName: string; drafts: Array<{ id: string; title: string }> }) {
+type DraftOption = { id: string; title: string };
+
+export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCreated }: { brandId: string; brandName: string; drafts: DraftOption[]; onOpenSession: (sessionId: string) => void; onBatchCreated?: () => void }) {
   const { user } = useCurrentUserState();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -56,11 +61,25 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
   const [formError, setFormError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [itemError, setItemError] = useState<string | null>(null);
+  const [sourceId, setSourceId] = useState("");
+  const [count, setCount] = useState(String(DEFAULT_VARIATIONS));
+  const [total, setTotal] = useState("");
+  const [variationError, setVariationError] = useState<string | null>(null);
+  const [useResearch, setUseResearch] = useState(false);
+  const [approvedSample, setApprovedSample] = useState(false);
   const queryClient = useQueryClient();
 
   const batches = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batches", brandId]),
     queryFn: () => listContentBatches({ data: { brandId } }),
+  });
+  const sourceList = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "variation-sources", brandId]),
+    queryFn: () => getContentVariationSources({ data: { brandId } }),
+  });
+  const format = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "research-format", brandId]),
+    queryFn: () => getContentResearchFormat({ data: { brandId } }),
   });
   const detail = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batch", selectedId]),
@@ -87,6 +106,87 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
       void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "The batch could not be made. Nothing was changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Only a draft that is ready can be chosen. The others are listed below with what each one still needs.
+  const allSources = sourceList.data ?? [];
+  const sources: DraftOption[] = allSources.filter((item) => item.problem === null).map((item) => ({ id: item.id, title: item.title }));
+  const notReady = allSources.filter((item) => item.problem !== null);
+  const chosenSource = sources.some((item) => item.id === sourceId) ? sourceId : (sources[0]?.id ?? "");
+  const variationCount = Number(count);
+  const variationTotal = total.trim() === "" ? Number.NaN : Number(total);
+  const variationSplit = splitBudget(variationTotal, variationCount);
+  const canVary = !busy && chosenSource !== "" && variationSplit.ok && approvedSample;
+
+  // The first video as it would be made: its angle, its share of the budget and the exact instruction it is given. Nothing is generated.
+  const sampleAngle = (useResearch && format.data?.ok ? researchAngles(format.data.format, Math.max(1, variationCount || 1))[0] : undefined) ?? VARIATION_ANGLES[0];
+  const sampleShare = variationSplit.ok ? (variationSplit.cents[0] ?? 0) / 100 : null;
+
+  async function vary() {
+    setBusy(true);
+    setVariationError(null);
+    setNotice(null);
+    setItemError(null);
+    try {
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample } });
+      setSelectedId(made.id);
+      setTotal("");
+      setApprovedSample(false);
+      await batches.refetch();
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
+      onBatchCreated?.();
+      setNotice(`Created ${made.items.length} draft videos in one batch. Nothing has started. Read the list, open any video, then press Start batch when you are ready.`);
+    } catch (error) {
+      setVariationError(error instanceof Error ? error.message : "The variations could not be made. Nothing was changed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function downloadSummary() {
+    if (!detail.data) return;
+    const csv = batchSummaryCsv(detail.data, detail.data.items.map((item) => ({ position: item.position, title: item.title, angle: item.angle, state: item.state, reason: item.reason, budgetUsd: item.budgetUsd, attempts: item.attempts })));
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${detail.data.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "batch"}-summary.csv`;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function download(name: string, type: string, text: string) {
+    const url = URL.createObjectURL(new Blob([text], { type }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function downloadManifest() {
+    if (!detail.data) return;
+    download(`${detail.data.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "batch"}-manifest.json`, "application/json", batchManifestJson(detail.data, new Date().toISOString()));
+  }
+
+  async function tryDemo() {
+    setBusy(true);
+    setFormError(null);
+    setNotice(null);
+    try {
+      const made = await createContentDemoBatch({ data: { brandId } });
+      setSelectedId(made.id);
+      await batches.refetch();
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
+      setNotice("The demo batch is open below. It is fixture data: no video was made and nothing was spent.");
+    } catch (error) {
+      setFormError(error instanceof Error ? error.message : "The demo could not be opened.");
     } finally {
       setBusy(false);
     }
@@ -143,6 +243,90 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
           Make a batch from draft videos and start them together under one budget. A start the engine refuses stays on its video with the reason. A start that would pass the budget stops the batch. A failed video can be retried alone.
         </CardDescription>
       </CardHeader>
+
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-dashed border-border p-3 text-sm">
+        <Button type="button" variant="secondary" disabled={busy} onClick={() => void tryDemo()}>Try a demo batch</Button>
+        <p className="min-w-0 flex-1 text-fg-muted">Opens a batch of fixture videos so you can try review and export with no key and no cost. Every part is marked DEMO. No video is made.</p>
+      </div>
+
+      <form
+        className="mt-4 space-y-3 border-b border-border pb-4"
+        aria-label="Create video variations"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (canVary) void vary();
+        }}
+      >
+        <fieldset className="space-y-3">
+          <legend className="text-sm font-semibold">Create video variations</legend>
+          <p className="text-sm text-fg-muted">
+            Pick a draft that has an uploaded reference video, attached Market research and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
+          </p>
+          {sources.length === 0 ? (
+            <div className="space-y-1 text-sm text-fg-muted">
+              <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research and a plain instruction."}</p>
+              {notReady.length > 0 ? (
+                <ul className="list-disc pl-5">
+                  {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg">{item.title}</span>: {item.problem}</li>)}
+                </ul>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <Field label="Source draft" hint="The source stays as it is and can be used again.">
+                <SelectInput value={chosenSource} onChange={(event) => setSourceId(event.target.value)}>
+                  {sources.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
+                </SelectInput>
+              </Field>
+              <div className="space-y-1 rounded-md border border-border p-3 text-sm" aria-label="What your research shows">
+                <p className="font-semibold">What your research shows</p>
+                {format.isPending ? <p className="text-fg-muted">Reading your analyzed research...</p> : format.data?.ok ? (
+                  <>
+                    <ul className="list-disc pl-5">{describeFormat(format.data.format).map((line) => <li key={line}>{line}</li>)}</ul>
+                    <p className="text-fg-muted">These are counts of labels a model gave your analyzed ads. They show what is common, not what works.</p>
+                    <label className="inline-flex min-h-11 items-center gap-2">
+                      <input type="checkbox" checked={useResearch} onChange={(event) => setUseResearch(event.target.checked)} />
+                      Base the videos on these patterns (the rest use the fixed angles)
+                    </label>
+                  </>
+                ) : (
+                  <p className="text-fg-muted">{format.data?.ok === false ? format.data.reason : "The research format could not be read."} The videos will use the fixed angles.</p>
+                )}
+              </div>
+              <Input id="variations-count" type="number" min={MIN_VARIATIONS} max={MAX_VARIATIONS} step="1" label="Number of videos" hint={`Between ${MIN_VARIATIONS} and ${MAX_VARIATIONS}.`} value={count} onChange={(event) => setCount(event.target.value)} />
+              <Input
+                id="variations-budget"
+                type="number"
+                min="0"
+                step="0.01"
+                label="Total batch budget (USD)"
+                hint={`Split equally across the videos. Each needs at least $${(minItemCents() / 100).toFixed(2)}.`}
+                value={total}
+                onChange={(event) => setTotal(event.target.value)}
+              />
+              {chosenSource !== "" ? (
+                <div className="space-y-2 rounded-md border border-border p-3 text-sm" aria-label="Sample of the first video">
+                  <p className="font-semibold">Sample of the first video</p>
+                  <p className="text-fg-muted">This is what the first draft would be. Nothing is made yet, and the other videos differ only in their angle.</p>
+                  <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
+                    <dt className="text-fg-muted">Angle</dt><dd className="font-semibold">{sampleAngle?.label}</dd>
+                    <dt className="text-fg-muted">Budget</dt><dd>{sampleShare === null ? "Enter a total budget to see each video's share." : `${money.format(sampleShare)} of the total`}</dd>
+                    <dt className="text-fg-muted">Copied from the source</dt><dd>Its plain instructions, its Market research records and its reference video file (shared, not copied).</dd>
+                    <dt className="text-fg-muted">Added instruction</dt><dd className="[overflow-wrap:anywhere]">{sampleAngle ? angleInstruction(sampleAngle) : ""}</dd>
+                  </dl>
+                  <label className="inline-flex min-h-11 items-center gap-2 font-semibold">
+                    <input type="checkbox" checked={approvedSample} onChange={(event) => setApprovedSample(event.target.checked)} />
+                    I have read the sample and approve this format
+                  </label>
+                </div>
+              ) : null}
+            </>
+          )}
+        </fieldset>
+        {variationError !== null ? <p role="alert" className="text-sm text-danger">{variationError}</p> : null}
+        {sources.length > 0 && total.trim() !== "" && !variationSplit.ok ? <p className="text-sm text-danger">{variationSplit.reason}</p> : null}
+        <Button type="submit" disabled={!canVary}>Create video variations</Button>
+      </form>
 
       <form
         className="mt-4 space-y-3"
@@ -204,19 +388,24 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
       {detail.data ? (
         <section aria-labelledby="batch-detail-title" className="mt-5 space-y-3">
           <h3 id="batch-detail-title" className="text-sm font-semibold">{detail.data.title}</h3>
+          {detail.data.demo ? <p role="note" className="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm font-semibold">DEMO: fixture data. No video was rendered and no provider was called. Nothing here is a real result.</p> : null}
           <p className="text-sm text-fg-muted">
             Budget {money.format(detail.data.budgetUsd)} · committed {money.format(detail.data.committedUsd)} by the videos the engine has taken.
+          </p>
+          <p className="text-sm" aria-label="Videos by state">
+            {stateCounts(items).map((entry, index) => <span key={entry.state}>{index > 0 ? " · " : ""}{entry.count} {STATE_LABEL[entry.state].toLowerCase()}</span>)}
           </p>
           <ol className="divide-y divide-border text-sm">
             {items.map((item) => (
               <li key={item.sessionId} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0 space-y-1">
-                  <p className="font-semibold">{item.title}</p>
+                  <p className="font-semibold">{item.title}{item.demo ? <Badge variant="warning" className="ml-2">DEMO</Badge> : null}</p>
                   <p className="text-fg-muted">{item.reason}</p>
                   {item.budgetUsd === null ? <p className="text-fg-muted">No budget set on this video.</p> : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <Badge variant={STATE_VARIANT[item.state]}>{STATE_LABEL[item.state]}</Badge>
+                  <Button type="button" variant="quiet" size="sm" onClick={() => onOpenSession(item.sessionId)}>Open video<span className="sr-only"> {item.title}</span></Button>
                   {item.retryable ? (
                     <Button type="button" variant="quiet" size="sm" disabled={busy} onClick={() => void retry(item.sessionId)}>
                       Retry this video<span className="sr-only"> {item.title}</span>
@@ -226,7 +415,13 @@ export function BatchCard({ brandId, brandName, drafts }: { brandId: string; bra
               </li>
             ))}
           </ol>
-          <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
+          <BatchReview items={items} busy={busy} onOpen={onOpenSession} onDecided={async () => { await detail.refetch(); }} />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" disabled={busy || !canStart} onClick={() => void start()}>Start the batch</Button>
+            <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadSummary}>Download batch summary (CSV)</Button>
+            <Button type="button" variant="secondary" disabled={items.length === 0} onClick={downloadManifest}>Download batch manifest (JSON)</Button>
+          </div>
+          <p className="text-sm text-fg-muted">The summary lists each video with the state the engine reports. It holds no video files, and a video that is not delivered is never shown as finished. The manifest lists the engine and manifest ids of each delivered video; open a video to read its delivered file.</p>
           {!canStart ? <p className="text-sm text-fg-muted">Nothing in this batch is a draft, so there is nothing to start.</p> : null}
         </section>
       ) : null}

@@ -2,7 +2,16 @@
 
 ## Unreleased
 
-Nothing yet.
+Still a pre-release. Everything below is verified with fixtures and recorded data. No live provider run has been recorded (see docs/RELEASE_CHECKLIST.md).
+
+- **Batch is the admin's default Content section.** It opens on Video batches. The research-led Factory is an advanced tab.
+- **Create video variations.** One reusable draft (an uploaded reference video, attached Market research and a plain instruction) becomes 2 to 20 original draft videos in one batch, with the total budget split exactly in cents. Nothing starts until a person presses Start the batch. A repeated identical request returns the same batch.
+- **Pattern-finding.** The structures, openings, hooks and calls to action that repeat in a brand's analyzed research are shown with their counts, and can be used as the variations' angles. They are model labels, so they show what is common, not what works.
+- **Batch review.** Delivered videos appear as cards to approve or reject with a reason. A batch summary downloads as CSV. Nothing is shown as finished unless the engine reports it delivered.
+- **Setup.** Two required steps (a brand, then a decision engine). The other four steps are one list of closed rows, each saying when it is needed. The variations form offers only drafts that are ready.
+- **Format sample, demo mode and manifest.** The variations form shows a sample of the first video and needs the person's approval; the server refuses without it. Try a demo batch opens marked fixture data with no key or cost. A batch downloads as CSV and as a JSON manifest. Migration 0139 adds the `demo` flags.
+- **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
+- Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
 
 ## 0.1.0-beta.16 — prerelease
 

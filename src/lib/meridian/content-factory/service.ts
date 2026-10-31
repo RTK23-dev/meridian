@@ -106,13 +106,14 @@ type SessionRow = {
   priority: string | null;
   keep_genes: string;
   last_refusal: string;
+  source_session_id: string | null;
   started_at: unknown;
   created_at: unknown;
   updated_at: unknown;
 };
 
 const SESSION_COLUMNS = `s.id, s.organization_id, s.brand_id, s.title, s.status, s.engine_request_id, s.revision, s.prior_request_ids,
-  s.budget_usd, s.max_seconds, s.language, s.priority, s.keep_genes, s.last_refusal, s.started_at, s.created_at, s.updated_at`;
+  s.budget_usd, s.max_seconds, s.language, s.priority, s.keep_genes, s.last_refusal, s.source_session_id, s.started_at, s.created_at, s.updated_at`;
 
 function iso(value: unknown): string {
   return new Date(value as string | Date).toISOString();
@@ -138,6 +139,7 @@ function summaryOf(row: SessionRow): SessionSummary {
     brandId: row.brand_id,
     status: row.status === "started" ? "started" : "draft",
     engineRequestId: row.engine_request_id,
+    sourceSessionId: row.source_session_id,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -231,12 +233,20 @@ async function touch(sql: Sql, row: SessionRow): Promise<void> {
 
 // --- Sessions and messages -------------------------------------------------------------------------------------------------
 
-export async function listSessions(sql: Sql, userId: string, input: { organizationId: string }): Promise<SessionSummary[]> {
+/** The most sessions one brand's list returns. A 20-video batch is 20 of them, so a brand outgrows the workspace-wide 100 quickly. */
+export const BRAND_SESSION_LIST_LIMIT = 500;
+
+export async function listSessions(sql: Sql, userId: string, input: { organizationId: string; brandId?: string | null }): Promise<SessionSummary[]> {
   await requireWorkspaceAdmin(sql, userId, input.organizationId);
-  const rows = await sql.query<SessionRow>(
-    `select ${SESSION_COLUMNS} from content_factory_sessions s where s.organization_id = $1 order by s.updated_at desc, s.id desc limit 100`,
-    [input.organizationId],
-  );
+  const rows = input.brandId
+    ? await sql.query<SessionRow>(
+        `select ${SESSION_COLUMNS} from content_factory_sessions s where s.organization_id = $1 and s.brand_id = $2 order by s.updated_at desc, s.id desc limit ${BRAND_SESSION_LIST_LIMIT}`,
+        [input.organizationId, input.brandId],
+      )
+    : await sql.query<SessionRow>(
+        `select ${SESSION_COLUMNS} from content_factory_sessions s where s.organization_id = $1 order by s.updated_at desc, s.id desc limit 100`,
+        [input.organizationId],
+      );
   return rows.map(summaryOf);
 }
 

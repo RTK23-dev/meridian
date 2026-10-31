@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -148,17 +148,19 @@ export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: 
   });
 
   const inputRef = useRef<HTMLInputElement>(null);
-  // A blocker elsewhere links here with #monthly-budget. Scroll to the field and focus it, on arrival and on a later hash change.
-  useEffect(() => {
-    const goToField = () => {
-      if (window.location.hash !== "#monthly-budget") return;
-      inputRef.current?.scrollIntoView({ block: "center" });
-      inputRef.current?.focus();
-    };
-    goToField();
-    window.addEventListener("hashchange", goToField);
-    return () => window.removeEventListener("hashchange", goToField);
-  }, [budget.isPending]);
+  // A blocker elsewhere links here with #monthly-budget. Read the router's location as well as the browser URL:
+  // client-side navigation uses history.pushState, which does not dispatch a native hashchange event.
+  const routeHash = useRouterState({ select: (state) => state.location.hash });
+  useLayoutEffect(() => {
+    const hash = routeHash.replace(/^#/, "");
+    if (hash !== "monthly-budget" && window.location.hash !== "#monthly-budget") return;
+    const field = inputRef.current;
+    if (!field) return;
+    field.scrollIntoView({ block: "center" });
+    // The field is disabled while its saved value loads. This effect runs again when loading ends,
+    // and layout-effect timing makes the focus visible before the client-side navigation settles.
+    if (!field.disabled) field.focus();
+  }, [budget.isPending, budget.isError, routeHash]);
 
   const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
   const parsed = parseMonthlyVideoBudget(shown);

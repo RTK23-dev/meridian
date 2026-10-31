@@ -27,6 +27,8 @@ export type GuideFacts = {
 export type GuideStep = {
   id: GuideStepId;
   title: string;
+  /** When to do it, in one short line: do it first, needed for a particular job, or safe to skip. */
+  when: string;
   /** What the step is, in plain words. */
   what: string;
   /** Why it matters to the person, in one sentence. */
@@ -50,43 +52,49 @@ export const GUIDE_STEPS: readonly Definition[] = [
   {
     id: "brand",
     title: "Create your first brand",
-    what: "A brand is the business or product line that Meridian makes ads and posts for. Each brand keeps its own research, grades and creatives.",
-    why: "Everything else belongs to a brand, so nothing can be graded or made until one exists.",
+    when: "Do this first.",
+    what: "A brand is the business or product you are making videos for. All your research and videos belong to it. You only need its name and what it sells to start.",
+    why: "Everything else belongs to a brand, so nothing can be made until one exists.",
     required: true,
   },
   {
     id: "engine",
     title: "Choose a decision engine",
-    what: "The engine answers the questions Meridian asks about each idea and ad. Pick TypeSafe JEV or OpenAI Decisions and save that engine's key on this step. Meridian never switches to the other one on its own.",
-    why: "No idea is graded by this engine until it is chosen and ready.",
+    when: "Do this second. You need one key.",
+    what: "This is the service that judges your ideas and examples. Pick one (TypeSafe JEV, OpenAI Decisions or OpenRouter), paste that service's key, and it is ready. You never need more than one.",
+    why: "No idea is graded until an engine is chosen and ready.",
     required: true,
   },
   {
-    id: "sources",
-    title: "Pick where examples come from",
-    what: "Meridian learns from ads and posts that already work in your niche. To start, paste one public page URL or upload an example. Neither needs a key. Searching by phrase is optional and uses your own developer key for Meta Ad Library, YouTube or Google search. Nothing here needs a login from the brands you study. For research beyond these, Agent Reach is a recommended, optional tool an operator runs on the host (docs/AGENT_REACH.md).",
-    why: "Better examples give better grades. With no source at all, there is nothing to compare against.",
-    required: false,
-  },
-  {
     id: "media",
-    title: "Make images and video",
-    what: "Gemini reads images and video frames and makes Omni video. Hypit runs as a separate process for video. The video engine reaches its models through OpenRouter, avatars through HeyGen and Claude through Anthropic, and Deepgram reads speech. Each key is saved for this workspace. You can also upload media you already have.",
-    why: "Only needed when Meridian should produce media itself. Uploads cover the rest.",
-    required: false,
-  },
-  {
-    id: "publish",
-    title: "Publish your work (optional)",
-    what: "Two kinds, and you choose either or both. Regular posts go to a Facebook Page, Instagram, YouTube or TikTok account you connect on Connected accounts. TikTok posts stay private until TikTok approves the app. Paid ads go to Meta or TikTok, where Meridian creates them paused, so nothing spends until you switch them on in that platform.",
-    why: "Only needed to publish. Until then, the export package holds everything Meridian made, and you can post it yourself.",
+    title: "Connect a video maker",
+    when: "Needed to make videos. Skip it while you are only trying things out.",
+    what: "This is the key for the service that actually renders your videos. Without it you can still plan, research and prepare drafts, and you can upload videos you already have.",
+    why: "Only needed when Meridian should produce media itself.",
     required: false,
   },
   {
     id: "storage",
     title: "Connect Google Drive",
-    what: "Drive keeps the files Meridian makes: media, exports and reports. The server sets it up once, and every workspace on it shares it.",
-    why: "Without Drive, files stay on the server's own disk.",
+    when: "Needed to upload a reference video. Skip it otherwise.",
+    what: "Drive stores the reference videos you upload and the files Meridian makes. The person who runs the server sets it up once, and every workspace on it shares it.",
+    why: "Without Drive, a reference video cannot be uploaded to a draft.",
+    required: false,
+  },
+  {
+    id: "sources",
+    title: "Where examples come from",
+    when: "Optional. Public page URLs and uploads need no key, so you can skip this.",
+    what: "To start, paste one public page URL or upload an example. Neither needs a key. Searching by phrase is optional and uses your own developer key for Meta Ad Library, YouTube or Google search. For research beyond these, Agent Reach is an optional tool an operator runs on the host (docs/AGENT_REACH.md).",
+    why: "Better examples give better patterns. With no source at all, there is nothing to compare against.",
+    required: false,
+  },
+  {
+    id: "publish",
+    title: "Publish your work",
+    when: "Optional. Skip it: you can export and post videos yourself.",
+    what: "Connect a Facebook Page, Instagram, YouTube or TikTok account to post from Meridian, or a Meta or TikTok key for paid ads. Paid ads are created paused, so nothing spends until you switch them on in that platform.",
+    why: "Only needed to publish. Until then, the export holds everything Meridian made.",
     required: false,
   },
 ];
@@ -153,12 +161,13 @@ function detailOf(id: GuideStepId, facts: GuideFacts, done: boolean | null): str
 }
 
 /**
- * The steps in their order, each with its status. Exactly one step can be current: the first not-done step whose status is known.
- * A required step after it is todo, and an optional step after it is optional. An unknown step never becomes current.
+ * The steps in their order, each with its status. Exactly one step can be current: the first required step that is not done and whose
+ * status is known. A required step after it is todo, and every optional step that is not done is optional. An unknown step never becomes current.
  */
 export function buildGuide(facts: GuideFacts): GuideStep[] {
   const dones = GUIDE_STEPS.map((definition) => doneOf(definition.id, facts));
-  const currentIndex = dones.findIndex((done) => done === false);
+  // The step to do now is the first required step that is not done. An optional step is never "Do this now": it waits until a person opens it.
+  const currentIndex = dones.findIndex((done, index) => done === false && GUIDE_STEPS[index]?.required === true);
   return GUIDE_STEPS.map((definition, index) => {
     const done = dones[index];
     let status: GuideStepStatus;

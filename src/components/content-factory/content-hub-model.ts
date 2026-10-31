@@ -1,7 +1,7 @@
 // The one content page: the sections it has, the modes a person can start in, and the search values that open it.
 // Pure, so these rules are tested without a screen. Each section's screen keeps its own role checks.
 
-export const CONTENT_SECTIONS = ["create", "ideas", "review", "library", "publish", "results", "ads"] as const;
+export const CONTENT_SECTIONS = ["create", "ads", "ideas", "review", "library", "publish", "results"] as const;
 
 export type ContentSection = (typeof CONTENT_SECTIONS)[number];
 
@@ -12,7 +12,7 @@ export const CONTENT_SECTION_LABELS: Record<ContentSection, string> = {
   library: "Library",
   publish: "Publish",
   results: "Results",
-  ads: "Ads",
+  ads: "Batch",
 };
 
 // Only an admin of the workspace sees these sections. The screens behind them still check their own roles.
@@ -85,6 +85,12 @@ export function contentSearchOf(search: Record<string, unknown>): ContentSearch 
   if (typeof search.preset === "string" && search.preset !== "" && search.preset.length <= 40) out.preset = search.preset;
   if (typeof search.session === "string" && search.session !== "" && search.session.length <= 80) out.session = search.session;
   return out;
+}
+
+// The section a page opens in when the address names none. Admins start in Batch, but an address that names an engine session is
+// a link to that session (an opportunity's brief makes one), and a session lives in Create, so it opens there.
+export function defaultSectionFor(isAdmin: boolean, search: ContentSearch): ContentSection {
+  return isAdmin && search.session === undefined ? "ads" : "create";
 }
 
 // Moving between sections keeps the starting mode the person chose. The engine session belongs to Create, so it is dropped.

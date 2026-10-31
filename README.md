@@ -1,19 +1,21 @@
 # Meridian
 
-Meridian is the operating system for one brand's advertising. You give it the brand. It gathers evidence, decides what is worth making, produces the ads and posts, checks them, and changes the next recommendation after it sees what happened.
+Meridian turns a brand's research into original content batches. It gathers evidence, helps choose what to make, plans and produces video and image variants, checks them, and leaves a person to review before anything is published. Publishing, paid ads and analytics are follow-on workflows, not prerequisites to making content.
 
 It never invents a result. A step with no key, no account, or no bill says so and stores nothing. A person reviews what is made before it goes out, and paid ads are always created paused.
 
 ## What it is for
 
-A small team that runs ads for a brand and wants one place where the facts, the evidence, the creative work, the review, and the results stay connected. Each brand has its own research, grades, creatives, receipts and measurements. Nothing crosses from one workspace to another.
+The intended primary job is to use research and reference examples to choose a repeatable video format, generate many original variants, review them, and export the finished work. Meridian also has brand, publishing, ads and measurement tools, but the current interface does not yet guide this end-to-end job in one place.
 
 ## How it works
 
 There are two ways to start, and they share one backend: the same brands, evidence, plans, assets, runs, reviews, publishing receipts, measurements and learning.
 
-- **Research-led.** The factory gathers and grades evidence about the niche, proposes an angle, plans, produces, checks, and asks for approval.
+- **Research-led.** Batch gathers and grades evidence about the niche, proposes an angle, plans, produces, checks, and asks for approval.
 - **Direct.** You bring a brief, a reference video, or your own upload, and the Content page plans, generates, revises and reviews it.
+
+These are still separate entry paths in the interface. Research collected in Market is not yet presented together with a reference-led video batch in one guided project.
 
 The loop, in either case:
 
@@ -32,7 +34,7 @@ The loop, in either case:
 | --- | --- |
 | **Setup guide** | A short path: create a brand, choose a decision engine and save its key. OpenRouter shows key saved, test passed and engine active as separate steps. Optional connections sit behind "Open this step" |
 | **Market** | Paste one public page URL, with no setup, and see what was read, what is new, what was blocked and what to do next. Searching by phrase is a separate, optional step with your own developer key |
-| **Content** | One page per brand. Create, Ideas, Review, Library, Publish, Results and Ads are its sections. Create starts a session from a brief, a reference, or Studio; the run planner is one click away under "Plan a run in detail" |
+| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Batch opens on Video batches: use an uploaded reference video and attached Market evidence in a reusable draft, create 2–20 original draft variations with a bounded total budget, then explicitly start the batch and review/export each video. The research-led run builder remains an advanced option. Live provider generation and owner acceptance are not yet verified. |
 | **Integrations** | Every connection, with what it needs and its state |
 | **Jobs & health** | Queued work, the worker and the scheduler |
 | **Settings** | The workspace, its members, scoring weights, alerts, learning, and the uncertain model-call holds |

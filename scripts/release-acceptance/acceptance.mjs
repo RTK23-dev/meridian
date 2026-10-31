@@ -148,14 +148,30 @@ try {
 
   await openSettings(page);
   await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
-  await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Ads tab", async () => {
+  await check("F1", "Content page exposes the workflow sections with accessible labels and an admin-only Batch tab", async () => {
     const main = await page.locator("main").innerText();
-    assert.match(main, /Make, review, publish and learn from your videos, images and ads in one place\./);
-    for (const label of ["Create", "Ideas", "Review", "Library", "Publish", "Results", "Ads"]) {
-      assert.equal(await page.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
+    assert.match(main, /Start from a reference video and Market research, make video drafts, and group them into a budget-limited batch\. Research-led production is available as an advanced option\./);
+    const contentTabList = page.getByRole("tablist").first();
+    const contentTabs = await contentTabList.getByRole("tab").allInnerTexts();
+    assert.equal(contentTabs[1], "Batch", "Batch is directly beside Create for admins");
+    assert.equal(await contentTabList.getByRole("tab", { name: "Batch", exact: true }).getAttribute("aria-selected"), "true", "admins land on Batch on the Content page");
+    for (const label of ["Create", "Batch", "Ideas", "Review", "Library", "Publish", "Results"]) {
+      assert.equal(await contentTabList.getByRole("tab", { name: label, exact: true }).count(), 1, `the ${label} tab is available to this admin`);
     }
+    await contentTabList.getByRole("tab", { name: "Batch", exact: true }).click();
+    const videoBatches = page.getByRole("tab", { name: "Video batches", exact: true });
+    await videoBatches.waitFor();
+    assert.equal(await videoBatches.getAttribute("aria-selected"), "true", "the Batch section opens on Video batches");
+    await page.getByRole("heading", { name: "Make and review video batches", exact: true }).waitFor();
+    // The research-led run builder is the advanced tab, and it opens on Make a batch, not on the technical Factory Line.
+    await page.getByRole("tab", { name: "Research-led runs (advanced)", exact: true }).click();
+    const makeBatch = page.getByRole("tab", { name: "Make a batch", exact: true });
+    await makeBatch.waitFor();
+    assert.equal(await makeBatch.getAttribute("aria-selected"), "true", "the research-led view opens on Make a batch");
+    await page.getByRole("heading", { name: "Start a run", exact: true }).waitFor();
   });
   await check("F2", "create presets show an unambiguous selected state", async () => {
+    await page.getByRole("tablist").first().getByRole("tab", { name: "Create", exact: true }).click();
     const briefPreset = page.getByRole("radio", { name: /Video from a brief/ });
     await briefPreset.waitFor();
     assert.equal(await briefPreset.getAttribute("aria-checked"), "true");
@@ -301,9 +317,8 @@ try {
 
   await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
-    // The sources step and its optional phrase-search keys are both behind clear disclosures.
-    const step = page.locator("li, section, article").filter({ hasText: "Pick where examples come from" }).filter({ has: page.getByText("Open this step") }).last();
-    await step.getByText("Open this step").first().click();
+    // An optional step is one closed row, and its phrase-search keys are behind a second disclosure. Open both as a person does.
+    await page.locator("summary").filter({ hasText: "Where examples come from" }).click();
     assert.match(await page.locator("main").innerText(), /Read one public page/);
     assert.match(await page.locator("main").innerText(), /This is not a search/);
     await page.getByText("Optional: search by phrase", { exact: true }).click();
@@ -360,6 +375,157 @@ try {
       const alerts = await page.locator("[role=alert], [role=status]").allInnerTexts();
       throw new Error(`${error.message.split("\n")[0]} | page said: ${alerts.join(" / ").slice(0, 400)}`);
     });
+  });
+
+  await check("G12", "variations: one source draft becomes a bounded batch of ready drafts, the template stays out of the batch list, and nothing starts", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    assert.match(await form.innerText(), /Nothing starts until you press Start batch/);
+    // A budget that cannot cover the count says why, and the button stays off.
+    // Only a draft that is ready can be chosen as the source: the DEMO draft has no reference, so it is not offered.
+    const offered = await form.getByLabel("Source draft").locator("option").allInnerTexts();
+    assert.deepEqual(offered, ["Acceptance reference draft"]);
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    await form.getByLabel("Total batch budget (USD)").fill("1");
+    await page.getByText(/cannot cover 3 videos/).waitFor();
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
+    await form.getByLabel("Total batch budget (USD)").fill("6");
+    // The sample of the first video is shown, and the batch cannot be made until the person approves it.
+    await form.getByLabel("Sample of the first video").waitFor();
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Angle\s*Problem first/);
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true, "no approval, no batch");
+    await form.getByLabel("I have read the sample and approve this format").check();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 3 draft videos in one batch\. Nothing has started/).waitFor();
+    // The batch detail loads after the notice, so wait for its first item before reading the list.
+    await page.getByText("Acceptance reference draft: Problem first", { exact: true }).first().waitFor();
+    const text = await page.locator("main").innerText();
+    for (const label of ["Problem first", "Result first", "Myth bust"]) assert.match(text, new RegExp(`Acceptance reference draft: ${label}`));
+    assert.equal(await page.getByText("Ready", { exact: true }).count() >= 3, true, "each new video is Ready, not running");
+    assert.doesNotMatch(text, /Started \d+ videos?\./, "creating the variations starts nothing");
+    // The reusable template is not offered as a draft to pick by hand, and the Start batch action is still waiting for a person.
+    await page.getByRole("checkbox", { name: "Acceptance reference draft" }).waitFor({ state: "detached", timeout: 10000 });
+    await page.getByRole("button", { name: "Start the batch" }).waitFor();
+    // The batch summary lists the recorded state of each video and holds no video file.
+    assert.match(await page.getByLabel("Videos by state").innerText(), /3 ready/);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    const { readFile } = await import("node:fs/promises");
+    const csv = await readFile(await download.path(), "utf8");
+    assert.match(csv, /^Batch,Position,Video,Angle,State,Reason,Budget \(USD\),Attempts/);
+    assert.match(csv, /Acceptance reference draft: Problem first,problem_first,ready/);
+    assert.equal(csv.trimEnd().split("\r\n").length, 4, "a header and three videos");
+    assert.doesNotMatch(csv, /delivered/i);
+  });
+
+  await check("G13", "pattern-finding: the research format is shown with its counts, and ticking it bases the videos on those patterns", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    const panel = page.getByLabel("What your research shows");
+    await panel.waitFor();
+    const shown = await panel.innerText();
+    assert.match(shown, /Structure: problem solution \(4 of 9\), listicle \(2 of 9\)/);
+    assert.match(shown, /Opening: question \(3 of 9\)/);
+    assert.match(shown, /show what is common, not what works/);
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    await panel.getByRole("checkbox").check();
+    await form.getByLabel("Number of videos").fill("4");
+    await form.getByLabel("Total batch budget (USD)").fill("8");
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Angle\s*Problem solution, question opening/);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 4 draft videos in one batch\. Nothing has started/).waitFor();
+    await page.getByText("Acceptance reference draft: Problem solution, question opening", { exact: true }).first().waitFor();
+    const text = await page.locator("main").innerText();
+    assert.match(text, /Acceptance reference draft: Listicle, question opening/);
+    assert.match(text, /Acceptance reference draft: Problem first/, "the fixed angles fill the rest");
+    assert.doesNotMatch(text, /Started \d+ videos?\./);
+  });
+
+  await check("G14", "demo run: a batch with two delivered fixture videos is reviewed in the browser, approved, rejected with a reason, and summarised", async () => {
+    // The batch is seeded fixture data titled DEMO. No video was rendered and no provider was called; this walks the review screen only.
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: /DEMO \(fixture\) batch/ }).click();
+    await page.getByRole("heading", { name: "DEMO (fixture) batch" }).waitFor();
+    assert.match(await page.getByLabel("Videos by state").innerText(), /1 ready · 2 delivered/);
+    const review = page.getByRole("region", { name: "Review delivered videos" });
+    await review.waitFor();
+    assert.match(await review.innerText(), /0 of 2 decided/);
+    assert.equal(await review.getByText("Not decided yet").count(), 2);
+    assert.doesNotMatch(await review.innerText(), /video C/, "a draft is never offered for review");
+    await review.getByRole("button", { name: /Approve DEMO \(fixture\) video A/ }).click();
+    await review.getByText("Approved", { exact: true }).waitFor();
+    assert.match(await review.innerText(), /1 of 2 decided/);
+    await review.getByRole("button", { name: /Reject DEMO \(fixture\) video B/ }).click();
+    const submit = review.getByRole("button", { name: "Reject with this reason" });
+    assert.equal(await submit.isDisabled(), true, "a rejection needs its reason");
+    await review.getByLabel("Why is it rejected?").fill("The pacing is too slow for the format.");
+    await submit.click();
+    await review.getByText("Rejected", { exact: true }).waitFor();
+    assert.match(await review.innerText(), /2 of 2 decided/);
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    const { readFile } = await import("node:fs/promises");
+    const csv = await readFile(await download.path(), "utf8");
+    assert.match(csv, /DEMO \(fixture\) video A,,delivered/);
+    assert.match(csv, /DEMO \(fixture\) video C \(draft\),,ready/);
+  });
+
+  await check("G15", "upload: with no Google Drive connected, the draft says why a reference cannot be stored, instead of failing silently", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    await page.getByRole("button", { name: "Open video Acceptance reference draft" }).first().click().catch(() => undefined);
+    const main = page.locator("main");
+    await main.getByText(/Files cannot be stored yet\./).first().waitFor();
+    assert.match(await main.innerText(), /Google Drive/);
+    assert.match(await main.innerText(), /Uploading needs Google Drive to be connected/);
+    assert.equal(await page.getByLabel("Choose files").count() >= 1, true, "the upload control is still there");
+  });
+
+  await check("G16", "one journey: Setup, Market, research format, sample, approve, batch, demo review, export, with nothing started and nothing leaving the server", async () => {
+    // Start: the two required steps and what to skip.
+    await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    const setupText = await page.locator("main").innerText();
+    assert.match(setupText, /What to fill in, and what to skip/);
+    assert.match(setupText, /Create your first brand/);
+    assert.match(setupText, /Choose a decision engine/);
+    // Research: Market explains the page URL, and shows what each run did.
+    await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
+    assert.match(await page.locator("main").innerText(), /Read this page|exact page/i);
+    // Format and sample, then approval gates the batch.
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    assert.match(await page.getByLabel("What your research shows").innerText(), /Structure: problem solution/);
+    await form.getByLabel("Number of videos").fill("2");
+    await form.getByLabel("Total batch budget (USD)").fill("3");
+    await form.getByLabel("Sample of the first video").waitFor();
+    assert.equal(await form.getByRole("button", { name: "Create video variations" }).isDisabled(), true);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 2 draft videos in one batch\. Nothing has started/).waitFor();
+    assert.match(await page.getByLabel("Videos by state").innerText(), /2 ready/);
+    // Demo: the fixture batch is opened from the page itself, marked DEMO, reviewed and exported.
+    await page.getByRole("button", { name: "Try a demo batch" }).click();
+    await page.getByRole("heading", { name: "DEMO (fixture) batch" }).waitFor();
+    await page.getByRole("note").filter({ hasText: /DEMO: fixture data/ }).waitFor();
+    const review = page.getByRole("region", { name: "Review delivered videos" });
+    await review.waitFor();
+    const before = await review.innerText();
+    if (!/Approved/.test(before)) await review.getByRole("button", { name: /Approve DEMO \(fixture\) video A/ }).click();
+    await review.getByText("Approved", { exact: true }).first().waitFor();
+    // Export: the CSV and the manifest hold ids and states, no file or link, and say DEMO.
+    const { readFile } = await import("node:fs/promises");
+    const [csvDownload] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    assert.match(await readFile(await csvDownload.path(), "utf8"), /DEMO \(fixture\) video A/);
+    const [manifestDownload] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch manifest (JSON)" }).click()]);
+    const manifest = JSON.parse(await readFile(await manifestDownload.path(), "utf8"));
+    assert.equal(manifest.kind, "meridian.batch-manifest");
+    assert.equal(manifest.demo, true);
+    assert.match(manifest.notice, /^DEMO: fixture data/);
+    assert.ok(manifest.videos.every((video) => video.demo === true));
+    assert.doesNotMatch(JSON.stringify(manifest), /https?:/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 
   await check("D1", "no request left the local server during the run", async () => {

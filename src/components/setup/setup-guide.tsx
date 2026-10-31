@@ -125,9 +125,18 @@ export function SetupGuide() {
       <div className="space-y-10">
         <PageHeader
           title="Set up Meridian"
-          description="Start with your brand and decision engine. To research examples, open Market and paste a public page URL—no extra key is needed. Set up other connections only when you need them."
+          description="Two steps get you started: create a brand, then choose a decision engine. Everything else is optional or only needed for one job."
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
+
+        <section aria-labelledby="setup-plain" className="rounded-xl border border-border bg-surface p-5">
+          <h2 id="setup-plain" className="text-lg font-semibold text-fg">What to fill in, and what to skip</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg">
+            <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one decision engine key.</li>
+            <li><strong>Fill in when you need it:</strong> a video maker key to render videos, and Google Drive to upload a reference video.</li>
+            <li><strong>Skip for now:</strong> search keys, publishing, and everything under Optional connections. Pasting a public page URL on Market needs no key.</li>
+          </ul>
+        </section>
 
         <section aria-labelledby="setup-progress" className="surface-rise surface-glow rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -155,18 +164,47 @@ export function SetupGuide() {
         </section>
 
         <ol className="space-y-5">
-          {steps.map((step, index) => (
+          {steps.filter((step) => step.required).map((step, index) => (
             <SetupStep key={step.id} step={step} index={index} body={body(step)} />
           ))}
         </ol>
 
-        <section aria-labelledby="setup-advanced" className="rounded-xl border border-dashed border-border p-5">
-          <h2 id="setup-advanced" className="font-semibold text-fg">Optional connections</h2>
-          <p className="mt-1 text-sm text-fg-muted">You do not need to connect every provider to start researching. Add a connection only for a task that needs it; advanced provider settings are available in Settings.</p>
-          <Button asChild variant="quiet" className="mt-3"><Link to="/settings">Open Settings</Link></Button>
+        <section aria-labelledby="setup-later" className="space-y-3">
+          <div>
+            <h2 id="setup-later" className="text-xl font-semibold text-fg">Later, only when you need it</h2>
+            <p className="text-sm text-fg-muted">None of these is needed to start. Open one when you reach the job it is for. More provider settings are in <Link to="/settings" className="font-semibold underline underline-offset-4">Settings</Link>.</p>
+          </div>
+          <ul className="space-y-2">
+            {steps.filter((step) => !step.required).map((step) => (
+              <OptionalStep key={step.id} step={step} body={body(step)} />
+            ))}
+          </ul>
         </section>
       </div>
     </SetupTests.Provider>
+  );
+}
+
+/** An optional step is one closed row: its title, when it is needed and whether it is done. Its text and controls open on request. */
+function OptionalStep({ step, body }: { step: GuideStep; body: ReactNode }) {
+  const mark = STEP_MARK[step.status];
+  const Icon = mark.icon;
+  return (
+    <li id={`step-${step.id}`} className="scroll-mt-24">
+      <details className="rounded-xl border border-border bg-surface px-4 py-3">
+        <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <Icon aria-hidden="true" className={`size-4 shrink-0 ${step.status === "done" ? "text-success" : "text-fg-muted"}`} />
+          <span className="font-semibold text-fg">{step.title}</span>
+          <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">{step.status === "done" ? "Done" : mark.label}</span>
+          <span className="w-full text-sm text-fg-muted sm:w-auto">{step.when}</span>
+        </summary>
+        <div className="mt-3 space-y-3 border-t border-border pt-3">
+          <p className="text-sm text-fg">{step.what}</p>
+          <StepDetail text={step.detail} />
+          {body}
+        </div>
+      </details>
+    </li>
   );
 }
 
@@ -197,12 +235,14 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
                 {step.required ? "Required" : "Optional"} · {mark.label}
               </span>
             </div>
+            {compact ? <p className="text-sm text-fg-muted">{step.when}</p> : null}
             {compact ? (
               <details className="group pt-1">
                 <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                   {step.status === "done" ? "Review or change this step" : "Open this step"}
                 </summary>
                 <div className="mt-3 space-y-3">
+                  <p className="text-sm font-semibold text-fg">{step.when}</p>
                   <p className="text-sm text-fg">{step.what}</p>
                   <StepDetail text={step.detail} />
                   {body}
@@ -210,6 +250,7 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
               </details>
             ) : (
               <>
+                <p className="text-sm font-semibold text-fg">{step.when}</p>
                 <p className="text-sm text-fg">{step.what}</p>
                 <StepDetail text={step.detail} />
                 <div className="pt-1">{body}</div>

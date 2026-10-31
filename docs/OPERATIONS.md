@@ -29,6 +29,19 @@ To start again empty, stop the server and delete `.data/pglite`. To back it up, 
 
 A local trial does not run periodic work. The scheduler needs `DATABASE_URL`.
 
+## Before you deploy
+
+Run `npm run check:deployment` with the deployment's environment loaded. It prints setting names and a verdict, never a value, and it connects to nothing. It exits with an error when a required setting is missing or unsafe:
+
+1. `NODE_ENV=production`, `DATABASE_URL` (PostgreSQL 16 with pgvector), `BETTER_AUTH_SECRET` and `TOKEN_ENCRYPTION_KEY` (32+ characters each), and `BETTER_AUTH_URL` (https).
+2. No test switches: `MERIDIAN_TESTING_RUNTIME`, `ALLOW_SYNTHETIC_TELEMETRY` and `VITE_AUTH_ENABLED=false` are errors in production.
+3. Run the migrations (`npm run db:migrate`), then three processes: the web app, `npm run worker` and `npm run scheduler`. Without the worker, queued runs and analysis never progress.
+4. Google Drive must be configured (a service account or an OAuth client) before anyone can upload a reference video. There is no other file store for session uploads, and the draft says so next to the upload button.
+5. Back up the database before an upgrade. Every batch, approval and ledger entry is in it.
+6. Read `/jobs` (Jobs & health) after the first start: it shows the worker, the queue and any stalled job.
+
+The check covers settings only. It does not prove the database is reachable or that a provider key works; those are checked by the app and by a live run. A first live run needs an owner-authorized key and a small budget (see `docs/RELEASE_ACCEPTANCE.md`).
+
 ## Health
 
 `GET /api/health` answers `{ "status": "ok" }` when the server is up. It does not read the database.

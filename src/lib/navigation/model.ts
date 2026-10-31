@@ -29,7 +29,7 @@ export const SETTINGS_SCREEN_LINKS: NavItem[] = [
 /**
  * Sidebar groups: Brand, Research, Content, Results, then Settings. Brand groups exist only on brand pages, so a workspace
  * page shows the workspace overview and Settings. The Content page holds ideas, creating, review, library, publishing,
- * results and ads, so the sidebar has one item for it. A badge appears only for a real count above zero: a null count (not
+ * results and the research-led Batch workflow, so the sidebar has one item for it. A badge appears only for a real count above zero: a null count (not
  * loaded yet, or failed) and a zero count both show no badge.
  */
 export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; reviewCount: number | null }): NavGroup[] {
@@ -93,12 +93,12 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
 
 /**
  * Where each kind of work lives on a brand, in words a new person can use. The brand overview shows this list. Each path is a screen
- * the sidebar lists, and a test keeps it that way. Ideas, creating, review, library, publishing, results and ads are sections of the
+ * the sidebar lists, and a test keeps it that way. Ideas, creating, review, library, publishing, results and Batch are sections of the
  * Content page.
  */
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
-  { id: "content", label: "Content", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Ads (admins only) runs the research-led Factory runs." },
+  { id: "content", label: "Content", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Batch (admins only) starts research-led production runs." },
 ];
 
 /**
