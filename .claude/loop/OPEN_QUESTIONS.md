@@ -100,3 +100,19 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - What the loop did: `engine/assets/router.ts` keeps `createAssetRouter` whole, the closure that runs submit, settle and produce over one shared state (about 770 lines). Only its types and pure helpers moved, to `router-types.ts` and `router-helpers.ts`. `router.ts` is now 831 lines.
 - Reason: the three entry points share the closure's state, so splitting them apart would change how that state is shared, not only where the code sits.
 - What would change if you chose otherwise: split the closure into submit, settle and produce modules that receive the shared state as a parameter. That is a behaviour-sensitive refactor, and it needs its own unit, with the retry and ambiguity tests as the check.
+
+## Owner answers, 2026-10-31
+
+- Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
+- Q2: answered. Save every price the project holds as plain files, so they can be read offline (done in `docs/data/prices/`). The render price is not in our data, and it stays unknown.
+- Q3: answered: make the 45 test-only modules work, or say clearly why one cannot be made to work. Round two of the run plan carries it.
+- Q4: answered: make the E6 engine-operations functions work. Done as a page at `/engine-ops`.
+- Q5: answered: make the export package and the disclosure gate work. Round two carries it.
+- Q6: answered: open a new pull request once the changes are done. PR #85 stays as it is.
+- Q7: answered: reference videos can be uploaded from this device or added by public link, and both are studied and graded. Round two carries it.
+- Q8: answered: one draft pull request for the new work.
+- Q9: answered: full coding permissions, with the hard stops still denied. Done in `.claude/settings.json`.
+- Q10: answered: yes, the online CI result closes T1.
+- Q11: answered: confirmed as decided by the loop.
+- Q12: answered: move the five secret reads behind one accessor. Done in `src/lib/meridian/credentials/secret-settings.ts`.
+- Q13: answered: keep the asset router whole, as decided.
