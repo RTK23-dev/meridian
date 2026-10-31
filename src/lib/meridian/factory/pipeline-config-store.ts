@@ -6,6 +6,7 @@
  * becomes the defaults, because that would show, or later run, values that nobody saved.
  */
 import type { Sql } from "../learning/store.ts";
+import { loadFactoryCookbook } from "../cookbooks/factory-bridge.ts";
 import { getDefaultPipelineConfig, validatePipelineConfig, type FactoryPipelineConfig } from "./pipeline-config.ts";
 
 export async function loadSavedFactoryPipelineConfig(
@@ -13,6 +14,9 @@ export async function loadSavedFactoryPipelineConfig(
   organizationId: string,
   brandId: string,
 ): Promise<FactoryPipelineConfig | null> {
+  // The brand's cookbook is the line once one has been written (K8). The old row is read only until the migration has run.
+  const fromCookbook = await loadFactoryCookbook(sql, { organizationId, brandId });
+  if (fromCookbook) return fromCookbook;
   const rows = await sql<{
     preset_name: string;
     stages: unknown;

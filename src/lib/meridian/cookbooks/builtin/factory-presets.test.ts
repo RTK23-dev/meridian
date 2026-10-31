@@ -39,7 +39,7 @@ test("a stage toggle reaches the configuration's stage, and no other stage moves
 
 test("the generation and grading controls reach the configuration", () => {
   const config = pipelineConfigFromCookbook(
-    resolved(factoryPresetCookbook("manual_cloud"), { video_count: 7, duration_seconds: "45", winner_score_min: 0.8, auto_approve: true }),
+    resolved(factoryPresetCookbook("manual_cloud"), { video_count: 7, duration_seconds: 45, winner_score_min: 0.8, auto_approve: true }),
     "manual_cloud",
   );
   assert.equal(config.generationParams.videoCount, 7);

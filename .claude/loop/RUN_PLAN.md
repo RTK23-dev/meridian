@@ -248,7 +248,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: each role on each action.
 
 #### K8: Migrate the saved pipeline configs (D4)
-- Status: `pending`. Depends on: K5, K6.
+- Status: `done` (`cookbooks/factory-bridge.ts`: a brand's saved factory line is also its cookbook, `ck_bf_<hash of the brand>`, with the preset as parent; loading prefers the cookbook and falls back to the old row; saving writes both, so the old table is still written until K20 retires it; `migrateFactoryPipelineConfigs` writes each old row once and is idempotent. Five PGlite tests: exact round trip for each preset, the factory's clamps still apply, one version for one line, another brand sees nothing, and the migration runs twice. The existing factory tests pass.)
 - Each `factory_pipeline_configs` row becomes a brand cookbook (forked from its preset's built-in, with its saved values as defaults),
   and `loadFactoryPipelineConfig` reads through the cookbook. The old table stays, read only, until K20 moves its editor; the
   migration is idempotent.

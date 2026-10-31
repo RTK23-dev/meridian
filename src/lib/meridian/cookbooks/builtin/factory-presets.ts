@@ -113,23 +113,21 @@ export function factoryPresetCookbook(presetName: (typeof FACTORY_PRESET_NAMES)[
     },
     {
       id: "duration_seconds",
-      kind: "select",
-      label: "Length",
-      options: [
-        { value: "15", label: "15 seconds" },
-        { value: "30", label: "30 seconds" },
-        { value: "45", label: "45 seconds" },
-        { value: "60", label: "60 seconds" },
-      ],
-      default: String(preset.generationParams.durationSeconds),
-      binds: [{ set: "step.produce.duration_seconds", map: { table: { "15": 15, "30": 30, "45": 45, "60": 60 } } }],
+      kind: "slider",
+      label: "Length (seconds)",
+      help: "The factory accepts 10 to 120 seconds.",
+      min: 10,
+      max: 120,
+      step: 1,
+      default: preset.generationParams.durationSeconds,
+      binds: [{ set: "step.produce.duration_seconds" }],
     },
     {
       id: "daily_generation_cap",
       kind: "slider",
       label: "Daily generation cap",
       min: 1,
-      max: 200,
+      max: 100,
       step: 1,
       default: preset.generationParams.dailyGenerationCap,
       binds: [{ set: "step.produce.daily_generation_cap" }],
@@ -265,7 +263,7 @@ export function blankCookbook(mode: "brief" | "reference" | "studio"): Cookbook 
 }
 
 /** The factory configuration a resolved factory cookbook gives back: the same shape getPresetConfig returns. Throws when a value is missing. */
-export function pipelineConfigFromCookbook(resolved: ResolvedCookbook, presetName: (typeof FACTORY_PRESET_NAMES)[number]): FactoryPipelineConfig {
+export function pipelineConfigFromCookbook(resolved: ResolvedCookbook, presetName: FactoryPipelineConfig["presetName"]): FactoryPipelineConfig {
   const byId = new Map(resolved.steps.map((step) => [step.id, step] as const));
   const param = (stepId: string, key: string): string | number | boolean => {
     const value = byId.get(stepId)?.params[key];

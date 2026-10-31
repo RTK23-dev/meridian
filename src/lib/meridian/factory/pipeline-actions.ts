@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
+import { saveFactoryCookbook } from "../cookbooks/factory-bridge.ts";
 import { loadFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import {
   type FactoryPipelineConfig,
@@ -94,6 +95,8 @@ export const savePipelineConfig = createServerFn({ method: "POST" })
         updated_by = excluded.updated_by,
         updated_at = now()
     `;
+    // The line is also a cookbook from now on (K8): the library and the resolver read it.
+    await saveFactoryCookbook(sql, { organizationId, brandId: data.brandId, config: validated, createdBy: context.userId });
 
     return { ok: true, config: validated };
   });
