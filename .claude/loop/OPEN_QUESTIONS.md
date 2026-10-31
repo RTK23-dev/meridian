@@ -231,6 +231,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) delete it, since the engine's render adapter is the real path. (b) Keep it as a test helper and say so in its header. (c) Connect it to real clips from storage, after the storage decision (Q26).
 - The loop recommends (a).
 
+## Q29: Four engine modules with no product caller: which to keep?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. All four stay as they are, with no caller.
+- Part A, `src/engine/jobs/review-decision.ts`: records an approve or reject decision on an engine review item. It uses `engine/review/labels.ts` and the take gold set in `engine/review/take/gold.ts`, which only it uses. Wiring it would let a person approve engine output from the product, which changes approvals.
+- Part B, `src/engine/assets/firstLastFrame.ts`: a test of first and last frames for video models. Running it calls paid video providers, so it needs your spend approval first.
+- Part C, `src/engine/render/recorded.ts`: a set of recorded render replies. The E1 dry-run script does not import it (it uses its own recorded file), so it is a duplicate fixture.
+- Options: A: keep the review decision for the owner to wire, or delete it with its gold set. B: approve one budgeted frame test, or delete the file. C: delete it.
+- The loop recommends deleting C, and deciding A and B with you. Nothing is run or deleted.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

@@ -435,3 +435,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `factory/benchmark-harness.ts`: used by its own test (`benchmark-harness.test.ts`), which checks the opportunity ranking against a hand-labelled gold set. Same treatment as `a11y/contrast.ts`: a test tool, no product change. The package has no benchmark script.
 - Decided by the loop: none. Q28 is an owner decision and is open.
 - Still open in R5: the engine modules still on the list (`engine/assets/firstLastFrame.ts`, `engine/jobs/review-decision.ts`, `engine/render/recorded.ts`, `engine/review/take/gold.ts`), then `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, and `render/splice-run.ts`.
+
+## 2026-10-31 19:18 UTC: round 2, R5 group: four engine modules, explained
+
+- Wake: the scheduled wake (`trig_013MBDNEH4ZSVs8rJsVeoshr`) fired at 19:15:41Z. CI on `8d52d29` (run 41231693551) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `engine/assets/firstLastFrame.ts`, `engine/jobs/review-decision.ts`, `engine/render/recorded.ts`, `engine/review/take/gold.ts`. No code changed.
+- Checked with exact import patterns and scripts: none has a product caller. `review/take/gold.ts` is used only by `review/labels.ts`, which only `review-decision.ts` uses. `render/recorded.ts` is not imported by the E1 scripts (which use `scripts/engine/fixtures/e1-recorded.json`). `firstLastFrame.ts` calls paid video providers if run.
+- Decided by the loop: none. Q29 is an owner decision and is open.
+- Still open in R5: `gates/slop-craft-gates.ts`, `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`.
