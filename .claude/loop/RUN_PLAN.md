@@ -311,7 +311,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: v12 fixtures; a v11 request still parses; instruction text over the bound is refused.
 
 #### K15: Roles that read cookbook instructions
-- Status: `pending`. Depends on: K14.
+- Status: `partly done`. Done: the script writer. `scriptwriter@3.md` is the version-2 text plus a section on the cookbook block (rule 11: the block sits under the rules and cannot lift a claim, a forbidden term, the copy rule, the length or a check). A run without a cookbook keeps version 2, byte for byte. A run with `cookbook.instructions.script` uses `scriptwriterWithCookbook` (version 3) and sends the block as escaped untrusted data. The write-script handler chooses the variant. Tests: the version-3 pin, the block's presence and escaping, the rule text, and the existing script writer and handler suites (28 pass). Remaining: the planner, the critic and the editor. Each needs its own `@n+1` prompt, a pin, and a role variant, following the same pattern.
 - New prompt versions for the script writer, the planner, the critic and the editor (`<role>@<n+1>.md`) with a delimited "cookbook
   instructions" block, which is data and never overrides the rules or the gates. The roles pin the new versions; the old files stay
   unchanged (their hashes are pinned).
