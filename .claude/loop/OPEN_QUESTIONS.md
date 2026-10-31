@@ -261,6 +261,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - D5: who may edit instructions: editors for their own cookbooks, admins for copies of built-ins? Recommended: yes.
 - D6: record option values with run results for the research agents? Recommended: yes.
 
+## Q32: The slop and craft gate: move its safe-zone check, delete the rest?
+- Kind: owner decision. Status: `open`.
+- Context: `src/lib/meridian/gates/slop-craft-gates.ts` has no product caller. It fails a video for morphing faces, garbled text, plastic skin, flicker, text outside the Reels safe zones, a dull first frame, loudness outside -14 LUFS, and a robot voice.
+- Why it is not wired: four inputs (morphing faces, garbled text, plastic skin, robot voice) are booleans that nothing in Meridian measures. They need a vision or audio model (paid), so wiring the gate now would feed it guesses (AGENTS rule 1). Its loudness check duplicates the engine's post-render gate (`engine/review/gates/postRender.ts`, from `thresholds.postRender`), and its flicker check duplicates the render-integrity detector.
+- Blocks: nothing.
+- Options: (a) move the safe-zone check (`validateReelsSafeZones`) into the engine's post-render gate once overlay boxes are measured, and delete the rest; (b) keep the file until a vision role can measure the four slop signs (paid); (c) delete it.
+- The loop recommends (a). Nothing is changed or deleted.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

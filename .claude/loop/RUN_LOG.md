@@ -452,3 +452,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Built: `src/engine/presets/` (the `StylePreset` shape, a registry, `presetProblems`, `installStylePreset` into `engine_kits`) and the first preset, `three-d-data-explainer.ts` (kit `sk_3d_data_explainer`, format `ref_98053a5a224b3833a3ed4421`). No contract change. 7 tests pass (`style-presets.test.ts`, PGlite). ESLint and typecheck clean.
 - Report: `docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md`. Gaps recorded as Q30 (live analysis, accent font and palette roles, caption and data components, an install button).
 - Note: `installStylePreset` has no product caller yet (Q30 part D), so it is itself a test-only module until the owner decides.
+
+## 2026-10-31 20:35 UTC: owner requests done; round 2, R5: the slop and craft gate, explained
+
+- Owner requests since 19:45: two original preview renders made from the 3D data explainer preset (`scripts/engine/preset-preview/`), measured against the reference with `compare.ts`; preset version 2 (layout, zoom jump kinds, motion per tenth, cut rule); a media-function fix (ffmpeg's `nan` momentary loudness now reads as silence; it made any reference with a hard mute fail analysis); and the cookbook presets plan (`docs/planning/COOKBOOK_PRESETS_PLAN.md`, round 3, decisions in Q31).
+- CI: one red run on d43b2cd and 5ba355e (the env-example test: the renderer read an environment variable). Fixed in acb0875 (a `--chromium` flag); 70f6fb0 was fully green. CI is running on 3dd919f.
+- Wake (20:34): `gates/slop-craft-gates.ts` checked with exact import patterns: no caller. Explained, not wired (Q32): four of its inputs have no measurement in Meridian, and its loudness and flicker checks duplicate the engine's post-render gate and integrity detector. The safe-zone check is the part worth keeping.
+- Still open in R5: `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`.
