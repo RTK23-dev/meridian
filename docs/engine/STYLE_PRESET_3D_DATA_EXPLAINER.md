@@ -130,3 +130,27 @@ Motion per tenth (timeline motion): reference 0.12, 0.08, 0.09, 0.08, 0.11, 0.10
 
 The renderer was re-tuned with the version 2 fields: faster camera moves in the data room, savanna and ocean, and cuts that change scale
 or set. Its measures are in section 8.
+
+## 8. Second render, with preset version 2
+
+| Measure | Reference | Render 1 | Render 2 |
+| --- | --- | --- | --- |
+| Hard cuts | 9 | 5 | 8 (only the room-to-room cut at 22.0 s does not register) |
+| Shot length p25, p50, p75 | 3.2, 4.1, 6.5 s | 4.3, 8.2, 10.6 s | 3.1, 3.4, 6.8 s |
+| First cut | 6.77 s | 6.80 s | 6.80 s |
+| Zoom jumps; punch-ins per 10 s | 8; 1.17 | 8; 0.83 | 7; 0.67 |
+| Pattern interrupt median | 2.7 s | 2.6 s | 3.1 s |
+| Mean motion | 0.020 | 0.005 | 0.007 |
+| Loudness, range | -14.1 LUFS, 2.8 LU | -14.1, 0.4 | -14.1, 0.3 |
+| Loop distance | 0.101 | 0.053 | 0.101 |
+
+Motion per tenth, render 2: 0.06, 0.10, 0.10, 0.03, 0.05, 0.05, 0.04, 0.04, 0.02, 0.10 (reference 0.12, 0.08, 0.09, 0.08, 0.11,
+0.10, 0.08, 0.06, 0.06, 0.10). The ice sections now match. The data room and the ocean still move about half as much: the room is mostly
+black, so a moving camera changes few pixels. The reference fills its room with lit panels that cross the frame.
+
+What is still not reachable from the preset alone: the voice (loudness range comes from speech), the 3D quality of generated aerials,
+and the components listed in section 6. The cut and shot rhythm is now close.
+
+The second run also found a bug in the media functions: ffmpeg prints `nan` for the momentary loudness of digital silence, and the
+timeline parser refused it, so any reference with a hard mute failed its analysis. `functions/ffmpeg/timeline.ts` now reads `nan` as
+silence, like `-inf`, with a test in `src/engine/media/timeline.test.ts`.

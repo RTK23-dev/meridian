@@ -71,6 +71,19 @@ describe("parsing the metadata series (pure, on recorded ffmpeg lines)", () => {
     ]);
   });
 
+  it("reads nan, which ffmpeg prints for a window of digital silence, as silence", () => {
+    const lines = [
+      "[Parsed_ametadata_1 @ 0x55bec16ef440] frame:0    pts:0       pts_time:42.9",
+      "[Parsed_ametadata_1 @ 0x55bec16ef440] lavfi.r128.M=nan",
+      "[Parsed_ametadata_1 @ 0x55bec16ef440] frame:1    pts:4800    pts_time:43",
+      "[Parsed_ametadata_1 @ 0x55bec16ef440] lavfi.r128.M=-18.2",
+    ].join("\n");
+    assert.deepEqual(parseLoudnessSeries(lines), [
+      { atMs: 42900, lufs: null },
+      { atMs: 43000, lufs: -18.2 },
+    ]);
+  });
+
   it("refuses a value with no time, or a time with no value, rather than shortening the series", () => {
     assert.throws(
       () => parseSignalSeries("lavfi.signalstats.YAVG=81", 255),
