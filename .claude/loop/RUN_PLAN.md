@@ -291,7 +291,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 4: engine integration (contract approved by D1)
 
 #### K12: Phase A wiring through existing fields
-- Status: `pending`. Depends on: K3.
+- Status: `done` (`content-factory/cookbook-request.ts`, 4 tests: a cookbook that names a style replaces the theme's kit, a factory preset leaves it, the length caps the request, the instructions join the brief or the change lines, and a brief over its limit is reported as incomplete in words. No contract change.)
 - `content-factory/request.ts` `buildProductionRequest` takes a resolved cookbook and maps it onto existing fields: `page.styleKitId`
   (installed through `installStylePreset` or the kit store), `format.keep`, `visualRequests`, `constraints`, and a delimited
   "Cookbook instructions" section in `brief.text`.
