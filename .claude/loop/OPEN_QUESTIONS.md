@@ -152,6 +152,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) decide the footage-rights question (R4) and the voice vendor, then wire the rework engine and the voice plan behind them. (b) Wire `route.ts` as the approval rule, once you confirm that is the rule you want. (c) Keep all three out of the product and delete them later.
 - The loop recommends (a) for the voice and the rework engine, after the footage and voice decisions, and (b) only if you confirm the rule.
 
+## Q20: Two duplicate modules: delete them, or switch to them?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one is, in plain words:
+  - `src/lib/meridian/jobs/durable.ts` is a job queue held in memory (an array that is lost on restart). The product already runs its jobs through the Postgres worker, which is the queue the rules name. Using this one would build a parallel pipeline, which AGENTS forbids.
+  - `src/lib/meridian/video/scene-frames.ts` picks four frames from a video, one per quarter, by the most relevant scene. The product already picks frames for its visual checks in `decisions/frames.ts`, which image QC uses. Switching would change which frames every visual judgment reads, so it changes scoring.
+- Options: (a) delete `jobs/durable.ts`, since the Postgres worker is the queue. (b) Delete `video/scene-frames.ts`, and keep `decisions/frames.ts`. (c) Compare the two frame selectors on recorded videos first, and switch only if the scene-based one is better and you approve the change to scoring.
+- The loop recommends (a) and (b). Deletion needs your decision, so nothing is deleted.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

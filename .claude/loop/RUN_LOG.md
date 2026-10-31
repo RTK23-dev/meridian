@@ -337,3 +337,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `voice-director.ts`: needs a voice (creator audio or consented synthetic) and a voice vendor, which is still open.
 - Decided by the loop: none. Q19 is an owner decision and is open.
 - Still open in R5: 31 modules. Next group: `jobs/durable.ts` and `video/scene-frames.ts`.
+
+## 2026-10-31 15:37 UTC: round 2, R5 group: jobs/durable.ts and video/scene-frames.ts, explained
+
+- Wake: the scheduled wake (`trig_018uvSyp6xrL5x2dei2UjpsH`) fired at 15:34:49Z. CI on `4a17603` (run 41213886480) finished with all 13 check runs successful. PR #85 is clean and still a draft.
+- Task: R5, `jobs/durable.ts` and `video/scene-frames.ts`. No code changed.
+- `jobs/durable.ts`: an in-memory array queue (`createDurableQueue`), not stored anywhere. The product runs its jobs through the Postgres worker (several files use `skip locked`). Using this would be a parallel pipeline.
+- `video/scene-frames.ts`: a pure four-frame selector by scene span. No product file imports it (checked). Image QC selects frames in `decisions/frames.ts`, so switching would change every visual judgment.
+- Decided by the loop: none. Q20 is an owner decision and is open. Both modules are recommended for deletion, which needs the owner.
+- Still open in R5: 29 modules. Next group: `flow/nodes.ts` and `grading/priors.ts`.
