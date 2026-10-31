@@ -241,7 +241,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
   the workspace when shared; an archived cookbook is not listed but still resolves for old runs.
 
 #### K7: Server functions and roles
-- Status: `pending`. Depends on: K6.
+- Status: `done` (`cookbooks/service.ts` with the rules, tested on PGlite: 9 tests; `cookbooks/policy.ts`, 5 tests; `cookbooks/actions.ts`, thin server functions that check the brand first with requireBrand; built-ins in `cookbooks/builtin/index.ts`). Rules: viewers read; members create and fork; a member edits or archives only their own cookbook; a copy of a built-in is maintained by an admin; built-in ids are reserved and cannot be archived.
 - `cookbooks/actions.ts`: `listCookbooks`, `getCookbook`, `resolveCookbookFor` (no writes), `saveCookbook`, `forkCookbook`,
   `archiveCookbook`, each with `authMiddleware`, `requireBrand` and role checks (viewer reads; editor saves and forks their own; admin
   edits copies of built-ins, D5).
