@@ -369,7 +369,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
   - `cta.follow`.
 
 #### K22: The checks module
-- Status: `pending`. Depends on: K2.
+- Status: `partly done`. Done: `cookbooks/checks.ts` (pass, near, miss, unknown; an unreadable measure is never a pass; a plain report line per check; 3 tests). Remaining: wiring the measures from the media functions (the compare script's measures, on the rendered file), and the safe-zone move into the post-render gate, which is Q32's decision (option a).
 - `cookbooks/checks.ts`: measure an output with the media functions and compare it with the cookbook's targets (pass, near, miss).
   It generalises `scripts/engine/preset-preview/compare.ts`.
 - The safe-zone check from `gates/slop-craft-gates.ts` moves here and into the engine's post-render gate as a note (Q32, option a). The
