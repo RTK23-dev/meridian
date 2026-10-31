@@ -6,8 +6,11 @@
 
 import { z } from "zod";
 
-export const COOKBOOK_ROLES = ["script", "plan", "visual", "voice", "edit", "critic", "agent"] as const;
-export const cookbookRoleSchema = z.enum(COOKBOOK_ROLES);
+import { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "../../../engine/contracts/request.ts";
+
+/** The roles a cookbook instruction can reach: the engine contract's list (contract v12), so the two cannot drift. */
+export const COOKBOOK_ROLES = COOKBOOK_INSTRUCTION_ROLES;
+export const cookbookRoleSchema = cookbookInstructionRoleSchema;
 export type CookbookRole = z.infer<typeof cookbookRoleSchema>;
 
 /** The colour roles of a style kit (styleKitSchema.palette). A colour control picks one of these, never a free colour. */

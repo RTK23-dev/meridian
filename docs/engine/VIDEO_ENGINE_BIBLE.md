@@ -588,6 +588,25 @@ a workspace. No row is rewritten.
 `speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
 records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
 
+### v12 changes and migration (cookbook reference on a request, contract version `engine-contracts@12`)
+
+Requested by the owner on 2026-10-31 (round 3, decision D1: the engine picks a cookbook and the person can change it before the request goes
+to the orchestrator). **Owner approval: given 2026-10-31 (D1). Lead review: to be recorded by the lead.** The set version is `CONTRACTS_VERSION`
+in `src/engine/contracts/version.ts`. The change is additive: `productionRequestSchema` gains an optional `cookbook` field (`cookbookRefSchema`).
+No field is removed or changes its meaning, and a request without `cookbook` parses and runs exactly as before.
+
+**What `cookbook` holds.** The cookbook's id (`ck_` and lower-case letters, digits or underscores), its version, `valuesHash` (the hash of the
+values the person chose, so a run can show what it was made with), and `instructions`: the text per role, for the roles in
+`COOKBOOK_INSTRUCTION_ROLES` (script, plan, visual, voice, edit, critic, agent). Each text is at most 4000 characters, and the total at most
+16000. The instructions are data. A role reads them as a delimited block after its own rules, and they never override the rules, the gates or
+the budget.
+
+**What changes for a role.** Nothing until the role's prompt version reads the block (round 3, K15). Until then the script writer receives its
+instruction through `brief.text`, as before.
+
+**Why.** Cookbooks are recipes with their own instructions and options. The request is the one place the engine learns which recipe a run
+used, so the run can be reproduced and the results learned from (decision D6).
+
 ### v11 changes and migration (visual treatments of a repurposed cut, contract version `engine-contracts@11`)
 
 Requested by the owner in the repurpose assignment (2026-10-24), which asks for a versioned contract change where the EDL cannot express the

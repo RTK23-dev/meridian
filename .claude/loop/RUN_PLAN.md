@@ -304,7 +304,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests (PGlite).
 
 #### K14: `engine-contracts@12`
-- Status: `pending`. Depends on: K12.
+- Status: `done` (approved by D1, 2026-10-31). `productionRequestSchema` gains an optional `cookbook` (id, version, valuesHash, instructions per role; bounded, strict). `CONTRACTS_VERSION` is `engine-contracts@12`, the Bible section 4 note is written (the lead's review is still to be recorded there), and the request builder sets the field too. Six contract tests (v12), and all 299 engine contract tests pass.
 - `productionRequestSchema` gains an optional `cookbook: { id, version, valuesHash, instructions: partial record of role to text }`.
   Optional, so earlier requests parse unchanged.
 - Version bump in `contracts/version.ts`, and a migration note in Bible section 4 (`docs/engine/VIDEO_ENGINE_BIBLE.md`).
