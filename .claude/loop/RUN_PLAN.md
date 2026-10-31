@@ -133,3 +133,9 @@ no merging, no force-push, no contract change without the owner's approval, no n
 
 ### R8: New pull request (Q6, Q8)
 - Status: `pending`. Open one new draft pull request once R5 and R6 are settled, and leave PR #85 unchanged. The owner said: when the changes are done.
+
+## Round 3: cookbook presets (planned 2026-10-31, not started)
+
+The plan is `docs/planning/COOKBOOK_PRESETS_PLAN.md`: tasks C1 to C17. C1 to C4 (control schema, cookbook schema and validator,
+resolver, the 3D data explainer as the first built-in) need no owner decision and can start once round 2 ends. C14 waits on D4, C15 on
+Q21, and C16 on D1 (Q1). The owner decisions are Q31 in OPEN_QUESTIONS.md.

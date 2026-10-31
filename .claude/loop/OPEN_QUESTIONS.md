@@ -250,6 +250,17 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Part D, a "Use this preset" button on the theme page that installs the kit and sets the page's style kit. Build it?
 - The loop recommends A (it is the only way to get the real grammar), C and D, and B only together with Q1.
 
+## Q31: Cookbook presets: six decisions
+- Kind: owner decision. Status: `open`.
+- Context: the owner asked for a plan for cookbook presets (recipes with their own instructions, needs and options). The plan is `docs/planning/COOKBOOK_PRESETS_PLAN.md`, section 10.
+- Blocks: C16 (D1), C14 (D4); the rest of round 3 can start without answers.
+- D1: add a cookbook field to the engine request (contract change, `engine-contracts@12`) so the planner, critic and editor follow cookbook instructions? Recommended: yes, after phase A works. This settles Q1.
+- D2: videos made fully in agent mode go through the same review, disclosure and publish gates, with a label saying how they were made? Recommended: yes.
+- D3: custom cookbooks visible to the brand, the workspace, or both by choice? Recommended: both, brand by default.
+- D4: retire the factory pipeline presets (stored, never applied) once they are cookbooks? Recommended: yes.
+- D5: who may edit instructions: editors for their own cookbooks, admins for copies of built-ins? Recommended: yes.
+- D6: record option values with run results for the research agents? Recommended: yes.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
