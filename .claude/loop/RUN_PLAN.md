@@ -360,7 +360,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 6: components, agent mode and checks
 
 #### K21: Compose components for data explainers
-- Status: `pending`. Depends on: K1.
+- Status: `partly done`. Done: `stat.counter` (a number that counts up on the composition clock, with a pill label; props, template, three fixtures, registered; the library list is pinned in the components test, which now holds 15). The component contract tests pass (112), and every compose test passes (279). NOT verified here: how it looks. The templates load GSAP from a CDN, which this sandbox cannot reach, so the look needs the owner's render or the browser check. Remaining: `captions.boxed`, `label.pill` (the place and date), `panel.bars`, `panel.line`, `panel.tiles` and `cta.follow`, one per unit.
 - One component per unit, each with `props.ts`, golden snapshots and declared variables in the K1 schema:
   - `captions.boxed` (in the contract already; the spoken word in a filled box, the words to come dimmed);
   - `stat.counter` (a number that counts up, with a pill label);

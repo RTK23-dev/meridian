@@ -16,6 +16,7 @@ import { priceReveal } from "./price.reveal/index.ts";
 import { productCard } from "./product.card/index.ts";
 import { reactLayout } from "./react.layout/index.ts";
 import { screenMock } from "./screen.mock/index.ts";
+import { statCounter } from "./stat.counter/index.ts";
 import { stopmotionPlayer } from "./stopmotion.player/index.ts";
 import { titleHook } from "./title.hook/index.ts";
 
@@ -34,4 +35,5 @@ export const COMPONENT_LIBRARY: ComponentLibrary = Object.freeze({
   [screenMock.name]: screenMock,
   [characterRig.name]: characterRig,
   [stopmotionPlayer.name]: stopmotionPlayer,
+  [statCounter.name]: statCounter,
 });
