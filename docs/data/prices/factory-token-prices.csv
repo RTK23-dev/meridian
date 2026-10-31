@@ -1,0 +1,3 @@
+engine,model,tier,input,cached_input,output,source_url,read_on
+openai-decisions,gpt-6-luna,short_context,0.1,0.01,0.5,https://developers.openai.com/api/docs/pricing,2026-10-13
+openai-decisions,gpt-6-luna,long_context,0.2,0.02,0.75,https://developers.openai.com/api/docs/pricing,2026-10-13

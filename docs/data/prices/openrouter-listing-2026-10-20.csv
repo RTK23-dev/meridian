@@ -1,0 +1,586 @@
+id,name,kind,prompt_usd_per_million_tokens,completion_usd_per_million_tokens,image_usd,usd_per_second_1080p
+~anthropic/claude-fable-latest,Anthropic: Claude Fable Latest,text,10,50,unknown,unknown
+~anthropic/claude-haiku-latest,Anthropic: Claude Haiku Latest,text,0.1,0.5,unknown,unknown
+~anthropic/claude-opus-latest,Anthropic: Claude Opus Latest,text,4,20,unknown,unknown
+~anthropic/claude-sonnet-latest,Anthropic: Claude Sonnet Latest,text,2,10,unknown,unknown
+~deepseek/deepseek-flash-latest,DeepSeek: DeepSeek Flash Latest,text,0.07,0.5,unknown,unknown
+~deepseek/deepseek-pro-latest,DeepSeek: DeepSeek Pro Latest,text,0.1307,8,unknown,unknown
+~deepseek/deepseek-v4-flash-latest,DeepSeek: DeepSeek V4 Flash Latest,text,0.0168,0.11288,unknown,unknown
+~google/gemini-flash-latest,Google: Gemini Flash Latest,text,0.75,3.75,unknown,unknown
+~google/gemini-pro-latest,Google: Gemini Pro Latest,text,2,10,unknown,unknown
+~moonshotai/kimi-latest,MoonshotAI: Kimi Latest,text,0.238,24,unknown,unknown
+~openai/gpt-astra-latest,OpenAI: GPT Astra Latest,text,10,50,unknown,unknown
+~openai/gpt-luna-latest,OpenAI: GPT Luna Latest,text,0.1,0.5,unknown,unknown
+~openai/gpt-mini-latest,OpenAI: GPT Mini Latest,text,0.75,4.5,unknown,unknown
+~openai/gpt-sol-latest,OpenAI: GPT Sol Latest,text,2,10,unknown,unknown
+~openai/gpt-terra-latest,OpenAI: GPT Terra Latest,text,2,12,unknown,unknown
+~unbiased/pareto-latest,Pareto Latest,text,0.8,3.2,unknown,unknown
+~x-ai/grok-latest,xAI: Grok Latest,text,2,6,unknown,unknown
+~z-ai/glm-flash-latest,Z.ai: GLM Flash Latest,text,0.047076,0.12,unknown,unknown
+~z-ai/glm-latest,Z.ai: GLM Latest,text,0.079,1.4,unknown,unknown
+aion-labs/aion-2.0,AionLabs: Aion-2.0,text,0.8,1.6,unknown,unknown
+aion-labs/aion-3.0,AionLabs: Aion-3.0,text,3,6,unknown,unknown
+aion-labs/aion-3.0-mini,AionLabs: Aion-3.0-Mini,text,0.7,1.4,unknown,unknown
+aion-labs/aion-3.5,AionLabs: Aion 3.5,text,3,6,unknown,unknown
+aion-labs/aion-3.5-mini,AionLabs: Aion 3.5 Mini,text,0.7,1.4,unknown,unknown
+aion-labs/aion-rp-llama-3.1-8b,AionLabs: Aion-RP 1.0 (8B),text,0.8,1.6,unknown,unknown
+alibaba/happyhorse-1.0,Alibaba: HappyHorse 1.0,video,unknown,unknown,unknown,0.1694
+alibaba/happyhorse-1.1,Alibaba: HappyHorse 1.1,video,unknown,unknown,unknown,0.1278
+alibaba/wan-2.6,Alibaba: Wan 2.6,video,unknown,unknown,unknown,unknown
+alibaba/wan-2.7,Alibaba: Wan 2.7,video,unknown,unknown,unknown,unknown
+alibaba/wan-3.0,Alibaba: Wan 3.0,video,unknown,unknown,unknown,0.2
+alibaba/wan-3.0-prime,Alibaba: Wan 3.0 Prime,video,unknown,unknown,unknown,0.28
+amazon/nova-2-lite-v1,Amazon: Nova 2 Lite,text,0.3,2.5,unknown,unknown
+amazon/nova-lite-v1,Amazon: Nova Lite 1.0,text,0.06,0.24,unknown,unknown
+amazon/nova-micro-v1,Amazon: Nova Micro 1.0,text,0.035,0.14,unknown,unknown
+amazon/nova-premier-v1,Amazon: Nova Premier 1.0,text,2.5,12.5,unknown,unknown
+amazon/nova-pro-v1,Amazon: Nova Pro 1.0,text,0.8,3.2,unknown,unknown
+anthracite-org/magnum-v4-72b,Magnum v4 72B,text,2.5,5,unknown,unknown
+anthropic/claude-fable-5,Anthropic: Claude Fable 5,text,10,50,unknown,unknown
+anthropic/claude-fable-5:batch,Anthropic: Claude Fable 5 (batch),text,5,25,unknown,unknown
+anthropic/claude-fable-5.1,Anthropic: Claude Fable 5.1,text,10,50,unknown,unknown
+anthropic/claude-fable-5.1:batch,Anthropic: Claude Fable 5.1 (batch),text,5,25,unknown,unknown
+anthropic/claude-haiku-4.5,Anthropic: Claude Haiku 4.5,text,1,5,unknown,unknown
+anthropic/claude-haiku-4.5:batch,Anthropic: Claude Haiku 4.5 (batch),text,0.5,2.5,unknown,unknown
+anthropic/claude-haiku-5.5,Anthropic: Claude Haiku 5.5,text,0.1,0.5,unknown,unknown
+anthropic/claude-haiku-5.5:batch,Anthropic: Claude Haiku 5.5 (batch),text,0.05,0.25,unknown,unknown
+anthropic/claude-opus-4.1,Anthropic: Claude Opus 4.1,text,15,75,unknown,unknown
+anthropic/claude-opus-4.1:batch,Anthropic: Claude Opus 4.1 (batch),text,7.5,37.5,unknown,unknown
+anthropic/claude-opus-4.5,Anthropic: Claude Opus 4.5,text,5,25,unknown,unknown
+anthropic/claude-opus-4.5:batch,Anthropic: Claude Opus 4.5 (batch),text,2.5,12.5,unknown,unknown
+anthropic/claude-opus-4.6,Anthropic: Claude Opus 4.6,text,5,25,unknown,unknown
+anthropic/claude-opus-4.6:batch,Anthropic: Claude Opus 4.6 (batch),text,2.5,12.5,unknown,unknown
+anthropic/claude-opus-4.7,Anthropic: Claude Opus 4.7,text,5,25,unknown,unknown
+anthropic/claude-opus-4.7:batch,Anthropic: Claude Opus 4.7 (batch),text,2.5,12.5,unknown,unknown
+anthropic/claude-opus-4.8,Anthropic: Claude Opus 4.8,text,5,25,unknown,unknown
+anthropic/claude-opus-4.8:batch,Anthropic: Claude Opus 4.8 (batch),text,2.5,12.5,unknown,unknown
+anthropic/claude-opus-5,Anthropic: Claude Opus 5,text,5,25,unknown,unknown
+anthropic/claude-opus-5:batch,Anthropic: Claude Opus 5 (batch),text,2.5,12.5,unknown,unknown
+anthropic/claude-opus-5.5,Anthropic: Claude Opus 5.5,text,4,20,unknown,unknown
+anthropic/claude-opus-5.5:batch,Anthropic: Claude Opus 5.5 (batch),text,2,10,unknown,unknown
+anthropic/claude-sonnet-4.5,Anthropic: Claude Sonnet 4.5,text,3,15,unknown,unknown
+anthropic/claude-sonnet-4.5:batch,Anthropic: Claude Sonnet 4.5 (batch),text,1.5,7.5,unknown,unknown
+anthropic/claude-sonnet-4.6,Anthropic: Claude Sonnet 4.6,text,3,15,unknown,unknown
+anthropic/claude-sonnet-4.6:batch,Anthropic: Claude Sonnet 4.6 (batch),text,1.5,7.5,unknown,unknown
+anthropic/claude-sonnet-5,Anthropic: Claude Sonnet 5,text,2,10,unknown,unknown
+anthropic/claude-sonnet-5:batch,Anthropic: Claude Sonnet 5 (batch),text,1,5,unknown,unknown
+anthropic/claude-sonnet-5.5,Anthropic: Claude Sonnet 5.5,text,2,10,unknown,unknown
+anthropic/claude-sonnet-5.5:batch,Anthropic: Claude Sonnet 5.5 (batch),text,1,5,unknown,unknown
+arcee-ai/trinity-large-thinking,Arcee AI: Trinity Large Thinking,text,0.25,0.8,unknown,unknown
+black-forest-labs/flux-3-image,Black Forest Labs: FLUX 3 Image,image,0,0,unknown,unknown
+black-forest-labs/flux-3-image-klein,Black Forest Labs: FLUX 3 Image Klein,image,0,0,unknown,unknown
+black-forest-labs/flux-3-video,Black Forest Labs: FLUX 3 Video,video,unknown,unknown,unknown,unknown
+black-forest-labs/flux-video-edit,Black Forest Labs: FLUX Video Edit,video,unknown,unknown,unknown,unknown
+black-forest-labs/flux-video-upscale,Black Forest Labs: FLUX Video Upscale,video,unknown,unknown,unknown,unknown
+black-forest-labs/flux.2-flex,Black Forest Labs: FLUX.2 Flex,image,0,0,unknown,unknown
+black-forest-labs/flux.2-klein-4b,Black Forest Labs: FLUX.2 Klein 4B,image,0,0,unknown,unknown
+black-forest-labs/flux.2-max,Black Forest Labs: FLUX.2 Max,image,0,0,unknown,unknown
+black-forest-labs/flux.2-pro,Black Forest Labs: FLUX.2 Pro,image,0,0,unknown,unknown
+bytedance-seed/seed-1.6,ByteDance Seed: Seed 1.6,text,0.25,2,unknown,unknown
+bytedance-seed/seed-1.6-flash,ByteDance Seed: Seed 1.6 Flash,text,0.075,0.3,unknown,unknown
+bytedance-seed/seed-2-1-turbo,ByteDance Seed: Seed 2.1 Turbo,text,0.5,2.5,unknown,unknown
+bytedance-seed/seed-2.0-code,ByteDance Seed: Seed-2.0-Code,text,0.5,3,unknown,unknown
+bytedance-seed/seed-2.0-lite,ByteDance Seed: Seed-2.0-Lite,text,0.25,2,unknown,unknown
+bytedance-seed/seed-2.0-mini,ByteDance Seed: Seed-2.0-Mini,text,0.1,0.4,unknown,unknown
+bytedance-seed/seed-audio-1-0,ByteDance Seed: Seed Audio 1.0,speech,0,2500,unknown,unknown
+bytedance-seed/seedream-4.5,ByteDance Seed: Seedream 4.5,image,0,0,0,unknown
+bytedance-seed/seedream-5-0-flash,ByteDance Seed: Seedream 5.0 Flash,image,0,0,0,unknown
+bytedance-seed/seedream-5-0-lite,ByteDance Seed: Seedream 5.0 Lite,image,0,0,0,unknown
+bytedance-seed/seedream-5-0-pro,ByteDance Seed: Seedream 5.0 Pro,image,0,0,0.003,unknown
+bytedance/seedance-1-5-pro,ByteDance: Seedance 1.5 Pro,video,unknown,unknown,unknown,unknown
+bytedance/seedance-2.0,ByteDance: Seedance 2.0,video,unknown,unknown,unknown,unknown
+bytedance/seedance-2.0-fast,ByteDance: Seedance 2.0 Fast,video,unknown,unknown,unknown,unknown
+bytedance/seedance-2.0-mini,ByteDance: Seedance 2.0 Mini,video,unknown,unknown,unknown,unknown
+bytedance/seedance-2.5,ByteDance: Seedance 2.5,video,unknown,unknown,unknown,unknown
+bytedance/ui-tars-1.5-7b,ByteDance: UI-TARS 7B ,text,0.1,0.2,unknown,unknown
+canopylabs/orpheus-3b-0.1-ft,Canopy Labs: Orpheus 3B,speech,7,0,unknown,unknown
+cognitivecomputations/dolphin-mistral-24b-venice-edition,Venice: Uncensored,text,0.2,0.9,unknown,unknown
+cohere/command-a,Cohere: Command A,text,2.5,10,unknown,unknown
+cohere/command-a-plus,Cohere: Command A+,text,0.3,1.5,unknown,unknown
+cohere/command-r-08-2024,Cohere: Command R (08-2024),text,0.15,0.6,unknown,unknown
+cohere/command-r-plus-08-2024,Cohere: Command R+ (08-2024),text,2.5,10,unknown,unknown
+cohere/command-r7b-12-2024,Cohere: Command R7B (12-2024),text,0.0375,0.15,unknown,unknown
+cohere/north-mini-code:free,Cohere: North Mini Code (free),text,0,0,unknown,unknown
+deepgram/aura-2,Deepgram: Aura-2,speech,30,0,unknown,unknown
+deepgram/flux-tts,Deepgram: Flux TTS,speech,45,0,unknown,unknown
+deepseek/deepseek-chat,DeepSeek: DeepSeek V3,text,0.2574,1.0287,unknown,unknown
+deepseek/deepseek-chat-v3-0324,DeepSeek: DeepSeek V3 0324,text,0.29,1.14,unknown,unknown
+deepseek/deepseek-chat-v3.1,DeepSeek: DeepSeek V3.1,text,0.25,0.95,unknown,unknown
+deepseek/deepseek-r1-0528,DeepSeek: R1 0528,text,0.5,2.15,unknown,unknown
+deepseek/deepseek-v3.1-terminus,DeepSeek: DeepSeek V3.1 Terminus,text,0.27,1,unknown,unknown
+deepseek/deepseek-v3.2,DeepSeek: DeepSeek V3.2,text,0.28,0.42,unknown,unknown
+deepseek/deepseek-v3.2-exp,DeepSeek: DeepSeek V3.2 Exp,text,0.27,0.41,unknown,unknown
+deepseek/deepseek-v4-flash,DeepSeek: DeepSeek V4 Flash 0423,text,0.091,0.182,unknown,unknown
+deepseek/deepseek-v4-flash-0731,DeepSeek: DeepSeek V4 Flash 0731,text,0.1298,0.3894,unknown,unknown
+deepseek/deepseek-v4-flash-vision-exp,DeepSeek: DeepSeek V4 Flash Vision Exp,text,0.2156,0.6468,unknown,unknown
+deepseek/deepseek-v4-pro,DeepSeek: DeepSeek V4 Pro 0423,text,0.342954,0.685908,unknown,unknown
+deepseek/deepseek-v4-pro-0813,DeepSeek: DeepSeek V4 Pro 0813,text,0.66,1.98,unknown,unknown
+deepseek/deepseek-v4.1-flash,DeepSeek: DeepSeek V4.1 Flash,text,0.02832,0.12,unknown,unknown
+deepseek/deepseek-v4.1-flash-1017,DeepSeek: DeepSeek V4.1 Flash 1017,text,0.15,0.6,unknown,unknown
+deepseek/deepseek-v4.1-flash:batch,DeepSeek: DeepSeek V4.1 Flash (batch),text,0.05,0.15,unknown,unknown
+dots-studio/dots-3-note-preview:free,Dots Studio: Dots3-Note Preview (free),text,0,0,unknown,unknown
+elevenlabs/eleven-flash-v2,ElevenLabs: Eleven Flash v2,speech,40,0,unknown,unknown
+elevenlabs/eleven-flash-v2.5,ElevenLabs: Eleven Flash v2.5,speech,40,0,unknown,unknown
+elevenlabs/eleven-multilingual-v2,ElevenLabs: Eleven Multilingual v2,speech,80,0,unknown,unknown
+elevenlabs/eleven-turbo-v2,ElevenLabs: Eleven Turbo v2,speech,40,0,unknown,unknown
+elevenlabs/eleven-turbo-v2.5,ElevenLabs: Eleven Turbo v2.5,speech,40,0,unknown,unknown
+elevenlabs/eleven-v3,ElevenLabs: Eleven v3,speech,80,0,unknown,unknown
+elevenlabs/eleven-v3-conversational,ElevenLabs: Eleven v3 Conversational,speech,40,0,unknown,unknown
+elevenlabs/eleven-v4,ElevenLabs: Eleven v4,speech,80,0,unknown,unknown
+elevenlabs/eleven-v4-turbo,ElevenLabs: Eleven v4 Turbo,speech,40,0,unknown,unknown
+elorian/glimpse,Elorian: Glimpse,text,0.6,3,unknown,unknown
+fireworks/ember-1,Fireworks: Ember-1,text,3,15,unknown,unknown
+fish-audio/drama-3,Fish Audio: Drama 3,speech,2,0,unknown,unknown
+fish-audio/s1,Fish Audio: S1,speech,15,0,unknown,unknown
+fish-audio/s2-pro,Fish Audio: S2 Pro,speech,15,0,unknown,unknown
+fish-audio/s2.1-pro,Fish Audio: S2.1 Pro,speech,15,0,unknown,unknown
+fish-audio/s2.1-pro-free:free,Fish Audio: S2.1 Pro Free (free),speech,0,0,unknown,unknown
+google/gemini-2.5-flash,Google: Gemini 2.5 Flash,text,0.3,2.5,unknown,unknown
+google/gemini-2.5-flash-image,Google: Nano Banana (Gemini 2.5 Flash Image),image,0.3,2.5,3e-7,unknown
+google/gemini-2.5-flash-lite,Google: Gemini 2.5 Flash Lite,text,0.1,0.4,unknown,unknown
+google/gemini-2.5-flash-lite:batch,Google: Gemini 2.5 Flash Lite (batch),text,0.05,0.2,unknown,unknown
+google/gemini-2.5-pro,Google: Gemini 2.5 Pro,text,1.25,10,unknown,unknown
+google/gemini-2.5-pro-preview,Google: Gemini 2.5 Pro Preview 06-05,text,1.25,10,unknown,unknown
+google/gemini-3-flash-preview,Google: Gemini 3 Flash Preview,text,0.5,3,unknown,unknown
+google/gemini-3-flash-preview:batch,Google: Gemini 3 Flash Preview (batch),text,0.25,1.5,unknown,unknown
+google/gemini-3-pro-image,Google: Nano Banana Pro (Gemini 3 Pro Image),image,2,12,0.000002,unknown
+google/gemini-3-pro-image-preview,Google: Nano Banana Pro (Gemini 3 Pro Image Preview),image,2,12,0.000002,unknown
+google/gemini-3.1-flash-image,Google: Nano Banana 2 (Gemini 3.1 Flash Image),image,0.5,3,unknown,unknown
+google/gemini-3.1-flash-image-preview,Google: Nano Banana 2 (Gemini 3.1 Flash Image Preview),image,0.5,3,unknown,unknown
+google/gemini-3.1-flash-lite,Google: Gemini 3.1 Flash Lite,text,0.25,1.5,unknown,unknown
+google/gemini-3.1-flash-lite-image,Google: Nano Banana 2 Lite (Gemini 3.1 Flash Lite Image),image,0.25,1.5,unknown,unknown
+google/gemini-3.1-flash-lite-preview,Google: Gemini 3.1 Flash Lite Preview,text,0.25,1.5,unknown,unknown
+google/gemini-3.1-flash-lite:batch,Google: Gemini 3.1 Flash Lite (batch),text,0.125,0.75,unknown,unknown
+google/gemini-3.1-flash-tts-preview,Google: Gemini 3.1 Flash TTS Preview,speech,1,20,unknown,unknown
+google/gemini-3.1-pro-preview,Google: Gemini 3.1 Pro Preview,text,2,12,unknown,unknown
+google/gemini-3.1-pro-preview-customtools,Google: Gemini 3.1 Pro Preview Custom Tools,text,2,12,unknown,unknown
+google/gemini-3.1-pro-preview:batch,Google: Gemini 3.1 Pro Preview (batch),text,1,6,unknown,unknown
+google/gemini-3.5-flash,Google: Gemini 3.5 Flash,text,1.5,9,unknown,unknown
+google/gemini-3.5-flash-lite,Google: Gemini 3.5 Flash Lite,text,0.3,2.5,unknown,unknown
+google/gemini-3.5-flash-lite:batch,Google: Gemini 3.5 Flash Lite (batch),text,0.15,1.25,unknown,unknown
+google/gemini-3.5-flash:batch,Google: Gemini 3.5 Flash (batch),text,0.75,4.5,unknown,unknown
+google/gemini-3.6-flash,Google: Gemini 3.6 Flash,text,0.75,3.75,unknown,unknown
+google/gemini-3.6-flash:batch,Google: Gemini 3.6 Flash (batch),text,0.375,1.875,unknown,unknown
+google/gemini-3.7-flash,Google: Gemini 3.7 Flash,text,0.75,3.75,unknown,unknown
+google/gemini-3.7-flash:batch,Google: Gemini 3.7 Flash (batch),text,0.375,1.875,unknown,unknown
+google/gemini-3.8-flash,Google: Gemini 3.8 Flash,text,0.825,4.125,unknown,unknown
+google/gemini-3.8-flash-lite-tts,Google: Gemini 3.8 Flash Lite TTS,speech,0.5,6,unknown,unknown
+google/gemini-3.8-flash-tts,Google: Gemini 3.8 Flash TTS,speech,0.5,9,unknown,unknown
+google/gemini-3.8-flash:batch,Google: Gemini 3.8 Flash (batch),text,0.375,1.875,unknown,unknown
+google/gemini-4-argon,Google: Gemini 4 Argon,text,2,10,unknown,unknown
+google/gemini-4-argon:batch,Google: Gemini 4 Argon (batch),text,1,5,unknown,unknown
+google/gemini-nano-banana-2.1,Google: Nano Banana 2.1,image,1.5,7.5,unknown,unknown
+google/gemma-2-27b-it,Google: Gemma 2 27B,text,0.65,0.65,unknown,unknown
+google/gemma-3-12b-it,Google: Gemma 3 12B,text,0.05,0.15,unknown,unknown
+google/gemma-3-27b-it,Google: Gemma 3 27B,text,0.08,0.35,unknown,unknown
+google/gemma-3-4b-it,Google: Gemma 3 4B,text,0.04,0.05,unknown,unknown
+google/gemma-4-26b-a4b-it,Google: Gemma 4 26B A4B ,text,0.0765,0.255,unknown,unknown
+google/gemma-4-26b-a4b-it:free,Google: Gemma 4 26B A4B  (free),text,0,0,unknown,unknown
+google/gemma-4-31b-it,Google: Gemma 4 31B,text,0.2,0.4,unknown,unknown
+google/gemma-4-31b-it:free,Google: Gemma 4 31B (free),text,0,0,unknown,unknown
+google/lyria-3-clip-preview,Google: Lyria 3 Clip Preview,text,0,0,unknown,unknown
+google/lyria-3-pro-preview,Google: Lyria 3 Pro Preview,text,0,0,unknown,unknown
+google/veo-3.1,Google: Veo 3.1,video,unknown,unknown,unknown,unknown
+google/veo-3.1-fast,Google: Veo 3.1 Fast,video,unknown,unknown,unknown,unknown
+google/veo-3.1-lite,Google: Veo 3.1 Lite,video,unknown,unknown,unknown,unknown
+gryphe/mythomax-l2-13b,MythoMax 13B,text,0.08,0.11,unknown,unknown
+hexgrad/kokoro-82m,hexgrad: Kokoro 82M,speech,0.62,0,unknown,unknown
+heygen/avatar-iv,HeyGen: Avatar IV,video,unknown,unknown,unknown,unknown
+heygen/heygen-video-1,HeyGen: HeyGen Video,video,unknown,unknown,unknown,unknown
+heygen/heygen-voice-1,HeyGen: HeyGen Voice,speech,15,0,unknown,unknown
+heygen/heygen-voice-1-turbo,HeyGen: HeyGen Voice Turbo,speech,4,0,unknown,unknown
+ibm-granite/granite-4.0-h-micro,IBM: Granite 4.0 Micro,text,0.017,0.112,unknown,unknown
+ibm-granite/granite-4.2-8b,IBM: Granite 4.2 8B,text,0.06,0.25,unknown,unknown
+inception/mercury-2,Inception: Mercury 2,text,0.25,0.75,unknown,unknown
+inception/mercury-2.5,Inception: Mercury 2.5,text,0.04,0.15,unknown,unknown
+inception/mercury-3,Inception: Mercury 3,text,0.1,0.35,unknown,unknown
+inclusionai/ling-3.0-flash,inclusionAI: Ling 3.0 Flash,text,0.021,0.063,unknown,unknown
+inclusionai/ling-3.0-flash-vl,inclusionAI: Ling 3.0 Flash VL,text,0.06,0.18,unknown,unknown
+inclusionai/ling-3.1-flash,inclusionAI: Ling 3.1 Flash,text,0.075,0.225,unknown,unknown
+inference-net/schematron-v2-small,Inference.net: Schematron V2 Small,text,0.05,0.23,unknown,unknown
+inference-net/schematron-v2-turbo,Inference.net: Schematron V2 Turbo,text,0.03,0.15,unknown,unknown
+krea/k3-edit,Krea: K3 Edit,image,0,0,0.02,unknown
+krea/krea-2-large,Krea: Krea 2 Large,image,0,0,unknown,unknown
+krea/krea-2-medium,Krea: Krea 2 Medium,image,0,0,unknown,unknown
+krea/krea-2-medium-turbo,Krea: Krea 2 Medium Turbo,image,0,0,unknown,unknown
+kwaivgi/kling-v3.0-pro,Kling: Video v3.0 Pro,video,unknown,unknown,unknown,unknown
+kwaivgi/kling-v3.0-std,Kling: Video v3.0 Standard,video,unknown,unknown,unknown,unknown
+kwaivgi/kling-video-o1,Kling: Video O1,video,unknown,unknown,unknown,unknown
+liquid/lfm-2.5-2.6b:free,LiquidAI: LFM2.5-2.6B (free),text,0,0,unknown,unknown
+liquid/lfm-2.5-24b-a2b,LiquidAI: LFM2.5-24B-A2B,text,0.05,0.7,unknown,unknown
+mancer/weaver,Mancer: Weaver (alpha),text,0.4,0.75,unknown,unknown
+meituan/longcat-2.0,Meituan: LongCat 2.0,text,0.3,1.2,unknown,unknown
+meta-llama/llama-3.1-70b-instruct,Meta: Llama 3.1 70B Instruct,text,0.4,0.4,unknown,unknown
+meta-llama/llama-3.1-8b-instruct,Meta: Llama 3.1 8B Instruct,text,0.05,0.08,unknown,unknown
+meta-llama/llama-3.2-1b-instruct,Meta: Llama 3.2 1B Instruct,text,0.027,0.201,unknown,unknown
+meta-llama/llama-3.2-3b-instruct,Meta: Llama 3.2 3B Instruct,text,0.0509,0.335,unknown,unknown
+meta-llama/llama-3.3-70b-instruct,Meta: Llama 3.3 70B Instruct,text,0.1,0.32,unknown,unknown
+meta-llama/llama-4-maverick,Meta: Llama 4 Maverick,text,0.1875,0.6525,unknown,unknown
+meta-llama/llama-4-scout,Meta: Llama 4 Scout,text,0.1,0.3,unknown,unknown
+meta-llama/llama-guard-4-12b,Meta: Llama Guard 4 12B,text,0.18,0.18,unknown,unknown
+meta/muse-glimmer-30b,Meta: Muse Glimmer 30B,text,0.3,1.2,unknown,unknown
+meta/muse-image,Meta: Muse Image,image,0,0,unknown,unknown
+meta/muse-spark-1.1,Meta: Muse Spark 1.1,text,1.25,4.25,unknown,unknown
+meta/muse-spark-1.2,Meta: Muse Spark 1.2,text,1.25,4.25,unknown,unknown
+meta/muse-spark-1.2-contributor,Meta: Muse Spark 1.2 Contributor,text,0.1,0.2,unknown,unknown
+meta/muse-spark-1.3,Meta: Muse Spark 1.3,text,1.25,4.25,unknown,unknown
+meta/muse-spark-1.3-contributor,Meta: Muse Spark 1.3 Contributor,text,0.1,0.2,unknown,unknown
+meta/muse-spark-open,Meta: Muse Spark Open,text,1.25,4.25,unknown,unknown
+meta/muse-wonder,Meta: Muse Wonder,text,4,20,unknown,unknown
+microsoft/mai-image-2.5,Microsoft AI: MAI-Image-2.5,image,5,0,unknown,unknown
+microsoft/mai-image-2.5-pro,Microsoft AI: MAI-Image-2.5 Pro,image,5,0,unknown,unknown
+microsoft/mai-image-2.6,Microsoft AI: MAI-Image-2.6,image,5,0,unknown,unknown
+microsoft/mai-image-2.6-flash,Microsoft AI: MAI-Image-2.6 Flash,image,1.75,0,unknown,unknown
+microsoft/mai-voice-2,Microsoft AI: MAI-Voice-2,speech,22,0,unknown,unknown
+microsoft/mai-voice-2-flash,Microsoft AI: MAI-Voice-2-Flash,speech,15,0,unknown,unknown
+microsoft/mai-voice-2.1,Microsoft AI: MAI-Voice-2.1,speech,22,0,unknown,unknown
+microsoft/mai-voice-2.1-flash,Microsoft AI: MAI-Voice-2.1-Flash,speech,15,0,unknown,unknown
+microsoft/phi-4,Microsoft: Phi 4,text,0.07,0.14,unknown,unknown
+minimax/hailuo-2.3,MiniMax: Hailuo 2.3,video,unknown,unknown,unknown,unknown
+minimax/hailuo-3,MiniMax: H3,video,unknown,unknown,unknown,unknown
+minimax/hailuo-3-max,MiniMax: H3 Max,video,unknown,unknown,unknown,unknown
+minimax/minimax-01,MiniMax: MiniMax-01,text,0.2,1.1,unknown,unknown
+minimax/minimax-m1,MiniMax: MiniMax M1,text,0.55,2.2,unknown,unknown
+minimax/minimax-m2,MiniMax: MiniMax M2,text,0.255,1.02,unknown,unknown
+minimax/minimax-m2-her,MiniMax: MiniMax M2-her,text,0.3,1.2,unknown,unknown
+minimax/minimax-m2.1,MiniMax: MiniMax M2.1,text,0.3,1.2,unknown,unknown
+minimax/minimax-m2.5,MiniMax: MiniMax M2.5,text,0.27,0.95,unknown,unknown
+minimax/minimax-m2.7,MiniMax: MiniMax M2.7,text,0.3,1.2,unknown,unknown
+minimax/minimax-m3,MiniMax: MiniMax M3,text,0.3,1.2,unknown,unknown
+minimax/minimax-m3.1-flash:free,MiniMax: MiniMax M3.1 Flash (free),text,0,0,unknown,unknown
+minimax/speech-2.8-hd,MiniMax: Speech 2.8 HD,speech,100,0,unknown,unknown
+minimax/speech-2.8-turbo,MiniMax: Speech 2.8 Turbo,speech,60,0,unknown,unknown
+mistralai/codestral-2508,Mistral: Codestral 2508,text,0.3,0.9,unknown,unknown
+mistralai/codestral-2508:batch,Mistral: Codestral 2508 (batch),text,0.15,0.45,unknown,unknown
+mistralai/devstral-2512,Mistral: Devstral 2 2512,text,0.4,2,unknown,unknown
+mistralai/ministral-14b-2512,Mistral: Ministral 3 14B 2512,text,0.2,0.2,unknown,unknown
+mistralai/ministral-3b-2512,Mistral: Ministral 3 3B 2512,text,0.1,0.1,unknown,unknown
+mistralai/ministral-8b-2512,Mistral: Ministral 3 8B 2512,text,0.15,0.15,unknown,unknown
+mistralai/ministral-8b-2512:batch,Mistral: Ministral 3 8B 2512 (batch),text,0.075,0.075,unknown,unknown
+mistralai/mistral-large,Mistral Large,text,2,6,unknown,unknown
+mistralai/mistral-large-2407,Mistral Large 2407,text,2,6,unknown,unknown
+mistralai/mistral-large-2512,Mistral: Mistral Large 3 2512,text,0.5,1.5,unknown,unknown
+mistralai/mistral-large-2512:batch,Mistral: Mistral Large 3 2512 (batch),text,0.25,0.75,unknown,unknown
+mistralai/mistral-large-4-0,Mistral: Mistral Large 4,text,1.36,4.18,unknown,unknown
+mistralai/mistral-medium-3,Mistral: Mistral Medium 3,text,0.4,2,unknown,unknown
+mistralai/mistral-medium-3-5,Mistral: Mistral Medium 3.5,text,1.5,7.5,unknown,unknown
+mistralai/mistral-medium-3-5:batch,Mistral: Mistral Medium 3.5 (batch),text,0.75,3.75,unknown,unknown
+mistralai/mistral-medium-3.1,Mistral: Mistral Medium 3.1,text,0.4,2,unknown,unknown
+mistralai/mistral-medium-3.1:batch,Mistral: Mistral Medium 3.1 (batch),text,0.2,1,unknown,unknown
+mistralai/mistral-nemo,Mistral: Mistral Nemo,text,0.029,0.03,unknown,unknown
+mistralai/mistral-saba,Mistral: Saba,text,0.2,0.6,unknown,unknown
+mistralai/mistral-small-24b-instruct-2501,Mistral: Mistral Small 3,text,0.05,0.08,unknown,unknown
+mistralai/mistral-small-2603,Mistral: Mistral Small 4,text,0.15,0.6,unknown,unknown
+mistralai/mistral-small-2603:batch,Mistral: Mistral Small 4 (batch),text,0.075,0.3,unknown,unknown
+mistralai/mistral-small-3.1-24b-instruct,Mistral: Mistral Small 3.1 24B,text,0.351,0.555,unknown,unknown
+mistralai/mistral-small-3.2-24b-instruct,Mistral: Mistral Small 3.2 24B,text,0.09375,0.25,unknown,unknown
+mistralai/mixtral-8x22b-instruct,Mistral: Mixtral 8x22B Instruct,text,2,6,unknown,unknown
+mistralai/voxtral-mini-tts-2603,Mistral: Voxtral Mini TTS,speech,16,0,unknown,unknown
+mistralai/voxtral-mini-tts-3-0,Mistral: Voxtral TTS 3,speech,13,0,unknown,unknown
+mistralai/voxtral-small-24b-2507,Mistral: Voxtral Small 24B 2507,text,0.1,0.3,unknown,unknown
+moondream/moondream3-preview,Moondream: Moondream 3 Preview,text,0.3,2.5,unknown,unknown
+moondream/moondream3.1-9b-a2b,Moondream: Moondream 3.1,text,0.3,2.5,unknown,unknown
+moonshotai/kimi-k2,MoonshotAI: Kimi K2 0711,text,0.57,2.3,unknown,unknown
+moonshotai/kimi-k2-0905,MoonshotAI: Kimi K2 0905,text,0.6,2.5,unknown,unknown
+moonshotai/kimi-k2-thinking,MoonshotAI: Kimi K2 Thinking,text,0.6,2.5,unknown,unknown
+moonshotai/kimi-k2.5,MoonshotAI: Kimi K2.5,text,0.5,2.5,unknown,unknown
+moonshotai/kimi-k2.6,MoonshotAI: Kimi K2.6,text,0.65,3.41,unknown,unknown
+moonshotai/kimi-k2.7-code,MoonshotAI: Kimi K2.7 Code,text,0.6712,3.35,unknown,unknown
+moonshotai/kimi-k3,MoonshotAI: Kimi K3,text,0.239,11.936,unknown,unknown
+moonshotai/kimi-k3:batch,MoonshotAI: Kimi K3 (batch),text,2.28,11.4,unknown,unknown
+morph/morph-v3-fast,Morph: Morph V3 Fast,text,0.8,1.2,unknown,unknown
+morph/morph-v3-large,Morph: Morph V3 Large,text,0.9,1.9,unknown,unknown
+nex-agi/nex-n2.5-mini,Nex AGI: Nex-N2.5-Mini,text,0.025,0.1,unknown,unknown
+nex-agi/nex-n2.5-pro,Nex AGI: Nex-N2.5-Pro,text,0.075,0.25,unknown,unknown
+nousresearch/hermes-3-llama-3.1-405b,Nous: Hermes 3 405B Instruct,text,1,1,unknown,unknown
+nousresearch/hermes-3-llama-3.1-70b,Nous: Hermes 3 70B Instruct,text,0.7,0.7,unknown,unknown
+nousresearch/hermes-4-405b,Nous: Hermes 4 405B,text,1,3,unknown,unknown
+nvidia/nemotron-3-nano-30b-a3b,NVIDIA: Nemotron 3 Nano 30B A3B,text,0.06,0.24,unknown,unknown
+nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free,NVIDIA: Nemotron 3 Nano Omni (free),text,0,0,unknown,unknown
+nvidia/nemotron-3-super-120b-a12b,NVIDIA: Nemotron 3 Super,text,0.08,0.45,unknown,unknown
+nvidia/nemotron-3-super-120b-a12b:free,NVIDIA: Nemotron 3 Super (free),text,0,0,unknown,unknown
+nvidia/nemotron-3-ultra-550b-a55b,NVIDIA: Nemotron 3 Ultra,text,0.6,2.4,unknown,unknown
+nvidia/nemotron-3-ultra-550b-a55b:free,NVIDIA: Nemotron 3 Ultra (free),text,0,0,unknown,unknown
+nvidia/nemotron-3.5-content-safety,NVIDIA: Nemotron 3.5 Content Safety,text,0.2,0.2,unknown,unknown
+nvidia/nemotron-3.5-content-safety:free,NVIDIA: Nemotron 3.5 Content Safety (free),text,0,0,unknown,unknown
+nvidia/nemotron-3.5-lightning,NVIDIA: Nemotron 3.5 Lightning,text,0.07,0.2,unknown,unknown
+nvidia/nemotron-3.5-lightning:free,NVIDIA: Nemotron 3.5 Lightning (free),text,0,0,unknown,unknown
+nvidia/nemotron-3.5-super-vl,NVIDIA: Nemotron 3.5 Super VL,text,0.15,0.5,unknown,unknown
+nvidia/nemotron-3.5-super-vl:free,NVIDIA: Nemotron 3.5 Super VL (free),text,0,0,unknown,unknown
+nvidia/switchyard,NVIDIA: Switchyard,text,unknown,unknown,unknown,unknown
+openai/gpt-3.5-turbo,OpenAI: GPT-3.5 Turbo,text,0.5,1.5,unknown,unknown
+openai/gpt-3.5-turbo-0613,OpenAI: GPT-3.5 Turbo (older v0613),text,1,2,unknown,unknown
+openai/gpt-3.5-turbo-16k,OpenAI: GPT-3.5 Turbo 16k,text,3,4,unknown,unknown
+openai/gpt-3.5-turbo-instruct,OpenAI: GPT-3.5 Turbo Instruct,text,1.5,2,unknown,unknown
+openai/gpt-3.5-turbo:batch,OpenAI: GPT-3.5 Turbo (batch),text,0.25,0.75,unknown,unknown
+openai/gpt-4,OpenAI: GPT-4,text,30,60,unknown,unknown
+openai/gpt-4-turbo,OpenAI: GPT-4 Turbo,text,10,30,unknown,unknown
+openai/gpt-4-turbo:batch,OpenAI: GPT-4 Turbo (batch),text,5,15,unknown,unknown
+openai/gpt-4.1,OpenAI: GPT-4.1,text,2,8,unknown,unknown
+openai/gpt-4.1-mini,OpenAI: GPT-4.1 Mini,text,0.4,1.6,unknown,unknown
+openai/gpt-4.1-mini:batch,OpenAI: GPT-4.1 Mini (batch),text,0.2,0.8,unknown,unknown
+openai/gpt-4.1-nano,OpenAI: GPT-4.1 Nano,text,0.1,0.4,unknown,unknown
+openai/gpt-4.1-nano:batch,OpenAI: GPT-4.1 Nano (batch),text,0.05,0.2,unknown,unknown
+openai/gpt-4.1:batch,OpenAI: GPT-4.1 (batch),text,1,4,unknown,unknown
+openai/gpt-4o,OpenAI: GPT-4o,text,2.5,10,unknown,unknown
+openai/gpt-4o-2024-05-13,OpenAI: GPT-4o (2024-05-13),text,5,15,unknown,unknown
+openai/gpt-4o-2024-08-06,OpenAI: GPT-4o (2024-08-06),text,2.5,10,unknown,unknown
+openai/gpt-4o-2024-11-20,OpenAI: GPT-4o (2024-11-20),text,2.5,10,unknown,unknown
+openai/gpt-4o-mini,OpenAI: GPT-4o-mini,text,0.15,0.6,unknown,unknown
+openai/gpt-4o-mini-2024-07-18,OpenAI: GPT-4o-mini (2024-07-18),text,0.15,0.6,unknown,unknown
+openai/gpt-4o-mini:batch,OpenAI: GPT-4o-mini (batch),text,0.075,0.3,unknown,unknown
+openai/gpt-4o:batch,OpenAI: GPT-4o (batch),text,1.25,5,unknown,unknown
+openai/gpt-5,OpenAI: GPT-5,text,1.25,10,unknown,unknown
+openai/gpt-5-image,OpenAI: GPT-5 Image,image,10,10,unknown,unknown
+openai/gpt-5-image-mini,OpenAI: GPT-5 Image Mini,image,2.5,2,unknown,unknown
+openai/gpt-5-mini,OpenAI: GPT-5 Mini,text,0.25,2,unknown,unknown
+openai/gpt-5-mini:batch,OpenAI: GPT-5 Mini (batch),text,0.125,1,unknown,unknown
+openai/gpt-5-nano,OpenAI: GPT-5 Nano,text,0.05,0.4,unknown,unknown
+openai/gpt-5-nano:batch,OpenAI: GPT-5 Nano (batch),text,0.025,0.2,unknown,unknown
+openai/gpt-5-pro,OpenAI: GPT-5 Pro,text,15,120,unknown,unknown
+openai/gpt-5-pro:batch,OpenAI: GPT-5 Pro (batch),text,7.5,60,unknown,unknown
+openai/gpt-5:batch,OpenAI: GPT-5 (batch),text,0.625,5,unknown,unknown
+openai/gpt-5.1,OpenAI: GPT-5.1,text,1.25,10,unknown,unknown
+openai/gpt-5.1-codex,OpenAI: GPT-5.1-Codex,text,1.25,10,unknown,unknown
+openai/gpt-5.1-codex-max,OpenAI: GPT-5.1-Codex-Max,text,1.25,10,unknown,unknown
+openai/gpt-5.1-codex-mini,OpenAI: GPT-5.1-Codex-Mini,text,0.25,2,unknown,unknown
+openai/gpt-5.1:batch,OpenAI: GPT-5.1 (batch),text,0.625,5,unknown,unknown
+openai/gpt-5.2,OpenAI: GPT-5.2,text,1.75,14,unknown,unknown
+openai/gpt-5.2-chat,OpenAI: GPT-5.2 Chat,text,1.75,14,unknown,unknown
+openai/gpt-5.2-codex,OpenAI: GPT-5.2-Codex,text,1.75,14,unknown,unknown
+openai/gpt-5.2-pro,OpenAI: GPT-5.2 Pro,text,21,168,unknown,unknown
+openai/gpt-5.2-pro:batch,OpenAI: GPT-5.2 Pro (batch),text,10.5,84,unknown,unknown
+openai/gpt-5.2:batch,OpenAI: GPT-5.2 (batch),text,0.875,7,unknown,unknown
+openai/gpt-5.3-codex,OpenAI: GPT-5.3-Codex,text,1.75,14,unknown,unknown
+openai/gpt-5.4,OpenAI: GPT-5.4,text,2.5,15,unknown,unknown
+openai/gpt-5.4-image-2,OpenAI: GPT-5.4 Image 2,image,8,15,unknown,unknown
+openai/gpt-5.4-mini,OpenAI: GPT-5.4 Mini,text,0.75,4.5,unknown,unknown
+openai/gpt-5.4-mini:batch,OpenAI: GPT-5.4 Mini (batch),text,0.375,2.25,unknown,unknown
+openai/gpt-5.4-nano,OpenAI: GPT-5.4 Nano,text,0.2,1.25,unknown,unknown
+openai/gpt-5.4-nano:batch,OpenAI: GPT-5.4 Nano (batch),text,0.1,0.625,unknown,unknown
+openai/gpt-5.4-pro,OpenAI: GPT-5.4 Pro,text,30,180,unknown,unknown
+openai/gpt-5.4-pro:batch,OpenAI: GPT-5.4 Pro (batch),text,15,90,unknown,unknown
+openai/gpt-5.4:batch,OpenAI: GPT-5.4 (batch),text,1.25,7.5,unknown,unknown
+openai/gpt-5.5,OpenAI: GPT-5.5,text,5,30,unknown,unknown
+openai/gpt-5.5-pro,OpenAI: GPT-5.5 Pro,text,30,180,unknown,unknown
+openai/gpt-5.5-pro:batch,OpenAI: GPT-5.5 Pro (batch),text,15,90,unknown,unknown
+openai/gpt-5.5:batch,OpenAI: GPT-5.5 (batch),text,2.5,15,unknown,unknown
+openai/gpt-5.6-luna,OpenAI: GPT-5.6 Luna,text,0.2,1.2,unknown,unknown
+openai/gpt-5.6-luna-pro,OpenAI: GPT-5.6 Luna Pro,text,0.2,1.2,unknown,unknown
+openai/gpt-5.6-luna-pro:batch,OpenAI: GPT-5.6 Luna Pro (batch),text,0.1,0.6,unknown,unknown
+openai/gpt-5.6-luna:batch,OpenAI: GPT-5.6 Luna (batch),text,0.1,0.6,unknown,unknown
+openai/gpt-5.6-sol,OpenAI: GPT-5.6 Sol,text,4,20,unknown,unknown
+openai/gpt-5.6-sol-pro,OpenAI: GPT-5.6 Sol Pro,text,4,20,unknown,unknown
+openai/gpt-5.6-sol-pro:batch,OpenAI: GPT-5.6 Sol Pro (batch),text,2,10,unknown,unknown
+openai/gpt-5.6-sol:batch,OpenAI: GPT-5.6 Sol (batch),text,2,10,unknown,unknown
+openai/gpt-5.6-terra,OpenAI: GPT-5.6 Terra,text,2,12,unknown,unknown
+openai/gpt-5.6-terra-pro,OpenAI: GPT-5.6 Terra Pro,text,2,12,unknown,unknown
+openai/gpt-5.6-terra-pro:batch,OpenAI: GPT-5.6 Terra Pro (batch),text,1,6,unknown,unknown
+openai/gpt-5.6-terra:batch,OpenAI: GPT-5.6 Terra (batch),text,1,6,unknown,unknown
+openai/gpt-6-astra,OpenAI: GPT-6 Astra,text,10,50,unknown,unknown
+openai/gpt-6-astra-pro,OpenAI: GPT-6 Astra Pro,text,10,50,unknown,unknown
+openai/gpt-6-astra-pro:batch,OpenAI: GPT-6 Astra Pro (batch),text,5,25,unknown,unknown
+openai/gpt-6-astra:batch,OpenAI: GPT-6 Astra (batch),text,5,25,unknown,unknown
+openai/gpt-6-luna,OpenAI: GPT-6 Luna,text,0.1,0.5,unknown,unknown
+openai/gpt-6-luna-pro,OpenAI: GPT-6 Luna Pro,text,0.1,0.5,unknown,unknown
+openai/gpt-6-luna-pro:batch,OpenAI: GPT-6 Luna Pro (batch),text,0.05,0.25,unknown,unknown
+openai/gpt-6-luna:batch,OpenAI: GPT-6 Luna (batch),text,0.05,0.25,unknown,unknown
+openai/gpt-6-sol,OpenAI: GPT-6 Sol,text,2,10,unknown,unknown
+openai/gpt-6-sol-pro,OpenAI: GPT-6 Sol Pro,text,2,10,unknown,unknown
+openai/gpt-6-sol-pro:batch,OpenAI: GPT-6 Sol Pro (batch),text,1,5,unknown,unknown
+openai/gpt-6-sol:batch,OpenAI: GPT-6 Sol (batch),text,1,5,unknown,unknown
+openai/gpt-6.1-sol,OpenAI: GPT-6.1 Sol,text,2,10,unknown,unknown
+openai/gpt-6.1-sol-pro,OpenAI: GPT-6.1 Sol Pro,text,2,10,unknown,unknown
+openai/gpt-6.1-sol-pro:batch,OpenAI: GPT-6.1 Sol Pro (batch),text,1,5,unknown,unknown
+openai/gpt-6.1-sol:batch,OpenAI: GPT-6.1 Sol (batch),text,1,5,unknown,unknown
+openai/gpt-audio,OpenAI: GPT Audio,text,2.5,10,unknown,unknown
+openai/gpt-audio-mini,OpenAI: GPT Audio Mini,text,0.6,2.4,unknown,unknown
+openai/gpt-chat-latest,OpenAI: GPT Chat Latest,text,5,30,unknown,unknown
+openai/gpt-image-1,OpenAI: GPT Image 1,image,10,10,unknown,unknown
+openai/gpt-image-1-mini,OpenAI: GPT Image 1 Mini,image,2.5,2.5,unknown,unknown
+openai/gpt-image-2,OpenAI: GPT Image 2,image,8,8,unknown,unknown
+openai/gpt-image-2.5-flare,OpenAI: GPT Image 2.5 Flare,image,8,8,unknown,unknown
+openai/gpt-image-2.5-sunburst,OpenAI: GPT Image 2.5 Sunburst,image,8,8,unknown,unknown
+openai/gpt-oss-120b,OpenAI: gpt-oss-120b,text,0.15,0.6,unknown,unknown
+openai/gpt-oss-120b:batch,OpenAI: gpt-oss-120b (batch),text,0.0296,0.136,unknown,unknown
+openai/gpt-oss-20b,OpenAI: gpt-oss-20b,text,0.018,0.09,unknown,unknown
+openai/gpt-oss-20b:batch,OpenAI: gpt-oss-20b (batch),text,0.024,0.112,unknown,unknown
+openai/gpt-oss-safeguard-20b,OpenAI: gpt-oss-safeguard-20b,text,0.075,0.3,unknown,unknown
+openai/o1,OpenAI: o1,text,15,60,unknown,unknown
+openai/o1-pro,OpenAI: o1-pro,text,150,600,unknown,unknown
+openai/o3,OpenAI: o3,text,2,8,unknown,unknown
+openai/o3-mini,OpenAI: o3 Mini,text,1.1,4.4,unknown,unknown
+openai/o3-mini-high,OpenAI: o3 Mini High,text,1.1,4.4,unknown,unknown
+openai/o3-mini:batch,OpenAI: o3 Mini (batch),text,0.55,2.2,unknown,unknown
+openai/o3-pro,OpenAI: o3 Pro,text,20,80,unknown,unknown
+openai/o3:batch,OpenAI: o3 (batch),text,1,4,unknown,unknown
+openai/o4-mini,OpenAI: o4 Mini,text,1.1,4.4,unknown,unknown
+openai/o4-mini-high,OpenAI: o4 Mini High,text,1.1,4.4,unknown,unknown
+openai/o4-mini:batch,OpenAI: o4 Mini (batch),text,0.55,2.2,unknown,unknown
+openrouter/auto,Auto Router,image,unknown,unknown,unknown,unknown
+openrouter/auto-beta,Auto Router (Beta),image,unknown,unknown,unknown,unknown
+openrouter/bodybuilder,Body Builder (beta),text,unknown,unknown,unknown,unknown
+openrouter/free,Free Models Router,text,0,0,unknown,unknown
+openrouter/fusion,OpenRouter: Fusion,text,unknown,unknown,unknown,unknown
+openrouter/pareto-code,Pareto Code Router,text,unknown,unknown,unknown,unknown
+perceptron/perceptron-mk1,Perceptron: Perceptron Mk1,text,0.15,1.5,unknown,unknown
+perceptron/perceptron-mk1.5,Perceptron: Perceptron Mk1.5,text,0.15,1.5,unknown,unknown
+perplexity/sonar,Perplexity: Sonar,text,1,1,unknown,unknown
+perplexity/sonar-deep-research,Perplexity: Sonar Deep Research,text,2,8,unknown,unknown
+perplexity/sonar-pro,Perplexity: Sonar Pro,text,3,15,unknown,unknown
+perplexity/sonar-pro-search,Perplexity: Sonar Pro Search,text,3,15,unknown,unknown
+perplexity/sonar-reasoning-pro,Perplexity: Sonar Reasoning Pro,text,2,8,unknown,unknown
+poolside/laguna-s-2.1,Poolside: Laguna S 2.1,text,0.09,0.18,unknown,unknown
+poolside/laguna-s-2.1:free,Poolside: Laguna S 2.1 (free),text,0,0,unknown,unknown
+poolside/laguna-xs-2.1,Poolside: Laguna XS 2.1,text,0.06,0.12,unknown,unknown
+poolside/laguna-xs-2.1:free,Poolside: Laguna XS 2.1 (free),text,0,0,unknown,unknown
+prism-ml/ternary-bonsai-2-27b,PrismML: Ternary Bonsai 2 27B,text,0.075,0.5,unknown,unknown
+qwen/qwen-2.5-72b-instruct,Qwen2.5 72B Instruct,text,0.36,0.4,unknown,unknown
+qwen/qwen-2.5-7b-instruct,Qwen: Qwen2.5 7B Instruct,text,0.1,0.2,unknown,unknown
+qwen/qwen-2.5-coder-32b-instruct,Qwen2.5 Coder 32B Instruct,text,0.66,1,unknown,unknown
+qwen/qwen-audio-3.0-tts-flash,Qwen: Qwen-Audio-3.0-TTS Flash,speech,15,0,unknown,unknown
+qwen/qwen-audio-3.0-tts-plus,Qwen: Qwen-Audio-3.0-TTS Plus,speech,20,0,unknown,unknown
+qwen/qwen-image-2.1-pro,Qwen: Qwen Image 2.1 Pro,image,0,0,0,unknown
+qwen/qwen-image-2.1-turbo,Qwen: Qwen Image 2.1 Turbo,image,0,0,0,unknown
+qwen/qwen-image-3,Qwen: Qwen Image 3,image,0,0,0.003,unknown
+qwen/qwen-image-3-pro,Qwen: Qwen Image 3 Pro,image,0,0,0.003,unknown
+qwen/qwen-plus,Qwen: Qwen-Plus,text,0.26,0.78,unknown,unknown
+qwen/qwen2.5-vl-72b-instruct,Qwen: Qwen2.5 VL 72B Instruct,text,0.8,1,unknown,unknown
+qwen/qwen3-14b,Qwen: Qwen3 14B,text,0.12,0.24,unknown,unknown
+qwen/qwen3-235b-a22b-2507,Qwen: Qwen3 235B A22B Instruct 2507,text,0.09,0.55,unknown,unknown
+qwen/qwen3-235b-a22b-thinking-2507,Qwen: Qwen3 235B A22B Thinking 2507,text,0.45,3.5,unknown,unknown
+qwen/qwen3-30b-a3b,Qwen: Qwen3 30B A3B,text,0.12,0.5,unknown,unknown
+qwen/qwen3-30b-a3b-instruct-2507,Qwen: Qwen3 30B A3B Instruct 2507,text,0.09,0.3,unknown,unknown
+qwen/qwen3-32b,Qwen: Qwen3 32B,text,0.08,0.28,unknown,unknown
+qwen/qwen3-coder,Qwen: Qwen3 Coder 480B A35B,text,0.3,1,unknown,unknown
+qwen/qwen3-coder-30b-a3b-instruct,Qwen: Qwen3 Coder 30B A3B Instruct,text,0.07,0.28,unknown,unknown
+qwen/qwen3-coder-flash,Qwen: Qwen3 Coder Flash,text,0.195,0.975,unknown,unknown
+qwen/qwen3-coder-next,Qwen: Qwen3 Coder Next,text,0.12,0.8,unknown,unknown
+qwen/qwen3-next-80b-a3b-instruct,Qwen: Qwen3 Next 80B A3B Instruct,text,0.1,1.1,unknown,unknown
+qwen/qwen3-next-80b-a3b-thinking,Qwen: Qwen3 Next 80B A3B Thinking,text,0.15,1.2,unknown,unknown
+qwen/qwen3-vl-235b-a22b-instruct,Qwen: Qwen3 VL 235B A22B Instruct,text,0.21,1.9,unknown,unknown
+qwen/qwen3-vl-30b-a3b-instruct,Qwen: Qwen3 VL 30B A3B Instruct,text,0.15,0.6,unknown,unknown
+qwen/qwen3-vl-30b-a3b-thinking,Qwen: Qwen3 VL 30B A3B Thinking,text,0.29,1,unknown,unknown
+qwen/qwen3-vl-8b-instruct,Qwen: Qwen3 VL 8B Instruct,text,0.25,0.75,unknown,unknown
+qwen/qwen3.5-122b-a10b,Qwen: Qwen3.5-122B-A10B,text,0.26,2.08,unknown,unknown
+qwen/qwen3.5-27b,Qwen: Qwen3.5-27B,text,0.27,2.16,unknown,unknown
+qwen/qwen3.5-35b-a3b,Qwen: Qwen3.5-35B-A3B,text,0.14,1,unknown,unknown
+qwen/qwen3.5-397b-a17b,Qwen: Qwen3.5 397B A17B,text,0.39,2.34,unknown,unknown
+qwen/qwen3.5-9b,Qwen: Qwen3.5-9B,text,0.1,0.15,unknown,unknown
+qwen/qwen3.5-flash-02-23,Qwen: Qwen3.5-Flash,text,0.065,0.26,unknown,unknown
+qwen/qwen3.5-plus-02-15,Qwen: Qwen3.5 Plus 2026-02-15,text,0.26,1.56,unknown,unknown
+qwen/qwen3.5-plus-20260420,Qwen: Qwen3.5 Plus 2026-04-20,text,0.3,1.8,unknown,unknown
+qwen/qwen3.6-27b,Qwen: Qwen3.6 27B,text,0.25,2,unknown,unknown
+qwen/qwen3.6-35b-a3b,Qwen: Qwen3.6 35B A3B,text,0.1,0.95,unknown,unknown
+qwen/qwen3.6-flash,Qwen: Qwen3.6 Flash,text,0.1875,1.125,unknown,unknown
+qwen/qwen3.6-plus,Qwen: Qwen3.6 Plus,text,0.325,1.95,unknown,unknown
+qwen/qwen3.7-flash,Qwen: Qwen3.7 Flash,text,0.03,0.13,unknown,unknown
+qwen/qwen3.7-max,Qwen: Qwen3.7 Max,text,1.475,4.425,unknown,unknown
+qwen/qwen3.7-plus,Qwen: Qwen3.7 Plus,text,0.32,1.28,unknown,unknown
+qwen/qwen3.7-plus:batch,Qwen: Qwen3.7 Plus (batch),text,0.23,0.92,unknown,unknown
+qwen/qwen3.8-2.4t-a95b,Qwen: Qwen3.8 2.4T A95B,text,2,6,unknown,unknown
+qwen/qwen3.8-27b,Qwen: Qwen3.8 27B,text,0.04,1.35,unknown,unknown
+qwen/qwen3.8-flash,Qwen: Qwen3.8 Flash,text,0.15,0.47,unknown,unknown
+qwen/qwen3.8-max-0902,Qwen: Qwen3.8 Max (0902),text,2,6,unknown,unknown
+qwen/qwen3.8-max-prime,Qwen: Qwen3.8 Max Prime,text,4,12,unknown,unknown
+qwen/qwen3.8-omni-flash,Qwen: Qwen3.8 Omni Flash,text,0.15,0.47,unknown,unknown
+recraft/recraft-v3,Recraft: Recraft V3,image,0,0,unknown,unknown
+recraft/recraft-v4,Recraft: Recraft V4,image,0,0,unknown,unknown
+recraft/recraft-v4-pro,Recraft: Recraft V4 Pro,image,0,0,unknown,unknown
+recraft/recraft-v4-pro-vector,Recraft: Recraft V4 Pro Vector,image,0,0,unknown,unknown
+recraft/recraft-v4-styles,Recraft: Recraft V4 Styles,image,0,0,unknown,unknown
+recraft/recraft-v4-styles-pro,Recraft: Recraft V4 Styles Pro,image,0,0,unknown,unknown
+recraft/recraft-v4-styles-pro-vector,Recraft: Recraft V4 Styles Pro Vector,image,0,0,unknown,unknown
+recraft/recraft-v4-styles-vector,Recraft: Recraft V4 Styles Vector,image,0,0,unknown,unknown
+recraft/recraft-v4-vector,Recraft: Recraft V4 Vector,image,0,0,unknown,unknown
+recraft/recraft-v4.1,Recraft: Recraft V4.1,image,0,0,unknown,unknown
+recraft/recraft-v4.1-flash,Recraft: Recraft V4.1 Flash,image,0,0,unknown,unknown
+recraft/recraft-v4.1-pro,Recraft: Recraft V4.1 Pro,image,0,0,unknown,unknown
+recraft/recraft-v4.1-pro-vector,Recraft: Recraft V4.1 Pro Vector,image,0,0,unknown,unknown
+recraft/recraft-v4.1-utility,Recraft: Recraft V4.1 Utility,image,0,0,unknown,unknown
+recraft/recraft-v4.1-utility-pro,Recraft: Recraft V4.1 Utility Pro,image,0,0,unknown,unknown
+recraft/recraft-v4.1-vector,Recraft: Recraft V4.1 Vector,image,0,0,unknown,unknown
+reflection/beam-1.0-501b-a23b,Reflection: Beam 1.0 501B A23B,text,0.3,1,unknown,unknown
+rekaai/reka-edge,Reka Edge,text,0.1,0.1,unknown,unknown
+rekaai/reka-flash-3,Reka Flash 3,text,0.1,0.2,unknown,unknown
+relace/relace-apply-3,Relace: Relace Apply 3,text,0.85,1.25,unknown,unknown
+relace/relace-search,Relace: Relace Search,text,1,3,unknown,unknown
+runway/aleph-2,Runway: Aleph 2.0,video,unknown,unknown,unknown,unknown
+runway/gen-4.5,Runway: Gen-4.5,video,unknown,unknown,unknown,unknown
+sakana/fugu-max,Sakana: Fugu Max,text,2,6,unknown,unknown
+sakana/fugu-ultra,Sakana: Fugu Ultra,text,5,30,unknown,unknown
+sakana/fugu-ultra-v2,Sakana: Fugu Ultra v2,text,5,30,unknown,unknown
+sakana/sakana-namazu,Sakana: Sakana Namazu,text,0.95,4,unknown,unknown
+sao10k/l3-lunaris-8b,Sao10K: Llama 3 8B Lunaris,text,0.04,0.05,unknown,unknown
+sao10k/l3.1-euryale-70b,Sao10K: Llama 3.1 Euryale 70B v2.2,text,0.85,0.85,unknown,unknown
+scaledown/extract,ScaleDown: Extract,text,0.04,0,unknown,unknown
+scaledown/summarize,ScaleDown: Summarize,text,0.04,0,unknown,unknown
+sesame/csm-1b,Sesame: CSM 1B,speech,7,0,unknown,unknown
+sourceful/riverflow-v2-fast,Sourceful: Riverflow V2 Fast,image,0,0,unknown,unknown
+sourceful/riverflow-v2-pro,Sourceful: Riverflow V2 Pro,image,0,0,unknown,unknown
+sourceful/riverflow-v2.5-fast,Sourceful: Riverflow V2.5 Fast,image,0,0,unknown,unknown
+sourceful/riverflow-v2.5-pro,Sourceful: Riverflow V2.5 Pro,image,0,0,unknown,unknown
+stepfun/step-3.5-flash,StepFun: Step 3.5 Flash,text,0.1,0.3,unknown,unknown
+stepfun/step-3.7-flash,StepFun: Step 3.7 Flash,text,0.2,1.15,unknown,unknown
+stepfun/step-5-preview,StepFun: Step 5 Preview,text,1,2.7,unknown,unknown
+tencent/hunyuan-a13b-instruct,Tencent: Hunyuan A13B Instruct,text,0.14,0.57,unknown,unknown
+tencent/hy-image-v3.5-preview,Tencent: Hy Image 3.5 Preview,image,0,0,unknown,unknown
+tencent/hy-mt2-1.8b,Tencent: Hy-MT2-1.8B,text,0.044,0.177,unknown,unknown
+tencent/hy-mt2-30b-a3b,Tencent: Hy-MT2-30B-A3B,text,0.074,0.295,unknown,unknown
+tencent/hy-mt2-7b,Tencent: Hy-MT2-7B,text,0.074,0.295,unknown,unknown
+tencent/hy3,Tencent: Hy3,text,0.0825,0.33,unknown,unknown
+tencent/hy3-preview,Tencent: Hy3 preview,text,0.18,0.6,unknown,unknown
+tencent/hy4-preview,Tencent: Hy4 preview,text,0.7506,2.2509,unknown,unknown
+thedrummer/cydonia-24b-v4.1,TheDrummer: Cydonia 24B V4.1,text,0.3,0.5,unknown,unknown
+thedrummer/skyfall-36b-v2,TheDrummer: Skyfall 36B V2,text,0.55,0.8,unknown,unknown
+thedrummer/unslopnemo-12b,TheDrummer: UnslopNemo 12B,text,0.4,0.4,unknown,unknown
+thinkingmachines/inkling,Thinking Machines: Inkling,text,1,4.05,unknown,unknown
+thinkingmachines/inkling-small,Thinking Machines: Inkling Small,text,0.45,1.2,unknown,unknown
+thinkingmachines/inkling-small:free,Thinking Machines: Inkling Small (free),text,0,0,unknown,unknown
+thinkingmachines/inkling:free,Thinking Machines: Inkling (free),text,0,0,unknown,unknown
+typesafe/jev-router,TypeSafe: Jev Router,text,unknown,unknown,unknown,unknown
+unbiased/pareto-26.10,Pareto 26.10,text,0.8,3.2,unknown,unknown
+unbiased/pareto-26.9,Pareto 26.9,text,2.5,7.5,unknown,unknown
+undi95/remm-slerp-l2-13b,ReMM SLERP 13B,text,0.35,0.65,unknown,unknown
+upstage/solar-mini4,Upstage: Solar Mini 4,text,0.05,0.2,unknown,unknown
+upstage/solar-pro-3,Upstage: Solar Pro 3,text,0.15,0.6,unknown,unknown
+upstage/solar-pro4,Upstage: Solar Pro 4,text,0.15,0.6,unknown,unknown
+writer/palmyra-x5,Writer: Palmyra X5,text,0.6,6,unknown,unknown
+x-ai/grok-4.20,SpaceXAI: Grok 4.20,text,1.25,2.5,unknown,unknown
+x-ai/grok-4.20-multi-agent,SpaceXAI: Grok 4.20 Multi-Agent,text,1.25,2.5,unknown,unknown
+x-ai/grok-4.3,SpaceXAI: Grok 4.3,text,1.25,2.5,unknown,unknown
+x-ai/grok-4.3:batch,SpaceXAI: Grok 4.3 (batch),text,1,2,unknown,unknown
+x-ai/grok-4.5,SpaceXAI: Grok 4.5,text,2,6,unknown,unknown
+x-ai/grok-4.6,SpaceXAI: Grok 4.6,text,2,6,unknown,unknown
+x-ai/grok-4.7,SpaceXAI: Grok 4.7,text,2,6,unknown,unknown
+x-ai/grok-build-0.1,SpaceXAI: Grok Build 0.1,text,1,2,unknown,unknown
+x-ai/grok-imagine-image-2.0,xAI: Grok Imagine Image 2.0,image,0,0,0.01,unknown
+x-ai/grok-imagine-image-quality,SpaceXAI: Grok Imagine Image Quality,image,0,0,0.01,unknown
+x-ai/grok-imagine-video,SpaceXAI: Grok Imagine Video,video,unknown,unknown,unknown,unknown
+x-ai/grok-imagine-video-1.5,SpaceXAI: Grok Imagine Video 1.5,video,unknown,unknown,unknown,unknown
+x-ai/grok-imagine-video-1.5-lite,SpaceXAI: Grok Imagine Video 1.5 Lite,video,unknown,unknown,unknown,unknown
+x-ai/grok-voice-tts-1.0,SpaceXAI: Grok Voice TTS 1.0,speech,15,0,unknown,unknown
+xiaomi/mimo-v2.5,Xiaomi: MiMo-V2.5,text,0.14,0.28,unknown,unknown
+xiaomi/mimo-v2.5-pro,Xiaomi: MiMo-V2.5-Pro,text,0.435,0.87,unknown,unknown
+xiaomi/mimo-v2.6-flash,Xiaomi: MiMo-V2.6-Flash,text,0.14,0.28,unknown,unknown
+xiaomi/mimo-v2.6-pro,Xiaomi: MiMo-V2.6-Pro,text,0.435,0.87,unknown,unknown
+xiaomi/mimo-v2.6-pro-ultraspeed,Xiaomi: MiMo-V2.6-Pro-UltraSpeed,text,4.35,8.7,unknown,unknown
+xingchen-agi/xing4.0-29b-a4b:free,XingChen: Xing4.0 29B A4B (free),text,0,0,unknown,unknown
+z-ai/glm-4.5,Z.ai: GLM 4.5,text,0.6,2.2,unknown,unknown
+z-ai/glm-4.5-air,Z.ai: GLM 4.5 Air,text,0.13,0.85,unknown,unknown
+z-ai/glm-4.5v,Z.ai: GLM 4.5V,text,0.6,1.8,unknown,unknown
+z-ai/glm-4.6,Z.ai: GLM 4.6,text,0.55,2.2,unknown,unknown
+z-ai/glm-4.6v,Z.ai: GLM 4.6V,text,0.3,0.9,unknown,unknown
+z-ai/glm-4.7,Z.ai: GLM 4.7,text,0.54,1.98,unknown,unknown
+z-ai/glm-4.7-flash,Z.ai: GLM 4.7 Flash,text,0.0605,0.4,unknown,unknown
+z-ai/glm-5,Z.ai: GLM 5,text,1,3.2,unknown,unknown
+z-ai/glm-5-turbo,Z.ai: GLM 5 Turbo,text,1.2,4,unknown,unknown
+z-ai/glm-5.1,Z.ai: GLM 5.1,text,0.966,3.036,unknown,unknown
+z-ai/glm-5.2,Z.ai: GLM 5.2,text,0.62,2.42,unknown,unknown
+z-ai/glm-5.3,Z.ai: GLM 5.3,text,0.079,1.4,unknown,unknown
+z-ai/glm-5.3-flash,Z.ai: GLM 5.3 Flash,text,0.047076,0.12,unknown,unknown
+z-ai/glm-5.3-flash:batch,Z.ai: GLM 5.3 Flash (batch),text,0.05,0.18,unknown,unknown
+z-ai/glm-5.3-flashx,Z.ai: GLM 5.3 FlashX,text,0.37,1.25,unknown,unknown
+z-ai/glm-5.3-prime,Z.ai: GLM 5.3 Prime,text,2.8,8.8,unknown,unknown
+z-ai/glm-5.3:batch,Z.ai: GLM 5.3 (batch),text,0.45,2,unknown,unknown
+z-ai/glm-5v-turbo,Z.ai: GLM 5V Turbo,text,1.2,4,unknown,unknown
