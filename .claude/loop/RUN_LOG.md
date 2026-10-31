@@ -417,3 +417,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `vision/logo.ts` is a second logo matcher. Image QC measures logos with `measureLogo` in `vision/measure.ts`.
 - Decided by the loop: none. Q26 is an owner decision and is open.
 - Still open in R5: `a11y/contrast.ts` and `factory/cost.ts` next, then the rest of section 6A.
+
+## 2026-10-31 18:34 UTC: round 2, R5 group: a11y/contrast.ts and factory/cost.ts
+
+- Wake: the scheduled wake (`trig_017ynq2sk7KKfzbNZmF1hRiC`) fired at 18:32:17Z. CI on `24156a1` (run 41228236404) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `a11y/contrast.ts` and `factory/cost.ts`. No code changed.
+- `a11y/contrast.ts`: used by `src/components/ui/tokens.test.ts` to check the theme's contrast ratios. Not dead code. The earlier inventory was wrong to list it as having no caller: its only user is a test, which is the accessibility gate. No change.
+- `factory/cost.ts`: no caller at all (exact import check; the grep hit `engine/plan/cost.ts`, a different module). Its budget check is a spend control, so wiring it is the owner's decision (Q27).
+- Decided by the loop: none. Q27 is an owner decision and is open.
+- Still open in R5: `factory/render.ts` and `factory/benchmark-harness.ts` next, then the rest of section 6A.

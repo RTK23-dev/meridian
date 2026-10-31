@@ -215,6 +215,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: A: keep the Drive store as the only one, and delete `filesystem.ts`, or make a local store a deliberate choice for development. B: delete `vision/logo.ts`, keeping `vision/measure.ts`.
 - The loop recommends B now. For A, it recommends deciding storage with the research-data plan (R7) first.
 
+## Q27: The factory cost rollup and budget check: show them?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. `src/lib/meridian/factory/cost.ts` stays as it is, with no caller.
+- What it does, in plain words: `rollupCosts` adds up the cost of each factory stage, and `withinBudget` says whether spend is under a budget, in cents. Nothing in the product calls either one, so no screen shows these totals or enforces this budget.
+- Why it is a question: a budget check is a spend control. Wiring it into the factory changes whether a run can start or continue, so it is a money decision for you (AGENTS: budgets are hard limits).
+- Options: (a) show the stage-cost rollup on the factory board, read-only, and leave the budget check out. (b) Wire the budget check too, with the cap you set. (c) Delete the file.
+- The loop recommends (a). The rollup is a read of costs already recorded, so it shows spend without changing any run.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
