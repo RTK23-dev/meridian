@@ -240,6 +240,16 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: A: keep the review decision for the owner to wire, or delete it with its gold set. B: approve one budgeted frame test, or delete the file. C: delete it.
 - The loop recommends deleting C, and deciding A and B with you. Nothing is run or deleted.
 
+## Q30: The 3D data explainer preset: what to build so it is complete?
+- Kind: owner decision. Status: `open`.
+- Context: the owner uploaded a 60 s 3D satellite explainer and asked for a reusable preset. The preset is in `src/engine/presets/` (the run report is `docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md`). It uses today's contracts only. The free measurements ran; the paid analysis steps did not.
+- Blocks: a full copy of the style. The kit, the measured grammar and the structure are usable now; the parts below are not.
+- Part A, one live analysis of the reference (speech-to-text, segmenter, genome, frame_reader). Spend: a few Claude calls and one minute of speech-to-text. It gives the full Video DNA, which is then cached and reused. Approve?
+- Part B, contract change (with Q1): an accent font role (the gold italic serif in the hook) and more palette roles (up green, down red, pill grey). Approve, or keep the kit at three fonts and five colours?
+- Part C, new compose components with no contract change: the boxed caption highlight (`captions.boxed`, already in the contract), a counter with a pill label, a place and date pill, and bar and line chart panels. Build them in the next run?
+- Part D, a "Use this preset" button on the theme page that installs the kit and sets the page's style kit. Build it?
+- The loop recommends A (it is the only way to get the real grammar), C and D, and B only together with Q1.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

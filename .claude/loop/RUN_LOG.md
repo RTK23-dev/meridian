@@ -443,3 +443,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checked with exact import patterns and scripts: none has a product caller. `review/take/gold.ts` is used only by `review/labels.ts`, which only `review-decision.ts` uses. `render/recorded.ts` is not imported by the E1 scripts (which use `scripts/engine/fixtures/e1-recorded.json`). `firstLastFrame.ts` calls paid video providers if run.
 - Decided by the loop: none. Q29 is an owner decision and is open.
 - Still open in R5: `gates/slop-craft-gates.ts`, `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`.
+
+## 2026-10-31 19:45 UTC: owner request, a style preset from an uploaded reference
+
+- Request (owner, in chat): use Meridian's system to copy the style of an uploaded 60 s 3D satellite explainer, and make a full preset that can be reused any time. This interrupted R5; R5 resumes on the next wake.
+- Ran, with no network and no spend: Meridian's own media handlers (`functions/ffmpeg/`: probe, cuts, loudness, timeline, picture, black, flicker, motion, silence) on the local file, then the engine's pure analysis code (`analyze/zoom.ts`, `analyze/measure.ts`, `edit/grammar.ts`). The grammar refused to build from free measures alone (motion, captions, sound unknown), as it should.
+- Not run: speech-to-text, segmenter, genome and frame_reader (paid). The frames were read by the coding agent instead, and every such value is labelled `read`.
+- Built: `src/engine/presets/` (the `StylePreset` shape, a registry, `presetProblems`, `installStylePreset` into `engine_kits`) and the first preset, `three-d-data-explainer.ts` (kit `sk_3d_data_explainer`, format `ref_98053a5a224b3833a3ed4421`). No contract change. 7 tests pass (`style-presets.test.ts`, PGlite). ESLint and typecheck clean.
+- Report: `docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md`. Gaps recorded as Q30 (live analysis, accent font and palette roles, caption and data components, an install button).
+- Note: `installStylePreset` has no product caller yet (Q30 part D), so it is itself a test-only module until the owner decides.
