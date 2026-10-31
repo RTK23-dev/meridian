@@ -319,7 +319,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
   output whatever the instructions say.
 
 #### K16: The orchestrator takes a cookbook as its plan template
-- Status: `pending`. Depends on: K11, K14.
+- Status: `partly done`. Done: `cookbooks/plan-template.ts`. A cookbook's plan template becomes an orchestrator plan skeleton, validated by the orchestrator's own schema and in dependency order (every built-in: checked). An edit keeps the person's change and marks the node as edited (unknown steps are refused). A plan is sent only with the right selection: a confirmed one in a normal run, the auto-accepted one in an automated loop (3 tests). Remaining: the planner that fills in the models and prices (`orchestrator_plan@3`, with the skeleton as a constraint), and the send button, which is the screen's (K18).
 - `engine/orchestrator/planner.ts` takes the resolved `planTemplate` as the starting plan; the person can still edit nodes on the
   canvas, and the plan records which nodes came from the cookbook.
 - "Send to orchestrator" sends only after the selection step is confirmed (normal runs).
