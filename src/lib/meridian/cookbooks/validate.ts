@@ -187,11 +187,11 @@ function targetOf(path: string, cookbook: Cookbook, context: ValidationContext):
     return { type: typeof value === "boolean" ? "boolean" : typeof value === "number" ? "number" : "string" };
   }
   if (path === "style.look.strength") {
-    if (cookbook.style.look === undefined) return "path style.look.strength needs a look on the style";
+    if (cookbook.style?.look === undefined) return "path style.look.strength needs a look on the style";
     return { type: "number", bound: { min: 0, max: 1 } };
   }
   if (path === "style.look.preset") {
-    if (cookbook.style.look === undefined) return "path style.look.preset needs a look on the style";
+    if (cookbook.style?.look === undefined) return "path style.look.preset needs a look on the style";
     return { type: "string", options: LOOK_PRESETS };
   }
   if (parts[0] === "component" && parts.length >= 3) {

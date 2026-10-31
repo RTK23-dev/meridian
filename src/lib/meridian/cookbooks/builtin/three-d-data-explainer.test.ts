@@ -24,7 +24,7 @@ test("the built-in cookbook passes validation", () => {
 });
 
 test("its style and structure come from the preset, not a copy", () => {
-  assert.equal(threeDDataExplainerCookbook.style.styleKitId, threeDDataExplainer.styleKit.styleKitId);
+  assert.equal(threeDDataExplainerCookbook.style?.styleKitId, threeDDataExplainer.styleKit.styleKitId);
   assert.deepEqual(
     threeDDataExplainerCookbook.grammar.structure,
     threeDDataExplainer.structure.map((beat) => ({ role: beat.role, fromMs: beat.fromMs, toMs: beat.toMs })),

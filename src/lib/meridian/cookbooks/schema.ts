@@ -167,7 +167,8 @@ export const cookbookSchema = z.strictObject({
   ingredients: z.array(ingredientSchema).max(20),
   steps: z.array(stepSchema).min(1).max(40),
   instructions: z.array(instructionSchema).max(40),
-  style: cookbookStyleSchema,
+  /** Absent when the brand's theme page decides the style at run time (the factory presets). */
+  style: cookbookStyleSchema.optional(),
   grammar: cookbookGrammarSchema,
   controls: z.array(controlSchema).max(40),
   checks: z.array(checkSchema).max(20),

@@ -219,7 +219,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: it validates. Turning on "Voice-over: AI voice" removes agent mode and adds a voice line.
 
 #### K5: Bring the existing presets in (D4)
-- Status: `pending`. Depends on: K3.
+- Status: `done` (`cookbooks/builtin/factory-presets.ts`, 12 tests: each of the four factory presets, resolved through its cookbook, gives back exactly `getPresetConfig`; the three start modes are blank cookbooks; the style is optional, because the theme page decides it at run time). Deferred to K19: the repurpose catalog's `packs` capability stays unavailable until the cookbook library exists, since making it available means a pick screen that K19 builds.
 - Each of the five factory pipeline presets (`viral_ugc`, `problem_solution`, `strict_quality`, `manual_cloud`, `custom`) becomes a
   built-in cookbook through an adapter: stages become steps, the four prompt texts become step instructions, and the generation params
   and thresholds become controls with the same ranges the validator enforces today.

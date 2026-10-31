@@ -61,12 +61,13 @@ export type ResolvedCookbook = {
   ingredients: ResolvedIngredient[];
   steps: ResolvedStep[];
   instructions: Partial<Record<CookbookRole, string[]>>;
-  style: { styleKitId: string; look: { preset: string; strength: number } | null };
+  /** styleKitId is null when the theme page decides the style. */
+  style: { styleKitId: string | null; look: { preset: string; strength: number } | null };
   checks: Check[];
   grammar: CookbookGrammar;
   /** Fields for buildProductionRequest (K12). */
   request: {
-    styleKitId: string;
+    styleKitId: string | null;
     lengthMs: number;
     look: { preset: string; strength: number } | null;
     componentProps: Record<string, Record<string, Scalar>>;
@@ -132,7 +133,7 @@ export function resolveCookbook(input: unknown, options: ResolveOptions): Resolv
   const stepParams = new Map<string, Record<string, Scalar>>(cookbook.steps.map((step) => [step.id, { ...step.params }]));
   const enabledBy = new Map<string, boolean[]>();
   const componentProps: Record<string, Record<string, Scalar>> = {};
-  const look = cookbook.style.look ? { ...cookbook.style.look } : null;
+  const look = cookbook.style?.look ? { ...cookbook.style.look } : null;
   const choices = new Map<string, string>();
   const chosenBy = new Map<string, string>();
   const bound: Instruction[] = [];
@@ -292,11 +293,11 @@ export function resolveCookbook(input: unknown, options: ResolveOptions): Resolv
     ingredients,
     steps,
     instructions,
-    style: { styleKitId: cookbook.style.styleKitId, look: resolvedLook },
+    style: { styleKitId: cookbook.style?.styleKitId ?? null, look: resolvedLook },
     checks,
     grammar: cookbook.grammar,
     request: {
-      styleKitId: cookbook.style.styleKitId,
+      styleKitId: cookbook.style?.styleKitId ?? null,
       lengthMs: options.lengthMs,
       look: resolvedLook,
       componentProps,
