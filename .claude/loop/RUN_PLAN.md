@@ -328,7 +328,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 5: screens
 
 #### K17: The cookbook settings panel
-- Status: `pending`. Depends on: K1, K3.
+- Status: `partly done`. Done: the model (`src/components/cookbooks/settings-model.ts`, 4 tests: one row per control in order; a value of the wrong kind, out of range or not an option falls back to the default) and the panel (`settings-panel.tsx`: switches, sliders, selects, text and colour choices from the design system; typecheck and lint clean). NOT done: mounting the panel on a screen (K18), the browser check of its labels and keyboard use (ui-smoke, not run here), and the live update of the requirements (K18, through the resolver).
 - `src/components/cookbooks/settings-panel.tsx`: renders any cookbook's controls from the schema with `Switch`, `Slider`,
   `SelectInput`, `RadioGroup` and the kit colour roles. Requirements and estimate update live through `resolveCookbook`.
 - Accessibility: a label on every control, keyboard use, visible focus, reduced motion.
