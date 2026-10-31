@@ -8,7 +8,11 @@ import { recordCookbookSelection } from "../cookbooks/run-record.ts";
 import { confirmSelection, pickFromList, type SelectionRecord } from "../cookbooks/select.ts";
 import type { Proposal, SelectorPort } from "../cookbooks/selector.ts";
 import type { Sql } from "../learning/store.ts";
-import { referenceOf } from "./request.ts";
+import { applyCookbook } from "./cookbook-request.ts";
+import { cookbookSelectionOf } from "../cookbooks/run-record.ts";
+import { readCookbookFor } from "../cookbooks/service.ts";
+import { resolveCookbook } from "../cookbooks/resolve.ts";
+import { referenceOf, type RequestBuild } from "./request.ts";
 import type { Attachment, Message } from "./model.ts";
 import { messagesOf } from "./service-sessions.ts";
 import { requireDraft, sessionAccess, settingsOf, type SessionRow } from "./service-core.ts";
@@ -74,5 +78,28 @@ export async function chooseCookbookFor(
   const written = await recordCookbookSelection(sql, { organizationId, sessionId: input.sessionId, record: outcome.record });
   if (!written) return { ok: false, reason: "This run has already started, so its cookbook cannot change." };
   return { ok: true, value: outcome.record };
+}
+
+function incompleteWith(build: RequestBuild, problems: string[]): RequestBuild {
+  const candidate = build.status === "ready" ? (build.request as unknown as Record<string, unknown>) : build.candidate;
+  return { status: "incomplete", candidate, problems: [...(build.status === "incomplete" ? build.problems : []), ...problems] };
+}
+
+/**
+ * Applies the cookbook a draft run recorded (K18b), if there is one: its style, its length cap and its instructions join the request, using the
+ * values the person chose. With no record the request is returned as it is. A recorded cookbook that can no longer be read or resolved makes the
+ * request incomplete, with the reason, rather than running without it.
+ */
+export async function applyRecordedCookbook(sql: Sql, row: SessionRow, build: RequestBuild): Promise<RequestBuild> {
+  const record = await cookbookSelectionOf(sql, { organizationId: row.organization_id, sessionId: row.id });
+  if (record === null) return build;
+  const settings = settingsOf(row);
+  // Without a length or a brand the request already names what is missing (its cap, its page), so there is nothing to apply yet.
+  if (settings.maxSeconds === null || row.brand_id === null) return build;
+  const read = await readCookbookFor(sql, { organizationId: row.organization_id, brandId: row.brand_id, cookbookId: record.cookbookId, version: record.version });
+  if (!read.ok) return incompleteWith(build, ["The chosen cookbook is no longer available. Choose it again."]);
+  const resolved = resolveCookbook(read.value.cookbook, { values: record.values, lengthMs: settings.maxSeconds * 1000 });
+  if (!resolved.ok) return incompleteWith(build, resolved.issues);
+  return applyCookbook(build, resolved.resolved);
 }
 

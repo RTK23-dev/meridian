@@ -11,13 +11,14 @@ import { themePageKits } from "./sources.ts";
 import { REFERENCE_NOTE, iso, priorIds, settingsOf, audit, sessionAccess, requireDraft } from "./service-core.ts";
 import type { ContentFactoryPorts, SessionRow } from "./service-core.ts";
 import { messagesOf, postMessage } from "./service-sessions.ts";
+import { applyRecordedCookbook } from "./cookbook-choice.ts";
 
 async function buildFor(sql: Sql, row: SessionRow, messages: Message[]) {
   const pageSource = messages.flatMap((message) => message.attachments).find((item) => item.kind === "source" && item.page === "page");
   const themePage = pageSource && pageSource.kind === "source"
     ? await themePageKits(sql, { organizationId: row.organization_id, brandId: pageSource.brandId }, pageSource.recordId)
     : null;
-  return buildProductionRequest({
+  const build = buildProductionRequest({
     id: row.id,
     organizationId: row.organization_id,
     createdAt: iso(row.created_at),
@@ -26,6 +27,8 @@ async function buildFor(sql: Sql, row: SessionRow, messages: Message[]) {
     messages,
     themePage,
   });
+  // A cookbook the person chose for this run is applied here, so the start and the preview see the same request (K18b).
+  return applyRecordedCookbook(sql, row, build);
 }
 
 async function readinessOf(sql: Sql, organizationId: string, ports: ContentFactoryPorts): Promise<EngineReadiness> {

@@ -5,7 +5,9 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { cookbookSelectionOf } from "../cookbooks/run-record.ts";
-import { chooseCookbookFor, runInputsOf } from "./cookbook-choice.ts";
+import { applyRecordedCookbook, chooseCookbookFor, runInputsOf } from "./cookbook-choice.ts";
+import type { RequestBuild } from "./request.ts";
+import { sessionAccess } from "./service-core.ts";
 import type { Attachment } from "./model.ts";
 import { createSession, saveSettings } from "./service-sessions.ts";
 
@@ -97,3 +99,40 @@ test("a member cannot choose a cookbook for a run: the session is the admin's to
   const id = await draftWithLength(60);
   await assert.rejects(chooseCookbookFor(db.sql, { userId: MEMBER, sessionId: id, choice: { cookbookId: "ck_3d_data_explainer", version: 2 } }));
 });
+
+const BASE_BUILD: RequestBuild = {
+  status: "incomplete",
+  candidate: {
+    schema: "meridian.production_request/v1",
+    requestId: "req_01HZX3K9M0Q7V8W6Y5T4R3E2D1",
+    workspaceId: ORG,
+    format: { formatId: "ref_abc", referenceVideo: "store://ref/1.mp4", keep: [], change: [] },
+    brief: { text: "Show the parking lots.", sources: [], attachments: [] },
+    visualRequests: [],
+    page: { pageId: "page_1", styleKitId: "sk_theme", voiceId: "voice_1" },
+    constraints: { aspect: "9:16", maxMs: 90000, budgetUsd: 20, priority: "normal" },
+    output: { master: true },
+  },
+  problems: [],
+};
+
+test("a draft run with no recorded cookbook gets its request back unchanged", async () => {
+  const id = await draftWithLength(60);
+  const row = await sessionAccess(db.sql, ADMIN, id);
+  const applied = await applyRecordedCookbook(db.sql, row, BASE_BUILD);
+  assert.equal(applied, BASE_BUILD);
+});
+
+test("a recorded cookbook is applied to the request: its style replaces the page's kit and its reference joins the request", async () => {
+  const id = await draftWithLength(60);
+  const chosen = await chooseCookbookFor(db.sql, { userId: ADMIN, sessionId: id, choice: { cookbookId: "ck_3d_data_explainer", version: 2 } });
+  assert.equal(chosen.ok, true);
+  const row = await sessionAccess(db.sql, ADMIN, id);
+  const applied = await applyRecordedCookbook(db.sql, row, BASE_BUILD);
+  assert.equal(applied.status, "ready", applied.status === "incomplete" ? applied.problems.join("; ") : "");
+  if (applied.status !== "ready") return;
+  assert.equal(applied.request.page.styleKitId, "sk_3d_data_explainer");
+  assert.equal(applied.request.cookbook?.id, "ck_3d_data_explainer");
+  assert.equal(applied.request.constraints.maxMs, 60000, "the shorter of the person's cap and the cookbook's length");
+});
+
