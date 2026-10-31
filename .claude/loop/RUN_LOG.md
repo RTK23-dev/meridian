@@ -309,3 +309,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Decided: Q16 is an owner decision and is left open. The bucket column is a schema change.
 - Not checked here: the page in a browser; CI's `ui-smoke` job covers it.
 - Still open in R5: the learning modules (`fatigue`, `guardrails`, `organic-telemetry`, `parameters`) and the rest of the 45, per group.
+
+## 2026-10-31 14:29 UTC: round 2, R5 group: the four learning modules, explained
+
+- Wake: the scheduled wake (`trig_01LpiCVXmYVgN7rUuVLxHyn6`) fired at 14:28:06Z. CI on `0114482` (run 41208652265, the state commit that carries the concurrency code) finished with every check run successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, the learning modules `fatigue`, `guardrails`, `organic-telemetry` and `parameters` (all in `src/lib/meridian/learning/`). None has a caller outside tests. No code changed.
+- Why none is wired: each one changes learning, scoring or product direction. The engine rules (CLAUDE.md, rule 6 of AGENTS.md) keep scoring changes for the owner, and the owner's answer to Q3 covers making modules work, not deciding what learning learns from. Each one is explained in Q17, with what it does and what wiring it changes.
+- The one with a real risk: `guardrails` finds test and fixture records. I checked the learning and measurement code for any other filter of that kind: none exists. So test rows could reach learning today. This is recorded as a finding for the owner, not fixed here.
+- Decided by the loop: none. Q17 is an owner decision and is open.
+- Still open in R5: 36 modules, handled one group at a time, next `studio/loop.ts` and `study/deep-study-service.ts`.

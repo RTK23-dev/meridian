@@ -122,6 +122,17 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) approve a migration that adds a bucket column to `engine_provider_attempts`, and have the gateway or the router write it on each call. Then the page can propose sizes from measured 429s. (b) Keep the proposals held, and accept that concurrency stays as it is. Growth also needs saturation measured from `engine_bucket_leases`, which is a separate step the loop has not built.
 - Why the loop did not choose: the change is a database migration on the engine's call path. That is a schema decision, so it is the owner's.
 
+## Q17: Four learning modules: wire them, or leave them out?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. The four modules stay as they are, with no caller, until you decide.
+- What each one does, in plain words:
+  - `guardrails.ts` finds test and fixture records, such as a row whose provider is "fixture" or whose name says "synthetic". Today no learning input filters them out, so such a row could shape what learning learns. Wiring the filter changes learning, which is a scoring decision.
+  - `parameters.ts` reads and writes the learned model parameters (table `model_parameters`), from seed prior to retired. Wiring it changes which parameters the engine uses, which is scoring.
+  - `organic-telemetry.ts` updates formula beliefs from the results of organic posts. Wiring it changes learning.
+  - `fatigue.ts` estimates whether an angle is tired, from total impressions, active ads, the click-rate drop and days active. It suggests SCALE, MONITOR, REFRESH_HOOK or PAUSE. Showing that is a product direction, and the per-angle impression totals it needs are not assembled yet.
+- Options: (a) wire `guardrails` first as a filter on learning input, and show on the learning page how many rows it would exclude, so you can see whether test data is in use. (b) Show `fatigue` as a suggestion only. (c) Leave all four out and delete them later.
+- The loop recommends (a). It changes nothing until you see the count.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
