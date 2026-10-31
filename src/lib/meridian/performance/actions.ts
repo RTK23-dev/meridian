@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -98,7 +99,7 @@ export const setPerformanceSchedule = createServerFn({ method: "POST" })
       organizationId: data.organizationId,
       provider: data.provider,
       sealed: secrets[0]?.sealed_token ?? "",
-      encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
+      encryptionKey: tokenEncryptionKey() ?? "",
       env: process.env,
       requireOAuth: OAUTH_METRIC_PROVIDERS.includes(data.provider),
       expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,

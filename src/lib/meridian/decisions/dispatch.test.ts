@@ -1,9 +1,9 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { contractRequest } from "./contract-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { contractRequest } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import { createDecisionEngines, decideWithActiveEngine, type DecisionEngineRegistry } from "./dispatcher.ts";
 import { parseDeploymentEngine, resolveActiveEngine, resolveEngineSelection, saveWorkspaceEngine } from "./selection.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";

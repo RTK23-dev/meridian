@@ -12,8 +12,8 @@ import {
   creatorReelSet,
   hashtagReelItem,
   recordedApifyClient,
-} from "../sources/apify/fixtures.ts";
-import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/sources/apify/fixtures.ts";
+import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { gatherInstagramVolume } from "./instagram-volume.ts";
 import type { ApifyClient, ApifyRunCall } from "../sources/apify/client.ts";
 import type { Sql } from "../learning/store.ts";

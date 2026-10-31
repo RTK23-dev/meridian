@@ -7,8 +7,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { saveWorkspaceProviderConfig, type ProviderCategory } from "../settings/provider-config.ts";
 import { normalizeCanonicalUrl } from "../evidence/dedupe.ts";
 import { SourceCallError, type SourceFetch } from "./live-api.ts";

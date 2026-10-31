@@ -6,7 +6,7 @@
  */
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { liveDecisionCatalog, type DecisionCatalogSource } from "./decision-catalog.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 
 export type OpenRouterSeam = { catalog: DecisionCatalogSource; fetchImpl?: typeof fetch };
 

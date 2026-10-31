@@ -1,9 +1,9 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import type { JevAnswer, JevQuestionSpec, JevQuestionType } from "../jev/types.ts";
-import { contractPngBytes } from "./contract-fixtures.ts";
+import { contractPngBytes } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateImage, type GateQuestion, type GateResult } from "./gate.ts";
 import type { EngineSelection } from "./selection.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";

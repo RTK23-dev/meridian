@@ -22,6 +22,7 @@ import { mustAllowedTypes } from "../../plan/filter.ts";
 import { visualPropertySchema } from "../../plan/tables.ts";
 import { promptAsksForText } from "./promptText.ts";
 import { check, EDL_FPS, gateResult, notEvaluated, stringsIn } from "./common.ts";
+import { hookTimingOf } from "./hookTiming.ts";
 import type { VisualClassification } from "./request.ts";
 
 export type PlanGateInput = {
@@ -321,6 +322,11 @@ export function checkPlan(input: PlanGateInput): GateResult {
       }),
     );
   }
+
+  // Hook timing (research note, section 4): the proposition by the window, and a hook by the latest time.
+  const hook = hookTimingOf(plan, request);
+  checks.push(...hook.checks);
+  hook.failingShotIds.forEach((id) => failing.add(id));
 
   const failingShotIds = shots.map((shot) => shot.shotId).filter((id) => failing.has(id));
   return gateResult("plan", plan.planId, checks, failingShotIds);

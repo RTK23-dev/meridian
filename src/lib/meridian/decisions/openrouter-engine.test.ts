@@ -5,9 +5,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { JevQuestionSpec } from "../jev/types.ts";
-import { contractPngBytes } from "./contract-fixtures.ts";
+import { contractPngBytes } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import type { DecisionCatalogSource } from "./decision-catalog.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import {
   NO_DECISION_MODEL_REASON,
   OPENROUTER_DECISIONS_EXAMPLE_MODEL,

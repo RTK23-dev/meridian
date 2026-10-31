@@ -6,8 +6,8 @@ import { fileURLToPath } from "node:url";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { persistBrandLogo } from "../brand/logo-store.ts";
-import { studioTenant, PNG_BASE64 } from "../testing/durable-image-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { studioTenant, PNG_BASE64 } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { emptyBrain } from "../brain.ts";
 
 // The brands listing imports modules that use the "@/" alias, so the alias hook is registered before it is loaded.

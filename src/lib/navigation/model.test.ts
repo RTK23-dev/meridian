@@ -28,7 +28,7 @@ test("workspace pages list the workspace overview and the Settings group, and no
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
   assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content is a workspace screen");
-  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "settings"]);
+  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "engine-ops", "settings"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);
   }
@@ -50,7 +50,7 @@ test("the sidebar shows the core loop and no longer lists the six screens that m
     for (const id of moved) assert.equal(ids.includes(id), false, `${id} must not be in the sidebar`);
   }
   const brandIds = sidebarGroups({ brandId: "brand-1", reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-  assert.equal(brandIds.length, 11, "7 brand screens and 4 settings screens");
+  assert.equal(brandIds.length, 12, "7 brand screens and 5 settings screens");
 });
 
 test("the Settings screen lists every screen that moved out of the sidebar, with its route", () => {

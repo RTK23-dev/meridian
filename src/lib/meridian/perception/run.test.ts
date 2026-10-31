@@ -8,7 +8,7 @@ process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-mas
 process.env.PERCEPTION_SHARED_DEFAULT = "gemini";
 process.env.MERIDIAN_GEMINI_API_KEY = "test-shared-gemini-key";
 import { getSql } from "../../db.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { solidFrame } from "../video/inspect.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionHealth, PerceptionMedia, PerceptionMediaKind, PerceptionResult } from "./types.ts";
 import { PERCEPTION_MAX_MEDIA, groundedPerceptionText, runPerception, selectPerceptionProvider, type PerceptionInputMedia } from "./run.ts";

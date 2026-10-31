@@ -1,4 +1,4 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 
 // The learning readers import the server-function layer, which uses the "@/" alias.
 enableAppAliases();

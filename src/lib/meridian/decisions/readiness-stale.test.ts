@@ -4,7 +4,7 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import { OPENROUTER_DECISIONS_EXAMPLE_MODEL, OpenRouterDecisionsEngine, type OpenRouterCheckStore, type OpenRouterKeySource } from "./openrouter-engine.ts";
 import type { OpenRouterCheckRecord } from "./openrouter-settings.ts";
 

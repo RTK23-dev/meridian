@@ -11,8 +11,8 @@ import { listOrganicPosts, publishCreativeToChannels } from "../distribution/ser
 import { buildExportPackage } from "../distribution/export-package.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import { linkCreativeMeasurement } from "../measurement/creative-linkage.ts";
-import { approveStage, runRow, studioTenant, type FactoryTenant } from "../testing/produce-fixtures.ts";
-import { approveCreative, organicRowsFor, paidRowsFor, producedCreative, runFor, stage } from "../testing/factory-launch-fixtures.ts";
+import { approveStage, runRow, studioTenant, type FactoryTenant } from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
+import { approveCreative, organicRowsFor, paidRowsFor, producedCreative, runFor, stage } from "../../../test-support/lib/meridian/testing/factory-launch-fixtures.ts";
 
 // The testing runtime enables the fixture paid publisher and the image double. Production never selects either.
 process.env.MERIDIAN_TESTING_RUNTIME = "true";

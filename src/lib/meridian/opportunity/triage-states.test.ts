@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { isDirectionAction, sourceStatusProblem, statusAfter, triageActionsFor } from "./triage-states.ts";
 import { fingerprintKey, priorIdeaFor, priorIdeasByFingerprint, type PriorIdea } from "./triage-memory.ts";
 import { readPriorIdeas } from "./triage-memory-store.ts";

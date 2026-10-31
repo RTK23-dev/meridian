@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { newId } from "../../../engine/contracts/index.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { engineInboxItems } from "./engine-items.ts";
 
 test("the video engine's open review items of a brand are listed in the Reviews inbox, with the engine's reason, and no other brand's", async () => {

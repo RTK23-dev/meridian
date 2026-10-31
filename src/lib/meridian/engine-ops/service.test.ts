@@ -9,8 +9,8 @@ import { readEngineRequest } from "../../../engine/jobs/orchestrator-sql.ts";
 import { chainWorld, drain, setDeliverFault, startChainRequest, type ChainWorld } from "../../../engine/ops/test/chain.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import type { Sql } from "../learning/store.ts";
-import { deadJobsInput, METRICS_DEFAULT_WINDOW_MS, replayInput, stageMetricsInput } from "./input.ts";
-import { readRequestDeadJobs, readWorkspaceStageMetrics, replayRequestDeadJob, REQUEST_REFUSAL, WORKSPACE_REFUSAL } from "./service.ts";
+import { alertsInput, deadJobsInput, METRICS_DEFAULT_WINDOW_MS, replayInput, stageMetricsInput } from "./input.ts";
+import { readRequestDeadJobs, readWorkspaceAlerts, readWorkspaceStageMetrics, replayRequestDeadJob, REQUEST_REFUSAL, WORKSPACE_REFUSAL } from "./service.ts";
 
 const WS = "ws_eops_a";
 const OTHER_WS = "ws_eops_b";
@@ -60,6 +60,14 @@ describe("video engine operations: input checks", () => {
     });
     assert.throws(() => replayInput({ requestId: "req:1", jobId: "job_1" }), /valid request/);
     assert.throws(() => replayInput({ requestId: "req_1", jobId: "" }), /valid job/);
+  });
+});
+
+describe("video engine operations: alerts input", () => {
+  test("the alerts read keeps only the workspace id; a blank or long id is refused", () => {
+    assert.deepEqual(alertsInput({ organizationId: WS, role: "admin" }), { organizationId: WS });
+    assert.throws(() => alertsInput({ organizationId: "  " }), /Choose a workspace/);
+    assert.throws(() => alertsInput({ organizationId: "x".repeat(101) }), /Choose a workspace/);
   });
 });
 
@@ -126,6 +134,29 @@ describe("video engine operations: reads and replay", () => {
 
     const own = await readWorkspaceStageMetrics(db.sql, OTHER_ADMIN, { organizationId: OTHER_WS, since });
     assert.equal(own.requests.total, 0, "the other workspace has no requests, so none of this workspace's are counted");
+  });
+
+  test("the alerts of a workspace show its open dead letter once it is over the proposed limit, to any member; a stranger is refused", async () => {
+    // One hour on, the dead letter that is open now is over the proposed limit of 15 minutes (ops-proposed@1).
+    const later = new Date(Date.now() + 60 * 60_000);
+    for (const userId of [ADMIN, MEMBER, VIEWER]) {
+      const report = await readWorkspaceAlerts(db.sql, userId, alertsInput({ organizationId: WS }), later);
+      assert.equal(report.thresholds, "ops-proposed@1");
+      const overLimit = report.alerts.filter((alert) => alert.reasonCode === "open_dead_letter_over_limit");
+      assert.equal(overLimit.length, 1, "one request is paused on its dead letter");
+      const alert = overLimit[0];
+      assert.ok(alert);
+      assert.equal(alert.kind, "dead_letter_growth");
+      assert.equal(alert.severity, "page");
+      assert.equal(alert.subject, requestId);
+      assert.equal(alert.organizationId, WS);
+    }
+    await assert.rejects(readWorkspaceAlerts(db.sql, STRANGER, alertsInput({ organizationId: WS }), later), { message: WORKSPACE_REFUSAL });
+  });
+
+  test("a workspace with no engine activity has no alerts: none is invented for it", async () => {
+    const report = await readWorkspaceAlerts(db.sql, OTHER_ADMIN, alertsInput({ organizationId: OTHER_WS }), new Date(Date.now() + 60 * 60_000));
+    assert.deepEqual(report.alerts, []);
   });
 
   test("the dead jobs of a request are listed for any member of its workspace", async () => {

@@ -25,7 +25,7 @@ import {
   seedFactoryRun,
   seedJobRow,
   withFixtureFetch,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import type { Sql } from "../learning/store.ts";
 
 const DISCOVER_JOB = "job-discover-gather";

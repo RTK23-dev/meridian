@@ -22,6 +22,7 @@ import { ipIsBlocked, publicUrlIssue } from "../sources/public-url.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { ProductionJob } from "./types.ts";
 import { detectArtifactType, type ArtifactCategory } from "./mime-detector.ts";
+import { artifactHostAllowlistSetting } from "../config/server-settings.ts";
 
 export class ArtifactIntegrityError extends Error {
   constructor(message: string) {
@@ -154,7 +155,7 @@ class OversizedArtifact extends Error {
 export async function downloadProviderArtifact(rawUri: string, options: ArtifactDownloadOptions = {}): Promise<ArtifactDownload> {
   const timeoutMs = options.timeoutMs ?? ARTIFACT_DOWNLOAD_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? MAX_ARTIFACT_BYTES;
-  const allowedHosts = options.allowedHosts ?? parseHostAllowlist(process.env.MERIDIAN_ARTIFACT_HOST_ALLOWLIST);
+  const allowedHosts = options.allowedHosts ?? parseHostAllowlist(artifactHostAllowlistSetting());
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   const deadline = new Promise<never>((_resolve, reject) => {

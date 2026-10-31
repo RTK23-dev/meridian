@@ -8,7 +8,7 @@ import { productionRouter } from "../production/router.ts";
 import type { CreativeSpec, ProductionJob, ProductionProvider } from "../production/types.ts";
 import { BudgetExceededError, BudgetLedgerService, toMicros } from "../security/budget-ledger.ts";
 import { executeApprovedCreativePlan } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 
 // The vault encrypts each workspace's saved production key with this master key. Only this test process uses it.

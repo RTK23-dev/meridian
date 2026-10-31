@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test, { after } from "node:test";
 import { randomUUID } from "node:crypto";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { openTestBackends } from "../credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 import {
   MAX_PROVIDER_POLL_ATTEMPTS,

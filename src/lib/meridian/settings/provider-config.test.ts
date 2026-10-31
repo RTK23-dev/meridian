@@ -9,8 +9,8 @@ import {
 } from "./provider-config.ts";
 import { resolveCredential } from "../credentials/resolve.ts";
 import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
-import { openTestBackends, vaultRowId, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, vaultRowId, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import type { Sql } from "../learning/store.ts";
 

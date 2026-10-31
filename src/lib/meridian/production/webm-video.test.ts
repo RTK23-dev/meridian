@@ -3,7 +3,7 @@ import test from "node:test";
 import { isWebmWithVideoTrack } from "./webm-video.ts";
 import { evaluateProductionPostflight } from "./postflight.ts";
 import type { ProductionJob } from "./types.ts";
-import { WEBM_TRACK_AUDIO as AUDIO, WEBM_TRACK_VIDEO as VIDEO, webmFixture as webmFile } from "../testing/webm-fixture.ts";
+import { WEBM_TRACK_AUDIO as AUDIO, WEBM_TRACK_VIDEO as VIDEO, webmFixture as webmFile } from "../../../test-support/lib/meridian/testing/webm-fixture.ts";
 
 test("isWebmWithVideoTrack: a WebM with a video track is recognized", () => {
   assert.equal(isWebmWithVideoTrack(webmFile({ tracks: [VIDEO] })), true);

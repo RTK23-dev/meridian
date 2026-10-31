@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
-import { insertExecutingPlan, imagePlan, stubGoogleImage, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { insertExecutingPlan, imagePlan, stubGoogleImage, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { recordTelemetry } from "../learning/telemetry-engine.ts";
 import { linkCreativeMeasurement } from "./creative-linkage.ts";
 

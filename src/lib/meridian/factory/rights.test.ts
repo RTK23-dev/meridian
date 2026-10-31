@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
-import { factoryRunFor, planRowsFor, stageJob, stubImageProvider, studioTenant, type FactoryTenant } from "../testing/produce-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
+import { factoryRunFor, planRowsFor, stageJob, stubImageProvider, studioTenant, type FactoryTenant } from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 import type { Sql } from "../learning/store.ts";
 import { rightsGate } from "./gates.ts";
 

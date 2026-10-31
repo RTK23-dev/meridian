@@ -1,9 +1,9 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DecisionRequest, DecisionResult, DecisionUsage } from "../decisions/types.ts";
 import type { Sql } from "../learning/store.ts";
-import { FixtureDecisionEngine } from "../testing/decision-fixtures.ts";
+import { FixtureDecisionEngine } from "../../../test-support/lib/meridian/testing/decision-fixtures.ts";
 import {
   FACTORY_TEST_BRAND,
   FACTORY_TEST_ORG,
@@ -13,7 +13,7 @@ import {
   makeFactoryTestSql,
   seedFactoryRun,
   seedJobRow,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { CREATIVE_DNA_VERSION, dnaField, emptyCreativeDna, type AdFormat } from "./creative-dna.ts";
 import { cappedGradeReason } from "./grade.ts";
 import { TOKEN_PRICES } from "./price-table.ts";

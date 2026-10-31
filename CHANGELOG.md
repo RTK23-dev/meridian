@@ -13,6 +13,12 @@ Still a pre-release. Everything below is verified with fixtures and recorded dat
 - **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
 - Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
 
+**Tidy, no behaviour change.** Removed two unused modules (`src/lib/env.server.ts`, `src/lib/meridian/intelligence/combinations.ts`). Test
+helpers moved out of production folders into `src/test-support/` and `src/engine/test/`, with one shared Node test alias hook; the recorded
+OpenRouter catalogue the testing runtime reads now lives in `src/lib/meridian/decisions/`. The root planning prompt moved to
+`docs/planning/`. Added `docs/STATE_2026-10-28.md` (where Meridian stands, measured) and `docs/FIRST_TEST_RUN.md` (the first run, step by
+step). The engine's dry acceptance (`npm run engine:e1 -- --dry-run`) is red on the render's bill check, as before; see the runbook, step 6.
+
 ## 0.1.0-beta.16 — prerelease
 
 OpenRouter decision routing with a live catalogue and a per-call ceiling, JEV image evidence, a stored-success freshness rule, disabled-by-default paths for every paid or side-effecting call that has no guard, a browser release acceptance, a guided setup, and a gate that requires every CI job. Tests use fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider call is recorded in this release.** Live provider behavior, real credentials, billing and publishing are unverified.

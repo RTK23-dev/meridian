@@ -6,7 +6,7 @@ import test from "node:test";
 import type { ApifyGateway } from "./client.ts";
 import { gatewayApifyClient, notConnectedApifyClient, settleApifyResponse } from "./client.ts";
 import { INSTAGRAM_VOLUME_CONFIG } from "./config.ts";
-import { ACTORS, creatorReelSet, hashtagReelItem, HASHTAG_PHOTO_ITEM, UNREADABLE_ITEM } from "./fixtures.ts";
+import { ACTORS, creatorReelSet, hashtagReelItem, HASHTAG_PHOTO_ITEM, UNREADABLE_ITEM } from "../../../../test-support/lib/meridian/sources/apify/fixtures.ts";
 import {
   type ReelCandidate,
   creatorBaseline,

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { ExecutableJob } from "../jobs/execute.ts";
 import type { Sql } from "../learning/store.ts";
-import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, makeFactoryTestSql, seedFactoryRun } from "../testing/factory-fixtures.ts";
+import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, makeFactoryTestSql, seedFactoryRun } from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { runSleepNight } from "./sleep.ts";
 
 const NOW = new Date("2026-10-15T12:00:00Z");

@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { estimateBase64DecodedBytes, finalizeProductionArtifact, type ArtifactFinalizeInput } from "./artifact-finalizer.ts";
 import type { Sql } from "../learning/store.ts";
 import type { GoogleDriveClient } from "../storage/drive.ts";
-import { WEBM_TRACK_AUDIO, WEBM_TRACK_VIDEO, webmFixture } from "../testing/webm-fixture.ts";
+import { WEBM_TRACK_AUDIO, WEBM_TRACK_VIDEO, webmFixture } from "../../../test-support/lib/meridian/testing/webm-fixture.ts";
 
 /** A small cap, so the one-byte-over tests stay small. The default cap is tested in artifact-download.test.ts. */
 const CAP = 512;

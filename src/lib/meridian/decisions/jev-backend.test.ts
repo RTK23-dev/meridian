@@ -14,7 +14,7 @@ import { getDecisionEngineStatus } from "./status.ts";
 import type { DecisionEngineRegistry } from "./dispatcher.ts";
 import type { Sql } from "../learning/store.ts";
 import type { DecisionEngine, DecisionRequest } from "./types.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import { memoryDecisionHolds } from "./holds.ts";
 
 const ORG = "org_jev_backend_fixture";

@@ -15,7 +15,7 @@ import {
   seedFactoryRun,
   seedJobRow,
   withFixtureFetch,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 
 const FULL_WITH_CAP = {
   automation: "full",

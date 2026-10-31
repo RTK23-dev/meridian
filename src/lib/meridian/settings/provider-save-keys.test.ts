@@ -11,8 +11,8 @@ import {
 } from "./provider-config.ts";
 import { resolveCredential } from "../credentials/resolve.ts";
 import { CREDENTIAL_VAULT_TYPE, SHARED_DEFAULT_ENV, SOURCE_CREDENTIAL_CATEGORIES, type CredentialCategory } from "../credentials/contract.ts";
-import { openTestBackends, vaultRowId, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, vaultRowId, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { retrieveVaultCredential } from "../vault/service.ts";
 
 // Used only by this test process: the vault encrypts saved keys with this master key.

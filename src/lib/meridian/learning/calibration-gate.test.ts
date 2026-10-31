@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { HELD_OUT_MINIMUM, learnedWeightUsable, recordCalibrationReport, resolveParameterForUse } from "./calibration-gate.ts";
 import { upsertModelParameter } from "./parameters.ts";
 
