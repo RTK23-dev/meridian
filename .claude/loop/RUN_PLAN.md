@@ -298,7 +298,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: a request fixture for each built-in.
 
 #### K13: Record the cookbook on runs (D6)
-- Status: `pending`. Depends on: K11, K12.
+- Status: `partly done`. Done: migration `0141_content_factory_cookbook.sql` adds `cookbook_selection` to the content factory session, and `cookbooks/run-record.ts` writes it only while the run is a draft (3 PGlite tests: a draft records and reads back; a started run keeps nothing new; another workspace reads nothing). Remaining: copy the record onto the engine request's metadata, and include it in the export package (`distribution/export-package.ts`). Both are small follow-ups; the export follow-up is part of K30.
 - The content factory run and the engine request record `cookbook_id`, `version`, the values, the mode and the selection kind
   (migration). The export package includes them.
 - Tests (PGlite).
