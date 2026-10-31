@@ -493,3 +493,9 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Wake (22:18): CI on 17d050c all green (typecheck, lint, tests, e2e, ui-smoke, release acceptance). The branch matched the pushed head; no foreign commits.
 - K18: `cookbook-selection-step.tsx` draws the selection view (typecheck and lint clean). Not mounted yet: mounting it in the hub needs the run path and the browser check.
 - Next: mount in the hub (K18), then K19 (library screen; the route tree is generated, so the route needs the generator and the navigation tests).
+
+## 2026-10-31 23:31 UTC: wake: K18a
+
+- Wake (23:26): the branch matched the pushed head; CI on the previous head (1bab925) was green. No foreign commits.
+- K18a done: the run's inputs are read from the session; a cookbook choice is checked and recorded on a draft run only. A selector that is not connected gives a 'picked' record. 6 PGlite tests; all cookbook suites (152) and the full content-factory suite (269) pass.
+- Next: K18b (apply the recorded cookbook when a run starts, in service-run.ts), then K18c (mount the step in the draft panel).
