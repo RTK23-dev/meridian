@@ -3,6 +3,7 @@
 //
 //   node --experimental-strip-types scripts/engine/preset-preview/render.ts --out artifacts/preset-preview/preview.mp4
 //   node --experimental-strip-types scripts/engine/preset-preview/render.ts --stills 1,8,18 --out artifacts/preset-preview
+//   Add --chromium /path/to/chrome when Playwright's own browser is not installed.
 //
 // The output goes to artifacts/ (ignored by git).
 
@@ -52,8 +53,8 @@ async function soundBed(path: string): Promise<void> {
   await run("ffmpeg", ["-y", "-v", "error", "-filter_complex", graph, "-map", "[out]", "-ar", "48000", "-ac", "2", "-t", d, path]);
 }
 
-// The repository pins its own Playwright; PRESET_PREVIEW_CHROMIUM points at another Chromium when that one is not installed.
-const executablePath = process.env.PRESET_PREVIEW_CHROMIUM?.trim() || undefined;
+// The repository pins its own Playwright; --chromium points at another Chromium when that one is not installed.
+const executablePath = arg("--chromium");
 const browser = await chromium.launch({ executablePath, args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"] });
 try {
   const page = await browser.newPage({ viewport: { width: 720, height: 1280 }, deviceScaleFactor: 1 });
