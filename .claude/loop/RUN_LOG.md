@@ -298,3 +298,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Decided by the loop: Q15, the planner runs when the page is read, not when a request starts. Engine start is not changed.
 - Doc to refresh at the end of R5: the PR #85 description still says 2 modules are wired. It now says 4 of 45. I have not edited the PR body for this yet.
 - Still open in R5: `ops/concurrency.ts` (its input is the provider attempt history, which the page does not read yet), then the learning modules.
+
+## 2026-10-31 14:07 UTC: round 2, R5 unit: the concurrency proposals on /engine-ops
+
+- Wake: the scheduled wake (`trig_013Epvr27QkYS4434pSrueMD`) fired at 14:03:01Z. CI on `5ef58a9` (the batch-report commit) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `src/engine/ops/concurrency.ts`. `readWorkspaceConcurrency` (`src/lib/meridian/engine-ops/service.ts`) reads the workspace's provider calls from the last hour (`engine_provider_attempts`) and runs `proposeConcurrency` with the current sizes from `config/thresholds.ts` and the proposed bounds. `getEngineConcurrency` exposes it. The page shows "Concurrency proposals": the sizes now and proposed, the reason, and how many calls were matched to a bucket.
+- What the page shows: every bucket is held. The route table names no model for OpenRouter, so `engine_provider_attempts` cannot be matched to a bucket. Growth would also need saturation, which the caller must sample from `engine_bucket_leases`. The page says so. Nothing is applied.
+- Checks, run here: `concurrency-report.test.ts`: 3 of 3 pass on PGlite (no calls, calls that cannot be matched and no size moves, a stranger refused and another workspace sees only its own). `service.test.ts`: 14 of 14. `batch-report.test.ts`: 4 of 4. `npx eslint` on the four changed files: exit 0. `npm run typecheck`: exit 0.
+- The 429 shrink rule is not exercised through the page, because no call can be matched. Its rules are tested in `src/engine/ops/concurrency.test.ts` (engine tests, unchanged here).
+- Decided: Q16 is an owner decision and is left open. The bucket column is a schema change.
+- Not checked here: the page in a browser; CI's `ui-smoke` job covers it.
+- Still open in R5: the learning modules (`fatigue`, `guardrails`, `organic-telemetry`, `parameters`) and the rest of the 45, per group.

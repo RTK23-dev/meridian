@@ -120,7 +120,7 @@ no merging, no force-push, no contract change without the owner's approval, no n
   decide two things: whether a C2PA signing library may be added (a new dependency), and whether any footage counts as real.
 
 ### R5: The 45 test-only modules (Q3)
-- Status: `active`, 4 of 45 wired so far: the export package and the disclosure gate (R4), the engine alerts (`ops/alerts-sql.ts`, shown as "Alerts right now" on `/engine-ops`, Q14), and the batch planner (`ops/batch.ts`, shown as "Batch requests" on `/engine-ops`, Q15). The owner's answer to Q3 is to make each one work, or to say clearly why it cannot. The other 41 are handled one group at a time, next the concurrency module (`ops/concurrency.ts`). Each module is either wired into a product path, or it is explained in plain words as one that cannot be made to work
+- Status: `active`, 5 of 45 wired so far: the export package and the disclosure gate (R4), the engine alerts (`ops/alerts-sql.ts`, shown as "Alerts right now" on `/engine-ops`, Q14), the batch planner (`ops/batch.ts`, shown as "Batch requests" on `/engine-ops`, Q15), and the concurrency proposals (`ops/concurrency.ts`, shown as "Concurrency proposals" on `/engine-ops`, held at every size until calls record their bucket, Q16). The owner's answer to Q3 is to make each one work, or to say clearly why it cannot. The other 40 are handled one group at a time, next the learning modules. Each module is either wired into a product path, or it is explained in plain words as one that cannot be made to work
   yet, with the reason. Done in groups: the disclosure gate and the export package (R4), the engine's ops modules, then the learning modules.
 
 ### R6: Reference videos by upload or public link (Q7)

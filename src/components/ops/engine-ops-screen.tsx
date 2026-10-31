@@ -3,14 +3,25 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
-import { getEngineAlerts, getEngineBatchReport, getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
+import { getEngineAlerts, getEngineBatchReport, getEngineConcurrency, getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
 import type { BatchReport } from "@/engine/ops/batch.ts";
+import type { ConcurrencyProposal } from "@/engine/ops/concurrency.ts";
 import type { OpsAlert } from "@/engine/ops/alerts.ts";
 import type { DeadJob } from "@/engine/ops/deadletter.ts";
 import type { StageMetricsReport } from "@/engine/ops/metrics-sql.ts";
 import { RefusalNotice } from "./ops-shared";
 
 type AlertsReport = { thresholds: string; alerts: OpsAlert[] };
+type ConcurrencyReport = { thresholds: string; callsInWindow: number; matchedCalls: number; proposals: ConcurrencyProposal[] };
+
+const BUCKET_LABEL: Record<ConcurrencyProposal["bucket"], string> = { video: "Video", image: "Image", tts: "Speech" };
+
+const CONCURRENCY_BASIS_LABEL: Record<ConcurrencyProposal["basis"], string> = {
+  insufficient_data: "Held",
+  held: "Held",
+  rate_limited: "Smaller",
+  headroom_measured: "Larger",
+};
 
 const ALERT_KIND_LABEL: Record<OpsAlert["kind"], string> = {
   budget_overrun: "Budget overrun",
@@ -56,6 +67,13 @@ export function EngineOpsScreen() {
     queryKey: ["engine-ops", "alerts", organizationId],
     enabled: organizationId !== "",
     queryFn: () => getEngineAlerts({ data: { organizationId } }),
+  });
+
+  // The concurrency proposals are read when the page opens. They are shown only: nothing here changes a bucket's size.
+  const concurrency = useQuery<ConcurrencyReport>({
+    queryKey: ["engine-ops", "concurrency", organizationId],
+    enabled: organizationId !== "",
+    queryFn: () => getEngineConcurrency({ data: { organizationId } }),
   });
 
   // The batch requests are read when the page opens: how many asked for batch, and how the planner ran them.
@@ -196,6 +214,43 @@ export function EngineOpsScreen() {
           </Card>
         ) : batch.isPending ? (
           <p className="text-small text-fg-muted">Reading the batch requests…</p>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="concurrency-heading" className="space-y-4">
+        <h2 id="concurrency-heading" className="text-section font-semibold">Concurrency proposals</h2>
+        <p className="text-small text-fg-muted">
+          These are proposals from the last hour of provider calls. Nothing here changes a bucket&apos;s size. A bucket grows only when the engine
+          can measure how full it was.
+        </p>
+        {concurrency.error ? <RefusalNotice error={concurrency.error} /> : null}
+        {concurrency.data ? (
+          <Card className="space-y-3 overflow-x-auto p-4">
+            <p>
+              {concurrency.data.callsInWindow} provider {concurrency.data.callsInWindow === 1 ? "call" : "calls"} in the last hour,{" "}
+              {concurrency.data.matchedCalls} matched to a bucket.
+            </p>
+            {concurrency.data.callsInWindow > 0 && concurrency.data.matchedCalls === 0 ? (
+              <p className="text-small text-fg-muted">
+                The engine does not record which bucket a provider call used, so no call can be matched, and every size is held.
+              </p>
+            ) : null}
+            <table className="w-full text-left text-small">
+              <thead><tr><th scope="col">Bucket</th><th scope="col">Size now</th><th scope="col">Proposed</th><th scope="col">Why</th></tr></thead>
+              <tbody>
+                {concurrency.data.proposals.map((proposal) => (
+                  <tr key={proposal.bucket}>
+                    <td>{BUCKET_LABEL[proposal.bucket]}</td>
+                    <td>{proposal.current}</td>
+                    <td>{proposal.proposed}</td>
+                    <td>{CONCURRENCY_BASIS_LABEL[proposal.basis]}: {proposal.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        ) : concurrency.isPending ? (
+          <p className="text-small text-fg-muted">Reading the proposals…</p>
         ) : null}
       </section>
 

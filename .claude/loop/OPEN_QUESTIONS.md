@@ -115,6 +115,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Reason: the planner is not called at request start (`src/engine/api/start.ts` does not call it), so there is no stored plan to read. Adding a call there would change the engine's start path, which is not part of this unit.
 - What would change if you chose otherwise: call `planBatch` when a request starts, and store the plan on the request. That needs a small engine change and a place to store the plan, which is a contract question for you.
 
+## Q16: Record the bucket on each provider call, so concurrency can be proposed
+- Kind: owner decision. Status: `open`.
+- Blocks: the concurrency proposals on `/engine-ops` can move no size until this is decided. They are held at every size today. Nothing else is blocked.
+- What the loop found: every OpenRouter target in `src/engine/config/routes.ts` names no model (the model is chosen at run time), so the static route table maps no provider call to a bucket. `engine_provider_attempts` does not store the bucket, so a call cannot be matched to one. In this workspace's last hour, the page shows the calls and that none matched.
+- Options: (a) approve a migration that adds a bucket column to `engine_provider_attempts`, and have the gateway or the router write it on each call. Then the page can propose sizes from measured 429s. (b) Keep the proposals held, and accept that concurrency stays as it is. Growth also needs saturation measured from `engine_bucket_leases`, which is a separate step the loop has not built.
+- Why the loop did not choose: the change is a database migration on the engine's call path. That is a schema decision, so it is the owner's.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

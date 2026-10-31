@@ -12,7 +12,9 @@
 
 import { hasRole, isRole, type Role } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
+import { thresholds as engineThresholds } from "../../../engine/config/thresholds.ts";
 import { planBatch, summarizeBatch, type BatchReport } from "../../../engine/ops/batch.ts";
+import { proposeConcurrency, type ConcurrencyAttempt, type ConcurrencyProposal } from "../../../engine/ops/concurrency.ts";
 import { evaluateAlerts, type OpsAlert } from "../../../engine/ops/alerts.ts";
 import { readAlertSnapshot } from "../../../engine/ops/alerts-sql.ts";
 import { listDeadJobs, type DeadJob } from "../../../engine/ops/deadletter.ts";
@@ -74,6 +76,45 @@ export async function readWorkspaceAlerts(
   await workspaceRole(sql, userId, input.organizationId, "viewer");
   const snapshot = await readAlertSnapshot(sql, { organizationIds: [input.organizationId] }, now.getTime(), proposedOpsThresholds);
   return { thresholds: OPS_PROPOSAL_VERSION, alerts: evaluateAlerts(snapshot, proposedOpsThresholds) };
+}
+
+/**
+ * The concurrency proposals for one workspace, from its provider attempts in the proposed window (an hour). Proposals only: nothing is
+ * applied. A call counts toward a bucket only when the engine can tell which bucket it used; `matchedCalls` says how many did, so the
+ * page can show when none could be matched. Any member may read them.
+ */
+export async function readWorkspaceConcurrency(
+  sql: Sql,
+  userId: string,
+  input: AlertsInput,
+  now: Date = new Date(),
+): Promise<{ thresholds: typeof OPS_PROPOSAL_VERSION; callsInWindow: number; matchedCalls: number; proposals: ConcurrencyProposal[] }> {
+  await workspaceRole(sql, userId, input.organizationId, "viewer");
+  const windowStart = now.getTime() - proposedOpsThresholds.concurrency.windowMs;
+  const rows = await sql<{ provider_id: string; outcome: ConcurrencyAttempt["outcome"]; error_kind: string | null; latency_ms: unknown; at_ms: unknown }>`
+    select provider_id, outcome, error_kind, latency_ms, at_ms from engine_provider_attempts
+    where organization_id = ${input.organizationId} and at_ms >= ${windowStart}
+  `;
+  const attempts: ConcurrencyAttempt[] = rows.map((row) => ({
+    providerId: row.provider_id,
+    outcome: row.outcome,
+    errorKind: row.error_kind,
+    latencyMs: row.latency_ms === null ? null : Number(row.latency_ms),
+    atMs: Number(row.at_ms),
+  }));
+  const proposals = proposeConcurrency({
+    current: {
+      video: engineThresholds.router.concurrency.video,
+      image: engineThresholds.router.concurrency.image,
+      tts: engineThresholds.router.concurrency.tts,
+    },
+    nowMs: now.getTime(),
+    attempts,
+    thresholds: proposedOpsThresholds.concurrency,
+  });
+  const callsInWindow = attempts.filter((attempt) => attempt.outcome !== "request_refused").length;
+  const matchedCalls = proposals.reduce((total, proposal) => total + proposal.providerSideAttempts, 0);
+  return { thresholds: OPS_PROPOSAL_VERSION, callsInWindow, matchedCalls, proposals };
 }
 
 /** The route the batch capability table names. Every batch request goes to it, so one plan describes them all. */
