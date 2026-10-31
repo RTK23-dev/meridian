@@ -392,7 +392,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: the export for each built-in; the label reaches the review item.
 
 #### K25: From a reference video to a draft cookbook
-- Status: `pending`. Depends on: K4, K22.
+- Status: `partly done`. Done: `cookbooks/from-reference.ts`. From a reference's measures it writes a valid draft: the measured numbers become the checks, what was not measured is listed as unknown (structure, style, instructions, ingredients), and the draft stays engine-only until reviewed (3 tests, built from the 3D explainer's recorded measures). Remaining: the beats and the genome, when the Video DNA exists (the paid analysis), and the labels that say which values were read from frames rather than measured.
 - `cookbooks/from-reference.ts` automates what was done by hand on 2026-10-31. From a reference's free measures (media functions),
   and its Video DNA when the paid analysis has run, it writes a draft cookbook: kit, layout, grammar targets, cut rule, structure and
   gaps.
