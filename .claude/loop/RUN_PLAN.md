@@ -197,7 +197,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: one passing and one failing case per rule.
 
 #### K3: The resolver
-- Status: `pending`. Depends on: K2.
+- Status: `done` (`cookbooks/resolve.ts`, 15 tests; the cost classes use the engine's own `shotCost`, `prices.routeFor` and units; an unknown price is never 0; agent mode needs every chosen way free; the plan template passes the orchestrator's `planNodeSchema`). Depends on: K2.
 - `cookbooks/resolve.ts`, `resolveCookbook(cookbook, values, context)`, pure. It fills defaults and applies the bindings, then works out:
   - the requirements with their cost class (free, paid or unknown), from `engine/plan/tables.ts` RECIPES, `plan/cost.ts` and
     `config/prices.ts`;

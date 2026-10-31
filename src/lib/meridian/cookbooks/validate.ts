@@ -205,7 +205,7 @@ function typeOfControl(control: Control): Target["type"] {
   return "string";
 }
 
-function fitsControl(control: Control, value: ControlValue): boolean {
+export function fitsControl(control: Control, value: ControlValue): boolean {
   switch (control.kind) {
     case "toggle":
       return typeof value === "boolean";
