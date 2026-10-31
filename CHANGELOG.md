@@ -2,12 +2,6 @@
 
 ## Unreleased
 
-**Tidy, no behaviour change.** Removed two unused modules (`src/lib/env.server.ts`, `src/lib/meridian/intelligence/combinations.ts`). Test
-helpers moved out of production folders into `src/test-support/` and `src/engine/test/`, with one shared Node test alias hook; the recorded
-OpenRouter catalogue the testing runtime reads now lives in `src/lib/meridian/decisions/`. The root planning prompt moved to
-`docs/planning/`. Added `docs/STATE_2026-10-28.md` (where Meridian stands, measured) and `docs/FIRST_TEST_RUN.md` (the first run, step by
-step). The engine's dry acceptance (`npm run engine:e1 -- --dry-run`) is red on the render's bill check, as before; see the runbook, step 6.
-
 Still a pre-release. Everything below is verified with fixtures and recorded data. No live provider run has been recorded (see docs/RELEASE_CHECKLIST.md).
 
 - **Batch is the admin's default Content section.** It opens on Video batches. The research-led Factory is an advanced tab.
@@ -18,6 +12,12 @@ Still a pre-release. Everything below is verified with fixtures and recorded dat
 - **Format sample, demo mode and manifest.** The variations form shows a sample of the first video and needs the person's approval; the server refuses without it. Try a demo batch opens marked fixture data with no key or cost. A batch downloads as CSV and as a JSON manifest. Migration 0139 adds the `demo` flags.
 - **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
 - Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
+
+**Tidy, no behaviour change.** Removed two unused modules (`src/lib/env.server.ts`, `src/lib/meridian/intelligence/combinations.ts`). Test
+helpers moved out of production folders into `src/test-support/` and `src/engine/test/`, with one shared Node test alias hook; the recorded
+OpenRouter catalogue the testing runtime reads now lives in `src/lib/meridian/decisions/`. The root planning prompt moved to
+`docs/planning/`. Added `docs/STATE_2026-10-28.md` (where Meridian stands, measured) and `docs/FIRST_TEST_RUN.md` (the first run, step by
+step). The engine's dry acceptance (`npm run engine:e1 -- --dry-run`) is red on the render's bill check, as before; see the runbook, step 6.
 
 ## 0.1.0-beta.16 — prerelease
 

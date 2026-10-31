@@ -9,7 +9,7 @@ The state of the code is in [STATE_2026-10-28.md](STATE_2026-10-28.md).
 ## 0. What is ready and what is not
 
 - **Ready and checked on this commit:** the app starts from a clean checkout with no `.env`, uses an embedded database, and the Settings
-  screens work in a browser (`node scripts/release-acceptance/run.mjs`: 25 checks). Typecheck, lint, build and the test suites pass.
+  screens work in a browser (`node scripts/release-acceptance/run.mjs`: 30 checks). Typecheck, lint, build and the test suites pass.
 - **Not ready:** no provider has been called live. The video engine's acceptance (`npm run engine:e1 -- --dry-run`) is red today, for a
   reason the owner has to decide (step 6). Postgres-backed behaviour is checked in CI, not on a laptop without a server.
 

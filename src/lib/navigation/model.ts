@@ -40,6 +40,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       { id: "setup", label: "Setup guide", to: "/setup" },
       { id: "integrations", label: "Integrations", to: "/integrations" },
       { id: "jobs", label: "Jobs & health", to: "/jobs" },
+      { id: "engine-ops", label: "Engine operations", to: "/engine-ops" },
       { id: "settings", label: "Settings", to: "/settings" },
     ],
   };

@@ -59,7 +59,7 @@ export function EngineOpsScreen() {
     <div className="space-y-10">
       <PageHeader
         title="Engine operations"
-        description="How the video engine has run in this workspace: request counts, the time each stage takes, how often each provider succeeds, and the jobs that stopped for good. Replaying a job can spend money, so only admins can do it."
+        description="How the video engine has run in this workspace: request counts, the time each stage takes, how often each provider succeeds, and the engine's jobs that stopped for good. Meridian's own background jobs are on Jobs & health. Replaying an engine job can spend money, so only admins can do it."
       />
 
       <section aria-labelledby="metrics-heading" className="space-y-4">
