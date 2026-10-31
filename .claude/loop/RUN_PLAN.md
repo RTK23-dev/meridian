@@ -413,7 +413,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Agent mode is allowed with a recording.
 
 #### K28: Results by cookbook and option (D6)
-- Status: `pending`. Depends on: K13.
+- Status: `partly done`. Done: `cookbooks/results.ts`, a pure table of recorded runs by cookbook, version and setting. A missing measure is counted as unknown, never 0; one run is marked as one; the table does not depend on the order of the runs (4 tests). Remaining: reading the runs from the store (the session records of K13, joined with the measures of the published output), and the export file next to `docs/data/`. The table makes measurements and counts only, not scores (AGENTS rule 9).
 - `learning/cookbook-results.ts` and a view: results per cookbook, version and option value, from recorded runs and their published
   measurements, with unknowns as unknown, plus an export for the research agents next to `docs/data/`.
 - Scores stay scores until a calibration report says otherwise.
