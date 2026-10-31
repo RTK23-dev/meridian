@@ -257,7 +257,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 3: automatic selection with a person in the loop (D1)
 
 #### K9: Eligibility from the inputs
-- Status: `pending`. Depends on: K3.
+- Status: `done` (`cookbooks/eligibility.ts`: each required ingredient must have a way available to this run; a coded way always, an upload when the person supplied that file, a paid way only with a budget above zero; the modes follow. Nine tests.)
 - `cookbooks/eligibility.ts`, pure: from the request inputs, decide which cookbooks can run and why the others cannot. The inputs are:
   - the brief text and its length;
   - a reference video, and its Video DNA when cached;
