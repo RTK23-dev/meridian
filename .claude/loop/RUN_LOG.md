@@ -366,3 +366,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `jev/calibration.ts` duplicates the Brier, log-loss and reliability code in `calibration/report.ts` and `learning/calibration-report.ts`, which the calibration screens use.
 - Decided by the loop: none. Q22 is an owner decision and is open. The loop recommends deleting both.
 - Still open in R5: 25 modules. Next group: the `organic/*` modules.
+
+## 2026-10-31 16:43 UTC: round 2, R5 group: the organic/* modules, explained
+
+- Wake: the scheduled wake (`trig_01NBrMByDNCCXWqEnMbqSA3Z`) fired at 16:41:00Z. CI on `da31ba2` (run 41219140290) finished with all 13 check runs successful. PR #85 is clean and still a draft.
+- Task: R5, the `organic/*` group (eight files) and its entry point `factory/instagram-volume.ts`. No code changed.
+- Checked with exact import patterns: nothing outside the group imports `organic/*` except `factory/instagram-volume.ts`, and nothing imports that file. One earlier grep match (`jobs/execute.ts`) was a different module with the same name, not an import of the organic one.
+- `instagram-volume.ts` asks Apify for about 1,000 reel candidates per niche per week. That is paid spend, a live call, so it cannot be wired without the owner's go-ahead.
+- `learning-bridge.ts` writes organic results into learning, which is scoring.
+- Decided by the loop: none. Q23 is an owner decision and is open.
+- Still open in R5: the rest of the list in section 6A. Next group: `quality/evidence.ts` and `shopify/reel-attribution.ts`.

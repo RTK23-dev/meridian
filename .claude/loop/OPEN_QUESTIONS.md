@@ -179,6 +179,16 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) delete `cluster.ts` and `jev/calibration.ts`, and keep the product versions. (b) Keep them only as test references, and say so in their headers. (c) Compare the two versions on recorded data first, and merge only if they disagree.
 - The loop recommends (a). Nothing is deleted until you decide.
 
+## Q23: The organic Instagram group: approve the paid gather, or keep it out?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. The eight `organic/*` files and their entry point, `src/lib/meridian/factory/instagram-volume.ts`, stay as they are, with no caller.
+- What the group does, in plain words:
+  - `factory/instagram-volume.ts` (the Factory's Instagram gather, from NORTH_STAR step 1 and 2) asks Apify for about 1,000 Instagram reel candidates per niche per week. It stores each one with its creator's baseline, and rates it. It fails closed without an Apify key. Running it spends money on Apify, so it is a live paid call, which the hard stops keep for a run you start.
+  - `organic/learning-bridge.ts` writes organic post results into learning, which the scoring uses. Wiring it changes learning.
+  - The rest (creators, reel store, snapshots, comments, pipeline, control sets) support those two. `control-sets.ts` has no link to anything else.
+- Options: (a) approve a small, budgeted Apify run that you start, with the cap set first and each cost shown, then wire the gather. (b) Keep the group out until the learning bridge's effect on scoring is decided. (c) Delete `control-sets.ts` now, since nothing uses it, and keep the rest.
+- The loop recommends (b) for the bridge, and (a) only with a cap you set. Nothing is run and nothing is deleted.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
