@@ -183,7 +183,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 1: the cookbook core (pure code, no storage)
 
 #### K1: One control schema
-- Status: `pending`. Depends on: K0.
+- Status: `done` (`src/lib/meridian/cookbooks/controls.ts`, 9 tests: all 14 component declarations parse; every kind refuses its own bad values with the field named; bindings are the four fixed shapes). Depends on: K0.
 - `src/lib/meridian/cookbooks/controls.ts`: zod schemas for `toggle`, `slider`, `select`, `text` and `colour` controls (section 3 of
   the design). A parser turns each compose component's `data-composition-variables` (enum, number, string) into the same schema.
 - Tests: every `component.html` in `src/engine/compose/components/` parses; a malformed declaration fails with its field named.
