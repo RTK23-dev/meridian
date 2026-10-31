@@ -269,7 +269,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: one case per ingredient kind.
 
 #### K10: The cookbook selector role
-- Status: `pending`. Depends on: K9.
+- Status: `partly done`. The logic is done in `cookbooks/selector.ts` (8 tests, with a fake port): the data sent (eligible cookbooks and inputs, delimited, no instructions), the answer's shape, each pick checked against the eligible list and its controls (a bad pick refuses the whole answer), and a port that is not connected gives the picker. The model call itself is a port. Registering the role `cookbook_selector` needs a value in `CLAUDE_ROLES` (engine-contracts), a database check migration, a prompt file and a role definition. That is a contract change beyond the approved cookbook field, so it is parked for the owner (Q34).
 - A new Claude role, `cookbook_selector`. It uses a small model through `runRole` and the gateway, with a budget line in the ledger.
   - Its prompt is `src/engine/prompts/cookbook_selector@1.md`.
   - It receives the eligible cookbooks (id, label, summary, needs, controls) and the inputs as delimited data.
@@ -279,7 +279,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: recorded answers (a good pick, an ineligible pick refused, an out-of-range value refused, not connected).
 
 #### K11: Selection in the request flow
-- Status: `pending`. Depends on: K7, K10.
+- Status: `done` for the logic (`cookbooks/select.ts`, 5 tests): a normal run waits for the person; an automated loop accepts the top pick; a confirmed pick, a changed value, and an alternative are recorded as confirmed, changed and auto_accepted. Wiring it into the screen is K18.
 - `cookbooks/select.ts`: `proposeCookbook(inputs)`, which runs eligibility, then the selector, then the resolver, and returns the
   proposal: the cookbook, the values, the requirements, the estimate, the reason and the alternatives.
 - Normal runs: the proposal is shown and nothing is sent until the person confirms, optionally after changing the cookbook or

@@ -278,6 +278,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Blocks: nothing in round 3.
 - The loop recommends: delete `lib/create/steps.ts` and `splice-run.ts` (no screen or pipeline needs them yet), keep the integrations model, and keep the debounce and draft-store modules for K17 and K20.
 
+## Q34: The cookbook selector: register its model role?
+- Kind: owner decision (a contract change). Status: `open`.
+- Context: the selector's logic is done and tested with a fake port (`src/lib/meridian/cookbooks/selector.ts`). Its model call needs a new engine role, `cookbook_selector`.
+- What registering it changes: a value in `CLAUDE_ROLES` (`src/engine/contracts/ledger.ts`), a database check migration that lists the roles (as migration 0100 does), a prompt file `cookbook_selector@1.md`, and a role definition on the small model tier.
+- Why parked: D1 approved the cookbook field on the request (engine-contracts@12). The role is a second contract change, and the round's rules put any other contract change under the owner.
+- Blocks: the live selector (K10's port) and the screen that shows its pick (K18), which then shows the picker instead.
+- Options: (a) approve the role as part of engine-contracts@12, with a migration and a Bible section 4 note; (b) keep the picker only for now.
+- The loop recommends (a): the selector is the feature D1 asked for, and the change is small and tested the same way as the other roles.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
