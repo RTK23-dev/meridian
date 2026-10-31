@@ -7,6 +7,8 @@ import type { Sql } from "../learning/store.ts";
 import { builtinCookbook, builtinCookbooks, isBuiltinId } from "./builtin/index.ts";
 import { canCreate, canEdit, canShareWithWorkspace } from "./policy.ts";
 import { resolveCookbook, type ResolvedCookbook, type ResolveOptions } from "./resolve.ts";
+import { proposeCookbooks, type Proposal, type SelectorPort } from "./selector.ts";
+import type { RunInputs } from "./eligibility.ts";
 import { archiveCookbook, forkCookbook, getCookbookVersion, listCookbooks, saveCookbookVersion, type StoredCookbook, type StoreResult } from "./store.ts";
 import type { Cookbook } from "./schema.ts";
 
@@ -141,4 +143,23 @@ export async function resolveFor(
   const result = resolveCookbook(source.value.cookbook, { values: input.values, lengthMs: input.lengthMs, voiceCharacters: input.voiceCharacters });
   if (!result.ok) return { ok: false, reason: "This cookbook cannot be resolved with these values.", issues: result.issues };
   return { ok: true, value: result.resolved };
+}
+
+/**
+ * The cookbooks proposed for a run: the library (built-ins and the workspace cookbooks visible to the brand), checked against the run's inputs,
+ * then the selector through the port. Without a port (the selector is not connected) the answer is the picker, never a guessed pick.
+ */
+export async function proposeFor(
+  sql: Sql,
+  input: { organizationId: string; brandId: string; inputs: RunInputs; lengthMs: number; voiceCharacters?: number; port?: SelectorPort | null },
+): Promise<Proposal> {
+  const library = await libraryFor(sql, { organizationId: input.organizationId, brandId: input.brandId });
+  const cookbooks = [...library.builtins, ...library.workspace.map((stored) => stored.cookbook)];
+  return proposeCookbooks({
+    cookbooks,
+    inputs: input.inputs,
+    lengthMs: input.lengthMs,
+    voiceCharacters: input.voiceCharacters,
+    port: input.port ?? null,
+  });
 }

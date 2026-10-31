@@ -6,7 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
-import { archiveCookbookFor, forkCookbookFor, libraryFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
 
 function clip(value: unknown, max = 120): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -131,4 +131,38 @@ export const resolveCookbookAction = createServerFn({ method: "POST" })
       lengthMs: data.lengthMs,
       voiceCharacters: data.voiceCharacters,
     });
+  });
+
+/**
+ * The cookbooks proposed for a run (K10/K18). Read-only, so a viewer may ask. The selector's model port is not connected in this build, so the
+ * answer is the picker over the eligible cookbooks, never a guessed pick, until the owner approves the role (Q34).
+ */
+export const proposeCookbookAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectOf(input);
+    const brandId = clip(body.brandId);
+    if (!brandId) throw new Error("Choose a brand.");
+    const lengthMs = typeof body.lengthMs === "number" && body.lengthMs > 0 && body.lengthMs <= 180000 ? body.lengthMs : NaN;
+    if (!Number.isFinite(lengthMs)) throw new Error("Choose a length between 1 and 180 seconds.");
+    const uploads = objectOf(body.uploads);
+    const budget = typeof body.budgetUsd === "number" && body.budgetUsd > 0 ? body.budgetUsd : null;
+    const briefChars = typeof body.briefChars === "number" && body.briefChars >= 0 && body.briefChars <= 8000 ? body.briefChars : 0;
+    return {
+      brandId,
+      lengthMs,
+      inputs: {
+        briefChars,
+        reference: { attached: objectOf(body.reference).attached === true, dnaCached: objectOf(body.reference).dnaCached === true },
+        productKit: body.productKit === true,
+        uploads: { voice: uploads.voice === true, footage: uploads.footage === true, music: uploads.music === true },
+        budgetUsd: budget,
+        runKind: body.runKind === "automated_loop" ? ("automated_loop" as const) : ("normal" as const),
+      },
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
+    return proposeFor(sql, { organizationId: access.organizationId, brandId: data.brandId, inputs: data.inputs, lengthMs: data.lengthMs, port: null });
   });

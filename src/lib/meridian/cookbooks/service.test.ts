@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { threeDDataExplainerCookbook } from "./builtin/three-d-data-explainer.ts";
-import { archiveCookbookFor, forkCookbookFor, libraryFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import type { RunInputs } from "./eligibility.ts";
 
 const ORG = "org_cookbook_service";
 const BRAND = "brand_cookbook_service";
@@ -105,3 +106,29 @@ test("reading a workspace cookbook returns its source and the stored row", async
   assert.equal(read.ok, true);
   if (read.ok) assert.equal(read.value.source, "workspace");
 });
+
+const RUN: RunInputs = {
+  briefChars: 100,
+  reference: { attached: false, dnaCached: false },
+  productKit: false,
+  uploads: { voice: false, footage: false, music: false },
+  budgetUsd: null,
+  runKind: "normal",
+};
+
+test("a run with no selector connected gets the picker over the eligible cookbooks, never a guessed pick", async () => {
+  const proposal = await proposeFor(db.sql, { ...scope, inputs: RUN, lengthMs: 60000 });
+  assert.equal(proposal.status, "not_connected");
+  if (proposal.status === "not_connected") assert.ok(proposal.eligible.includes("ck_3d_data_explainer"));
+});
+
+test("with a selector port, a pick names only a cookbook the library offers, and it is resolved", async () => {
+  const port = async () => ({
+    ok: true as const,
+    text: JSON.stringify({ picks: [{ cookbookId: "ck_3d_data_explainer", version: 2, reason: "A data story.", values: {} }] }),
+  });
+  const proposal = await proposeFor(db.sql, { ...scope, inputs: RUN, lengthMs: 60000, port });
+  assert.equal(proposal.status, "proposed");
+  if (proposal.status === "proposed") assert.equal(proposal.picks[0]?.cookbookId, "ck_3d_data_explainer");
+});
+
