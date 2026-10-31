@@ -288,3 +288,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked here: the page in a browser (AGENTS rule 11). The sandbox has no running dev server for it now. CI's `ui-smoke` job loads `/engine-ops` on the pushed commit, and the browser check of this section is still to do if CI does not cover it.
 - Decided by the loop: Q14, the proposed thresholds, shown as proposed.
 - Still open in R5: the engine's batch and concurrency modules (`ops/batch.ts`, `ops/concurrency.ts`), then the learning modules. R8 waits for R5 and R6.
+
+## 2026-10-31 13:41 UTC: round 2, R5 unit: the batch planner on /engine-ops
+
+- Wake: the scheduled wake (`trig_01PQdwpitJMBY9gTBXBRZd62`) fired at 13:38:47Z. CI on `5c2bb38` (the alerts commit, run 41204886031) finished with every check run successful and CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `src/engine/ops/batch.ts`. It had no caller. Now `readWorkspaceBatch` (`src/lib/meridian/engine-ops/service.ts`) counts the workspace's batch-priority requests in the window and plans them for OpenRouter, the only route in the batch table, with `planBatch` and `summarizeBatch`. `getEngineBatchReport` exposes it to any member. The page shows "Batch requests" with the counts and the planner's reason. Nothing is claimed as batched.
+- Checks, run here: `src/lib/meridian/engine-ops/batch-report.test.ts`: 4 of 4 pass on PGlite (no batch request; a normal request is not counted; a batch request runs as normal calls with the planner's reason; a stranger is refused and another workspace sees only its own). `service.test.ts`: 14 of 14 still pass. `npx eslint` on the four changed files: exit 0. `npm run typecheck`: exit 0.
+- Not checked here: the page in a browser. CI's `ui-smoke` job covers the page on the pushed commit.
+- Decided by the loop: Q15, the planner runs when the page is read, not when a request starts. Engine start is not changed.
+- Doc to refresh at the end of R5: the PR #85 description still says 2 modules are wired. It now says 4 of 45. I have not edited the PR body for this yet.
+- Still open in R5: `ops/concurrency.ts` (its input is the provider attempt history, which the page does not read yet), then the learning modules.

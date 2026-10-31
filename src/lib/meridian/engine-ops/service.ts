@@ -12,6 +12,7 @@
 
 import { hasRole, isRole, type Role } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
+import { planBatch, summarizeBatch, type BatchReport } from "../../../engine/ops/batch.ts";
 import { evaluateAlerts, type OpsAlert } from "../../../engine/ops/alerts.ts";
 import { readAlertSnapshot } from "../../../engine/ops/alerts-sql.ts";
 import { listDeadJobs, type DeadJob } from "../../../engine/ops/deadletter.ts";
@@ -73,6 +74,24 @@ export async function readWorkspaceAlerts(
   await workspaceRole(sql, userId, input.organizationId, "viewer");
   const snapshot = await readAlertSnapshot(sql, { organizationIds: [input.organizationId] }, now.getTime(), proposedOpsThresholds);
   return { thresholds: OPS_PROPOSAL_VERSION, alerts: evaluateAlerts(snapshot, proposedOpsThresholds) };
+}
+
+/** The route the batch capability table names. Every batch request goes to it, so one plan describes them all. */
+const BATCH_ROUTE = "openrouter";
+
+/**
+ * The batch requests of one workspace since the input's start time, and how the planner runs them. The planner decides, not the
+ * count: a batch request is counted as batched only when the planner says so. Any member may read this.
+ */
+export async function readWorkspaceBatch(sql: Sql, userId: string, input: StageMetricsInput): Promise<BatchReport> {
+  await workspaceRole(sql, userId, input.organizationId, "viewer");
+  const rows = await sql<{ n: number }>`
+    select count(*)::int as n from engine_requests
+    where organization_id = ${input.organizationId} and priority = 'batch' and created_at >= ${input.since}::timestamptz
+  `;
+  const count = rows[0]?.n ?? 0;
+  const plan = planBatch({ priority: "batch", provider: BATCH_ROUTE });
+  return summarizeBatch(Array.from({ length: count }, () => plan));
 }
 
 /** The dead engine jobs of one request, oldest first. Any member of the request's workspace may read them. */

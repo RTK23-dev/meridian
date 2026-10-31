@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { alertsInput, deadJobsInput, replayInput, stageMetricsInput } from "./input.ts";
-import { readRequestDeadJobs, readWorkspaceAlerts, readWorkspaceStageMetrics, replayRequestDeadJob } from "./service.ts";
+import { readRequestDeadJobs, readWorkspaceAlerts, readWorkspaceBatch, readWorkspaceStageMetrics, replayRequestDeadJob } from "./service.ts";
 
 // The video engine's operations surface (Video Engine Bible 15.3, 5.2). The checks are in service.ts; these functions only take the
 // session's user and the database.
@@ -23,6 +23,15 @@ export const getEngineAlerts = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     return readWorkspaceAlerts(sql, context.userId, data);
+  });
+
+/** How the batch requests of one workspace run: the planner's answer, never a claim of batching. Any member may read them. */
+export const getEngineBatchReport = createServerFn({ method: "POST" })
+  .validator((input: unknown) => stageMetricsInput(input))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return readWorkspaceBatch(sql, context.userId, data);
   });
 
 /** The dead engine jobs of one request, oldest first. Any member of the request's workspace may read them. */

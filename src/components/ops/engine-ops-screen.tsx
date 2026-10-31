@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
-import { getEngineAlerts, getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
+import { getEngineAlerts, getEngineBatchReport, getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
+import type { BatchReport } from "@/engine/ops/batch.ts";
 import type { OpsAlert } from "@/engine/ops/alerts.ts";
 import type { DeadJob } from "@/engine/ops/deadletter.ts";
 import type { StageMetricsReport } from "@/engine/ops/metrics-sql.ts";
@@ -55,6 +56,13 @@ export function EngineOpsScreen() {
     queryKey: ["engine-ops", "alerts", organizationId],
     enabled: organizationId !== "",
     queryFn: () => getEngineAlerts({ data: { organizationId } }),
+  });
+
+  // The batch requests are read when the page opens: how many asked for batch, and how the planner ran them.
+  const batch = useQuery<BatchReport>({
+    queryKey: ["engine-ops", "batch", organizationId],
+    enabled: organizationId !== "",
+    queryFn: () => getEngineBatchReport({ data: { organizationId } }),
   });
 
   // The dead jobs are read only for the request the person typed, so nothing is listed without a choice.
@@ -166,6 +174,28 @@ export function EngineOpsScreen() {
           </Card>
         ) : alerts.isPending ? (
           <p className="text-small text-fg-muted">Reading the alerts…</p>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="batch-heading" className="space-y-4">
+        <h2 id="batch-heading" className="text-section font-semibold">Batch requests</h2>
+        <p className="text-small text-fg-muted">
+          A batch request asks for the batch price. Meridian runs it as normal calls unless the route&apos;s batch support is verified and its
+          executor is built. The counts here come from the planner, so a batch is never counted unless the planner made one.
+        </p>
+        {batch.error ? <RefusalNotice error={batch.error} /> : null}
+        {batch.data && batch.data.batchRequests === 0 ? (
+          <EmptyState title="No batch requests" reason="No request in the last seven days asked for batch." />
+        ) : batch.data ? (
+          <Card className="space-y-2 p-4">
+            <p>
+              {batch.data.batchRequests} batch {batch.data.batchRequests === 1 ? "request" : "requests"} in the last seven days: {batch.data.asBatch} run
+              as a batch, {batch.data.asNormalCalls} run as normal calls.
+            </p>
+            {batch.data.reason ? <p className="text-small text-fg-muted">The planner&apos;s reason: {batch.data.reason}.</p> : null}
+          </Card>
+        ) : batch.isPending ? (
+          <p className="text-small text-fg-muted">Reading the batch requests…</p>
         ) : null}
       </section>
 

@@ -108,6 +108,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Reason: Q3 asks for the modules to work. The thresholds are the only ones the engine has, and the file says the lead accepts them later. Showing them as proposed keeps the page honest.
 - What would change if you chose otherwise: accept the numbers (move them into `config/thresholds.ts`), change them, or hide the section until they are accepted.
 
+## Q15: The batch planner runs when the page is read, not when a request starts
+- Kind: technical ambiguity. Status: `decided by loop, confirm`.
+- Blocks: nothing. Part of R5.
+- What the loop did: `ops/batch.ts` is shown on `/engine-ops` as "Batch requests". The count is the workspace's requests with batch priority (`engine_requests.priority`) in the last seven days. Each one is planned for OpenRouter, the only route in the batch table. The planner says no for OpenRouter (support unknown, no executor), so every batch request is shown as a normal call, with the planner's reason. A batch is never counted unless the planner makes one.
+- Reason: the planner is not called at request start (`src/engine/api/start.ts` does not call it), so there is no stored plan to read. Adding a call there would change the engine's start path, which is not part of this unit.
+- What would change if you chose otherwise: call `planBatch` when a request starts, and store the plan on the request. That needs a small engine change and a place to store the plan, which is a contract question for you.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
