@@ -207,6 +207,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) keep `learning/calibration-report.ts` and delete the other two. (b) Move the expected-calibration-error and reliability curve from this file into `learning/calibration-report.ts`, then delete this one. (c) Keep all three until the owner chooses which report the screen should show.
 - The loop recommends (b), which keeps the one screen's report and the extra measure, and removes the copies.
 
+## Q26: A local-disk file store, and a second logo matcher
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both files stay as they are, with no caller.
+- Part A, `src/lib/meridian/storage/filesystem.ts`: a store that keeps media bytes on the server's disk, with signed keys, on the same object-store port the engine uses. The product keeps artifacts in Google Drive (`docs/FIRST_TEST_RUN.md`, step 4). Using this store would add a second storage location, which decides where your artifacts live. It is tied to the research-data storage question in `docs/data/RESEARCH_DATA_PLAN.md`.
+- Part B, `src/lib/meridian/vision/logo.ts`: a second logo matcher (`compareLogoPng`, `locateLogo`). Image QC uses `measureLogo` in `vision/measure.ts`. Two matchers can disagree.
+- Options: A: keep the Drive store as the only one, and delete `filesystem.ts`, or make a local store a deliberate choice for development. B: delete `vision/logo.ts`, keeping `vision/measure.ts`.
+- The loop recommends B now. For A, it recommends deciding storage with the research-data plan (R7) first.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

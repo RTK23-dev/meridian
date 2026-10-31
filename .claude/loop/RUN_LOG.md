@@ -408,3 +408,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked here: the Market page in a browser (AGENTS rule 11). CI's `ui-smoke` job covers the brand pages.
 - Decided by the loop: none. No owner decision needed (read-only, no scoring or publishing change).
 - Still open in R5: the rest of section 6A. Next: `storage/filesystem.ts` and `vision/logo.ts`.
+
+## 2026-10-31 18:13 UTC: round 2, R5 group: storage/filesystem.ts and vision/logo.ts, explained
+
+- Wake: the scheduled wake (`trig_012fTz695u118Mn6LQgHMoUW`) fired at 18:11:13Z. CI on `9b089e9` (run 41226545358) finished with all 13 check runs successful, CodeRabbit skipped (the 18:03 wake). PR #85 is clean and still a draft. The 18:10 watchdog found the chain alive.
+- Task: R5, `storage/filesystem.ts` and `vision/logo.ts`. No code changed.
+- Checks: neither has a caller outside tests (exact import patterns). The product's artifact store is Google Drive (`docs/FIRST_TEST_RUN.md`, step 4); `filesystem.ts` would be a second storage location, and it is tied to R7's storage decision.
+- `vision/logo.ts` is a second logo matcher. Image QC measures logos with `measureLogo` in `vision/measure.ts`.
+- Decided by the loop: none. Q26 is an owner decision and is open.
+- Still open in R5: `a11y/contrast.ts` and `factory/cost.ts` next, then the rest of section 6A.
