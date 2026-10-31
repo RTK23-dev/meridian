@@ -499,3 +499,9 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Wake (23:26): the branch matched the pushed head; CI on the previous head (1bab925) was green. No foreign commits.
 - K18a done: the run's inputs are read from the session; a cookbook choice is checked and recorded on a draft run only. A selector that is not connected gives a 'picked' record. 6 PGlite tests; all cookbook suites (152) and the full content-factory suite (269) pass.
 - Next: K18b (apply the recorded cookbook when a run starts, in service-run.ts), then K18c (mount the step in the draft panel).
+
+## 2026-10-31 23:57 UTC: wake: K18b
+
+- Wake (23:53): the branch matched the pushed head; CI on K18a (d135524) was green (13 of 13). No foreign commits.
+- K18b done: a draft run's recorded cookbook is applied in `buildFor`, so the start and the preview see the same request. Two PGlite tests; the content-factory and cookbook suites pass together (413).
+- Next: K18c (mount the selection step in the draft panel), then the rest of K18's browser check in CI.
