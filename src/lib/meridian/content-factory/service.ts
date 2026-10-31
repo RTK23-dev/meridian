@@ -17,7 +17,7 @@
 
 export { WORKSPACE_REFUSAL, SESSION_REFUSAL, ADMIN_REFUSAL, BRAND_REFUSAL, STARTED_REFUSAL, MESSAGE_REFUSAL, REFERENCE_NOTE, requireWorkspaceAdmin, sessionAccess, todayIso } from "./service-core.ts";
 export type { ContentFactoryPorts } from "./service-core.ts";
-export { listSessions, createSession, briefFromOpportunity, getSession, postMessage, saveSettings, uploadFile, searchSources, attachSource } from "./service-sessions.ts";
+export { BRAND_SESSION_LIST_LIMIT, listSessions, createSession, briefFromOpportunity, getSession, postMessage, saveSettings, uploadFile, searchSources, attachSource } from "./service-sessions.ts";
 export type { SettingsInput, UploadInput, UploadOutcome } from "./service-sessions.ts";
 export { startRun, reviseWithDirection, reviseSession, readRun } from "./service-run.ts";
 export type { StartOutcome, ReviseOutcome, RunView } from "./service-run.ts";

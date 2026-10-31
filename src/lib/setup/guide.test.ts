@@ -44,7 +44,7 @@ test("a ready engine finishes the engine step, and the required steps then read 
   const summary = guideSummary(steps);
   assert.equal(summary.requiredDone, summary.requiredTotal);
   assert.equal(summary.headline, "Every required step is done. The optional steps can wait.");
-  assert.equal(currentStep(steps)?.id, "sources", "the next thing to do is the first optional step that is not done");
+  assert.equal(currentStep(steps), null, "once the required steps are done nothing is offered as 'do this now'; optional steps wait to be opened");
 });
 
 test("optional steps never block the required summary", () => {
@@ -62,7 +62,7 @@ test("a keyed source in use completes the sources step; an unusable key does not
   assert.equal(statusOf(shared, "sources"), "done", "a key the deployment shares is in use");
 
   const unusable = buildGuide(facts({ brandCount: 1, engine: readyEngine, providers: { ...none, youtube: "unusable" } }));
-  assert.equal(statusOf(unusable, "sources"), "current", "an unusable key is not in use, so the step is the next one to do");
+  assert.equal(statusOf(unusable, "sources"), "optional", "an unusable key is not in use, and an optional step is never 'do this now'");
 });
 
 test("media needs both the perception and the production keys", () => {
@@ -107,7 +107,17 @@ test("at most one step is current, and every step explains what it is and why", 
   }
   for (const definition of GUIDE_STEPS) {
     assert.ok(definition.title.length > 0, `${definition.id} has a title`);
+    assert.ok(definition.when.length > 10, `${definition.id} says when to do it or skip it`);
     assert.ok(definition.what.length > 40, `${definition.id} says what it is`);
     assert.ok(definition.why.length > 20, `${definition.id} says why it matters`);
   }
+});
+
+test("only the two required steps can be 'do this now', in order: the brand, then the engine", () => {
+  assert.equal(currentStep(buildGuide(facts()))?.id, "brand");
+  assert.equal(currentStep(buildGuide(facts({ brandCount: 1 })))?.id, "engine");
+  for (const definition of GUIDE_STEPS.filter((item) => !item.required)) {
+    assert.match(definition.when, /Needed|Optional/, `${definition.id} says it can be skipped or when it is needed`);
+  }
+  assert.deepEqual(GUIDE_STEPS.map((item) => item.id), ["brand", "engine", "media", "storage", "sources", "publish"]);
 });

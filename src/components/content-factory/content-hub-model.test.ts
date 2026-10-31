@@ -56,7 +56,7 @@ test("every screen that moved into the content page opens its section, and Studi
   }
   assert.deepEqual(LEGACY_CONTENT_ROUTES.studio, { section: "create", preset: "studio" });
   assert.equal(LEGACY_CONTENT_ROUTES.accounts.section, "publish", "connected accounts are the Publish section");
-  assert.equal(LEGACY_CONTENT_ROUTES.factory.section, "ads", "the factory is the Ads section, which only admins see");
+  assert.equal(LEGACY_CONTENT_ROUTES.factory.section, "ads", "the factory opens the admin-only Batch section");
 });
 
 test("moving between sections keeps the chosen starting mode and drops the engine session", () => {
@@ -73,4 +73,13 @@ test("the search values the page accepts are kept, and anything else is dropped"
   assert.deepEqual(contentSearchOf({ section: "settings", preset: "", session: 7 }), {});
   assert.deepEqual(contentSearchOf({ preset: "x".repeat(41) }), {});
   assert.deepEqual(contentSearchOf({ session: "s".repeat(81) }), {});
+});
+
+test("admins open Batch by default, but a link to an engine session opens Create, and members always open Create", async () => {
+  const { defaultSectionFor } = await import("./content-hub-model.ts");
+  assert.equal(defaultSectionFor(true, {}), "ads");
+  assert.equal(defaultSectionFor(true, { session: "sess_1" }), "create", "an opportunity's brief links to its session in Create");
+  assert.equal(defaultSectionFor(true, { preset: "studio" }), "ads");
+  assert.equal(defaultSectionFor(false, {}), "create");
+  assert.equal(defaultSectionFor(false, { session: "sess_1" }), "create");
 });

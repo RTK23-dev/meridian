@@ -8,6 +8,17 @@ OpenRouter catalogue the testing runtime reads now lives in `src/lib/meridian/de
 `docs/planning/`. Added `docs/STATE_2026-10-28.md` (where Meridian stands, measured) and `docs/FIRST_TEST_RUN.md` (the first run, step by
 step). The engine's dry acceptance (`npm run engine:e1 -- --dry-run`) is red on the render's bill check, as before; see the runbook, step 6.
 
+Still a pre-release. Everything below is verified with fixtures and recorded data. No live provider run has been recorded (see docs/RELEASE_CHECKLIST.md).
+
+- **Batch is the admin's default Content section.** It opens on Video batches. The research-led Factory is an advanced tab.
+- **Create video variations.** One reusable draft (an uploaded reference video, attached Market research and a plain instruction) becomes 2 to 20 original draft videos in one batch, with the total budget split exactly in cents. Nothing starts until a person presses Start the batch. A repeated identical request returns the same batch.
+- **Pattern-finding.** The structures, openings, hooks and calls to action that repeat in a brand's analyzed research are shown with their counts, and can be used as the variations' angles. They are model labels, so they show what is common, not what works.
+- **Batch review.** Delivered videos appear as cards to approve or reject with a reason. A batch summary downloads as CSV. Nothing is shown as finished unless the engine reports it delivered.
+- **Setup.** Two required steps (a brand, then a decision engine). The other four steps are one list of closed rows, each saying when it is needed. The variations form offers only drafts that are ready.
+- **Format sample, demo mode and manifest.** The variations form shows a sample of the first video and needs the person's approval; the server refuses without it. Try a demo batch opens marked fixture data with no key or cost. A batch downloads as CSV and as a JSON manifest. Migration 0139 adds the `demo` flags.
+- **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
+- Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
+
 ## 0.1.0-beta.16 — prerelease
 
 OpenRouter decision routing with a live catalogue and a per-call ceiling, JEV image evidence, a stored-success freshness rule, disabled-by-default paths for every paid or side-effecting call that has no guard, a browser release acceptance, a guided setup, and a gate that requires every CI job. Tests use fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider call is recorded in this release.** Live provider behavior, real credentials, billing and publishing are unverified.

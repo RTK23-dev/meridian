@@ -134,6 +134,8 @@ try {
   if (seeded !== 0) throw new Error("Seeding the uncertain holds failed.");
   const seededFirstRun = await run(process.execPath, ["scripts/release-acceptance/seed-first-run.mjs", dataDir], { TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY });
   if (seededFirstRun !== 0) throw new Error("Seeding the first-run discovery runs failed.");
+  const seededDemo = await run(process.execPath, ["--experimental-strip-types", "scripts/release-acceptance/seed-demo-batch.mjs", dataDir], { TOKEN_ENCRYPTION_KEY: ACCEPTANCE_ENCRYPTION_KEY });
+  if (seededDemo !== 0) throw new Error("Seeding the demo batch failed.");
   startServer();
   await waitForServer();
   const acceptance = await run(process.execPath, ["scripts/release-acceptance/acceptance.mjs"], { ACCEPTANCE_OUT: out });

@@ -129,7 +129,7 @@ function MakeBriefButton({ organizationId, brandId, opportunityId, label }: { or
     setFailure(null);
     try {
       const made = await createContentFactoryBriefFromOpportunity({ data: { organizationId, brandId, opportunityId } });
-      await navigate({ to: "/content-factory", search: { session: made.sessionId } });
+      await navigate({ to: "/content-factory", search: { section: "create", session: made.sessionId } });
     } catch (error) {
       setFailure(errorText(error));
     } finally {

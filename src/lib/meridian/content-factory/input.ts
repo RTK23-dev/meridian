@@ -50,6 +50,13 @@ export function workspaceInput(input: unknown): { organizationId: string } {
   return { organizationId: idOf(fields(input).organizationId, "workspace") };
 }
 
+/** The sessions list: a workspace's newest, or one brand's when a brand is named. */
+export function sessionsListInput(input: unknown): { organizationId: string; brandId: string | null } {
+  const body = fields(input);
+  const brandId = typeof body.brandId === "string" && body.brandId.trim() !== "" ? idOf(body.brandId, "brand") : null;
+  return { organizationId: idOf(body.organizationId, "workspace"), brandId };
+}
+
 export function brandHookInput(input: unknown): { organizationId: string; brandId: string } {
   return { organizationId: idOf(fields(input).organizationId, "workspace"), brandId: idOf(fields(input).brandId, "brand") };
 }

@@ -6,7 +6,7 @@ import type { LedgerLine, RunRecord } from "./economics.ts";
 
 export async function readBrandRuns(sql: Sql, organizationId: string, brandId: string): Promise<RunRecord[]> {
   const rows = await sql<{ id: string; status: string }>`
-    select id, status from engine_requests where organization_id = ${organizationId} and brand_id = ${brandId}
+    select id, status from engine_requests where organization_id = ${organizationId} and brand_id = ${brandId} and format_id <> 'fmt_demo'
   `;
   return rows.map((row) => ({ requestId: row.id, delivered: row.status === "delivered" }));
 }
@@ -16,7 +16,7 @@ export async function readBrandLedger(sql: Sql, organizationId: string, brandId:
     select l.request_id, l.estimate_usd, l.actual_usd, l.settlement
     from engine_ledger l
     join engine_requests r on r.organization_id = l.organization_id and r.id = l.request_id
-    where l.organization_id = ${organizationId} and r.brand_id = ${brandId}
+    where l.organization_id = ${organizationId} and r.brand_id = ${brandId} and r.format_id <> 'fmt_demo'
   `;
   return rows.map((row) => ({
     requestId: row.request_id,

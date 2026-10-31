@@ -6,8 +6,8 @@ happened. Each step is a screen, and each screen says what it has and what it is
 ## The workflow
 
 Setup starts on the **Setup guide**: create a brand, then choose a decision engine and save its key. Everything after that is optional and
-sits behind "Open this step". Work happens on the **Content** page, one per brand, with these sections: Create, Ideas, Review, Library,
-Publish, Results and Ads.
+sits behind "Open this step". Work happens on the **Content** page, one per brand, with these sections: Create, Batch, Ideas, Review, Library,
+Publish and Results. Batch now opens on Video batches: an admin can choose a reusable draft with an uploaded reference video, attached Market evidence and plain instructions, create 2–20 original draft variations with a total budget split per video, then explicitly start the batch and inspect each item's real status/review/export. The research-led Factory remains an advanced tab. The live-provider and owner acceptance gates are still open.
 
 1. **Brand brain.** The facts the system must not contradict: positioning, audience, voice, rules and assets. Four fields are required
    for generation: positioning, target customers, tone and prohibited claims. Saving never replaces a field the person did not change.

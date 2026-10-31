@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 import { Plus } from "lucide-react";
 import { Button, Card, CardDescription, CardHeader, CardTitle, EmptyState, Input, PageHeader, ScreenSkeleton, SelectInput, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
@@ -25,14 +26,14 @@ import { SettingsPanel } from "./settings-panel";
 const RUN_POLL_MS = 4_000;
 
 const contentFactoryKeys = {
-  sessions: (organizationId: string) => ["content-factory", organizationId] as const,
+  sessions: (organizationId: string, brandId: string | null = null) => ["content-factory", organizationId, brandId ?? "all"] as const,
   session: (sessionId: string) => ["content-factory-session", sessionId] as const,
   run: (sessionId: string) => ["content-factory-run", sessionId] as const,
 };
 
 type BrandOption = { id: string; name: string };
 
-export function ContentFactoryScreen({ initialSessionId = null, embedded = false }: { initialSessionId?: string | null; embedded?: boolean } = {}) {
+export function ContentFactoryScreen({ initialSessionId = null, embedded = false, guided = false, initialBrandId = null }: { initialSessionId?: string | null; embedded?: boolean; guided?: boolean; initialBrandId?: string | null } = {}) {
   const { data: workspace } = useWorkspace();
   const { user, isPending } = useCurrentUserState();
   const organizationId = workspace?.active?.id ?? "";
@@ -40,14 +41,20 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   const canAdmin = hasRole(role, "admin");
   const brands: BrandOption[] = (workspace?.brands ?? []).map((brand) => ({ id: brand.id, name: brand.name }));
   const sessions = useQuery({
-    queryKey: userScopedQueryKey(user?.id, contentFactoryKeys.sessions(organizationId)),
-    queryFn: () => listContentFactorySessions({ data: { organizationId } }),
+    // The guided Batch view reads one brand's sessions, so a brand's older drafts and templates are not crowded out by other brands.
+    queryKey: userScopedQueryKey(user?.id, contentFactoryKeys.sessions(organizationId, guided ? initialBrandId : null)),
+    queryFn: () => listContentFactorySessions({ data: { organizationId, brandId: guided ? initialBrandId : null } }),
     enabled: !isPending && !!user && canAdmin && !!organizationId,
   });
   const [selectedId, setSelectedId] = useState<string | null>(initialSessionId);
   const [creating, setCreating] = useState(false);
-  const list = sessions.data ?? [];
-  const selected = list.find((item) => item.id === selectedId) ?? list[0] ?? null;
+  // In the guided Batch view a brand's batch shows only that brand's drafts, never another brand's session.
+  const listed = sessions.data ?? [];
+  const list = guided && initialBrandId ? listed.filter((item) => item.brandId === initialBrandId) : listed;
+  // The manual "pick draft videos" list leaves out a reusable template (videos were made from it) and the variations, which already sit in a batch.
+  const templateIds = new Set(listed.map((item) => item.sourceSessionId).filter((id): id is string => id !== null));
+  const manualDrafts = listed.filter((item) => item.status === "draft" && item.sourceSessionId === null && !templateIds.has(item.id));
+  const selected = list.find((item) => item.id === selectedId) ?? (initialBrandId ? list.find((item) => item.brandId === initialBrandId) : null) ?? list[0] ?? null;
 
   if (!workspace?.active) return null;
   // Inside the content page the page header belongs to the page, so the screen shows only its own New session button.
@@ -68,18 +75,31 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
   return (
     <div className="space-y-6">
       {header}
+      {guided ? (
+        <div className="space-y-2">
+          <h2 className="text-section font-semibold">Make and review video batches</h2>
+          <p className="max-w-3xl text-sm text-fg-muted">Research a topic, then make many original videos from what you find. No video is marked complete unless the engine records the output.</p>
+          <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg">
+            <li>Fill in your brand details{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/brain` as never} className="font-semibold underline underline-offset-4">Brand brain</Link></> : null}. Four fields are required.</li>
+            <li>Collect research{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/market` as never} className="font-semibold underline underline-offset-4">Market</Link></> : null}: paste public page URLs of examples that work.</li>
+            <li>Make one draft below. Upload your reference as a video file, attach the research, and write what the videos should be about. Uploading needs Google Drive to be connected for this workspace; if it is not, the draft says so next to the upload button.</li>
+            <li>Choose how many videos and one total budget under <strong>Create video variations</strong>. This makes the drafts and starts nothing.</li>
+            <li>Read the list, then press <strong>Start the batch</strong>. Each video shows its real state. Open a video to approve or export it.</li>
+          </ol>
+        </div>
+      ) : null}
       {embedded && newSession ? <div className="flex justify-end">{newSession}</div> : null}
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"
-          reason="A session is one chat about one video. Give it a title to start. A brand is optional, but files are kept in a brand's Google Drive folder, so a session needs a brand to take files."
-          action={<NewSessionForm organizationId={organizationId} brands={brands} onCreated={(created) => { setSelectedId(created.id); }} />}
+          reason={guided ? "Start with one video draft. Give it a title, keep it on the current brand, and attach a reference Reel plus Market research in the brief. Create more drafts in the same format, then group them into one batch." : "A session is one chat about one video. Give it a title to start. A brand is optional, but files are kept in a brand folder, so a session needs a brand to take files."}
+          action={<NewSessionForm organizationId={organizationId} brands={brands} initialBrandId={initialBrandId} onCreated={(created) => { setSelectedId(created.id); }} />}
         />
       ) : null}
       {list.length > 0 && creating ? (
         <Card>
-          <CardHeader><CardTitle>New session</CardTitle><CardDescription>One chat, then one video.</CardDescription></CardHeader>
-          <NewSessionForm organizationId={organizationId} brands={brands} onCreated={(created) => { setSelectedId(created.id); setCreating(false); }} />
+          <CardHeader><CardTitle>New video draft</CardTitle><CardDescription>One draft contains one video brief and its references.</CardDescription></CardHeader>
+          <NewSessionForm organizationId={organizationId} brands={brands} initialBrandId={initialBrandId} onCreated={(created) => { setSelectedId(created.id); setCreating(false); }} />
         </Card>
       ) : null}
       {selected ? (
@@ -92,32 +112,33 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           </div>
           {selected.brandId ? (
             <>
-              <HookHistoryCard
+              {!guided ? <HookHistoryCard
                 organizationId={organizationId}
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
-              <EconomicsCard
+              /> : null}
+              {!guided ? <EconomicsCard
                 organizationId={organizationId}
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
+              /> : null}
               <BatchCard
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-                drafts={list.filter((item) => item.brandId === selected.brandId && item.status === "draft").map((item) => ({ id: item.id, title: item.title }))}
+                drafts={manualDrafts.filter((item) => item.brandId === selected.brandId).map((item) => ({ id: item.id, title: item.title }))}
+                onBatchCreated={() => void sessions.refetch()}
+                onOpenSession={setSelectedId}
               />
-              <GovernanceCard
+              {!guided ? <GovernanceCard
                 brandId={selected.brandId}
                 brandName={brands.find((brand) => brand.id === selected.brandId)?.name ?? "this brand"}
-              />
+              /> : null}
             </>
           ) : null}
-          <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} />
+          <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} guided={guided} />
         </>
       ) : null}
-      {/* The planner is the advanced path. It stays one click away so the first view is the session, not every control at once. */}
-      <details className="group rounded-xl border border-border bg-surface">
+      {!guided ? <details className="group rounded-xl border border-border bg-surface">
         <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <span>Plan a run in detail (advanced)</span>
           <span className="text-xs font-normal text-fg-muted">Draw the steps and see the price before anything runs</span>
@@ -126,15 +147,15 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           <OrchestratorPlans />
           <OrchestratorModelPanel organizationId={organizationId} />
         </div>
-      </details>
+      </details> : null}
     </div>
   );
 }
 
-function NewSessionForm({ organizationId, brands, onCreated }: { organizationId: string; brands: BrandOption[]; onCreated: (session: SessionSummary) => void }) {
+function NewSessionForm({ organizationId, brands, initialBrandId = null, onCreated }: { organizationId: string; brands: BrandOption[]; initialBrandId?: string | null; onCreated: (session: SessionSummary) => void }) {
   const queryClient = useQueryClient();
   const [title, setTitle] = useState("");
-  const [brandId, setBrandId] = useState("");
+  const [brandId, setBrandId] = useState(initialBrandId ?? "");
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
@@ -164,7 +185,7 @@ function NewSessionForm({ organizationId, brands, onCreated }: { organizationId:
   );
 }
 
-function SessionView({ session, brands, userId }: { session: SessionSummary; brands: BrandOption[]; userId: string | null }) {
+function SessionView({ session, brands, userId, guided = false }: { session: SessionSummary; brands: BrandOption[]; userId: string | null; guided?: boolean }) {
   const queryClient = useQueryClient();
   const detail = useQuery({
     queryKey: userScopedQueryKey(userId, contentFactoryKeys.session(session.id)),
@@ -201,7 +222,7 @@ function SessionView({ session, brands, userId }: { session: SessionSummary; bra
         {data.status === "draft" ? <SettingsPanel session={data} brands={brands} hasFiles={hasFiles} onSaved={refresh} /> : null}
       </div>
       <div className="min-w-0">
-        <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} />
+        <RunPanel sessionId={data.id} run={run} lastRefusal={data.lastRefusal} onStarted={refresh} guided={guided} />
         {data.status === "started" ? <RepurposePanel sessionId={data.id} /> : null}
       </div>
     </div>

@@ -12,24 +12,24 @@ import { FlowBoard } from "./run-board";
 import { QualityScore } from "./quality-score";
 import { STATUS_LABELS } from "./status";
 
-export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void }) {
+export function RunPanel({ sessionId, run, lastRefusal, onStarted, guided = false }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void; guided?: boolean }) {
   if (run.isError && !run.data) return <PlainErrorState error={run.error} onRetry={() => void run.refetch()} />;
   if (!run.data) {
     return (
       <Card aria-busy="true">
-        <CardHeader><CardTitle>Decisions</CardTitle></CardHeader>
+        <CardHeader><CardTitle>{guided ? "Video status" : "Decisions"}</CardTitle></CardHeader>
         <div role="status" aria-label="Loading the run" className="space-y-3"><Skeleton /><Skeleton /><Skeleton variant="card" /></div>
       </Card>
     );
   }
   const view = run.data;
   if (view.stage === "missing") return <ErrorState message={view.reason} onRetry={() => void run.refetch()} />;
-  if (view.stage === "draft") return <DraftPanel sessionId={sessionId} view={view} lastRefusal={lastRefusal} onStarted={onStarted} />;
+  if (view.stage === "draft") return <DraftPanel sessionId={sessionId} view={view} lastRefusal={lastRefusal} onStarted={onStarted} guided={guided} />;
   const feed = view.feed;
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Decisions</CardTitle>
+        <CardTitle>{guided ? "Video status" : "Decisions"}</CardTitle>
         <CardDescription>
           {feed.headline} Request <code className="break-all">{feed.requestId}</code>.{feed.active ? " This view refreshes every few seconds while the engine works." : ""}
         </CardDescription>
@@ -55,7 +55,7 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted }: { sessionId
   );
 }
 
-function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: string; view: Extract<RunView, { stage: "draft" }>; lastRefusal: string[]; onStarted: () => void }) {
+function DraftPanel({ sessionId, view, lastRefusal, onStarted, guided = false }: { sessionId: string; view: Extract<RunView, { stage: "draft" }>; lastRefusal: string[]; onStarted: () => void; guided?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<{ problems: string[]; notConnected: string[] } | null>(null);
   const blocked = view.problems.length > 0 || view.notConnected.length > 0;
@@ -80,7 +80,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
     <Card>
       <CardHeader>
         <CardTitle>Decisions</CardTitle>
-        <CardDescription>When you ask for the video, the engine analyses the reference, writes the script (unless you sent script lines), plans the shots, picks the models, makes the voice and visuals, edits and renders. Each step appears here with its reason and its cost.</CardDescription>
+        <CardDescription>{guided ? "This is where the video status and any reason it cannot start appear. When the engine is connected, the finished video and review controls appear here." : "When you ask for the video, the engine analyses the reference, writes the script (unless you sent script lines), plans the shots, picks the models, makes the voice and visuals, edits and renders. Each step appears here with its reason and its cost."}</CardDescription>
       </CardHeader>
       <p className="mb-4 text-sm text-fg-muted">{view.referenceNote}</p>
       {view.problems.length > 0 ? (
@@ -102,7 +102,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted }: { sessionId: st
         </section>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-start-reason" : undefined} onClick={() => void start()}>Make the video</Button>
+        <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-start-reason" : undefined} onClick={() => void start()}>Make this video</Button>
         {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first."}</p> : null}
       </div>
       {refusal || lastRefusal.length > 0 ? (

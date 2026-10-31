@@ -63,3 +63,39 @@ test("a batch budget is a hard limit: an item that fits starts, one that would p
   assert.equal(unbounded.ok, false);
   assert.equal(unbounded.ok === false && unbounded.overBudget, false, "an unbounded item is refused without stopping the batch");
 });
+
+test("the batch summary lists each video's recorded state, escapes cells, and never turns a cell into a spreadsheet formula", async () => {
+  const { batchSummaryCsv, csvCell, stateCounts } = await import("./batch.ts");
+  assert.equal(csvCell(null), "");
+  assert.equal(csvCell('say "hi", now'), '"say ""hi"", now"');
+  assert.equal(csvCell("=HYPERLINK(1)"), "'=HYPERLINK(1)");
+  assert.equal(csvCell("-1+1"), "'-1+1");
+  const rows = [
+    { position: 0, title: "Video A", angle: "problem_first", state: "ready" as const, reason: "Ready to start.", budgetUsd: 3.34, attempts: 1 },
+    { position: 1, title: "=Evil", angle: null, state: "blocked" as const, reason: "Not started: no, budget", budgetUsd: null, attempts: 1 },
+  ];
+  const csv = batchSummaryCsv({ title: "Spring", budgetUsd: 10 }, rows);
+  const lines = csv.trimEnd().split("\r\n");
+  assert.equal(lines[0], "Batch,Position,Video,Angle,State,Reason,Budget (USD),Attempts");
+  assert.equal(lines[1], "Spring,1,Video A,problem_first,ready,Ready to start.,3.34,1");
+  assert.equal(lines[2], `Spring,2,'=Evil,,blocked,"Not started: no, budget",,1`);
+  assert.deepEqual(stateCounts(rows), [{ state: "ready", count: 1 }, { state: "blocked", count: 1 }]);
+  assert.doesNotMatch(csv, /delivered/, "nothing is marked delivered that the engine did not report");
+});
+
+test("the batch manifest lists ids and states, holds no file or link, and a demo batch says so", async () => {
+  const { batchManifestJson } = await import("./batch.ts");
+  const item = (position: number, over: Record<string, unknown> = {}) => ({
+    position, title: `Video ${position}`, angle: "problem_first", state: "delivered" as const, reason: "Delivered.", budgetUsd: 2, attempts: 1,
+    approval: "approved" as const, engineRequestId: `req_${position}`, manifestId: `man_${position}`, demo: false, ...over,
+  });
+  const real = JSON.parse(batchManifestJson({ id: "b1", title: "Spring", budgetUsd: 6, committedUsd: 2, demo: false, items: [item(0), item(1, { state: "ready", manifestId: null, approval: null })] }, "2026-10-30T00:00:00.000Z"));
+  assert.equal(real.kind, "meridian.batch-manifest");
+  assert.equal(real.demo, false);
+  assert.deepEqual(real.videos.map((video: { position: number }) => video.position), [1, 2]);
+  assert.equal(real.videos[1].manifestId, null);
+  assert.doesNotMatch(JSON.stringify(real), /https?:|\.mp4|signed/i, "no link and no file name");
+  const demo = JSON.parse(batchManifestJson({ id: "b2", title: "DEMO (fixture) batch", budgetUsd: 6, committedUsd: 0, demo: true, items: [item(0, { demo: true })] }, "2026-10-30T00:00:00.000Z"));
+  assert.equal(demo.demo, true);
+  assert.match(demo.notice, /^DEMO: fixture data\. No video was rendered/);
+});

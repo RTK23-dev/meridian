@@ -32,6 +32,40 @@ try {
     );
   }
   console.log(`Seeded ${runs.length} discovery runs for ${BRAND_NAME}.`);
+
+  // A reusable source draft for "Create video variations": an instruction, a reference video record and one Market research record. They are
+  // stored rows only. No file is uploaded, no page is read and no video is started.
+  const source = "cf_accept_source";
+  await db.query(`delete from content_factory_sessions where id = $1`, [source]);
+  await db.query(
+    `insert into content_factory_sessions (id, organization_id, brand_id, title, status, max_seconds, language, priority) values ($1, $2, $3, 'Acceptance reference draft', 'draft', 30, 'en', 'normal')`,
+    [source, brand.org, brand.id],
+  );
+  await db.query(`insert into content_factory_messages (id, organization_id, session_id, text) values ($1, $2, $3, $4)`, [`${source}_m1`, brand.org, source, "Make a calm product demo in the brand voice."]);
+  await db.query(`insert into content_factory_messages (id, organization_id, session_id, text) values ($1, $2, $3, '')`, [`${source}_m2`, brand.org, source]);
+  await db.query(
+    `insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, purpose, file_name, storage_key, media_type, byte_size, sha256)
+     values ($1, $2, $3, $4, 'file', 'reference_video', 'reference.mp4', 'acceptance/reference.mp4', 'video/mp4', 2048, $5)`,
+    [`${source}_ref`, brand.org, source, `${source}_m2`, "b".repeat(64)],
+  );
+  await db.query(
+    `insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
+     values ($1, $2, $3, $4, 'source', 'market', $5, 'acceptance_record', 'A competitor opens on the problem.')`,
+    [`${source}_mkt`, brand.org, source, `${source}_m2`, brand.id],
+  );
+  console.log("Seeded one reusable source draft.");
+
+  // Stored research patterns, as the pattern builder writes them from analyzed ads: model-labelled counts, INFERRED. No ad is stored or read.
+  const patterns = [["structure", "problem_solution", 4], ["structure", "listicle", 2], ["openingMove", "question", 3], ["cta", "learn_more", 3]];
+  for (const [dimension, value, samples] of patterns) {
+    await db.query(`delete from research_patterns where brand_id = $1 and dimension = $2 and value = $3`, [brand.id, dimension, value]);
+    await db.query(
+      `insert into research_patterns (id, organization_id, brand_id, scope, dimension, value, state, sample_count, corpus_size, prevalence, confidence, summary)
+       values ($1, $2, $3, 'brand', $4, $5, 'INFERRED', $6, 9, $7, 0.8, 'Model-labelled. Frequency only.')`,
+      [`pat_accept_${dimension}_${value}`, brand.org, brand.id, dimension, value, samples, samples / 9],
+    );
+  }
+  console.log(`Seeded ${patterns.length} research patterns.`);
 } finally {
   await db.close();
 }
