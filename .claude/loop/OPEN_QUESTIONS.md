@@ -175,7 +175,7 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
 - What each one is, in plain words:
   - `src/lib/meridian/intelligence/cluster.ts` groups creatives by similarity, with a threshold of 0.72. The product already groups them in `intelligence/whitespace.ts` (`clusterFingerprints`), which the opportunity engine and the studio loop use. This file is a second grouping of the same kind.
-  - `src/lib/meridian/jev/calibration.ts` computes Brier score, log loss and reliability. The product already computes these in `calibration/report.ts` and `learning/calibration-report.ts`, which the calibration screens use. This file is a second copy of that work.
+  - `src/lib/meridian/jev/calibration.ts` computes Brier score, log loss and reliability. The product already computes these in `learning/calibration-report.ts`, which the calibration screen uses. This file is a second copy of that work. (Correction, 17:04: `calibration/report.ts` has no product caller either. It is on the no-caller list in section 6A and is not the one the screen uses.)
 - Options: (a) delete `cluster.ts` and `jev/calibration.ts`, and keep the product versions. (b) Keep them only as test references, and say so in their headers. (c) Compare the two versions on recorded data first, and merge only if they disagree.
 - The loop recommends (a). Nothing is deleted until you decide.
 
@@ -204,3 +204,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Q11: answered: confirmed as decided by the loop.
 - Q12: answered: move the five secret reads behind one accessor. Done in `src/lib/meridian/credentials/secret-settings.ts`.
 - Q13: answered: keep the asset router whole, as decided.
+
+## Q24: Evidence freshness labels, and tracked reel links at publish
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one does, in plain words:
+  - `src/lib/meridian/quality/evidence.ts` labels a piece of evidence as fresh, aging (over 30 days) or stale (over 90 days), as a duplicate, or as weak (under 40 characters). It rewrites no text. No screen shows these labels yet. Showing them changes what a reader sees, not any score.
+  - `src/lib/meridian/shopify/reel-attribution.ts` gives each published reel a tracked link (UTM tags) and a unique 8-character keyword for direct messages, stored once per reel (migration 0092). Its own header says the publish step should call it, and that the publish files belong to another workstream. Wiring it changes the caption or bio link of every reel published from then on. That is an outward change, so it needs your approval.
+- Options: (a) show the freshness labels on the research evidence list. (b) Approve the tracked links in the publish step, for new reels first. (c) Keep both out for now.
+- The loop recommends (a), and (b) once you have confirmed the link text.
+
+## Owner answers, 2026-10-31

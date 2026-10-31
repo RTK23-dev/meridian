@@ -363,7 +363,7 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Task: R5, `intelligence/cluster.ts` and `jev/calibration.ts`. No code changed.
 - Checked: neither file has a caller outside tests. The grep first matched other calibration modules by name; the exact import check found none for `jev/calibration.ts`. So both are test-only, as the inventory says.
 - `cluster.ts` duplicates the grouping in `intelligence/whitespace.ts` (`clusterFingerprints`), which the opportunity engine and the studio loop use.
-- `jev/calibration.ts` duplicates the Brier, log-loss and reliability code in `calibration/report.ts` and `learning/calibration-report.ts`, which the calibration screens use.
+- `jev/calibration.ts` duplicates the Brier, log-loss and reliability code in `learning/calibration-report.ts`, which the calibration screen uses. Correction (17:04 wake): this entry first named `calibration/report.ts` as used by the screen. It is not: it has no product caller. Q22 is corrected to match.
 - Decided by the loop: none. Q22 is an owner decision and is open. The loop recommends deleting both.
 - Still open in R5: 25 modules. Next group: the `organic/*` modules.
 
@@ -376,3 +376,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `learning-bridge.ts` writes organic results into learning, which is scoring.
 - Decided by the loop: none. Q23 is an owner decision and is open.
 - Still open in R5: the rest of the list in section 6A. Next group: `quality/evidence.ts` and `shopify/reel-attribution.ts`.
+
+## 2026-10-31 17:04 UTC: round 2, R5 group: quality/evidence.ts and shopify/reel-attribution.ts, explained
+
+- Wake: the scheduled wake (`trig_01D9mu47Jiq8f3dAu5FKVa9G`) fired at 17:03:00Z. CI on `ef48614` (run 41220939864) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `quality/evidence.ts` and `shopify/reel-attribution.ts`. No code changed.
+- `quality/evidence.ts`: a 19-line labeller (freshness, duplicate, weak). No product file imports it.
+- `shopify/reel-attribution.ts`: derives a tracked link and a keyword per reel. Its header says publish should call it, and that the publish files belong to another workstream. Wiring it changes every reel's published link, an outward change.
+- Correction to the 16:43 and 17:03 entries: I first wrote that `calibration/report.ts` is used by the calibration screen. The exact import check shows no product file imports it. The screen uses `learning/calibration-report.ts`. Q22 is corrected.
+- Decided by the loop: none. Q24 is an owner decision and is open.
+- Still open in R5: the rest of the list in section 6A. Next group: `calibration/report.ts` (no caller, verified), and `discovery/provenance.ts`.
