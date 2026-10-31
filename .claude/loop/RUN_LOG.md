@@ -346,3 +346,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - `video/scene-frames.ts`: a pure four-frame selector by scene span. No product file imports it (checked). Image QC selects frames in `decisions/frames.ts`, so switching would change every visual judgment.
 - Decided by the loop: none. Q20 is an owner decision and is open. Both modules are recommended for deletion, which needs the owner.
 - Still open in R5: 29 modules. Next group: `flow/nodes.ts` and `grading/priors.ts`.
+
+## 2026-10-31 15:58 UTC: round 2, R5 group: flow/nodes.ts and grading/priors.ts, explained
+
+- Wake: the scheduled wake (`trig_017J8rMEpvqwMZvdHtVzNsqB`) fired at 15:56:38Z. CI on `f77acca` (run 41215626431) finished with all 13 check runs successful, CodeRabbit skipped. PR #85 is clean and still a draft.
+- Task: R5, `flow/nodes.ts` and `grading/priors.ts`. No code changed.
+- `flow/nodes.ts`: a node graph with the Factory's stages (source, grading, planning, production, gate, publish, organic publish). It has no caller, and using it would be a parallel pipeline.
+- `grading/priors.ts`: labelled seed values (hook retention, speech pace, niche view baselines), each marked as a seed, not a fitted weight. Scoring would need a calibration report first (AGENTS rule 9).
+- Finding: the speech-pace range differs. Here it is 140 to 185 words a minute. `production/voice-director.ts` uses 140 to 180 with a 160 baseline. The two should agree before either is used (Q21).
+- Decided by the loop: none. Q21 is an owner decision and is open.
+- Still open in R5: 27 modules. Next group: `intelligence/cluster.ts` and `jev/calibration.ts` (JEV logic: check AGENTS rule 6 before touching it).

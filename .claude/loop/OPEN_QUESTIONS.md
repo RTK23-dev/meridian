@@ -161,6 +161,15 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) delete `jobs/durable.ts`, since the Postgres worker is the queue. (b) Delete `video/scene-frames.ts`, and keep `decisions/frames.ts`. (c) Compare the two frame selectors on recorded videos first, and switch only if the scene-based one is better and you approve the change to scoring.
 - The loop recommends (a) and (b). Deletion needs your decision, so nothing is deleted.
 
+## Q21: The flow nodes and the seed priors: delete the flow, keep the priors as a registry?
+- Kind: owner decision. Status: `open`.
+- Blocks: nothing. Both modules stay as they are, with no caller, until you decide.
+- What each one is, in plain words:
+  - `src/lib/meridian/flow/nodes.ts` is a node graph for source, grading, planning, production, gate, publish and organic publish. Those are the stages of the Factory, which is the research-led pipeline the project already runs. Using this would build a parallel pipeline, which AGENTS forbids.
+  - `src/lib/meridian/grading/priors.ts` lists the heuristic starting values for hook retention, speech pace (140 to 185 words a minute) and niche view baselines. Each is labelled as a seed, not a fitted weight. Scoring would use them only once a calibration report supports them (AGENTS rule 9). Note: the voice module (`production/voice-director.ts`, Q19) uses 140 to 180 words a minute, so the two modules disagree on the upper bound.
+- Options: (a) delete `flow/nodes.ts`, since the Factory covers those stages. (b) Keep `priors.ts` as the labelled registry, and wire it into scoring only with a calibration report. (c) Reconcile the speech-pace range (140 to 180, or 140 to 185) before either module uses it.
+- The loop recommends (a), (b) and (c).
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
