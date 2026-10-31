@@ -459,3 +459,17 @@ Append-only. One entry per unit of work, newest at the bottom.
 - CI: one red run on d43b2cd and 5ba355e (the env-example test: the renderer read an environment variable). Fixed in acb0875 (a `--chromium` flag); 70f6fb0 was fully green. CI is running on 3dd919f.
 - Wake (20:34): `gates/slop-craft-gates.ts` checked with exact import patterns: no caller. Explained, not wired (Q32): four of its inputs have no measurement in Meridian, and its loudness and flicker checks duplicate the engine's post-render gate and integrity detector. The safe-zone check is the part worth keeping.
 - Still open in R5: `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`.
+
+## 2026-10-31 (later): round 3, cookbook presets, K0 to K15
+
+- K0: the four leftover R5 modules checked. `lib/progress/step-url.ts` is wired already. The rest are explained (Q33).
+- K1 to K4: one control schema (all 14 component declarations parse), the cookbook schema and validator (18 tests), the resolver (15 tests), and the 3D explainer as the first built-in cookbook (11 tests). The validator also allows a select to set a typed parameter through a lookup table.
+- K5: the four factory presets and the three start modes as cookbooks. Resolved through their cookbooks, the presets give back exactly the configuration `getPresetConfig` gives (12 tests).
+- K6, K7: migration `0140_cookbooks.sql` and the store (8 tests); the policy and the service with the server functions (14 tests). The rules follow D5.
+- K8: a brand's saved factory line is also its cookbook. Saving writes both; loading prefers the cookbook. The migration of old rows is idempotent (5 tests). The existing factory tests pass.
+- K9 to K11: eligibility from the inputs (9 tests); the selector's logic with the model call behind a port (8 tests); the confirmation step with its records (5 tests). The role's registration is a contract change beyond the approved field: parked (Q34).
+- K12: a resolved cookbook reaches the request through existing fields (4 tests).
+- K13 (partly): migration `0141` and the session record, written only while the run is a draft (3 tests). The engine-request copy and the export package remain.
+- K14: `engine-contracts@12`, approved by D1: the optional cookbook reference on the request, with the Bible note (6 tests; all 299 engine contract tests pass).
+- K15 (partly): `scriptwriter@3` reads the cookbook block; a run without a cookbook keeps version 2 (28 tests across the role, the prompt pins and the handler). The planner, critic and editor remain.
+- Typecheck and lint are clean for every changed file. Each unit was committed and pushed.
