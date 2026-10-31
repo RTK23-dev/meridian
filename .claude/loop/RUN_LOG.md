@@ -278,3 +278,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Q7: local upload already works in the Content Factory. Public links need the owner's decisions first (which kinds of link, the size limit and the host list). The run plan parks it.
 - Q6 and Q8: one new draft pull request, opened once the changes are settled. PR #85 is not changed.
 - The wake-up is armed for 12:29Z, and the watchdog is recreated for round 2.
+
+## 2026-10-31 13:13 UTC: round 2, R5 unit: the engine alerts on /engine-ops
+
+- Wake: the scheduled wake (`trig_01QHcc431rfUbRpqEp7UM2Ue`) fired at 13:13:01Z. PR #85 on `8365e1b`: all 14 check runs succeeded, `mergeable_state` clean, still a draft, no review threads.
+- Task: R5, the engine's alert modules (`src/engine/ops/alerts-sql.ts`, `alerts.ts`). They were test-only. Now `readWorkspaceAlerts` (`src/lib/meridian/engine-ops/service.ts`) reads them for one workspace, with the proposed thresholds, and `getEngineAlerts` (`actions.ts`) exposes it. Any member may read them, as with the stage metrics. `alertsInput` keeps only the workspace id (`input.ts`).
+- The page: a new "Alerts right now" section on `/engine-ops` (`src/components/ops/engine-ops-screen.tsx`). It shows severity, kind, the request or provider concerned and the reason in plain words, with the threshold version stated. An empty list says "No alerts right now". Nothing is invented: a workspace with no engine activity has no alerts (test).
+- Checks, run here: `NODE_ENV=development node --experimental-strip-types --test src/lib/meridian/engine-ops/service.test.ts`: 14 of 14 pass on PGlite (3 new: the input check, the dead-letter alert to each member and refusal to a stranger, and the empty workspace). `npx eslint` on the five changed files: exit 0. `npm run typecheck`: exit 0.
+- Not checked here: the page in a browser (AGENTS rule 11). The sandbox has no running dev server for it now. CI's `ui-smoke` job loads `/engine-ops` on the pushed commit, and the browser check of this section is still to do if CI does not cover it.
+- Decided by the loop: Q14, the proposed thresholds, shown as proposed.
+- Still open in R5: the engine's batch and concurrency modules (`ops/batch.ts`, `ops/concurrency.ts`), then the learning modules. R8 waits for R5 and R6.

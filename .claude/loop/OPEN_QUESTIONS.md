@@ -101,6 +101,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Reason: the three entry points share the closure's state, so splitting them apart would change how that state is shared, not only where the code sits.
 - What would change if you chose otherwise: split the closure into submit, settle and produce modules that receive the shared state as a parameter. That is a behaviour-sensitive refactor, and it needs its own unit, with the retry and ambiguity tests as the check.
 
+## Q14: The engine alerts use the proposed thresholds
+- Kind: technical ambiguity. Status: `decided by loop, confirm`.
+- Blocks: nothing. Part of R5 (the 45 test-only modules).
+- What the loop did: `ops/alerts-sql.ts` and `ops/alerts.ts` are shown on `/engine-ops` as "Alerts right now", for the workspace, to any member. They use `proposedOpsThresholds` (version `ops-proposed@1`, `src/engine/ops/thresholds.ts`). The page says the thresholds are proposed and not accepted.
+- Reason: Q3 asks for the modules to work. The thresholds are the only ones the engine has, and the file says the lead accepts them later. Showing them as proposed keeps the page honest.
+- What would change if you chose otherwise: accept the numbers (move them into `config/thresholds.ts`), change them, or hide the section until they are accepted.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

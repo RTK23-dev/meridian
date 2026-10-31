@@ -3,10 +3,26 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button, Card, EmptyState, Field, PageHeader } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { hasRole } from "@/lib/meridian/access";
-import { getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
+import { getEngineAlerts, getEngineStageMetrics, listEngineDeadJobs, replayEngineDeadJob } from "@/lib/meridian/engine-ops/actions";
+import type { OpsAlert } from "@/engine/ops/alerts.ts";
 import type { DeadJob } from "@/engine/ops/deadletter.ts";
 import type { StageMetricsReport } from "@/engine/ops/metrics-sql.ts";
 import { RefusalNotice } from "./ops-shared";
+
+type AlertsReport = { thresholds: string; alerts: OpsAlert[] };
+
+const ALERT_KIND_LABEL: Record<OpsAlert["kind"], string> = {
+  budget_overrun: "Budget overrun",
+  dead_letter_growth: "Dead letter",
+  breaker_open: "Provider circuit open",
+  stuck_request: "Stuck request",
+  gate_pass_drop: "Gate pass rate dropped",
+};
+
+const ALERT_SEVERITY_LABEL: Record<OpsAlert["severity"], string> = {
+  page: "Needs attention now",
+  warn: "Look today",
+};
 
 /** Milliseconds as seconds with one decimal place, or "not enough data" when the stage has no timing yet. */
 function seconds(ms: number | null): string {
@@ -32,6 +48,13 @@ export function EngineOpsScreen() {
     queryKey: ["engine-ops", "metrics", organizationId],
     enabled: organizationId !== "",
     queryFn: () => getEngineStageMetrics({ data: { organizationId } }),
+  });
+
+  // The alerts are read when the page opens. They use the thresholds the engine proposes, and the page says so.
+  const alerts = useQuery<AlertsReport>({
+    queryKey: ["engine-ops", "alerts", organizationId],
+    enabled: organizationId !== "",
+    queryFn: () => getEngineAlerts({ data: { organizationId } }),
   });
 
   // The dead jobs are read only for the request the person typed, so nothing is listed without a choice.
@@ -113,6 +136,36 @@ export function EngineOpsScreen() {
           </>
         ) : metrics.isPending ? (
           <p className="text-small text-fg-muted">Reading the metrics…</p>
+        ) : null}
+      </section>
+
+      <section aria-labelledby="alerts-heading" className="space-y-4">
+        <h2 id="alerts-heading" className="text-section font-semibold">Alerts right now</h2>
+        <p className="text-small text-fg-muted">
+          These use the thresholds the engine proposes{alerts.data ? ` (version ${alerts.data.thresholds})` : ""}. They have not been accepted yet,
+          so read each one as a guide, not a verdict.
+        </p>
+        {alerts.error ? <RefusalNotice error={alerts.error} /> : null}
+        {alerts.data && alerts.data.alerts.length === 0 ? (
+          <EmptyState title="No alerts right now" reason="Nothing in this workspace is over a proposed limit." />
+        ) : alerts.data ? (
+          <Card className="overflow-x-auto p-4">
+            <table className="w-full text-left text-small">
+              <thead><tr><th scope="col">Severity</th><th scope="col">What</th><th scope="col">About</th><th scope="col">Why</th></tr></thead>
+              <tbody>
+                {alerts.data.alerts.map((alert, index) => (
+                  <tr key={`${index}-${alert.kind}-${alert.subject}`}>
+                    <td>{ALERT_SEVERITY_LABEL[alert.severity]}</td>
+                    <td>{ALERT_KIND_LABEL[alert.kind]}</td>
+                    <td className="font-mono text-xs">{alert.subject}</td>
+                    <td>{alert.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Card>
+        ) : alerts.isPending ? (
+          <p className="text-small text-fg-muted">Reading the alerts…</p>
         ) : null}
       </section>
 

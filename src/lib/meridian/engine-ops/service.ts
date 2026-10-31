@@ -12,10 +12,13 @@
 
 import { hasRole, isRole, type Role } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
+import { evaluateAlerts, type OpsAlert } from "../../../engine/ops/alerts.ts";
+import { readAlertSnapshot } from "../../../engine/ops/alerts-sql.ts";
 import { listDeadJobs, type DeadJob } from "../../../engine/ops/deadletter.ts";
 import { readStageMetrics, type StageMetricsReport } from "../../../engine/ops/metrics-sql.ts";
 import { REPLAY_MINIMUM_ROLE, replayDeadJob, type ReplayOutcome } from "../../../engine/ops/replay.ts";
-import type { DeadJobsInput, ReplayInput, StageMetricsInput } from "./input.ts";
+import { OPS_PROPOSAL_VERSION, proposedOpsThresholds } from "../../../engine/ops/thresholds.ts";
+import type { AlertsInput, DeadJobsInput, ReplayInput, StageMetricsInput } from "./input.ts";
 
 export const WORKSPACE_REFUSAL = "This workspace is not available to you.";
 export const REQUEST_REFUSAL = "This request is not available to you.";
@@ -58,6 +61,18 @@ async function requestAccess(sql: Sql, userId: string, requestId: string, minimu
 export async function readWorkspaceStageMetrics(sql: Sql, userId: string, input: StageMetricsInput, now: Date = new Date()): Promise<StageMetricsReport> {
   await workspaceRole(sql, userId, input.organizationId, "viewer");
   return readStageMetrics(sql, { organizationIds: [input.organizationId] }, { now: () => now, since: input.since });
+}
+
+/** The alerts that hold for one workspace at `now`, with the thresholds the engine proposes (not yet accepted, so the version is returned too). Any member may read them. */
+export async function readWorkspaceAlerts(
+  sql: Sql,
+  userId: string,
+  input: AlertsInput,
+  now: Date = new Date(),
+): Promise<{ thresholds: typeof OPS_PROPOSAL_VERSION; alerts: OpsAlert[] }> {
+  await workspaceRole(sql, userId, input.organizationId, "viewer");
+  const snapshot = await readAlertSnapshot(sql, { organizationIds: [input.organizationId] }, now.getTime(), proposedOpsThresholds);
+  return { thresholds: OPS_PROPOSAL_VERSION, alerts: evaluateAlerts(snapshot, proposedOpsThresholds) };
 }
 
 /** The dead engine jobs of one request, oldest first. Any member of the request's workspace may read them. */
