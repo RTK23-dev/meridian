@@ -231,8 +231,8 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 ### Stage 2: storage and server functions
 
 #### K6: The cookbooks table and store
-- Status: `done` (migration `0140_cookbooks.sql`; `cookbooks/store.ts`: save the next version, latest visible version, list, fork and archive; 8 PGlite tests: immutable numbered versions, brand and workspace visibility, a kept brand, forks with parents, archived-but-resolvable, reserved built-in ids, another workspace not found, and a body validated on the way in).
-- Migration `migrations/0140_cookbooks.sql`. Columns: `id`, `organization_id`, `brand_id` (null when visible to the whole
+- Status: `done` (migration `0142_cookbooks.sql`; `cookbooks/store.ts`: save the next version, latest visible version, list, fork and archive; 8 PGlite tests: immutable numbered versions, brand and workspace visibility, a kept brand, forks with parents, archived-but-resolvable, reserved built-in ids, another workspace not found, and a body validated on the way in).
+- Migration `migrations/0142_cookbooks.sql`. Columns: `id`, `organization_id`, `brand_id` (null when visible to the whole
   workspace, D3), `cookbook_id`, `version`, `parent_cookbook_id`, `parent_version`, `body jsonb`, `content_hash`, `created_by`,
   `created_at`, `archived_at`. Unique on `(organization_id, cookbook_id, version)`.
 - `cookbooks/store.ts`: list (built-ins, plus this workspace's, plus this brand's), get (latest or a version), save the next version,

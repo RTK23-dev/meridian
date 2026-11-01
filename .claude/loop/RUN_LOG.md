@@ -761,3 +761,9 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks on the merged tree: `npm run typecheck` exits 0. Eslint on the four files exits 0. `node --check` on the acceptance script passes. The compose suite passes 299 of 299. The release acceptance run `ra-run13` passes 34 of 34 (exit 0), including H1, H2, G17 and G18.
 - Not checked: the full test suite on the merged tree (CI runs it). No live provider call was made.
 - The 11:30 wake (trig_01KijjKtFfp2K3Jhw5HgkUTp) is still armed. It checks CI on the merge commit.
+
+## 2026-11-01 11:2x UTC: fix: the cookbooks migration renumbered to 0142
+
+- Wake (11:19): CI on the merge commit a70be14 failed in `tests (shard 2)`. The failing test is `scripts/migration-plan.test.mjs`, "the migration numbers have exactly the known gaps and duplicates": two files share the number 0140, `0140_content_factory_style_preset.sql` (from main, PR #86) and this branch's `0140_cookbooks.sql`. The test rejects a duplicate that is not on its known list.
+- Fix: renamed `migrations/0140_cookbooks.sql` to `migrations/0142_cookbooks.sql` (the next free number on main), and changed its header to 0142. Its file is not on main and no environment has applied it, so the rename changes no applied migration. It has no dependency on `0141`, which is this branch's K13 column migration, so the order is safe. The planning and loop references to the file name are updated. The known-duplicates list is unchanged: the fix removes the duplicate rather than accepting it.
+- Checks: `node --test scripts/migration-plan.test.mjs` passes 8 of 8. The cookbook and content-factory suites pass 438 of 438 across 54 files (they apply the migrations in order against the test database). Not run: CI's postgres job, which runs on the new head.

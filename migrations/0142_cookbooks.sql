@@ -1,4 +1,4 @@
--- Migration 0140: custom cookbooks (round 3, K6).
+-- Migration 0142: custom cookbooks (round 3, K6).
 --
 -- A cookbook is a versioned recipe for one kind of video (docs/planning/COOKBOOK_PRESETS_PLAN.md). Built-in cookbooks live in code. A
 -- workspace's own cookbooks live here, one row per version. Rows are immutable: an edit writes the next version, a fork writes a new
