@@ -346,6 +346,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
   - `render/splice-run.ts`: splices rendered windows into a master. Its window render returns not connected, so it cannot run until a render is connected. Wiring it changes the engine's render path (the render adapters, owned by the engine work).
 - The loop does not wire `connection-state.ts`: relabelling the integration cards is a product choice, and the cards are built to show the server's phase exactly. The owner decides whether the cards should use these labels, or whether the module is deleted. The other three stay explained until the owner decides the Create flow and the render path.
 
+## Q43: The example run of the orchestrator: build its replay screen, or delete it?
+- Kind: owner decision (what the product shows). Status: `open`.
+- Context: `src/engine/orchestrator/example.ts` is a recorded example run of the sample plan, for a screen to replay. Every handler is a stand-in: it calls no provider, and its costs are the plan's estimates, not charges. No screen replays it, and no product code imports it. It is the last module on the 6A list (section 6A of `docs/STATE_2026-10-28.md`) without a recorded outcome.
+- What each option changes: (a) a replay screen, shown with the stand-in labels, so people can see how a run's events draw; (b) delete the file, with its test, since nothing else needs it.
+- Blocks: nothing else.
+- The loop recommends (b) unless the owner wants the replay screen: a screen that replays stand-ins can be read as a real run, which is the risk here.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

@@ -845,3 +845,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - No code changed in this wake: records only (OPEN_QUESTIONS, RUN_PLAN, STATE, RUN_LOG).
 - Still open in R5: reconciling the 45 test-only modules against `docs/STATE_2026-10-28.md` section 6A, which is the next unit.
 - Next wake armed for 14:33 UTC (trig_011CxrbnXDQmdVZgJDcsyjCm).
+
+## 2026-11-01 14:35 UTC: wake: R5 reconciled against section 6A
+
+- Wake (14:33): CI on the head 85fea07 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Reconciled the 45 test-only modules in section 6A of `docs/STATE_2026-10-28.md` against the record. Each module has an outcome: wired (R4 export package and disclosure gate, discovery provenance, the engine's alerts, batch planner and concurrency proposals, `url` step-state's `step-url`), explained with its Q (Q14 to Q29, Q32, Q42), or kept because a test uses it (`a11y/contrast`, `factory/benchmark-harness`), except three.
+- The three without an outcome: `lib/progress/draft-store.ts` and `debounce.ts` (test-only; K17's settings panel is where they are wired, so K17 now says so), and `orchestrator/example.ts` (a recorded example run for a replay screen that does not exist; recorded as Q43, with the loop's recommendation to delete it unless the owner wants the screen).
+- Records only: RUN_PLAN (R5 and K17), OPEN_QUESTIONS (Q43), STATE and RUN_LOG. No code changed.
+- Next unit: K17, the cookbook settings panel, which wires `draft-store` and `debounce`.
+- Next wake armed for 14:55 UTC (trig_012r31PW8GrJhe5sQ2Cdrn5k).
