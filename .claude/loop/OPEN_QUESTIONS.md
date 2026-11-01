@@ -342,9 +342,9 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Context: the owner's answer to Q3 is to make each of the 45 test-only modules work, or to say why one cannot. Four are explained here (13:48).
   - `lib/progress/step-state.ts`: used only by `lib/create/steps.ts`, which no screen imports. Wiring it means the Create page's steps (brief, plan, review) show what the state says, which changes that page's flow.
   - `lib/create/steps.ts`: the Create steps. No screen imports it; the step bar component is built with its own steps.
-  - `components/settings/connection-state.ts`: the label and action of a connection row. The settings screen builds its own "NOT CONNECTED" strings inline (`drive-connection.tsx`). Wiring replaces those strings with this function, a small change that needs a browser check.
+  - `components/settings/connection-state.ts`: the label, tone and action of a connection row (Connected, NOT CONNECTED, Error, Checking). It is not wired, on purpose of the design: the integration cards show the server's own phase as the badge, because `integration-model.ts` says the badge "says exactly what it reports". This module would relabel the same statuses, so wiring it changes what the owner sees.
   - `render/splice-run.ts`: splices rendered windows into a master. Its window render returns not connected, so it cannot run until a render is connected. Wiring it changes the engine's render path (the render adapters, owned by the engine work).
-- The loop recommends wiring `connection-state.ts` next (it only tidies labels that already exist), and explaining the other three until the owner decides the Create flow and the render path.
+- The loop does not wire `connection-state.ts`: relabelling the integration cards is a product choice, and the cards are built to show the server's phase exactly. The owner decides whether the cards should use these labels, or whether the module is deleted. The other three stay explained until the owner decides the Create flow and the render path.
 
 ## Owner answers, 2026-10-31
 

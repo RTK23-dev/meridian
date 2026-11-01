@@ -836,3 +836,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: the results and recorded-runs tests passed 8 of 8. `npx eslint` on the four changed files exits 0. `npm run typecheck` exits 0.
 - Not checked: the export file, since no measures are stored to export. No live provider call was made.
 - Next wake armed for 14:09 UTC (trig_01XatwGoKN9BCwg7jxLmzjdA).
+
+## 2026-11-01 14:12 UTC: wake: connection-state is not wired (a product choice)
+
+- Wake (14:09): CI on the head 7b5fd2c was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Checked the planned wiring of `components/settings/connection-state.ts` before changing anything. The earlier note said the settings screen builds its own "NOT CONNECTED" strings inline in `drive-connection.tsx`, but that badge belongs to the single Drive status card, not to connection rows. The integration cards (`provider-card.tsx`, built from `integration-model.ts`) show the server's own phase as the badge on purpose ("the badge says exactly what it reports"). `connectionState` would relabel the same statuses as Connected, NOT CONNECTED, Error or Checking. So wiring it would change what the owner sees, which is a product decision.
+- Decision: not wired. Recorded in Q42, with the earlier note corrected. RUN_PLAN's R5 status is updated to match.
+- No code changed in this wake: records only (OPEN_QUESTIONS, RUN_PLAN, STATE, RUN_LOG).
+- Still open in R5: reconciling the 45 test-only modules against `docs/STATE_2026-10-28.md` section 6A, which is the next unit.
+- Next wake armed for 14:33 UTC (trig_011CxrbnXDQmdVZgJDcsyjCm).
