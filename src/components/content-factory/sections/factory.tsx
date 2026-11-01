@@ -388,6 +388,18 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                 </li>
               ))}
             </ol>
+            <div className="space-y-1 text-sm">
+              <p className="font-semibold">Stage totals, read only</p>
+              <p className="text-muted">
+                From the last {board.stageCosts.rows} cost rows. {board.stageCosts.unpricedRows} row(s) have no price and are not in the totals.
+                {board.stageCosts.variants > 0 && board.stageCosts.costPerVariantCents !== null ? ` About $${(board.stageCosts.costPerVariantCents / 100).toFixed(2)} per variant.` : " No cost per variant: no variant is counted."}
+              </p>
+              <ul>
+                {board.stageCosts.stages.map((stage) => (
+                  <li key={stage.stage}>{stage.stage}: ${(stage.cents / 100).toFixed(2)} over {stage.seconds} s</li>
+                ))}
+              </ul>
+            </div>
             {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
