@@ -119,3 +119,13 @@ The brand's analyzed ads already carry model labels for structure, opening move,
 - **Demo mode.** **Try a demo batch** opens a batch of fixture videos (two "delivered", one draft) with no key, no provider and no cost. Every row is marked demo (`demo = true`), titled "DEMO (fixture)", and the page, the CSV and the manifest all say so. No video file exists for them. Hook history and economics leave demo rows out. A brand has one demo batch.
 - **Export.** A batch downloads as a CSV summary and as a JSON manifest (`meridian.batch-manifest`): each video's position, title, angle, state, reason, approval, budget, attempts, engine request id and delivered manifest id. It holds no video file and no link, because a delivered file is read from its own video screen. Finished MP4s and captions are therefore not bundled here yet: that needs a live run to verify.
 
+## Video style presets
+
+The variations form has a **Video style** choice and a **Browse the style library** list (Product promo, Explainer, Talking head, UGC style, Fast-cut short, Cinematic story, Motion graphics, Tips list). The wording is Meridian's own.
+
+- **What a preset does.** It adds one style instruction to each draft's brief and records the preset id on the draft (`style_preset`). It tells the planner what kind of video to brief. It does **not** set a render option and does not change the engine's style kits, which are an engine contract. Every style instruction ends with a line that it steers the brief only and forbids a real person's likeness and any invented testimonial, result or claim.
+- **Three ways to choose.** One preset for every video; **Auto**, which maps the structure that repeats most in the brand's research to a preset by a fixed table (problem solution → Explainer, listicle → Tips list, story payoff → Cinematic story, testimonial → UGC style, before/after, demonstration and offer-led → Product promo) and shows why, or mixes every style when there is no repeating structure; or the **Super preset**, which gives each video the next style in the library, so a batch of eight tries eight styles.
+- **Auto is a rule table, not a model call.** The same research always gives the same preset. Nothing is judged by a model here.
+- **Recorded.** The CSV has a Style column and the manifest a `style` field. No style chosen means no style instruction and a null style.
+- **Not verified.** Whether a preset makes the engine's output look the way its description says needs a live run and someone looking at the videos.
+

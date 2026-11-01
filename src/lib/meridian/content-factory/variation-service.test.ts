@@ -302,3 +302,29 @@ test("without the person's approval of the sample, nothing is created", async ()
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: false }), /approve the format first/);
   assert.deepEqual(await counts(), before);
 });
+
+test("a style preset adds a style instruction to each draft and is recorded; Auto follows the research and Super mixes; an unknown style is refused", async () => {
+  const { STYLE_PRESETS } = await import("./style-presets.ts");
+  const id = await source({ id: "s_style" });
+  const before = await counts();
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true, stylePreset: "cinematic" }), /Choose a style/);
+  assert.deepEqual(await counts(), before, "an unknown style writes nothing");
+
+  const one = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, stylePreset: "explainer" });
+  assert.deepEqual(one.items.map((item) => item.style), ["explainer", "explainer"]);
+  const [text] = await db.sql<{ text: string }>`select text from content_factory_messages where session_id = ${one.items[0]?.sessionId ?? ""} and text like 'Style preset:%'`;
+  assert.match(text?.text ?? "", /^Style preset: Explainer\./);
+  assert.match(text?.text ?? "", /no real person's likeness/);
+
+  const none = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 5, approvedSample: true });
+  assert.deepEqual(none.items.map((item) => item.style), [null, null]);
+  const [noStyleMessages] = await db.sql<{ n: string }>`select count(*)::text as n from content_factory_messages where session_id = ${none.items[0]?.sessionId ?? ""} and text like 'Style preset:%'`;
+  assert.equal(noStyleMessages?.n, "0", "no style chosen, no style instruction");
+
+  const mix = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 9, approvedSample: true, stylePreset: "super" });
+  assert.deepEqual(mix.items.map((item) => item.style), STYLE_PRESETS.slice(0, 3).map((preset) => preset.id));
+
+  // Auto with research: the most common structure maps to a fixed preset. No research format leaves it a mix.
+  const autoNoResearch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 6, approvedSample: true, stylePreset: "auto" });
+  assert.notEqual(new Set(autoNoResearch.items.map((item) => item.style)).size, 0);
+});

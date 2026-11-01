@@ -36,6 +36,8 @@ export type BatchItemSummary = {
   engineRequestId: string | null;
   manifestId: string | null;
   demo: boolean;
+  /** The style preset the video was briefed with, or null. */
+  style: string | null;
 };
 
 export type BatchSummary = {
@@ -65,6 +67,7 @@ type ItemRow = {
   engine_request_id: string | null;
   variation_angle: string | null;
   demo: boolean;
+  style_preset: string | null;
 };
 
 function refusalsOf(value: unknown): string[] {
@@ -90,7 +93,7 @@ async function loadBatch(sql: Sql, batchId: string): Promise<{ batch: BatchRow; 
   const batch = batches[0];
   if (!batch) throw new Error("That batch is not found.");
   const items = await sql<ItemRow>`
-    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle, s.demo
+    select i.session_id, i.position, s.title, s.status as session_status, s.revision, s.last_refusal, s.budget_usd, s.engine_request_id, s.variation_angle, s.demo, s.style_preset
     from content_factory_batch_items i
     join content_factory_sessions s on s.id = i.session_id
     where i.batch_id = ${batchId}
@@ -140,6 +143,7 @@ async function summarize(sql: Sql, batch: BatchRow, items: ItemRow[]): Promise<B
       engineRequestId: item.engine_request_id,
       manifestId: engine?.status === "delivered" ? engine.manifestId : null,
       demo: item.demo === true,
+      style: item.style_preset,
       approval: view.state === "delivered" && engine?.status === "delivered" && item.engine_request_id !== null
         ? approvalStateFor(approvals.get(item.session_id) ?? [], item.engine_request_id, engine.manifestId).status
         : null,

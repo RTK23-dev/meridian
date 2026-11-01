@@ -76,9 +76,9 @@ test("the batch summary lists each video's recorded state, escapes cells, and ne
   ];
   const csv = batchSummaryCsv({ title: "Spring", budgetUsd: 10 }, rows);
   const lines = csv.trimEnd().split("\r\n");
-  assert.equal(lines[0], "Batch,Position,Video,Angle,State,Reason,Budget (USD),Attempts");
-  assert.equal(lines[1], "Spring,1,Video A,problem_first,ready,Ready to start.,3.34,1");
-  assert.equal(lines[2], `Spring,2,'=Evil,,blocked,"Not started: no, budget",,1`);
+  assert.equal(lines[0], "Batch,Position,Video,Angle,State,Reason,Budget (USD),Attempts,Style");
+  assert.equal(lines[1], "Spring,1,Video A,problem_first,ready,Ready to start.,3.34,1,");
+  assert.equal(lines[2], `Spring,2,'=Evil,,blocked,"Not started: no, budget",,1,`);
   assert.deepEqual(stateCounts(rows), [{ state: "ready", count: 1 }, { state: "blocked", count: 1 }]);
   assert.doesNotMatch(csv, /delivered/, "nothing is marked delivered that the engine did not report");
 });

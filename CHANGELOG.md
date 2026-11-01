@@ -10,6 +10,7 @@ Still a pre-release. Everything below is verified with fixtures and recorded dat
 - **Batch review.** Delivered videos appear as cards to approve or reject with a reason. A batch summary downloads as CSV. Nothing is shown as finished unless the engine reports it delivered.
 - **Setup.** Two required steps (a brand, then a decision engine). The other four steps are one list of closed rows, each saying when it is needed. The variations form offers only drafts that are ready.
 - **Format sample, demo mode and manifest.** The variations form shows a sample of the first video and needs the person's approval; the server refuses without it. Try a demo batch opens marked fixture data with no key or cost. A batch downloads as CSV and as a JSON manifest. Migration 0139 adds the `demo` flags.
+- **Video style presets.** A library of eight styles, "Let Meridian decide (Auto)" from the research structure, and a Super preset that mixes styles across a batch. A preset steers the brief only and is recorded in the CSV and manifest. Migration 0140 adds `style_preset`.
 - **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
 - Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
 

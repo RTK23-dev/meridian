@@ -7,6 +7,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentBatch, createContentVariations, getContentBatch, createContentDemoBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import { batchManifestJson, batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
+import { autoReason, presetsForBatch, STYLE_AUTO, STYLE_PRESETS, STYLE_SUPER, styleInstruction } from "@/lib/meridian/content-factory/style-presets";
 import { describeFormat, researchAngles } from "@/lib/meridian/content-factory/research-format";
 import { angleInstruction, DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget, VARIATION_ANGLES } from "@/lib/meridian/content-factory/variations";
 
@@ -67,6 +68,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const [variationError, setVariationError] = useState<string | null>(null);
   const [useResearch, setUseResearch] = useState(false);
   const [approvedSample, setApprovedSample] = useState(false);
+  const [style, setStyle] = useState("none");
   const queryClient = useQueryClient();
 
   const batches = useQuery({
@@ -123,6 +125,9 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
 
   // The first video as it would be made: its angle, its share of the budget and the exact instruction it is given. Nothing is generated.
   const sampleAngle = (useResearch && format.data?.ok ? researchAngles(format.data.format, Math.max(1, variationCount || 1))[0] : undefined) ?? VARIATION_ANGLES[0];
+  // The style of the first video, as it would be briefed. Auto reads the structure that repeats most in the research, with a reason shown.
+  const topStructure = format.data?.ok ? (format.data.format.structures[0]?.value ?? null) : null;
+  const sampleStyle = style === "none" ? null : (presetsForBatch(style, Math.max(1, variationCount || 1), topStructure)?.[0] ?? null);
   const sampleShare = variationSplit.ok ? (variationSplit.cents[0] ?? 0) / 100 : null;
 
   async function vary() {
@@ -131,10 +136,11 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
     setNotice(null);
     setItemError(null);
     try {
-      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample } });
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample, stylePreset: style } });
       setSelectedId(made.id);
       setTotal("");
       setApprovedSample(false);
+      setStyle("none");
       await batches.refetch();
       void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
       onBatchCreated?.();
@@ -148,7 +154,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
 
   function downloadSummary() {
     if (!detail.data) return;
-    const csv = batchSummaryCsv(detail.data, detail.data.items.map((item) => ({ position: item.position, title: item.title, angle: item.angle, state: item.state, reason: item.reason, budgetUsd: item.budgetUsd, attempts: item.attempts })));
+    const csv = batchSummaryCsv(detail.data, detail.data.items.map((item) => ({ position: item.position, title: item.title, angle: item.angle, state: item.state, reason: item.reason, budgetUsd: item.budgetUsd, attempts: item.attempts, style: item.style })));
     const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
@@ -304,6 +310,24 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                 value={total}
                 onChange={(event) => setTotal(event.target.value)}
               />
+              <Field label="Video style" hint="Optional. A style tells the planner what kind of video to brief. It does not change how the engine renders.">
+                <SelectInput value={style} onChange={(event) => setStyle(event.target.value)}>
+                  <option value="none">No style preset</option>
+                  <option value={STYLE_AUTO}>Let Meridian decide (Auto)</option>
+                  <option value={STYLE_SUPER}>Super preset: a different style for each video</option>
+                  {STYLE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                </SelectInput>
+              </Field>
+              {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure)}</p> : null}
+              {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style in the library, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1))} {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
+              <details className="rounded-md border border-border p-3 text-sm">
+                <summary className="cursor-pointer font-semibold">Browse the style library</summary>
+                <ul className="mt-2 space-y-2">
+                  {STYLE_PRESETS.map((preset) => (
+                    <li key={preset.id}><span className="font-semibold">{preset.label}</span>: {preset.bestFor} <span className="text-fg-muted">{preset.look}</span></li>
+                  ))}
+                </ul>
+              </details>
               {chosenSource !== "" ? (
                 <div className="space-y-2 rounded-md border border-border p-3 text-sm" aria-label="Sample of the first video">
                   <p className="font-semibold">Sample of the first video</p>
@@ -312,7 +336,8 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                     <dt className="text-fg-muted">Angle</dt><dd className="font-semibold">{sampleAngle?.label}</dd>
                     <dt className="text-fg-muted">Budget</dt><dd>{sampleShare === null ? "Enter a total budget to see each video's share." : `${money.format(sampleShare)} of the total`}</dd>
                     <dt className="text-fg-muted">Copied from the source</dt><dd>Its plain instructions, its Market research records and its reference video file (shared, not copied).</dd>
-                    <dt className="text-fg-muted">Added instruction</dt><dd className="[overflow-wrap:anywhere]">{sampleAngle ? angleInstruction(sampleAngle) : ""}</dd>
+                    <dt className="text-fg-muted">Style</dt><dd>{sampleStyle ? sampleStyle.label : "No style preset"}</dd>
+                    <dt className="text-fg-muted">Added instruction</dt><dd className="[overflow-wrap:anywhere]">{sampleAngle ? angleInstruction(sampleAngle) : ""}{sampleStyle ? ` ${styleInstruction(sampleStyle)}` : ""}</dd>
                   </dl>
                   <label className="inline-flex min-h-11 items-center gap-2 font-semibold">
                     <input type="checkbox" checked={approvedSample} onChange={(event) => setApprovedSample(event.target.checked)} />
