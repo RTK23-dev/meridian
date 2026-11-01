@@ -8,13 +8,13 @@
 // or generated scenes (a paid shot) turns agent mode off, and the badge and the estimate say so.
 
 import { threeDDataExplainer } from "../../../../engine/presets/three-d-data-explainer.ts";
-import type { StylePreset } from "../../../../engine/presets/style-presets.ts";
+import type { StylePackage } from "../../../../engine/presets/style-packages.ts";
 import type { Cookbook } from "../schema.ts";
 
 export const THREE_D_DATA_EXPLAINER_ID = "ck_3d_data_explainer";
 
 /** The cookbook, built from a style preset. Pass another preset of the same shape to build a cookbook from it. */
-export function buildThreeDDataExplainerCookbook(preset: StylePreset = threeDDataExplainer): Cookbook {
+export function buildThreeDDataExplainerCookbook(preset: StylePackage = threeDDataExplainer): Cookbook {
   const measured = preset.grammar.measured as {
     cutsMs: number[];
     shotLengthMs: { p50: number };

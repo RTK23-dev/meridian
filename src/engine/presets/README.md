@@ -6,8 +6,8 @@ so it needs no version bump. Whether presets get fields of their own is the owne
 
 ## Files
 
-- `style-presets.ts`: the `StylePreset` shape, the registry (`STYLE_PRESETS`), `stylePreset(id)` (an unknown id is refused),
-  `presetProblems(preset)` (contract and consistency checks) and `installStylePreset(sql, { organizationId, presetId })`, which writes
+- `style-packages.ts`: the `StylePackage` shape, the registry (`STYLE_PACKAGES`), `stylePackage(id)` (an unknown id is refused),
+  `packageProblems(preset)` (contract and consistency checks) and `installStylePackage(sql, { organizationId, packageId })`, which writes
   the preset's style kit into one workspace's kit store (`engine_kits`, through `jobs/kit-store.ts`).
 - `three-d-data-explainer.ts`: the first preset, the 3D satellite data explainer. Its run report is
   `docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md`.

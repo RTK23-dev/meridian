@@ -10,7 +10,7 @@
 // The genes, not the content: no footage, voice, music or script line of the reference is stored here (CLAUDE.md rule 6).
 
 import type { StyleKit } from "../contracts/index.ts";
-import type { StylePreset } from "./style-presets.ts";
+import type { StylePackage } from "./style-packages.ts";
 
 /** The reference's SHA-256 (hex). The Content Factory names a reference's format `ref_` plus its first 24 characters. */
 export const REFERENCE_SHA256 = "98053a5a224b3833a3ed4421818f8c6f6d623cac99e6c017585ccc6bb1706377";
@@ -46,8 +46,8 @@ export const threeDDataExplainerKit: StyleKit = {
   stickers: [],
 };
 
-export const threeDDataExplainer: StylePreset = {
-  presetId: "3d_data_explainer",
+export const threeDDataExplainer: StylePackage = {
+  packageId: "3d_data_explainer",
   version: 2,
   label: "3D satellite data explainer",
   summary:

@@ -7,7 +7,7 @@ import { geneIdSchema, styleKitSchema } from "../contracts/index.ts";
 import { styleKitCss } from "../compose/styleKit.ts";
 import { readKit } from "../jobs/kit-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { installStylePreset, presetProblems, STYLE_PRESETS, stylePreset, type StylePreset } from "./style-presets.ts";
+import { installStylePackage, packageProblems, STYLE_PACKAGES, stylePackage, type StylePackage } from "./style-packages.ts";
 import { REFERENCE_SHA256, threeDDataExplainer } from "./three-d-data-explainer.ts";
 
 const WS = "ws_style_presets";
@@ -25,10 +25,10 @@ after(async () => {
 });
 
 test("every preset passes its contracts, with unique ids", () => {
-  const ids = STYLE_PRESETS.map((preset) => preset.presetId);
+  const ids = STYLE_PACKAGES.map((preset) => preset.packageId);
   assert.equal(new Set(ids).size, ids.length);
-  for (const preset of STYLE_PRESETS) {
-    assert.deepEqual(presetProblems(preset), [], preset.presetId);
+  for (const preset of STYLE_PACKAGES) {
+    assert.deepEqual(packageProblems(preset), [], preset.packageId);
     assert.ok(styleKitSchema.safeParse(preset.styleKit).success);
     for (const gene of preset.genes.keep) assert.ok(geneIdSchema.safeParse(gene).success, gene);
   }
@@ -67,31 +67,31 @@ test("the measured grammar is consistent and nothing unknown is filled in", () =
 test("the layout names every measured zoom jump, and a layout that misses one has a problem", () => {
   assert.ok(threeDDataExplainer.layout !== undefined);
   const layout = threeDDataExplainer.layout;
-  const broken: StylePreset = { ...threeDDataExplainer, layout: { ...layout, zoomJumpKinds: layout.zoomJumpKinds.slice(1) } };
-  assert.ok(presetProblems(broken).some((problem) => problem.includes("zoomJumpKinds")));
-  const outside: StylePreset = { ...threeDDataExplainer, layout: { ...layout, captions: { ...layout.captions, topFrac: 1.4 } } };
-  assert.ok(presetProblems(outside).some((problem) => problem.includes("captions.topFrac")));
+  const broken: StylePackage = { ...threeDDataExplainer, layout: { ...layout, zoomJumpKinds: layout.zoomJumpKinds.slice(1) } };
+  assert.ok(packageProblems(broken).some((problem) => problem.includes("zoomJumpKinds")));
+  const outside: StylePackage = { ...threeDDataExplainer, layout: { ...layout, captions: { ...layout.captions, topFrac: 1.4 } } };
+  assert.ok(packageProblems(outside).some((problem) => problem.includes("captions.topFrac")));
 });
 
 test("a preset whose beats leave a gap, or whose shot uses a banned type, has problems", () => {
-  const broken: StylePreset = {
+  const broken: StylePackage = {
     ...threeDDataExplainer,
     structure: [{ ...threeDDataExplainer.structure[0]!, fromMs: 100 }],
     shots: [{ id: "presenter", visualType: "ugc_presenter", want: "a presenter" }],
   };
-  const problems = presetProblems(broken);
+  const problems = packageProblems(broken);
   assert.ok(problems.some((problem) => problem.includes("starts at 100 ms")));
   assert.ok(problems.some((problem) => problem.includes("banned type ugc_presenter")));
 });
 
 test("an unknown preset id is refused", async () => {
-  assert.throws(() => stylePreset("no_such_preset"), /no style preset/);
-  await assert.rejects(installStylePreset(db.sql, { organizationId: WS, presetId: "no_such_preset" }), /no style preset/);
+  assert.throws(() => stylePackage("no_such_preset"), /no style preset/);
+  await assert.rejects(installStylePackage(db.sql, { organizationId: WS, packageId: "no_such_preset" }), /no style preset/);
 });
 
 test("installing writes one kit row per workspace, and the kit loader finds it", async () => {
-  const first = await installStylePreset(db.sql, { organizationId: WS, presetId: "3d_data_explainer" });
-  const second = await installStylePreset(db.sql, { organizationId: WS, presetId: "3d_data_explainer" });
+  const first = await installStylePackage(db.sql, { organizationId: WS, packageId: "3d_data_explainer" });
+  const second = await installStylePackage(db.sql, { organizationId: WS, packageId: "3d_data_explainer" });
   assert.equal(first.kitId, "sk_3d_data_explainer");
   assert.equal(first.contentHash, second.contentHash);
   const rows = await db.sql<{ count: number }>`

@@ -60,7 +60,7 @@ list of what stays unknown until one live analysis runs.
 
 ## 5. How to reuse the preset
 
-1. Install the style kit into the workspace: `installStylePreset(sql, { organizationId, presetId: "3d_data_explainer" })`. It writes
+1. Install the style kit into the workspace: `installStylePackage(sql, { organizationId, packageId: "3d_data_explainer" })`. It writes
    kit `sk_3d_data_explainer` version 1 into `engine_kits`. No screen calls it yet.
 2. On the brand's theme page, set the style kit to `sk_3d_data_explainer`.
 3. In the Content Factory, attach the same reference file and mark it as the reference. Its format id is `ref_98053a5a224b3833a3ed4421`.

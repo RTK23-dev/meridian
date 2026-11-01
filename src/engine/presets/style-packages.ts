@@ -3,7 +3,7 @@
 // today (the beat structure, the shot wants, the measured grammar). It adds no contract: the kit is validated by styleKitSchema, the
 // look by the look enum, the genes by the gene enum. See README.md in this folder.
 //
-// How a preset is reused: installStylePreset writes its style kit into the workspace's kit store (engine_kits), so a theme page can
+// How a preset is reused: installStylePackage writes its style kit into the workspace's kit store (engine_kits), so a theme page can
 // name the kit id; the reference's format id is the one the Content Factory gives the same reference file, so the Video DNA the first
 // analysis stores is reused by every later run of that format.
 
@@ -21,8 +21,8 @@ import { writeKit, type StoredKit } from "../jobs/kit-store.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { threeDDataExplainer } from "./three-d-data-explainer.ts";
 
-export type StylePreset = {
-  presetId: string;
+export type StylePackage = {
+  packageId: string;
   version: number;
   label: string;
   summary: string;
@@ -65,19 +65,19 @@ export type PresetLayout = {
   zoomJumpKinds: Array<{ atMs: number; kind: "punch" | "camera_move" }>;
 };
 
-export const STYLE_PRESETS: readonly StylePreset[] = [threeDDataExplainer];
+export const STYLE_PACKAGES: readonly StylePackage[] = [threeDDataExplainer];
 
 /** The preset with this id. An unknown id is refused, never defaulted (CLAUDE.md rule 1). */
-export function stylePreset(presetId: string): StylePreset {
-  const preset = STYLE_PRESETS.find((candidate) => candidate.presetId === presetId);
+export function stylePackage(packageId: string): StylePackage {
+  const preset = STYLE_PACKAGES.find((candidate) => candidate.packageId === packageId);
   if (preset === undefined) {
-    throw new EngineError("invalid_input", `there is no style preset "${presetId}"`, { stage: "presets" });
+    throw new EngineError("invalid_input", `there is no style preset "${packageId}"`, { stage: "presets" });
   }
   return preset;
 }
 
 /** Checks a preset against the contracts it uses. Returns the problems; an empty list means the preset is usable. */
-export function presetProblems(preset: StylePreset): string[] {
+export function packageProblems(preset: StylePackage): string[] {
   const problems: string[] = [];
   const kit = styleKitSchema.safeParse(preset.styleKit);
   if (!kit.success) problems.push(`style kit: ${kit.error.message}`);
@@ -127,14 +127,14 @@ export function presetProblems(preset: StylePreset): string[] {
  * Writes the preset's style kit into one workspace's kit store, so a theme page can name it. The same kit twice is one row. A preset
  * with problems is refused before anything is written.
  */
-export async function installStylePreset(
+export async function installStylePackage(
   sql: Sql,
-  input: { organizationId: string; presetId: string },
+  input: { organizationId: string; packageId: string },
 ): Promise<StoredKit<unknown>> {
-  const preset = stylePreset(input.presetId);
-  const problems = presetProblems(preset);
+  const preset = stylePackage(input.packageId);
+  const problems = packageProblems(preset);
   if (problems.length > 0) {
-    throw new EngineError("invalid_input", `the style preset "${preset.presetId}" is not usable: ${problems.join("; ")}`, {
+    throw new EngineError("invalid_input", `the style preset "${preset.packageId}" is not usable: ${problems.join("; ")}`, {
       stage: "presets",
     });
   }
