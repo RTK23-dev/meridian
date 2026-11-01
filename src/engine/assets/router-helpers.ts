@@ -11,7 +11,7 @@ import type { AttemptOutcome } from "./stats.ts";
 import type { BucketStore } from "./buckets.ts";
 import type { ScoreResult } from "./score.ts";
 import { CARRY_LIMIT, type AssetJobCarry } from "./job.ts";
-import type { ProducedAsset, AttemptLog, ProduceOutcome, ProduceInput, TargetResult, Fallback, Candidate } from "./router-types.ts";
+import type { ProducedAsset, AttemptLog, ProduceOutcome, ProduceInput, TargetResult, Fallback } from "./router-types.ts";
 import { EngineError } from "../contracts/errors.ts";
 
 export function capabilityGap(spec: AssetSpec, caps: { maxSeconds: number; minSeconds: number; firstFrame: boolean; lastFrame: boolean; refsMax: number; aspect: string[] }): string | null {
