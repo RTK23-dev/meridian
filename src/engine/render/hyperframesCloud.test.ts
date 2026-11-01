@@ -37,7 +37,7 @@ import {
   uploadStart,
   VIDEO_BYTES,
   VIDEO_URL,
-} from "./recorded.ts";
+} from "./test/hyperframes-recorded.ts";
 
 const FAKE_KEY = "test-key-not-a-real-credential";
 const text = (value: string) => new TextEncoder().encode(value);
