@@ -366,3 +366,80 @@ test("the style and the angle reach the engine: a variation started through the 
   assert.match(brief, /Style preset: Tips list\. Make a numbered tips video/, "the style is in the brief");
   assert.match(brief, /no real person's likeness/, "and so is the safety line");
 });
+
+test("the orchestrator chooses the styles: one call, ranked, recorded; and a source that would be refused never reaches the engine", async () => {
+  const calls: Array<{ brandName: string; instruction: string }> = [];
+  const good = async ({ facts }: { facts: { brandName: string; instruction: string } }) => {
+    calls.push({ brandName: facts.brandName, instruction: facts.instruction });
+    return { ok: true as const, ranked: ["tips_list", "explainer", "product_promo"], chosen: "tips_list", confidence: 0.64, engine: "jev", model: "recorded-model" };
+  };
+  const id = await source({ id: "s_orch" });
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 4, totalBudgetUsd: 8, approvedSample: true, stylePreset: "orchestrator", chooseStyle: good as never });
+  assert.equal(calls.length, 1, "one engine call for the whole batch");
+  assert.match(calls[0]?.instruction ?? "", /calm product demo/, "the engine is given the source's goal");
+  assert.deepEqual(batch.items.map((item) => item.style), ["tips_list", "explainer", "product_promo", "tips_list"]);
+  const [text] = await db.sql<{ text: string }>`select text from content_factory_messages where session_id = ${batch.items[1]?.sessionId ?? ""} and text like 'Style preset:%'`;
+  assert.match(text?.text ?? "", /^Style preset: Explainer\./);
+  const [audit] = await db.sql<{ metadata: string }>`select metadata from audit_log where object_id = ${batch.id} and action = 'content_factory.variations_batch_created'`;
+  assert.match(String(audit?.metadata), /"style":"orchestrator"/);
+  assert.match(String(audit?.metadata), /"styleEngine":"jev"/);
+  assert.match(String(audit?.metadata), /"styleModel":"recorded-model"/);
+
+  // A source that is not ready is refused before the engine is asked, so no model call is spent on it.
+  const notReady = await source({ id: "s_orch_noref", reference: false });
+  const callsBefore = calls.length;
+  const before = await counts();
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: notReady, count: 3, totalBudgetUsd: 10, approvedSample: true, stylePreset: "orchestrator", chooseStyle: good as never }), /uploaded reference video/);
+  assert.equal(calls.length, callsBefore, "the engine was not called");
+  assert.deepEqual(await counts(), before);
+});
+
+test("when the decision engine will not choose, nothing is created and there is no silent fallback to a rule", async () => {
+  const id = await source({ id: "s_orch_refused" });
+  const before = await counts();
+  const refusing = async () => ({ ok: false as const, reason: "The decision engine could not answer: No TypeSafe key is saved." });
+  await assert.rejects(
+    createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 10, approvedSample: true, stylePreset: "orchestrator", chooseStyle: refusing }),
+    /No TypeSafe key is saved\. No style was chosen, so nothing was created\./,
+  );
+  assert.deepEqual(await counts(), before, "no session, message, batch or audit was written");
+});
+
+test("through the real dispatcher, an engine that is not connected refuses, and a recorded answer from a registered engine is used", async () => {
+  const { chooseStyleWithEngine, STYLE_QUESTION_ID } = await import("./style-chooser.ts");
+  const id = await source({ id: "s_orch_real" });
+  // With no key in this test environment, the default engine is not connected: the real chooser reports it and creates nothing.
+  const before = await counts();
+  await assert.rejects(
+    createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, stylePreset: "orchestrator", chooseStyle: chooseStyleWithEngine }),
+    /No style was chosen, so nothing was created\./,
+  );
+  assert.deepEqual(await counts(), before);
+  assert.equal(STYLE_QUESTION_ID, "content.video_style.v1");
+
+  // A recorded answer from a registered engine, through the real dispatcher: the engine receives the style question under its own name, and
+  // its answer is read back from that name into a ranking the videos take in order.
+  const { chooserFor, STYLE_QUESTION_KEY } = await import("./style-chooser.ts");
+  const seen: Array<{ keys: string[]; options: string[]; state: string }> = [];
+  const fake = {
+    id: "jev",
+    adapterVersion: "recorded",
+    capabilities: () => ({}),
+    health: async () => ({ status: "READY" }),
+    async decide(request: { questions: Record<string, { id: string; version: string; criteria: Record<string, string> }>; state: { description: string } }) {
+      const question = request.questions[STYLE_QUESTION_KEY];
+      seen.push({ keys: Object.keys(request.questions), options: Object.keys(question?.criteria ?? {}), state: request.state.description });
+      return {
+        runId: "run_recorded", model: "recorded-model", provider: "recorded", inputHash: "h", cached: false, latencyMs: 1, engineId: "jev", adapterVersion: "recorded", requestedModel: "recorded-model",
+        returnedModel: "recorded-model", inputModality: "text", imageCount: 0, imagesOmitted: 0,
+        answers: { [STYLE_QUESTION_KEY]: { questionId: question?.id ?? "", questionVersion: question?.version ?? "", type: "choice", model: "recorded-model", provider: "recorded", status: "answered", answer: "cinematic_story", choice: "cinematic_story", probabilities: { cinematic_story: 0.6, explainer: 0.25, tips_list: 0.1 }, confidence: 0.6, evidenceRefs: [], evaluatedAt: "2026-11-01T00:00:00.000Z" } },
+      };
+    },
+  };
+  const registry = { jev: fake, "openai-decisions": fake, "openrouter-decisions": fake } as never;
+  const real = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 9, approvedSample: true, stylePreset: "orchestrator", chooseStyle: chooserFor(registry) });
+  assert.deepEqual(real.items.map((item) => item.style), ["cinematic_story", "explainer", "tips_list"], "the recorded ranking is used in order");
+  assert.deepEqual(seen[0]?.keys, ["style"]);
+  assert.equal(seen[0]?.options.length, 8, "every preset is an option");
+  assert.match(seen[0]?.state ?? "", /^Brand: .*Goal \(data\): .*calm product demo/);
+});

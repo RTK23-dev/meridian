@@ -84,6 +84,8 @@ export type StyleMode = "auto" | "super" | "none" | string;
 
 export const STYLE_AUTO = "auto";
 export const STYLE_SUPER = "super";
+/** The workspace's decision engine chooses: one model call, made when the batch is created, ranked over the library. */
+export const STYLE_ORCHESTRATOR = "orchestrator";
 
 export function presetById(id: string): StylePreset | null {
   return STYLE_PRESETS.find((preset) => preset.id === id) ?? null;
@@ -91,7 +93,7 @@ export function presetById(id: string): StylePreset | null {
 
 /** Whether the value is a way to choose: Auto, the Super preset, or the id of one preset in the library. */
 export function isStyleChoice(value: string): boolean {
-  return value === STYLE_AUTO || value === STYLE_SUPER || presetById(value) !== null;
+  return value === STYLE_AUTO || value === STYLE_SUPER || value === STYLE_ORCHESTRATOR || presetById(value) !== null;
 }
 
 /** The preset Auto picks for a research structure. A fixed table: the same research always gives the same preset. */
@@ -119,6 +121,16 @@ export function presetsForBatch(choice: string, count: number, topStructure: str
   }
   const one = presetById(choice);
   return one ? Array.from({ length: count }, () => one) : null;
+}
+
+/**
+ * The preset for each video from a ranked list of preset ids (best first), as the decision engine ranked them. The first `count` take one
+ * each in rank order, and a batch longer than the list starts over. An id that is not in the library is dropped; with none left, null.
+ */
+export function presetsFromRanking(ranked: readonly string[], count: number): StylePreset[] | null {
+  const known = ranked.map((id) => presetById(id)).filter((preset): preset is StylePreset => preset !== null);
+  if (known.length === 0) return null;
+  return Array.from({ length: count }, (_, index) => known[index % known.length] as StylePreset);
 }
 
 /** The sentence Auto's choice is explained with, so the person can see why. */

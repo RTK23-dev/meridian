@@ -566,6 +566,27 @@ try {
     assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 
+  await check("G18", "orchestrator style: with no decision engine connected the choice is refused with its reason and nothing is created or started", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    await form.getByLabel("Video style").selectOption({ value: "orchestrator" });
+    await form.getByText(/makes one paid model call/).waitFor();
+    await form.getByLabel("Number of videos").fill("2");
+    await form.getByLabel("Total batch budget (USD)").fill("3.5");
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Style\s*Chosen by the orchestrator when you create the videos/);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    const batchesBefore = await page.locator("main").getByRole("button", { name: /variations ·/ }).count();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    const alert = form.getByRole("alert");
+    await alert.waitFor();
+    assert.match(await alert.innerText(), /decision engine/i);
+    assert.match(await alert.innerText(), /No style was chosen, so nothing was created\./);
+    assert.equal(await page.locator("main").getByRole("button", { name: /variations ·/ }).count(), batchesBefore, "no batch was made");
+    assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });

@@ -9,7 +9,8 @@ import { withTransaction, type Sql } from "../learning/store.ts";
 import { SESSION_REFUSAL, sessionAccess } from "./service.ts";
 import { getBatch, type BatchSummary } from "./batch-service.ts";
 import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES, type VariationAngle } from "./variations.ts";
-import { isStyleChoice, presetsForBatch, styleInstruction } from "./style-presets.ts";
+import { isStyleChoice, presetsForBatch, presetsFromRanking, STYLE_ORCHESTRATOR, styleInstruction } from "./style-presets.ts";
+import { chooseStyleWithEngine, type StyleChooser, type StyleRanking } from "./style-chooser.ts";
 import { formatFromPatterns, researchAngles, type FormatOutcome, type StoredPattern } from "./research-format.ts";
 
 const TITLE_MAX = 120;
@@ -69,7 +70,7 @@ async function audit(sql: Sql, entry: { organizationId: string; brandId: string;
 export async function createVariations(
   sql: Sql,
   userId: string,
-  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean; stylePreset?: string },
+  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean; stylePreset?: string; chooseStyle?: StyleChooser },
 ): Promise<BatchSummary> {
   // The person reads a sample of the format first and approves it. Without that approval nothing is written.
   if (input.approvedSample !== true) throw new Error("Read the sample video and approve the format first. Nothing was created.");
@@ -85,6 +86,28 @@ export async function createVariations(
   const brandId = source.brand_id;
   const organizationId = source.organization_id;
   let batchId: string = randomUUID();
+
+  // The orchestrator's choice: one call to the workspace's decision engine, made before anything is written and before the source row is locked.
+  // The source is checked first, so a call is never spent on a source that would be refused. A refusal from the engine stops here, with its reason.
+  let ranking: Extract<StyleRanking, { ok: true }> | null = null;
+  if (stylePreset === STYLE_ORCHESTRATOR) {
+    const listed = (await variationSourcesOf(sql, userId, { brandId })).find((item) => item.id === source.id);
+    if (!listed) throw new Error("The source draft is not available as a source. Nothing was created.");
+    if (listed.problem !== null) throw new Error(listed.problem);
+    const [brand] = await sql<{ name: string }>`select name from brands where id = ${brandId} and organization_id = ${organizationId} limit 1`;
+    const instructionRows = await sql<{ text: string }>`
+      select text from content_factory_messages where session_id = ${source.id} and organization_id = ${organizationId} and beat_role is null and char_length(btrim(text)) > 0
+      order by created_at asc, id asc
+    `;
+    const result = await (input.chooseStyle ?? chooseStyleWithEngine)({
+      sql,
+      organizationId,
+      brandId,
+      facts: { brandName: brand?.name ?? "the brand", instruction: instructionRows.map((row) => row.text).join(" "), patterns: await brandPatterns(sql, organizationId, brandId) },
+    });
+    if (!result.ok) throw new Error(`${result.reason} No style was chosen, so nothing was created.`);
+    ranking = result;
+  }
 
   await withTransaction(sql, async (tx) => {
     // The source is locked for the rest of the transaction, so a start or an edit cannot land between the check and the copies.
@@ -169,7 +192,10 @@ export async function createVariations(
 
     // Styles: one preset for every video, Auto (from the research structure that repeats most) or the Super mix. None adds nothing.
     let styles: ReturnType<typeof presetsForBatch> = null;
-    if (stylePreset !== "none") {
+    if (ranking !== null) {
+      styles = presetsFromRanking(ranking.ranked, input.count);
+      if (styles === null) throw new Error("The decision engine's ranking held no style from the library. Nothing was created.");
+    } else if (stylePreset !== "none") {
       const patterns = await brandPatterns(tx, organizationId, brandId);
       const outcome = formatFromPatterns(patterns);
       const top = outcome.ok ? (outcome.format.structures[0]?.value ?? null) : null;
@@ -234,7 +260,7 @@ export async function createVariations(
       action: "content_factory.variations_batch_created",
       objectType: "content_factory_batch",
       objectId: batchId,
-      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true", style: stylePreset },
+      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true", style: stylePreset, ...(ranking ? { styleEngine: ranking.engine, styleModel: ranking.model, styleConfidence: ranking.confidence === null ? "unknown" : String(ranking.confidence) } : {}) },
     });
   });
   return getBatch(sql, userId, { batchId });

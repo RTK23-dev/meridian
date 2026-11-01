@@ -125,8 +125,18 @@ The variations form has a **Video style** choice and a **Browse the style librar
 
 - **What a preset does.** It adds one style instruction to each draft's brief and records the preset id on the draft (`style_preset`). It tells the planner what kind of video to brief. It does **not** set a render option and does not change the engine's style kits, which are an engine contract. Every style instruction ends with a line that it steers the brief only and forbids a real person's likeness and any invented testimonial, result or claim.
 - **Three ways to choose.** One preset for every video; **Auto**, which maps the structure that repeats most in the brand's research to a preset by a fixed table (problem solution → Explainer, listicle → Tips list, story payoff → Cinematic story, testimonial → UGC style, before/after, demonstration and offer-led → Product promo) and shows why, or mixes every style when there is no repeating structure; or the **Super preset**, which gives each video the next style in the library, so a batch of eight tries eight styles.
-- **Auto is a rule table, not a model call.** The same research always gives the same preset. Nothing is judged by a model here.
+- **Auto is a rule table, not a model call.** The same research always gives the same preset. Nothing is judged by a model here. Its label on the form says so.
 - **Recorded.** The CSV has a Style column and the manifest a `style` field. No style chosen means no style instruction and a null style.
 - **Not verified.** Whether a preset makes the engine's output look the way its description says needs a live run and someone looking at the videos.
 - **Does a style reach the engine?** Yes, as part of the brief. A draft's plain instructions, its angle instruction and its style instruction are joined into the production request's `brief.text` when the video is started. A test starts a variation through the real start path and reads the stored request to check that the source's instruction, the angle and the style are all in it. That proves the text is handed to the engine. It does not prove how the planner or the script writer weighs it, which needs a live run.
+
+### Let the orchestrator choose
+
+**Let the orchestrator choose** asks the workspace's active decision engine (TypeSafe JEV, OpenAI Decisions or OpenRouter Decisions) once, when the videos are created. It uses the same dispatcher, key resolution, budget holds and lineage as every other decision.
+
+- The question is a `choice` (`content.video_style.v1`) whose options are the eight presets. The engine sees the brand name, the source draft's instruction and the structures that repeat in the research, all cut short and marked as data. Its answer ranks the presets (the chosen one first, then the others by probability); the videos take them in that order and start over if the batch is longer.
+- **It costs one model call.** The form says so before you create. The source is checked first, so no call is spent on a source that would be refused.
+- **Fail closed.** If the engine is not connected, has no key, abstains, fails, or chooses something outside the library, the request is refused with the reason and nothing is created. It does not fall back to Auto or to another engine.
+- **Recorded.** Each video records its style. The batch's audit line records `style: orchestrator`, the engine, the model and the engine's confidence.
+- **Tested** with recorded engine answers through the real dispatcher, and in the browser for the not-connected refusal. **Not verified** with a live engine: whether its choices are good ones, and what a call costs, need a real key.
 

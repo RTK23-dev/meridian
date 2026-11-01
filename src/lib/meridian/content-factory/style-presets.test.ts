@@ -41,3 +41,11 @@ test("Auto follows the most common research structure by a fixed table, and mixe
   assert.match(autoReason("listicle"), /Auto picked Tips list because "listicle"/);
   assert.match(autoReason(null), /mixes every style/);
 });
+
+test("a ranking gives each video the next ranked style, starts over when the batch is longer, and ignores ids outside the library", async () => {
+  const { presetsFromRanking } = await import("./style-presets.ts");
+  assert.deepEqual(presetsFromRanking(["tips_list", "explainer"], 3)?.map((preset) => preset.id), ["tips_list", "explainer", "tips_list"]);
+  assert.deepEqual(presetsFromRanking(["nope", "explainer"], 2)?.map((preset) => preset.id), ["explainer", "explainer"]);
+  assert.equal(presetsFromRanking(["nope"], 2), null);
+  assert.ok(isStyleChoice("orchestrator"));
+});

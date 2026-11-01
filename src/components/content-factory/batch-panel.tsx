@@ -7,7 +7,7 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentBatch, createContentVariations, getContentBatch, createContentDemoBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import { batchManifestJson, batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
-import { autoReason, presetsForBatch, STYLE_AUTO, STYLE_PRESETS, STYLE_SUPER, styleInstruction } from "@/lib/meridian/content-factory/style-presets";
+import { autoReason, presetsForBatch, STYLE_AUTO, STYLE_ORCHESTRATOR, STYLE_PRESETS, STYLE_SUPER, styleInstruction } from "@/lib/meridian/content-factory/style-presets";
 import { describeFormat, researchAngles } from "@/lib/meridian/content-factory/research-format";
 import { angleInstruction, DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget, VARIATION_ANGLES } from "@/lib/meridian/content-factory/variations";
 
@@ -127,7 +127,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const sampleAngle = (useResearch && format.data?.ok ? researchAngles(format.data.format, Math.max(1, variationCount || 1))[0] : undefined) ?? VARIATION_ANGLES[0];
   // The style of the first video, as it would be briefed. Auto reads the structure that repeats most in the research, with a reason shown.
   const topStructure = format.data?.ok ? (format.data.format.structures[0]?.value ?? null) : null;
-  const sampleStyle = style === "none" ? null : (presetsForBatch(style, Math.max(1, variationCount || 1), topStructure)?.[0] ?? null);
+  const sampleStyle = style === "none" || style === STYLE_ORCHESTRATOR ? null : (presetsForBatch(style, Math.max(1, variationCount || 1), topStructure)?.[0] ?? null);
   const sampleShare = variationSplit.ok ? (variationSplit.cents[0] ?? 0) / 100 : null;
 
   async function vary() {
@@ -313,12 +313,14 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
               <Field label="Video style" hint="Optional. A style tells the planner what kind of video to brief. It does not change how the engine renders.">
                 <SelectInput value={style} onChange={(event) => setStyle(event.target.value)}>
                   <option value="none">No style preset</option>
-                  <option value={STYLE_AUTO}>Let Meridian decide (Auto)</option>
+                  <option value={STYLE_ORCHESTRATOR}>Let the orchestrator choose (asks your decision engine)</option>
+                  <option value={STYLE_AUTO}>Auto from my research (a fixed rule, no model call)</option>
                   <option value={STYLE_SUPER}>Super preset: a different style for each video</option>
                   {STYLE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
                 </SelectInput>
               </Field>
               {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure)}</p> : null}
+              {style === STYLE_ORCHESTRATOR ? <p className="text-sm text-fg-muted">When you create the videos, your active decision engine is asked once to rank the styles for this brand, the source instruction and your research, and the videos take the styles in that order. This makes one paid model call. If the engine is not connected, or does not answer, nothing is created and you are told why.</p> : null}
               {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style in the library, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1))} {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
               <details className="rounded-md border border-border p-3 text-sm">
                 <summary className="cursor-pointer font-semibold">Browse the style library</summary>
@@ -336,7 +338,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                     <dt className="text-fg-muted">Angle</dt><dd className="font-semibold">{sampleAngle?.label}</dd>
                     <dt className="text-fg-muted">Budget</dt><dd>{sampleShare === null ? "Enter a total budget to see each video's share." : `${money.format(sampleShare)} of the total`}</dd>
                     <dt className="text-fg-muted">Copied from the source</dt><dd>Its plain instructions, its Market research records and its reference video file (shared, not copied).</dd>
-                    <dt className="text-fg-muted">Style</dt><dd>{sampleStyle ? sampleStyle.label : "No style preset"}</dd>
+                    <dt className="text-fg-muted">Style</dt><dd>{style === STYLE_ORCHESTRATOR ? "Chosen by the orchestrator when you create the videos" : sampleStyle ? sampleStyle.label : "No style preset"}</dd>
                     <dt className="text-fg-muted">Added instruction</dt><dd className="[overflow-wrap:anywhere]">{sampleAngle ? angleInstruction(sampleAngle) : ""}{sampleStyle ? ` ${styleInstruction(sampleStyle)}` : ""}</dd>
                   </dl>
                   <label className="inline-flex min-h-11 items-center gap-2 font-semibold">
