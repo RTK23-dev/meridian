@@ -777,3 +777,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames, as for the other new components.
 - Still open in K21: `panel.line`, `panel.tiles`, `cta.follow`.
 - Next wake armed for 11:54 UTC (trig_01MxmbEB35fToAyKC6NVHbDN).
+
+## 2026-11-01 11:57 UTC: wake: K21, panel.line
+
+- Wake (11:55): CI on the head 3f6476b was fully green (all 13 check runs, including the aggregate check). The local branch matched the remote.
+- Unit done (K21): `panel.line` in `src/engine/compose/components/panel.line/`: `props.ts` (a title and two to twelve labelled points with non-negative values, with the duration), three fixtures (a weekly rise; a dip and recovery; a flat line), `component.html` and `index.ts`. The line is an SVG path drawn from its first point to its last on the composition clock, with a dot at each point appearing in turn. The scale is the largest value, and a line of zeros uses a scale of one. The stroke colour is read from the style kit. The SVG is built with createElementNS and setAttribute, and text is set with textContent. It is registered in `components/index.ts`, and the pinned list holds 19.
+- Checks: `components.test.ts` passed 140 of 140. The compose suite passed 319 of 319. `npx eslint` on the changed files exits 0. The template's inline script parses (`node --check`). `npm run typecheck` exits 0.
+- Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames, as for the other new components.
+- Still open in K21: `panel.tiles`, `cta.follow`.
+- Next wake armed for 12:18 UTC (trig_01DRGXmxH1XWK9Nwe9iwQ58q).

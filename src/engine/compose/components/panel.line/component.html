@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"title","type":"string","label":"Title","default":"Data"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":2600,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="panel.line" data-width="1080" data-height="1920">
+  <div class="pl-panel">
+    <div class="pl-title"></div>
+    <div class="pl-plot"></div>
+    <div class="pl-labels"></div>
+  </div>
+  <style>
+    .pl-panel {
+      position: absolute;
+      left: 10%;
+      width: 80%;
+      top: 36%;
+      padding: 36px 40px 32px;
+      border-radius: 24px;
+      background: var(--kit-background);
+      border: 2px solid var(--kit-primary);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+    }
+    .pl-title {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 48px;
+      color: var(--kit-text);
+      margin-bottom: 24px;
+    }
+    .pl-plot {
+      width: 100%;
+      height: 420px;
+    }
+    .pl-plot svg {
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+    }
+    .pl-labels {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 16px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 26px;
+      color: var(--kit-secondary);
+    }
+    .pl-label {
+      white-space: nowrap;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var panel = document.querySelector(".pl-panel");
+      var titleEl = document.querySelector(".pl-title");
+      var plot = document.querySelector(".pl-plot");
+      var labelRow = document.querySelector(".pl-labels");
+      var seconds = vars.durationMs / 1000;
+      titleEl.textContent = String(vars.title || "");
+      var points = Array.isArray(vars.points) ? vars.points : [];
+      // The scale is the largest value; a line of zeros uses a scale of one, so no point divides by zero.
+      var max = 0;
+      points.forEach(function (point) {
+        if (point.value > max) max = point.value;
+      });
+      if (!(max > 0)) max = 1;
+      var W = 880;
+      var H = 420;
+      var PAD = 24;
+      var svgNS = "http://www.w3.org/2000/svg";
+      var svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("viewBox", "0 0 " + W + " " + H);
+      var coords = points.map(function (point, index) {
+        var x = points.length === 1 ? W / 2 : PAD + (index / (points.length - 1)) * (W - 2 * PAD);
+        var y = H - PAD - (point.value / max) * (H - 2 * PAD);
+        return { x: x, y: y };
+      });
+      var d = coords
+        .map(function (c, index) {
+          return (index === 0 ? "M" : "L") + c.x.toFixed(1) + " " + c.y.toFixed(1);
+        })
+        .join(" ");
+      var path = document.createElementNS(svgNS, "path");
+      path.setAttribute("d", d);
+      path.setAttribute("fill", "none");
+      path.setAttribute("stroke", accent);
+      path.setAttribute("stroke-width", "10");
+      path.setAttribute("stroke-linecap", "round");
+      path.setAttribute("stroke-linejoin", "round");
+      svg.appendChild(path);
+      var dots = coords.map(function (c) {
+        var dot = document.createElementNS(svgNS, "circle");
+        dot.setAttribute("cx", c.x.toFixed(1));
+        dot.setAttribute("cy", c.y.toFixed(1));
+        dot.setAttribute("r", "12");
+        dot.setAttribute("fill", accent);
+        svg.appendChild(dot);
+        return dot;
+      });
+      plot.appendChild(svg);
+      points.forEach(function (point) {
+        var span = document.createElement("span");
+        span.className = "pl-label";
+        span.textContent = String(point.label);
+        labelRow.appendChild(span);
+      });
+      // The line draws from its first point to its last: its dash is the whole length, and the offset moves it into view.
+      var length = path.getTotalLength();
+      path.style.strokeDasharray = String(length);
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(panel, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, 0);
+      tl.fromTo(path, { strokeDashoffset: length }, { strokeDashoffset: 0, duration: 1.2, ease: "power1.inOut" }, 0.3);
+      dots.forEach(function (dot, index) {
+        var at = 0.3 + (index / Math.max(1, points.length - 1)) * 1.2;
+        tl.fromTo(dot, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, at);
+      });
+      tl.set({}, {}, seconds);
+      window.__timelines["panel.line"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>
