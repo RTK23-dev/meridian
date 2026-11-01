@@ -24,7 +24,7 @@ function request(extra: Record<string, unknown> = {}) {
 }
 
 test("the contract is version 12", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@12");
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@13");
 });
 
 test("a request without a cookbook parses unchanged", () => {

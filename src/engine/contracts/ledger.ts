@@ -68,6 +68,8 @@ export type BudgetReservation = z.infer<typeof budgetReservationSchema>;
  * `model_chooser` (contract v8) picks each production call's model from the OpenRouter catalog (Bible 10.5). It runs on llm.check.
  * `scriptwriter` (contract v8) writes a request's script from its brief and the analysed reference (Bible 6.x write_script). It runs
  * on llm.direction.
+ * `cookbook_selector` (contract v13) proposes up to three cookbooks for a run, with starting values and a reason (round 3, K10). It runs
+ * on llm.check, and the person chooses in a normal run.
  */
 export const CLAUDE_ROLES = [
   "segmenter",
@@ -84,6 +86,7 @@ export const CLAUDE_ROLES = [
   "model_chooser",
   "scriptwriter",
   "orchestrator_plan",
+  "cookbook_selector",
 ] as const;
 export const claudeRoleSchema = z.enum(CLAUDE_ROLES);
 export type ClaudeRole = z.infer<typeof claudeRoleSchema>;

@@ -588,6 +588,23 @@ a workspace. No row is rewritten.
 `speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
 records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
 
+### v13 changes and migration (the cookbook selector role, contract version `engine-contracts@13`)
+
+Requested by the owner on 2026-11-01 (round 3, decision Q34: the recommendation was accepted in chat). **Owner approval: given 2026-11-01
+(Q34). Lead review: to be recorded by the lead.** The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`.
+
+**What changes.** `CLAUDE_ROLES` gains `cookbook_selector`. The role proposes up to three cookbooks for a run, each with starting values and a
+short reason. It runs on the check tier (`llm.check`) and reads the cookbooks that can run and the run's inputs as one untrusted block
+(`src/engine/claude/roles/cookbook_selector.ts`, prompt `cookbook_selector@1`). The database check `engine_role_calls_role_check` allows the
+new role (migration `0143_engine_cookbook_selector_role.sql`). No other field, table or meaning changes.
+
+**Rules that stay.** The code checks every pick against the eligible list and each value against its control, and refuses the whole answer on
+a bad one. A normal run shows the picks and waits for the person. An automated loop accepts the top pick and records it as auto-accepted.
+Without a request and a budget reservation to make the call against, the selector stays on the picker (fail closed).
+
+**Why.** The engine picks the right cookbook from the inputs with a small decision call (decision D1), and the call is a role like every other
+(budgeted, recorded and retried through the role runner).
+
 ### v12 changes and migration (cookbook reference on a request, contract version `engine-contracts@12`)
 
 Requested by the owner on 2026-10-31 (round 3, decision D1: the engine picks a cookbook and the person can change it before the request goes
