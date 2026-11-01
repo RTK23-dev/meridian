@@ -151,6 +151,7 @@ function runtimeFor(options: { gateway: ReturnType<typeof gatewayWith>; profiles
   registerEngineHandlers(runtime, {
     estimate_reserve: createEstimateReserveHandler({
       workspaceBudget: { async monthBudget() { return { status: "known", usd: 100 }; } },
+      now: () => NOW,
     }),
     produce_shot: createProduceShotHandler({
       generator: routerGenerator(routerFor),

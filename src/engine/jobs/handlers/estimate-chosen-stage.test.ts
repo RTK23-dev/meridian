@@ -132,7 +132,7 @@ test("the stage prices the chosen call from the model_choices input: the reserva
   const requestId = await storeAs("production_request", { ...productionRequestFixture, constraints: { ...productionRequestFixture.constraints, budgetUsd: 4 } });
   const choicesId = await storeAs("model_choices", choicesOf(plan, MODEL), [planId]);
 
-  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, catalog: catalogOf(0.1) });
+  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, catalog: catalogOf(0.1), now: () => NOW });
   const result = await handler.run(stageContext([planId, requestId, choicesId], hold));
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate output");
   assert.equal(result.output.gate.pass, true, JSON.stringify(result.output.gate.checks.filter((item) => !item.pass)));
@@ -152,7 +152,7 @@ test("without a catalog the same plan is priced from the price table, and the ot
   const requestId = await storeAs("production_request", { ...productionRequestFixture, constraints: { ...productionRequestFixture.constraints, budgetUsd: 4 } });
   const choicesId = await storeAs("model_choices", choicesOf(plan, MODEL), [planId]);
 
-  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) } });
+  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, now: () => NOW });
   const result = await handler.run(stageContext([planId, requestId, choicesId], hold));
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate output");
   assert.equal(result.output.gate.pass, true);
@@ -169,7 +169,7 @@ test("in cap mode a chosen total above the request budget refuses the stage with
   const requestId = await storeAs("production_request", { ...productionRequestFixture, constraints: { ...productionRequestFixture.constraints, budgetUsd: 1 } });
   const choicesId = await storeAs("model_choices", choicesOf(plan, MODEL), [planId]);
 
-  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, catalog: catalogOf(50) });
+  const handler = createEstimateReserveHandler({ workspaceBudget: { monthBudget: async () => ({ status: "known", usd: 100 }) }, catalog: catalogOf(50), now: () => NOW });
   const result = await handler.run(stageContext([planId, requestId, choicesId], hold));
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate output");
   assert.equal(result.output.gate.pass, false);

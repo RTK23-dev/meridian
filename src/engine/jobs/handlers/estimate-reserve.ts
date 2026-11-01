@@ -129,6 +129,8 @@ export type EstimateReservePorts = {
    * Absent, or a choice the catalog no longer supports: that call is priced from the price table, as the router then routes it.
    */
   catalog?: ModelCatalogSource;
+  /** The clock the workspace month is read at (an ISO string). Absent: the wall clock. A test sets it, so a fixture dated in one month does not depend on the month it runs in. */
+  now?: () => string;
 };
 
 /** The optional input artifact of a type, or null when the job names none. */
@@ -184,7 +186,7 @@ export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): 
       if (reservationId === null) {
         return refusedBeforeExtending(ctx, "intake made no pre-flight hold on this request");
       }
-      const now = new Date().toISOString();
+      const now = ports.now?.() ?? new Date().toISOString();
       const month = await source.monthBudget({ organizationId: ctx.organizationId, requestId: ctx.requestId, now });
       if (month.status !== "known") return refusedBeforeExtending(ctx, month.reason);
       if (!Number.isFinite(month.usd) || month.usd < 0) {
