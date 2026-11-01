@@ -534,3 +534,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Current head `8d333a3` (run 41256855570): green so far: `tests (shard 0)`, `typecheck, lint and build`, `release-acceptance`, `sidecar`, `postgres money checks`. Shards 1 to 5 and `ui-smoke` were still running at this entry.
 - Local full `src` run (825 files, started on the pre-fix head): at about 3,050 results, the only failures are the five fixed above. Still running.
 - Open: confirm shards 1 to 5 and ui-smoke on `8d333a3`; then close out the full local run.
+
+## 2026-11-01 00:41 UTC: CI green on 8d333a3; the local full src run closed
+
+- CI on `8d333a3` (run 41256855570) is fully green: tests shards 0 to 5, ui-smoke, e2e, release-acceptance, sidecar, postgres money checks, typecheck/lint/build, and the aggregate `check`.
+- The local full `src` run (825 files, started on the pre-fix head) finished: 7,005 tests, 6,959 pass, 41 skipped, 5 fail. The five failures are the clock class already fixed (`e3-pipeline`, `estimate-chosen-stage` x3, `model-choice-pipeline`); each of those files was re-run after its fix and passes.
+- Other failures in the wake notifications were on superseded heads (`e6a4b28`, `4a7de92`, `24a2515`, `4c34efe`, `d6af8d2`, `f550b70`, `48d40e1`) and were the same class.
+- The loop-record commit's own CI run (41257279429) was still running at this entry.
+- Next: K19 (library screen).
