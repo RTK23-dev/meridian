@@ -565,3 +565,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: typecheck and eslint pass on the changed files. The factory and cookbook suites (76 files, 515 tests) pass. The commit was pushed before the suite finished, as the stop hook required; the suite then passed.
 - Next: K20b (the preset bar and the editor).
 - Next wake armed for 02:59 UTC (trig_015zeiXC6vR5eq9BcfZ1XXrG).
+
+## 2026-11-01 03:02 UTC: wake: K20b split
+
+- Wake (02:59): the branch matched 7623029, and its CI was green (02:51).
+- K20b is too big for one wake, so it is split (RUN_PLAN, K20): K20b1 the preset bar lists the brand's cookbooks; K20b2 the editor shows a cookbook's steps and controls read-only; K20b3 the editor edits controls and per-role instructions.
+- Finding: the preset bar's labels already come from the same source as the factory cookbooks (`PRESET_LABEL`), so swapping the source would change nothing visible; it is not a unit. The validation piece is already done for prompts: prompts-panel shows each empty prompt's message beside its field. The generation and grading fields get the same treatment in K20b3.
+- This wake changed documents only. No code changed, so no checks were run beyond the branch state.
+- Next: K20b1.
