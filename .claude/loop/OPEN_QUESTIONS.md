@@ -287,6 +287,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) approve the role as part of engine-contracts@12, with a migration and a Bible section 4 note; (b) keep the picker only for now.
 - The loop recommends (a): the selector is the feature D1 asked for, and the change is small and tested the same way as the other roles.
 
+## Q35: A reservation from one month cannot fund variants in the next: keep the rule?
+- Kind: owner decision (a budget rule). Status: `open`.
+- Context: `extendForVariants` (`src/engine/variants/reserve.ts`) refuses to raise a reservation when the month of the variants stage differs from the month the reservation was made. A request that starts on the last day of a month and reaches its variants after midnight UTC gets no variants: each is skipped, with the reason "cannot be raised in <next month>", recorded on its `variant.planned` event.
+- What it caused: the E6 load test failed in CI on 2026-11-01 (run 124694955415, shard 2). The test's clock was the cause and is fixed in `e6a4b28`. The rule itself is unchanged, and it can happen again in production at any month boundary.
+- Options: (a) keep the rule: a reservation belongs to the month it was made, so the month's budget is never overspent; (b) let the variants raise a reservation into the new month and check only the new month's budget.
+- The loop does not change the rule. It is a budget decision, so the owner chooses.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

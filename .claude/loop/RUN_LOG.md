@@ -505,3 +505,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Wake (23:53): the branch matched the pushed head; CI on K18a (d135524) was green (13 of 13). No foreign commits.
 - K18b done: a draft run's recorded cookbook is applied in `buildFor`, so the start and the preview see the same request. Two PGlite tests; the content-factory and cookbook suites pass together (413).
 - Next: K18c (mount the selection step in the draft panel), then the rest of K18's browser check in CI.
+
+## 2026-11-01 00:12 UTC: wake: shard 2 red (the E6 load test)
+
+- Wake (00:0x): CI on 369922a (K18b): `tests (shard 2)` failed with 1 failure of 1263. The failing test is `src/engine/ops/load.test.ts`, E6 (100 requests), not K18b's code. Reproduced locally: 0 variants where 20 were expected.
+- The same failure is on `main` (9664557), so it was not caused by the cookbook work.
+- Cause: a time bomb in the test. The chain fixture (`src/engine/ops/test/chain.ts`) makes its reservation in October 2026 (`CREATED`), while the engine's clock read the real time. `extendForVariants` refuses to raise a reservation in another month, so every variant was skipped ("made in 2026-10 and cannot be raised in 2026-11"). The run started at 23:59 UTC on 31 October and reached its variants after midnight.
+- Fix (`e6a4b28`, pushed): the chain's clock starts one second after `CREATED` and moves one second per read, so it stays in the reservation's month and each read is later than the last. Nothing depends on the wall clock. Only the fixture changes; the funding rule stays.
+- Verified: `load.test.ts` and the nine other test files that use the chain fixture (53 tests) pass; the typecheck passes; eslint passes on the changed file. CI on `e6a4b28` is pending.
+- Owner question raised: Q35, whether a reservation from one month may fund variants in the next (the engine rule is unchanged).
+- Next: K18c (mount the selection step in the draft panel), once CI on `e6a4b28` is green.
