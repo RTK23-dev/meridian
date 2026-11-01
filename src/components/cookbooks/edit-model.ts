@@ -57,3 +57,21 @@ export function applyEdits(cookbook: Cookbook, edits: readonly CookbookEdit[]): 
   }
   return { ok: true, cookbook: { ...cookbook, controls, instructions } };
 }
+
+/** The server calls that save an edited cookbook, in order (K20b3b part 2). A built-in cookbook is copied first: its id is reserved, and admins
+ * maintain copies of built-ins (D5). A workspace cookbook is saved as its next version under its own id. */
+export type SaveStep =
+  | { action: "fork"; from: { cookbookId: string; version: number }; newCookbookId: string }
+  | { action: "save"; cookbook: Cookbook };
+
+/** A copy id for a built-in's copy: the prefix the workspace uses for copies the people make. */
+export const COPY_PREFIX = "ck_my_";
+
+export function planSave(input: { source: "builtin" | "workspace"; original: Cookbook; edited: Cookbook; newCopyId: string }): SaveStep[] {
+  if (input.source === "workspace") return [{ action: "save", cookbook: input.edited }];
+  if (!input.newCopyId.startsWith(COPY_PREFIX)) throw new Error(`a copy id starts with ${COPY_PREFIX}`);
+  return [
+    { action: "fork", from: { cookbookId: input.original.cookbookId, version: input.original.version }, newCookbookId: input.newCopyId },
+    { action: "save", cookbook: { ...input.edited, cookbookId: input.newCopyId } },
+  ];
+}

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbook } from "../../lib/meridian/cookbooks/builtin/index.ts";
-import { applyEdits, INSTRUCTION_MAX_CHARACTERS, instructionEdit, setControlValue } from "./edit-model.ts";
+import { applyEdits, COPY_PREFIX, INSTRUCTION_MAX_CHARACTERS, instructionEdit, planSave, setControlValue } from "./edit-model.ts";
 
 const EXPLAINER = builtinCookbook("ck_3d_data_explainer");
 if (EXPLAINER === undefined) throw new Error("the explainer is built in");
@@ -63,4 +63,29 @@ test("one edit that fails stops the set: nothing half-applied is returned, with 
   if (!bad.ok) assert.match(bad.reason, /outside what the control allows/);
   assert.equal(applyEdits(EXPLAINER, [{ kind: "instruction", index: 999, text: "x" }]).ok, false, "an instruction that does not exist is refused");
   assert.equal(applyEdits(EXPLAINER, [{ kind: "instruction", index: 0, text: "  " }]).ok, false, "a blank instruction is refused");
+});
+
+test("a workspace cookbook is saved as its next version in one step (K20b3b part 2)", () => {
+  const edited = applyEdits(EXPLAINER, [{ kind: "control", id: "pace", value: 1.2 }]);
+  if (!edited.ok) throw new Error("the edit should apply");
+  const steps = planSave({ source: "workspace", original: EXPLAINER, edited: edited.cookbook, newCopyId: "ck_my_unused" });
+  assert.equal(steps.length, 1);
+  assert.equal(steps[0]?.action, "save");
+});
+
+test("a built-in cookbook is copied first, then the edited copy is saved under the copy's id", () => {
+  const edited = applyEdits(EXPLAINER, [{ kind: "control", id: "pace", value: 1.2 }]);
+  if (!edited.ok) throw new Error("the edit should apply");
+  const steps = planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: `${COPY_PREFIX}abc123` });
+  assert.equal(steps.length, 2);
+  assert.deepEqual(steps[0], { action: "fork", from: { cookbookId: "ck_3d_data_explainer", version: EXPLAINER.version }, newCookbookId: `${COPY_PREFIX}abc123` });
+  const save = steps[1];
+  assert.equal(save?.action, "save");
+  if (save?.action === "save") assert.equal(save.cookbook.cookbookId, `${COPY_PREFIX}abc123`);
+});
+
+test("a built-in is never saved under its own id, and a copy id must carry the copy prefix", () => {
+  const edited = applyEdits(EXPLAINER, []);
+  if (!edited.ok) throw new Error("no edits apply");
+  assert.throws(() => planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: "ck_3d_data_explainer" }), /copy id/);
 });
