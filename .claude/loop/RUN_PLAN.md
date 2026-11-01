@@ -128,7 +128,7 @@ no merging, no force-push, no contract change without the owner's approval, no n
 - Status: `done` as a proposal, `docs/data/RESEARCH_DATA_PLAN.md`. Six decisions for the owner, in section 4, before anything is built.
 
 ### R8: New pull request (Q6, Q8)
-- Status: `pending`, and waits on Q44 (open). Open one new draft pull request once R5 and R6 are settled, and leave PR #85 unchanged (see Q44: the work is on #85's branch, and the new PR needs its own branch). The owner said: when the changes are done.
+- Status: `done` (Q44 b, 2026-11-01): draft pull request RTK23-dev/meridian#87 on claude/cookbook-presets-zrf6un. Earlier: `pending`, and waits on Q44. Open one new draft pull request once R5 and R6 are settled, and leave PR #85 unchanged (see Q44: the work is on #85's branch, and the new PR needs its own branch). The owner said: when the changes are done.
 
 ## Round 3: cookbook presets (the owner's go, 2026-10-31)
 

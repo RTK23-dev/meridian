@@ -4,7 +4,7 @@ The first thing a wake-up reads. Keep it short. The coding-loop skill says how e
 
 - status: final version verified and pushed on claude/cookbook-presets-zrf6un (draft PR for rounds 2 and 3). Not in this version: K15, K16, K23, K24, K20f, K29, K30 (see RUN_PLAN.md, Final version).
 - branch: claude/cookbook-presets-zrf6un (created 2026-11-01 from 09a8423; claude/nice-tesla-zrf6un and PR #85 are left as they are)
-- pr: RTK23-dev/meridian#85 (draft, stacked on main at 0aa3301). Q44 is open: a new PR for the new work needs a new branch.
+- pr: RTK23-dev/meridian#87 (draft, branch claude/cookbook-presets-zrf6un, base main). RTK23-dev/meridian#85 is unchanged.
 - started: 2026-10-29 00:09 UTC
 - next_task: none in this version. Next work, if the owner asks: K15 and K16 (prompts and planner), then K23 and K24, then K29 and K20f, then K30.
 - current_task: none. The owner's chat decisions of 2026-11-01 are recorded in OPEN_QUESTIONS.md and RUN_PLAN.md.
