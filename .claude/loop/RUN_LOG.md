@@ -590,3 +590,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Likely also broken: the K19 route `/brands/$brandId/cookbooks` imports the same client code, and CI never opens it. Not verified in a browser yet; K19b verifies and fixes it.
 - Plan: K19b (RUN_PLAN): the server computes the cards and the settings; the browser code imports only types and plain helpers. Then re-add K20b1, and add the cookbook route to the acceptance.
 - Next wake armed for 03:57 UTC (trig_014K6Hm5YCTYS9hcfNdH1crk).
+
+## 2026-11-01 03:47 UTC: wake: CI green on the revert; K19b1
+
+- Wake (03:44): CI on 0aabd33 (the revert) was green: the release acceptance passed in CI, as it did locally (30 of 30), and all test shards passed.
+- Two wake-ups were pending (03:44's and the 03:57 one). The 03:57 one is cancelled, and one wake is armed for 04:08 UTC (trig_0143dCyC2LJAPGeuXJWiMdRV).
+- K19b1 done (`ceb3b68`): the cookbook role and family lists are plain leaf modules with no node imports. 467 tests across the engine contract, cookbook, cookbook-component and navigation suites pass; typecheck and eslint pass.
+- Next: K19b2 (the cards come from the server), then K19b3 (`fitsControl` out of validate.ts), then a browser check of the cookbook route.
