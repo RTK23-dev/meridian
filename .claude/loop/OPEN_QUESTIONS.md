@@ -353,6 +353,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Blocks: nothing else.
 - The loop recommends (b) unless the owner wants the replay screen: a screen that replays stand-ins can be read as a real run, which is the risk here.
 
+## Q44: Round 2 and 3 work is on PR #85's branch: move it to a new draft PR?
+- Kind: owner decision (the pull request). Status: `open`.
+- Context: your answer to Q6 (31 October) was: open a new pull request once the changes are done, and PR #85 stays as it is. Since round 2 the loop has pushed its commits to `claude/nice-tesla-zrf6un`, which is PR #85's branch. PR #85 now holds 182 commits on top of `main` (+25,315 / -8,230), and its description still describes the first tidy-up. The loop kept pushing to the designated branch, as the session rules ask.
+- What each option changes: (a) keep the work on this branch and PR #85, and refresh PR #85's description at K30; (b) open a new draft PR for the new work when it is done. GitHub allows one open PR per branch and base, so (b) needs a new branch, or PR #85 closed or retargeted. The loop would ask before creating a branch or closing #85.
+- Blocks: R8 (the new draft PR) and K30's PR refresh.
+- The loop recommends (b), since it matches your Q6 answer. The branch choice and closing #85 are yours to make.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

@@ -865,3 +865,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - R5: `draft-store` and `debounce` now have a non-test importer, so they are no longer test-only.
 - Next: K18, mounting the settings panel and the selection step, then the browser checks.
 - Next wake armed for 15:18 UTC (trig_01Xhcj4eXEPtKT3JHYfXjeZc).
+
+## 2026-11-01 15:19 UTC: wake: K18 split into K18d, and the PR question (Q44)
+
+- Wake (15:18): CI on the head cea08a7 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Read K18. K18a to K18c are done (the server choice, the recorded cookbook in the start, and the step mounted in the draft panel). The last piece is mounting the settings panel with its draft, and the browser check in CI, which is now K18d.
+- Raised a conflict with the owner's answer on Q6 as Q44: round 2 and 3 work has been pushed to PR #85's branch, though the answer said PR #85 stays as it is and a new PR is opened once the work is done. GitHub allows one open PR per branch and base, so a new PR needs a new branch. This is for the owner to decide, and the loop has not changed anything about the PR.
+- Records only: OPEN_QUESTIONS (Q44), RUN_PLAN (K18 and R8), STATE and RUN_LOG. No code changed.
+- Next: K18d.
+- Next wake armed for 15:40 UTC (trig_011nB12KdWSCoiDtHk1GBgdm).
