@@ -111,7 +111,7 @@ describe("safe zones (Bible 8.3)", () => {
 });
 
 describe("component library", () => {
-  it("holds the E1, E2, E5 and chain components, and stat.counter, captions.boxed, label.pill, panel.bars, panel.line and panel.tiles (round 3, K21), each keyed by its name", () => {
+  it("holds the E1, E2, E5 and chain components, and stat.counter, captions.boxed, label.pill, panel.bars, panel.line, panel.tiles and cta.follow (round 3, K21), each keyed by its name", () => {
     assert.deepEqual(Object.keys(COMPONENT_LIBRARY).sort(), [
       "captions.boxed",
       "captions.karaoke",
@@ -119,6 +119,7 @@ describe("component library", () => {
       "chat.thread",
       "compare.split",
       "cta.card",
+      "cta.follow",
       "kinetic.punchline",
       "kinetic.type",
       "label.pill",

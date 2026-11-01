@@ -796,3 +796,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames.
 - Still open in K21: `cta.follow`.
 - Next wake armed for 12:33 UTC (trig_01TRxvDsizBBjERjPxTpxbQ3).
+
+## 2026-11-01 12:36 UTC: wake: K21, cta.follow (the last component of K21)
+
+- Wake (12:33): CI on the head b52a4a2 was fully green (all 13 check runs, including the aggregate check; CodeRabbit skipped), and the branch matched the remote.
+- Unit done (K21): `cta.follow` in `src/engine/compose/components/cta.follow/`: `props.ts` (a handle, and an optional prompt, with the duration), three fixtures (a handle with the default prompt; a handle with its own prompt; a long handle), `component.html` and `index.ts`. It is a pill with the prompt and the handle, placed at 66% of the frame, above the bottom 20% line. It is distinct from `cta.card`, the closing card. Text is set with textContent. It is registered in `components/index.ts`, and the pinned list holds 21.
+- Checks: `components.test.ts` passed 154 of 154. The compose suite passed 339 of 339. `npx eslint` on the changed files exits 0. The template's inline script parses (`node --check`). `npm run typecheck` exits 0.
+- Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames for any K21 component.
+- K21 is done: every component on its list is built and registered (captions.boxed, stat.counter, label.pill, panel.bars, panel.line, panel.tiles, cta.follow). The visual checks need a browser on the owner's side.
+- Next wake armed for 12:57 UTC (trig_01GC81cYPB8d2urcBhuE3F8f). The next unit is K22 (partly done), the first unfinished task in order.

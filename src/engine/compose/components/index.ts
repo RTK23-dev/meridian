@@ -10,6 +10,7 @@ import { characterRig } from "./character.rig/index.ts";
 import { chatThread } from "./chat.thread/index.ts";
 import { compareSplit } from "./compare.split/index.ts";
 import { ctaCard } from "./cta.card/index.ts";
+import { ctaFollow } from "./cta.follow/index.ts";
 import { kineticPunchline } from "./kinetic.punchline/index.ts";
 import { kineticType } from "./kinetic.type/index.ts";
 import { labelPill } from "./label.pill/index.ts";
@@ -32,6 +33,7 @@ export const COMPONENT_LIBRARY: ComponentLibrary = Object.freeze({
   [kineticPunchline.name]: kineticPunchline,
   [productCard.name]: productCard,
   [ctaCard.name]: ctaCard,
+  [ctaFollow.name]: ctaFollow,
   [reactLayout.name]: reactLayout,
   [listTierBoard.name]: listTierBoard,
   [compareSplit.name]: compareSplit,
