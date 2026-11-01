@@ -68,3 +68,8 @@ export function familiesIn(cards: readonly CookbookCard[]): CookbookFamily[] {
   const present = new Set(cards.map((card) => card.family));
   return COOKBOOK_FAMILIES.filter((family) => present.has(family));
 }
+
+/** The cards that are not a factory preset or a blank start mode. The preset bar shows those already, so the bar lists these beside them (K20b1). */
+export function nonFactoryCardsOf(cards: readonly CookbookCard[]): CookbookCard[] {
+  return cards.filter((card) => !card.cookbookId.startsWith("ck_factory_") && !card.cookbookId.startsWith("ck_blank_"));
+}
