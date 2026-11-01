@@ -893,3 +893,16 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked here: the panel in a browser. The browser check runs in CI's ui-smoke on the pushed head.
 - K18 is done. Next: K13, the engine request copy and export.
 - Next wake armed for 16:36 UTC (trig_01XqJxdHya82SpH4fWb5WyyN).
+
+
+## 2026-11-01 16:36 UTC: wake: the owner's decisions recorded, and the backlog set
+
+- Resumed after a context break. CI on the head d4b182d was fully green (14 check runs, the aggregate `check` included; CodeRabbit skipped, as before). The branch matched the remote.
+- The owner answered in chat: "Go with all the most logical and recommended choices. And leave the 3 most important ones for me to now answer." Every open question was given the recommended option, except Q34, Q39 and Q44, which stay open for the owner.
+- Records: OPEN_QUESTIONS.md has a status for all 43 questions and the decision under each one (applied 2026-11-01). RUN_PLAN.md updated: T1 closed on CI's verdict (Q10). K22 done (Q38), with its Q32 move as B10. K25 done for the free part (Q40 b). K28 pending on Q41 (B11). K20f parked until K29 (Q37 b). R5 active until its module units are done. The parked list now holds only the three open questions and the music decision.
+- Backlog added to RUN_PLAN.md: B1 to B16, one unit per wake, in order. Owner actions and the partly done tasks with no open question are listed after it.
+- Checked before writing the backlog: each file named in B1 to B9, B12 to B15 exists, except one path to correct: the studio loop is `src/lib/meridian/studio/loop.ts`, not `src/engine/studio/loop.ts`. `connection-state.ts` has a test (`connection-state.test.ts`), so B2 deletes both. `validateReelsSafeZones` is in `src/lib/meridian/study/perception-extensions.ts` (used by its own test and by `slop-craft-gates.ts`). The newest migration is `0142_cookbooks.sql`, so the B11 migration is `0143`.
+- No code changed. No live provider call, no spend, no publishing, no merge.
+- Choice taken on Q18 (b): "say so on the page" has no page to point to, since neither module has a screen. The note goes in the file's header and module note (B15). If a screen was meant, that is a question for the owner.
+- Next: B1 (delete `src/engine/orchestrator/example.ts` and its test, after the importer search).
+- Next wake armed for 16:57 UTC (trig_01C21ayNP4FrjbgEGvQWJteL). The earlier wake for 16:36 (trig_01XqJxdHya82SpH4fWb5WyyN) was deleted, so there is one wake.

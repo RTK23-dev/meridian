@@ -2,20 +2,19 @@
 
 The first thing a wake-up reads. Keep it short. The coding-loop skill says how each field is used.
 
-- status: running (round 2 ending, then round 3: cookbook presets, K0 to K30; see RUN_PLAN.md)
+- status: running (round 3: cookbook presets, K0 to K30, then the owner-decision backlog B1 to B16; see RUN_PLAN.md)
 - branch: claude/nice-tesla-zrf6un
-- pr: RTK23-dev/meridian#85 (draft, stacked on main at 0aa3301)
+- pr: RTK23-dev/meridian#85 (draft, stacked on main at 0aa3301). Q44 is open: a new PR for the new work needs a new branch.
 - started: 2026-10-29 00:09 UTC
-- next_task: K13 (partly done): the engine request copy and export remain. K10's live port waits on Q34. Parked: K23 (Q39), K25 (Q40), K28 (Q41). Open: Q32, Q34 to Q44.
-- current_task: round 2, R5 (the 45 test-only modules, Q3). Done: the engine alerts (Q14), the batch planner (Q15) and the concurrency proposals (Q16, held at every size until calls record their bucket), all on /engine-ops. The four learning modules are explained, not wired, and wait for the owner (Q17; guardrails shows that test rows could reach learning). `studio/loop.ts` and `study/deep-study-service.ts` are explained, not wired (Q18). `production/route.ts`, `production/rework-engine.ts` and `production/voice-director.ts` are explained, not wired (Q19). `jobs/durable.ts` and `video/scene-frames.ts` are explained, not wired (Q20). `flow/nodes.ts` and `grading/priors.ts` are explained, not wired (Q21). `intelligence/cluster.ts` and `jev/calibration.ts` are explained, not wired (Q22). The `organic/*` group is explained, not wired (Q23): its entry point asks Apify for paid gathers. `quality/evidence.ts` and `shopify/reel-attribution.ts` are explained, not wired (Q24). `calibration/report.ts` is explained, not wired (Q25). `discovery/provenance.ts` is wired as "Where it was seen" on the Market stored pages (read-only, brand-scoped, PGlite-tested). `storage/filesystem.ts` and `vision/logo.ts` are explained, not wired (Q26). `a11y/contrast.ts` is in use by the token contrast test, so no change. `factory/cost.ts` is explained, not wired (Q27). `factory/render.ts` is explained, not wired (Q28), and `factory/benchmark-harness.ts` is in use by its test, so no change. The four engine modules (`firstLastFrame.ts`, `review-decision.ts`, `render/recorded.ts`, `review/take/gold.ts`) are explained, not wired (Q29). `gates/slop-craft-gates.ts` is explained, not wired (Q32). Next: `lib/progress/*`, `lib/create/steps.ts`, `components/settings/connection-state.ts`, `render/splice-run.ts`. PR #85 was green on 70f6fb0; CI runs on 3dd919f. Still a draft. R6 is parked. R8 waits for R5 and R6.
-- units_done: 14 in round 1; round 3: K0, K1, K2, K3, K4, K5, K6, K7, K8, K9, K10 (logic), K11, K12, K13 (partly), K14, K15 (partly), K16 (partly), K17 (partly), K21 (stat.counter, partly), K22 (partly), K24, K25 (partly), K26, K27, K28 (partly), K30 (guide written; PR refresh pending).
-- units_done (earlier): 14 in round 1 (T10, T11, T2, the acceptance fix, T12, T3 non-secret reads, T4, T5, T6, T7, T8, T9a, T9b, T13). Round 2: R1, R2, R3 (browser check pending), R4 done; R5 at 6 wired and 34 explained (26 modules, plus the 8-file organic group) of the 45 listed, and 2 found in use by tests (contrast, benchmark); R7 done as a proposal.
+- next_task: B1, delete `src/engine/orchestrator/example.ts` and its test (Q43), then B2 to B16 in order (RUN_PLAN.md, "Backlog from the owner's decisions").
+- current_task: none. The owner's chat decisions of 2026-11-01 are recorded in OPEN_QUESTIONS.md and RUN_PLAN.md.
+- open_questions: 3 open, one of the three most important each: Q34 (the selector role, a contract change; blocks K10's live port), Q39 (the 3D explainer's scenes; blocks K23, K24, K29, K30) and Q44 (the pull request; blocks R8). All other questions are answered.
+- units_done: round 1: 14 (T1 closed on CI's verdict, Q10). Round 2: R1, R2, R3 (browser check pending), R4, R7; R5 active until the module backlog units are done. Round 3: K0 to K9, K11, K12, K14, K18, K19, K19b, K20 (except K20f, parked until K29), K21, K22 (Q38), K25 (Q40 b), K26, K27. Partly done: K10 (live port, Q34), K13, K15, K16, K17, K28 (pending on B11). K30: guide written, PR refresh pending.
 - owner_requests_done: the preset preview (two original renders, preset version 2, the nan loudness fix) and the cookbook plan (round 3 in RUN_PLAN.md, Q31). Done 20:30 UTC.
-- next_wake_at: 2026-11-01T16:36:00Z
-- wake_trigger: trig_01XqJxdHya82SpH4fWb5WyyN (armed 16:15 UTC, 20 minutes after the K18d2 unit; the 16:09 wake trig_01DxqaSdBBEPF5BaQ9CrEghz fired)
-- watchdog_trigger: trig_013BHUFk1JYN8Lkt1nFRh3Fd (every two hours, fires into this session; recreated for round 2)
-- last_entry: RUN_LOG.md, final entry (the run ends; the gate's stops are in the 07:12 and final entries)
-- open_questions: 10 (see OPEN_QUESTIONS.md; Q13 is decided by the loop and asks for confirmation)
+- next_wake_at: 2026-11-01T16:57:00Z
+- wake_trigger: trig_01C21ayNP4FrjbgEGvQWJteL (armed 16:36 UTC, 20 minutes after the decisions were recorded; the wake trig_01XqJxdHya82SpH4fWb5WyyN was replaced by it)
+- watchdog_trigger: trig_013BHUFk1JYN8Lkt1nFRh3Fd (every two hours, fires into this session)
+- last_entry: RUN_LOG.md, the 16:36 UTC entry (owner decisions recorded, backlog set)
 - permissions: `.claude/settings.json` is written (round 2, Q9): full coding permissions, with the hard stops denied.
 - sandbox: the browser step of the gate needs `GATE_ACCEPTANCE_NODE_OPTIONS` pointing at a Chromium wrapper. The session scratchpad that held it is gone; the wrapper must be recreated if the gate is run again.
-- gate_in_progress: none. The gate has stopped without a verdict twice in the detached runs (see the 07:12 entry).
+- gate_in_progress: none.
