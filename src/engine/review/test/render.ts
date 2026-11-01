@@ -149,7 +149,7 @@ export function cleanPostRenderInput(render: CleanRender = cleanRender()): PostR
     silence: { longestMs: 120 },
     overlays: drawnOverlays(render.edl),
     blackFrames: clearBlackFrames(render.edl),
-    ocr: { captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"] },
+    ocr: { captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"], textBoxes: [] },
     forbiddenTerms: ["miracle cure"],
     critic: answeredCritic(),
   };
