@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbook } from "../../lib/meridian/cookbooks/builtin/index.ts";
-import { applyEdits, COPY_PREFIX, INSTRUCTION_MAX_CHARACTERS, instructionEdit, planSave, setControlValue } from "./edit-model.ts";
+import { applyEdits, COPY_PREFIX, INSTRUCTION_MAX_CHARACTERS, instructionEdit, planSave, runSavePlan, setControlValue, type SaveCalls } from "./edit-model.ts";
 
 const EXPLAINER = builtinCookbook("ck_3d_data_explainer");
 if (EXPLAINER === undefined) throw new Error("the explainer is built in");
@@ -88,4 +88,56 @@ test("a built-in is never saved under its own id, and a copy id must carry the c
   const edited = applyEdits(EXPLAINER, []);
   if (!edited.ok) throw new Error("no edits apply");
   assert.throws(() => planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: "ck_3d_data_explainer" }), /copy id/);
+});
+
+test("the copy is saved as a workspace cookbook, never as a built-in", () => {
+  const edited = applyEdits(EXPLAINER, []);
+  if (!edited.ok) throw new Error("no edits apply");
+  const steps = planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: `${COPY_PREFIX}xyz` });
+  const save = steps[1];
+  if (save?.action !== "save") throw new Error("the second step saves");
+  assert.equal(save.cookbook.scope, "workspace");
+});
+
+function recordingCalls(outcomes: { fork?: { ok: boolean; reason?: string }; save?: { ok: boolean; reason?: string } }) {
+  const log: string[] = [];
+  const calls: SaveCalls = {
+    fork: async () => {
+      log.push("fork");
+      return outcomes.fork ?? { ok: true };
+    },
+    save: async () => {
+      log.push("save");
+      return outcomes.save ?? { ok: true };
+    },
+  };
+  return { calls, log };
+}
+
+test("a save plan runs in order and reports success when every call succeeds", async () => {
+  const edited = applyEdits(EXPLAINER, []);
+  if (!edited.ok) throw new Error("no edits apply");
+  const steps = planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: `${COPY_PREFIX}ok` });
+  const { calls, log } = recordingCalls({});
+  assert.deepEqual(await runSavePlan("brand_1", steps, calls), { ok: true });
+  assert.deepEqual(log, ["fork", "save"]);
+});
+
+test("a failed fork stops the plan: nothing is saved, and the reason is kept", async () => {
+  const edited = applyEdits(EXPLAINER, []);
+  if (!edited.ok) throw new Error("no edits apply");
+  const steps = planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: `${COPY_PREFIX}f` });
+  const { calls, log } = recordingCalls({ fork: { ok: false, reason: "no permission" } });
+  assert.deepEqual(await runSavePlan("brand_1", steps, calls), { ok: false, reason: "no permission" });
+  assert.deepEqual(log, ["fork"]);
+});
+
+test("a refused edit after the copy was made says the copy exists with the cookbook's own text", async () => {
+  const edited = applyEdits(EXPLAINER, []);
+  if (!edited.ok) throw new Error("no edits apply");
+  const steps = planSave({ source: "builtin", original: EXPLAINER, edited: edited.cookbook, newCopyId: `${COPY_PREFIX}s` });
+  const { calls } = recordingCalls({ save: { ok: false, reason: "a rule broke" } });
+  const outcome = await runSavePlan("brand_1", steps, calls);
+  assert.equal(outcome.ok, false);
+  if (!outcome.ok) assert.match(outcome.reason, /The copy was made with the cookbook's own text, but the edits were not saved: a rule broke/);
 });

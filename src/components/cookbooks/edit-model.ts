@@ -72,6 +72,36 @@ export function planSave(input: { source: "builtin" | "workspace"; original: Coo
   if (!input.newCopyId.startsWith(COPY_PREFIX)) throw new Error(`a copy id starts with ${COPY_PREFIX}`);
   return [
     { action: "fork", from: { cookbookId: input.original.cookbookId, version: input.original.version }, newCookbookId: input.newCopyId },
-    { action: "save", cookbook: { ...input.edited, cookbookId: input.newCopyId } },
+    { action: "save", cookbook: { ...input.edited, cookbookId: input.newCopyId, scope: "workspace" as const } },
   ];
+}
+
+/** The server calls the save runs: a fork and a save. Passed in, so the sequence and its failures are tested without a server. */
+export type SaveCalls = {
+  fork: (input: { brandId: string; cookbookId: string; version: number; newCookbookId: string; shareWithWorkspace: false }) => Promise<{ ok: boolean; reason?: string }>;
+  save: (input: { brandId: string; cookbook: Cookbook }) => Promise<{ ok: boolean; reason?: string }>;
+};
+
+export type SaveOutcome = { ok: true } | { ok: false; reason: string };
+
+/**
+ * Runs a save plan in order, stopping at the first failure. If the copy was made and its edited version was then refused, the reason says the
+ * copy exists with the cookbook's own text, so nothing is reported as saved that was not.
+ */
+export async function runSavePlan(brandId: string, steps: readonly SaveStep[], calls: SaveCalls): Promise<SaveOutcome> {
+  let copied = false;
+  for (const step of steps) {
+    if (step.action === "fork") {
+      const made = await calls.fork({ brandId, cookbookId: step.from.cookbookId, version: step.from.version, newCookbookId: step.newCookbookId, shareWithWorkspace: false });
+      if (!made.ok) return { ok: false, reason: made.reason ?? "The copy was not made." };
+      copied = true;
+    } else {
+      const saved = await calls.save({ brandId, cookbook: step.cookbook });
+      if (!saved.ok) {
+        const why = saved.reason ?? "The edits were not saved.";
+        return { ok: false, reason: copied ? `The copy was made with the cookbook's own text, but the edits were not saved: ${why}` : why };
+      }
+    }
+  }
+  return { ok: true };
 }
