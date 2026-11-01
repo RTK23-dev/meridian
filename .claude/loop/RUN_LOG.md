@@ -604,3 +604,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K19b2 done (`81fc9c5`): the card rules moved to `cookbooks/cards.ts` (server). `libraryFor` returns the cards, and the library screen draws them. `library-model.ts` keeps only the plain filter and the family list, with no engine import. 211 tests across the cookbook, choice, card, component and navigation suites pass; typecheck and eslint pass.
 - Not yet: the screen still imports `actions.ts` (which reaches the engine) and `settings-model.ts` (through `validate.ts`). K19b3 handles those; a browser check of the route follows.
 - Next wake armed for 04:32 UTC (trig_0187GzR2BjkFJxWcKkrJyGid).
+
+## 2026-11-01 04:38 UTC: wake: K19b3 and the cookbook route checked in a browser
+
+- Wake (04:32): the branch matched ad7acf3; its checks completed with no failures.
+- K19b3 done (`c972854`): `fitsControl` moves to controls.ts (the validator re-exports it), and the settings model imports it from there, so the library's settings code no longer loads the validator.
+- New browser check H1 in the release acceptance: it opens `/brands/$brandId/cookbooks`, requires its heading, its list and the 3D data explainer card. Locally: 31 of 31 checks pass, and the dev server log has no externalized-module error. The route works in a browser.
+- Tests: typecheck and eslint pass; 142 tests across the cookbook, choice and component suites pass.
+- Next: re-add K20b1 (the preset bar's cookbook list), now that the route is known to load.
+- Next wake armed for 04:58 UTC (trig_01VHj8uqfqenum9G2VyUujN8).
