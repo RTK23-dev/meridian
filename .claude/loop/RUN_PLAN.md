@@ -347,7 +347,8 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Tests: ui-smoke covers pick, change and send.
 
 #### K19: The cookbook library and detail screens
-- Status: `pending`. Depends on: K7, K17.
+- Status: `done in part` (`library-model.ts`, 6 tests: a card per built-in, the explainer free in agent mode, the free and family filters, workspace copies after built-ins, unknown parts named). The route `/brands/$brandId/cookbooks` (`routes/_app/brands/$brandId/cookbooks.tsx`, the route tree regenerated) and the screen `library-screen.tsx` are in; the sidebar has "Cookbooks" under Create, with the navigation tests updated (51 tests across the cookbook and navigation suites pass). NOT done: (a) the version history list (the store keeps the versions, but no server function lists them, so the screen says so); (b) "Use in Content Factory" goes to the Create section, not with a `?cookbook=` parameter, because the Content page drops unknown search keys; the run's Cookbook step (K18c) offers the cookbook there; (c) the repurpose catalog `packs` capability (deferred from K5) is still unavailable; (d) the look is not checked in a browser (CI ui-smoke only visits the other pages).
+- Depends on: K7, K17.
 - `/brands/$brandId/cookbooks`: cards with badge, needs and estimate; filters by family and "free in agent mode"; detail with the
   settings panel, "Use in Content Factory" (`?cookbook=`), "Save as my cookbook" (fork, brand or workspace, D3) and the version
   history.

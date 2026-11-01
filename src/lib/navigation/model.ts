@@ -81,7 +81,10 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       id: "content",
       label: "Create",
       // The badge counts the reviews waiting for a person. They are in this page's Review section.
-      items: [{ id: "content", label: "Content", to: `${base}/content`, badge: openReviews }],
+      items: [
+        { id: "content", label: "Content", to: `${base}/content`, badge: openReviews },
+        { id: "cookbooks", label: "Cookbooks", to: `${base}/cookbooks` },
+      ],
     },
     {
       id: "results",
@@ -98,6 +101,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
  * Content page.
  */
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
+  { id: "cookbooks", label: "Cookbooks", path: "cookbooks", what: "The cookbooks a video can be made from: their steps, their cost and what each needs, and copies you can make and edit." },
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
   { id: "content", label: "Content", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Batch (admins only) starts research-led production runs." },
 ];
@@ -113,6 +117,7 @@ const BRAND_NEXT: Record<string, string> = {
   market: "intelligence",
   intelligence: "content",
   content: "calibration",
+  cookbooks: "content",
   calibration: "content",
 };
 

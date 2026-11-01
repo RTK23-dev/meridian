@@ -542,3 +542,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Other failures in the wake notifications were on superseded heads (`e6a4b28`, `4a7de92`, `24a2515`, `4c34efe`, `d6af8d2`, `f550b70`, `48d40e1`) and were the same class.
 - The loop-record commit's own CI run (41257279429) was still running at this entry.
 - Next: K19 (library screen).
+
+## 2026-11-01 00:58 UTC: K19 (in part)
+
+- CI on the current head (run 41258120485) is green in full, so the red checks are closed.
+- K19 in part: the library model (6 tests), the route `/brands/$brandId/cookbooks` with the regenerated route tree, the screen (filters, cards, a detail with the settings panel, a link to the Create section, "Save as my cookbook"), and a "Cookbooks" sidebar item under Create. Navigation tests updated: the brand screen count is 13.
+- Checks: typecheck, eslint, and 51 tests across the cookbook and navigation suites pass. The Vite build succeeds.
+- Not done: the version history list (no server function lists versions), the `?cookbook=` link (the Content page drops unknown search keys), the repurpose `packs` capability, and a browser look.
+- Next: K20 (the pipeline editor becomes the cookbook editor), or finish K19's version list first.
