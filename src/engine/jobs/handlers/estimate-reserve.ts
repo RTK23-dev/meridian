@@ -129,6 +129,11 @@ export type EstimateReservePorts = {
    * Absent, or a choice the catalog no longer supports: that call is priced from the price table, as the router then routes it.
    */
   catalog?: ModelCatalogSource;
+  /**
+   * The clock of the hold's extension, as the other stages take theirs. Absent, it is the real time. A test sets a fixed time: a hold made in
+   * one month cannot be extended in another (extendForPlan), so a real clock makes such a test pass only in the month it was written in.
+   */
+  now?: () => string;
 };
 
 /** The optional input artifact of a type, or null when the job names none. */
@@ -184,7 +189,7 @@ export function createEstimateReserveHandler(ports: EstimateReservePorts = {}): 
       if (reservationId === null) {
         return refusedBeforeExtending(ctx, "intake made no pre-flight hold on this request");
       }
-      const now = new Date().toISOString();
+      const now = (ports.now ?? (() => new Date().toISOString()))();
       const month = await source.monthBudget({ organizationId: ctx.organizationId, requestId: ctx.requestId, now });
       if (month.status !== "known") return refusedBeforeExtending(ctx, month.reason);
       if (!Number.isFinite(month.usd) || month.usd < 0) {

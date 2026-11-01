@@ -226,7 +226,7 @@ async function runEstimate(
   const requestArtifactId = await storeRequest(options.requestBudgetUsd ?? 4);
   const reservationId = options.reservationId === undefined ? HOLD : options.reservationId;
   const ctx = contextFor([planArtifactId, requestArtifactId], reservationId);
-  const handler = createEstimateReserveHandler(options.source === undefined ? {} : { workspaceBudget: options.source });
+  const handler = createEstimateReserveHandler({ now: () => NOW, ...(options.source === undefined ? {} : { workspaceBudget: options.source }) });
   const result = await handler.run(ctx);
   assert.equal(result.kind, "done");
   if (result.kind !== "done" || result.output.stage !== "estimate_reserve") assert.fail("expected an estimate_reserve output");
@@ -309,7 +309,7 @@ test("a stage with no scene_plan among its inputs is refused, not guessed", asyn
   const requestArtifactId = await storeRequest(4);
   const ctx = contextFor([requestArtifactId], HOLD);
   await assert.rejects(
-    () => createEstimateReserveHandler({ workspaceBudget: fundedWorkspace }).run(ctx),
+    () => createEstimateReserveHandler({ workspaceBudget: fundedWorkspace, now: () => NOW }).run(ctx),
     (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
   );
 });
