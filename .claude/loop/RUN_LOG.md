@@ -659,3 +659,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K20b3b part 2a done: `planSave` turns an edited cookbook into the server calls that save it. A workspace cookbook is one save of its next version. A built-in cookbook is forked to a `ck_my_` copy first, since its id is reserved and admins maintain copies of built-ins (D5), then the edited copy is saved. 9 tests; typecheck and eslint pass.
 - Next: K20b3b part 2b (the editor's fields, and running the plan through `forkCookbookAction` and `saveCookbookAction`).
 - Next wake armed for 07:18 UTC (trig_01UWsBk2p8ZC3iJBEafQRnY5).
+
+## 2026-11-01 07:20 UTC: wake: K20b3b part 2b
+
+- Wake (07:18): the branch matched a5790b7; the check runs for the current head were green so far, and the failures in the notifications were on old heads.
+- K20b3b part 2b done: the save plan's copy is saved as a workspace cookbook. `runSavePlan` runs a plan through two injected calls (fork, save), stops at the first failure, and names the copy's state when the edits are refused. 13 tests; typecheck and eslint pass.
+- Known gap (to check in the store): a copy's later versions do not carry the parent link the fork records, because the save path does not pass it.
+- Next: K20b3b part 2c (the editor's fields, calling `applyEdits`, `planSave` and `runSavePlan` through the actions).
+- Next wake armed for 07:41 UTC (trig_018C9q11URkiud5GZG4t5xeF).
