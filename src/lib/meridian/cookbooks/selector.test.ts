@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { factoryPresetCookbook } from "./builtin/factory-presets.ts";
 import { threeDDataExplainerCookbook } from "./builtin/three-d-data-explainer.ts";
 import type { RunInputs } from "./eligibility.ts";
-import { proposeCookbooks, selectorData, SELECTOR_INSTRUCTIONS, validateAnswer, type SelectorPort } from "./selector.ts";
+import { proposeCookbooks, selectorInputOf, validateAnswer, type SelectorPort } from "./selector.ts";
 
 const INPUTS: RunInputs = {
   briefChars: 120,
@@ -22,12 +22,12 @@ function port(text: string): SelectorPort {
   return async () => ({ ok: true, text });
 }
 
-test("the data the model sees carries the eligible cookbooks, in a delimited block, and no instructions", () => {
-  const data = selectorData([threeDDataExplainerCookbook], INPUTS);
-  assert.match(data, /^<cookbook_data>\n/);
-  assert.ok(data.includes("ck_3d_data_explainer"));
-  assert.equal(data.includes("Open on a surprising claim"), false, "the cookbook's instructions are not sent");
-  assert.ok(SELECTOR_INSTRUCTIONS.includes("JSON only"));
+test("the data the model sees carries the eligible cookbooks and the run's inputs, and no cookbook instructions", () => {
+  const input = selectorInputOf([threeDDataExplainerCookbook], INPUTS);
+  assert.equal(input.cookbooks.length, 1);
+  assert.equal(input.cookbooks[0]?.cookbookId, "ck_3d_data_explainer");
+  assert.equal(input.inputs.runKind, INPUTS.runKind);
+  assert.equal(JSON.stringify(input).includes("Open on a surprising claim"), false, "the cookbook's instructions are not sent");
 });
 
 test("a good answer is proposed, with its values, its reason and its resolution", async () => {
