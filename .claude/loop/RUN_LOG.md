@@ -854,3 +854,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Records only: RUN_PLAN (R5 and K17), OPEN_QUESTIONS (Q43), STATE and RUN_LOG. No code changed.
 - Next unit: K17, the cookbook settings panel, which wires `draft-store` and `debounce`.
 - Next wake armed for 14:55 UTC (trig_012r31PW8GrJhe5sQ2Cdrn5k).
+
+## 2026-11-01 14:57 UTC: wake: K17, the unsent settings draft
+
+- Wake (14:55): CI on the head 25d7f48 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Read K17. Its remaining work is mounting the panel on a screen (K18) and the browser check. The draft part was unwired, and it is the part that the storage and timers can test here.
+- Unit done (K17): `components/cookbooks/settings-draft.ts`. It keeps a person's unsent settings per person, workspace and cookbook, through `draft-store.ts`. It saves a change a short pause after the last one, through `debounce.ts`. It restores only the stored values that fit their controls, and falls back to the defaults for the rest. It drops the draft when the values equal the defaults, and on discard, which also cancels a waiting save. Storage and timers are injected, so the rules run in Node. The panel itself is not mounted until K18.
+- Checks: `settings-draft.test.ts` passed 6 of 6. `npx eslint` on the two files exits 0. `npm run typecheck` exits 0.
+- Not checked: the panel in a browser, since K18 has not mounted it yet.
+- R5: `draft-store` and `debounce` now have a non-test importer, so they are no longer test-only.
+- Next: K18, mounting the settings panel and the selection step, then the browser checks.
+- Next wake armed for 15:18 UTC (trig_01Xhcj4eXEPtKT3JHYfXjeZc).
