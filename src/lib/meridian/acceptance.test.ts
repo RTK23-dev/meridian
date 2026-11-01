@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { ingestComposedText } from "./assets/lifecycle.ts";
-import { calibrationReport } from "./calibration/report.ts";
+import { buildCalibrationReport } from "./learning/calibration-report.ts";
 import type { BrainSlice, LearnedPattern, ObservedCreative, PerformanceRow } from "./domain.ts";
 import { designExperiment } from "./experiments/design.ts";
 import { buildBrief } from "./brief/engine.ts";
@@ -599,12 +599,15 @@ test("acceptance: market evidence becomes a recommendation, then learning change
   const nextScript = `${script}\n${briefAfter.learningNotes[0]}`;
   assert.notEqual(nextScript, script);
 
-  const report = calibrationReport([
-    { probability: curiosity ? 0.8 : 0, outcome: true },
-    { probability: 0.2, outcome: false },
-  ]);
-  assert.equal(report.appliedToThresholds, false);
-  assert.ok(report.bins.some((bin) => bin.count > 0));
+  const report = buildCalibrationReport(
+    [
+      { predicted: curiosity ? 0.8 : 0, observed: true },
+      { predicted: 0.2, observed: false },
+    ],
+    { minimumSample: 1 },
+  );
+  assert.equal(report.state, "measured", "the report measures, and applies nothing to a threshold");
+  assert.ok(report.state === "measured" && report.bins.some((bin) => bin.count > 0));
 
   const missing = INTEGRATIONS.filter((item) => item.status === "NOT_CONNECTED").map((item) => item.id);
   assert.ok(missing.includes("ad_library"));
