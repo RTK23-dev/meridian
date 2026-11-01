@@ -622,3 +622,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Tests: typecheck and eslint pass; the library and factory component tests pass (15).
 - Next: K20b2 (the editor shows a cookbook's steps and controls read-only).
 - Next wake armed for 05:23 UTC (trig_01PXrdY6q87qCf7nBgt2mZUH).
+
+## 2026-11-01 05:27 UTC: wake: K20b2a
+
+- Wake (05:23): the branch matched 2501843; CI on it was fully green (run 41275436279: every test shard, ui-smoke, e2e, release-acceptance, typecheck, sidecar and PostgreSQL).
+- K20b2a done: `components/cookbooks/outline-model.ts`, a pure read-only outline of one cookbook: its steps in order (with what each waits for, and whether it is conditional) and its controls (with their defaults in words). The types are imported for typing only, so the browser can draw it. 3 tests; typecheck and eslint pass.
+- Next: K20b2b (mount the outline in the editor, reading the cookbook through `readCookbookAction`).
+- Next wake armed for 05:47 UTC (trig_014raF7ACovwWpmkVrCNHt3C).
