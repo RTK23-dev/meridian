@@ -674,3 +674,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K20b3 done: the outline panel has an Edit action for members and above. The edit form edits control defaults and instruction texts; Save runs the edit rules and the save plan through the server (a built-in is copied first; the server checks the whole cookbook again). Typecheck, lint and 35 component and factory tests pass. The release acceptance passes locally, 31 of 31, with no externalized-module error. The Edit action is not clicked by the acceptance.
 - Next: a browser check of the Edit action (a save of a workspace cookbook and of a built-in copy), and the parent-link gap in the store.
 - Next wake armed for 08:04 UTC (trig_01P9379T4BpYHrGZumRxF1L4).
+
+## 2026-11-01 08:08 UTC: wake: the parent-link gap fixed
+
+- Wake (08:04): the branch matched 083d58a; its check suite completed with no failure.
+- Parent-link gap fixed: a later version of a copy keeps the parent its latest version recorded (the save path named none, so the copy lost its link from version 2). One PGlite test; the cookbook suites pass (188 tests). Typecheck and eslint pass.
+- Next: a browser check of the Edit action (a save of a workspace cookbook and of a built-in copy), with the release acceptance extended to cover it.
+- Next wake armed for 08:28 UTC (trig_012DV5N74c4ocuUxhxtJSt4E).
