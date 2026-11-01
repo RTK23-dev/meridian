@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { getPresetConfig, validatePipelineConfig, type FactoryPipelineConfig } from "../factory/pipeline-config.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
-import { factoryCookbookId, loadFactoryCookbook, migrateFactoryPipelineConfigs, saveFactoryCookbook } from "./factory-bridge.ts";
+import { factoryCookbookId, loadFactoryCookbook, migrateFactoryPipelineConfigs, saveFactoryCookbook, saveFactoryLine } from "./factory-bridge.ts";
 import { getCookbookVersion } from "./store.ts";
 
 const ORG = "org_factory_bridge";
@@ -97,4 +97,19 @@ test("the migration writes each saved row once, and running it again writes noth
   assert.deepEqual(second, { written: 0, current: 2, refused: 0 }, "a second run finds every row already current");
   assert.deepEqual(await loadFactoryCookbook(db.sql, { organizationId: migrating, brandId: brandX }), validatePipelineConfig(rows[0]![1]));
   assert.deepEqual(await loadFactoryCookbook(db.sql, { organizationId: migrating, brandId: brandY }), validatePipelineConfig(rows[1]![1]));
+});
+
+test("a saved factory line is written as its cookbook only: no row goes to the old factory_pipeline_configs table (K20)", async () => {
+  const brand = "brand_factory_k20";
+  await db.sql`insert into brands (id, organization_id, name, created_by) values (${brand}, ${ORG}, ${brand}, 'test') on conflict (id) do nothing`;
+  const countOld = async (): Promise<number> => {
+    const rows = await db.sql<{ n: number }>`select count(*)::int as n from factory_pipeline_configs where organization_id = ${ORG} and brand_id = ${brand}`;
+    return rows[0]?.n ?? -1;
+  };
+  assert.equal(await countOld(), 0);
+  const saved = await saveFactoryLine(db.sql, { organizationId: ORG, brandId: brand, config: getPresetConfig("viral_ugc"), createdBy: "user_k20" });
+  assert.deepEqual(saved, validatePipelineConfig(getPresetConfig("viral_ugc")), "the line is returned as validated");
+  assert.equal(await countOld(), 0, "the old table is not written");
+  const stored = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: brand, cookbookId: factoryCookbookId(brand) });
+  assert.equal(stored.ok, true, "the cookbook holds the line");
 });

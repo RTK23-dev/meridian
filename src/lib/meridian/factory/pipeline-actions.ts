@@ -9,11 +9,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
-import { saveFactoryCookbook } from "../cookbooks/factory-bridge.ts";
+import { saveFactoryLine } from "../cookbooks/factory-bridge.ts";
 import { loadFactoryPipelineConfig } from "./pipeline-config-store.ts";
 import {
   type FactoryPipelineConfig,
-  validatePipelineConfig,
   PIPELINE_PRESETS,
 } from "./pipeline-config.ts";
 
@@ -68,35 +67,8 @@ export const savePipelineConfig = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
-    const validated = validatePipelineConfig(data.config);
-    const id = `fpc_${globalThis.crypto.randomUUID()}`;
-
-    await sql`
-      insert into factory_pipeline_configs (
-        id, organization_id, brand_id, preset_name, stages, prompts, generation_params, grading_thresholds, updated_by, updated_at
-      ) values (
-        ${id},
-        ${organizationId},
-        ${data.brandId},
-        ${validated.presetName},
-        ${JSON.stringify(validated.stages)}::jsonb,
-        ${JSON.stringify(validated.prompts)}::jsonb,
-        ${JSON.stringify(validated.generationParams)}::jsonb,
-        ${JSON.stringify(validated.gradingThresholds)}::jsonb,
-        ${context.userId},
-        now()
-      )
-      on conflict (organization_id, brand_id) do update set
-        preset_name = excluded.preset_name,
-        stages = excluded.stages,
-        prompts = excluded.prompts,
-        generation_params = excluded.generation_params,
-        grading_thresholds = excluded.grading_thresholds,
-        updated_by = excluded.updated_by,
-        updated_at = now()
-    `;
-    // The line is also a cookbook from now on (K8): the library and the resolver read it.
-    await saveFactoryCookbook(sql, { organizationId, brandId: data.brandId, config: validated, createdBy: context.userId });
+    // The line is saved as its cookbook only (K20): factory_pipeline_configs is no longer written.
+    const validated = await saveFactoryLine(sql, { organizationId, brandId: data.brandId, config: data.config, createdBy: context.userId });
 
     return { ok: true, config: validated };
   });
@@ -116,31 +88,7 @@ export const applyPipelinePreset = createServerFn({ method: "POST" })
       throw new Error(`Unknown preset: ${data.presetName}`);
     }
 
-    const id = `fpc_${globalThis.crypto.randomUUID()}`;
-    await sql`
-      insert into factory_pipeline_configs (
-        id, organization_id, brand_id, preset_name, stages, prompts, generation_params, grading_thresholds, updated_by, updated_at
-      ) values (
-        ${id},
-        ${organizationId},
-        ${data.brandId},
-        ${preset.presetName},
-        ${JSON.stringify(preset.stages)}::jsonb,
-        ${JSON.stringify(preset.prompts)}::jsonb,
-        ${JSON.stringify(preset.generationParams)}::jsonb,
-        ${JSON.stringify(preset.gradingThresholds)}::jsonb,
-        ${context.userId},
-        now()
-      )
-      on conflict (organization_id, brand_id) do update set
-        preset_name = excluded.preset_name,
-        stages = excluded.stages,
-        prompts = excluded.prompts,
-        generation_params = excluded.generation_params,
-        grading_thresholds = excluded.grading_thresholds,
-        updated_by = excluded.updated_by,
-        updated_at = now()
-    `;
+    const saved = await saveFactoryLine(sql, { organizationId, brandId: data.brandId, config: preset, createdBy: context.userId });
 
-    return { ok: true, config: preset };
+    return { ok: true, config: saved };
   });

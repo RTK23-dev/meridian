@@ -122,6 +122,20 @@ export function factoryConfigOfCookbook(cookbook: Cookbook): FactoryPipelineConf
  * Saves a brand's factory configuration as its cookbook, if it differs from the latest version. Writing the same configuration twice gives one
  * version. The configuration is clamped by the factory's validator first.
  */
+/**
+ * Saves a brand's factory line as its cookbook (K20). The factory line no longer writes factory_pipeline_configs: the cookbook is the only
+ * write. A save the cookbook refuses is an error, so nothing is reported as saved that was not. Returns the validated line.
+ */
+export async function saveFactoryLine(
+  sql: Sql,
+  input: { organizationId: string; brandId: string; config: Partial<FactoryPipelineConfig>; createdBy: string },
+): Promise<FactoryPipelineConfig> {
+  const validated = validatePipelineConfig(input.config);
+  const saved = await saveFactoryCookbook(sql, { organizationId: input.organizationId, brandId: input.brandId, config: validated, createdBy: input.createdBy });
+  if (!saved.ok) throw new Error(saved.issues?.join("; ") || saved.reason);
+  return validated;
+}
+
 export async function saveFactoryCookbook(
   sql: Sql,
   input: { organizationId: string; brandId: string; config: Partial<FactoryPipelineConfig>; createdBy: string },
