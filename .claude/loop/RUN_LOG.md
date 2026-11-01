@@ -906,3 +906,17 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Choice taken on Q18 (b): "say so on the page" has no page to point to, since neither module has a screen. The note goes in the file's header and module note (B15). If a screen was meant, that is a question for the owner.
 - Next: B1 (delete `src/engine/orchestrator/example.ts` and its test, after the importer search).
 - Next wake armed for 16:57 UTC (trig_01C21ayNP4FrjbgEGvQWJteL). The earlier wake for 16:36 (trig_01XqJxdHya82SpH4fWb5WyyN) was deleted, so there is one wake.
+
+
+## 2026-11-01: the owner's go on Q34, Q39 and Q44, and the final version
+
+- The owner answered: "Go with recommendations for all and work on making the final stable version only then when fully confident you may push this version". Applied: Q34 (approve cookbook_selector as a contract change), Q39 (K23 reuses the preview scene file, with the cookbook as the source of its values), Q44 (a new draft PR on a new branch; #85 untouched).
+- Branch: `claude/cookbook-presets-zrf6un`, from 09a8423. Local commits only, pushed once when the version is verified.
+- Done (committed locally, each unit its own commit):
+  - The cookbook_selector role (contract engine-contracts@13): CLAUDE_ROLES, migration 0143 (the role check), prompt cookbook_selector@1 (pinned), role file with schemas and recorded-answer tests, the Bible section 4 note. Typecheck passes.
+  - The selector port (lib/meridian/cookbooks/selector-port.ts): through runRole against a request and reservation; a missing key gives the picker. The server action does not yet hold a request or reservation for a proposal before a run, so it still gives the picker. That needs an owner decision on how a selection is reserved (flagged for the final message).
+  - B1 to B10 (commits): the example module (data moved to a test fixture), three modules with no caller, the in-memory queue and the second frame selector, the duplicate clustering and calibration, the factory timeline renderer, the second logo matcher, the recorded render replies (moved to test), the flow pipeline and the speech-pace prior (140 to 180), the third calibration implementation (its reliability curve in the learning report), and the Reels safe-zone check (new gate check text_in_safe_zones, fail closed without boxes).
+- Behaviour change to report: the post-render gate now has a check that is not evaluated without on-screen text boxes, and the OCR port does not return boxes. A video that passed before now goes to review until boxes are measured. This follows the gate's rule that an unmeasured check is not a pass.
+- Migration numbering: Q41 (B11) uses 0144, since 0143 is the cookbook_selector role.
+- Coverage gap recorded (B3): the durable queue's idempotency, tenant, schedule and cancel behaviour had no other test. The Postgres worker tests cover lease renewal, backoff and dead letters.
+- Next: B11, then B12 to B16, K13, K15, K16, K17, K23 and K24, K29, K20f, K30, then the verification and one push.
