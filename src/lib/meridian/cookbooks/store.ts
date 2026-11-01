@@ -100,8 +100,8 @@ export async function saveCookbookVersion(
   if (cookbook.scope !== "workspace") return { ok: false, reason: "invalid", issues: ["scope: a saved cookbook is a workspace cookbook"] };
   if (isReserved(cookbook.cookbookId)) return { ok: false, reason: "reserved", issues: [`${cookbook.cookbookId} is a built-in id`] };
 
-  const existing = await sql<{ brand_id: string | null; version: number | string }>`
-    select brand_id, version from cookbooks
+  const existing = await sql<{ brand_id: string | null; version: number | string; parent_cookbook_id: string | null; parent_version: number | string | null }>`
+    select brand_id, version, parent_cookbook_id, parent_version from cookbooks
     where organization_id = ${input.organizationId} and cookbook_id = ${cookbook.cookbookId}
     order by version desc limit 1
   `;
@@ -110,14 +110,17 @@ export async function saveCookbookVersion(
     return { ok: false, reason: "brand_mismatch", issues: ["a cookbook keeps its brand: fork it to share it elsewhere"] };
   }
   const version = latest === undefined ? 1 : Number(latest.version) + 1;
-  const body = { ...cookbook, version, scope: "workspace" as const, ...(input.parent ? { parent: input.parent } : {}) };
+  // A later version keeps the parent its earlier version recorded (a copy of a built-in stays a copy of it), unless the caller names one.
+  const carried = latest?.parent_cookbook_id ? { cookbookId: latest.parent_cookbook_id, version: Number(latest.parent_version) } : null;
+  const parent = input.parent !== undefined ? input.parent : carried;
+  const body = { ...cookbook, version, scope: "workspace" as const, ...(parent ? { parent } : {}) };
   const hash = contentHash(body);
   const rowId = randomUUID();
   try {
     await sql`
       insert into cookbooks (id, organization_id, brand_id, cookbook_id, version, parent_cookbook_id, parent_version, body, content_hash, created_by)
       values (${rowId}, ${input.organizationId}, ${input.brandId}, ${cookbook.cookbookId}, ${version},
-        ${input.parent?.cookbookId ?? null}, ${input.parent?.version ?? null}, ${JSON.stringify(body)}::jsonb, ${hash}, ${input.createdBy})
+        ${parent?.cookbookId ?? null}, ${parent?.version ?? null}, ${JSON.stringify(body)}::jsonb, ${hash}, ${input.createdBy})
     `;
   } catch (error) {
     if (isUniqueViolation(error)) return { ok: false, reason: "conflict", issues: ["another edit wrote this version first: reload and try again"] };

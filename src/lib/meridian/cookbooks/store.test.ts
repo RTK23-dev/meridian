@@ -130,3 +130,24 @@ test("a brand lists the versions it can see, newest first, and another brand see
   const none = await listCookbookVersions(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_missing" });
   assert.deepEqual(none, []);
 });
+
+test("a later version of a copy keeps the parent its first version recorded (K20b3)", async () => {
+  const first = await saveCookbookVersion(db.sql, {
+    organizationId: ORG,
+    brandId: BRAND_A,
+    cookbook: custom("ck_store_parent"),
+    createdBy: USER,
+    parent: { cookbookId: "ck_3d_data_explainer", version: 2 },
+  });
+  assert.equal(first.ok, true);
+  const second = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbook: custom("ck_store_parent", "Edited"), createdBy: USER });
+  assert.equal(second.ok, true);
+  const rows = await db.sql<{ version: number; parent_cookbook_id: string | null; parent_version: number | null }>`
+    select version, parent_cookbook_id, parent_version from cookbooks
+    where organization_id = ${ORG} and cookbook_id = 'ck_store_parent' order by version
+  `;
+  assert.deepEqual(rows.map((row) => [row.version, row.parent_cookbook_id, row.parent_version]), [
+    [1, "ck_3d_data_explainer", 2],
+    [2, "ck_3d_data_explainer", 2],
+  ]);
+});
