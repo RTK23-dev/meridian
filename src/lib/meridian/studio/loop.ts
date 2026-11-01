@@ -1,3 +1,5 @@
+// Test harness (Q18, decision b). This loop runs on test providers only, and no screen or product path calls it. Its output is fixture output,
+// not a product result, and it must not be shown as one. It stays as a harness for its tests until the owner decides otherwise.
 import { walkToQa, advanceAsset, type AssetLineage, type AssetState } from "../assets/pipeline.ts";
 import { assertSameTenant, type BrainSlice, type LearnedPattern, type ObservedCreative, type PerformanceRow, type ProductFact, type RejectionFact } from "../domain.ts";
 import { fingerprintCreative, type CreativeFingerprint } from "../intelligence/fingerprint.ts";

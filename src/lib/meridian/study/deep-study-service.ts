@@ -1,3 +1,5 @@
+// Test harness (Q18, decision b). The deep study depends on model-backed judgment that is not connected, and no screen or product path calls
+// it. Its output is not a product result. It stays as a harness for its tests until the owner decides otherwise.
 /**
  * Deep Study JEV Service & Concept Library Integration
  *
