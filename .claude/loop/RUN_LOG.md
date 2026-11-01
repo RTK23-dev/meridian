@@ -613,3 +613,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Tests: typecheck and eslint pass; 142 tests across the cookbook, choice and component suites pass.
 - Next: re-add K20b1 (the preset bar's cookbook list), now that the route is known to load.
 - Next wake armed for 04:58 UTC (trig_01VHj8uqfqenum9G2VyUujN8).
+
+## 2026-11-01 05:03 UTC: wake: K20b1 re-applied on the server cards
+
+- Wake (04:58): the branch matched a9367af; its checks completed with no failures.
+- K20b1 re-applied: the cookbook cards come from the server (`listCookbooksAction` returns them), and `nonFactoryCardsOf` (a client helper with plain fields) leaves out the factory presets and the blank modes. The editor passes the rest to the preset bar, which lists them read-only.
+- Gate: the local release acceptance passed, 31 of 31 checks, including the Content-page checks F1 and F2 (which failed on the reverted K20b1) and the cookbook route H1. The dev server log has no externalized-module error.
+- Tests: typecheck and eslint pass; the library and factory component tests pass (15).
+- Next: K20b2 (the editor shows a cookbook's steps and controls read-only).
+- Next wake armed for 05:23 UTC (trig_01PXrdY6q87qCf7nBgt2mZUH).
