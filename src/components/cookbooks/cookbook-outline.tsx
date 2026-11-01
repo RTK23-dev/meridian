@@ -1,14 +1,22 @@
-// The read-only outline of one cookbook (round 3, K20b2b): the server reads the cookbook, the outline model orders it, and this panel draws the
-// steps and the controls. Nothing here changes a cookbook; the library screen and the editor's own controls do that.
+// The read-only outline of one cookbook (round 3, K20b2b), with an Edit action for people who may change it (K20b3b part 2c). The server reads the
+// cookbook, the outline model orders it, and this panel draws it. Editing opens the edit form in its place; saving reloads the outline.
 
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui";
 import { readCookbookAction } from "@/lib/meridian/cookbooks/actions";
+import type { Cookbook } from "@/lib/meridian/cookbooks/schema";
+import { CookbookEditForm } from "./cookbook-edit-form";
 import { outlineOf, type Outline } from "./outline-model";
 
-type Loaded = { state: "loading" } | { state: "error"; reason: string } | { state: "ready"; outline: Outline };
+type Loaded =
+  | { state: "loading" }
+  | { state: "error"; reason: string }
+  | { state: "ready"; outline: Outline; cookbook: Cookbook; source: "builtin" | "workspace" };
 
-export function CookbookOutline({ brandId, cookbookId }: { brandId: string; cookbookId: string }) {
+export function CookbookOutline({ brandId, cookbookId, canEdit = false }: { brandId: string; cookbookId: string; canEdit?: boolean }) {
   const [loaded, setLoaded] = useState<Loaded>({ state: "loading" });
+  const [editing, setEditing] = useState(false);
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -16,7 +24,11 @@ export function CookbookOutline({ brandId, cookbookId }: { brandId: string; cook
       try {
         const outcome = await readCookbookAction({ data: { brandId, cookbookId } });
         if (cancelled) return;
-        setLoaded(outcome.ok ? { state: "ready", outline: outlineOf(outcome.value.cookbook) } : { state: "error", reason: outcome.reason });
+        setLoaded(
+          outcome.ok
+            ? { state: "ready", outline: outlineOf(outcome.value.cookbook), cookbook: outcome.value.cookbook, source: outcome.value.source }
+            : { state: "error", reason: outcome.reason },
+        );
       } catch (caught) {
         if (!cancelled) setLoaded({ state: "error", reason: caught instanceof Error ? caught.message : "The cookbook could not be read." });
       }
@@ -24,11 +36,26 @@ export function CookbookOutline({ brandId, cookbookId }: { brandId: string; cook
     return () => {
       cancelled = true;
     };
-  }, [brandId, cookbookId]);
+  }, [brandId, cookbookId, reload]);
 
   if (loaded.state === "loading") return <p className="text-sm text-fg-muted">Reading the steps…</p>;
   if (loaded.state === "error") return <p role="alert" className="text-sm text-danger">{loaded.reason}</p>;
-  const { outline } = loaded;
+  const { outline, cookbook, source } = loaded;
+
+  if (editing) {
+    return (
+      <CookbookEditForm
+        brandId={brandId}
+        source={source}
+        cookbook={cookbook}
+        onDone={() => {
+          setEditing(false);
+          setReload((count) => count + 1);
+        }}
+      />
+    );
+  }
+
   return (
     <section aria-label={`Steps of ${outline.label}`} className="space-y-3">
       <ol className="list-decimal space-y-1 pl-5 text-sm text-fg">
@@ -50,6 +77,11 @@ export function CookbookOutline({ brandId, cookbookId }: { brandId: string; cook
           </li>
         ))}
       </ul>
+      {canEdit ? (
+        <Button type="button" variant="secondary" size="sm" onClick={() => setEditing(true)}>
+          {source === "builtin" ? "Edit a copy" : "Edit"}
+        </Button>
+      ) : null}
     </section>
   );
 }

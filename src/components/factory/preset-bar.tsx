@@ -109,7 +109,7 @@ export function PresetBar({
               </li>
             ))}
           </ul>
-          {shown !== null ? <CookbookOutline brandId={brandId} cookbookId={shown} /> : null}
+          {shown !== null ? <CookbookOutline brandId={brandId} cookbookId={shown} canEdit={canEdit} /> : null}
         </section>
       ) : null}
     </section>
