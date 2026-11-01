@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbook } from "../../lib/meridian/cookbooks/builtin/index.ts";
-import { INSTRUCTION_MAX_CHARACTERS, instructionEdit, setControlValue } from "./edit-model.ts";
+import { applyEdits, INSTRUCTION_MAX_CHARACTERS, instructionEdit, setControlValue } from "./edit-model.ts";
 
 const EXPLAINER = builtinCookbook("ck_3d_data_explainer");
 if (EXPLAINER === undefined) throw new Error("the explainer is built in");
@@ -39,4 +39,28 @@ test("an instruction must say something, and fit the limit", () => {
   const long = instructionEdit("x".repeat(INSTRUCTION_MAX_CHARACTERS + 1));
   assert.equal(long.ok, false);
   if (!long.ok) assert.match(long.reason, /4000/);
+});
+
+test("applying edits returns a copy with the new defaults and texts, and leaves the original untouched (K20b3)", () => {
+  const before = JSON.stringify(EXPLAINER);
+  const edited = applyEdits(EXPLAINER, [
+    { kind: "control", id: "pace", value: 1.2 },
+    { kind: "instruction", index: 0, text: "Open on a bigger number." },
+  ]);
+  assert.equal(edited.ok, true);
+  if (!edited.ok) return;
+  assert.equal(edited.cookbook.controls.find((control) => control.id === "pace")?.default, 1.2);
+  assert.equal(edited.cookbook.instructions[0]?.text, "Open on a bigger number.");
+  assert.equal(JSON.stringify(EXPLAINER), before, "the original cookbook is not changed");
+});
+
+test("one edit that fails stops the set: nothing half-applied is returned, with the reason", () => {
+  const bad = applyEdits(EXPLAINER, [
+    { kind: "control", id: "pace", value: 1.1 },
+    { kind: "control", id: "pace", value: 9 },
+  ]);
+  assert.equal(bad.ok, false);
+  if (!bad.ok) assert.match(bad.reason, /outside what the control allows/);
+  assert.equal(applyEdits(EXPLAINER, [{ kind: "instruction", index: 999, text: "x" }]).ok, false, "an instruction that does not exist is refused");
+  assert.equal(applyEdits(EXPLAINER, [{ kind: "instruction", index: 0, text: "  " }]).ok, false, "a blank instruction is refused");
 });
