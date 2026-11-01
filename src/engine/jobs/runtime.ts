@@ -100,6 +100,7 @@ import { createRenderHandler, type RenderPorts } from "./handlers/render.ts";
 import { createVariantsHandler, type VariantPorts } from "./handlers/variants.ts";
 import { createDeliverHandler, type DeliverPorts } from "./handlers/deliver.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
+import { sqlOutputMeasures } from "./output-measures-sql.ts";
 import { sqlSamplingPorts } from "./sampling-store.ts";
 import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
@@ -602,7 +603,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       deepgram: deepgramBillReader({ gateway, projects }),
     },
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
-    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
+    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow, recordMeasures: sqlOutputMeasures(sql) }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
     // Intake's VideoDNA lookup (Bible 6.1 step 5). Without it the request gate reads "the lookup has not run" and every production request fails
     // at intake; with it, a stored analysis of the same reference is the hit and no stored analysis is a miss (video-dna-cache.ts).

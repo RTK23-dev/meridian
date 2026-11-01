@@ -171,6 +171,8 @@ export function productionRenderPorts(input: ProductionRenderInput): RenderPorts
 
 export type ProductionPostRenderInput = {
   gateway: Gateway;
+  /** Records each output's measures (K28). Absent, nothing is recorded. */
+  recordMeasures?: PostRenderPorts["recordMeasures"];
   /** The media functions: frames, loudness, the timeline and the detectors of the rendered file. */
   media: HttpMediaFunctions;
   objects: MediaStorePort;
@@ -191,6 +193,7 @@ export function productionPostRenderPorts(input: ProductionPostRenderInput): Pos
     objects: input.objects,
     frameReader: true,
     now: input.now,
+    recordMeasures: input.recordMeasures,
   };
 }
 

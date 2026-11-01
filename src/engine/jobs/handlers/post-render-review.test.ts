@@ -129,7 +129,7 @@ function portsFor(s: Scenario, options: { transport: ReturnType<typeof recordedT
     objects: s.objects,
     measureBlackFrames: async () => clearBlackFrames(s.render.edl),
     measureOverlays: async ({ edl }) => drawnOverlays(edl).map((item, index) => ({ clipId: item.clipId, present: !(options.overlayDrop === true && index === 0) })),
-    measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"] }),
+    measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"], textBoxes: [] }),
     forbiddenTerms: async () => options.forbidden ?? ["miracle cure"],
   };
 }

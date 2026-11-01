@@ -62,3 +62,18 @@ test("another workspace's runs are not read", async () => {
   assert.equal(unreadable, 0);
   assert.equal((await recordedRunsOf(db.sql, { organizationId: "org_nobody" })).runs.length, 0);
 });
+
+test("a run whose output the engine measured carries those measures, with an unknown reading kept as null (K28, Q41)", async () => {
+  const request = "req_01JABCDEFGHJKMNPQRSTVWXYZ0";
+  await db.sql`
+    insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state)
+    values (${request}, ${ORG}, ${BRAND}, 'fmt_fixture_rank', 'normal', 'running', '{}')
+  `;
+  await db.sql`update content_factory_sessions set status = 'started', engine_request_id = ${request} where id = 'cfs_recorded'`;
+  await db.sql`
+    insert into engine_output_measures (organization_id, request_id, measures, recorded_at)
+    values (${ORG}, ${request}, ${JSON.stringify({ integrated_lufs: -14, longest_silence_ms: null })}::jsonb, '2026-11-01T10:00:00.000Z')
+  `;
+  const { runs } = await recordedRunsOf(db.sql, { organizationId: ORG });
+  assert.deepEqual(runs[0]?.measures, { integrated_lufs: -14, longest_silence_ms: null });
+});
