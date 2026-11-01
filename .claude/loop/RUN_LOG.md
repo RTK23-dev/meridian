@@ -573,3 +573,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Finding: the preset bar's labels already come from the same source as the factory cookbooks (`PRESET_LABEL`), so swapping the source would change nothing visible; it is not a unit. The validation piece is already done for prompts: prompts-panel shows each empty prompt's message beside its field. The generation and grading fields get the same treatment in K20b3.
 - This wake changed documents only. No code changed, so no checks were run beyond the branch state.
 - Next: K20b1.
+
+## 2026-11-01 03:24 UTC: wake: K20b1
+
+- Wake (03:21): CI on fb035a5 was fully green; the branch matched the remote.
+- K20b1 done (`c006efd`): the preset bar lists the brand's other cookbooks beneath the four factory presets, read-only, with one link to the library. The factory presets and blank modes are left out (`nonFactoryCardsOf`). The editor loads the library for the bar; a library that cannot be read shows no list.
+- Checks: typecheck and eslint pass; the factory component and cookbook library tests pass (19). Not checked in a browser (ui-smoke runs the factory screens in CI).
+- Next: K20b2.
+- Next wake armed for 03:44 UTC (trig_01XVVZ19zZJrpRqSUzSBXm4g).
