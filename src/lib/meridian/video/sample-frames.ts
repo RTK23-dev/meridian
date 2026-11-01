@@ -90,7 +90,7 @@ export async function sampleVideoFrames(input: {
   count?: number;
   /**
    * Exact timestamps to decode, such as the start of each selected scene. When given, they replace the even spacing, and each
-   * frame is decoded at its real time (video/scene-frames.ts).
+   * frame is decoded at its real time.
    */
   timestampsMs?: readonly number[];
   extractor?: FrameExtractor;

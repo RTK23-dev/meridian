@@ -7,7 +7,6 @@ import { embeddingProviderState, retrieveSimilar, testEmbedding, type EmbeddingV
 import { clusterCreatives, clusterWhitespace } from "./intelligence/cluster.ts";
 import { decide } from "./jev/engine.ts";
 import { duplicateRisk, publishingReadiness } from "./jev/guards.ts";
-import { createDurableQueue, runWorkerTick } from "./jobs/durable.ts";
 import { learnPatterns } from "./learning/engine.ts";
 import { collectAdLibrarySource, dedupeCreatives, normalizeRecord, type RawMarketRecord } from "./market/pipeline.ts";
 import { rankOpportunities } from "./opportunity/engine.ts";
@@ -124,20 +123,8 @@ test("stored evidence changes the next brief after the worker learns", async () 
     spendCents: 1000,
     revenueCents: item.angle === "curiosity" ? 4000 : 800,
   }));
-  const queue = createDurableQueue();
-  let runs = 0;
-  let learned = learnPatterns({ organizationId: org, brandId: brand, creatives: owned, observations });
-  const handler = async () => {
-    runs += 1;
-    learned = learnPatterns({ organizationId: org, brandId: brand, creatives: owned, observations });
-    return `patterns:${learned.length}`;
-  };
-  const firstJob = queue.enqueue({ organizationId: org, brandId: brand, type: "learning.update", idempotencyKey: "learn-1", payload: { organizationId: org } });
-  const duplicate = queue.enqueue({ organizationId: org, brandId: brand, type: "learning.update", idempotencyKey: "learn-1", payload: { organizationId: org } });
-  assert.equal(duplicate.created, false);
-  await runWorkerTick(queue, { "learning.update": handler }, 0);
-  assert.equal(runs, 1);
-  assert.equal(firstJob.job.status, "succeeded");
+  // The learning update runs once, as the worker's learning handler runs it. The queue that ran it is the Postgres worker, which has its own tests.
+  const learned = learnPatterns({ organizationId: org, brandId: brand, creatives: owned, observations });
   const after = rankOpportunities({ organizationId: org, brandId: brand, brain, products: [], creatives: owned, patterns: learned, rejections: [] });
   const beforeCuriosity = before.find((item) => item.angle === "curiosity")?.expectedValue ?? 0;
   const afterCuriosity = after.find((item) => item.angle === "curiosity")?.expectedValue ?? 0;
@@ -179,36 +166,4 @@ test("stored evidence changes the next brief after the worker learns", async () 
   assert.equal(limit.allow(org, 0), true);
   assert.equal(limit.allow(org, 10), true);
   assert.equal(limit.allow(org, 20), false);
-
-  const failing = createDurableQueue();
-  failing.enqueue({ organizationId: org, brandId: brand, type: "publishing.sync", idempotencyKey: "boom", payload: {}, maxAttempts: 1 });
-  await runWorkerTick(failing, { "publishing.sync": () => { throw new Error("down"); } }, 0);
-  assert.equal(failing.jobs[0]?.status, "dead");
-
-  const leased = createDurableQueue();
-  leased.enqueue({ organizationId: org, brandId: brand, type: "learning.update", idempotencyKey: "lease", payload: {} });
-  leased.claim(0, 1, 1000);
-  assert.equal(leased.recover(500), 0);
-  assert.equal(leased.recover(1000), 1);
-  assert.equal(leased.jobs[0]?.status, "retry");
-
-  const foreign = createDurableQueue();
-  foreign.enqueue({ organizationId: org, brandId: brand, type: "learning.update", idempotencyKey: "foreign", payload: { organizationId: "org-2" }, maxAttempts: 1 });
-  let called = false;
-  await runWorkerTick(foreign, { "learning.update": () => { called = true; return "no"; } }, 0);
-  assert.equal(called, false);
-  assert.equal(foreign.jobs[0]?.status, "dead");
-  assert.match(foreign.jobs[0]?.lastError ?? "", /Tenant/);
-
-  const scheduled = createDurableQueue();
-  scheduled.schedule({ id: "nightly", organizationId: org, brandId: brand, type: "market.collect", everyMs: 10_000, nextRun: 0 });
-  await runWorkerTick(scheduled, { "market.collect": () => "NOT_CONNECTED" }, 0);
-  await runWorkerTick(scheduled, { "market.collect": () => "NOT_CONNECTED" }, 0);
-  assert.equal(scheduled.jobs.filter((job) => job.type === "market.collect").length, 1);
-
-  const cancelled = createDurableQueue();
-  const pending = cancelled.enqueue({ organizationId: org, brandId: brand, type: "market.collect", idempotencyKey: "stop", payload: {} });
-  cancelled.cancel(pending.job.id, 0);
-  await runWorkerTick(cancelled, { "market.collect": () => "ran" }, 0);
-  assert.equal(cancelled.jobs[0]?.status, "cancelled");
 });
