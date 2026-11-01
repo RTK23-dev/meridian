@@ -315,7 +315,7 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
       objects,
       measureBlackFrames: async (input) => input.times.map((atMs) => ({ atMs, black: false })),
       measureOverlays: async ({ edl }) => drawnOverlays(edl).map((item) => ({ clipId: item.clipId, present: true })),
-      measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"] }),
+      measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"], textBoxes: [] }),
       forbiddenTerms: async () => ["miracle cure"],
       now,
     },

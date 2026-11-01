@@ -210,7 +210,7 @@ function postRenderPorts(state: World): PostRenderPorts {
     objects: state.objects,
     measureBlackFrames: async (input) => input.times.map((atMs) => ({ atMs, black: false })),
     measureOverlays: async ({ edl }) => drawnOverlays(edl).map((item, index) => ({ clipId: item.clipId, present: !(state.overlayDrop && index === 0) })),
-    measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"] }),
+    measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"], textBoxes: [] }),
     forbiddenTerms: async () => ["miracle cure"],
     now: () => CREATED,
   };
