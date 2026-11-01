@@ -112,3 +112,20 @@ test("flush saves now, and discard drops the draft and any waiting save, and ret
   assert.equal(items.size, 0, "discard removes the draft and the waiting save never runs");
   assert.equal(draft.values().pace, DEFAULT_PACE);
 });
+
+test("the pick's resolved values are the starting point, a saved draft still wins, and a draft equal to them is not kept (K18d2)", () => {
+  const { items, storage } = fakeStorage();
+  const clock = fakeTimers();
+  const base = { pace: 1.2 };
+  const draft = createSettingsDraft({ cookbook: EXPLAINER, base, scope: SCOPE, storage, timers: clock.timers });
+  assert.equal(draft.values().pace, 1.2, "the selector's value is the start, not the default");
+  draft.change("pace", 1.4);
+  clock.fire();
+  assert.equal(items.size, 1, "a change from the start is saved");
+  const reloaded = createSettingsDraft({ cookbook: EXPLAINER, base, scope: SCOPE, storage, timers: clock.timers });
+  assert.equal(reloaded.values().pace, 1.4, "the saved draft wins over the start");
+  reloaded.change("pace", 1.2);
+  clock.fire();
+  assert.equal(items.size, 0, "back at the start, nothing is kept");
+});
+

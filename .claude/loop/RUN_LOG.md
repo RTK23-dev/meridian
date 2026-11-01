@@ -883,3 +883,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: the panel in a browser. K18d2 mounts it, and the browser check runs in CI's ui-smoke.
 - Next: K18d2, mounting the settings panel with its draft, and sending the edited values with the confirm.
 - Next wake armed for 16:08 UTC (trig_01DxqaSdBBEPF5BaQ9CrEghz).
+
+## 2026-11-01 16:15 UTC: wake: K18d2, the settings panel is mounted in the choice panel
+
+- Wake (16:09): CI on the head 5039ab4 was fully green (all 13 check runs, including the aggregate check and ui-smoke). The branch matched the remote.
+- Unit done (K18d2): `cookbook-settings-step.tsx` draws the pick's controls with the settings panel, and keeps each change as the person's unsent draft (`settings-draft.ts`, per person, workspace and cookbook, through the draft store and the debounce). `cookbook-choice-panel.tsx` mounts it under the pick, and the confirm sends the edited values when they belong to the chosen cookbook.
+- A change in `settings-draft.ts` was needed. The draft used to start from each control's default, which would have overridden the value the selector resolved for the pick. It now starts from the pick's resolved values (a saved draft still wins), and it no longer keeps a draft equal to those starting values. `settingRows` takes only the controls.
+- Checks: `settings-draft.test.ts` and `settings-model.test.ts` pass 11 of 11, including a new test for the starting values. The 64 test files across the cookbook, content-factory and cookbook component suites pass 515 of 515. `npm run typecheck` exits 0, and eslint on the changed files exits 0.
+- Not checked here: the panel in a browser. The browser check runs in CI's ui-smoke on the pushed head.
+- K18 is done. Next: K13, the engine request copy and export.
+- Next wake armed for 16:36 UTC (trig_01XqJxdHya82SpH4fWb5WyyN).

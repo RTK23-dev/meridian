@@ -18,7 +18,7 @@ export function currentValue(control: Control, values: Readonly<Record<string, C
 }
 
 /** One row per control, in the cookbook's order, with the value to show. */
-export function settingRows(cookbook: Cookbook, values: Readonly<Record<string, ControlValue>>): SettingRow[] {
+export function settingRows(cookbook: Pick<Cookbook, "controls">, values: Readonly<Record<string, ControlValue>>): SettingRow[] {
   return cookbook.controls.map((control): SettingRow => {
     const help = control.help ?? null;
     const value = currentValue(control, values);

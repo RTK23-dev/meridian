@@ -8,14 +8,29 @@ import type { Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
 import { createDebouncer, DRAFT_SAVE_DELAY_MS, type DebounceTimers } from "../../lib/progress/debounce.ts";
 import { createDraftStore, draftKey, type DraftScope, type DraftStorage } from "../../lib/progress/draft-store.ts";
 
-/** Each control's default, with the saved draft's value where the draft has one that fits its control. Anything else falls back to the default. */
-export function restoredValues(cookbook: Cookbook, saved: unknown): Record<string, ControlValue> {
+/** The starting values with no saved draft: the base value where it fits, else the default. */
+function restoredBase(cookbook: Pick<Cookbook, "controls">, base: Readonly<Record<string, ControlValue>>): Record<string, ControlValue> {
+  return restoredValues(cookbook, null, base);
+}
+
+/**
+ * Each control's starting value: the saved draft's value where the draft has one that fits its control; otherwise the base value (the value a
+ * proposal resolved for the pick), if it fits; otherwise the control's default.
+ */
+export function restoredValues(
+  cookbook: Pick<Cookbook, "controls">,
+  saved: unknown,
+  base: Readonly<Record<string, ControlValue>> = {},
+): Record<string, ControlValue> {
   const stored = typeof saved === "object" && saved !== null && !Array.isArray(saved) ? (saved as Record<string, unknown>) : {};
   const values: Record<string, ControlValue> = {};
   for (const control of cookbook.controls) {
     const candidate = stored[control.id];
     const isValue = typeof candidate === "boolean" || typeof candidate === "number" || typeof candidate === "string";
-    values[control.id] = isValue && fitsControl(control, candidate) ? candidate : control.default;
+    const baseValue = base[control.id];
+    if (isValue && fitsControl(control, candidate)) values[control.id] = candidate;
+    else if (baseValue !== undefined && fitsControl(control, baseValue)) values[control.id] = baseValue;
+    else values[control.id] = control.default;
   }
   return values;
 }
@@ -32,7 +47,9 @@ export type SettingsDraft = {
 };
 
 export function createSettingsDraft(input: {
-  cookbook: Cookbook;
+  cookbook: Pick<Cookbook, "controls">;
+  /** The starting values when there is no saved draft: the proposal's resolved values for the pick. */
+  base?: Readonly<Record<string, ControlValue>>;
   scope: DraftScope;
   storage: DraftStorage;
   timers: DebounceTimers<unknown>;
@@ -40,13 +57,13 @@ export function createSettingsDraft(input: {
 }): SettingsDraft {
   const store = createDraftStore(input.storage);
   const key = draftKey(input.scope);
-  const defaults: Record<string, ControlValue> = Object.fromEntries(input.cookbook.controls.map((control) => [control.id, control.default]));
-  let values = restoredValues(input.cookbook, store.read(key));
+  const start = restoredBase(input.cookbook, input.base ?? {});
+  let values = restoredValues(input.cookbook, store.read(key), input.base ?? {});
   const debounce = createDebouncer(input.delayMs ?? DRAFT_SAVE_DELAY_MS, input.timers);
 
-  // A draft that equals the defaults is not kept: there is nothing to restore, so the stored draft is removed.
+  // A draft that equals the starting values is not kept: there is nothing to restore, so the stored draft is removed.
   const persist = () => {
-    const differs = input.cookbook.controls.some((control) => values[control.id] !== control.default);
+    const differs = input.cookbook.controls.some((control) => values[control.id] !== start[control.id]);
     if (differs) store.write(key, values);
     else store.clear(key);
   };
@@ -64,7 +81,7 @@ export function createSettingsDraft(input: {
     },
     discard() {
       debounce.cancel();
-      values = { ...defaults };
+      values = { ...start };
       store.clear(key);
     },
   };

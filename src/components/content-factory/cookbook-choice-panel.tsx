@@ -2,12 +2,16 @@
 // the server from the session), draws them with CookbookSelectionStep, and sends the person's choice. A choice is recorded on the draft run only.
 // While a pick or the picker is on screen and nothing is chosen, the panel tells the draft panel that a choice is needed, so the start waits.
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useWorkspace } from "@/components/workspace";
 import { toast } from "@/components/ui";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { chooseCookbookForRunAction, proposeCookbookForRunAction } from "@/lib/meridian/cookbooks/actions";
+import type { ControlValue } from "@/lib/meridian/cookbooks/controls";
 import type { CookbookRef } from "@/lib/meridian/cookbooks/selector";
 import { selectionViewOf, type ChoiceToSend, type SelectionView } from "./cookbook-selection-model";
 import { CookbookSelectionStep } from "./cookbook-selection-step";
+import { CookbookSettingsStep } from "./cookbook-settings-step";
 
 type Loaded = { state: "loading" } | { state: "unavailable"; reason: string } | { state: "ready"; view: SelectionView };
 
@@ -16,6 +20,11 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
   const [chosen, setChosen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The settings the person has on screen, for the cookbook they are on. They are sent with the confirm.
+  const [settings, setSettings] = useState<{ cookbookId: string; values: Record<string, ControlValue> } | null>(null);
+  const reportValues = useCallback((cookbookId: string, values: Record<string, ControlValue>) => setSettings({ cookbookId, values }), []);
+  const workspace = useWorkspace();
+  const user = useCurrentUserState().user;
 
   useEffect(() => {
     let cancelled = false;
@@ -73,10 +82,22 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
         <CookbookSelectionStep
           view={view}
           onConfirm={() => {
-            if (view.state === "pick") void send(view.confirm, view.title);
+            if (view.state !== "pick") return;
+            const values = settings?.cookbookId === view.confirm.cookbookId ? settings.values : view.confirm.values;
+            void send({ ...view.confirm, values }, view.title);
           }}
           onPick={(cookbook: CookbookRef) => void send({ cookbookId: cookbook.cookbookId, version: cookbook.version, values: {} }, cookbook.label)}
         />
+        {view.state === "pick" ? (
+          <CookbookSettingsStep
+            userId={user?.id ?? "signed-out"}
+            workspaceId={workspace.data?.active?.id ?? "no-workspace"}
+            cookbookId={view.confirm.cookbookId}
+            controls={view.controls}
+            base={view.confirm.values}
+            onValues={reportValues}
+          />
+        ) : null}
       </div>
     </section>
   );
