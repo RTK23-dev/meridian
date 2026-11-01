@@ -786,3 +786,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames, as for the other new components.
 - Still open in K21: `panel.tiles`, `cta.follow`.
 - Next wake armed for 12:18 UTC (trig_01DRGXmxH1XWK9Nwe9iwQ58q).
+
+## 2026-11-01 12:12 UTC: wake: K21, panel.tiles
+
+- Wake (12:10, a CI event): CI on the head 1608848 was fully green (all 13 check runs, including the aggregate check; CodeRabbit skipped). The PR is clean. No red check, so the loop went on to the next unit. The pending 12:18 wake was cancelled, and the chain now runs from the 12:33 wake.
+- Unit done (K21): `panel.tiles` in `src/engine/compose/components/panel.tiles/`: `props.ts` (a title and one to six tiles, each a short value and a short label, with the duration), three fixtures (four tiles; six tiles; one tile), `component.html` and `index.ts`. The tiles sit in a grid of one, two or three columns by their count, and each pops in on the composition clock. The value colour is read from the style kit. The values are text as given, so nothing is formatted or computed. Text is set with textContent. It is registered in `components/index.ts`, and the pinned list holds 20.
+- A comment in the template described the column rule backwards. It is corrected before the commit.
+- Checks: `components.test.ts` passed 147 of 147. The compose suite passed 329 of 329. `npx eslint` on the changed files exits 0. The template's inline script parses (`node --check`). `npm run typecheck` exits 0.
+- Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames.
+- Still open in K21: `cta.follow`.
+- Next wake armed for 12:33 UTC (trig_01TRxvDsizBBjERjPxTpxbQ3).
