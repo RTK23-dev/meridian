@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { threeDDataExplainerCookbook } from "./builtin/three-d-data-explainer.ts";
-import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor, versionsFor } from "./service.ts";
 import type { RunInputs } from "./eligibility.ts";
 
 const ORG = "org_cookbook_service";
@@ -132,3 +132,19 @@ test("with a selector port, a pick names only a cookbook the library offers, and
   if (proposal.status === "proposed") assert.equal(proposal.picks[0]?.cookbookId, "ck_3d_data_explainer");
 });
 
+test("a built-in cookbook has no stored history here, and a workspace cookbook's versions are listed newest first (K19)", async () => {
+  const builtin = await versionsFor(db.sql, { ...scope, cookbookId: "ck_3d_data_explainer" });
+  assert.deepEqual(builtin, { ok: true, value: [] }, "a built-in is versioned with the app, so nothing is invented here");
+  const missing = await versionsFor(db.sql, { ...scope, cookbookId: "ck_service_no_such" });
+  assert.equal(missing.ok, false);
+  const member = "user_service_versions";
+  await db.sql`insert into "user" (id, name, email, "emailVerified") values (${member}, ${member}, ${`${member}@fixture.example`}, true) on conflict do nothing`;
+  await db.sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${member}`}, ${ORG}, ${member}, 'admin') on conflict do nothing`;
+  const first = await saveCookbookFor(db.sql, { ...scope, role: "admin", userId: member, cookbook: { ...mine("ck_service_versions"), label: "One" } });
+  assert.equal(first.ok, true);
+  const second = await saveCookbookFor(db.sql, { ...scope, role: "admin", userId: member, cookbook: { ...mine("ck_service_versions"), label: "Two" } });
+  assert.equal(second.ok, true);
+  const listed = await versionsFor(db.sql, { ...scope, cookbookId: "ck_service_versions" });
+  assert.equal(listed.ok, true);
+  if (listed.ok) assert.deepEqual(listed.value.map((item) => item.version), [2, 1]);
+});

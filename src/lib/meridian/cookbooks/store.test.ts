@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { threeDDataExplainerCookbook } from "./builtin/three-d-data-explainer.ts";
-import { archiveCookbook, forkCookbook, getCookbookVersion, listCookbooks, saveCookbookVersion } from "./store.ts";
+import { archiveCookbook, forkCookbook, getCookbookVersion, listCookbookVersions, listCookbooks, saveCookbookVersion } from "./store.ts";
 
 const ORG = "org_cookbook_store";
 const BRAND_A = "brand_cookbook_a";
@@ -114,4 +114,19 @@ test("a built-in id cannot be saved over, and a cookbook in another workspace is
 test("archiving a cookbook outside the brand's view finds nothing", async () => {
   const result = await archiveCookbook(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_only_a" });
   assert.equal(result.ok, false);
+});
+
+test("a brand lists the versions it can see, newest first, and another brand sees none of a brand-only cookbook (K19)", async () => {
+  for (const label of ["First", "Second", "Third"]) {
+    const saved = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbook: custom("ck_store_versions", label), createdBy: USER });
+    assert.equal(saved.ok, true);
+  }
+  const mine = await listCookbookVersions(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_versions" });
+  assert.deepEqual(mine.map((item) => item.version), [3, 2, 1]);
+  assert.ok(mine.every((item) => item.archived === false));
+  assert.ok(mine.every((item) => !Number.isNaN(Date.parse(item.createdAt))), "each version has a time");
+  const theirs = await listCookbookVersions(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_versions" });
+  assert.deepEqual(theirs, [], "a brand-only cookbook is not listed for another brand");
+  const none = await listCookbookVersions(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_missing" });
+  assert.deepEqual(none, []);
 });

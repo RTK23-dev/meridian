@@ -550,3 +550,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: typecheck, eslint, and 51 tests across the cookbook and navigation suites pass. The Vite build succeeds.
 - Not done: the version history list (no server function lists versions), the `?cookbook=` link (the Content page drops unknown search keys), the repurpose `packs` capability, and a browser look.
 - Next: K20 (the pipeline editor becomes the cookbook editor), or finish K19's version list first.
+
+## 2026-11-01 02:12 UTC: wake: K19 completed (the version list)
+
+- Watchdog (02:09): the state was running with next_wake_at at 00:17, more than 30 minutes past, so the Wake procedure ran. The branch matched my last commit (750d801), and CI on it (run 41259369307) was green, with shard 2 still running and no failure at this entry.
+- K19 completed: the version list. `listCookbookVersions` (store, the same visibility rule as a read), `versionsFor` (service; a built-in has no stored history and says so), `listCookbookVersionsAction` (viewer), and the detail's Versions list. Tests: a store test (newest first, another brand's brand-only versions not listed) and a service test (a built-in is empty, a missing one is not found, two saves list as 2 then 1). 72 tests across the cookbook, navigation and component suites pass; typecheck and eslint pass.
+- Still open for K19 on purpose: "Use in Content Factory" goes to the Create section, not with a `?cookbook=` parameter; the repurpose `packs` capability; a look in a browser.
+- Next wake armed for 02:33 UTC (trig_01PWijiWoBsbvKWQyWYMToKQ). Next task: K20.

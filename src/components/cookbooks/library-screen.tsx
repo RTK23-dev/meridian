@@ -9,7 +9,7 @@ import { Button, ScreenSkeleton, toast } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import type { Cookbook } from "@/lib/meridian/cookbooks/schema";
 import { defaultsOf, type ControlValue } from "@/lib/meridian/cookbooks/controls";
-import { forkCookbookAction, listCookbooksAction, readCookbookAction } from "@/lib/meridian/cookbooks/actions";
+import { forkCookbookAction, listCookbookVersionsAction, listCookbooksAction, readCookbookAction } from "@/lib/meridian/cookbooks/actions";
 import { useBrandQuery } from "@/lib/query/hooks";
 import { cardsOf, familiesIn, NO_FILTER, type CookbookCard, type LibraryFilter } from "./library-model";
 import { SettingsPanel } from "./settings-panel";
@@ -221,12 +221,7 @@ function CookbookDetail({
         {rows.length === 0 ? <p className="text-small text-fg-muted">This cookbook has no settings.</p> : <SettingsPanel rows={rows} onChange={(id, value) => setValues((current) => ({ ...current, [id]: value }))} />}
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-small font-semibold text-fg">Versions</h3>
-        <p className="text-small text-fg-muted">
-          This is version {cookbook.version}. Earlier versions are kept, but listing them here is not built yet.
-        </p>
-      </div>
+      <VersionHistory brandId={brandId} cookbookId={cookbookId} source={state.source} current={cookbook.version} />
 
       {canCopy ? (
         <div className="space-y-3 border-t border-border pt-4">
@@ -253,5 +248,50 @@ function CookbookDetail({
         </div>
       ) : null}
     </section>
+  );
+}
+
+type VersionRow = { version: number; createdAt: string; archived: boolean };
+
+function VersionHistory({ brandId, cookbookId, source, current }: { brandId: string; cookbookId: string; source: "builtin" | "workspace"; current: number }) {
+  const [state, setState] = useState<{ state: "loading" } | { state: "error"; reason: string } | { state: "ready"; versions: VersionRow[] }>({ state: "loading" });
+
+  useEffect(() => {
+    if (source === "builtin") return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const outcome = await listCookbookVersionsAction({ data: { brandId, cookbookId } });
+        if (cancelled) return;
+        setState(outcome.ok ? { state: "ready", versions: outcome.value } : { state: "error", reason: outcome.reason });
+      } catch (caught) {
+        if (!cancelled) setState({ state: "error", reason: caught instanceof Error ? caught.message : "The versions could not be read." });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [brandId, cookbookId, source]);
+
+  return (
+    <div className="space-y-2">
+      <h3 className="text-small font-semibold text-fg">Versions</h3>
+      {source === "builtin" ? (
+        <p className="text-small text-fg-muted">A built-in cookbook is versioned with the app. This is version {current}.</p>
+      ) : state.state === "loading" ? (
+        <p className="text-small text-fg-muted">Reading the versions…</p>
+      ) : state.state === "error" ? (
+        <p role="alert" className="text-small text-danger">{state.reason}</p>
+      ) : (
+        <ol className="list-decimal space-y-1 pl-5 text-small text-fg">
+          {state.versions.map((row) => (
+            <li key={row.version}>
+              Version {row.version}, written {new Date(row.createdAt).toLocaleDateString()}
+              {row.archived ? " (archived)" : ""}
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
   );
 }

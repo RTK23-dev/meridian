@@ -9,7 +9,7 @@ import { canCreate, canEdit, canShareWithWorkspace } from "./policy.ts";
 import { resolveCookbook, type ResolvedCookbook, type ResolveOptions } from "./resolve.ts";
 import { proposeCookbooks, type Proposal, type SelectorPort } from "./selector.ts";
 import type { RunInputs } from "./eligibility.ts";
-import { archiveCookbook, forkCookbook, getCookbookVersion, listCookbooks, saveCookbookVersion, type StoredCookbook, type StoreResult } from "./store.ts";
+import { archiveCookbook, forkCookbook, getCookbookVersion, listCookbookVersions, listCookbooks, saveCookbookVersion, type StoredCookbook, type StoreResult, type VersionSummary } from "./store.ts";
 import type { Cookbook } from "./schema.ts";
 
 export type CookbookSource = { source: "builtin"; cookbook: Cookbook } | { source: "workspace"; cookbook: Cookbook; stored: StoredCookbook };
@@ -44,6 +44,20 @@ export async function readCookbookFor(
   const stored = await getCookbookVersion(sql, input);
   if (!stored.ok) return fromStore(stored);
   return { ok: true, value: { source: "workspace", cookbook: stored.value.cookbook, stored: stored.value } };
+}
+
+/**
+ * The versions a brand can see, newest first. A built-in cookbook is versioned with the app, so it has no stored history here (an empty list).
+ * A workspace cookbook the brand cannot see is not found, the same as a read.
+ */
+export async function versionsFor(
+  sql: Sql,
+  input: { organizationId: string; brandId: string; cookbookId: string },
+): Promise<ServiceResult<VersionSummary[]>> {
+  if (isBuiltinId(input.cookbookId)) return { ok: true, value: [] };
+  const versions = await listCookbookVersions(sql, { organizationId: input.organizationId, brandId: input.brandId, cookbookId: input.cookbookId });
+  if (versions.length === 0) return { ok: false, reason: "No such cookbook is visible to this brand." };
+  return { ok: true, value: versions };
 }
 
 /**

@@ -6,7 +6,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
-import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
+import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor, versionsFor } from "./service.ts";
 import { chooseCookbookFor, proposalForRunFor } from "../content-factory/cookbook-choice.ts";
 
 function clip(value: unknown, max = 120): string {
@@ -49,6 +49,22 @@ export const readCookbookAction = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     return readCookbookFor(sql, { organizationId: access.organizationId, brandId: data.brandId, cookbookId: data.cookbookId, version: data.version });
+  });
+
+/** The versions of a cookbook a brand can see, newest first (K19). A viewer may read them. */
+export const listCookbookVersionsAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectOf(input);
+    const brandId = clip(body.brandId);
+    const cookbookId = clip(body.cookbookId, 80);
+    if (!brandId || !cookbookId) throw new Error("Choose a brand and a cookbook.");
+    return { brandId, cookbookId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
+    return versionsFor(sql, { organizationId: access.organizationId, brandId: data.brandId, cookbookId: data.cookbookId });
   });
 
 /** Saves a new version of a workspace cookbook. Members create; the creator or an admin edits. */

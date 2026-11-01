@@ -169,6 +169,24 @@ export async function listCookbooks(
     .sort((a, b) => a.cookbookId.localeCompare(b.cookbookId));
 }
 
+/** One version a brand can see: its number, when it was written, and whether the cookbook is archived. The author is not shown here. */
+export type VersionSummary = { version: number; createdAt: string; archived: boolean };
+
+/** The versions of a workspace cookbook that a brand can see, newest first. A version written for another brand is not listed. */
+export async function listCookbookVersions(sql: Sql, input: { organizationId: string; brandId: string | null; cookbookId: string }): Promise<VersionSummary[]> {
+  const rows = await sql<{ version: number; created_at: unknown; archived_at: unknown }>`
+    select version, created_at, archived_at from cookbooks
+    where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId}
+      and (brand_id is null or brand_id = ${input.brandId})
+    order by version desc
+  `;
+  return rows.map((row) => ({
+    version: Number(row.version),
+    createdAt: new Date(row.created_at as string | Date).toISOString(),
+    archived: row.archived_at !== null && row.archived_at !== undefined,
+  }));
+}
+
 /**
  * Forks a visible cookbook into a new cookbook id, with its parent recorded. shareWithWorkspace decides the scope (D3): a brand-only fork
  * stays with the brand, a shared fork is visible to the whole workspace.
