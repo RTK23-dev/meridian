@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, EmptyState, ErrorNotice, Field, Input, ScreenSkeleton, SelectInput } from "@/components/ui";
+import { Badge, Button, Card, Dialog, DialogContent, DialogDescription, DialogTitle, DisabledReason, EmptyState, ErrorNotice, Field, Input, ScreenSkeleton, SelectInput, toast } from "@/components/ui";
 import { PlainErrorState } from "@/components/plain-error";
 import { useThemePagesQuery, usePlatformAccountsQuery, useScopedMutation } from "@/lib/query/hooks";
 import { qk } from "@/lib/query/keys";
-import { archiveThemePageAction, createThemePageAction, updateThemePageAction } from "@/lib/meridian/pages/actions";
+import { archiveThemePageAction, createThemePageAction, installThreeDStyleKitAction, updateThemePageAction } from "@/lib/meridian/pages/actions";
 import { PAGE_PLATFORMS, WEEKDAYS, type PagePlatform, type Weekday } from "@/lib/meridian/pages/model";
 import type { ThemePageView } from "@/lib/meridian/pages/store";
 import { useWorkspace } from "@/components/workspace";
@@ -193,6 +193,20 @@ function BrandPages({ brandId }: { brandId: string }) {
   };
 
   const setTime = (day: Weekday, value: string) => setDraft((current) => ({ ...current, times: { ...current.times, [day]: value } }));
+  const [styleKitBusy, setStyleKitBusy] = useState(false);
+  // Installs the 3D data explainer's style kit and names it on this draft. The page keeps it only when the person saves (B16, Q30 D).
+  const useThreeDStyle = async () => {
+    setStyleKitBusy(true);
+    try {
+      const { kitId } = await installThreeDStyleKitAction({ data: { brandId } });
+      setDraft((current) => ({ ...current, styleKitId: kitId }));
+      toast.success("The 3D data explainer style is set on this page. Save the page to keep it.");
+    } catch (caught) {
+      toast.error(caught instanceof Error ? caught.message : "The style kit could not be installed.");
+    } finally {
+      setStyleKitBusy(false);
+    }
+  };
   const accountOptions = accounts.filter((account) => account.platform === draft.platform);
   const saving = createPage.isPending || updatePage.isPending;
 
@@ -314,6 +328,9 @@ function BrandPages({ brandId }: { brandId: string }) {
             </Field>
             <Field label="Style kit id" hint="A run needs a style kit to make a video for this page.">
               <Input value={draft.styleKitId} maxLength={120} onChange={(event) => setDraft({ ...draft, styleKitId: event.target.value })} />
+              <Button type="button" variant="secondary" disabled={!canEdit || styleKitBusy} onClick={() => void useThreeDStyle()}>
+                Use the 3D data explainer style
+              </Button>
             </Field>
 
             <Field label="Time zone" hint="An IANA name such as Europe/London. Needed when a schedule is set.">

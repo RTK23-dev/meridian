@@ -4,6 +4,7 @@ import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
 import { parseNewThemePage, parseThemePageFields } from "./model.ts";
 import { archiveThemePage, createThemePage, listThemePages, updateThemePage } from "./store.ts";
+import { installThreeDStyleKit } from "./style-preset.ts";
 
 function clip(value: unknown, max = 120): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -79,4 +80,18 @@ export const archiveThemePageAction = createServerFn({ method: "POST" })
     const access = await requireBrand(sql, context.userId, data.brandId, "admin");
     await archiveThemePage(sql, { organizationId: access.organizationId, brandId: data.brandId }, data.pageId, context.userId);
     return { ok: true as const };
+  });
+
+/** Installs the 3D data explainer's style kit for the brand's workspace and returns its id. Members may install it, as they may save a page. */
+export const installThreeDStyleKitAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const brandId = clip(objectOf(input).brandId);
+    if (!brandId) throw new Error("Choose a brand.");
+    return { brandId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    const access = await requireBrand(sql, context.userId, data.brandId, "member");
+    return installThreeDStyleKit(sql, { organizationId: access.organizationId });
   });
