@@ -515,3 +515,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Verified: `load.test.ts` and the nine other test files that use the chain fixture (53 tests) pass; the typecheck passes; eslint passes on the changed file. CI on `e6a4b28` is pending.
 - Owner question raised: Q35, whether a reservation from one month may fund variants in the next (the engine rule is unchanged).
 - Next: K18c (mount the selection step in the draft panel), once CI on `e6a4b28` is green.
+
+## 2026-11-01 00:31 UTC: K18c
+
+- Wake (00:17 is the scheduled one; this unit ran after the shard fix was pushed): CI for `e6a4b28` is pending (checked below).
+- K18c done (`24a2515`): the Cookbook step sits above "Make this video" in the draft panel. The server proposes from the session's own inputs (`proposeCookbookForRunAction`), the picker and the alternatives show labels, the confirm sends the top pick at its version with its resolved values, and the start waits while a pick or the picker has no recorded choice. A proposal of none, failed or refused does not block the start.
+- Checks: typecheck, eslint, 454 tests across the cookbook, content-factory and cookbook component suites. New: the proposal on PGlite (labels and versions; a started run; no length), the confirm payload.
+- Not checked here: the look and the button in a browser. CI ui-smoke runs them.
+- Caveat for the owner: a choice made before a reload is not shown; the person confirms it again. Recorded in RUN_PLAN K18c.
+- Next: K19 (the library screen; the route tree is generated, so regenerate it and update the navigation tests).
