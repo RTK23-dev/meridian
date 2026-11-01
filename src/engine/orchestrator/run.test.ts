@@ -5,7 +5,7 @@ import { contentHash } from "../contracts/hash.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog } from "./catalog.ts";
 import { NODE_KINDS, type OrchestratorPlan } from "./contracts.ts";
-import { examplePlan } from "./example.ts";
+import { examplePlan } from "./fixtures/example-run.ts";
 import type { Handlers, NodeHandler } from "./execute.ts";
 import { editStoredPlan, runStoredPlan, type RunOutcome } from "./run.ts";
 import { createPlanDraft, getPlan, listPlanEvents, recordPlanOutcome } from "./store.ts";

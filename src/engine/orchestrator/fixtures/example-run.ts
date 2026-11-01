@@ -1,12 +1,12 @@
-// A recorded example run of the sample plan, for the screen to replay. Every handler is a stand-in: it returns a deterministic
-// output hash and calls no provider, and the costs shown are the plan's estimates, not charges. The run uses the same executor a
-// live run uses, so the events the canvas draws have the same shape.
+// Test fixture: the sample plan as parsed objects, and a recorded run of it through the executor with stand-in handlers. Moved here from
+// orchestrator/example.ts (decision Q43, backlog B1): the module had no product caller, and its data is what the orchestrator tests use.
+// Every handler is a stand-in: it returns a deterministic output hash and calls no provider.
 
-import { contentHash } from "../contracts/hash.ts";
-import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "./contracts.ts";
-import { examplePlanRaw } from "./fixtures/example-plan.ts";
-import { runPlan, type Handlers, type NodeHandler } from "./execute.ts";
-import { topologicalOrder } from "./validate.ts";
+import { contentHash } from "../../contracts/hash.ts";
+import { NODE_KINDS, orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "../contracts.ts";
+import { examplePlanRaw } from "./example-plan.ts";
+import { runPlan, type Handlers, type NodeHandler } from "../execute.ts";
+import { topologicalOrder } from "../validate.ts";
 
 export const examplePlan: OrchestratorPlan = orchestratorPlanSchema.parse(examplePlanRaw);
 

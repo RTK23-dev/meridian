@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
-import { examplePlan, recordedExampleRun } from "./example.ts";
+import { examplePlan, recordedExampleRun } from "./fixtures/example-run.ts";
 import { appendPlanEvents, claimForPlanning, createPlanDraft, getPlan, listPlanEvents, listPlans, recordPlanOutcome, releasePlanning, setPlanStatus, updatePlanJson } from "./store.ts";
 
 const ORG_A = "org_orch_a";

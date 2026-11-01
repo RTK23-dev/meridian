@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog } from "./catalog.ts";
-import { examplePlan } from "./example.ts";
+import { examplePlan } from "./fixtures/example-run.ts";
 import type { Handlers } from "./execute.ts";
 import { openRunBudget, releaseRunBudget } from "./run-budget.ts";
 import { runStoredPlan } from "./run.ts";
