@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"place","type":"string","label":"Place","default":"Berlin"},{"id":"date","type":"string","label":"Date","default":""},{"id":"durationMs","type":"number","label":"Duration (ms)","default":2000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="label.pill" data-width="1080" data-height="1920">
+  <div class="lp-track">
+    <div class="lp-pill">
+      <span class="lp-place"></span>
+      <span class="lp-sep"></span>
+      <span class="lp-date"></span>
+    </div>
+  </div>
+  <style>
+    .lp-track {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 11%;
+      display: flex;
+      justify-content: center;
+    }
+    .lp-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5em;
+      padding: 12px 34px;
+      border-radius: 999px;
+      background: var(--kit-primary);
+      color: var(--kit-background);
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 36px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      white-space: nowrap;
+      opacity: 0;
+    }
+    .lp-sep {
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--kit-background);
+      opacity: 0.7;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var pill = document.querySelector(".lp-pill");
+      var placeEl = document.querySelector(".lp-place");
+      var sepEl = document.querySelector(".lp-sep");
+      var dateEl = document.querySelector(".lp-date");
+      var seconds = vars.durationMs / 1000;
+      var date = typeof vars.date === "string" ? vars.date : "";
+      placeEl.textContent = String(vars.place || "");
+      dateEl.textContent = date;
+      // The separator and the date show only when there is a date.
+      sepEl.hidden = date === "";
+      dateEl.hidden = date === "";
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(pill, { scale: 1 - 0.08 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.4)" }, 0);
+      tl.set({}, {}, seconds);
+      window.__timelines["label.pill"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -741,3 +741,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Left for later: the preset comment in `src/engine/presets/three-d-data-explainer.ts` (around line 278) still says captions.boxed has no component. It is stale now, and changing the preset is outside this unit.
 - Still open in K21: `label.pill`, `panel.bars`, `panel.line`, `panel.tiles`, `cta.follow`.
 - Next wake armed for 11:07 UTC (trig_01PhkV26r7BgsscuGmV6TWmJ).
+
+## 2026-11-01 11:10 UTC: wake: K21, label.pill
+
+- Wake (11:07): CI on the head 132323d was green (13 check runs; CodeRabbit skipped). The local branch matched the remote.
+- Unit done (K21): `label.pill` in `src/engine/compose/components/label.pill/`: `props.ts` (a place, and an optional date, with the duration), three fixtures (a place and date; a place alone; a long place name with a date), `component.html` and `index.ts`. The place sits in a pill at the top of the frame, in the kit's primary colour with the background colour as text, as stat.counter's pill does. The date follows a dot, and both are hidden when there is no date. Text is set with textContent. It is registered in `components/index.ts`, and the pinned library list in `components.test.ts` now holds 17.
+- Checks: `components.test.ts` passed 126 of 126. The whole compose suite passed 299 of 299. `npx eslint` on the changed files exits 0. `npm run typecheck` exits 0. The template's inline script parses (`node --check`).
+- Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames, as for stat.counter and captions.boxed.
+- Still open in K21: `panel.bars`, `panel.line`, `panel.tiles`, `cta.follow`.
+- Next wake armed for 11:30 UTC (trig_01KijjKtFfp2K3Jhw5HgkUTp).

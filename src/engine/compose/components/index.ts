@@ -12,6 +12,7 @@ import { compareSplit } from "./compare.split/index.ts";
 import { ctaCard } from "./cta.card/index.ts";
 import { kineticPunchline } from "./kinetic.punchline/index.ts";
 import { kineticType } from "./kinetic.type/index.ts";
+import { labelPill } from "./label.pill/index.ts";
 import { listTierBoard } from "./list.tierBoard/index.ts";
 import { priceReveal } from "./price.reveal/index.ts";
 import { productCard } from "./product.card/index.ts";
@@ -34,6 +35,7 @@ export const COMPONENT_LIBRARY: ComponentLibrary = Object.freeze({
   [priceReveal.name]: priceReveal,
   [chatThread.name]: chatThread,
   [kineticType.name]: kineticType,
+  [labelPill.name]: labelPill,
   [screenMock.name]: screenMock,
   [characterRig.name]: characterRig,
   [stopmotionPlayer.name]: stopmotionPlayer,
