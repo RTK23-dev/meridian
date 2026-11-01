@@ -11,6 +11,7 @@ import type { RunView } from "@/lib/meridian/content-factory/service";
 import { FlowBoard } from "./run-board";
 import { QualityScore } from "./quality-score";
 import { STATUS_LABELS } from "./status";
+import { CookbookChoicePanel } from "./cookbook-choice-panel";
 
 export function RunPanel({ sessionId, run, lastRefusal, onStarted, guided = false }: { sessionId: string; run: UseQueryResult<RunView>; lastRefusal: string[]; onStarted: () => void; guided?: boolean }) {
   if (run.isError && !run.data) return <PlainErrorState error={run.error} onRetry={() => void run.refetch()} />;
@@ -58,6 +59,8 @@ export function RunPanel({ sessionId, run, lastRefusal, onStarted, guided = fals
 function DraftPanel({ sessionId, view, lastRefusal, onStarted, guided = false }: { sessionId: string; view: Extract<RunView, { stage: "draft" }>; lastRefusal: string[]; onStarted: () => void; guided?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<{ problems: string[]; notConnected: string[] } | null>(null);
+  // True while the cookbook step shows a pick or the picker and no choice is recorded: the video waits for the person to choose.
+  const [choiceNeeded, setChoiceNeeded] = useState(false);
   const blocked = view.problems.length > 0 || view.notConnected.length > 0;
   const start = async () => {
     setBusy(true);
@@ -101,9 +104,10 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted, guided = false }:
           <ul className="list-disc space-y-1 pl-5 text-sm">{view.notConnected.map((reason) => <li key={reason}>{reason}</li>)}</ul>
         </section>
       ) : null}
+      <CookbookChoicePanel sessionId={sessionId} onChoiceNeededChange={setChoiceNeeded} />
       <div className="flex flex-wrap items-center gap-3">
-        <Button size="md" loading={busy} disabled={busy || blocked} aria-describedby={blocked ? "cf-start-reason" : undefined} onClick={() => void start()}>Make this video</Button>
-        {blocked ? <p id="cf-start-reason" className="text-sm text-fg-muted">{view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first."}</p> : null}
+        <Button size="md" loading={busy} disabled={busy || blocked || choiceNeeded} aria-describedby={blocked || choiceNeeded ? "cf-start-reason" : undefined} onClick={() => void start()}>Make this video</Button>
+        {blocked || choiceNeeded ? <p id="cf-start-reason" className="text-sm text-fg-muted">{blocked ? (view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first.") : "Choose a cookbook above, then make the video."}</p> : null}
       </div>
       {refusal || lastRefusal.length > 0 ? (
         <div role="status" className="mt-4 space-y-1 text-sm">

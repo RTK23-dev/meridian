@@ -7,7 +7,7 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
 import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor } from "./service.ts";
-import { chooseCookbookFor } from "../content-factory/cookbook-choice.ts";
+import { chooseCookbookFor, proposalForRunFor } from "../content-factory/cookbook-choice.ts";
 
 function clip(value: unknown, max = 120): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -166,6 +166,22 @@ export const proposeCookbookAction = createServerFn({ method: "POST" })
     const sql = await getSql();
     const access = await requireBrand(sql, context.userId, data.brandId, "viewer");
     return proposeFor(sql, { organizationId: access.organizationId, brandId: data.brandId, inputs: data.inputs, lengthMs: data.lengthMs, port: null });
+  });
+
+/**
+ * The cookbooks proposed for a draft run (K18c). The run's inputs are read on the server from the session, so the client sends only the id.
+ * The session's own access rule applies, as for starting a run.
+ */
+export const proposeCookbookForRunAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const sessionId = clip(objectOf(input).sessionId, 80);
+    if (!sessionId) throw new Error("Choose a run.");
+    return { sessionId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    return proposalForRunFor(sql, { userId: context.userId, sessionId: data.sessionId });
   });
 
 /**

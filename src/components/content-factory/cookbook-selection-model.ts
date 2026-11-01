@@ -1,12 +1,27 @@
 // The selection step's view model (round 3, K18): a proposal from the cookbook selector, turned into what the hub shows. Pure, so the rules
 // are tested without a browser. The step shows one pick with its reason, what it needs and what it costs, two alternatives, and the words for
-// the cases where there is no pick: nothing can run, or the selector is not connected (the person picks from the list instead).
+// the cases where there is no pick: nothing can run, or the selector is not connected (the person picks from the list instead). Every choice
+// the step offers names a cookbook by its id and version, and its label is what the person reads.
 
-import type { Proposal } from "../../lib/meridian/cookbooks/selector.ts";
+import type { ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
+import type { CookbookRef, Proposal } from "../../lib/meridian/cookbooks/selector.ts";
+
+export type ChoiceToSend = { cookbookId: string; version: number; values: Record<string, ControlValue> };
 
 export type SelectionView =
-  | { state: "pick"; title: string; reason: string; needs: string[]; badge: string; estimate: string; alternatives: string[]; confirmLabel: string }
-  | { state: "picker"; message: string; options: string[] }
+  | {
+      state: "pick";
+      title: string;
+      reason: string;
+      needs: string[];
+      badge: string;
+      estimate: string;
+      alternatives: CookbookRef[];
+      confirmLabel: string;
+      /** The first pick, with the values its proposal resolved: what the confirm button sends. */
+      confirm: ChoiceToSend;
+    }
+  | { state: "picker"; message: string; options: CookbookRef[] }
   | { state: "none"; message: string; reasons: string[] }
   | { state: "failed"; message: string }
   | { state: "refused"; message: string; issues: string[] };
@@ -32,6 +47,7 @@ export function selectionViewOf(proposal: Proposal): SelectionView {
         estimate,
         alternatives: proposal.alternatives,
         confirmLabel: "Use this cookbook",
+        confirm: { cookbookId: top.cookbookId, version: top.version, values: top.values },
       };
     }
     case "not_connected":

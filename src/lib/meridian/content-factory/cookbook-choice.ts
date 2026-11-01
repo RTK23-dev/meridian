@@ -68,7 +68,7 @@ export async function chooseCookbookFor(
   if (proposal.status === "proposed") {
     outcome = confirmSelection({ proposal, choice: input.choice, cookbooks, inputs });
   } else if (proposal.status === "not_connected") {
-    outcome = pickFromList({ eligibleIds: proposal.eligible, cookbooks, inputs, choice: input.choice });
+    outcome = pickFromList({ eligibleIds: proposal.eligible.map((ref) => ref.cookbookId), cookbooks, inputs, choice: input.choice });
   } else if (proposal.status === "none") {
     outcome = { ok: false, reason: proposal.reasons.join("; ") || "No cookbook can run with these inputs." };
   } else {
@@ -78,6 +78,32 @@ export async function chooseCookbookFor(
   const written = await recordCookbookSelection(sql, { organizationId, sessionId: input.sessionId, record: outcome.record });
   if (!written) return { ok: false, reason: "This run has already started, so its cookbook cannot change." };
   return { ok: true, value: outcome.record };
+}
+
+/**
+ * The cookbooks proposed for a draft run (K18c), from the run's own inputs as the session states them. The selector's port is not connected in
+ * this build, so the answer is the picker (the eligible cookbooks, with their labels). A run that has started has no choice left to make.
+ */
+export async function proposalForRunFor(sql: Sql, input: { userId: string; sessionId: string }): Promise<ServiceResult<Proposal>> {
+  const row: SessionRow = await sessionAccess(sql, input.userId, input.sessionId);
+  try {
+    requireDraft(row);
+  } catch {
+    return { ok: false, reason: "This run has already started, so its cookbook is fixed." };
+  }
+  const settings = settingsOf(row);
+  if (settings.maxSeconds === null) return { ok: false, reason: "Set the length before choosing a cookbook." };
+  if (row.brand_id === null) return { ok: false, reason: "Choose a brand before choosing a cookbook." };
+  const messages = await messagesOf(sql, row);
+  const inputs = runInputsOf({ budgetUsd: settings.budgetUsd, messages });
+  const proposal = await proposeFor(sql, {
+    organizationId: row.organization_id,
+    brandId: row.brand_id,
+    inputs,
+    lengthMs: settings.maxSeconds * 1000,
+    port: null,
+  });
+  return { ok: true, value: proposal };
 }
 
 function incompleteWith(build: RequestBuild, problems: string[]): RequestBuild {

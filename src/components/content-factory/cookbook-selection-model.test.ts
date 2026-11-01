@@ -16,7 +16,7 @@ test("a proposed pick shows its title, reason, needs, badge and the alternatives
   const proposal: Proposal = {
     status: "proposed",
     picks: [{ cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: {}, resolved }],
-    alternatives: ["ck_factory_viral_ugc"],
+    alternatives: [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }],
   };
   const view = selectionViewOf(proposal);
   assert.equal(view.state, "pick");
@@ -26,7 +26,7 @@ test("a proposed pick shows its title, reason, needs, badge and the alternatives
   assert.deepEqual(view.needs, ["Scenes: Coded 3D scenes (free)"]);
   assert.equal(view.badge, "Free in agent mode");
   assert.equal(view.estimate, "No paid parts");
-  assert.deepEqual(view.alternatives, ["ck_factory_viral_ugc"]);
+  assert.deepEqual(view.alternatives, [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }]);
 });
 
 test("an estimate with unknown parts says so, rather than showing the known part as the whole", () => {
@@ -39,9 +39,19 @@ test("with nothing eligible, the step says why; with the selector not connected,
   const none = selectionViewOf({ status: "none", reasons: ["Presenter: no budget is set"] });
   assert.equal(none.state, "none");
   if (none.state === "none") assert.deepEqual(none.reasons, ["Presenter: no budget is set"]);
-  const picker = selectionViewOf({ status: "not_connected", eligible: ["ck_a", "ck_b"], message: "Pick a cookbook." });
+  const picker = selectionViewOf({
+    status: "not_connected",
+    eligible: [
+      { cookbookId: "ck_a", version: 1, label: "Alpha" },
+      { cookbookId: "ck_b", version: 3, label: "Beta" },
+    ],
+    message: "Pick a cookbook.",
+  });
   assert.equal(picker.state, "picker");
-  if (picker.state === "picker") assert.deepEqual(picker.options, ["ck_a", "ck_b"]);
+  if (picker.state === "picker") assert.deepEqual(picker.options, [
+    { cookbookId: "ck_a", version: 1, label: "Alpha" },
+    { cookbookId: "ck_b", version: 3, label: "Beta" },
+  ]);
 });
 
 test("a failed call and a refused answer are each shown as what they are", () => {
@@ -49,4 +59,18 @@ test("a failed call and a refused answer are each shown as what they are", () =>
   const refused = selectionViewOf({ status: "refused", issues: ["picks[0]: nope"] });
   assert.equal(refused.state, "refused");
   if (refused.state === "refused") assert.deepEqual(refused.issues, ["picks[0]: nope"]);
+});
+
+test("the confirm button sends the top pick at its version, with the values its proposal resolved (K18c)", () => {
+  const view = selectionViewOf({
+    status: "proposed",
+    picks: [
+      { cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: { pace: 1.2 }, resolved },
+      { cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC", reason: "Second.", values: {}, resolved },
+    ],
+    alternatives: [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }],
+  });
+  assert.equal(view.state, "pick");
+  if (view.state !== "pick") return;
+  assert.deepEqual(view.confirm, { cookbookId: "ck_3d_data_explainer", version: 2, values: { pace: 1.2 } });
 });

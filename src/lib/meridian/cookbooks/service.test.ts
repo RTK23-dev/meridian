@@ -119,7 +119,7 @@ const RUN: RunInputs = {
 test("a run with no selector connected gets the picker over the eligible cookbooks, never a guessed pick", async () => {
   const proposal = await proposeFor(db.sql, { ...scope, inputs: RUN, lengthMs: 60000 });
   assert.equal(proposal.status, "not_connected");
-  if (proposal.status === "not_connected") assert.ok(proposal.eligible.includes("ck_3d_data_explainer"));
+  if (proposal.status === "not_connected") assert.ok(proposal.eligible.some((ref) => ref.cookbookId === "ck_3d_data_explainer" && ref.version >= 1));
 });
 
 test("with a selector port, a pick names only a cookbook the library offers, and it is resolved", async () => {

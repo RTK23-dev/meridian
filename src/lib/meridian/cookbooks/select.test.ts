@@ -30,7 +30,7 @@ const PROPOSAL: Proposal = {
       resolved: {} as never,
     },
   ],
-  alternatives: ["ck_factory_viral_ugc"],
+  alternatives: [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }],
 };
 
 test("a normal run waits for the person, and an automated loop accepts the top pick", () => {

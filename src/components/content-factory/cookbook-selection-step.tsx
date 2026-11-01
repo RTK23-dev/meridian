@@ -3,6 +3,7 @@
 // connected it offers the picker. Nothing here decides a cookbook: the model and the server do that.
 
 import { Button } from "@/components/ui/button";
+import type { CookbookRef } from "../../lib/meridian/cookbooks/selector.ts";
 import type { SelectionView } from "./cookbook-selection-model";
 
 export function CookbookSelectionStep({
@@ -12,7 +13,7 @@ export function CookbookSelectionStep({
 }: {
   view: SelectionView;
   onConfirm: () => void;
-  onPick: (cookbookId: string) => void;
+  onPick: (cookbook: CookbookRef) => void;
 }) {
   if (view.state === "pick") {
     return (
@@ -34,9 +35,9 @@ export function CookbookSelectionStep({
           <div className="space-y-2">
             <p className="text-small text-fg-muted">Or choose another:</p>
             <div className="flex flex-wrap gap-2">
-              {view.alternatives.map((id) => (
-                <Button key={id} type="button" variant="secondary" size="sm" onClick={() => onPick(id)}>
-                  {id}
+              {view.alternatives.map((cookbook) => (
+                <Button key={cookbook.cookbookId} type="button" variant="secondary" size="sm" onClick={() => onPick(cookbook)}>
+                  {cookbook.label}
                 </Button>
               ))}
             </div>
@@ -51,9 +52,9 @@ export function CookbookSelectionStep({
         <h3 id="cookbook-picker-title" className="text-section font-semibold text-fg">Choose a cookbook</h3>
         <p className="text-small text-fg-secondary">{view.message}</p>
         <div className="flex flex-wrap gap-2">
-          {view.options.map((id) => (
-            <Button key={id} type="button" variant="secondary" size="sm" onClick={() => onPick(id)}>
-              {id}
+          {view.options.map((cookbook) => (
+            <Button key={cookbook.cookbookId} type="button" variant="secondary" size="sm" onClick={() => onPick(cookbook)}>
+              {cookbook.label}
             </Button>
           ))}
         </div>

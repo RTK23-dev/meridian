@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { cookbookSelectionOf } from "../cookbooks/run-record.ts";
-import { applyRecordedCookbook, chooseCookbookFor, runInputsOf } from "./cookbook-choice.ts";
+import { applyRecordedCookbook, chooseCookbookFor, proposalForRunFor, runInputsOf } from "./cookbook-choice.ts";
 import type { RequestBuild } from "./request.ts";
 import { sessionAccess } from "./service-core.ts";
 import type { Attachment } from "./model.ts";
@@ -136,3 +136,31 @@ test("a recorded cookbook is applied to the request: its style replaces the page
   assert.equal(applied.request.constraints.maxMs, 60000, "the shorter of the person's cap and the cookbook's length");
 });
 
+test("a draft run is offered the eligible cookbooks by label and version, read on the server from the session (K18c)", async () => {
+  const id = await draftWithLength(60);
+  const outcome = await proposalForRunFor(db.sql, { userId: ADMIN, sessionId: id });
+  assert.equal(outcome.ok, true, outcome.ok ? "" : outcome.reason);
+  if (!outcome.ok) return;
+  assert.equal(outcome.value.status, "not_connected", "the selector's port is not connected in this build, so the answer is the picker");
+  if (outcome.value.status !== "not_connected") return;
+  const explainer = outcome.value.eligible.find((ref) => ref.cookbookId === "ck_3d_data_explainer");
+  assert.ok(explainer, "the free 3D explainer is eligible for a run with no paid inputs");
+  assert.equal(explainer.version, 2);
+  assert.equal(explainer.label, "3D data explainer");
+});
+
+test("a started run has no cookbook left to propose", async () => {
+  const id = await draftWithLength(60);
+  await db.sql`insert into engine_requests (id, organization_id, brand_id, format_id, priority, status, state) values ('req_proposal_started', ${ORG}, ${BRAND}, 'ref_proposal', 'normal', 'running', '{}')`;
+  await db.sql`update content_factory_sessions set status = 'started', engine_request_id = 'req_proposal_started', started_at = now() where id = ${id}`;
+  const outcome = await proposalForRunFor(db.sql, { userId: ADMIN, sessionId: id });
+  assert.equal(outcome.ok, false);
+  if (!outcome.ok) assert.match(outcome.reason, /already started/);
+});
+
+test("without a length there is no proposal: the reason is said in words", async () => {
+  const id = await draftWithLength(null);
+  const outcome = await proposalForRunFor(db.sql, { userId: ADMIN, sessionId: id });
+  assert.equal(outcome.ok, false);
+  if (!outcome.ok) assert.equal(outcome.reason, "Set the length before choosing a cookbook.");
+});

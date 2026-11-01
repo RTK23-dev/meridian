@@ -41,7 +41,7 @@ test("a good answer is proposed, with its values, its reason and its resolution"
   if (proposal.status !== "proposed") return;
   assert.equal(proposal.picks[0]?.values.pace, 1.2);
   assert.equal(proposal.picks[0]?.resolved.badge, "Free in agent mode");
-  assert.ok(proposal.alternatives.includes("ck_factory_viral_ugc"));
+  assert.ok(proposal.alternatives.some((ref) => ref.cookbookId === "ck_factory_viral_ugc" && typeof ref.label === "string"));
 });
 
 test("an answer naming a cookbook that was not eligible is refused whole", async () => {
@@ -72,7 +72,7 @@ test("an answer that is not JSON, or has the wrong shape, is refused", () => {
 test("a port that is not connected gives the picker, with the eligible cookbooks", async () => {
   const proposal = await proposeCookbooks({ cookbooks: COOKBOOKS, inputs: INPUTS, lengthMs: 60000, port: null });
   assert.equal(proposal.status, "not_connected");
-  if (proposal.status === "not_connected") assert.ok(proposal.eligible.includes("ck_3d_data_explainer"));
+  if (proposal.status === "not_connected") assert.ok(proposal.eligible.some((ref) => ref.cookbookId === "ck_3d_data_explainer" && ref.version >= 1));
   const notConnected: SelectorPort = async () => ({ ok: false, reason: "not_connected", message: "no key" });
   assert.equal((await proposeCookbooks({ cookbooks: COOKBOOKS, inputs: INPUTS, lengthMs: 60000, port: notConnected })).status, "not_connected");
 });

@@ -96,15 +96,22 @@ export function validateAnswer(text: string, eligible: readonly Cookbook[]): { o
   return issues.length === 0 ? { ok: true, picks } : { ok: false, issues };
 }
 
+/** A cookbook as a proposal names it: its id, the version that may be chosen, and the label the person reads. */
+export type CookbookRef = { cookbookId: string; version: number; label: string };
+
+function refOf(cookbook: Cookbook): CookbookRef {
+  return { cookbookId: cookbook.cookbookId, version: cookbook.version, label: cookbook.label };
+}
+
 export type Proposal =
   | { status: "none"; reasons: string[] }
-  | { status: "not_connected"; eligible: string[]; message: string }
+  | { status: "not_connected"; eligible: CookbookRef[]; message: string }
   | { status: "failed"; message: string }
   | { status: "refused"; issues: string[] }
   | {
       status: "proposed";
       picks: Array<{ cookbookId: string; version: number; label: string; reason: string; values: Record<string, ControlValue>; resolved: ResolvedCookbook }>;
-      alternatives: string[];
+      alternatives: CookbookRef[];
     };
 
 /**
@@ -123,13 +130,13 @@ export async function proposeCookbooks(input: {
   const eligible = input.cookbooks.filter((cookbook) => eligibleIds.has(cookbook.cookbookId));
   if (eligible.length === 0) return { status: "none", reasons: checked.flatMap((item) => item.reasons) };
   if (input.port === null) {
-    return { status: "not_connected", eligible: eligible.map((cookbook) => cookbook.cookbookId), message: "The cookbook selector is not connected. Pick a cookbook." };
+    return { status: "not_connected", eligible: eligible.map(refOf), message: "The cookbook selector is not connected. Pick a cookbook." };
   }
 
   const answer = await input.port({ instructions: SELECTOR_INSTRUCTIONS, data: selectorData(eligible, input.inputs) });
   if (!answer.ok) {
     if (answer.reason === "not_connected") {
-      return { status: "not_connected", eligible: eligible.map((cookbook) => cookbook.cookbookId), message: "The cookbook selector is not connected. Pick a cookbook." };
+      return { status: "not_connected", eligible: eligible.map(refOf), message: "The cookbook selector is not connected. Pick a cookbook." };
     }
     return { status: "failed", message: answer.message };
   }
@@ -151,5 +158,5 @@ export async function proposeCookbooks(input: {
     });
   }
   const pickedIds = new Set(picks.map((pick) => pick.cookbookId));
-  return { status: "proposed", picks, alternatives: [...eligibleIds].filter((id) => !pickedIds.has(id)) };
+  return { status: "proposed", picks, alternatives: eligible.filter((cookbook) => !pickedIds.has(cookbook.cookbookId)).map(refOf) };
 }
