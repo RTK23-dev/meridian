@@ -4,7 +4,7 @@ import { emptyBrain } from "./brain.ts";
 import { buildBrief } from "./brief/engine.ts";
 import type { ObservedCreative, PerformanceRow } from "./domain.ts";
 import { embeddingProviderState, retrieveSimilar, testEmbedding, type EmbeddingVector } from "./embeddings/provider.ts";
-import { clusterCreatives, clusterWhitespace } from "./intelligence/cluster.ts";
+import { clusterFingerprints } from "./intelligence/whitespace.ts";
 import { decide } from "./jev/engine.ts";
 import { duplicateRisk, publishingReadiness } from "./jev/guards.ts";
 import { learnPatterns } from "./learning/engine.ts";
@@ -104,8 +104,8 @@ test("stored evidence changes the next brief after the worker learns", async () 
     { id: "c2", origin: "competitor" as const, angle: "unboxing", vector: vector(0.95, 0.05) },
     { id: "own", origin: "own" as const, angle: "offer", vector: vector(0, 1) },
   ];
-  const clusters = clusterCreatives(members, 0.8);
-  assert.ok(clusterWhitespace(clusters, members).includes("unboxing"));
+  const clusters = clusterFingerprints(members, 0.8);
+  assert.ok(clusters.some((cluster) => cluster.memberIds.includes("c1") && cluster.memberIds.includes("c2") && cluster.label === "unboxing"));
 
   const brain = emptyBrain();
   brain.positioning = "A direct offer for people comparing price.";
