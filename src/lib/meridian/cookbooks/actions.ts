@@ -7,7 +7,8 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { requireBrand } from "../brand-membership.ts";
 import { archiveCookbookFor, forkCookbookFor, libraryFor, proposeFor, readCookbookFor, resolveFor, saveCookbookFor, versionsFor } from "./service.ts";
-import { chooseCookbookFor, proposalForRunFor } from "../content-factory/cookbook-choice.ts";
+import { chooseCookbookFor, liveSummaryFor, proposalForRunFor } from "../content-factory/cookbook-choice.ts";
+import type { ControlValue } from "./controls.ts";
 
 function clip(value: unknown, max = 120): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -199,6 +200,19 @@ export const proposeCookbookForRunAction = createServerFn({ method: "POST" })
     const sql = await getSql();
     return proposalForRunFor(sql, { userId: context.userId, sessionId: data.sessionId });
   });
+
+/** The requirements and estimate of a cookbook at the values on screen, for a draft run (K17). Read only. */
+export const liveCookbookSummaryAction = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectOf(input);
+    const sessionId = clip(body.sessionId, 80);
+    const cookbookId = clip(body.cookbookId, 80);
+    const version = versionOf(body.version);
+    if (!sessionId || !cookbookId || version === undefined) throw new Error("Choose a run, a cookbook and its version.");
+    return { sessionId, cookbookId, version, values: objectOf(body.values) as Record<string, ControlValue> };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => liveSummaryFor(await getSql(), { userId: context.userId, ...data }));
 
 /**
  * Records the person's choice of cookbook for a draft run (K18a). The session's own access rule applies (an admin, as for starting a run), and a

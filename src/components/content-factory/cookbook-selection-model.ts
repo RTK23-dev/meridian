@@ -29,17 +29,18 @@ export type SelectionView =
   | { state: "refused"; message: string; issues: string[] };
 
 /** What the step shows for a proposal. The first pick is the one the person is asked to confirm. */
+/** The estimate in words: the known dollars, and that some parts have no known price (K17 shares this with the live update). */
+export function estimateTextOf(estimate: { knownUsd: number; unknown: readonly string[] }): string {
+  if (estimate.unknown.length > 0) return `About $${estimate.knownUsd.toFixed(2)}, plus parts whose price is unknown`;
+  return estimate.knownUsd > 0 ? `About $${estimate.knownUsd.toFixed(2)}` : "No paid parts";
+}
+
 export function selectionViewOf(proposal: Proposal): SelectionView {
   switch (proposal.status) {
     case "proposed": {
       const top = proposal.picks[0];
       if (top === undefined) return { state: "refused", message: "The selector gave no pick.", issues: [] };
-      const estimate =
-        top.resolved.estimate.unknown.length > 0
-          ? `About $${top.resolved.estimate.knownUsd.toFixed(2)}, plus parts whose price is unknown`
-          : top.resolved.estimate.knownUsd > 0
-            ? `About $${top.resolved.estimate.knownUsd.toFixed(2)}`
-            : "No paid parts";
+      const estimate = estimateTextOf(top.resolved.estimate);
       return {
         state: "pick",
         title: top.label,

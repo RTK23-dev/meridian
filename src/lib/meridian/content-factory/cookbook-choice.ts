@@ -3,6 +3,7 @@
 // The choice is checked against the proposal (or the eligible list, when no selector is connected) and recorded only on a draft run.
 
 import type { RunInputs } from "../cookbooks/eligibility.ts";
+import type { ControlValue } from "../cookbooks/controls.ts";
 import { libraryFor, proposeFor, type ServiceResult } from "../cookbooks/service.ts";
 import { recordCookbookSelection } from "../cookbooks/run-record.ts";
 import { confirmSelection, pickFromList, type SelectionRecord } from "../cookbooks/select.ts";
@@ -104,6 +105,31 @@ export async function proposalForRunFor(sql: Sql, input: { userId: string; sessi
     port: null,
   });
   return { ok: true, value: proposal };
+}
+
+/** What a cookbook needs and costs at the values on screen (K17). Read only: nothing is saved, and nothing is called. */
+export type LiveSummary = { cookbookId: string; badge: string; requirements: string[]; estimate: { knownUsd: number; unknown: string[] } };
+
+/** The requirements, badge and estimate of one cookbook at the person's values for this draft run (K17). The run's length is read from the session. */
+export async function liveSummaryFor(
+  sql: Sql,
+  input: { userId: string; sessionId: string; cookbookId: string; version: number; values: Record<string, ControlValue> },
+): Promise<ServiceResult<LiveSummary>> {
+  const row: SessionRow = await sessionAccess(sql, input.userId, input.sessionId);
+  try {
+    requireDraft(row);
+  } catch {
+    return { ok: false, reason: "This run has already started, so its cookbook is fixed." };
+  }
+  const settings = settingsOf(row);
+  if (settings.maxSeconds === null) return { ok: false, reason: "Set the length before choosing a cookbook." };
+  if (row.brand_id === null) return { ok: false, reason: "Choose a brand before choosing a cookbook." };
+  const read = await readCookbookFor(sql, { organizationId: row.organization_id, brandId: row.brand_id, cookbookId: input.cookbookId, version: input.version });
+  if (!read.ok) return { ok: false, reason: read.reason };
+  const resolved = resolveCookbook(read.value.cookbook, { values: input.values, lengthMs: settings.maxSeconds * 1000 });
+  if (!resolved.ok) return { ok: false, reason: "These settings are not allowed.", issues: resolved.issues };
+  const { cookbookId, badge, requirements, estimate } = resolved.resolved;
+  return { ok: true, value: { cookbookId, badge, requirements, estimate } };
 }
 
 function incompleteWith(build: RequestBuild, problems: string[]): RequestBuild {

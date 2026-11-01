@@ -6,10 +6,10 @@ import { useCallback, useEffect, useState } from "react";
 import { useWorkspace } from "@/components/workspace";
 import { toast } from "@/components/ui";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { chooseCookbookForRunAction, proposeCookbookForRunAction } from "@/lib/meridian/cookbooks/actions";
+import { chooseCookbookForRunAction, liveCookbookSummaryAction, proposeCookbookForRunAction } from "@/lib/meridian/cookbooks/actions";
 import type { ControlValue } from "@/lib/meridian/cookbooks/controls";
 import type { CookbookRef } from "@/lib/meridian/cookbooks/selector";
-import { selectionViewOf, type ChoiceToSend, type SelectionView } from "./cookbook-selection-model";
+import { estimateTextOf, selectionViewOf, type ChoiceToSend, type SelectionView } from "./cookbook-selection-model";
 import { CookbookSelectionStep } from "./cookbook-selection-step";
 import { CookbookSettingsStep } from "./cookbook-settings-step";
 
@@ -23,6 +23,8 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
   // The settings the person has on screen, for the cookbook they are on. They are sent with the confirm.
   const [settings, setSettings] = useState<{ cookbookId: string; values: Record<string, ControlValue> } | null>(null);
   const reportValues = useCallback((cookbookId: string, values: Record<string, ControlValue>) => setSettings({ cookbookId, values }), []);
+  // The requirements and estimate for the values on screen, read from the server after a short pause (K17). Until one arrives, the pick's own are shown.
+  const [live, setLive] = useState<{ cookbookId: string; summary: { badge: string; requirements: string[]; estimate: { knownUsd: number; unknown: string[] } } } | null>(null);
   const workspace = useWorkspace();
   const user = useCurrentUserState().user;
 
@@ -44,6 +46,21 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
       cancelled = true;
     };
   }, [sessionId]);
+
+  useEffect(() => {
+    if (settings === null || loaded.state !== "ready" || loaded.view.state !== "pick") return;
+    const { cookbookId, values } = settings;
+    const version = loaded.view.confirm.version;
+    const timer = window.setTimeout(() => {
+      liveCookbookSummaryAction({ data: { sessionId, cookbookId, version, values } })
+        .then((outcome) => {
+          if (outcome.ok) setLive({ cookbookId, summary: outcome.value });
+          else setError(outcome.reason);
+        })
+        .catch(() => setLive(null));
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [settings, loaded, sessionId]);
 
   // A pick or the picker needs a choice until one is recorded; nothing else does.
   const needed = loaded.state === "ready" && (loaded.view.state === "pick" || loaded.view.state === "picker") && chosen === null;
@@ -72,7 +89,11 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
   if (loaded.state === "loading") return <p className="mb-4 text-sm text-fg-muted">Reading the cookbooks for this video…</p>;
   if (loaded.state === "unavailable") return <p className="mb-4 text-sm text-fg-muted">No cookbook yet: {loaded.reason}</p>;
 
-  const view = loaded.view;
+  const pickedView = loaded.view;
+  const view: SelectionView =
+    pickedView.state === "pick" && live !== null && live.cookbookId === pickedView.confirm.cookbookId
+      ? { ...pickedView, badge: live.summary.badge, needs: live.summary.requirements, estimate: estimateTextOf(live.summary.estimate) }
+      : pickedView;
   return (
     <section aria-labelledby="cf-cookbook" className="mb-4 space-y-3 rounded-md border border-border p-3">
       <h2 id="cf-cookbook" className="text-sm font-semibold">Cookbook</h2>

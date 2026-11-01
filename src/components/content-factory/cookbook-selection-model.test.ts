@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { selectionViewOf } from "./cookbook-selection-model.ts";
+import { estimateTextOf, selectionViewOf } from "./cookbook-selection-model.ts";
 import type { Proposal } from "../../lib/meridian/cookbooks/selector.ts";
 
 const resolved = {
@@ -80,4 +80,10 @@ test("the first pick carries its cookbook's controls, so the step can draw the s
   const view = selectionViewOf({ status: "proposed", picks: [{ cookbookId: "ck_x", version: 1, label: "X", reason: "r", values: {}, controls: [control], resolved: { requirements: [], badge: "Free", estimate: { knownUsd: 0, unknown: [] } } as never }], alternatives: [] });
   assert.equal(view.state === "pick" && view.controls.length, 1);
   assert.equal(view.state === "pick" && view.controls[0]?.id, "pace");
+});
+
+test("the estimate in words names the known dollars, the unknown parts, or that nothing is paid (K17)", () => {
+  assert.equal(estimateTextOf({ knownUsd: 1.5, unknown: ["voice"] }), "About $1.50, plus parts whose price is unknown");
+  assert.equal(estimateTextOf({ knownUsd: 0.25, unknown: [] }), "About $0.25");
+  assert.equal(estimateTextOf({ knownUsd: 0, unknown: [] }), "No paid parts");
 });

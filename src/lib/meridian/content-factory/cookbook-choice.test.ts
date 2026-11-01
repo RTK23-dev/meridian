@@ -164,3 +164,22 @@ test("without a length there is no proposal: the reason is said in words", async
   assert.equal(outcome.ok, false);
   if (!outcome.ok) assert.equal(outcome.reason, "Set the length before choosing a cookbook.");
 });
+
+test("the live summary gives a cookbook's badge and estimate at the values on screen, for a draft run (K17)", async () => {
+  const id = await draftWithLength(60);
+  const { liveSummaryFor } = await import("./cookbook-choice.ts");
+  const outcome = await liveSummaryFor(db.sql, { userId: ADMIN, sessionId: id, cookbookId: "ck_3d_data_explainer", version: 2, values: { pace: 1.2 } });
+  assert.equal(outcome.ok, true, outcome.ok ? "" : outcome.reason);
+  if (!outcome.ok) return;
+  assert.equal(outcome.value.cookbookId, "ck_3d_data_explainer");
+  assert.ok(outcome.value.badge.length > 0);
+  const refused = await liveSummaryFor(db.sql, { userId: ADMIN, sessionId: id, cookbookId: "ck_3d_data_explainer", version: 2, values: { pace: 999 } });
+  assert.equal(refused.ok, false, "a value outside its control is refused, and nothing is shown for it");
+});
+
+test("the live summary needs a length, and a run that has started keeps its cookbook fixed (K17)", async () => {
+  const noLength = await draftWithLength(null);
+  const { liveSummaryFor } = await import("./cookbook-choice.ts");
+  const outcome = await liveSummaryFor(db.sql, { userId: ADMIN, sessionId: noLength, cookbookId: "ck_3d_data_explainer", version: 2, values: {} });
+  assert.equal(outcome.ok, false);
+});
