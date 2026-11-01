@@ -920,3 +920,18 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Migration numbering: Q41 (B11) uses 0144, since 0143 is the cookbook_selector role.
 - Coverage gap recorded (B3): the durable queue's idempotency, tenant, schedule and cancel behaviour had no other test. The Postgres worker tests cover lease renewal, backoff and dead letters.
 - Next: B11, then B12 to B16, K13, K15, K16, K17, K23 and K24, K29, K20f, K30, then the verification and one push.
+
+
+## 2026-11-01: the final version, verified and pushed
+
+- Verification on the head before the push:
+  - Source tests: `src/**/*.test.ts`, 7089 tests, 7048 pass, 0 fail, 41 skipped (the skips predate this branch's tests).
+  - Scripts tests: 224 tests, 221 pass, 0 fail, 3 skipped.
+  - `npm run typecheck`: exit 0. `npx eslint` on every changed TypeScript file: exit 0.
+  - Not run here: the release acceptance (browser) and the build. CI runs both on the pushed head, and that run is the verification of record (Q10).
+- Two failed source runs came first. Both were caused by this branch and are fixed in `4c2a11c`:
+  - The migration test's engine table list did not name `engine_output_measures`. The table is now in the list and in Bible 5.4.
+  - Engine test fixtures returned a clean OCR result with no text boxes, which the new safe-zone check reads as not measured. The fixtures now report their boxes as measured and empty.
+- Production behaviour check: `productionPostRenderPorts` does not supply an OCR measure, so the caption check was already not evaluated, and every video already went to review. The safe-zone check does not change that.
+- Not in this version (the run plan lists them): K15, K16, K23, K24, K20f, K29, K30.
+- Owner runs: the live selector call (a budget decision for reservations before a run) and writing `docs/data/cookbook-results.json` (needs the database).
