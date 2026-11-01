@@ -645,3 +645,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K20b3a done: `components/cookbooks/edit-model.ts`, the editor's rules. A control takes only a value that fits it (its bounds, options and kind), and an instruction must say something and fit the 4000-character limit. The same checks run again on save. 4 tests; typecheck and eslint pass.
 - Next: K20b3b (the editor's fields, saved through `saveCookbookAction`).
 - Next wake armed for 06:33 UTC (trig_01TQ7fWMKhVwea21iKBn5b8c).
+
+## 2026-11-01 06:36 UTC: wake: K20b3b part 1
+
+- Wake (06:34): the branch matched aaf0dce; its check_suite completed with no failure. The check failures in the notifications were on old heads (f550b70, 48d40e1, 0d589fe and others).
+- K20b3b part 1 done: `applyEdits` applies a set of control-default and instruction-text edits to a copy of a cookbook, stopping at the first failing edit and never changing the original. 6 tests; typecheck and eslint pass.
+- Next: K20b3b part 2 (the editor's fields and the save through `saveCookbookAction`; a built-in cookbook is copied first, since admins maintain copies of built-ins).
+- Next wake armed for 06:56 UTC (trig_01UrfzbaGatZZt56ASaHmN6F).
