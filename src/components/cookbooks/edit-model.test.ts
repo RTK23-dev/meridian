@@ -4,9 +4,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbook } from "../../lib/meridian/cookbooks/builtin/index.ts";
+import type { Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
 import {
   applyEdits,
   COPY_PREFIX,
+  editsFromDraft,
   INSTRUCTION_MAX_CHARACTERS,
   instructionEdit,
   planSave,
@@ -15,6 +17,7 @@ import {
   STEP_LABEL_MAX_CHARACTERS,
   stepLabelEdit,
   stepParamValue,
+  type CookbookDraft,
   type SaveCalls,
 } from "./edit-model.ts";
 
@@ -191,4 +194,42 @@ test("applying step edits changes the copy's label and setting, leaves the origi
   assert.equal(JSON.stringify(EXPLAINER), before, "the original cookbook is not changed");
   assert.equal(applyEdits(EXPLAINER, [{ kind: "step-param", index: 999, key: "beats", value: 10 }]).ok, false, "a step that does not exist is refused");
   assert.equal(applyEdits(EXPLAINER, [{ kind: "step-label", index, label: " " }]).ok, false, "a blank step label is refused");
+});
+
+function draftOf(cookbook: Cookbook): CookbookDraft {
+  return {
+    values: Object.fromEntries(cookbook.controls.map((control) => [control.id, control.default])),
+    texts: cookbook.instructions.map((instruction) => instruction.text),
+    steps: cookbook.steps.map((step) => ({ label: step.label, params: { ...step.params } })),
+  };
+}
+
+test("an untouched draft makes no edits, so saving it changes nothing (K20d)", () => {
+  assert.deepEqual(editsFromDraft(EXPLAINER, draftOf(EXPLAINER)), []);
+});
+
+test("each changed field becomes one edit: a control, an instruction, a step's label and a step's setting (K20d)", () => {
+  const index = EXPLAINER.steps.findIndex((step) => step.id === "script");
+  assert.ok(index >= 0, "the explainer has a script step");
+  const draft = draftOf(EXPLAINER);
+  draft.values = { ...draft.values, pace: 1.2 };
+  draft.texts = draft.texts.map((text, position) => (position === 0 ? "Open on a bigger number." : text));
+  draft.steps = draft.steps.map((step, position) => (position === index ? { label: "Write the hook", params: { ...step.params, beats: 10 } } : step));
+  assert.deepEqual(editsFromDraft(EXPLAINER, draft), [
+    { kind: "control", id: "pace", value: 1.2 },
+    { kind: "instruction", index: 0, text: "Open on a bigger number." },
+    { kind: "step-label", index, label: "Write the hook" },
+    { kind: "step-param", index, key: "beats", value: 10 },
+  ]);
+});
+
+test("the edits a draft makes are the ones the rules accept: applying them gives the copy the draft's step text (K20d)", () => {
+  const index = EXPLAINER.steps.findIndex((step) => step.id === "script");
+  const draft = draftOf(EXPLAINER);
+  draft.steps = draft.steps.map((step, position) => (position === index ? { label: "  Write the hook  ", params: { ...step.params, beats: 10 } } : step));
+  const applied = applyEdits(EXPLAINER, editsFromDraft(EXPLAINER, draft));
+  assert.equal(applied.ok, true);
+  if (!applied.ok) return;
+  assert.equal(applied.cookbook.steps[index]?.label, "Write the hook", "the label is trimmed, as the rule says");
+  assert.equal(applied.cookbook.steps[index]?.params.beats, 10);
 });

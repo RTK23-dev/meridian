@@ -107,6 +107,37 @@ export function applyEdits(cookbook: Cookbook, edits: readonly CookbookEdit[]): 
   return { ok: true, cookbook: { ...cookbook, controls, instructions, steps } };
 }
 
+/** What the editor's form holds: each control's value, each instruction's text, and each step's label and settings (K20d). */
+export type CookbookDraft = {
+  values: Readonly<Record<string, ControlValue>>;
+  texts: readonly string[];
+  steps: readonly { label: string; params: Readonly<Record<string, Scalar>> }[];
+};
+
+/**
+ * The edits a draft makes to a cookbook: each control whose value differs from its default, each instruction whose text differs, and each
+ * step whose label or setting differs. A field that was not changed makes no edit, so an untouched draft makes none.
+ */
+export function editsFromDraft(cookbook: Cookbook, draft: CookbookDraft): CookbookEdit[] {
+  const edits: CookbookEdit[] = [];
+  for (const control of cookbook.controls) {
+    const value = draft.values[control.id];
+    if (value !== undefined && value !== control.default) edits.push({ kind: "control", id: control.id, value });
+  }
+  draft.texts.forEach((text, index) => {
+    if (text !== cookbook.instructions[index]?.text) edits.push({ kind: "instruction", index, text });
+  });
+  draft.steps.forEach((step, index) => {
+    const original = cookbook.steps[index];
+    if (original === undefined) return;
+    if (step.label !== original.label) edits.push({ kind: "step-label", index, label: step.label });
+    for (const [key, value] of Object.entries(step.params)) {
+      if (value !== original.params[key]) edits.push({ kind: "step-param", index, key, value });
+    }
+  });
+  return edits;
+}
+
 /** The server calls that save an edited cookbook, in order (K20b3b part 2). A built-in cookbook is copied first: its id is reserved, and admins
  * maintain copies of built-ins (D5). A workspace cookbook is saved as its next version under its own id. */
 export type SaveStep =

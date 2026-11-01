@@ -699,3 +699,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: the form does not show step fields yet, so nothing is in a browser. No live provider call was made.
 - Still open in K20: K20d (the form's step fields, saved through the same plan) and K20e (inline validation on the generation and grading fields).
 - Next wake armed for 09:27 UTC (trig_01X3jEtbKyuveoLmcLSgzp4A).
+
+## 2026-11-01 09:33 UTC: wake: K20d, the step fields in the cookbook editor
+
+- Wake (09:27): CI on the head 12c7e45 was green (13 check runs; CodeRabbit skipped). The local branch matched the remote.
+- Unit done (K20d): `editsFromDraft` in `components/cookbooks/edit-model.ts` turns the form's draft (control values, instruction texts, and each step's name and settings) into the edits the rules and save plan take. The form (`cookbook-edit-form.tsx`) gains a Steps section after the instructions: a name field (up to 80 characters) and one field per setting, shown by its kind. Save uses the same rules and save plan as before.
+- Acceptance: H2 also waits for the step name field, so the editor's new section is seen in a browser.
+- Checks: `NODE_ENV=development node --experimental-strip-types --test src/components/cookbooks/edit-model.test.ts` passed 19 of 19 (16 before, 3 new). `npx eslint` on the three cookbook files and the acceptance script exits 0. `npm run typecheck` exits 0. The local release acceptance run `ra-run11` passed 32 of 32, exit 0.
+- Not checked: saving a changed step name or setting in the browser. No live provider call was made.
+- Still open in K20: K20e (inline validation on the generation and grading fields).
+- Next wake armed for 09:53 UTC (trig_01MfAL22eiuKjWsV9VrH2PcC).

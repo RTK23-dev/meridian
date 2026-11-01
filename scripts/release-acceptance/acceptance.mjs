@@ -570,6 +570,8 @@ try {
     await page.getByRole("button", { name: /^Edit( a copy)?$/ }).first().click();
     const form = page.getByRole("form", { name: /^Edit / });
     await form.waitFor({ timeout: 30000 });
+    // The steps section (K20d): each step has a name field, so the form shows the steps as well as the instructions.
+    await form.getByRole("textbox", { name: "Step name" }).first().waitFor({ timeout: 30000 });
     await form.locator("textarea").first().fill("Acceptance edit: open on a number that counts up.");
     await form.getByRole("button", { name: "Save as my copy" }).click();
     await page.getByText("Saved as your copy.").waitFor({ timeout: 30000 });
