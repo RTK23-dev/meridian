@@ -629,3 +629,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K20b2a done: `components/cookbooks/outline-model.ts`, a pure read-only outline of one cookbook: its steps in order (with what each waits for, and whether it is conditional) and its controls (with their defaults in words). The types are imported for typing only, so the browser can draw it. 3 tests; typecheck and eslint pass.
 - Next: K20b2b (mount the outline in the editor, reading the cookbook through `readCookbookAction`).
 - Next wake armed for 05:47 UTC (trig_014raF7ACovwWpmkVrCNHt3C).
+
+## 2026-11-01 05:52 UTC: wake: K20b2b
+
+- Wake (05:47): the branch matched e779348; its check had completed with no failure.
+- K20b2b done: the preset bar's cookbook list has a Show steps button, which opens the cookbook's outline read-only (steps with what they wait for; controls with defaults). The outline is read through `readCookbookAction`, and drawn by `cookbook-outline.tsx`.
+- Gate: the local release acceptance passes, 31 of 31, with no externalized-module error. The acceptance does not click the button, so its rendering is not checked in a browser here.
+- Checks: typecheck and eslint pass; the factory and outline tests pass (15).
+- Next: K20b3 (the editor edits controls and per-role instructions).
+- Next wake armed for 06:12 UTC (trig_01GhMx3rmqm48iiUHUb1VnqP).
