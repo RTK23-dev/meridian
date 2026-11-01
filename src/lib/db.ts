@@ -161,7 +161,7 @@ async function createPgliteSql(): Promise<Sql> {
         const path = await import("node:path");
         const dir = path.resolve(process.cwd(), "migrations");
         if (fs.existsSync(dir)) {
-          const files = fs.readdirSync(dir).filter((f: string) => f.endsWith(".sql"));
+          const files = fs.readdirSync(dir).filter((f: string) => f.endsWith(".sql")).sort();
           for (const file of files) {
             migrations[`/migrations/${file}`] = fs.readFileSync(path.join(dir, file), "utf-8");
           }

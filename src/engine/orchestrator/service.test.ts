@@ -5,8 +5,10 @@ import { fixture, gatewayFor, json } from "../claude/test/helpers.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { loadCatalog, type CatalogEntry } from "./catalog.ts";
 import type { WorkspaceBudgetSource, WorkspaceMonthBudget } from "../jobs/handlers/estimate-reserve.ts";
-import { planStoredDraft, type PlanScope } from "./service.ts";
+import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
+import { planInputTokensOf, planStoredDraft, type PlanScope } from "./service.ts";
 import { createPlanDraft, getPlan } from "./store.ts";
+import { estimateFromPriceUsd } from "../claude/rates.ts";
 
 const ORG = "org_svc_a";
 const OTHER = "org_svc_b";
@@ -106,12 +108,17 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     assert.equal(Number(holds[0]?.n ?? 0), 0);
   });
 
-  test("a call whose estimate is over the plan's budget is refused before the hold", async () => {
+  test("a planning call whose hold does not fit the budget is refused before any call, and no hold is written (D17)", async () => {
     await draft(db, "plan_svc_budget", 0.0001);
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ4", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ4" };
-    const outcome = await planStoredDraft(scopeFor(db, [], ids), "plan_svc_budget");
+    const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_budget");
     assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /over the plan's \$0\.0001 budget, so no call is made/);
+    if (outcome.status === "refused") {
+      assert.match(outcome.reasons[0] ?? "", /^the plan call's hold of \$[0-9.]+ would take the spend past the \$0\.0001 budget \(committed \$0\.0000\), so the draft is refused before any call$/);
+    }
+    assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
+    assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+    assert.equal((await getPlan(db.sql, ORG, "plan_svc_budget"))?.status, "refused");
   });
 
   test("a plan that is already ready is not planned again, and another organization gets not found", async () => {
@@ -125,13 +132,31 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
   test("a plan call that would take the workspace month over its budget is refused, and no hold is written", async () => {
     await draft(db, "plan_svc_month");
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ6", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ6" };
-    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: 0.0001 }) };
+    // A month with a zero budget is at its line before the call, whatever this month has committed (earlier tests write calls to it).
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: 0 }) };
     const outcome = await planStoredDraft(scope, "plan_svc_month");
     assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /workspace monthly budget 0\.0001 USD would be exceeded/);
+    if (outcome.status === "refused") assert.match(outcome.reasons[0] ?? "", /^workspace monthly budget reached: \$[0-9.]+ is committed against the \$0\.0000 budget/);
     assert.equal((await getPlan(db.sql, ORG, "plan_svc_month"))?.status, "refused");
     assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
     assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+  });
+
+  test("a plan call whose hold does not fit the workspace month is refused, though the month is below its budget, and no hold is written (D17)", async () => {
+    await draft(db, "plan_svc_month_fit");
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZB", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZB" };
+    // The month's committed spend is read the way the check reads it. The budget is a sliver above it, so the month is below its line, but
+    // the call's hold is far larger than that sliver and does not fit under the line.
+    const committed = await scopedLedgerStore(db.sql, ORG, ids.reservation).committedForMonth(ORG, NOW.slice(0, 7));
+    const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "known", usd: committed + 0.0001 }) };
+    const outcome = await planStoredDraft(scope, "plan_svc_month_fit");
+    assert.equal(outcome.status, "refused");
+    if (outcome.status === "refused") {
+      assert.match(outcome.reasons[0] ?? "", /^the plan call's hold of \$[0-9.]+ would take the workspace month past its \$[0-9.]+ budget \(committed \$[0-9.]+\), so the draft is refused before any call$/);
+    }
+    assert.equal(await roleCallsFor(db, ids.request), 0, "no call is made");
+    assert.equal(await holdCount(db, ids.reservation), 0, "no reservation is written");
+    assert.equal((await getPlan(db.sql, ORG, "plan_svc_month_fit"))?.status, "refused");
   });
 
   test("a workspace month that is not known refuses the call before any hold, with the source's reason", async () => {
@@ -146,13 +171,15 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     assert.equal(await holdCount(db, ids.reservation), 0);
   });
 
-  test("a plan whose budget is above the budget the user set is refused, and is not stored as ready", async () => {
+  test("a plan whose budget is above the budget the user set is stored as ready, with a note: the run stops at the user's budget", async () => {
     await draft(db, "plan_svc_overbudget", 1);
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ8", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ8" };
     const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_overbudget");
-    assert.equal(outcome.status, "refused");
-    if (outcome.status === "refused") assert.equal(outcome.reasons[0], "the plan's budget $2.0000 is above the budget you set, $1.0000");
-    assert.equal((await getPlan(db.sql, ORG, "plan_svc_overbudget"))?.plan, null);
+    assert.equal(outcome.status, "ready", "a plan that asks for more is a plan, not a refusal (envelope.ts)");
+    const stored = await getPlan(db.sql, ORG, "plan_svc_overbudget");
+    assert.equal(stored?.plan?.budgetUsd, 2, "the plan keeps the budget it asked for");
+    assert.equal(stored?.budgetUsd, 1, "the user's budget is unchanged");
+    assert.ok(stored?.reasons.includes("the plan asks for $2.0000; the run stops at the $1.0000 budget you set"), `the note is stored: ${stored?.reasons.join(" | ")}`);
   });
 
   test("a model whose hold would have more than four decimals never leaves the plan in planning", async () => {
@@ -166,5 +193,35 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
     const stored = await getPlan(db.sql, ORG, "plan_svc_cheap");
     assert.ok(stored?.status === "ready" || stored?.status === "refused", `the plan is ${stored?.status}, not planning`);
     assert.equal(await holdCount(db, ids.reservation), 1, "the hold is written, with a valid reservation shape");
+  });
+
+  test("the planning call is held for the count its check sized: the reviewer's fixture is 54,062 input tokens, and the check and the hold are that same amount", async () => {
+    // The reviewer's fixture: this brief and this catalog size the call at 54,062 input tokens (the role's own estimate is 8,000).
+    const fixtureBrief = {
+      goal: "A short branded video",
+      format: "a hook, a product shot, a call to action",
+      userInputs: "",
+      brand: { name: "Example", summary: "plain" },
+      budgetUsd: 1,
+    };
+    assert.equal(planInputTokensOf(catalog, fixtureBrief), 54062, "the check sizes the fixture's call at 54,062 input tokens");
+    await createPlanDraft(db.sql, { id: "plan_svc_sized", organizationId: ORG, title: "sized", brief: fixtureBrief, orchestratorModel: HAIKU, budgetUsd: 1 });
+    const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZA", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZA" };
+    const outcome = await planStoredDraft(scopeFor(db, [json(200, fixture("openrouter-orchestrator-plan-ok"))], ids), "plan_svc_sized");
+    assert.equal(outcome.status, "ready", "the sized call is held within the user's budget, so it is made");
+
+    const entry = catalog.get(HAIKU);
+    if (entry === undefined) throw new Error("haiku must be in the recorded catalog");
+    const { promptUsdPerToken, completionUsdPerToken } = entry.pricing;
+    if (promptUsdPerToken === null || completionUsdPerToken === null) throw new Error("haiku must have a per-token price");
+    const sizedUsd = estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: 54062, output: 4000 });
+    const roleOnlyUsd = estimateFromPriceUsd({ promptUsdPerToken, completionUsdPerToken }, { input: 8000, output: 4000 });
+    assert.ok(sizedUsd > roleOnlyUsd, "the sized call costs more than the role's fixed estimate, so holding the role's would undercount it");
+
+    // The check's estimate (the reservation) and the call's hold (its ledger entry) are the same sized amount.
+    const reservations = (await db.sql`select estimate_usd from engine_reservations where id = ${ids.reservation}`) as Array<{ estimate_usd: unknown }>;
+    assert.equal(Number(reservations[0]?.estimate_usd), sizedUsd, "the check sizes the hold from 54,062 input tokens");
+    const ledger = (await db.sql`select estimate_usd from engine_ledger where reservation_id = ${ids.reservation}`) as Array<{ estimate_usd: unknown }>;
+    assert.deepEqual(ledger.map((row) => Number(row.estimate_usd)), [sizedUsd], "the call is held at the check's amount, not at the role's 8,000-token estimate");
   });
 });

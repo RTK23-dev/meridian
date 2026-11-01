@@ -34,7 +34,10 @@ export const TAKE_HEIGHT = 1920;
 
 export const HINT_PATTERN = /^[a-z0-9_.:-]{1,64}$/;
 
-/** What the router (or another generator) reports for one generate call. Every case is a fact about the call. */
+/**
+ * What the router (or another generator) reports for one generate call. Every case is a fact about the call. billedUsd on a failure is the
+ * bill the provider charged the attempt before it stopped (D12, D14): the ledger charges it, and the hold of the attempt keeps it.
+ */
 
 export type ShotProduction =
   | {
@@ -49,13 +52,13 @@ export type ShotProduction =
     }
   /** The router submitted the call. job is the router's asset job: the poller carries it, and settle receives it back. */
   | { status: "submitted"; providerId: string; jobRef: string; submittedAt: string; job: AssetJob; runAfterMs: number; decisions: Decision[] }
-  | { status: "failed"; providerId: string; error: ProviderError; decisions: Decision[] }
-  | { status: "refused"; reasons: string[]; decisions: Decision[] }
-  | { status: "queued"; reasons: string[] }
-  | { status: "unavailable"; reasons: string[]; decisions: Decision[] }
+  | { status: "failed"; providerId: string; error: ProviderError; decisions: Decision[]; billedUsd?: number }
+  | { status: "refused"; reasons: string[]; decisions: Decision[]; billedUsd?: number }
+  | { status: "queued"; reasons: string[]; billedUsd?: number }
+  | { status: "unavailable"; reasons: string[]; decisions: Decision[]; billedUsd?: number }
   | { status: "not_connected"; reasons: string[] }
-  | { status: "duplicate"; providerId: string; ledgerEntryId: string }
-  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; decisions: Decision[] };
+  | { status: "duplicate"; providerId: string; ledgerEntryId: string; billedUsd?: number }
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; decisions: Decision[]; billedUsd?: number };
 
 export type GenerateInput = {
   sql: Sql;

@@ -1,4 +1,4 @@
-// The cookbook_selector role (contract v13, round 3 K10, decision Q34): Haiku reads the cookbooks that can run for one run, each with its
+// The cookbook_selector role (contract v14, round 3 K10, decision Q34): Haiku reads the cookbooks that can run for one run, each with its
 // controls and their bounds, and the run's inputs, and proposes up to three cookbooks with starting values and one short reason each. The
 // answer is untrusted: the code (lib/meridian/cookbooks/selector.ts) accepts a pick only when it is one of the eligible cookbooks at its
 // version, and a value only when it fits its control. The role never picks for the person: a normal run shows the picks and waits for a choice.

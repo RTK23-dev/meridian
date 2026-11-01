@@ -27,16 +27,16 @@ export const geneIdSchema = z.enum(GENE_IDS);
 export type GeneId = z.infer<typeof geneIdSchema>;
 
 /**
- * The roles a cookbook's instructions can reach (contract v12). The engine's roles read the instruction of their own role, if the request
+ * The roles a cookbook's instructions can reach (contract v13). The engine's roles read the instruction of their own role, if the request
  * carries one. This list is the cookbook library's list too (src/lib/meridian/cookbooks/controls.ts).
  */
 export { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "./cookbook-roles.ts";
 
-/** The total text a cookbook may send with one request, in characters (contract v12). */
+/** The total text a cookbook may send with one request, in characters (contract v13). */
 export const COOKBOOK_INSTRUCTIONS_MAX = 16000;
 
 /**
- * A cookbook the request was made from (contract v12, round 3). The id and version name the cookbook; valuesHash names the values the person
+ * A cookbook the request was made from (contract v13, round 3). The id and version name the cookbook; valuesHash names the values the person
  * chose; instructions carries the text per role. The instructions are data: a role reads them as a delimited block and never as rules.
  */
 export const cookbookRefSchema = z
@@ -115,7 +115,7 @@ export const productionRequestSchema = z.object({
     keep: z.array(geneIdSchema),
     change: z.array(z.string().min(1)),
   }),
-  /** The cookbook the request was made from, when one was used (contract v12). Optional, so earlier requests parse unchanged. */
+  /** The cookbook the request was made from, when one was used (contract v13). Optional, so earlier requests parse unchanged. */
   cookbook: cookbookRefSchema.optional(),
   /** The script the producer sends (the words to speak). Exactly one of `script` and `brief` is present (contract v8). */
   script: z

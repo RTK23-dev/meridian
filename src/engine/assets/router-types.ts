@@ -106,6 +106,14 @@ export type RouterDeps = {
    * decision that says so.
    */
   catalog?: ModelCatalogSource;
+  /**
+   * The model families this router must not submit to: the workspace's switched-off families, with a plan's brand families added (D16).
+   * A route-table target, the route table being the fallback when a chosen model is not used, of one of them is excluded with that reason,
+   * before any adapter is built, so no fallback can reach it. A new submit is checked when it is made: the candidates at submit time, and at
+   * settle time a fallback or a retry, so a family switched off while a job was in flight is not used. Absent: no family is excluded here.
+   * The poll and the settle of a job already in flight are never refused by it, so its bill is always recorded.
+   */
+  disabledFamilies?: readonly string[];
   signals?: RouterSignals;
   settings?: Partial<RouterSettings>;
   /** Epoch milliseconds. Injected so that tests control time. */
@@ -130,6 +138,12 @@ export type ProduceInput = {
   voiceProvider?: string | null;
   /** The speaking rate for speech routes (1 is the vendor's default). Part of the adapter's identity, so it is part of the cache key. */
   speechSpeed?: number;
+  /**
+   * The plan's measure hold of a measured clip (D15): an unpriced video or avatar step in measure mode, held to its ceiling times its length.
+   * The ledger holds this amount for each submit of the call, so the ledger holds the money the plan holds. Absent for a priced step, which holds
+   * the router's own price for the target. When set, it must be a positive USD amount, or the call is refused before anything is authorized.
+   */
+  measureHoldUsd?: number;
 };
 
 export type ProducedAsset = {
@@ -138,7 +152,10 @@ export type ProducedAsset = {
   modelClass: ModelClass;
   uri: string;
   cacheKey: string;
-  /** What the asset cost: the provider bills of the submits of its winning target. Zero for a cache hit. Never an estimate (contract v6). */
+  /**
+   * What the asset cost: the provider bills of every submit it made, on its winning target and on each earlier target it failed after billing
+   * it. No bill is dropped. Zero for a cache hit. Never an estimate (contract v6).
+   */
   costUsd: number;
   cacheHit: boolean;
   /** On a cache hit, the cost the hit saved. */
@@ -159,26 +176,31 @@ export type AttemptLog = {
   latencyMs: number | null;
 };
 
+/**
+ * What the router did with an asset. `billedUsd` on each outcome that can follow a submit is what the asset's failed targets were billed,
+ * failed ones included (D12, D14). The router sets it, zero when none was billed, so a stop never drops a bill. It is optional so that
+ * outcomes built elsewhere in the engine still type-check.
+ */
 export type ProduceOutcome =
   | { status: "done"; asset: ProducedAsset }
   /** A content or input refusal. The planner rewrites the prompt once, then downgrades the shot (Bible 10.4). */
-  | { status: "failed"; providerId: string; error: ProviderError }
+  | { status: "failed"; providerId: string; error: ProviderError; billedUsd?: number }
   /** No eligible target is connected. Nothing was sent. */
   | { status: "not_connected"; reasons: string[] }
   /** Every target the budget could take was refused. Nothing was sent. */
-  | { status: "refused"; reasons: string[] }
+  | { status: "refused"; reasons: string[]; billedUsd?: number }
   /** A concurrency bucket is full. The job stays queued; it does not spin. */
-  | { status: "queued"; reasons: string[] }
+  | { status: "queued"; reasons: string[]; billedUsd?: number }
   /** The same call was already authorized. Nothing was sent again. */
-  | { status: "duplicate"; providerId: string; ledgerEntryId: string }
+  | { status: "duplicate"; providerId: string; ledgerEntryId: string; billedUsd?: number }
   /** No target produced an asset. */
-  | { status: "unavailable"; reasons: string[] }
+  | { status: "unavailable"; reasons: string[]; billedUsd?: number }
   /**
    * A paid submit has an unknown outcome: a server error, a timeout, or an answer with no job id, so the provider may have billed it.
    * Nothing else is submitted for the asset, on this target or any other, until the submit is settled from its invoice or confirmed
    * absent by the provider (resolveAmbiguousSubmit). The stage stops with this reason.
    */
-  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string };
+  | { status: "unsettled"; providerId: string; idempotencyKey: string; ledgerEntryId: string; reason: string; billedUsd?: number };
 
 export type ProduceReport = {
   outcome: ProduceOutcome;
@@ -217,7 +239,10 @@ export type Candidate = {
   priority: number;
   route: ResolvedRoute;
   adapter: RoutedAdapter;
+  /** The route's own price, or for a route with no known price (a measured clip only) the measure hold it is held at. */
   estimateUsd: number;
+  /** False when the route has no price the engine can read. Its cost is then unknown to the scorer, which compares known prices only. */
+  priceKnown: boolean;
   cacheKey: string;
 };
 
@@ -225,6 +250,8 @@ export type Candidate = {
 
 export type TargetState = {
   submitNumber: number;
+  /** The bills of the asset's earlier targets, each billed and then failed. Carried to the job, never dropped (Bible 14.1). */
+  earlierTargetsBilledUsd: number;
   targetBilledUsd: number;
   targetSubmits: number;
   targetFirstEntryId: string | null;

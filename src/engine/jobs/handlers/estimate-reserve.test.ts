@@ -91,16 +91,14 @@ test("a hold is never lowered: a plan below the held amount keeps the larger hol
   assert.ok(result.reservation.reservedUsd >= 0.52, "the fixed lines stay in the hold");
 });
 
-test("in cap mode a raise over the request budget pauses: the gate fails with the reason, and the hold keeps its amount and state", async () => {
+test("in cap mode a raise over the request budget is held with a note: the gate passes, and calls are gated by their line (D12)", async () => {
   const store = memoryLedgerStore();
   await holdIn(store, 0.6);
   const result = await extendForPlan(store, input({ requestBudgetUsd: 0.6 }));
-  assert.equal(result.gate.pass, false);
-  assert.equal(result.reservation, null);
-  assert.match(checkOf(result.gate, "reservation_succeeded").detail ?? "", /request budget 0\.6 USD is below/);
-  const kept = await store.getReservation(HOLD);
-  assert.equal(kept?.state, "reserved");
-  assert.equal(kept?.reservedUsd, 0.52);
+  assert.equal(result.gate.pass, true, "a plan above its budget is not refused");
+  assert.equal(result.reservation?.state, "reserved");
+  assert.ok((result.reservation?.reservedUsd ?? 0) > 0.6, "the hold is the plan's estimate, above the 0.6 USD budget");
+  assert.equal((await store.getReservation(HOLD))?.reservedUsd, result.reservation?.reservedUsd);
 });
 
 test("an unknown price is refused with its shot named: the gate fails, and the hold is not touched", async () => {
@@ -295,14 +293,14 @@ test("a monthly budget that is not a usable amount is refused before anything is
   assert.match(checkOf(output.gate, "reservation_succeeded").detail ?? "", /not a usable amount/);
 });
 
-test("a raise that cap mode pauses returns no id and writes no artifact; the hold keeps its amount", async () => {
+test("a raise above the request budget is not paused: it returns the id and writes the reservation (D12)", async () => {
   await holdInDatabase(fixtureId("res_", 814), 0.6);
   const planId = await storePlan(scenePlanFixture);
   const { output } = await runEstimate(planId, { reservationId: fixtureId("res_", 814), source: fundedWorkspace, requestBudgetUsd: 0.6 });
-  assert.equal(output.gate.pass, false);
-  assert.equal(output.budgetReservationId, null);
-  assert.deepEqual(output.artifacts, {});
-  assert.equal((await reservationRow(fixtureId("res_", 814))).reservedUsd, 0.52);
+  assert.equal(output.gate.pass, true);
+  assert.equal(output.budgetReservationId, fixtureId("res_", 814));
+  assert.ok(output.artifacts.budget, "the reservation artifact is written");
+  assert.ok(Number((await reservationRow(fixtureId("res_", 814))).reservedUsd) > 0.6, "the hold is the plan's estimate, above the budget");
 });
 
 test("a stage with no scene_plan among its inputs is refused, not guessed", async () => {

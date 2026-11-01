@@ -5,8 +5,12 @@
 // plan's own estimateUsd is advisory and is overwritten: a model that understates its cost cannot pass the budget check. A step whose
 // model has no usable price in the listing, or whose parameters do not give a basis for the price, does not run.
 
+import { isDisabledModel } from "../config/model-policy.ts";
+import { positionOfLine, type BudgetPosition } from "../budget/line.ts";
+import { BUDGET_CATEGORIES, categoryOf, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import type { NodeKind, OrchestratorPlan, PlanNode } from "./contracts.ts";
+import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 
 /** The catalog kind a step's model must be. A step whose kind is not listed here makes no model call and must have no model. */
 export const KIND_CATALOG: Partial<Record<NodeKind, CatalogKind>> = {
@@ -30,20 +34,23 @@ export const PRICING_LIMITS = {
   charactersPerSpeechToken: 3,
 } as const;
 
-export type ValidationResult = { ok: true; order: string[]; plan: OrchestratorPlan } | { ok: false; reasons: string[] };
+/** The plan's money against its line (D12, envelope.ts lineOf). A plan above its line is still a plan: the run stops at the line. */
+export type BudgetView = { estimateUsd: number; budgetUsd: number; position: BudgetPosition };
+
+/** One category's money against its own envelope, for each category the brief sets (categories.ts). */
+export type CategoryView = BudgetView & { category: BudgetCategory };
+
+/**
+ * A checked plan. `notes` say what is accepted with a note rather than refused: an estimate above its line (the run stops at the first step
+ * that does not fit, D17). A plan that is over its line is still a plan.
+ */
+export type ValidationResult =
+  | { ok: true; order: string[]; plan: OrchestratorPlan; budget: BudgetView; categories: CategoryView[]; notes: string[] }
+  | { ok: false; reasons: string[] };
 
 /** A model id that is an alias (a ~ id, or one with "latest" in it) is not pinned: the same id can mean a different model next week. */
 export function isAliasModelId(id: string): boolean {
   return id.startsWith("~") || id.toLowerCase().includes("latest");
-}
-
-/**
- * The reason a plan is refused when its own budget is above the budget the user set, or null when it is not. The model writes the plan's
- * budget, so the user's budget is the limit, and a plan that asks for more is never run.
- */
-export function planBudgetReason(planUsd: number, setUsd: number): string | null {
-  if (planUsd <= setUsd) return null;
-  return `the plan's budget $${planUsd.toFixed(4)} is above the budget you set, $${setUsd.toFixed(4)}`;
 }
 
 /** The steps in an order where every step comes after the steps it depends on. Null when the graph has a cycle. */
@@ -63,7 +70,11 @@ export function topologicalOrder(nodes: PlanNode[]): string[] | null {
   return order;
 }
 
-type Priced = { usd: number } | { reason: string };
+/**
+ * A step's price: its cost, why it has none (the step is refused), or that it needs measure mode (a planning note, D15). A step that needs
+ * measure mode has no cost until a run in measure mode gives it a hold.
+ */
+type Priced = { usd: number } | { reason: string } | { needsMeasure: string };
 
 /** A whole-number parameter within a range, or the default when the parameter is absent. */
 function countParam(node: PlanNode, name: string, fallback: number, max: number): number | { reason: string } {
@@ -85,7 +96,16 @@ export function priceStep(node: PlanNode, entry: CatalogEntry, options: Validate
       if (typeof seconds !== "number" || !(seconds > 0) || seconds > PRICING_LIMITS.maxSeconds) {
         return { reason: `step ${node.id}: params.seconds must be a number from 0 to ${PRICING_LIMITS.maxSeconds}` };
       }
-      if (price.usdPerSecond1080p === null) return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing` };
+      if (price.usdPerSecond1080p === null) {
+        // Measure mode (D15): the hold is the ceiling times the length. The plan's own estimate is advisory and is not read here.
+        const measured = holdUsdOf({ ...node, estimateUsd: null }, options.measure ?? null);
+        if (measured !== null) return { usd: measured };
+        // Planning (D15): the plan is stored with a note, and the step has no cost. The run refuses it until a run in measure mode holds it.
+        if (options.planning === true) {
+          return { needsMeasure: `step ${node.id}: ${entry.id} has no per-second price in the listing, so the step needs measure mode; it does not run until a run in measure mode holds it` };
+        }
+        return { reason: `step ${node.id}: ${entry.id} has no per-second price in the listing, so the step needs measure mode, which an admin starts` };
+      }
       return { usd: price.usdPerSecond1080p * seconds };
     }
     case "visual": {
@@ -133,14 +153,53 @@ export type ValidateOptions = {
    * it, so a model cannot understate what its text steps cost.
    */
   textInputTokens?: number;
+  /** The model families the workspace has switched off (owner direction 2026-10-23). A model of one is refused with that reason, not as unlisted. */
+  disabledFamilies?: readonly string[];
+  /** The plan's line (D12): the lower of its budget and the budget the user set. Absent: the plan's own budget. */
+  budgetUsd?: number;
+  /** The line of each category the brief sets (categories.ts categoryBudgetsOf). A category without one has no check of its own. */
+  categoryBudgetsUsd?: CategoryAmounts;
+  /** Measure mode (D15): a video or avatar step with no engine price is held to its ceiling and may run. Absent or null: off. */
+  measure?: MeasureOptions | null;
+  /**
+   * Planning (D15): a video or avatar step with no engine price, and no measure mode, is not refused. The plan is stored with a note that the
+   * step needs measure mode, and the step has no cost. The run still refuses such a plan until a run in measure mode holds the step. Every
+   * other unpriced step is still refused.
+   */
+  planning?: boolean;
 };
+
+/**
+ * Whether the engine can price a step of the entry's kind from the listing: the same fields priceStep reads. A model the listing does not
+ * price is not offered as a candidate, because a step that uses it is refused.
+ */
+export function hasPriceBasis(entry: CatalogEntry): boolean {
+  const { pricing } = entry;
+  switch (entry.kind) {
+    case "text":
+      return pricing.promptUsdPerToken !== null && pricing.completionUsdPerToken !== null;
+    case "speech":
+      return pricing.promptUsdPerToken !== null;
+    case "image":
+      return pricing.imageUsd !== null;
+    case "video":
+      return pricing.usdPerSecond1080p !== null;
+    default:
+      return false;
+  }
+}
+
+/** Why a model id is not a candidate: switched off by the workspace's policy, or not in the live catalog. */
+export function listingReason(id: string, disabledFamilies: readonly string[]): string {
+  return isDisabledModel(id, disabledFamilies) ? `${id} is switched off by the workspace's model policy` : `${id} is not in the live catalog`;
+}
 
 export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, CatalogEntry>, options: ValidateOptions = {}): ValidationResult {
   const reasons: string[] = [];
 
   const orchestrator = catalog.get(plan.orchestrator.id);
   if (isAliasModelId(plan.orchestrator.id)) reasons.push(`orchestrator ${plan.orchestrator.id}: the model id is an alias, not a pinned id`);
-  if (!orchestrator) reasons.push(`orchestrator ${plan.orchestrator.id} is not in the live catalog`);
+  if (!orchestrator) reasons.push(`orchestrator ${listingReason(plan.orchestrator.id, options.disabledFamilies ?? [])}`);
   else if (orchestrator.kind !== "text") reasons.push(`orchestrator ${plan.orchestrator.id} is a ${orchestrator.kind} model, not a text model`);
 
   const ids = new Set<string>();
@@ -150,6 +209,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   }
 
   const costs = new Map<string, number>();
+  const notes: string[] = [];
   for (const node of plan.nodes) {
     for (const dep of node.dependsOn) {
       if (dep === node.id) reasons.push(`step ${node.id}: depends on itself`);
@@ -172,7 +232,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
     }
     const entry = catalog.get(node.model.id);
     if (!entry) {
-      reasons.push(`step ${node.id}: ${node.model.id} is not in the live catalog`);
+      reasons.push(`step ${node.id}: ${listingReason(node.model.id, options.disabledFamilies ?? [])}`);
       continue;
     }
     if (entry.kind !== expected) {
@@ -184,12 +244,39 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
       reasons.push(priced.reason);
       continue;
     }
+    if ("needsMeasure" in priced) {
+      notes.push(priced.needsMeasure);
+      continue;
+    }
     costs.set(node.id, priced.usd);
   }
 
+  // The plan's money is placed against its line: within it, or over it. A plan over its line is still a plan, and the run stops at the line
+  // (execute.ts). A measured step's hold is part of the estimate (D15).
   const paidTotal = [...costs.values()].reduce((sum, usd) => sum + usd, 0);
-  if (paidTotal > plan.budgetUsd) {
-    reasons.push(`estimated cost $${paidTotal.toFixed(4)} exceeds the budget $${plan.budgetUsd.toFixed(4)}`);
+  const lineUsd = options.budgetUsd ?? plan.budgetUsd;
+  const budget: BudgetView = { estimateUsd: paidTotal, budgetUsd: lineUsd, position: positionOfLine(paidTotal, lineUsd) };
+
+  // Each category the brief sets is summed from its own steps and placed against its own line. The same rule as the total.
+  const categories: CategoryView[] = [];
+  for (const category of BUDGET_CATEGORIES) {
+    const categoryLine = options.categoryBudgetsUsd?.[category];
+    if (categoryLine === undefined) continue;
+    let estimateUsd = 0;
+    for (const node of plan.nodes) if (categoryOf(node.kind) === category) estimateUsd += costs.get(node.id) ?? 0;
+    categories.push({ category, estimateUsd, budgetUsd: categoryLine, position: positionOfLine(estimateUsd, categoryLine) });
+  }
+
+  // A plan or a category whose estimate is above its line is accepted with a note (D17). The run stops at the first step that does not fit.
+  if (budget.position === "over_budget") {
+    notes.push(`the plan's estimate of $${paidTotal.toFixed(4)} is above its $${lineUsd.toFixed(4)} budget; the run stops at the first step that does not fit`);
+  }
+  for (const view of categories) {
+    if (view.position === "over_budget") {
+      notes.push(
+        `the ${view.category} steps' estimate of $${view.estimateUsd.toFixed(4)} is above their $${view.budgetUsd.toFixed(4)} ${view.category} budget; the run stops at the first ${view.category} step that does not fit`,
+      );
+    }
   }
 
   const order = topologicalOrder(plan.nodes);
@@ -198,7 +285,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
   if (reasons.length > 0 || order === null) return { ok: false, reasons };
 
   const priced = plan.nodes.map((node) => ({ ...node, estimateUsd: costs.get(node.id) ?? null }));
-  return { ok: true, order, plan: { ...plan, nodes: priced } };
+  return { ok: true, order, plan: { ...plan, nodes: priced }, budget, categories, notes };
 }
 
 /** The steps a plan's steps need, for the message a reviewer reads. Pure. */

@@ -43,7 +43,7 @@ export function applyCookbook(build: RequestBuild, resolved: ResolvedCookbook): 
     }
   }
 
-  // The reference the engine receives (contract v12): the id, the version, the values' hash and the instructions per role.
+  // The reference the engine receives (contract v13): the id, the version, the values' hash and the instructions per role.
   const instructionsByRole = Object.fromEntries(Object.entries(resolved.instructions).filter(([, texts]) => (texts ?? []).length > 0).map(([role, texts]) => [role, (texts ?? []).join("\n")]));
   candidate.cookbook = {
     id: resolved.cookbookId,

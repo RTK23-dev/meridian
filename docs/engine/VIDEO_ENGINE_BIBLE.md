@@ -588,7 +588,7 @@ a workspace. No row is rewritten.
 `speed`), the generation id carried by the stream, and the stats field `total_cost` are not confirmed by a live call. The owner's live run
 records one take with its stream, its generation id and its bill. The basis for estimating the Gemini target is the owner's decision.
 
-### v13 changes and migration (the cookbook selector role, contract version `engine-contracts@13`)
+### v14 changes and migration (the cookbook selector role, contract version `engine-contracts@14`)
 
 Requested by the owner on 2026-11-01 (round 3, decision Q34: the recommendation was accepted in chat). **Owner approval: given 2026-11-01
 (Q34). Lead review: to be recorded by the lead.** The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`.
@@ -605,7 +605,7 @@ Without a request and a budget reservation to make the call against, the selecto
 **Why.** The engine picks the right cookbook from the inputs with a small decision call (decision D1), and the call is a role like every other
 (budgeted, recorded and retried through the role runner).
 
-### v12 changes and migration (cookbook reference on a request, contract version `engine-contracts@12`)
+### v13 changes and migration (cookbook reference on a request, contract version `engine-contracts@13`)
 
 Requested by the owner on 2026-10-31 (round 3, decision D1: the engine picks a cookbook and the person can change it before the request goes
 to the orchestrator). **Owner approval: given 2026-10-31 (D1). Lead review: to be recorded by the lead.** The set version is `CONTRACTS_VERSION`
@@ -623,6 +623,10 @@ instruction through `brief.text`, as before.
 
 **Why.** Cookbooks are recipes with their own instructions and options. The request is the one place the engine learns which recipe a run
 used, so the run can be reproduced and the results learned from (decision D6).
+
+### v12 changes and migration (the budget is a line, contract version `engine-contracts@12`)
+
+Decided by the owner on 2026-10-23 (D12 in `docs/engine/run/DECISIONS_2026-10-23.md`, which supersedes the tolerance of D2). **Lead approval: pending** (the lead records it when it reviews the change). The set version is `CONTRACTS_VERSION` in `src/engine/contracts/version.ts`. A budget is a line, not a tolerance, and both lines read committed spend: an entry's actual cost, or its hold until it settles. A paid call starts only while the request's committed spend (across all its reservations) is below the request budget and the workspace month's committed spend is below the month budget, and only if its own hold fits under both: the committed spend before the call plus the call's estimate is not above either budget (`budget/reserve.ts`, `authorizeCall`, D17). A reservation is always accepted, and a plan above a budget is held with a note: no reservation is paused at a line, and its paid calls are gated by the lines (D17). In cap mode a settled bill marks a reservation `exceeded` only when it takes the request or the month to its line; an overrun of the hold alone does not (`budget/reconcile.ts`). The two allowance fields of `BudgetReservation` (`requestAllowanceUsd`, `workspaceMonthAllowanceUsd`) are retired: no reservation written from v11 carries them, and no budget rule reads them. They stay optional, so rows stored before v11 still parse. **Migration:** none. The columns are kept (no column is dropped from `engine_reservations`), and nothing is rewritten.
 
 ### v11 changes and migration (visual treatments of a repurposed cut, contract version `engine-contracts@11`)
 
@@ -662,6 +666,7 @@ the chooser had picked the model.
 
 **Migration.** None. A catalog entry is read and held in memory (`modelCatalogCache`), and a model choice stores its id, source, reason and
 read time, so no stored row holds a catalog entry.
+
 
 ## 5. Jobs, queue, artifacts and gates
 
@@ -1262,12 +1267,12 @@ No paid call happens without a reservation, and every call is reconciled to its 
 ### 14.1 Flow
 
 1. **Estimate** in `estimate_reserve`: price every shot from the price table (section 10.3), plus Claude, render and media-function costs, plus a redo allowance (initial 25% of generated-shot cost).
-2. **Reserve** the estimate against the request budget and the workspace's monthly budget. If either would be exceeded, the request pauses (not fails) with a reason.
+2. **Reserve** the estimate against the request budget and the workspace's monthly budget. A budget is a line (owner direction 2026-10-23, D12). A paid call starts only while the committed spend of its request and of its workspace month is below their budgets, and only if its own hold fits under both: the committed spend before the call plus the call's estimate is not above either budget (D17; `budget/reserve.ts`, `authorizeCall`). Committed spend is each ledger entry's actual cost, or its hold until it settles. A call that does not fit is refused before any request is made, and the request pauses (not fails) with the reason. A reservation is never paused at a line; a plan above a budget is held with a note.
 3. **Spend:** every adapter call writes a `LedgerEntry` with estimate and reservation before submitting.
 4. **Reconcile:** on completion the adapter settles the call to the provider's verified bill (from the provider's response or billing API). With no bill, the call stays held at its reservation and its cost is unknown: no list price is booked as an actual (amended for contract v6, owner direction 2026-10-16; section 4, v6 changes).
 5. **Release** unused reservation at `deliver`.
 
-**Modes per workspace:** `observe` (record only), `warn` (record and alert on overrun), `cap` (refuse calls beyond the reservation). Production runs in `cap`.
+**Modes per workspace:** `observe` (record only), `warn` (authorize the call and alert on any overshoot of a line), `cap` (a paid call starts only if its own hold fits under each line, D17; a call that would pass a line is refused, and a settled bill that takes a line marks its reservation `exceeded`). Production runs in `cap`.
 
 ### 14.2 Cost per master
 

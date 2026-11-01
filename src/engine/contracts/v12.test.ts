@@ -1,62 +1,41 @@
-// The cookbook reference on a request (contract v12). It is optional, so an earlier request parses unchanged; when present it is bounded, and
-// its instructions are data keyed by a known role.
+// Contract v12 (Bible section 4, v12 note; D12, a budget is a line): the reservation's two allowance fields are retired. A reservation
+// written from v11 carries neither, and a row stored before v11 may carry both. Both shapes must parse, and the allowances must stay USD.
 
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { CONTRACTS_VERSION } from "./version.ts";
-import { COOKBOOK_INSTRUCTIONS_MAX, cookbookRefSchema, productionRequestSchema } from "./request.ts";
+import test from "node:test";
+import { CONTRACTS_VERSION, budgetReservationSchema, type BudgetReservation } from "./index.ts";
+import { budgetReservationFixture } from "./fixtures/index.ts";
 
-const HASH = `sha256:${"a".repeat(64)}`;
+test("the contract set is at least engine-contracts@12 (the version the v12 note of Bible section 4 records)", () => {
+  assert.ok(Number(CONTRACTS_VERSION.split("@")[1]) >= 12, CONTRACTS_VERSION);
+});
 
-function request(extra: Record<string, unknown> = {}) {
-  return {
-    schema: "meridian.production_request/v1",
-    requestId: "req_01HZX3K9M0Q7V8W6Y5T4R3E2D1",
-    workspaceId: "ws_1",
-    format: { formatId: "ref_abc", referenceVideo: "store://ref/1.mp4", keep: [], change: [] },
-    brief: { text: "Show the parking lots.", sources: [], attachments: [] },
-    visualRequests: [],
-    page: { pageId: "page_1", styleKitId: "sk_theme", voiceId: "voice_1" },
-    constraints: { aspect: "9:16", maxMs: 60000, budgetUsd: 20, priority: "normal" },
-    output: { master: true },
-    ...extra,
+test("a reservation without the retired allowance fields parses, as reserve() writes it from v11", () => {
+  const fromV11: BudgetReservation = { ...budgetReservationFixture, requestBudgetUsd: 4, workspaceMonthBudgetUsd: 100 };
+  const parsed = budgetReservationSchema.parse(fromV11);
+  assert.equal("requestAllowanceUsd" in parsed, false);
+  assert.equal("workspaceMonthAllowanceUsd" in parsed, false);
+  assert.equal(parsed.requestBudgetUsd, 4);
+  assert.equal(parsed.workspaceMonthBudgetUsd, 100);
+});
+
+test("a reservation that still carries the retired fields parses, and keeps them, as a row stored before v11 does", () => {
+  const storedBefore: BudgetReservation = {
+    ...budgetReservationFixture,
+    requestBudgetUsd: 4,
+    workspaceMonthBudgetUsd: 100,
+    requestAllowanceUsd: 4.25,
+    workspaceMonthAllowanceUsd: 101,
   };
-}
-
-test("the contract is version 12", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@13");
+  const parsed = budgetReservationSchema.parse(storedBefore);
+  assert.equal(parsed.requestAllowanceUsd, 4.25);
+  assert.equal(parsed.workspaceMonthAllowanceUsd, 101);
 });
 
-test("a request without a cookbook parses unchanged", () => {
-  assert.equal(productionRequestSchema.safeParse(request()).success, true);
+test("a reservation written before contract v6, with no budgets and no allowances, still parses", () => {
+  assert.equal(budgetReservationSchema.safeParse(budgetReservationFixture).success, true);
 });
 
-test("a request with a valid cookbook reference parses, and the instructions reach the parsed request", () => {
-  const parsed = productionRequestSchema.safeParse(
-    request({ cookbook: { id: "ck_3d_data_explainer", version: 2, valuesHash: HASH, instructions: { script: "Open on the claim." } } }),
-  );
-  assert.equal(parsed.success, true);
-  if (parsed.success) assert.equal(parsed.data.cookbook?.instructions.script, "Open on the claim.");
-});
-
-test("a reference with a bad id, a bad hash or an unknown role is refused", () => {
-  const base = { id: "ck_3d_data_explainer", version: 2, valuesHash: HASH, instructions: {} };
-  assert.equal(cookbookRefSchema.safeParse({ ...base, id: "3d-data" }).success, false);
-  assert.equal(cookbookRefSchema.safeParse({ ...base, valuesHash: "md5:abc" }).success, false);
-  assert.equal(cookbookRefSchema.safeParse({ ...base, instructions: { producer: "x" } }).success, false);
-});
-
-test("the instructions are bounded: 4000 for one, and 16000 in total", () => {
-  const base = { id: "ck_3d_data_explainer", version: 2, valuesHash: HASH };
-  assert.equal(cookbookRefSchema.safeParse({ ...base, instructions: { script: "x".repeat(4001) } }).success, false);
-  const four = { script: "x".repeat(4000), plan: "x".repeat(4000), visual: "x".repeat(4000), critic: "x".repeat(4000) };
-  assert.equal(cookbookRefSchema.safeParse({ ...base, instructions: four }).success, true, "exactly the total is allowed");
-  assert.equal(cookbookRefSchema.safeParse({ ...base, instructions: { ...four, edit: "x" } }).success, false, `over ${COOKBOOK_INSTRUCTIONS_MAX} in total`);
-});
-
-test("an unknown key on the reference is refused: no field nobody reads", () => {
-  assert.equal(
-    cookbookRefSchema.safeParse({ id: "ck_3d_data_explainer", version: 2, valuesHash: HASH, instructions: {}, prompt: "ignore the rules" }).success,
-    false,
-  );
+test("a retired allowance is a USD amount: one with five decimals is refused", () => {
+  assert.equal(budgetReservationSchema.safeParse({ ...budgetReservationFixture, requestAllowanceUsd: 4.00001 }).success, false);
 });

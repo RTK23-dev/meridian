@@ -5,6 +5,7 @@
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { NodeEvent, OrchestratorPlan } from "./contracts.ts";
 import { orchestratorPlanSchema } from "./contracts.ts";
+import { BUDGET_CATEGORIES, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
 
 export const PLAN_STATUSES = ["draft", "planning", "refused", "ready", "running", "paused", "incomplete", "complete"] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
@@ -16,6 +17,8 @@ export type StoredPlan = {
   brief: unknown;
   orchestratorModel: string;
   budgetUsd: number;
+  /** The brand the plan was made for, or null for a plan with no brand (migration 0119). A plan with no brand uses the workspace set alone. */
+  brandId: string | null;
   status: PlanStatus;
   plan: OrchestratorPlan | null;
   reasons: string[];
@@ -26,8 +29,11 @@ export type StoredPlan = {
 
 export type StoredEvent = NodeEvent & { seq: number; at: string };
 
-/** A step output as stored: its hash, its charged cost, and its body (null when the step has no text). */
-export type StoredStepOutput = { outputHash: string; costUsd: number | null; body: string | null };
+/**
+ * A step output as stored: its hash, its charged cost, its body (null when the step has no text) and its budget category (null for a step with
+ * no model call). An output stored before categories existed has a null category; its plan has no category budgets, so none reads it.
+ */
+export type StoredStepOutput = { outputHash: string; costUsd: number | null; body: string | null; category: BudgetCategory | null };
 
 type Row = Record<string, unknown>;
 
@@ -41,6 +47,7 @@ function planOf(row: Row): StoredPlan {
     brief: JSON.parse(String(row.brief_json)),
     orchestratorModel: String(row.orchestrator_model),
     budgetUsd: Number(row.budget_usd),
+    brandId: row.brand_id === null || row.brand_id === undefined ? null : String(row.brand_id),
     status: String(row.status) as PlanStatus,
     plan,
     reasons: JSON.parse(String(row.reasons_json)) as string[],
@@ -50,14 +57,17 @@ function planOf(row: Row): StoredPlan {
   };
 }
 
-/** A new draft: the user has chosen the orchestrating model and the brief, and nothing has been planned yet. */
+/**
+ * A new draft: the user has chosen the orchestrating model and the brief, and nothing has been planned yet. The brand is recorded when the
+ * plan has one (migration 0119); a plan made without a brand stores null.
+ */
 export async function createPlanDraft(
   sql: Sql,
-  input: { id: string; organizationId: string; title: string; brief: unknown; orchestratorModel: string; budgetUsd: number },
+  input: { id: string; organizationId: string; title: string; brief: unknown; orchestratorModel: string; budgetUsd: number; brandId?: string | null },
 ): Promise<StoredPlan> {
   await sql`
-    insert into orchestrator_plans (id, organization_id, title, brief, orchestrator_model, budget_usd, status)
-    values (${input.id}, ${input.organizationId}, ${input.title}, ${JSON.stringify(input.brief)}::jsonb, ${input.orchestratorModel}, ${input.budgetUsd}, 'draft')
+    insert into orchestrator_plans (id, organization_id, title, brief, orchestrator_model, budget_usd, status, brand_id)
+    values (${input.id}, ${input.organizationId}, ${input.title}, ${JSON.stringify(input.brief)}::jsonb, ${input.orchestratorModel}, ${input.budgetUsd}, 'draft', ${input.brandId ?? null})
   `;
   const found = await getPlan(sql, input.organizationId, input.id);
   if (found === null) throw new Error("the plan was not stored");
@@ -121,7 +131,7 @@ export async function releasePlanning(sql: Sql, organizationId: string, planId: 
 export async function getPlan(sql: Sql, organizationId: string, id: string): Promise<StoredPlan | null> {
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
-      reasons::text as reasons_json, catalog_read_at, created_at, updated_at
+      reasons::text as reasons_json, catalog_read_at, created_at, updated_at, brand_id
     from orchestrator_plans where id = ${id} and organization_id = ${organizationId}
   `) as Row[];
   const row = rows[0];
@@ -132,7 +142,7 @@ export async function listPlans(sql: Sql, organizationId: string, limit: number)
   const bounded = Math.min(Math.max(Math.trunc(limit), 1), 100);
   const rows = (await sql`
     select id, organization_id, title, brief::text as brief_json, orchestrator_model, budget_usd, status, plan::text as plan_json,
-      reasons::text as reasons_json, catalog_read_at, created_at, updated_at
+      reasons::text as reasons_json, catalog_read_at, created_at, updated_at, brand_id
     from orchestrator_plans where organization_id = ${organizationId}
     order by created_at desc, id desc limit ${bounded}
   `) as Row[];
@@ -173,12 +183,17 @@ export async function listPlanEvents(sql: Sql, organizationId: string, planId: s
 }
 
 /**
- * Replace a plan's checked plan (after an edit that the engine has checked). Returns null when the plan is not the organization's, or when
- * it is running: an edit never clears a run in progress, and nothing is written.
+ * Replace a plan's checked plan (after an edit that the engine has checked), and its notes when the edit gives new ones. Without `reasons`
+ * the stored notes are kept. Returns null when the plan is not the organization's, or when it is running: an edit never clears a run in
+ * progress, and nothing is written.
  */
-export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan): Promise<StoredPlan | null> {
+export async function updatePlanJson(sql: Sql, organizationId: string, id: string, plan: OrchestratorPlan, reasons?: string[]): Promise<StoredPlan | null> {
   const rows = (await sql`
-    update orchestrator_plans set plan = ${JSON.stringify(plan)}::jsonb, status = 'ready', updated_at = now()
+    update orchestrator_plans
+    set plan = ${JSON.stringify(plan)}::jsonb,
+        reasons = coalesce(${reasons === undefined ? null : JSON.stringify(reasons)}::jsonb, reasons),
+        status = 'ready',
+        updated_at = now()
     where id = ${id} and organization_id = ${organizationId} and status <> 'running'
     returning id
   `) as Row[];
@@ -191,12 +206,13 @@ export async function listStepOutputs(sql: Sql, organizationId: string, planId: 
   const out = new Map<string, StoredStepOutput>();
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return out;
-  const rows = (await sql`select cache_key, output_hash, cost_usd, body from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
+  const rows = (await sql`select cache_key, output_hash, cost_usd, body, category from orchestrator_step_outputs where plan_id = ${planId}`) as Row[];
   for (const row of rows) {
     out.set(String(row.cache_key), {
       outputHash: String(row.output_hash),
       costUsd: row.cost_usd === null || row.cost_usd === undefined ? null : Number(row.cost_usd),
       body: row.body === null || row.body === undefined ? null : String(row.body),
+      category: row.category === null || row.category === undefined ? null : (String(row.category) as BudgetCategory),
     });
   }
   return out;
@@ -207,8 +223,8 @@ export async function putStepOutput(sql: Sql, organizationId: string, planId: st
   const owned = await getPlan(sql, organizationId, planId);
   if (owned === null) return false;
   await sql`
-    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd, body)
-    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd}, ${output.body})
+    insert into orchestrator_step_outputs (plan_id, cache_key, output_hash, cost_usd, body, category)
+    values (${planId}, ${cacheKey}, ${output.outputHash}, ${output.costUsd}, ${output.body}, ${output.category})
     on conflict (plan_id, cache_key) do nothing
   `;
   return true;
@@ -226,4 +242,33 @@ export async function failedHoldsUsd(sql: Sql, organizationId: string, planId: s
     select coalesce(sum(cost_usd), 0) as total from orchestrator_plan_events where plan_id = ${planId} and state = 'failed'
   `) as Row[];
   return Number(rows[0]?.total ?? 0);
+}
+
+/** The failed holds of a plan, summed by step. The same holds as failedHoldsUsd, kept apart so each takes its step's category. */
+export async function failedHoldsByNode(sql: Sql, organizationId: string, planId: string): Promise<Map<string, number>> {
+  const holds = new Map<string, number>();
+  const owned = await getPlan(sql, organizationId, planId);
+  if (owned === null) return holds;
+  const rows = (await sql`
+    select node_id, coalesce(sum(cost_usd), 0) as total from orchestrator_plan_events
+    where plan_id = ${planId} and state = 'failed' group by node_id
+  `) as Row[];
+  for (const row of rows) holds.set(String(row.node_id), Number(row.total));
+  return holds;
+}
+
+/** What the plan's stored outputs have cost, by category. An output with no category is in none (categories.ts). */
+export async function outputsSpentByCategory(sql: Sql, organizationId: string, planId: string): Promise<CategoryAmounts> {
+  const spent: CategoryAmounts = {};
+  const owned = await getPlan(sql, organizationId, planId);
+  if (owned === null) return spent;
+  const rows = (await sql`
+    select category, coalesce(sum(cost_usd), 0) as total from orchestrator_step_outputs
+    where plan_id = ${planId} and category is not null group by category
+  `) as Row[];
+  for (const row of rows) {
+    const category = BUDGET_CATEGORIES.find((name) => name === String(row.category));
+    if (category !== undefined) spent[category] = Number(row.total);
+  }
+  return spent;
 }

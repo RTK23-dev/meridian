@@ -61,7 +61,7 @@ Each item below is a change to a zod schema or a version, so each needs the owne
 
 | Change | Why | Contract |
 | --- | --- | --- |
-| A fifth look | `LOOK_PRESETS` is a zod enum in `edl.ts:17`, and `visualTreatmentSchema` uses it | Yes: `engine-contracts@12` |
+| A fifth look | `LOOK_PRESETS` is a zod enum in `edl.ts:17`, and `visualTreatmentSchema` uses it | Yes: `engine-contracts@13` (the cookbook reference, now at @13) |
 | A new caption style | `CAPTION_COMPONENTS` is an enum in `kits.ts` | Yes |
 | A new palette role or font role | `styleKitSchema` names each role | Yes |
 | A new visual field, such as a caption-timing preset | `visualTreatmentSchema` has `version: z.literal(1)` | Yes |

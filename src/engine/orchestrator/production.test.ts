@@ -1,13 +1,18 @@
-import { describe, test } from "node:test";
+import { after, before, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts/index.ts";
 import { newId } from "../contracts/ids.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
+import type { AsyncAssetRouter } from "../assets/router.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
-import type { NodeKind, PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, type NodeHandler } from "./execute.ts";
-import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps } from "./production.ts";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
+import { ORCHESTRATOR_PLAN_VERSION, orchestratorPlanSchema, type NodeEvent, type NodeKind, type OrchestratorPlan, type PlanNode } from "./contracts.ts";
+import { BilledStopError, CallRefusedError, NotConnectedError, StepQueuedError, runPlan, type NodeHandler } from "./execute.ts";
+import { analysisAnswerSchema, productionHandlers, scriptAnswerSchema, type ProductionDeps, type QueuedAsset } from "./production.ts";
+import { pollAssetJobs, queueAssetJob, sqlAssetPollStore } from "./asset-poll.ts";
+import { appendPlanEvents, createPlanDraft, failedHoldsUsd } from "./store.ts";
 
 const ORG = "org_production_a";
 const CREATED = "2026-10-22T10:00:00.000Z";
@@ -153,7 +158,7 @@ describe("production handlers: analysis and script (paid text calls)", () => {
     assert.equal(calls, 1);
   });
 
-  test("a call the budget refuses is not made", async () => {
+  test("a call past the request budget is not made", async () => {
     const ledger = await ledgerWith(0.001);
     let called = false;
     const deps = depsWith(ledger, {
@@ -163,7 +168,8 @@ describe("production handlers: analysis and script (paid text calls)", () => {
       },
     });
     const handler = productionHandlers(deps).analysis as NodeHandler;
-    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 0.01 }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }), /budget refused/);
+    // The reservation carries its request budget ($5) and no allowance, so a $6 call is past the budget and is refused in cap mode.
+    await assert.rejects(handler({ node: node({ id: "a", kind: "analysis", dependsOn: ["ref"], estimateUsd: 6 }), key: "k", upstream: new Map([["ref", "x"]]), upstreamKinds: NO_KINDS }), /budget refused/);
     assert.equal(called, false);
   });
 
@@ -332,3 +338,288 @@ describe("production handlers: visual and voice (the run's asset router, D13)", 
   });
 });
 
+describe("production handlers: a queued clip waits once, and measure mode holds an unpriced one (D14, D15)", () => {
+  let db: TestDatabase;
+
+  before(async () => {
+    db = await createTestDatabase();
+  });
+
+  after(async () => {
+    await db.close();
+  });
+
+  /** A workspace with one plan, so the queued rows belong to it. */
+  async function planIn(org: string, planId: string): Promise<void> {
+    await seedWorkspace(db.sql, org);
+    await createPlanDraft(db.sql, { id: planId, organizationId: org, title: planId, brief: {}, orchestratorModel: "orchestrator-test-model", budgetUsd: 5 });
+  }
+
+  /** A router that counts its submits, and answers each one with the step it is given. */
+  function countingRouter(counted: { submits: number }): NonNullable<ProductionDeps["router"]> {
+    return {
+      produce: async () => {
+        throw new Error("a queued clip is never produced inline");
+      },
+      submit: async () => {
+        counted.submits += 1;
+        return { step: SUBMITTED_STEP, decisions: [], alerts: [], attempts: [] } as never;
+      },
+    } as unknown as NonNullable<ProductionDeps["router"]>;
+  }
+
+  const SUBMITTED_STEP = { status: "submitted", job: SUBMITTED_JOB, runAfterMs: 5000 };
+
+  const clip = (over: Partial<PlanNode> = {}): PlanNode =>
+    node({ id: "clip", kind: "video", model: { provider: "openrouter", id: "vendor/video-model" }, params: { prompt: "A wave", seconds: 8, model_class: "video.budget" }, estimateUsd: null, ...over });
+
+  test("a re-run while the job waits reports the step queued, and submits nothing", async () => {
+    const org = "org_queued_guard";
+    await planIn(org, "plan_queued_guard");
+    const counted = { submits: 0 };
+    const handler = productionHandlers(depsWith(await ledgerWith(1), {
+      organizationId: org,
+      planId: "plan_queued_guard",
+      sql: db.sql,
+      router: countingRouter(counted),
+      queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry),
+    })).video as NodeHandler;
+    const priced = clip({ estimateUsd: 0.4 });
+
+    await assert.rejects(handler({ node: priced, key: "k-guard", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), StepQueuedError);
+    assert.equal(counted.submits, 1, "the first run submits the job once");
+
+    await assert.rejects(
+      handler({ node: priced, key: "k-guard", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }),
+      (error) => error instanceof StepQueuedError && /already counted/.test(error.message),
+    );
+    assert.equal(counted.submits, 1, "the re-run submits nothing: its hold is already counted");
+    const [count] = await db.sql<{ n: unknown }>`select count(*) as n from orchestrator_asset_jobs where organization_id = ${org}`;
+    assert.equal(Number(count?.n), 1, "one waiting job, not two");
+  });
+
+  test("REPRO 5 (re-run): a job the poll closed as failed is not submitted again: its step is refused, and its hold counts once", async () => {
+    const org = "org_queued_failed_rerun";
+    const planId = "plan_queued_failed_rerun";
+    await planIn(org, planId);
+    const counted = { submits: 0 };
+    // The first submit is accepted. A submit under the same key is answered unsettled, as the router answers a key whose first submit is unsettled.
+    const router = {
+      produce: async () => {
+        throw new Error("a queued clip is never produced inline");
+      },
+      submit: async () => {
+        counted.submits += 1;
+        const step =
+          counted.submits === 1
+            ? SUBMITTED_STEP
+            : { status: "unsettled", providerId: "openrouter:video", idempotencyKey: SUBMITTED_JOB.idempotencyKey, ledgerEntryId: "led_1", reason: "a submit under the key is unsettled" };
+        return { step, decisions: [], alerts: [], attempts: [] } as never;
+      },
+    } as unknown as NonNullable<ProductionDeps["router"]>;
+    const deps = depsWith(await ledgerWith(1), { organizationId: org, planId, sql: db.sql, router, queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry) });
+    const plan: OrchestratorPlan = { version: ORCHESTRATOR_PLAN_VERSION, orchestrator: { provider: "openrouter", id: "vendor/orchestrator-model" }, budgetUsd: 5, nodes: [clip({ estimateUsd: 0.4 })] };
+    const runOnce = async (): Promise<NodeEvent[]> => {
+      const events: NodeEvent[] = [];
+      await runPlan({ plan, order: ["clip"], handlers: productionHandlers(deps), cache: new Map(), emit: (event) => events.push(event), spentUsd: 0, lineUsd: 5 });
+      return events;
+    };
+
+    // Run 1: the provider accepts the clip, which is queued with its hold of 0.40.
+    await appendPlanEvents(db.sql, org, planId, await runOnce());
+    assert.equal(counted.submits, 1);
+
+    // The poll: the provider fails the job. Its row closes as failed, and its hold is charged as a failed hold.
+    await db.sql`update orchestrator_asset_jobs set next_poll_at = now() - interval '1 minute' where organization_id = ${org}`;
+    const failing = {
+      async pollOnce() {
+        return { state: "failed", error: { kind: "server", retryable: false, message: "the job failed at the provider" } };
+      },
+      async settle(_job: unknown, polled: { error: unknown }) {
+        return { step: { status: "failed", providerId: "openrouter:video", error: polled.error }, decisions: [], alerts: [], attempts: [] };
+      },
+    } as unknown as AsyncAssetRouter;
+    assert.deepEqual(await pollAssetJobs({ store: sqlAssetPollStore(db.sql, org), organizationId: org, routerFor: () => failing }), { polled: 1, done: 0, failed: 1, waiting: 0 });
+    assert.equal(await failedHoldsUsd(db.sql, org, planId), 0.4);
+
+    // Run 2 (a re-run): the failed job is not submitted again. The step is refused before any submit, so nothing is charged a second time.
+    const second = await runOnce();
+    await appendPlanEvents(db.sql, org, planId, second);
+    const again = second.filter((event) => event.nodeId === "clip").at(-1);
+    assert.equal(counted.submits, 1, "the re-run submits nothing: the failed job is not paid again");
+    assert.equal(again?.state, "failed");
+    assert.equal(again?.costUsd, null, "the refusal charges nothing: the job's hold is already counted");
+    assert.match(again?.reason ?? "", /this job failed earlier and its hold is already counted, so it is not paid again; edit the step to run it again/);
+    assert.equal(await failedHoldsUsd(db.sql, org, planId), 0.4, "the job's hold is counted once");
+  });
+
+  test("a job waiting in another plan does not block this plan's step", async () => {
+    const org = "org_queued_other_plan";
+    await planIn(org, "plan_queued_first");
+    await planIn(org, "plan_queued_second");
+    const first = { submits: 0 };
+    await assert.rejects(
+      (productionHandlers(depsWith(await ledgerWith(1), { organizationId: org, planId: "plan_queued_first", sql: db.sql, router: countingRouter(first), queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry) })).video as NodeHandler)({ node: clip({ estimateUsd: 0.4 }), key: "k-shared", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }),
+      StepQueuedError,
+    );
+    const second = { submits: 0 };
+    await assert.rejects(
+      (productionHandlers(depsWith(await ledgerWith(1), { organizationId: org, planId: "plan_queued_second", sql: db.sql, router: countingRouter(second), queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry) })).video as NodeHandler)({ node: clip({ estimateUsd: 0.4 }), key: "k-shared", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }),
+      StepQueuedError,
+    );
+    assert.equal(second.submits, 1, "the second plan's step is its own: it submits");
+  });
+
+  test("measure mode holds an unpriced clip to its ceiling times its length, and the queued job carries that hold and length", async () => {
+    const counted = { submits: 0 };
+    const queued: QueuedAsset[] = [];
+    const handler = productionHandlers(depsWith(await ledgerWith(1), {
+      router: countingRouter(counted),
+      queueAsset: async (entry) => {
+        queued.push(entry);
+      },
+      measure: { ceilingUsdPerSecond: 0.5 },
+    })).video as NodeHandler;
+
+    await assert.rejects(handler({ node: clip(), key: "k-measure", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), StepQueuedError);
+    assert.equal(counted.submits, 1);
+    assert.equal(queued[0]?.hold, 4, "8 seconds at 0.50 a second");
+    assert.equal(queued[0]?.seconds, 8);
+  });
+
+  test("without measure mode an unpriced clip is refused before anything is submitted or queued", async () => {
+    for (const measure of [undefined, null] as const) {
+      const counted = { submits: 0 };
+      const queued: QueuedAsset[] = [];
+      const handler = productionHandlers(depsWith(await ledgerWith(1), {
+        router: countingRouter(counted),
+        queueAsset: async (entry) => {
+          queued.push(entry);
+        },
+        measure,
+      })).video as NodeHandler;
+      await assert.rejects(handler({ node: clip(), key: "k-off", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), CallRefusedError);
+      assert.equal(counted.submits, 0, "nothing is submitted when the step has no hold");
+      assert.equal(queued.length, 0);
+    }
+  });
+
+  test("a priced clip is queued with its estimate as its hold, and the queued row holds that amount until the poll settles it", async () => {
+    const org = "org_queued_priced";
+    await planIn(org, "plan_queued_priced");
+    const counted = { submits: 0 };
+    const handler = productionHandlers(depsWith(await ledgerWith(1), {
+      organizationId: org,
+      planId: "plan_queued_priced",
+      sql: db.sql,
+      router: countingRouter(counted),
+      queueAsset: (entry: QueuedAsset) => queueAssetJob(db.sql, org, entry),
+    })).video as NodeHandler;
+
+    await assert.rejects(handler({ node: clip({ estimateUsd: 0.4 }), key: "k-priced", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS }), StepQueuedError);
+    const [found] = await db.sql<{ held_usd: unknown; hold_usd: unknown; seconds: unknown }>`
+      select held_usd, hold_usd, seconds from orchestrator_asset_jobs where organization_id = ${org} and cache_key = 'k-priced'
+    `;
+    assert.deepEqual([Number(found?.held_usd), Number(found?.hold_usd), Number(found?.seconds)], [0.4, 0.4, 8]);
+  });
+});
+
+describe("production handlers: a stop after a bill keeps the bill, and a budget line pauses the run (D12, D14, D17)", () => {
+  const samplePlan = orchestratorPlanSchema.parse(JSON.parse(readFileSync(new URL("./fixtures/sample-plan.json", import.meta.url), "utf8")));
+  const visual = node({ id: "img", kind: "visual", model: { provider: "openrouter", id: "test/visual-model" }, params: { prompt: "A bowl" }, estimateUsd: 0.4 });
+  // The reasons the router gives for a rate-limited target and then a budget line (router.ts, budget/reserve.ts).
+  const RATE_LIMIT = "openrouter:target-one: rate_limit: the provider limited the requests";
+  const BUDGET_LINE = "openrouter:target-two: call produce_shot would take the request to 0.75 USD, above its 0.7 USD budget, so it does not start";
+
+  /** The error the visual step stops with, when its router answers the outcome. */
+  async function stopOf(outcome: object): Promise<Error> {
+    const handler = productionHandlers(depsWith(await ledgerWith(1), { router: routerAnswering(outcome) })).visual as NodeHandler;
+    try {
+      await handler({ node: visual, key: "k", upstream: NO_UPSTREAM, upstreamKinds: NO_KINDS });
+    } catch (error) {
+      return error as Error;
+    }
+    throw new Error("the visual step did not stop");
+  }
+
+  /** One visual step, alone in its plan with the given hold, on the router's answer: the run's result, its events and the step's last event. */
+  async function runVisual(outcome: object, hold: number) {
+    const step = { ...visual, estimateUsd: hold };
+    const events: NodeEvent[] = [];
+    const result = await runPlan({
+      plan: { ...samplePlan, nodes: [step] },
+      order: [step.id],
+      handlers: productionHandlers(depsWith(await ledgerWith(10), { router: routerAnswering(outcome) })),
+      cache: new Map(),
+      lineUsd: 10,
+      emit: (event) => events.push(event),
+    });
+    return { result, events, last: events.filter((event) => event.nodeId === step.id).at(-1) };
+  }
+
+  test("a stop that follows a bill carries the bill on its error; a stop with no bill throws the error it always threw", async () => {
+    const stops: Array<[object, new (message: string) => Error]> = [
+      [{ status: "refused", reasons: [BUDGET_LINE] }, CallRefusedError],
+      [{ status: "queued", reasons: ["bucket full"] }, CallRefusedError],
+      [{ status: "duplicate", providerId: "p", ledgerEntryId: "e" }, CallRefusedError],
+      [{ status: "unavailable", reasons: ["no target"] }, Error],
+      [{ status: "unsettled", providerId: "p", idempotencyKey: "k", ledgerEntryId: "e", reason: "no bill" }, Error],
+      [{ status: "failed", providerId: "p", error: { kind: "server", retryable: false, message: "x" } }, Error],
+    ];
+    for (const [outcome, kind] of stops) {
+      const status = (outcome as { status: string }).status;
+      const plain = await stopOf(outcome);
+      assert.equal(plain instanceof BilledStopError, false, `${status}: with no bill, no bill is carried`);
+      assert.ok(plain instanceof kind, `${status}: the error it always threw`);
+      const billed = await stopOf({ ...outcome, billedUsd: 0.25 });
+      assert.ok(billed instanceof BilledStopError, `${status}: the bill is carried on the error`);
+      assert.equal((billed as BilledStopError).billedUsd, 0.25);
+      assert.equal(billed.message, plain.message, `${status}: the same reason`);
+    }
+  });
+
+  test("a fallback that bills 0.25 and then fails, on a 0.40 hold, records 0.40 as failed, so the plan counts it", async () => {
+    const run = await runVisual({ status: "unavailable", reasons: ["no image target produced an asset"], billedUsd: 0.25 }, 0.4);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.4, "the larger of the hold and the bill");
+    assert.equal(run.result.spentUsd, 0.4);
+  });
+
+  test("a fallback that bills 0.60 and then fails records 0.60 as failed", async () => {
+    const run = await runVisual({ status: "unavailable", reasons: ["no image target produced an asset"], billedUsd: 0.6 }, 0.4);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.6);
+    assert.equal(run.result.spentUsd, 0.6);
+  });
+
+  test("a queued fallback that stopped after a bill is not at cost zero: its failed event carries the 0.25", async () => {
+    const run = await runVisual({ status: "queued", reasons: ["no free slot"], billedUsd: 0.25 }, 0);
+    assert.equal(run.last?.state, "failed");
+    assert.equal(run.last?.costUsd, 0.25, "the bill is recorded, not zero");
+    assert.equal(run.result.spentUsd, 0.25);
+  });
+
+  test("a rate-limited target followed by a budget refusal pauses the run at the step, and nothing is held for it", async () => {
+    const run = await runVisual({ status: "refused", reasons: [RATE_LIMIT, BUDGET_LINE], billedUsd: 0 }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.events.some((event) => event.state === "failed"), false, "the step is not failed");
+    assert.equal(run.last?.reason, `budget reached, project not finished: ${RATE_LIMIT}; ${BUDGET_LINE}`, "the pause names the line and the rate limit");
+    assert.equal(run.result.spentUsd, 0, "its 0.40 hold is not charged");
+  });
+
+  test("a budget refusal with no bill pauses the run, and nothing is held for the call that did not start", async () => {
+    const run = await runVisual({ status: "refused", reasons: [BUDGET_LINE] }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.result.spentUsd, 0);
+  });
+
+  test("a budget refusal after a billed target pauses the run, and the bill is counted on a failed event: the hold is not", async () => {
+    const run = await runVisual({ status: "refused", reasons: [BUDGET_LINE], billedUsd: 0.25 }, 0.4);
+    assert.equal(run.result.status, "paused");
+    assert.equal(run.events.find((event) => event.state === "failed")?.costUsd, 0.25, "the bill is recorded so a later run counts it");
+    assert.equal(run.last?.state, "paused");
+    assert.equal(run.result.spentUsd, 0.25);
+  });
+});

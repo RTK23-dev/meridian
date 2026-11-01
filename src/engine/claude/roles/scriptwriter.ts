@@ -94,7 +94,7 @@ export const scriptwriterInputSchema = z.object({
   /** Words the product kit forbids. They must not appear in a beat. */
   forbidden: z.array(z.string().min(1).max(60)).max(50),
   /**
-   * The cookbook's instructions for the script (contract v12), present only in a run made from a cookbook. They are data, and the prompt
+   * The cookbook's instructions for the script (contract v13), present only in a run made from a cookbook. They are data, and the prompt
    * version that reads them (scriptwriter@3) says they sit under the rules.
    */
   cookbookInstructions: z.string().min(1).max(4000).optional(),

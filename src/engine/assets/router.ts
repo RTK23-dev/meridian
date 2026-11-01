@@ -19,7 +19,8 @@
 // Ledger (Bible 14.1, contract v6). Every submit is authorized before it is sent, under its own key: the first submit of a target uses
 // the target's cache key, and a retry uses that key with an attempt suffix. A submit is settled only to the provider's verified bill, or
 // as absent when the provider refused it before any job existed. With no bill the submit stays held at its reservation and its cost is
-// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target. The provider's own
+// unknown: no list price is booked. The asset's cost is the sum of the bills over the submits of its winning target. Every outcome that stops
+// an asset carries the bills of the targets it failed after billing (billedUsd), so a stop never drops a bill (D12). The provider's own
 // id for the call (the generation id an adapter reports, contract v9) is recorded on its entry whether or not the bill arrives, so the
 // reconciler can read a held bill later (budget/reconcile-holds.ts).
 //
@@ -32,6 +33,7 @@ import { sumUsd } from "../contracts/money.ts";
 import type { Decision } from "../contracts/plan.ts";
 import type { ModelClass } from "../contracts/plan.ts";
 import { thresholds } from "../config/thresholds.ts";
+import { isDisabledModel } from "../config/model-policy.ts";
 import type { BudgetAlert } from "../budget/reserve.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import { gatewayDownloader, type MediaDownloader } from "../gateway/download.ts";
@@ -53,7 +55,7 @@ import { ASSET_JOB_SCHEMA, capped, memorySettlementStore, parseAssetJob, type As
 import { normaliseUri, normaliseVideo, OUTPUT_LIMITS, VIDEO_MEDIA_TYPE } from "./normalise.ts";
 import { defaultRouterSettings, NO_SIGNALS } from "./router-types.ts";
 import type { RouterSettings, RouterDeps, ProduceInput, AttemptLog, ProduceReport, AssetStep, StepReport, AsyncAssetRouter, Candidate, TargetState, JobBody, TargetResult, Fallback } from "./router-types.ts";
-import { capabilityGap, isDefinitiveRefusal, shouldRetry, outcomeFor, sleepFor, pushCapped, emptyCarry, absorb, finalOutcome, freeSlot, newSession, describeScore, assetFromCache } from "./router-helpers.ts";
+import { capabilityGap, isDefinitiveRefusal, shouldRetry, outcomeFor, sleepFor, pushCapped, emptyCarry, absorb, finalOutcome, freeSlot, newSession, describeScore, assetFromCache, ledgerHoldOf, measureHoldOf } from "./router-helpers.ts";
 import type { Session } from "./router-helpers.ts";
 
 export { ROUTER_CONSTANTS, defaultRouterSettings, NO_SIGNALS } from "./router-types.ts";
@@ -180,7 +182,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           stage: input.stage,
           provider: target.provider,
           model: target.model,
-          estimateUsd: target.estimateUsd,
+          estimateUsd: ledgerHoldOf(input, target),
           idempotencyKey: key,
           at: at(),
         });
@@ -233,6 +235,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
             submittedAt: new Date(startedMs).toISOString(),
             targets: [...targets],
             targetIndex: index,
+            earlierTargetsBilledUsd: state.earlierTargetsBilledUsd,
             targetBilledUsd: state.targetBilledUsd,
             targetSubmits: state.targetSubmits,
             targetFirstEntryId: state.targetFirstEntryId,
@@ -285,13 +288,19 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     targets: readonly AssetTarget[],
     from: number,
     carry: AssetJobCarry,
-    start: { submitNumber: number; fallback: Fallback },
+    start: { submitNumber: number; fallback: Fallback; earlierTargetsBilledUsd: number },
   ): Promise<AssetStep> {
     const next: AssetJobCarry = structuredClone(carry);
     let submitNumber = start.submitNumber;
     let fallback = start.fallback;
+    let earlierBilledUsd = start.earlierTargetsBilledUsd;
     for (let index = from; index < targets.length; index += 1) {
       const target = targets[index] as AssetTarget;
+      // A fallback is a new paid submit, so it is checked against the families the router has now: a family switched off mid-flight is not used.
+      if (deps.disabledFamilies !== undefined && isDisabledModel(target.model, deps.disabledFamilies)) {
+        pushCapped(next.excluded, `${target.adapterId}: switched off by the model policy`);
+        continue;
+      }
       const open = await openBreaker(deps.breakers, target.adapterId, now());
       if (open !== null) {
         pushCapped(next.excluded, `${target.adapterId}: circuit open until ${new Date(open.openUntilMs).toISOString()}`);
@@ -307,19 +316,34 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         });
         fallback = null;
       }
-      const state: TargetState = { submitNumber, targetBilledUsd: 0, targetSubmits: 0, targetFirstEntryId: null };
+      const state: TargetState = {
+        submitNumber,
+        earlierTargetsBilledUsd: earlierBilledUsd,
+        targetBilledUsd: 0,
+        targetSubmits: 0,
+        targetFirstEntryId: null,
+      };
       const result = await driveTarget(session, input, targets, index, state, { startAttempt: 1, slotHeld: false });
       submitNumber = state.submitNumber;
       if (result.kind === "submitted") {
         return { status: "submitted", job: parseAssetJob({ ...result.job, carry: next }), runAfterMs: 0 };
       }
       if (result.kind === "unsettled") {
-        return { status: "unsettled", providerId: result.providerId, idempotencyKey: result.idempotencyKey, ledgerEntryId: result.ledgerEntryId, reason: result.reason };
+        return {
+          status: "unsettled",
+          providerId: result.providerId,
+          idempotencyKey: result.idempotencyKey,
+          ledgerEntryId: result.ledgerEntryId,
+          reason: result.reason,
+          billedUsd: earlierBilledUsd,
+        };
       }
-      if (result.kind === "planner") return { status: "failed", providerId: result.providerId, error: result.error };
+      if (result.kind === "planner") return { status: "failed", providerId: result.providerId, error: result.error, billedUsd: earlierBilledUsd };
+      // The target failed and the router moves on: whatever it was billed is carried to the next target, never dropped.
+      earlierBilledUsd = sumUsd([earlierBilledUsd, state.targetBilledUsd]);
       fallback = absorb(next, result);
     }
-    return finalOutcome(next);
+    return finalOutcome(next, earlierBilledUsd);
   }
 
   /** The video profiles of a catalog read, from its GET /videos/models body. Built once per read. */
@@ -383,6 +407,8 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
   async function submit(input: ProduceInput): Promise<StepReport> {
     const session = newSession();
     const { spec, workspaceId } = input;
+    // A measure hold is checked before any route is read: a call that names an invalid hold sends and holds nothing (D15).
+    const measureHold = measureHoldOf(input);
 
     // 0. A model the orchestrator chose (Bible 10.5) is the only target, priced from the catalog. A choice that cannot be used, or no
     // choice, routes by the route table as before.
@@ -410,6 +436,11 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     const notConnected: string[] = [];
     const excluded: string[] = [];
     for (const [priority, route] of routes.entries()) {
+      // A target of a family this router switches off is not a candidate, so neither the first submit nor a fallback can reach it.
+      if (deps.disabledFamilies !== undefined && isDisabledModel(route.model, deps.disabledFamilies)) {
+        excluded.push(`${route.provider.id}:${route.model}: switched off by the model policy`);
+        continue;
+      }
       const built =
         chosen === null
           ? adapterFor(route, workspaceId, input.voiceId, input.speechSpeed, videoProfiles, input.voiceProvider)
@@ -433,36 +464,47 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         excluded.push(`${adapter.id}: ${gap}`);
         continue;
       }
+      // The route's own price. A route the engine cannot price is kept only for a measured clip (D15): it is held at the measure hold, and its
+      // cost stays unknown to the scorer, never zero or a guess. Without a measure hold it is excluded, as before.
       let estimateUsd: number;
+      let priceKnown = true;
       try {
         estimateUsd = adapter.price(spec).estimateUsd;
       } catch (error) {
         if (error instanceof EngineError && error.kind === "unknown_price") {
-          excluded.push(`${adapter.id}: ${error.message}`);
-          continue;
+          if (measureHold === undefined) {
+            excluded.push(`${adapter.id}: ${error.message}`);
+            continue;
+          }
+          estimateUsd = measureHold;
+          priceKnown = false;
+        } else {
+          throw error;
         }
-        throw error;
       }
       const open = await openBreaker(deps.breakers, adapter.id, now());
       if (open !== null) {
         excluded.push(`${adapter.id}: circuit open until ${new Date(open.openUntilMs).toISOString()}`);
         continue;
       }
-      candidates.push({ priority, route, adapter, estimateUsd, cacheKey: routeCacheKey(spec, adapter.id, input) });
+      candidates.push({ priority, route, adapter, estimateUsd, priceKnown, cacheKey: routeCacheKey(spec, adapter.id, input) });
       if (chosen !== null && spec.modelChoice !== null) {
         const price = chosen.entry.price;
+        const priceNote = priceKnown
+          ? `estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`
+          : `no price the engine can estimate ($${price.usd} ${price.unit}), so held at the measure hold $${estimateUsd} (D15)`;
         session.decisions.push({
           at: at(),
           chose: adapter.id,
           alternatives: [],
-          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt} (${spec.modelChoice.reason}), still listed in the read at ${chosen.entry.readAt}; estimated $${estimateUsd} from the catalog price $${price.usd} ${price.unit}${price.sku === null ? "" : ` (${price.sku})`}`,
+          reason: `the ${spec.modelChoice.source} choice from the catalog read at ${spec.modelChoice.catalogReadAt} (${spec.modelChoice.reason}), still listed in the read at ${chosen.entry.readAt}; ${priceNote}`,
           by: spec.modelChoice.source === "orchestrator" ? "director" : "scorer",
         });
       }
     }
     if (candidates.length === 0) {
       if (notConnected.length > 0 && excluded.length === 0) return report(session, { status: "not_connected", reasons: notConnected });
-      return report(session, { status: "unavailable", reasons: [...notConnected, ...excluded] });
+      return report(session, { status: "unavailable", reasons: [...notConnected, ...excluded], billedUsd: 0 });
     }
 
     // 3. Score: each dimension is a value in [0, 1] or unknown. Unknowns are left out of the mean (score.ts).
@@ -471,7 +513,10 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     for (const candidate of candidates) {
       recordsById.set(candidate.adapter.id, await deps.stats.since(candidate.adapter.id, windowStart));
     }
-    const costs = costEfficiencyValues(candidates.map((candidate) => ({ id: candidate.adapter.id, usd: candidate.estimateUsd })));
+    // Only known prices are compared. A route with no known price has an unknown cost, which the score leaves out, never a zero or a hold (score.ts).
+    const costs = costEfficiencyValues(
+      candidates.filter((candidate) => candidate.priceKnown).map((candidate) => ({ id: candidate.adapter.id, usd: candidate.estimateUsd })),
+    );
     const latencies = latencyValues(
       candidates.map((candidate) => ({ id: candidate.adapter.id, ms: medianLatencyMs(recordsById.get(candidate.adapter.id) ?? []) })),
     );
@@ -490,7 +535,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     });
     scored.sort((a, b) => compareScored({ score: a.score, priority: a.priority }, { score: b.score, priority: b.priority }));
     const winner = scored[0];
-    if (winner === undefined) return report(session, { status: "unavailable", reasons: [...excluded] });
+    if (winner === undefined) return report(session, { status: "unavailable", reasons: [...excluded], billedUsd: 0 });
     session.decisions.push({
       at: at(),
       chose: winner.adapter.id,
@@ -526,7 +571,14 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
       cacheKey: candidate.cacheKey,
       estimateUsd: candidate.estimateUsd,
     }));
-    const step = await launch(session, input, targets, 0, { ...emptyCarry(), excluded: capped(excluded) }, { submitNumber: 0, fallback: null });
+    const step = await launch(
+      session,
+      input,
+      targets,
+      0,
+      { ...emptyCarry(), excluded: capped(excluded) },
+      { submitNumber: 0, fallback: null, earlierTargetsBilledUsd: 0 },
+    );
     return report(session, step);
   }
 
@@ -620,9 +672,14 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         idempotencyKey: job.idempotencyKey,
         ledgerEntryId: reconciled.entry.entryId,
         reason: `${target.adapterId}: the provider reported no bill for ${job.idempotencyKey}, so the submit stays unsettled`,
+        // The bills so far, without this submit: its bill is not known, and its hold stands on the ledger.
+        billedUsd: sumUsd([job.earlierTargetsBilledUsd ?? 0, job.targetBilledUsd]),
       });
     }
     const targetBilledUsd = sumUsd([job.targetBilledUsd, reconciled.entry.actualUsd]);
+    // The asset's bills so far: the earlier targets' (each billed, then failed) and this target's, this submit included.
+    const earlierBilledUsd = job.earlierTargetsBilledUsd ?? 0;
+    const assetBilledUsd = sumUsd([earlierBilledUsd, targetBilledUsd]);
 
     if (outcome.ok) {
       await recordAttempt(session, target.adapterId, startedMs, null, latencyMs, job.attemptOnTarget);
@@ -632,7 +689,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
         providerId: target.adapterId,
         modelClass: job.modelClass,
         uri: outcome.uri,
-        costUsd: targetBilledUsd,
+        costUsd: assetBilledUsd,
         mediaType: outcome.mediaType,
         storedAt: at(),
       });
@@ -644,7 +701,7 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           modelClass: job.modelClass,
           uri: stored.uri,
           cacheKey: target.cacheKey,
-          costUsd: targetBilledUsd,
+          costUsd: assetBilledUsd,
           cacheHit: false,
           savedUsd: 0,
           ledgerEntryId: job.targetFirstEntryId ?? reconciled.entry.entryId,
@@ -659,18 +716,23 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
     await recordAttempt(session, target.adapterId, startedMs, failure, null, job.attemptOnTarget);
     if (failure.kind === "content_policy" || failure.kind === "invalid_input") {
       await freeSlot(slot, deps.buckets);
-      return report(session, { status: "failed", providerId: target.adapterId, error: failure });
+      return report(session, { status: "failed", providerId: target.adapterId, error: failure, billedUsd: assetBilledUsd });
     }
 
     const failureReason = `${target.adapterId}: ${failure.kind}: ${failure.message}`;
     const carry = structuredClone(job.carry);
     let submitNumber = job.submitNumber;
     let fallback: Fallback = { providerId: target.adapterId, reason: failureReason };
-    if (shouldRetry(failure) && job.attemptOnTarget < settings.maxAttempts) {
+    // A retry is a new paid submit. It is made only while the target's family is switched on now (D16), so a family switched off while the
+    // job was in flight gets no further call. The job's own bill is settled either way.
+    const retryable = shouldRetry(failure) && job.attemptOnTarget < settings.maxAttempts;
+    const familySwitchedOff = deps.disabledFamilies !== undefined && isDisabledModel(target.model, deps.disabledFamilies);
+    if (retryable && !familySwitchedOff) {
       // The same target, the next attempt. The slot passes to the retry, which releases it if the retry cannot submit.
       slot.bucketId = null;
       const state: TargetState = {
         submitNumber: job.submitNumber,
+        earlierTargetsBilledUsd: earlierBilledUsd,
         targetBilledUsd,
         targetSubmits: job.targetSubmits,
         targetFirstEntryId: job.targetFirstEntryId,
@@ -683,7 +745,9 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           runAfterMs: backoffFor(job.attemptOnTarget),
         });
       }
-      if (retried.kind === "planner") return report(session, { status: "failed", providerId: retried.providerId, error: retried.error });
+      if (retried.kind === "planner") {
+        return report(session, { status: "failed", providerId: retried.providerId, error: retried.error, billedUsd: assetBilledUsd });
+      }
       if (retried.kind === "unsettled") {
         return report(session, {
           status: "unsettled",
@@ -691,18 +755,27 @@ export function createAssetRouter(deps: RouterDeps): AsyncAssetRouter {
           idempotencyKey: retried.idempotencyKey,
           ledgerEntryId: retried.ledgerEntryId,
           reason: retried.reason,
+          billedUsd: assetBilledUsd,
         });
       }
       submitNumber = state.submitNumber;
       pushCapped(carry.exhausted, failureReason);
       fallback = absorb(carry, retried) ?? fallback;
     } else {
+      if (retryable && familySwitchedOff) {
+        pushCapped(carry.excluded, `${target.adapterId}: switched off by the model policy, so the rate-limited submit is not retried`);
+      }
       pushCapped(carry.exhausted, failureReason);
     }
 
     // The next target. This job's slot is released before it moves on.
     await freeSlot(slot, deps.buckets);
-    const step = await launch(session, input, job.targets, job.targetIndex + 1, carry, { submitNumber, fallback });
+    // This target's bills, failed or not, join the earlier ones: the next target carries them, so the asset's cost keeps every bill.
+    const step = await launch(session, input, job.targets, job.targetIndex + 1, carry, {
+      submitNumber,
+      fallback,
+      earlierTargetsBilledUsd: assetBilledUsd,
+    });
     return report(session, step);
   }
 

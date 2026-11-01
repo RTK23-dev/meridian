@@ -1,7 +1,7 @@
 // The `estimate_reserve` stage handler (Bible 6.5, 14.1 steps 1 and 2). It prices the scene plan and raises the request's pre-flight
 // hold to the plan's estimate (budget/preflight.ts extendReservation), then runs the `budget` gate (review/gates/budget.ts).
-// The hold is the one intake made (E3 lead decision 1): this stage never makes a second reservation. A raise that cap mode
-// pauses, a refusal, and an unknown price all fail the gate; no reservation id is returned, and the orchestrator pauses on budget.
+// The hold is the one intake made (E3 lead decision 1): this stage never makes a second reservation. A refusal and an unknown price
+// fail the gate; no reservation id is returned, and the orchestrator pauses on budget. A hold above a budget is noted, not refused (D12).
 //
 // Two parts. extendForPlan is pure apart from the LedgerStore it is given: the plan, the budgets and the time go in, and the
 // reservation and the gate come out. createEstimateReserveHandler is the stage: it reads the scene_plan and production_request
@@ -53,13 +53,13 @@ export type ExtendForPlanInput = {
 export type ExtendForPlanResult = {
   /** The budget gate: passes only when the extended hold is held and covers the plan's estimate. */
   gate: GateResult;
-  /** The reservation after the extension, or null when it was paused, refused or unpriced (nothing new is held). */
+  /** The reservation after the extension, or null when it was refused or unpriced (nothing new is held). */
   reservation: BudgetReservation | null;
 };
 
 /**
- * Raise the pre-flight hold to the plan's estimate. A paused or refused extension fails the gate with its reasons, and the hold
- * keeps what it had. An unknown price is refused with its shot named (the extension throws before it writes anything).
+ * Raise the pre-flight hold to the plan's estimate. A refused extension fails the gate with its reason, and the hold keeps what it had.
+ * An unknown price is refused with its shot named (the extension throws before it writes anything).
  */
 export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInput): Promise<ExtendForPlanResult> {
   const plan = scenePlanSchema.safeParse(input.plan);
@@ -90,14 +90,17 @@ export async function extendForPlan(store: LedgerStore, input: ExtendForPlanInpu
   }
   const chosen = input.chosenPrices?.size ?? 0;
   const priced = chosen === 0 ? "" : ` (${chosen} call${chosen === 1 ? "" : "s"} priced at the chosen model's catalog price, Bible 10.5)`;
-  const reason = `${outcome.status === "paused" ? outcome.reasons.join("; ") : outcome.reason}${priced}`;
+  const reason = `${outcome.reason}${priced}`;
   return {
     gate: gateResult("budget", input.reservationId, [check("reservation_succeeded", false, { detail: `the hold is not raised: ${reason}` })]),
     reservation: null,
   };
 }
 
-/** The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount; "not_connected" the reason. */
+/**
+ * The workspace's monthly budget for the month of `now`. Two answers. "known" carries the USD amount; "not_connected" the reason. A budget is
+ * a line (D12): the answer carries no tolerance.
+ */
 export type WorkspaceMonthBudget = { status: "known"; usd: number } | { status: "not_connected"; reason: string };
 
 export type WorkspaceBudgetScope = { organizationId: string; requestId: string; now: string };

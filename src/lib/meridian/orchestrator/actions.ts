@@ -7,12 +7,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { randomUUID } from "node:crypto";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
-import { assertRole, isRole, type Role } from "@/lib/meridian/access";
+import type { Role } from "@/lib/meridian/access";
 import { requireWorkspaceAdmin } from "@/lib/meridian/content-factory/service";
-import { editPlanStepFor, planDraftFor, runPlanFor, textModelsFor } from "@/engine/orchestrator/api";
+import { editPlanStepFor, planDraftFor, textModelsFor } from "@/engine/orchestrator/api";
 import type { NodeChange } from "@/engine/orchestrator/stale";
 import { createPlanDraft, getPlan, listPlanEvents, listPlans, type StoredPlan } from "@/engine/orchestrator/store";
+import { MEASURE_CEILING_RANGE } from "@/engine/orchestrator/policy-store";
+import { planBrandRefusal } from "@/engine/orchestrator/brand-policy";
 import { getOrchestratorModel, isOrchestratorModelId, setOrchestratorModel } from "@/engine/orchestrator/settings";
+import {
+  approveBudgetAs,
+  brandAccessFor,
+  listApprovalsAs,
+  measuredAverageAs,
+  readBrandPolicyAs,
+  readWorkspacePolicyAs,
+  runPlanAs,
+  saveBrandPolicyAs,
+  saveWorkspacePolicyAs,
+} from "./operations.ts";
 
 const MODEL_ID = /^~?[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._:-]*$/i;
 
@@ -38,21 +51,17 @@ function number(value: unknown, label: string, min: number, max: number): number
   return parsed;
 }
 
-/** The brand's organization and the caller's role in it, checked against the minimum the action needs. */
+/** A category budget the user may leave unset: absent, empty or null is unset, and the orchestrator splits that category. Otherwise a number in range. */
+function optionalBudget(value: unknown, label: string): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return number(value, label, 0.01, 1000);
+}
+
+/** The brand's organization and the caller's role in it, checked against the minimum the action needs (operations.ts brandAccessFor). */
 async function requireBrand(userId: string, brandId: string, minimum: Role) {
   const sql = await getSql();
-  const rows = await sql<{ organization_id: string; name: string }>`
-    select organization_id, name from brands where id = ${brandId} and deleted_at is null limit 1
-  `;
-  const brand = rows[0];
-  if (!brand) throw new Error("Brand not found.");
-  const members = await sql<{ role: string }>`
-    select role from memberships where user_id = ${userId} and organization_id = ${brand.organization_id} limit 1
-  `;
-  const role = members[0]?.role;
-  if (!role || !isRole(role)) throw new Error("That workspace is not available to you.");
-  assertRole(role, minimum);
-  return { sql, organizationId: brand.organization_id, brandName: brand.name, now: () => new Date().toISOString() };
+  const access = await brandAccessFor(sql, userId, brandId, minimum);
+  return { sql, organizationId: access.organizationId, brandName: access.brandName, now: () => new Date().toISOString(), role: access.role };
 }
 
 /** A plan as the screens show it: its status, its reasons and its steps, without the stored JSON strings. */
@@ -105,6 +114,9 @@ export const getOrchestratorPlan = createServerFn({ method: "POST" })
     return { plan: summaryOf(plan), events };
   });
 
+/** The format of a brief made from the person's own inputs, when no format is given. The brief still states what is to be made. */
+const OWN_INPUTS_FORMAT = "A short branded video made from the inputs below.";
+
 export const createOrchestratorDraft = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
@@ -115,24 +127,40 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       brandId: text(body.brandId, 80, "Brand", true),
       title: text(body.title, 120, "Title", true),
       goal: text(body.goal, 2000, "Goal", true),
-      format: text(body.format, 4000, "Format", true),
+      format: text(body.format, 4000, "Format"),
       userInputs: text(body.userInputs, 4000, "Your inputs"),
       brandSummary: text(body.brandSummary, 2000, "Brand summary"),
       budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+      copyBudgetUsd: optionalBudget(body.copyBudgetUsd, "Copy budget"),
+      creativeBudgetUsd: optionalBudget(body.creativeBudgetUsd, "Creative budget"),
+      voiceBudgetUsd: optionalBudget(body.voiceBudgetUsd, "Voice budget"),
       orchestratorModelId: model === "" ? null : model,
+      // The brand the plan is made for (D16). Optional: absent, the brand the composer is working in is the plan's brand.
+      planBrandId: body.planBrandId === undefined || body.planBrandId === null || body.planBrandId === "" ? undefined : text(body.planBrandId, 80, "Brand", true),
     };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, brandName } = await requireBrand(context.userId, data.brandId, "admin");
+    const acting = await requireBrand(context.userId, data.brandId, "admin");
+    const { sql, organizationId } = acting;
+    if (data.format === "" && data.userInputs === "") throw new Error("Give the format to rebuild or make, or your own inputs.");
+    // The plan's brand: looked up as the other functions look a brand up, and refused unless it belongs to this workspace. Its switched-off
+    // families apply to the plan (D16), so a plan made without a brand would lose them.
+    const planBrand = data.planBrandId === undefined ? acting : await requireBrand(context.userId, data.planBrandId, "viewer");
+    const refusal = planBrandRefusal(organizationId, planBrand.organizationId);
+    if (refusal !== null) throw new Error(refusal);
     const model = data.orchestratorModelId ?? (await getOrchestratorModel(sql, organizationId));
     if (model === null) throw new Error("Choose the orchestrating model in the Content Factory panel first.");
+    // A category the user leaves unset is absent from the brief (JSON drops it), so the orchestrator splits that category (categories.ts).
     const brief = {
       goal: data.goal,
-      format: data.format,
+      format: data.format === "" ? OWN_INPUTS_FORMAT : data.format,
       userInputs: data.userInputs,
-      brand: { name: brandName, summary: data.brandSummary },
+      brand: { name: planBrand.brandName, summary: data.brandSummary },
       budgetUsd: data.budgetUsd,
+      copyBudgetUsd: data.copyBudgetUsd,
+      creativeBudgetUsd: data.creativeBudgetUsd,
+      voiceBudgetUsd: data.voiceBudgetUsd,
     };
     const stored = await createPlanDraft(sql, {
       id: `plan_${randomUUID().replace(/-/g, "")}`,
@@ -141,6 +169,7 @@ export const createOrchestratorDraft = createServerFn({ method: "POST" })
       brief,
       orchestratorModel: model,
       budgetUsd: data.budgetUsd,
+      brandId: data.planBrandId ?? data.brandId,
     });
     return { plan: summaryOf(stored) };
   });
@@ -163,20 +192,24 @@ export const planOrchestratorDraft = createServerFn({ method: "POST" })
     return { status: "ready", reasons: [], plan: summaryOf(outcome.stored) };
   });
 
+/**
+ * Runs a plan. `measure` asks for measure mode (D15): only a workspace admin may ask, and an admin's run is held to the workspace's ceiling.
+ * A run that does not ask takes no measure mode.
+ */
 export const runOrchestratorPlan = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+    if (body.measure !== undefined && typeof body.measure !== "boolean") throw new Error("Measure must be true or false.");
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true), measure: body.measure === true };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
-    const { sql, organizationId, now } = await requireBrand(context.userId, data.brandId, "admin");
-    const outcome = await runPlanFor(sql, { organizationId, planId: data.planId, now });
+    // The admin's check, the measure decision and the run are in operations.ts runPlanAs.
+    const { outcome, stored } = await runPlanAs(await getSql(), context.userId, data);
     if (outcome.status === "not_connected" || outcome.status === "failed") return { status: outcome.status, reason: outcome.reason };
     if (outcome.status === "ok") throw new Error("The catalog state does not match the outcome.");
     if (outcome.status === "not_found") throw new Error("Plan not found.");
     if (outcome.status === "not_runnable") return { status: "not_runnable", reasons: outcome.reasons };
-    const stored = await getPlan(sql, organizationId, data.planId);
     if (!("spentUsd" in outcome)) throw new Error("The run did not finish.");
     return { status: outcome.status, spentUsd: outcome.spentUsd, plan: stored ? summaryOf(stored) : null };
   });
@@ -216,6 +249,58 @@ export const editOrchestratorStep = createServerFn({ method: "POST" })
     if (outcome.status === "refused") return { status: "refused", reasons: outcome.reasons };
     const after = await getPlan(sql, organizationId, data.planId);
     return { status: "edited", plan: after ? summaryOf(after) : null };
+  });
+
+/** The workspace's switched-off model families, with the initial values. Any member of the brand's workspace reads it. */
+export const getOrchestratorPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => readWorkspacePolicyAs(await getSql(), context.userId, data));
+
+/** Save the policy. Only a workspace admin changes it. An absent field keeps its value; the engine's schema checks every value it is given. */
+export const saveOrchestratorPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    const families = Array.isArray(body.disabledModelFamilies) ? body.disabledModelFamilies.map((family) => text(family, 200, "Model family")) : undefined;
+    // The measure ceiling (D15): absent keeps its value; otherwise a number in the range the engine allows, which the engine checks again.
+    const ceiling =
+      body.measureCeilingUsdPerSecond === undefined || body.measureCeilingUsdPerSecond === null || body.measureCeilingUsdPerSecond === ""
+        ? undefined
+        : number(body.measureCeilingUsdPerSecond, "Measure ceiling", MEASURE_CEILING_RANGE.min, MEASURE_CEILING_RANGE.max);
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      disabledModelFamilies: families === undefined ? undefined : families.filter((family) => family !== ""),
+      measureCeilingUsdPerSecond: ceiling,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => saveWorkspacePolicyAs(await getSql(), context.userId, data));
+
+/** Approve a paused plan's budget: the amount the person approves becomes the budget the run is held to. Only a workspace admin approves. */
+export const approveOrchestratorBudget = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    // A category pause is approved with its category (D3, D12): copy, creative or voice. Absent, empty or null is a total pause.
+    const named = body.category === undefined || body.category === null || body.category === "" ? null : body.category;
+    if (named !== null && named !== "copy" && named !== "creative" && named !== "voice") throw new Error("Category must be copy, creative or voice.");
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      planId: text(body.planId, 80, "Plan", true),
+      budgetUsd: number(body.budgetUsd, "Budget", 0.01, 1000),
+      category: named as "copy" | "creative" | "voice" | null,
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const { outcome, stored } = await approveBudgetAs(await getSql(), context.userId, data);
+    if (outcome.status === "not_found") throw new Error("Plan not found.");
+    if (outcome.status === "refused") return { status: "refused" as const, reasons: outcome.reasons };
+    return {
+      status: "approved" as const,
+      previousUsd: outcome.previousUsd,
+      budgetUsd: outcome.budgetUsd,
+      plan: stored === null ? null : summaryOf(stored),
+    };
   });
 
 /** The orchestrator model stored for a workspace, for the Content Factory panel. Admin only, like the rest of that screen. */
@@ -277,3 +362,46 @@ export const saveOrchestratorModelSetting = createServerFn({ method: "POST" })
     await setOrchestratorModel(sql, { organizationId: data.organizationId, modelId: data.orchestratorModelId, actorId: context.userId });
     return { orchestratorModel: data.orchestratorModelId, checkedAgainstCatalog };
   });
+
+/** The budget approvals of a plan, newest first, for any member of the brand's workspace. Each one records who approved and the budgets (decision D13). */
+export const listBudgetApprovalsFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    return { brandId: text(body.brandId, 80, "Brand", true), planId: text(body.planId, 80, "Plan", true) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => listApprovalsAs(await getSql(), context.userId, data));
+
+/**
+ * The model families the brand switches off, the workspace's, and the set a plan of this brand is held to (decision D16). Any member of the
+ * brand's workspace reads it.
+ */
+export const getBrandPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => readBrandPolicyAs(await getSql(), context.userId, data));
+
+/**
+ * Save the model families the brand switches off. Only a workspace admin changes it. A brand may only add families: the workspace's stay off,
+ * and the engine checks every family it is given before anything is written.
+ */
+export const saveBrandPolicyFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const body = objectInput(input);
+    if (!Array.isArray(body.disabledModelFamilies)) throw new Error("The model families must be a list.");
+    return {
+      brandId: text(body.brandId, 80, "Brand", true),
+      disabledModelFamilies: body.disabledModelFamilies.map((family) => text(family, 200, "Model family")).filter((family) => family !== ""),
+    };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => saveBrandPolicyAs(await getSql(), context.userId, data));
+
+/**
+ * The measured average cost per second of the workspace's clips (D15): the reported bills over their lengths. It is shown, never used to set a
+ * hold, and null until a clip has been measured. Any member of the brand's workspace reads it.
+ */
+export const getMeasuredAverageFor = createServerFn({ method: "POST" })
+  .validator((input: unknown) => ({ brandId: text(objectInput(input).brandId, 80, "Brand", true) }))
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => measuredAverageAs(await getSql(), context.userId, data));

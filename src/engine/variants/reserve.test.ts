@@ -98,7 +98,18 @@ describe("the variants' hold on the request's reservation (Bible 6.13, 14.1)", (
 
   it("refuses a raise that would pass the workspace month budget, with the reason", async () => {
     const ledger = await ledgerWithCommitment();
+    // The other reservation of the month has committed 98 USD in a call: committed spend, not its hold, counts against the month (D12).
     await ledger.createReservation(reservation({ reservationId: OTHER_RESERVATION, reservedUsd: 98, estimateUsd: 98, lines: [{ stage: "claude_roles", estimateUsd: 98 }] }));
+    const committed = await authorizeCall(ledger, {
+      reservationId: OTHER_RESERVATION,
+      stage: "render",
+      provider: "fixture-render",
+      model: "fixture-model",
+      estimateUsd: 98,
+      idempotencyKey: "key-committed-98",
+      at: CREATED,
+    });
+    assert.equal(committed.status, "authorized");
     const result = await extendForVariants(ledger, raise({ workspaceMonthBudgetUsd: 99 }));
     assert.equal(result.status, "refused");
     if (result.status !== "refused") return;

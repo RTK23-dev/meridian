@@ -1,6 +1,6 @@
 # cookbook_selector@1
 
-Stage: cookbook, before a run's plan is built (round 3, K10; decision Q34). Role: cookbook_selector (contract v13). Output: up to three cookbooks, each with starting values and one short reason. Version 1. A change to this text is a new version.
+Stage: cookbook, before a run's plan is built (round 3, K10; decision Q34). Role: cookbook_selector (contract v14). Output: up to three cookbooks, each with starting values and one short reason. Version 1. A change to this text is a new version.
 
 ## Role and rules
 

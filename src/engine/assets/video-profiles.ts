@@ -9,6 +9,7 @@
 // Caching (one loader per runtime). A listing that was read is kept for the loader's life, per workspace. A listing that failed is not
 // kept, so the next call reads again (the listing is free). Concurrent calls for one workspace share one read.
 
+import { isDisabledModel } from "../config/model-policy.ts";
 import { EngineError } from "../contracts/errors.ts";
 import type { Gateway } from "../gateway/gateway.ts";
 import { notConnectedReason } from "../media/stt-connection.ts";
@@ -38,8 +39,15 @@ function listingFailure(error: unknown): string {
 
 const LISTING = "GET /videos/models";
 
-/** The video profile loader over the gateway. Its profiles are every video model the workspace's GET /videos/models names. */
-export function videoProfileLoader(options: { gateway: Gateway }): VideoProfileLoader {
+/**
+ * The video profile loader over the gateway. Its profiles are every video model the workspace's GET /videos/models names, except the models
+ * of a family the workspace has switched off (owner direction 2026-10-23): those have no profile, so no route can call them. The families
+ * come from `familiesFor`, read on every load, as the catalog's policy reads them (gateway/catalog-policy.ts).
+ */
+export function videoProfileLoader(options: {
+  gateway: Gateway;
+  familiesFor?: (organizationId: string) => Promise<readonly string[]>;
+}): VideoProfileLoader {
   const reads = new Map<string, Promise<Read>>();
   const gaps = new Map<string, readonly VideoProfileGap[]>();
 
@@ -72,8 +80,15 @@ export function videoProfileLoader(options: { gateway: Gateway }): VideoProfileL
       }
       const result = await pending;
       if (!result.ok && reads.get(organizationId) === pending) reads.delete(organizationId);
-      gaps.set(organizationId, result.gaps);
-      return result.profiles;
+      const families = options.familiesFor === undefined ? [] : await options.familiesFor(organizationId);
+      const profiles = new Map<string, VideoProfile>();
+      const switchedOff: VideoProfileGap[] = [];
+      for (const [model, profile] of result.profiles) {
+        if (isDisabledModel(model, families)) switchedOff.push({ model, reason: `${model} is switched off by the workspace's model policy` });
+        else profiles.set(model, profile);
+      }
+      gaps.set(organizationId, [...result.gaps, ...switchedOff]);
+      return profiles;
     },
     gapsFor(organizationId) {
       return gaps.get(organizationId) ?? [];
