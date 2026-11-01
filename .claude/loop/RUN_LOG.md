@@ -524,3 +524,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked here: the look and the button in a browser. CI ui-smoke runs them.
 - Caveat for the owner: a choice made before a reload is not shown; the person confirms it again. Recorded in RUN_PLAN K18c.
 - Next: K19 (the library screen; the route tree is generated, so regenerate it and update the navigation tests).
+
+## 2026-11-01 00:34 UTC: wake: the clock class in the estimate tests
+
+- Wakes (00:20 to 00:33): CI failed on several heads: `tests (shard 0, 1, 5)` and the aggregate `check`, on `e6a4b28`, `4a7de92`, `24a2515`, `4c34efe`, `d6af8d2`, `f550b70`. Each failure on a superseded head is the same clock class (below).
+- Cause: several tests build a hold in October 2026 and extend it on the real clock. From 1 November, `extendForPlan` refuses the extension across the month, so the tests fail. The estimate handler read `new Date()` directly and had no clock port.
+- Fixes (pushed): the estimate handler takes an optional `now` port, like the other stages (`d6af8d2`); the tests pass their fixed time in `estimate-reserve`, `estimate-chosen-stage` (`48d40e1`), `e3-pipeline` (`f550b70`) and `model-choice-pipeline` (`8d333a3`). The E6 chain fixture was fixed in `e6a4b28`.
+- Mistake: `d6af8d2` was pushed while `estimate-chosen-stage` still failed. My check piped the test output through `grep`, which exits 0, so the `&&` chain committed. Fixed forward in `48d40e1`. Rule from now on: check the test process's exit code, not a grep.
+- Current head `8d333a3` (run 41256855570): green so far: `tests (shard 0)`, `typecheck, lint and build`, `release-acceptance`, `sidecar`, `postgres money checks`. Shards 1 to 5 and `ui-smoke` were still running at this entry.
+- Local full `src` run (825 files, started on the pre-fix head): at about 3,050 results, the only failures are the five fixed above. Still running.
+- Open: confirm shards 1 to 5 and ui-smoke on `8d333a3`; then close out the full local run.
