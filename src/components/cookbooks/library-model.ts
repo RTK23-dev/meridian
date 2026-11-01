@@ -4,7 +4,8 @@
 
 import { defaultsOf } from "../../lib/meridian/cookbooks/controls.ts";
 import { resolveCookbook } from "../../lib/meridian/cookbooks/resolve.ts";
-import { COOKBOOK_FAMILIES, type Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
+import { COOKBOOK_FAMILIES } from "../../lib/meridian/cookbooks/families.ts";
+import type { Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
 
 /** The length a card is priced at. The person sets the real length in the detail's settings. */
 export const STANDARD_LENGTH_MS = 60_000;

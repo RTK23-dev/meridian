@@ -6,7 +6,7 @@
 
 import { z } from "zod";
 
-import { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "../../../engine/contracts/request.ts";
+import { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "../../../engine/contracts/cookbook-roles.ts";
 
 /** The roles a cookbook instruction can reach: the engine contract's list (contract v12), so the two cannot drift. */
 export const COOKBOOK_ROLES = COOKBOOK_INSTRUCTION_ROLES;

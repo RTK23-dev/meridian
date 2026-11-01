@@ -6,6 +6,7 @@ import { usdSchema } from "./money.ts";
 import { kitRefSchema } from "./kits.ts";
 import { contentHashSchema } from "./hash.ts";
 import { nonBlankText, positiveMsSchema } from "./primitives.ts";
+import { cookbookInstructionRoleSchema } from "./cookbook-roles.ts";
 
 export const BEAT_ROLES = ["hook", "setup", "item", "proof", "twist", "payoff", "cta"] as const;
 export const beatRoleSchema = z.enum(BEAT_ROLES);
@@ -29,8 +30,7 @@ export type GeneId = z.infer<typeof geneIdSchema>;
  * The roles a cookbook's instructions can reach (contract v12). The engine's roles read the instruction of their own role, if the request
  * carries one. This list is the cookbook library's list too (src/lib/meridian/cookbooks/controls.ts).
  */
-export const COOKBOOK_INSTRUCTION_ROLES = ["script", "plan", "visual", "voice", "edit", "critic", "agent"] as const;
-export const cookbookInstructionRoleSchema = z.enum(COOKBOOK_INSTRUCTION_ROLES);
+export { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "./cookbook-roles.ts";
 
 /** The total text a cookbook may send with one request, in characters (contract v12). */
 export const COOKBOOK_INSTRUCTIONS_MAX = 16000;

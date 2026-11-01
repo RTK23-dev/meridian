@@ -11,7 +11,8 @@ import { nodeKindSchema } from "../../../engine/orchestrator/contracts.ts";
 import { controlSchema, cookbookRoleSchema, controlIdSchema, ingredientIdSchema, nameSchema, scalarSchema, stepIdSchema } from "./controls.ts";
 
 export const COOKBOOK_SCHEMA = "meridian.cookbook/v1";
-export const COOKBOOK_FAMILIES = ["explainer", "ugc", "product", "listicle", "story", "other"] as const;
+export { COOKBOOK_FAMILIES } from "./families.ts";
+import { COOKBOOK_FAMILIES } from "./families.ts";
 export const COOKBOOK_MODES = ["agent", "engine"] as const;
 export const COOKBOOK_SCOPES = ["builtin", "workspace"] as const;
 export const INGREDIENT_KINDS = [
