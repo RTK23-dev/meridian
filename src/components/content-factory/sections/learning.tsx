@@ -36,6 +36,9 @@ export function Learning({ brandId }: { brandId: string }) {
         description={data.policy}
         actions={<Button asChild variant="secondary"><Link to="/brands/$brandId/calibration" params={{ brandId }}>Calibration</Link></Button>}
       />
+      <p className="text-sm text-muted-foreground" role="status">
+        Left out of learning as test or synthetic: {data.excludedFromLearning.performance} performance rows, {data.excludedFromLearning.creatives} creatives and {data.excludedFromLearning.organic} organic rows.
+      </p>
       {/* Every panel stays mounted so a half-filled form survives a tab change. Queries run only for the open tab. */}
       <Tabs value={tab} onValueChange={(value) => setTab(value as LearningTab)} className="space-y-6">
         <TabsList aria-label="Learning sections">

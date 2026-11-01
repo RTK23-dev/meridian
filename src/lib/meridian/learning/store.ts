@@ -1,5 +1,6 @@
 import type { LearnedPattern, LearningSurface, ObservedCreative, PerformanceRow, OrganicObservationRow } from "../domain.ts";
 import { learnPatterns } from "./engine.ts";
+import { filterLearnableObservations, filterLearnablePerformance, isSyntheticOrTestRecord } from "./guardrails.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 
 /**
@@ -35,16 +36,29 @@ function optionalNumber(value: unknown): number | null {
 }
 
 /** What one recomputation stored, per surface: the patterns kept, and the measured outcomes they were learned from. */
+export type LearningExclusions = { creatives: number; performance: number; organic: number };
+
 export type LearningSummary = {
   patterns: number;
   bySurface: Record<LearningSurface, { patterns: number; outcomes: number }>;
+  /** Rows left out of learning as test or synthetic (guardrails.ts), counted per kind. */
+  excluded: LearningExclusions;
 };
 
 /**
  * Recompute brand-scoped patterns from stored rows, per surface and channel (NORTH_STAR section 8, item 10).
  * Does not mark jobs succeeded. The process that claimed the job records its own result.
  */
-export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: string, brandId: string): Promise<LearningSummary> {
+/**
+ * The rows learning reads for one brand, with the test and synthetic rows left out (guardrails.ts). The same reader serves the learning run
+ * and the learning page, so the count the page shows is the count the run used.
+ */
+export async function learningInputsOf(sql: Sql, organizationId: string, brandId: string): Promise<{
+  creatives: ObservedCreative[];
+  observations: PerformanceRow[];
+  organicObservations: OrganicObservationRow[];
+  excluded: LearningExclusions;
+}> {
   const creativeRows = await sql<Record<string, unknown>>`
     select id, organization_id, brand_id, origin, angle, hook_type, format, proof_type, offer, cta,
            visual_style, platform, emotion, product_name, claim, raw_text
@@ -111,6 +125,23 @@ export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: st
     likes: optionalNumber(row.likes),
     comments: optionalNumber(row.comments),
   }));
+  const learnableCreatives = filterLearnableObservations(creatives);
+  const learnablePerformance = filterLearnablePerformance(observations);
+  const learnableOrganic = organicObservations.filter((row) => !isSyntheticOrTestRecord(row as unknown as Record<string, unknown>));
+  return {
+    creatives: learnableCreatives,
+    observations: learnablePerformance,
+    organicObservations: learnableOrganic,
+    excluded: {
+      creatives: creatives.length - learnableCreatives.length,
+      performance: observations.length - learnablePerformance.length,
+      organic: organicObservations.length - learnableOrganic.length,
+    },
+  };
+}
+
+export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: string, brandId: string): Promise<LearningSummary> {
+  const { creatives, observations, organicObservations, excluded } = await learningInputsOf(sql, organizationId, brandId);
   // Learned once over every channel (channel ''), and once per channel that a row names. A channel set holds only its own rows, so a
   // pattern for one platform never comes from another platform's outcomes. Paid and organic metrics are disjoint, so each call
   // learns each surface from its own rows only.
@@ -159,7 +190,7 @@ export async function applyLearnedPatternsBySurface(sql: Sql, organizationId: st
       `;
     }
   });
-  return { patterns: patterns.length, bySurface };
+  return { patterns: patterns.length, bySurface, excluded };
 }
 
 /** The number of patterns stored, across both surfaces. Callers that do not report per surface use this. */

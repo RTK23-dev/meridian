@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql, type Sql } from "@/lib/db";
 import { countRejections } from "@/lib/meridian/learning/engine";
-import { applyLearnedPatterns } from "@/lib/meridian/learning/store";
+import { applyLearnedPatterns, learningInputsOf } from "@/lib/meridian/learning/store";
 import { designExperiment } from "@/lib/meridian/experiments/design";
 import { manualPerformanceSchema } from "@/lib/meridian/schemas/performance";
 import { storedNumberOrNull } from "../decisions/stored-number.ts";
@@ -216,8 +216,10 @@ export const getLearning = createServerFn({ method: "POST" })
       select use_organization_learning from brand_brains where brand_id = ${data.brandId} limit 1
     `;
     const flag = settingRows[0]?.use_organization_learning;
+    const { excluded } = await learningInputsOf(sql, access.organizationId, data.brandId);
     return {
       role: access.role,
+      excludedFromLearning: excluded,
       organizationId: access.organizationId,
       useOrganizationLearning: flag === true || flag === "t" || flag === "true",
       policy: "A pattern is stored only after at least 3 creatives and 300 impressions in that bucket, and only when CTR, conversion rate, or ROAS differs from the brand baseline by 5% or more. Pairs such as angle+hook and visual style+format use the same floor. VALIDATED requires 4 creatives, 2000 impressions, and 15% absolute lift. OBSERVED patterns are discounted in the next rank. Organization patterns are ignored unless this brand opts in. Global patterns are never used. A separate worker runs queued learning when it is deployed. Thresholds change only after an admin approves a proposal.",
