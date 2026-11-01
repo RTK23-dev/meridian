@@ -552,6 +552,29 @@ try {
     if (/something went wrong|not available|Module .* externalized/i.test(text) && !text.includes("3D data explainer")) throw new Error("the library shows an error page");
   });
 
+  // The cookbook editor (K20b3): on the factory page, a built-in cookbook's steps open, Edit opens the form, and a changed instruction saves
+  // as the person's copy. The server checks the whole cookbook on save; this is the browser proof of that path.
+  // The factory line is the Batch section of the Content page (the factory route redirects there, section=ads).
+  await page.goto(`${base}${brandPath}/content?section=ads`, { waitUntil: "networkidle" });
+  await check("H2", "The cookbook editor opens from a built-in's steps, and a changed instruction saves as the person's copy", async () => {
+    // The factory line is the Factory Line tab of the Research-led runs section of the Batch section.
+    await page.getByRole("tab", { name: "Research-led runs (advanced)" }).click();
+    await page.getByRole("tab", { name: "Factory Line", exact: true }).click();
+    const showSteps = page.getByRole("button", { name: "Show steps" }).first();
+    await showSteps.waitFor({ timeout: 30000 }).catch(async (error) => {
+      await page.screenshot({ path: join(out, "cookbook-editor-missing.png"), fullPage: true });
+      throw new Error(`${error.message.split("\n")[0]} at ${page.url()}: ${(await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+    });
+    await showSteps.click();
+    await page.getByRole("region", { name: /Steps of/ }).waitFor({ timeout: 30000 });
+    await page.getByRole("button", { name: /^Edit( a copy)?$/ }).first().click();
+    const form = page.getByRole("form", { name: /^Edit / });
+    await form.waitFor({ timeout: 30000 });
+    await form.locator("textarea").first().fill("Acceptance edit: open on a number that counts up.");
+    await form.getByRole("button", { name: "Save as my copy" }).click();
+    await page.getByText("Saved as your copy.").waitFor({ timeout: 30000 });
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });

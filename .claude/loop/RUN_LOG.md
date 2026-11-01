@@ -681,3 +681,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Parent-link gap fixed: a later version of a copy keeps the parent its latest version recorded (the save path named none, so the copy lost its link from version 2). One PGlite test; the cookbook suites pass (188 tests). Typecheck and eslint pass.
 - Next: a browser check of the Edit action (a save of a workspace cookbook and of a built-in copy), with the release acceptance extended to cover it.
 - Next wake armed for 08:28 UTC (trig_012DV5N74c4ocuUxhxtJSt4E).
+
+## 2026-11-01 08:45 UTC: wake: K20, the browser check of the Edit action
+
+- Wake: CI on the head 88378b8 was green (check, e2e, the six test shards, ui-smoke, release-acceptance, postgres and sidecar; CodeRabbit skipped). The earlier acceptance run had been in progress and was read this wake.
+- Unit done: acceptance check H2 in `scripts/release-acceptance/acceptance.mjs`. From the Batch section's Factory Line tab, a built-in cookbook's steps open, Edit opens the form, a changed instruction is saved with "Save as my copy", and "Saved as your copy." appears. Earlier failed runs were selector problems in the check (the route, the default section, then the tab order), fixed in the check, not in the component.
+- Checks: local release-acceptance run ra-run10 (dev server, testing runtime) passed 32 of 32, exit 0, including F1, F2, H1, H2, D1 and E1. `node --check` and `npx eslint` on the acceptance script pass.
+- Not covered: the single-save path of a workspace cookbook in a browser, and any live server. No live provider call was made.
+- Still open in K20: the editor's steps and inline validation on the generation and grading fields.
+- Next wake armed for 09:03 UTC (trig_01XTqaSPnH4asxHWexZQNdYF); the 08:50 wake was cancelled.
