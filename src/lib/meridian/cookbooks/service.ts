@@ -5,6 +5,7 @@
 import type { Role } from "../access.ts";
 import type { Sql } from "../learning/store.ts";
 import { builtinCookbook, builtinCookbooks, isBuiltinId } from "./builtin/index.ts";
+import { cardsOf } from "./cards.ts";
 import { canCreate, canEdit, canShareWithWorkspace } from "./policy.ts";
 import { resolveCookbook, type ResolvedCookbook, type ResolveOptions } from "./resolve.ts";
 import { proposeCookbooks, type Proposal, type SelectorPort } from "./selector.ts";
@@ -31,7 +32,9 @@ function fromStore<T>(result: StoreResult<T>): ServiceResult<T> {
 /** The library of a brand: every built-in cookbook, and the workspace cookbooks visible to the brand (latest version of each). */
 export async function libraryFor(sql: Sql, input: { organizationId: string; brandId: string; includeArchived?: boolean }) {
   const workspace = await listCookbooks(sql, input);
-  return { builtins: builtinCookbooks(), workspace };
+  const builtins = builtinCookbooks();
+  // The cards are computed here, on the server (K19b2): the browser gets them, and never imports the rules that make them.
+  return { builtins, workspace, cards: cardsOf({ builtins, workspace: workspace.map((stored) => stored.cookbook) }) };
 }
 
 /** One cookbook by id: a built-in, or the visible workspace version (the latest unless a version is named). */

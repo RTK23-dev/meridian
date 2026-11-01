@@ -11,11 +11,11 @@ import type { Cookbook } from "@/lib/meridian/cookbooks/schema";
 import { defaultsOf, type ControlValue } from "@/lib/meridian/cookbooks/controls";
 import { forkCookbookAction, listCookbookVersionsAction, listCookbooksAction, readCookbookAction } from "@/lib/meridian/cookbooks/actions";
 import { useBrandQuery } from "@/lib/query/hooks";
-import { cardsOf, familiesIn, NO_FILTER, type CookbookCard, type LibraryFilter } from "./library-model";
+import { familiesIn, filterCards, NO_FILTER, type CookbookCard, type LibraryFilter } from "./library-model";
 import { SettingsPanel } from "./settings-panel";
 import { settingRows } from "./settings-model";
 
-type Library = { state: "loading" } | { state: "error"; reason: string } | { state: "ready"; builtins: Cookbook[]; workspace: Cookbook[] };
+type Library = { state: "loading" } | { state: "error"; reason: string } | { state: "ready"; cards: CookbookCard[] };
 
 export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
   const brand = useBrandQuery(brandId);
@@ -32,7 +32,7 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
       try {
         const outcome = await listCookbooksAction({ data: { brandId } });
         if (cancelled) return;
-        setLibrary({ state: "ready", builtins: outcome.builtins, workspace: outcome.workspace.map((stored) => stored.cookbook) });
+        setLibrary({ state: "ready", cards: outcome.cards });
       } catch (caught) {
         if (!cancelled) setLibrary({ state: "error", reason: caught instanceof Error ? caught.message : "The cookbooks could not be read." });
       }
@@ -43,10 +43,10 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
   }, [brandId, reload]);
 
   const cards = useMemo(
-    () => (library.state === "ready" ? cardsOf({ builtins: library.builtins, workspace: library.workspace }, filter) : []),
+    () => (library.state === "ready" ? filterCards(library.cards, filter) : []),
     [library, filter],
   );
-  const families = useMemo(() => (library.state === "ready" ? familiesIn(cardsOf({ builtins: library.builtins, workspace: library.workspace })) : []), [library]);
+  const families = useMemo(() => (library.state === "ready" ? familiesIn(library.cards) : []), [library]);
 
   if (library.state === "error") return <p role="alert" className="text-sm text-danger">The cookbooks could not be loaded: {library.reason}</p>;
   if (library.state === "loading") return <ScreenSkeleton label="Loading cookbooks" shape="rows" />;
