@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { checkOutputs, reportLines } from "./checks.ts";
+import { measuresOf, numericMeasures } from "../../../engine/analyze/measures.ts";
 
 const CHECKS = [
   { measure: "hardCuts" as const, target: 9, tolerance: 1 },
@@ -29,4 +30,31 @@ test("the report has one plain line per check, with the value or that it was not
   const lines = reportLines(checkOutputs(CHECKS, { hardCuts: 8, shotP50Ms: null, integratedLufs: -14 }));
   assert.equal(lines[0], "hardCuts: 8 against 9 (+/- 1): pass");
   assert.equal(lines[1], "shotP50Ms: not measured against 4000 (+/- 500): unknown");
+});
+
+test("the measures of a recorded video feed the checks by name: the recorded cut count passes, and the loudness misses a tight tolerance (K22)", () => {
+  const measures = numericMeasures(
+    measuresOf({
+      durationMs: 6000,
+      cutsMs: [1000, 2500, 4000],
+      pairs: [],
+      loopDistance: 0.02,
+      meanMotion: 0.25,
+      flickerScore: 0.1,
+      brightness: [0.2, 0.4],
+      integratedLufs: -14.2,
+      loudnessRangeLu: 6.5,
+    }),
+  );
+  const outcomes = checkOutputs(
+    [
+      { measure: "hardCuts", target: 3, tolerance: 0 },
+      { measure: "integratedLufs", target: -14, tolerance: 0.05 },
+    ],
+    measures,
+  );
+  assert.deepEqual(
+    outcomes.map((outcome) => outcome.verdict),
+    ["pass", "miss"],
+  );
 });

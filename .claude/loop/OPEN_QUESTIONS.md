@@ -309,6 +309,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Blocks: K20f (the test move) and the removal of `pipeline-model.ts` in K29.
 - The loop's default is (b): nothing changes now, and the three cases keep passing where they are.
 
+## Q38: K22 counts as done for K23, with its Q32 move parked
+- Kind: technical ambiguity inside the plan. Status: `decided by loop, confirm`.
+- Context: K22 has two parts: the measures wired from the media functions, and the safe-zone move into the post-render gate, which waits for Q32. K23 depends on K22.
+- What the loop did: it treats K22 as done for K23 (the same treatment as K20, whose one parked test move is Q37). The checks module and its measures are complete. The safe-zone move is a gate change, not a dependency of the agent-mode renderer.
+- What would change if the owner chose otherwise: if the safe-zone check must be in the gate before K23 starts, K23 waits for Q32.
+- Blocks: nothing now.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

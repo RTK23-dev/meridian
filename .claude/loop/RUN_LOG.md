@@ -805,3 +805,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames for any K21 component.
 - K21 is done: every component on its list is built and registered (captions.boxed, stat.counter, label.pill, panel.bars, panel.line, panel.tiles, cta.follow). The visual checks need a browser on the owner's side.
 - Next wake armed for 12:57 UTC (trig_01GC81cYPB8d2urcBhuE3F8f). The next unit is K22 (partly done), the first unfinished task in order.
+
+## 2026-11-01 13:01 UTC: wake: K22, the measures wired to the checks
+
+- Wake (12:57): CI on the head d5ebd20 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Unit done (K22): the compare report's derivation moved from `scripts/engine/preset-preview/compare.ts` into `src/engine/analyze/measures.ts`. `measuresOf` takes the media functions' readings (durations, cuts, picture pairs, loop distance, motion, flicker, brightness, loudness) and returns the report's measures by name. `numericMeasures` keeps the numbers and nulls, so a check reads its measure by name. The script now gathers the readings and calls `measuresOf`, and it prints the same table.
+- A real fault came out of this: the old derivation threw on a zero or unknown duration (an empty median), which made an unknown duration a crash. Now the timing measures, the loop distance and the other unknowns are null, not zero or NaN (CLAUDE.md rule 1).
+- Checks: `measures.test.ts` passed 7 tests on recorded readings, and `checks.test.ts` gained a test that feeds recorded measures to a check by name (a cut count passes, and a loudness misses a tight tolerance). Eslint on the changed files exits 0, `npm run typecheck` exits 0, and the compare script parses.
+- Not checked: the compare script end to end. The repository has no reference video, so the script cannot be run here.
+- Parked: the safe-zone move into the post-render gate, which waits for Q32 (an owner decision; the loop recommends option a, and nothing is changed).
+- Decision recorded as Q38: K22 counts as done for K23, so K23 can start.
+- Next wake armed for 13:22 UTC (trig_01TEgKaBqTtDmsNKY9PfSMwD).

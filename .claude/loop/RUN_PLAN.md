@@ -392,7 +392,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
   - `cta.follow`.
 
 #### K22: The checks module
-- Status: `partly done`. Done: `cookbooks/checks.ts` (pass, near, miss, unknown; an unreadable measure is never a pass; a plain report line per check; 3 tests). Remaining: wiring the measures from the media functions (the compare script's measures, on the rendered file), and the safe-zone move into the post-render gate, which is Q32's decision (option a).
+- Status: `done except the Q32 move` (13:01). Done: `cookbooks/checks.ts` (pass, near, miss, unknown; an unreadable measure is never a pass; a plain report line per check; 3 tests). The measures are wired (13:01): the derivation of the compare report moved from `scripts/engine/preset-preview/compare.ts` into `src/engine/analyze/measures.ts` (`measuresOf` takes the media functions' readings, and `numericMeasures` keeps what a check can compare). The script now gathers the readings and calls it, and an unknown duration or loop distance stays null (the old script crashed on a zero duration). 7 tests on recorded readings, the checks test feeds recorded measures to a check by name; eslint and typecheck pass. The script was not run end to end, since no reference video is in the repository. Parked: the safe-zone move into the post-render gate, which is Q32's decision (the loop recommends option a).
 - `cookbooks/checks.ts`: measure an output with the media functions and compare it with the cookbook's targets (pass, near, miss).
   It generalises `scripts/engine/preset-preview/compare.ts`.
 - The safe-zone check from `gates/slop-craft-gates.ts` moves here and into the engine's post-render gate as a note (Q32, option a). The
