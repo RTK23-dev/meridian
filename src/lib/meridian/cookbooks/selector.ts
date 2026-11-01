@@ -11,7 +11,7 @@ import { eligibilityOf, type Eligibility, type RunInputs } from "./eligibility.t
 import { fitsControl } from "./validate.ts";
 import { resolveCookbook, type ResolvedCookbook } from "./resolve.ts";
 import type { Cookbook } from "./schema.ts";
-import type { ControlValue } from "./controls.ts";
+import type { Control, ControlValue } from "./controls.ts";
 
 /** The port the model call goes through. It returns the model's text, or why there is none. */
 export type SelectorPort = (request: { instructions: string; data: string }) => Promise<
@@ -110,7 +110,16 @@ export type Proposal =
   | { status: "refused"; issues: string[] }
   | {
       status: "proposed";
-      picks: Array<{ cookbookId: string; version: number; label: string; reason: string; values: Record<string, ControlValue>; resolved: ResolvedCookbook }>;
+      picks: Array<{
+        cookbookId: string;
+        version: number;
+        label: string;
+        reason: string;
+        values: Record<string, ControlValue>;
+        /** The cookbook's controls, so the step can draw the settings the person may change (K18d). */
+        controls: Control[];
+        resolved: ResolvedCookbook;
+      }>;
       alternatives: CookbookRef[];
     };
 
@@ -144,7 +153,7 @@ export async function proposeCookbooks(input: {
   const validated = validateAnswer(answer.text, eligible);
   if (!validated.ok) return { status: "refused", issues: validated.issues };
 
-  const picks: Array<{ cookbookId: string; version: number; label: string; reason: string; values: Record<string, ControlValue>; resolved: ResolvedCookbook }> = [];
+  const picks: Array<{ cookbookId: string; version: number; label: string; reason: string; values: Record<string, ControlValue>; controls: Control[]; resolved: ResolvedCookbook }> = [];
   for (const pick of validated.picks) {
     const resolved = resolveCookbook(pick.cookbook, { values: pick.values, lengthMs: input.lengthMs, voiceCharacters: input.voiceCharacters });
     if (!resolved.ok) return { status: "refused", issues: resolved.issues };
@@ -154,6 +163,7 @@ export async function proposeCookbooks(input: {
       label: pick.cookbook.label,
       reason: pick.reason,
       values: resolved.resolved.values,
+      controls: pick.cookbook.controls,
       resolved: resolved.resolved,
     });
   }

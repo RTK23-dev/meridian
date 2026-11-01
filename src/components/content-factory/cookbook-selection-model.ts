@@ -3,7 +3,7 @@
 // the cases where there is no pick: nothing can run, or the selector is not connected (the person picks from the list instead). Every choice
 // the step offers names a cookbook by its id and version, and its label is what the person reads.
 
-import type { ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
+import type { Control, ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
 import type { CookbookRef, Proposal } from "../../lib/meridian/cookbooks/selector.ts";
 
 export type ChoiceToSend = { cookbookId: string; version: number; values: Record<string, ControlValue> };
@@ -20,6 +20,8 @@ export type SelectionView =
       confirmLabel: string;
       /** The first pick, with the values its proposal resolved: what the confirm button sends. */
       confirm: ChoiceToSend;
+      /** The first pick's controls, for the settings the person may change before confirming (K18d). */
+      controls: Control[];
     }
   | { state: "picker"; message: string; options: CookbookRef[] }
   | { state: "none"; message: string; reasons: string[] }
@@ -48,6 +50,7 @@ export function selectionViewOf(proposal: Proposal): SelectionView {
         alternatives: proposal.alternatives,
         confirmLabel: "Use this cookbook",
         confirm: { cookbookId: top.cookbookId, version: top.version, values: top.values },
+        controls: top.controls,
       };
     }
     case "not_connected":

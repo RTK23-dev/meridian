@@ -874,3 +874,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Records only: OPEN_QUESTIONS (Q44), RUN_PLAN (K18 and R8), STATE and RUN_LOG. No code changed.
 - Next: K18d.
 - Next wake armed for 15:40 UTC (trig_011nB12KdWSCoiDtHk1GBgdm).
+
+## 2026-11-01 15:47 UTC: wake: K18d1, the pick carries its controls
+
+- Wake (15:40): CI on the head 0c9e3d0 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- K18d was split. K18d1 is done: the client needs each candidate's controls to draw the settings, and the server knows them when it builds the picks. `selector.ts` now gives each pick its cookbook's `controls`, and `selectionViewOf` carries the first pick's controls into the view. The fixtures that build picks by hand gain `controls: []`, and a new test checks that the first pick's controls reach the view.
+- Checks: `cookbook-selection-model.test.ts`, `select.test.ts` and `selector.test.ts` passed 19 of 19. The 64 test files across the cookbook, content-factory and cookbook component suites passed 514 of 514. `npx eslint` on the changed files exits 0. `npm run typecheck` exits 0.
+- Not checked: the panel in a browser. K18d2 mounts it, and the browser check runs in CI's ui-smoke.
+- Next: K18d2, mounting the settings panel with its draft, and sending the edited values with the confirm.
+- Next wake armed for 16:08 UTC (trig_01DxqaSdBBEPF5BaQ9CrEghz).

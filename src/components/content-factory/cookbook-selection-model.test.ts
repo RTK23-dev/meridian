@@ -15,7 +15,7 @@ const resolved = {
 test("a proposed pick shows its title, reason, needs, badge and the alternatives to switch to", () => {
   const proposal: Proposal = {
     status: "proposed",
-    picks: [{ cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: {}, resolved }],
+    picks: [{ cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: {}, controls: [], resolved }],
     alternatives: [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }],
   };
   const view = selectionViewOf(proposal);
@@ -31,7 +31,7 @@ test("a proposed pick shows its title, reason, needs, badge and the alternatives
 
 test("an estimate with unknown parts says so, rather than showing the known part as the whole", () => {
   const unknown = { requirements: [], badge: "Price unknown", estimate: { knownUsd: 4.5, unknown: ["Voice: price unknown"] } } as never;
-  const view = selectionViewOf({ status: "proposed", picks: [{ cookbookId: "ck_x", version: 1, label: "X", reason: "r", values: {}, resolved: unknown }], alternatives: [] });
+  const view = selectionViewOf({ status: "proposed", picks: [{ cookbookId: "ck_x", version: 1, label: "X", reason: "r", values: {}, controls: [], resolved: unknown }], alternatives: [] });
   assert.equal(view.state === "pick" && view.estimate, "About $4.50, plus parts whose price is unknown");
 });
 
@@ -65,12 +65,19 @@ test("the confirm button sends the top pick at its version, with the values its 
   const view = selectionViewOf({
     status: "proposed",
     picks: [
-      { cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: { pace: 1.2 }, resolved },
-      { cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC", reason: "Second.", values: {}, resolved },
+      { cookbookId: "ck_3d_data_explainer", version: 2, label: "3D data explainer", reason: "A data story.", values: { pace: 1.2 }, controls: [], resolved },
+      { cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC", reason: "Second.", values: {}, controls: [], resolved },
     ],
     alternatives: [{ cookbookId: "ck_factory_viral_ugc", version: 1, label: "Viral UGC" }],
   });
   assert.equal(view.state, "pick");
   if (view.state !== "pick") return;
   assert.deepEqual(view.confirm, { cookbookId: "ck_3d_data_explainer", version: 2, values: { pace: 1.2 } });
+});
+
+test("the first pick carries its cookbook's controls, so the step can draw the settings the person may change (K18d)", () => {
+  const control = { id: "pace", kind: "slider", label: "Pace", help: null, default: 1, min: 0.5, max: 2, step: 0.1, unit: null } as never;
+  const view = selectionViewOf({ status: "proposed", picks: [{ cookbookId: "ck_x", version: 1, label: "X", reason: "r", values: {}, controls: [control], resolved: { requirements: [], badge: "Free", estimate: { knownUsd: 0, unknown: [] } } as never }], alternatives: [] });
+  assert.equal(view.state === "pick" && view.controls.length, 1);
+  assert.equal(view.state === "pick" && view.controls[0]?.id, "pace");
 });

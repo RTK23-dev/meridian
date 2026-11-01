@@ -25,6 +25,7 @@ const PROPOSAL: Proposal = {
       cookbookId: "ck_3d_data_explainer",
       version: 2,
       label: "3D data explainer",
+      controls: [],
       reason: "A data story in aerial shots.",
       values: { pace: 1 },
       resolved: {} as never,
