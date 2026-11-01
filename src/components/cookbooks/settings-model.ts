@@ -1,9 +1,8 @@
 // The settings panel's model (round 3, K17): a cookbook's controls and their current values, as rows the panel draws. Pure, so the rules are
 // tested without a browser. The panel (settings-panel.tsx) only draws these rows.
 
-import type { Control, ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
+import { fitsControl, type Control, type ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
 import type { Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
-import { fitsControl } from "../../lib/meridian/cookbooks/validate.ts";
 
 export type SettingRow =
   | { id: string; kind: "toggle"; label: string; help: string | null; value: boolean }

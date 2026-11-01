@@ -13,7 +13,10 @@
 // Plus: a cookbook that offers agent mode must have a free way (coded or upload) for every required ingredient, and its structure
 // must be contiguous.
 
-import { PALETTE_ROLES, type Control, type ControlValue, type PaletteRole } from "./controls.ts";
+import { fitsControl, type Control, type ControlValue } from "./controls.ts";
+
+/** Re-exported: the rule lives in controls.ts, where the browser can load it without the validator (K19b3). */
+export { fitsControl };
 import { cookbookSchema, type Cookbook } from "./schema.ts";
 import { LOOK_PRESETS } from "../../../engine/contracts/edl.ts";
 
@@ -222,20 +225,6 @@ function typeOfControl(control: Control): Target["type"] {
   return "string";
 }
 
-export function fitsControl(control: Control, value: ControlValue): boolean {
-  switch (control.kind) {
-    case "toggle":
-      return typeof value === "boolean";
-    case "slider":
-      return typeof value === "number" && value >= control.min && value <= control.max;
-    case "select":
-      return typeof value === "string" && control.options.some((option) => option.value === value);
-    case "text":
-      return typeof value === "string" && value.length <= control.maxLength;
-    case "colour":
-      return typeof value === "string" && (PALETTE_ROLES as readonly string[]).includes(value) && control.roles.includes(value as PaletteRole);
-  }
-}
 
 function duplicatesOf<T extends string>(values: readonly T[]): T[] {
   const seen = new Set<T>();

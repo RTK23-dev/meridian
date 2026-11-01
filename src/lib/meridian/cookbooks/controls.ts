@@ -250,3 +250,19 @@ function toControl(variable: ComponentVariable, id: string, binds: Binding[]): u
   }
   return { id, kind: "text", label: variable.label, binds, default: variable.default, maxLength: Math.max(200, variable.default.length) };
 }
+
+/** Whether a value fits its control: the one rule the validator, the selector, the chooser and the settings share (K19b3). */
+export function fitsControl(control: Control, value: ControlValue): boolean {
+  switch (control.kind) {
+    case "toggle":
+      return typeof value === "boolean";
+    case "slider":
+      return typeof value === "number" && value >= control.min && value <= control.max;
+    case "select":
+      return typeof value === "string" && control.options.some((option) => option.value === value);
+    case "text":
+      return typeof value === "string" && value.length <= control.maxLength;
+    case "colour":
+      return typeof value === "string" && (PALETTE_ROLES as readonly string[]).includes(value) && control.roles.includes(value as PaletteRole);
+  }
+}

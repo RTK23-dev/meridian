@@ -541,6 +541,17 @@ try {
     assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 
+  // The cookbook library (K19): the route opens, lists its built-in cookbooks, and does not crash the page. K19b moved its client code
+  // off the engine; this check is the browser proof that the route loads.
+  await page.goto(`${base}${brandPath}/cookbooks`, { waitUntil: "networkidle" });
+  await check("H1", "The cookbook library opens and lists its built-in cookbooks, with no error page", async () => {
+    await page.getByRole("heading", { name: "Cookbooks", exact: true, level: 1 }).waitFor({ timeout: 30000 });
+    await page.getByRole("list", { name: "Cookbooks" }).waitFor({ timeout: 30000 });
+    const text = await page.locator("main").innerText();
+    if (!text.includes("3D data explainer")) throw new Error("the 3D data explainer card is missing from the library");
+    if (/something went wrong|not available|Module .* externalized/i.test(text) && !text.includes("3D data explainer")) throw new Error("the library shows an error page");
+  });
+
   await check("D1", "no request left the local server during the run", async () => {
     assert.deepEqual(external, [], `external requests: ${external.slice(0, 3).join(", ")}`);
   });
