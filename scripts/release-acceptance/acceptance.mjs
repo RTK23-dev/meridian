@@ -30,6 +30,16 @@ async function check(id, label, fn) {
 }
 
 /** Opens Settings and opens each top-level section, as a person does by clicking it. General keeps most sections closed on arrival. */
+/** Waits (up to a few seconds) for the element to take focus. The field is focused after the destination commits and its saved value loads, so a check made the instant it is visible can be early. */
+async function focusedWithin(locator, ms = 5000) {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline) {
+    if (await locator.evaluate((node) => node === document.activeElement)) return true;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  return locator.evaluate((node) => node === document.activeElement);
+}
+
 async function openSettings(page) {
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
   await page.locator("main").waitFor();
@@ -278,7 +288,7 @@ try {
     await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
     const field = page.getByLabel("Monthly budget (USD)");
     await field.waitFor();
-    assert.equal(await field.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    assert.equal(await focusedWithin(field), true, "the budget field must have focus");
     const text = await page.locator("main").innerText();
     assert.match(text, /not your OpenRouter account balance/);
     assert.doesNotMatch(text, /Monthly video budget/);
@@ -356,7 +366,7 @@ try {
     await link.click();
     const budget = page.getByLabel("Monthly budget (USD)");
     await budget.waitFor();
-    assert.equal(await budget.evaluate((node) => node === document.activeElement), true, "the budget field must have focus");
+    assert.equal(await focusedWithin(budget), true, "the budget field must have focus");
     await budget.fill("5");
     await page.getByRole("button", { name: "Save budget" }).click();
     await page.getByText("Monthly budget saved.").waitFor();
@@ -412,7 +422,7 @@ try {
     const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
     const { readFile } = await import("node:fs/promises");
     const csv = await readFile(await download.path(), "utf8");
-    assert.match(csv, /^Batch,Position,Video,Angle,State,Reason,Budget \(USD\),Attempts/);
+    assert.match(csv, /^Batch,Position,Video,Angle,State,Reason,Budget \(USD\),Attempts,Style/);
     assert.match(csv, /Acceptance reference draft: Problem first,problem_first,ready/);
     assert.equal(csv.trimEnd().split("\r\n").length, 4, "a header and three videos");
     assert.doesNotMatch(csv, /delivered/i);
@@ -525,6 +535,55 @@ try {
     assert.match(manifest.notice, /^DEMO: fixture data/);
     assert.ok(manifest.videos.every((video) => video.demo === true));
     assert.doesNotMatch(JSON.stringify(manifest), /https?:/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
+  });
+
+  await check("G17", "style presets: the library can be browsed, Auto explains its choice, the Super preset gives each video a different style, and the choice is recorded in the export", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    await form.getByText("Browse the style library").click();
+    for (const label of ["Product promo", "Explainer", "Talking head", "Cinematic story", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
+    // Auto reads the research structure that repeats most (problem solution, in the seeded patterns) and says why.
+    await form.getByLabel("Video style").selectOption({ value: "auto" });
+    await form.getByText(/Auto picked Explainer because "problem solution"/).waitFor();
+    // The Super preset: one different style per video.
+    await form.getByLabel("Video style").selectOption({ value: "super" });
+    await form.getByLabel("Number of videos").fill("3");
+    await form.getByLabel("Total batch budget (USD)").fill("7");
+    await form.getByLabel("Sample of the first video").waitFor();
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Style\s*Product promo/);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    await page.getByText(/Created 3 draft videos in one batch\. Nothing has started/).waitFor();
+    const { readFile } = await import("node:fs/promises");
+    const [download] = await Promise.all([page.waitForEvent("download"), page.getByRole("button", { name: "Download batch summary (CSV)" }).click()]);
+    const csv = await readFile(await download.path(), "utf8");
+    assert.match(csv, /,product_promo\r?\n/);
+    assert.match(csv, /,explainer\r?\n/);
+    assert.match(csv, /,talking_head\r?\n/);
+    assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
+  });
+
+  await check("G18", "orchestrator style: with no decision engine connected the choice is refused with its reason and nothing is created or started", async () => {
+    await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
+    const form = page.getByRole("form", { name: "Create video variations" });
+    await form.waitFor();
+    await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
+    await form.getByLabel("Video style").selectOption({ value: "orchestrator" });
+    await form.getByText(/makes one paid model call/).waitFor();
+    await form.getByLabel("Number of videos").fill("2");
+    await form.getByLabel("Total batch budget (USD)").fill("3.5");
+    assert.match(await form.getByLabel("Sample of the first video").innerText(), /Style\s*Chosen by the orchestrator when you create the videos/);
+    await form.getByLabel("I have read the sample and approve this format").check();
+    const batchesBefore = await page.locator("main").getByRole("button", { name: /variations ·/ }).count();
+    await form.getByRole("button", { name: "Create video variations" }).click();
+    const alert = form.getByRole("alert");
+    await alert.waitFor();
+    assert.match(await alert.innerText(), /decision engine/i);
+    assert.match(await alert.innerText(), /No style was chosen, so nothing was created\./);
+    assert.equal(await page.locator("main").getByRole("button", { name: /variations ·/ }).count(), batchesBefore, "no batch was made");
     assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 

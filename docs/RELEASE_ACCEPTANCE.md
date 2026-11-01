@@ -65,6 +65,8 @@ whether the run passes or fails.
 | G14 | Demo run on seeded fixture data (titled DEMO): a batch with two delivered videos and one draft is reviewed in the browser, one approved, one rejected with a reason, and summarised; a draft is never offered for review | not yet run on CI |
 | G12c | The variations form offers only drafts that are ready as a source (a draft with no reference is not offered), and lists what each other draft still needs | not yet run on CI |
 | G16 | One journey in the browser: Setup, Market, research format, sample of the first video, approval, batch of drafts, demo batch marked DEMO, review, then CSV and JSON manifest exports; nothing started and nothing leaves the local server | not yet run on CI |
+| G17 | Style presets: the library is browsable, Auto explains its choice from the research, the Super preset gives each video a different style, and the choice is recorded in the CSV and manifest | not yet run on CI |
+| G18 | Orchestrator style: with no decision engine connected, the choice is refused with its reason, no batch is made and nothing starts | not yet run on CI |
 | M1 | Page heights on a clean account are recorded to `page-heights.json` and bounded (Setup, Settings, Market, Brand brain) | not yet run on CI |
 
 `verify-release.mjs` then checks the database: exactly one `generation_hold_releases` row, for the first hold, attributed to the owner account,

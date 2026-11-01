@@ -255,7 +255,8 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
   const deliverFaults = new Set<string>();
   const requests = new Map<string, RequestEntry>();
   const renderIds = { next: 0 };
-  const now = (): string => new Date().toISOString();
+  // A fixed time in the month the chain fixtures are dated: a reservation can only be raised in the month it was made (variants/reserve.ts).
+  const now = (): string => CREATED;
   const entryOf = (requestId: string): RequestEntry => {
     const entry = requests.get(requestId);
     if (!entry) throw new EngineError("not_found", `request ${requestId} was not started in this chain world`);

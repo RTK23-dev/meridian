@@ -119,6 +119,7 @@ export const createContentVariations = createServerFn({ method: "POST" })
       title: typeof body.title === "string" ? body.title.slice(0, 200) : "",
       useResearchFormat: body.useResearchFormat === true,
       approvedSample: body.approvedSample === true,
+      stylePreset: typeof body.stylePreset === "string" ? body.stylePreset.slice(0, 40) : "none",
     };
   })
   .middleware([authMiddleware])

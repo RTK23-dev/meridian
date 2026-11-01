@@ -175,7 +175,7 @@ function runtimeFor(options: { gateway: ReturnType<typeof gatewayWith>; catalog:
       now: () => Date.parse(NOW),
     });
   registerEngineHandlers(runtime, {
-    estimate_reserve: createEstimateReserveHandler({ workspaceBudget: { async monthBudget() { return { status: "known", usd: 100 }; } } }),
+    estimate_reserve: createEstimateReserveHandler({ workspaceBudget: { async monthBudget() { return { status: "known", usd: 100 }; } }, now: () => NOW }),
     produce_shot: createProduceShotHandler({
       generator: routerGenerator(routerFor),
       stock: (input) =>

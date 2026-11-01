@@ -53,6 +53,17 @@ try {
      values ($1, $2, $3, $4, 'source', 'market', $5, 'acceptance_record', 'A competitor opens on the problem.')`,
     [`${source}_mkt`, brand.org, source, `${source}_m2`, brand.id],
   );
+  // The theme page the source carries: a video cannot start without one, because its style, persona and voice kits are what it is made with.
+  await db.query(`delete from theme_pages where id = 'page_accept_1'`);
+  await db.query(
+    `insert into theme_pages (id, organization_id, brand_id, name, niche, platform, style_kit_id, voice_kit_id) values ('page_accept_1', $1, $2, 'Acceptance page', 'kitchen', 'instagram', 'style_accept_1', 'voice_accept_1')`,
+    [brand.org, brand.id],
+  );
+  await db.query(
+    `insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
+     values ($1, $2, $3, $4, 'source', 'page', $5, 'page_accept_1', 'Acceptance page: kitchen, Instagram.')`,
+    [`${source}_page`, brand.org, source, `${source}_m2`, brand.id],
+  );
   console.log("Seeded one reusable source draft.");
 
   // Stored research patterns, as the pattern builder writes them from analyzed ads: model-labelled counts, INFERRED. No ad is stored or read.
