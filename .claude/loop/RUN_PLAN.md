@@ -481,3 +481,49 @@ Owner actions, not the loop's: the paid Video DNA analysis for Q30 A (set the ca
 Still open after the backlog, and waiting on the owner: K10's live port (Q34), K23, K24, K29 and K30 (Q39), R8 (Q44), K20f (Q37, until K29), and Q16 and Q23 (held as they are).
 
 Partly done tasks with no open question, to pick up after the backlog: K13 (copy the cookbook record onto the engine request's metadata), K15 (the planner, critic and editor prompt variants, each as its own `@n+1` prompt with a pin), K16 (the planner that fills in models and prices), and K17 (the live update of the requirements through the resolver). Any contract change among them is raised as a question, not made.
+
+## Final version (the owner's go, 2026-11-01)
+
+The owner answered Q34, Q39 and Q44 with the recommendations, and asked for one stable version, pushed only when fully confident. The work is
+on the new branch `claude/cookbook-presets-zrf6un`, from `09a8423`, in a new draft pull request. PR #85 and its branch are left as they are.
+
+Done in this version (commit in brackets):
+- Q34, the cookbook_selector role (contract `engine-contracts@13`, migration 0143, prompt `cookbook_selector@1`, Bible section 4 note). The selector's
+  port runs the role through runRole against a request and reservation, and gives the picker without them (K10). [a0a5f40, bc5f480]
+- B1 to B16, the backlog from the owner's decisions:
+  - B1 orchestrator example, data kept as a test fixture [88f9b45]
+  - B2 three modules with no caller [d42475e]
+  - B3 in-memory queue and second frame selector [f3178d1]
+  - B4 duplicate clustering and calibration [37262f5]
+  - B5 factory timeline renderer [08d9406]
+  - B6 second logo matcher [5a403eb]
+  - B7 recorded render replies, moved to a test folder [f01f059]
+  - B8 flow pipeline, speech-pace prior 140 to 180 [a43d1bf]
+  - B9 third calibration implementation, reliability curve in the learning report [a7b3b24]
+  - B10 Reels safe-zone check in the post-render gate, fail closed without boxes [fcd94f4]
+  - B11 per-output measures (migration 0144), recorded after the review, joined into the results, export builder [5826720]
+  - B12 stage-cost rollup, read only, on the factory board [f7e4231]
+  - B13 freshness labels on stored pages [f0d8b70]
+  - B14 test and synthetic rows left out of learning, count on the learning page [55eb148]
+  - B15 test-harness notes on the studio loop and the deep study [389328c]
+  - B16 "Use the 3D data explainer style" button on the theme pages [4b211c2]
+- K17, the live requirements and estimate as the person changes the settings [9b66c84]
+- K22 done (Q38), K25 done for its free part (Q40 b), K28 done except the file write (Q41)
+- Lint fixes on the new code [2f3143b]
+
+Not in this version (open, and not claimed):
+- K15, the planner, critic and editor prompt versions with the cookbook block (each its own `@n+1` with a pin)
+- K16, the planner that takes a cookbook's plan template as its skeleton
+- K23, the agent-mode renderer. Q39 says reuse `scripts/engine/preset-preview/scene.html` with the cookbook's values. It needs the render
+  in this sandbox to be checked, and the render uses local Chromium and ffmpeg.
+- K24, the cookbook Claude Code skill (`.claude/skills/cookbook-video/SKILL.md` exists; it depends on K23)
+- K20f and K29, retiring the picker and the engineRows cases (Q37 keeps them until K29)
+- K30, the owner's guide and the export package inclusion (K13's last piece)
+- K13's export follow-up, which is part of K30
+
+Owner runs, not the loop's:
+- The live selector run (Q34): the proposal needs a reservation before a run, which is a budget decision (see the final report).
+- Writing `docs/data/cookbook-results.json` (K28): it needs the database.
+- Q30 A, the paid Video DNA analysis (set the cap first).
+- The footage-rights and voice-vendor decisions (Q19), and the storage decision in R7 (Q26 A).
+- R6, reference links: three decisions are still open.
