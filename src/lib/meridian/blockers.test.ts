@@ -25,7 +25,6 @@ import { rankOpportunities } from "./opportunity/engine.ts";
 import { ingestPerformance, publishThrough } from "./providers/boundaries.ts";
 import { createFilesystemObjectStore, migrateBlob } from "./storage/filesystem.ts";
 import { videoGenerationStatus, videoQa } from "./video/provider.ts";
-import { PNG } from "pngjs";
 
 const org = "org-block";
 const brand = "brand-block";

@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { videoEngineById } from "../video/engine.ts";
-import { templateFromDna, variantMatrix } from "./template.ts";
-import { dnaFromTranscript } from "./creative-dna.ts";
+import { variantMatrix } from "./template.ts";
 import { compareOriginalityAgainstSource } from "./gates.ts";
 
 test("Production Step 5: second VideoEngine adapter (timeline) is available and functional", async () => {

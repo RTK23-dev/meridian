@@ -195,7 +195,7 @@ function BrandPages({ brandId }: { brandId: string }) {
   const setTime = (day: Weekday, value: string) => setDraft((current) => ({ ...current, times: { ...current.times, [day]: value } }));
   const [styleKitBusy, setStyleKitBusy] = useState(false);
   // Installs the 3D data explainer's style kit and names it on this draft. The page keeps it only when the person saves (B16, Q30 D).
-  const useThreeDStyle = async () => {
+  const installThreeDStyle = async () => {
     setStyleKitBusy(true);
     try {
       const { kitId } = await installThreeDStyleKitAction({ data: { brandId } });
@@ -328,7 +328,7 @@ function BrandPages({ brandId }: { brandId: string }) {
             </Field>
             <Field label="Style kit id" hint="A run needs a style kit to make a video for this page.">
               <Input value={draft.styleKitId} maxLength={120} onChange={(event) => setDraft({ ...draft, styleKitId: event.target.value })} />
-              <Button type="button" variant="secondary" disabled={!canEdit || styleKitBusy} onClick={() => void useThreeDStyle()}>
+              <Button type="button" variant="secondary" disabled={!canEdit || styleKitBusy} onClick={() => void installThreeDStyle()}>
                 Use the 3D data explainer style
               </Button>
             </Field>
