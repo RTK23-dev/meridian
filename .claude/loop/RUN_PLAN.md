@@ -355,7 +355,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Navigation entry, with the navigation tests updated.
 
 #### K20: The pipeline editor becomes the cookbook editor (D4)
-- Status: `pending`. Depends on: K8, K19.
+- Status: `partly done`. K20a (`commit below`): the factory line is saved as its cookbook only; `savePipelineConfig` and `applyPipelinePreset` no longer write `factory_pipeline_configs`, and a refused cookbook is an error (`saveFactoryLine`). One PGlite test; the factory and cookbook suites (515 tests) and typecheck and lint pass. Left for K20b: the preset bar lists cookbooks, the editor edits a cookbook's steps, per-role instructions and controls, and validation errors show next to their fields. Depends on: K8, K19.
 - `pipeline-editor.tsx` and `preset-bar.tsx` are upgraded, not replaced: the preset bar lists cookbooks, and the editor edits a
   cookbook's steps, per-role instructions (D5 roles) and controls. Validation errors show next to their fields.
 - `factory_pipeline_configs` is no longer written; its rows were migrated in K8.

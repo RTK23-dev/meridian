@@ -557,3 +557,11 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K19 completed: the version list. `listCookbookVersions` (store, the same visibility rule as a read), `versionsFor` (service; a built-in has no stored history and says so), `listCookbookVersionsAction` (viewer), and the detail's Versions list. Tests: a store test (newest first, another brand's brand-only versions not listed) and a service test (a built-in is empty, a missing one is not found, two saves list as 2 then 1). 72 tests across the cookbook, navigation and component suites pass; typecheck and eslint pass.
 - Still open for K19 on purpose: "Use in Content Factory" goes to the Create section, not with a `?cookbook=` parameter; the repurpose `packs` capability; a look in a browser.
 - Next wake armed for 02:33 UTC (trig_01PWijiWoBsbvKWQyWYMToKQ). Next task: K20.
+
+## 2026-11-01 02:39 UTC: wake: K20a
+
+- Wake (02:33): the branch matched my last commit (d4e722d). CI on it was fully green at 02:25 (run 41264235224).
+- K20a done (`factory-bridge.ts`, `pipeline-actions.ts`): `savePipelineConfig` and `applyPipelinePreset` no longer write `factory_pipeline_configs`. Both save through `saveFactoryLine`, which validates the line, writes its cookbook and throws when the cookbook refuses. One PGlite test: a saved line writes no old row and leaves its cookbook in the store.
+- Checks: typecheck and eslint pass on the changed files. The factory and cookbook suites (76 files, 515 tests) pass. The commit was pushed before the suite finished, as the stop hook required; the suite then passed.
+- Next: K20b (the preset bar and the editor).
+- Next wake armed for 02:59 UTC (trig_015zeiXC6vR5eq9BcfZ1XXrG).
