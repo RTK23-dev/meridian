@@ -652,3 +652,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - K20b3b part 1 done: `applyEdits` applies a set of control-default and instruction-text edits to a copy of a cookbook, stopping at the first failing edit and never changing the original. 6 tests; typecheck and eslint pass.
 - Next: K20b3b part 2 (the editor's fields and the save through `saveCookbookAction`; a built-in cookbook is copied first, since admins maintain copies of built-ins).
 - Next wake armed for 06:56 UTC (trig_01UrfzbaGatZZt56ASaHmN6F).
+
+## 2026-11-01 06:58 UTC: wake: K20b3b part 2a
+
+- Wake (06:56): the branch matched 15ea21e; its check suite completed with no failure.
+- K20b3b part 2a done: `planSave` turns an edited cookbook into the server calls that save it. A workspace cookbook is one save of its next version. A built-in cookbook is forked to a `ck_my_` copy first, since its id is reserved and admins maintain copies of built-ins (D5), then the edited copy is saved. 9 tests; typecheck and eslint pass.
+- Next: K20b3b part 2b (the editor's fields, and running the plan through `forkCookbookAction` and `saveCookbookAction`).
+- Next wake armed for 07:18 UTC (trig_01UWsBk2p8ZC3iJBEafQRnY5).
