@@ -53,6 +53,9 @@ function SeenInBody({ query }: { query: UseQueryResult<SourceProvenance | null> 
  * as plain text. "Use as observation" fills the observation form from the page; a member still chooses the competitor, angle and
  * hook, and ranking reads the page only once it is stored as an observation.
  */
+/** Plain labels for how old a stored page is (B13, Q24 a). The label says the age; it is not a quality score. */
+const FRESHNESS_LABEL = { fresh: "Fresh", aging: "Aging", stale: "Stale" } as const;
+
 export function StoredPages({
   brandId,
   query,
@@ -76,7 +79,7 @@ export function StoredPages({
         <li key={item.id} className="space-y-2 p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="min-w-0 font-semibold [overflow-wrap:anywhere]">{item.title || "Untitled page"}</p>
-            <span className="text-xs text-muted">{item.source} · {when(item.discoveredAt)}</span>
+            <span className="text-xs text-muted">{item.source} · {when(item.discoveredAt)}{item.freshness ? ` · ${FRESHNESS_LABEL[item.freshness]}` : ""}</span>
           </div>
           {item.excerpt ? <p className="text-sm [overflow-wrap:anywhere]">{item.excerpt}</p> : null}
           <p className="text-xs text-muted [overflow-wrap:anywhere]">{item.url}</p>

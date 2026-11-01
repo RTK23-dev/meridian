@@ -5,6 +5,7 @@
  */
 import { requireBrand } from "../brand-membership.ts";
 import type { Sql } from "../learning/store.ts";
+import { freshnessOf, type EvidenceQuality } from "../quality/evidence.ts";
 
 export const DISCOVERED_ITEM_LIST_LIMIT = 20;
 export const DISCOVERED_TITLE_LIMIT = 200;
@@ -18,6 +19,8 @@ export type DiscoveredItemRow = {
   title: string;
   excerpt: string;
   discoveredAt: string;
+  /** How old the stored page is (fresh, aging or stale), or null when its time cannot be read. Shown as a label, never as a score. */
+  freshness: EvidenceQuality["freshness"] | null;
 };
 
 function timestampText(value: unknown): string {
@@ -41,5 +44,6 @@ export async function listDiscoveredItemsFor(sql: Sql, userId: string, brandId: 
     title: String(row.title ?? "").replace(/\s+/g, " ").trim().slice(0, DISCOVERED_TITLE_LIMIT),
     excerpt: String(row.text_content ?? "").replace(/\s+/g, " ").trim().slice(0, DISCOVERED_EXCERPT_LIMIT),
     discoveredAt: timestampText(row.discovered_at),
+    freshness: freshnessOf(Date.parse(timestampText(row.discovered_at)), Date.now()),
   }));
 }
