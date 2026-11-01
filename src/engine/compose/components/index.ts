@@ -1,9 +1,10 @@
 // The component library (Bible 9.2). Claude picks a name and fills props; it never writes component code.
 // E1 shipped the first five; E2 added react.layout, list.tierBoard, compare.split, price.reveal and chat.thread; E5 adds
 // kinetic.type, screen.mock and character.rig; the chain work adds stopmotion.player (Bible 7.1, sourceBound). The rest
-// of the Bible 9.2 list (captions.boxed, list.countdown, list.ranking, and the others) arrives in later phases.
+// of the Bible 9.2 list (list.countdown, list.ranking, and the others) arrives in later phases. captions.boxed is K21's.
 
 import type { ComponentLibrary } from "../library.ts";
+import { captionsBoxed } from "./captions.boxed/index.ts";
 import { captionsKaraoke } from "./captions.karaoke/index.ts";
 import { characterRig } from "./character.rig/index.ts";
 import { chatThread } from "./chat.thread/index.ts";
@@ -21,6 +22,7 @@ import { stopmotionPlayer } from "./stopmotion.player/index.ts";
 import { titleHook } from "./title.hook/index.ts";
 
 export const COMPONENT_LIBRARY: ComponentLibrary = Object.freeze({
+  [captionsBoxed.name]: captionsBoxed,
   [captionsKaraoke.name]: captionsKaraoke,
   [titleHook.name]: titleHook,
   [kineticPunchline.name]: kineticPunchline,

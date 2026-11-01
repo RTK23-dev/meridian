@@ -730,3 +730,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - No code changed in this wake: the records only (RUN_PLAN, OPEN_QUESTIONS, STATE, RUN_LOG).
 - Next: K21 (partly done), the first unfinished task in order.
 - Next wake armed for 10:42 UTC (trig_01VSaY1LHmUafkKGFzLFD5LY).
+
+## 2026-11-01 10:46 UTC: wake: K21, captions.boxed
+
+- Wake (10:42): CI on the head 783d6c2 was green (13 check runs; CodeRabbit skipped). The local branch matched the remote.
+- Unit done (K21): `captions.boxed` in `src/engine/compose/components/captions.boxed/`, with `props.ts` (the karaoke caption schema, so the same word rules), three fixtures (lower, middle, upper with punctuation), `component.html` and `index.ts`. The spoken word sits in a filled box in the kit's highlight colour, with text in the kit's background colour; words to come are dimmed; a spoken word is plain. It is registered in `components/index.ts`, and the pinned library list in `components.test.ts` now holds 16.
+- Contract: `captions.boxed` was already in `CAPTION_COMPONENTS` (`contracts/kits.ts`), so the contract is unchanged.
+- Checks: `components.test.ts` passed 119 of 119. The whole compose suite passed 289 of 289. `npx eslint` on the changed files exits 0. `npm run typecheck` exits 0. The template's inline script parses (`node --check`).
+- Not checked: how it looks. GSAP loads from a CDN this sandbox cannot reach, so there are no golden frames, as for stat.counter. The look needs a render on the owner's side or the browser check.
+- Left for later: the preset comment in `src/engine/presets/three-d-data-explainer.ts` (around line 278) still says captions.boxed has no component. It is stale now, and changing the preset is outside this unit.
+- Still open in K21: `label.pill`, `panel.bars`, `panel.line`, `panel.tiles`, `cta.follow`.
+- Next wake armed for 11:07 UTC (trig_01PhkV26r7BgsscuGmV6TWmJ).

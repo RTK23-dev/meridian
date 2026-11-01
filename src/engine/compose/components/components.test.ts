@@ -111,8 +111,9 @@ describe("safe zones (Bible 8.3)", () => {
 });
 
 describe("component library", () => {
-  it("holds the fourteen E1, E2, E5 and chain components, and stat.counter (round 3, K21), each keyed by its name", () => {
+  it("holds the E1, E2, E5 and chain components, and stat.counter and captions.boxed (round 3, K21), each keyed by its name", () => {
     assert.deepEqual(Object.keys(COMPONENT_LIBRARY).sort(), [
+      "captions.boxed",
       "captions.karaoke",
       "character.rig",
       "chat.thread",
