@@ -597,3 +597,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Two wake-ups were pending (03:44's and the 03:57 one). The 03:57 one is cancelled, and one wake is armed for 04:08 UTC (trig_0143dCyC2LJAPGeuXJWiMdRV).
 - K19b1 done (`ceb3b68`): the cookbook role and family lists are plain leaf modules with no node imports. 467 tests across the engine contract, cookbook, cookbook-component and navigation suites pass; typecheck and eslint pass.
 - Next: K19b2 (the cards come from the server), then K19b3 (`fitsControl` out of validate.ts), then a browser check of the cookbook route.
+
+## 2026-11-01 04:12 UTC: wake: K19b2
+
+- Wake (04:08): the branch matched c5ca0c2; its CI check had completed with no failure.
+- K19b2 done (`81fc9c5`): the card rules moved to `cookbooks/cards.ts` (server). `libraryFor` returns the cards, and the library screen draws them. `library-model.ts` keeps only the plain filter and the family list, with no engine import. 211 tests across the cookbook, choice, card, component and navigation suites pass; typecheck and eslint pass.
+- Not yet: the screen still imports `actions.ts` (which reaches the engine) and `settings-model.ts` (through `validate.ts`). K19b3 handles those; a browser check of the route follows.
+- Next wake armed for 04:32 UTC (trig_0187GzR2BjkFJxWcKkrJyGid).
