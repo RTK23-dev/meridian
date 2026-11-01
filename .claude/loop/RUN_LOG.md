@@ -667,3 +667,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Known gap (to check in the store): a copy's later versions do not carry the parent link the fork records, because the save path does not pass it.
 - Next: K20b3b part 2c (the editor's fields, calling `applyEdits`, `planSave` and `runSavePlan` through the actions).
 - Next wake armed for 07:41 UTC (trig_018C9q11URkiud5GZG4t5xeF).
+
+## 2026-11-01 07:44 UTC: wake: K20b3 part 2c
+
+- Wake (07:41): the branch matched f59d1f8; its check suite completed with no failure.
+- K20b3 done: the outline panel has an Edit action for members and above. The edit form edits control defaults and instruction texts; Save runs the edit rules and the save plan through the server (a built-in is copied first; the server checks the whole cookbook again). Typecheck, lint and 35 component and factory tests pass. The release acceptance passes locally, 31 of 31, with no externalized-module error. The Edit action is not clicked by the acceptance.
+- Next: a browser check of the Edit action (a save of a workspace cookbook and of a built-in copy), and the parent-link gap in the store.
+- Next wake armed for 08:04 UTC (trig_01P9379T4BpYHrGZumRxF1L4).
