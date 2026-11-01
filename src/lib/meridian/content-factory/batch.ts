@@ -90,7 +90,7 @@ export function fitsBatchBudget(input: { batchBudgetUsd: number; committedUsd: n
   return { ok: true };
 }
 
-export type BatchRowForExport = { position: number; title: string; angle: string | null; state: BatchItemState; reason: string; budgetUsd: number | null; attempts: number };
+export type BatchRowForExport = { position: number; title: string; angle: string | null; state: BatchItemState; reason: string; budgetUsd: number | null; attempts: number; style?: string | null };
 
 /** Counts by state, only for states that occur, in the order the states are listed. */
 export function stateCounts(items: ReadonlyArray<{ state: BatchItemState }>): Array<{ state: BatchItemState; count: number }> {
@@ -109,9 +109,9 @@ export function csvCell(value: string | number | null): string {
  * nothing else; it holds no video file and no link, and a video that has not been delivered is not shown as finished.
  */
 export function batchSummaryCsv(batch: { title: string; budgetUsd: number }, rows: readonly BatchRowForExport[]): string {
-  const header = ["Batch", "Position", "Video", "Angle", "State", "Reason", "Budget (USD)", "Attempts"].map(csvCell).join(",");
+  const header = ["Batch", "Position", "Video", "Angle", "State", "Reason", "Budget (USD)", "Attempts", "Style"].map(csvCell).join(",");
   const lines = rows.map((row) =>
-    [batch.title, row.position + 1, row.title, row.angle, row.state, row.reason, row.budgetUsd === null ? null : row.budgetUsd.toFixed(2), row.attempts].map(csvCell).join(","),
+    [batch.title, row.position + 1, row.title, row.angle, row.state, row.reason, row.budgetUsd === null ? null : row.budgetUsd.toFixed(2), row.attempts, row.style ?? null].map(csvCell).join(","),
   );
   return `${[header, ...lines].join("\r\n")}\r\n`;
 }
@@ -124,7 +124,7 @@ export type BatchForManifest = {
   demo: boolean;
   items: ReadonlyArray<{
     position: number; title: string; angle: string | null; state: BatchItemState; reason: string; budgetUsd: number | null; attempts: number;
-    approval: "approved" | "rejected" | "not_decided" | null; engineRequestId: string | null; manifestId: string | null; demo: boolean;
+    approval: "approved" | "rejected" | "not_decided" | null; engineRequestId: string | null; manifestId: string | null; demo: boolean; style?: string | null;
   }>;
 };
 
@@ -153,6 +153,7 @@ export function batchManifestJson(batch: BatchForManifest, generatedAt: string):
       attempts: item.attempts,
       engineRequestId: item.engineRequestId,
       manifestId: item.manifestId,
+      style: item.style ?? null,
       demo: item.demo,
     })),
   }, null, 2)}\n`;

@@ -255,12 +255,8 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
   const deliverFaults = new Set<string>();
   const requests = new Map<string, RequestEntry>();
   const renderIds = { next: 0 };
-  // The engine's clock for this world. It starts one second after CREATED and moves one second per read, so each read is later than the
-  // last (as the real clock was) and stays in CREATED's month. extendForVariants refuses a reservation raised in another month
-  // (variants/reserve.ts), so a real clock failed this world on the first day of each month (it did on 2026-11-01).
-  const clockStartMs = Date.parse(CREATED) + 1000;
-  let clockReads = 0;
-  const now = (): string => new Date(clockStartMs + 1000 * clockReads++).toISOString();
+  // A fixed time in the month the chain fixtures are dated: a reservation can only be raised in the month it was made (variants/reserve.ts).
+  const now = (): string => CREATED;
   const entryOf = (requestId: string): RequestEntry => {
     const entry = requests.get(requestId);
     if (!entry) throw new EngineError("not_found", `request ${requestId} was not started in this chain world`);

@@ -9,6 +9,8 @@ import { withTransaction, type Sql } from "../learning/store.ts";
 import { SESSION_REFUSAL, sessionAccess } from "./service.ts";
 import { getBatch, type BatchSummary } from "./batch-service.ts";
 import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES, type VariationAngle } from "./variations.ts";
+import { isStyleChoice, presetsForBatch, presetsFromRanking, STYLE_ORCHESTRATOR, styleInstruction } from "./style-presets.ts";
+import { chooseStyleWithEngine, type StyleChooser, type StyleRanking } from "./style-chooser.ts";
 import { formatFromPatterns, researchAngles, type FormatOutcome, type StoredPattern } from "./research-format.ts";
 
 const TITLE_MAX = 120;
@@ -68,12 +70,14 @@ async function audit(sql: Sql, entry: { organizationId: string; brandId: string;
 export async function createVariations(
   sql: Sql,
   userId: string,
-  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean },
+  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean; stylePreset?: string; chooseStyle?: StyleChooser },
 ): Promise<BatchSummary> {
   // The person reads a sample of the format first and approves it. Without that approval nothing is written.
   if (input.approvedSample !== true) throw new Error("Read the sample video and approve the format first. Nothing was created.");
   const split = splitBudget(input.totalBudgetUsd, input.count);
   if (!split.ok) throw new Error(split.reason);
+  const stylePreset = input.stylePreset ?? "none";
+  if (stylePreset !== "none" && !isStyleChoice(stylePreset)) throw new Error("Choose a style from the list, Auto or the Super preset.");
   const source = await sessionAccess(sql, userId, input.sourceSessionId);
   if (source.source_session_id !== null) throw new Error("Choose the original reusable draft, not a video variation, as the source.");
   if (source.brand_id === null) throw new Error("The source draft has no brand, so variations cannot be made from it.");
@@ -82,6 +86,28 @@ export async function createVariations(
   const brandId = source.brand_id;
   const organizationId = source.organization_id;
   let batchId: string = randomUUID();
+
+  // The orchestrator's choice: one call to the workspace's decision engine, made before anything is written and before the source row is locked.
+  // The source is checked first, so a call is never spent on a source that would be refused. A refusal from the engine stops here, with its reason.
+  let ranking: Extract<StyleRanking, { ok: true }> | null = null;
+  if (stylePreset === STYLE_ORCHESTRATOR) {
+    const listed = (await variationSourcesOf(sql, userId, { brandId })).find((item) => item.id === source.id);
+    if (!listed) throw new Error("The source draft is not available as a source. Nothing was created.");
+    if (listed.problem !== null) throw new Error(listed.problem);
+    const [brand] = await sql<{ name: string }>`select name from brands where id = ${brandId} and organization_id = ${organizationId} limit 1`;
+    const instructionRows = await sql<{ text: string }>`
+      select text from content_factory_messages where session_id = ${source.id} and organization_id = ${organizationId} and beat_role is null and char_length(btrim(text)) > 0
+      order by created_at asc, id asc
+    `;
+    const result = await (input.chooseStyle ?? chooseStyleWithEngine)({
+      sql,
+      organizationId,
+      brandId,
+      facts: { brandName: brand?.name ?? "the brand", instruction: instructionRows.map((row) => row.text).join(" "), patterns: await brandPatterns(sql, organizationId, brandId) },
+    });
+    if (!result.ok) throw new Error(`${result.reason} No style was chosen, so nothing was created.`);
+    ranking = result;
+  }
 
   await withTransaction(sql, async (tx) => {
     // The source is locked for the rest of the transaction, so a start or an edit cannot land between the check and the copies.
@@ -115,6 +141,7 @@ export async function createVariations(
       marketAttachments: attachments.filter(
         (item) => item.kind === "source" && item.source_page === "market" && typeof item.snapshot === "string" && item.snapshot.trim().length > 0,
       ).length,
+      pageAttachments: attachments.filter((item) => item.kind === "source" && item.source_page === "page").length,
       instructions: messages.filter((item) => item.beat_role === null).map((item) => item.text),
       scriptLines: messages.filter((item) => item.beat_role !== null).length,
     });
@@ -141,6 +168,10 @@ export async function createVariations(
           select 1 from content_factory_batch_items i join content_factory_sessions s on s.id = i.session_id
           where i.batch_id = b.id and left(s.variation_angle, 4) = 'res_'
         )) = ${input.useResearchFormat === true}
+        and (exists (
+          select 1 from content_factory_batch_items i join content_factory_sessions s on s.id = i.session_id
+          where i.batch_id = b.id and s.style_preset is not null
+        )) = ${(input.stylePreset ?? "none") !== "none"}
       order by b.created_at desc limit 1
     `;
     if (recent) {
@@ -159,6 +190,19 @@ export async function createVariations(
     const fixed = VARIATION_ANGLES.filter((angle) => !fromResearch.some((found) => found.id === angle.id));
     const angles: VariationAngle[] = [...fromResearch, ...fixed].slice(0, input.count);
 
+    // Styles: one preset for every video, Auto (from the research structure that repeats most) or the Super mix. None adds nothing.
+    let styles: ReturnType<typeof presetsForBatch> = null;
+    if (ranking !== null) {
+      styles = presetsFromRanking(ranking.ranked, input.count);
+      if (styles === null) throw new Error("The decision engine's ranking held no style from the library. Nothing was created.");
+    } else if (stylePreset !== "none") {
+      const patterns = await brandPatterns(tx, organizationId, brandId);
+      const outcome = formatFromPatterns(patterns);
+      const top = outcome.ok ? (outcome.format.structures[0]?.value ?? null) : null;
+      styles = presetsForBatch(stylePreset, input.count, top);
+      if (styles === null) throw new Error("Choose a style from the list, Auto or the Super preset.");
+    }
+
     const title = clip((input.title ?? "").trim() || `${locked.title}: ${input.count} variations`, TITLE_MAX);
     const totalUsd = split.cents.reduce((sum, cents) => sum + cents, 0) / 100;
     await tx`
@@ -172,8 +216,8 @@ export async function createVariations(
       if (!angle || cents === undefined) throw new Error("The variations could not be planned.");
       const sessionId = randomUUID();
       await tx`
-        insert into content_factory_sessions (id, organization_id, brand_id, created_by, title, budget_usd, max_seconds, language, priority, keep_genes, source_session_id, variation_angle)
-        values (${sessionId}, ${organizationId}, ${brandId}, ${userId}, ${clip(`${locked.title}: ${angle.label}`, TITLE_MAX)}, ${cents / 100}, ${locked.max_seconds}, ${locked.language}, ${locked.priority}, ${locked.keep_genes}, ${source.id}, ${angle.id})
+        insert into content_factory_sessions (id, organization_id, brand_id, created_by, title, budget_usd, max_seconds, language, priority, keep_genes, source_session_id, variation_angle, style_preset)
+        values (${sessionId}, ${organizationId}, ${brandId}, ${userId}, ${clip(`${locked.title}: ${angle.label}`, TITLE_MAX)}, ${cents / 100}, ${locked.max_seconds}, ${locked.language}, ${locked.priority}, ${locked.keep_genes}, ${source.id}, ${angle.id}, ${styles?.[index]?.id ?? null})
       `;
       const messageIds = new Map<string, string>();
       for (const message of messages) {
@@ -188,6 +232,13 @@ export async function createVariations(
         insert into content_factory_messages (id, organization_id, session_id, author_id, text, beat_role)
         values (${randomUUID()}, ${organizationId}, ${sessionId}, ${userId}, ${angleInstruction(angle)}, ${null})
       `;
+      const styleOfThis = styles?.[index];
+      if (styleOfThis) {
+        await tx`
+          insert into content_factory_messages (id, organization_id, session_id, author_id, text, beat_role)
+          values (${randomUUID()}, ${organizationId}, ${sessionId}, ${userId}, ${styleInstruction(styleOfThis)}, ${null})
+        `;
+      }
       for (const item of attachments) {
         const messageId = messageIds.get(item.message_id);
         if (!messageId) throw new Error("A source attachment has no message to copy it onto.");
@@ -209,7 +260,7 @@ export async function createVariations(
       action: "content_factory.variations_batch_created",
       objectType: "content_factory_batch",
       objectId: batchId,
-      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true" },
+      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true", style: stylePreset, ...(ranking ? { styleEngine: ranking.engine, styleModel: ranking.model, styleConfidence: ranking.confidence === null ? "unknown" : String(ranking.confidence) } : {}) },
     });
   });
   return getBatch(sql, userId, { batchId });
@@ -229,10 +280,11 @@ export async function variationSourcesOf(sql: Sql, userId: string, input: { bran
     order by updated_at desc, id desc limit 200
   `;
   if (drafts.length === 0) return [];
-  const attachments = await sql<{ session_id: string; reference: number; market: number }>`
+  const attachments = await sql<{ session_id: string; reference: number; market: number; page: number }>`
     select a.session_id,
       count(*) filter (where a.kind = 'file' and a.purpose = 'reference_video')::int as reference,
-      count(*) filter (where a.kind = 'source' and a.source_page = 'market')::int as market
+      count(*) filter (where a.kind = 'source' and a.source_page = 'market')::int as market,
+      count(*) filter (where a.kind = 'source' and a.source_page = 'page')::int as page
     from content_factory_attachments a join content_factory_sessions s on s.id = a.session_id
     where s.organization_id = ${access.organizationId} and s.brand_id = ${input.brandId} and s.source_session_id is null and s.status = 'draft'
     group by a.session_id
@@ -249,6 +301,7 @@ export async function variationSourcesOf(sql: Sql, userId: string, input: { bran
       brandId: input.brandId,
       hasReferenceVideo: (counts?.reference ?? 0) > 0,
       marketAttachments: counts?.market ?? 0,
+      pageAttachments: counts?.page ?? 0,
       instructions: own.filter((row) => row.beat_role === null).map((row) => row.text),
       scriptLines: own.filter((row) => row.beat_role !== null).length,
     });

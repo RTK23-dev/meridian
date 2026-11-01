@@ -97,6 +97,8 @@ export type SourceFacts = {
   brandId: string | null;
   hasReferenceVideo: boolean;
   marketAttachments: number;
+  /** Theme pages attached. The engine needs one: its style, persona and voice kits are what a video is made with. */
+  pageAttachments: number;
   /** Messages with no beat role, as plain text. */
   instructions: string[];
   /** Messages that are hand-written script lines. A copy would repeat them word for word in every variation. */
@@ -109,6 +111,7 @@ export function sourceProblem(facts: SourceFacts): string | null {
   if (facts.brandId === null) return "The source draft has no brand, so variations cannot be made from it.";
   if (!facts.hasReferenceVideo) return "The source draft has no uploaded reference video. Upload the video file first. A link to a post is not a video file.";
   if (facts.marketAttachments < 1) return "The source draft has no Market research attached. Attach at least one Market record so the claims have evidence.";
+  if (facts.pageAttachments < 1) return "The source draft has no theme page attached. Attach one from the Pages screen: its style, persona and voice are what every video is made with, and a video cannot start without it.";
   if (facts.scriptLines > 0) return "The source draft has hand-written script lines, and every variation would repeat them word for word. Remove the script lines and keep plain instructions.";
   if (!facts.instructions.some((text) => text.trim().length >= MIN_INSTRUCTION_CHARS)) {
     return `The source draft has no plain-language instruction. Write at least one, of ${MIN_INSTRUCTION_CHARS} characters or more.`;

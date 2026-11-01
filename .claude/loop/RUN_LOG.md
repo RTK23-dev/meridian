@@ -750,3 +750,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: how it looks. GSAP cannot load in this sandbox, so there are no golden frames, as for stat.counter and captions.boxed.
 - Still open in K21: `panel.bars`, `panel.line`, `panel.tiles`, `cta.follow`.
 - Next wake armed for 11:30 UTC (trig_01KijjKtFfp2K3Jhw5HgkUTp).
+
+## 2026-11-01 11:2x UTC: wake: merge main into the PR branch
+
+- Wake (11:10, the CI notice on ac36176): the PR reported `mergeable_state: dirty`. `origin/main` had moved to 6a7fcbf (PR #86, the video style presets and orchestrator style choice), and four files conflicted with this branch.
+- Resolved with a merge commit (no rebase, no force push):
+  - `src/engine/jobs/handlers/estimate-reserve.ts` and its test: main already added an injectable `now` to the estimate handler, equivalent to this branch's change. Took main's version of both blocks.
+  - `src/engine/ops/test/chain.ts`: both sides fixed the same month problem. Took main's fixed clock (the chain's fixture month). The 23 test files that import the chain or the estimate stage pass (160 of 160), so the choice does not lose behaviour the tests check.
+  - `scripts/release-acceptance/acceptance.mjs`: main's `focusedWithin` helper replaces this branch's local `waitForBudgetFocus` (removed, since nothing else used it). Both sides added checks at the same place. Kept this branch's H1 and H2, then main's G17 and G18.
+- Checks on the merged tree: `npm run typecheck` exits 0. Eslint on the four files exits 0. `node --check` on the acceptance script passes. The compose suite passes 299 of 299. The release acceptance run `ra-run13` passes 34 of 34 (exit 0), including H1, H2, G17 and G18.
+- Not checked: the full test suite on the merged tree (CI runs it). No live provider call was made.
+- The 11:30 wake (trig_01KijjKtFfp2K3Jhw5HgkUTp) is still armed. It checks CI on the merge commit.

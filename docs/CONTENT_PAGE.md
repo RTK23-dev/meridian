@@ -92,7 +92,7 @@ A section a person may not use falls back to Create.
 
 ## Video variations
 
-A **reusable format** is a draft session with an uploaded reference video, at least one attached Market research record and a plain-language instruction (10 characters or more). **Create video variations** (Batch → Video batches) makes 2 to 20 original draft videos from it and groups them into one batch:
+A **reusable format** is a draft session with an uploaded reference video, at least one attached Market research record, a **theme page** and a plain-language instruction (10 characters or more). The theme page is required because a video cannot start without one: its style, persona and voice kits are what the engine makes the video with. **Create video variations** (Batch → Video batches) makes 2 to 20 original draft videos from it and groups them into one batch:
 
 - Each new draft copies the source's instructions and attachments by value. The reference video is shared by its storage record; no bytes are copied. It gets one of 20 fixed, distinct structural angles. Every angle's instruction says to use the reference only for structure and pacing, to make new wording and visuals, never to copy footage, words, voice or music, and to leave out claims the evidence does not support.
 - The batch budget is split exactly in cents. Each video needs at least the master cost floor (`MASTER_COST_FLOOR_USD`) and at most $1,000.
@@ -118,4 +118,25 @@ The brand's analyzed ads already carry model labels for structure, opening move,
 - **Sample and approval.** Before the variations are made, the form shows a sample of the first video: its angle, its share of the budget, what it copies from the source, and the exact instruction it is given. Nothing is generated. The batch cannot be made until the person ticks "I have read the sample and approve this format", and the server refuses a request without that approval and writes nothing.
 - **Demo mode.** **Try a demo batch** opens a batch of fixture videos (two "delivered", one draft) with no key, no provider and no cost. Every row is marked demo (`demo = true`), titled "DEMO (fixture)", and the page, the CSV and the manifest all say so. No video file exists for them. Hook history and economics leave demo rows out. A brand has one demo batch.
 - **Export.** A batch downloads as a CSV summary and as a JSON manifest (`meridian.batch-manifest`): each video's position, title, angle, state, reason, approval, budget, attempts, engine request id and delivered manifest id. It holds no video file and no link, because a delivered file is read from its own video screen. Finished MP4s and captions are therefore not bundled here yet: that needs a live run to verify.
+
+## Video style presets
+
+The variations form has a **Video style** choice and a **Browse the style library** list (Product promo, Explainer, Talking head, UGC style, Fast-cut short, Cinematic story, Motion graphics, Tips list). The wording is Meridian's own.
+
+- **What a preset does.** It adds one style instruction to each draft's brief and records the preset id on the draft (`style_preset`). It tells the planner what kind of video to brief. It does **not** set a render option and does not change the engine's style kits, which are an engine contract. Every style instruction ends with a line that it steers the brief only and forbids a real person's likeness and any invented testimonial, result or claim.
+- **Three ways to choose.** One preset for every video; **Auto**, which maps the structure that repeats most in the brand's research to a preset by a fixed table (problem solution → Explainer, listicle → Tips list, story payoff → Cinematic story, testimonial → UGC style, before/after, demonstration and offer-led → Product promo) and shows why, or mixes every style when there is no repeating structure; or the **Super preset**, which gives each video the next style in the library, so a batch of eight tries eight styles.
+- **Auto is a rule table, not a model call.** The same research always gives the same preset. Nothing is judged by a model here. Its label on the form says so.
+- **Recorded.** The CSV has a Style column and the manifest a `style` field. No style chosen means no style instruction and a null style.
+- **Not verified.** Whether a preset makes the engine's output look the way its description says needs a live run and someone looking at the videos.
+- **Does a style reach the engine?** Yes, as part of the brief. A draft's plain instructions, its angle instruction and its style instruction are joined into the production request's `brief.text` when the video is started. A test starts a variation through the real start path and reads the stored request to check that the source's instruction, the angle and the style are all in it. That proves the text is handed to the engine. It does not prove how the planner or the script writer weighs it, which needs a live run.
+
+### Let the orchestrator choose
+
+**Let the orchestrator choose** asks the workspace's active decision engine (TypeSafe JEV, OpenAI Decisions or OpenRouter Decisions) once, when the videos are created. It uses the same dispatcher, key resolution, budget holds and lineage as every other decision.
+
+- The question is a `choice` (`content.video_style.v1`) whose options are the eight presets. The engine sees the brand name, the source draft's instruction and the structures that repeat in the research, all cut short and marked as data. Its answer ranks the presets (the chosen one first, then the others by probability); the videos take them in that order and start over if the batch is longer.
+- **It costs one model call.** The form says so before you create. The source is checked first, so no call is spent on a source that would be refused.
+- **Fail closed.** If the engine is not connected, has no key, abstains, fails, or chooses something outside the library, the request is refused with the reason and nothing is created. It does not fall back to Auto or to another engine.
+- **Recorded.** Each video records its style. The batch's audit line records `style: orchestrator`, the engine, the model and the engine's confidence.
+- **Tested** with recorded engine answers through the real dispatcher, and in the browser for the not-connected refusal. **Not verified** with a live engine: whether its choices are good ones, and what a call costs, need a real key.
 
