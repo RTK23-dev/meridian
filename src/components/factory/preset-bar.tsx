@@ -1,6 +1,4 @@
-import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason } from "@/components/ui";
-import type { CookbookCard } from "@/components/cookbooks/library-model";
 import { PRESET_KEYS, PRESET_LABEL, presetSettingLines, type PresetKey } from "./pipeline-model";
 
 /**
@@ -13,18 +11,12 @@ export function PresetBar({
   matchKey,
   onFill,
   onSave,
-  brandId,
-  cookbooks = [],
 }: {
   canEdit: boolean;
   busy: string | null;
   matchKey: PresetKey | null;
   onFill: (key: PresetKey) => void;
   onSave: (key: PresetKey) => void;
-  /** The brand, for the link to its cookbook library. */
-  brandId?: string;
-  /** The brand's other cookbooks (not the factory presets), listed read-only. */
-  cookbooks?: readonly CookbookCard[];
 }) {
   return (
     <section aria-labelledby="factory-presets" className="space-y-4">
@@ -77,27 +69,6 @@ export function PresetBar({
           </article>
         ))}
       </div>
-
-      {cookbooks.length > 0 && brandId !== undefined ? (
-        <section aria-labelledby="factory-cookbooks" className="space-y-3">
-          <div className="space-y-1">
-            <h4 id="factory-cookbooks" className="font-semibold text-fg">Other cookbooks in this brand</h4>
-            <p className="max-w-3xl text-sm text-fg-muted">
-              These are read-only here. Open the cookbook library to change one or make a copy.{" "}
-              <Link to="/brands/$brandId/cookbooks" params={{ brandId }} className="underline underline-offset-4">Open the cookbook library</Link>
-            </p>
-          </div>
-          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            {cookbooks.map((card) => (
-              <li key={`${card.source}:${card.cookbookId}`} className="flex flex-col gap-2 panel">
-                <span className="font-semibold text-fg">{card.label}</span>
-                <span className="text-sm text-fg-muted">{card.summary}</span>
-                <span className="text-xs font-semibold text-fg-muted">{card.badge}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
     </section>
   );
 }

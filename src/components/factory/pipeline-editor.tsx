@@ -2,8 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button, DisabledReason, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { plainError } from "@/lib/copy";
-import { cardsOf, nonFactoryCardsOf, type CookbookCard } from "@/components/cookbooks/library-model";
-import { listCookbooksAction } from "@/lib/meridian/cookbooks/actions";
 import {
   DEFAULT_GRADING_THRESHOLDS,
   DEFAULT_PROMPTS,
@@ -78,23 +76,6 @@ export function PipelineEditor({
   const [tab, setTab] = useState<EditorTab>("flow");
   const [busy, setBusy] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-  // The brand's other cookbooks, for the preset bar's read-only list (K20b1). A library that cannot be read shows none, rather than a guess.
-  const [otherCookbooks, setOtherCookbooks] = useState<CookbookCard[]>([]);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const library = await listCookbooksAction({ data: { brandId } });
-        if (cancelled) return;
-        setOtherCookbooks(nonFactoryCardsOf(cardsOf({ builtins: library.builtins, workspace: library.workspace.map((stored) => stored.cookbook) })));
-      } catch {
-        if (!cancelled) setOtherCookbooks([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [brandId]);
 
   // Adopt a new server copy unless the draft holds edits that are not saved yet.
   useEffect(() => {
@@ -194,7 +175,7 @@ export function PipelineEditor({
         </p>
       </header>
 
-      <PresetBar canEdit={canEdit} busy={busy} matchKey={matchKey} onFill={fillPreset} onSave={(key) => void savePreset(key)} brandId={brandId} cookbooks={otherCookbooks} />
+      <PresetBar canEdit={canEdit} busy={busy} matchKey={matchKey} onFill={fillPreset} onSave={(key) => void savePreset(key)} />
 
       <FeedbackLine feedback={feedback} onDismiss={() => setFeedback(null)} />
 

@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbooks } from "../../lib/meridian/cookbooks/builtin/index.ts";
-import { cardsOf, estimateWords, familiesIn, NO_FILTER, nonFactoryCardsOf } from "./library-model.ts";
+import { cardsOf, estimateWords, familiesIn, NO_FILTER } from "./library-model.ts";
 
 const BUILTINS = builtinCookbooks();
 
@@ -61,12 +61,4 @@ test("an unknown part is named and never shown as zero: the estimate says the pr
   assert.equal(estimateWords({ knownUsd: 4.5, unknown: [] }), "About $4.50");
   assert.equal(estimateWords({ knownUsd: 4.5, unknown: ["Voice: price unknown"] }), "About $4.50, plus parts whose price is unknown");
   assert.equal(estimateWords({ knownUsd: 0, unknown: ["Voice: price unknown"] }), "About $0.00, plus parts whose price is unknown");
-});
-
-test("the preset bar's extra list leaves out the factory presets and the blank start modes, and keeps every other cookbook (K20b1)", () => {
-  const cards = cardsOf({ builtins: BUILTINS, workspace: [] });
-  const kept = nonFactoryCardsOf(cards).map((card) => card.cookbookId);
-  assert.ok(kept.includes("ck_3d_data_explainer"));
-  assert.ok(kept.every((id) => !id.startsWith("ck_factory_") && !id.startsWith("ck_blank_")), "no factory or blank cookbook is listed twice");
-  assert.equal(kept.length, cards.filter((card) => !card.cookbookId.startsWith("ck_factory_") && !card.cookbookId.startsWith("ck_blank_")).length);
 });
