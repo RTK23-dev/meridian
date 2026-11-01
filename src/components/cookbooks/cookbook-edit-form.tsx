@@ -7,7 +7,7 @@ import { Button, toast } from "@/components/ui";
 import { forkCookbookAction, saveCookbookAction } from "@/lib/meridian/cookbooks/actions";
 import type { Control, ControlValue, Scalar } from "@/lib/meridian/cookbooks/controls";
 import type { Cookbook } from "@/lib/meridian/cookbooks/schema";
-import { applyEdits, COPY_PREFIX, editsFromDraft, planSave, runSavePlan, type CookbookDraft } from "./edit-model";
+import { applyEdits, COPY_PREFIX, editsFromDraft, fieldProblemsOf, planSave, runSavePlan, type CookbookDraft } from "./edit-model";
 
 export function CookbookEditForm({
   brandId,
@@ -26,7 +26,14 @@ export function CookbookEditForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Each refused field is marked next to it (K20e). While any is marked, Save sends nothing.
+  const problems = fieldProblemsOf(cookbook, { values, texts, steps });
+
   const save = async () => {
+    if (Object.keys(problems).length > 0) {
+      setError("Fix the fields marked in red before saving.");
+      return;
+    }
     const edits = editsFromDraft(cookbook, { values, texts, steps });
     if (edits.length === 0) {
       onDone();
@@ -40,8 +47,8 @@ export function CookbookEditForm({
     setBusy(true);
     setError(null);
     try {
-      const steps = planSave({ source, original: cookbook, edited: applied.cookbook, newCopyId: `${COPY_PREFIX}${Date.now().toString(36)}` });
-      const outcome = await runSavePlan(brandId, steps, {
+      const plan = planSave({ source, original: cookbook, edited: applied.cookbook, newCopyId: `${COPY_PREFIX}${Date.now().toString(36)}` });
+      const outcome = await runSavePlan(brandId, plan, {
         fork: async (input) => {
           const made = await forkCookbookAction({ data: input });
           return made.ok ? { ok: true } : { ok: false, reason: made.reason };
@@ -76,52 +83,62 @@ export function CookbookEditForm({
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-fg">Settings</legend>
         {cookbook.controls.map((control) => (
-          <ControlField
-            key={control.id}
-            control={control}
-            value={values[control.id] ?? control.default}
-            onChange={(value) => setValues((current) => ({ ...current, [control.id]: value }))}
-          />
+          <div key={control.id} className="space-y-1">
+            <ControlField
+              control={control}
+              value={values[control.id] ?? control.default}
+              onChange={(value) => setValues((current) => ({ ...current, [control.id]: value }))}
+            />
+            <FieldProblem problem={problems[`control:${control.id}`]} />
+          </div>
         ))}
       </fieldset>
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-fg">Instructions</legend>
         {cookbook.instructions.map((instruction, index) => (
-          <label key={index} className="flex flex-col gap-1 text-sm">
-            <span className="text-fg-secondary">Instruction for {instruction.role}</span>
-            <textarea
-              className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
-              rows={3}
-              maxLength={4000}
-              value={texts[index] ?? ""}
-              onChange={(event) => setTexts((current) => current.map((item, position) => (position === index ? event.target.value : item)))}
-            />
-          </label>
+          <div key={index} className="space-y-1">
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="text-fg-secondary">Instruction for {instruction.role}</span>
+              <textarea
+                className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+                rows={3}
+                maxLength={4000}
+                value={texts[index] ?? ""}
+                onChange={(event) => setTexts((current) => current.map((item, position) => (position === index ? event.target.value : item)))}
+              />
+            </label>
+            <FieldProblem problem={problems[`instruction:${index}`]} />
+          </div>
         ))}
       </fieldset>
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold text-fg">Steps</legend>
         {cookbook.steps.map((step, index) => (
           <div key={step.id} className="space-y-3 rounded-md border border-border p-3">
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="text-fg-secondary">Step name</span>
-              <input
-                type="text"
-                maxLength={80}
-                className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
-                value={steps[index]?.label ?? step.label}
-                onChange={(event) => setSteps((current) => current.map((item, position) => (position === index ? { ...item, label: event.target.value } : item)))}
-              />
-            </label>
+            <div className="space-y-1">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-fg-secondary">Step name</span>
+                <input
+                  type="text"
+                  maxLength={80}
+                  className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+                  value={steps[index]?.label ?? step.label}
+                  onChange={(event) => setSteps((current) => current.map((item, position) => (position === index ? { ...item, label: event.target.value } : item)))}
+                />
+              </label>
+              <FieldProblem problem={problems[`step-label:${index}`]} />
+            </div>
             {Object.entries(step.params).map(([key, original]) => (
-              <StepSettingField
-                key={key}
-                name={key}
-                value={steps[index]?.params[key] ?? original}
-                onChange={(value) =>
-                  setSteps((current) => current.map((item, position) => (position === index ? { ...item, params: { ...item.params, [key]: value } } : item)))
-                }
-              />
+              <div key={key} className="space-y-1">
+                <StepSettingField
+                  name={key}
+                  value={steps[index]?.params[key] ?? original}
+                  onChange={(value) =>
+                    setSteps((current) => current.map((item, position) => (position === index ? { ...item, params: { ...item.params, [key]: value } } : item)))
+                  }
+                />
+                <FieldProblem problem={problems[`step-param:${index}:${key}`]} />
+              </div>
             ))}
           </div>
         ))}
@@ -141,6 +158,12 @@ export function CookbookEditForm({
       </div>
     </form>
   );
+}
+
+/** The reason a field is refused, shown under the field in the error colour. Nothing is shown for a field that is allowed. */
+function FieldProblem({ problem }: { problem: string | undefined }) {
+  if (problem === undefined) return null;
+  return <p className="text-sm text-danger">{problem}</p>;
 }
 
 /** One setting of a step, shown by its kind: a checkbox, a number box or a text box. The name is the setting's key, with spaces for underscores. */

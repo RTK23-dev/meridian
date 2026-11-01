@@ -709,3 +709,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: saving a changed step name or setting in the browser. No live provider call was made.
 - Still open in K20: K20e (inline validation on the generation and grading fields).
 - Next wake armed for 09:53 UTC (trig_01MfAL22eiuKjWsV9VrH2PcC).
+
+## 2026-11-01 09:59 UTC: wake: K20e, a message next to each refused field
+
+- Wake (09:53): CI on the head b993730 was green (13 check runs; CodeRabbit skipped). The local branch matched the remote.
+- Scope read (technical ambiguity, Q36, decided by loop, confirm): K20 says validation errors show next to their fields, and the generation and grading fields follow the prompts panel's pattern. The factory's generation and grading controls are sliders and choices bounded by their ranges, so no value can be typed outside them. The cookbook form is where a typed value is refused, so the unit covers that form.
+- Unit done (K20e): `fieldProblemsOf` in `components/cookbooks/edit-model.ts` checks each changed field alone with the rules applyEdits runs, and returns the reason by the field's key. The form shows each reason under its field (a control, an instruction, a step name, a setting). Save sends nothing while any field is marked.
+- Acceptance: H2 also types a blank instruction and waits for "cannot be empty", then saves a valid one.
+- Checks: `NODE_ENV=development node --experimental-strip-types --test src/components/cookbooks/edit-model.test.ts` passed 20 of 20 (19 before, 1 new). `npx eslint` on the three cookbook files and the acceptance script exits 0. `npm run typecheck` exits 0. The local release acceptance run `ra-run12` passed 32 of 32, exit 0.
+- Not checked: the factory's generation and grading panels, which are unchanged. No live provider call was made.
+- Still open in K20: the pipeline-model tests move (K20f, to check first, from the spec), and the decision in Q36.
+- Next wake armed for 10:20 UTC (trig_01D8pg22zXi4dhBrTXJ9L4t4).

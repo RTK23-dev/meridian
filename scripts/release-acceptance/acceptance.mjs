@@ -572,6 +572,9 @@ try {
     await form.waitFor({ timeout: 30000 });
     // The steps section (K20d): each step has a name field, so the form shows the steps as well as the instructions.
     await form.getByRole("textbox", { name: "Step name" }).first().waitFor({ timeout: 30000 });
+    // A blank instruction is refused next to its field (K20e), then the valid text is entered and saved.
+    await form.locator("textarea").first().fill("   ");
+    await form.getByText(/cannot be empty/).first().waitFor({ timeout: 30000 });
     await form.locator("textarea").first().fill("Acceptance edit: open on a number that counts up.");
     await form.getByRole("button", { name: "Save as my copy" }).click();
     await page.getByText("Saved as your copy.").waitFor({ timeout: 30000 });

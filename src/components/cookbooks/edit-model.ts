@@ -138,6 +138,33 @@ export function editsFromDraft(cookbook: Cookbook, draft: CookbookDraft): Cookbo
   return edits;
 }
 
+/** The form's name for the field an edit changes, so a message sits next to that field (K20e). */
+export function fieldKeyOf(edit: CookbookEdit): string {
+  switch (edit.kind) {
+    case "control":
+      return `control:${edit.id}`;
+    case "instruction":
+      return `instruction:${edit.index}`;
+    case "step-label":
+      return `step-label:${edit.index}`;
+    case "step-param":
+      return `step-param:${edit.index}:${edit.key}`;
+  }
+}
+
+/**
+ * The reason each changed field is refused, by the field's key. Each edit is checked alone by the rules applyEdits runs, so a message names
+ * its own field and an empty object means every change is allowed.
+ */
+export function fieldProblemsOf(cookbook: Cookbook, draft: CookbookDraft): Record<string, string> {
+  const problems: Record<string, string> = {};
+  for (const edit of editsFromDraft(cookbook, draft)) {
+    const checked = applyEdits(cookbook, [edit]);
+    if (!checked.ok) problems[fieldKeyOf(edit)] = checked.reason;
+  }
+  return problems;
+}
+
 /** The server calls that save an edited cookbook, in order (K20b3b part 2). A built-in cookbook is copied first: its id is reserved, and admins
  * maintain copies of built-ins (D5). A workspace cookbook is saved as its next version under its own id. */
 export type SaveStep =

@@ -294,6 +294,13 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Options: (a) keep the rule: a reservation belongs to the month it was made, so the month's budget is never overspent; (b) let the variants raise a reservation into the new month and check only the new month's budget.
 - The loop does not change the rule. It is a budget decision, so the owner chooses.
 
+## Q36: Field messages for the generation and grading fields: which fields need them?
+- Kind: technical ambiguity inside the plan. Status: `decided by loop, confirm`.
+- Context: K20 says validation errors show next to their fields, and that the generation and grading fields follow the prompts panel's pattern. In the factory's pipeline editor, the generation fields (videos per concept, duration, daily cap) and the grading thresholds are sliders and choices bounded by their ranges, so no value can be typed outside them and no message is needed there. The prompts panel already marks an empty prompt next to its field.
+- What the loop did: the cookbook editor's form, where a typed value can be refused (a control outside its bounds, a blank instruction, a bad step setting), now marks each refused field next to it, and Save sends nothing while one is marked (K20e, `fieldProblemsOf` in `edit-model.ts`). The factory's generation and grading panels are unchanged.
+- What would change if the owner chose otherwise: the server's validator clamps a stored value silently (`validatePipelineConfig` in `src/lib/meridian/factory/pipeline-config.ts`). If the owner wants that clamp reported, that is a change to factory validation and would be a separate unit.
+- Blocks: nothing.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

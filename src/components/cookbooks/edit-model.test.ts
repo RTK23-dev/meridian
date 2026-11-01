@@ -9,6 +9,7 @@ import {
   applyEdits,
   COPY_PREFIX,
   editsFromDraft,
+  fieldProblemsOf,
   INSTRUCTION_MAX_CHARACTERS,
   instructionEdit,
   planSave,
@@ -232,4 +233,20 @@ test("the edits a draft makes are the ones the rules accept: applying them gives
   if (!applied.ok) return;
   assert.equal(applied.cookbook.steps[index]?.label, "Write the hook", "the label is trimmed, as the rule says");
   assert.equal(applied.cookbook.steps[index]?.params.beats, 10);
+});
+
+test("each field the rules refuse gets its own message, keyed by the field; a clean draft gets none (K20e)", () => {
+  const index = EXPLAINER.steps.findIndex((step) => step.id === "script");
+  assert.ok(index >= 0, "the explainer has a script step");
+  assert.deepEqual(fieldProblemsOf(EXPLAINER, draftOf(EXPLAINER)), {}, "an untouched draft has no problems");
+  const draft = draftOf(EXPLAINER);
+  draft.values = { ...draft.values, pace: 9 };
+  draft.texts = draft.texts.map((text, position) => (position === 0 ? "   " : text));
+  draft.steps = draft.steps.map((step, position) => (position === index ? { label: " ", params: { ...step.params, beats: "ten" } } : step));
+  const problems = fieldProblemsOf(EXPLAINER, draft);
+  assert.deepEqual(Object.keys(problems).sort(), [`control:pace`, `instruction:0`, `step-label:${index}`, `step-param:${index}:beats`].sort());
+  assert.match(problems["control:pace"] ?? "", /outside what the control allows/);
+  assert.match(problems["instruction:0"] ?? "", /cannot be empty/);
+  assert.match(problems[`step-label:${index}`] ?? "", /needs a label/);
+  assert.match(problems[`step-param:${index}:beats`] ?? "", /takes a number, not a string/);
 });
