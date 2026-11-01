@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason } from "@/components/ui";
 import type { CookbookCard } from "@/components/cookbooks/library-model";
+import { CookbookOutline } from "@/components/cookbooks/cookbook-outline";
 import { PRESET_KEYS, PRESET_LABEL, presetSettingLines, type PresetKey } from "./pipeline-model";
 
 /**
@@ -26,6 +28,8 @@ export function PresetBar({
   /** The brand's other cookbooks (not the factory presets), listed read-only. */
   cookbooks?: readonly CookbookCard[];
 }) {
+  // The cookbook whose steps are open below the list (K20b2b). One at a time, so the panel stays short.
+  const [shown, setShown] = useState<string | null>(null);
   return (
     <section aria-labelledby="factory-presets" className="space-y-4">
       <div className="space-y-1">
@@ -93,9 +97,19 @@ export function PresetBar({
                 <span className="font-semibold text-fg">{card.label}</span>
                 <span className="text-sm text-fg-muted">{card.summary}</span>
                 <span className="text-xs font-semibold text-fg-muted">{card.badge}</span>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  aria-expanded={shown === card.cookbookId}
+                  onClick={() => setShown(shown === card.cookbookId ? null : card.cookbookId)}
+                >
+                  {shown === card.cookbookId ? "Hide steps" : "Show steps"}
+                </Button>
               </li>
             ))}
           </ul>
+          {shown !== null ? <CookbookOutline brandId={brandId} cookbookId={shown} /> : null}
         </section>
       ) : null}
     </section>
