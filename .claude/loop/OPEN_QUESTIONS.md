@@ -316,6 +316,20 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - What would change if the owner chose otherwise: if the safe-zone check must be in the gate before K23 starts, K23 waits for Q32.
 - Blocks: nothing now.
 
+## Q39: Which scenes draw the 3D explainer from its cookbook?
+- Kind: owner decision (the rendering approach). Status: `open`.
+- Context: K23 asks for an agent-mode renderer that draws a cookbook frame by frame in the local Chromium, and runs the checks on the result. The 3D data explainer's cookbook names one library component (`captions.karaoke`, the captions). Its 3D room, camera and scenes are not in the component library. The preset preview already draws those scenes (`scripts/engine/preset-preview/scene.html`, rendered by `render.ts`), but from a preset, not from a cookbook. The frames need GSAP from a CDN this sandbox cannot reach, so nothing here can check a render.
+- What each option changes: (a) the renderer reuses the preview's scene file and takes its values from the cookbook, so one scene file stays and the cookbook is the source of the values; (b) the 3D room becomes library components, each with its own template and golden frames, which is more work and each piece needs review.
+- Blocks: K23 (its done-when), K24, K29 (through K24) and K30.
+- The loop recommends (a). Either way a live render on the owner's side is needed before any claim.
+
+## Q40: The remaining beats and genome of a reference draft: spend on the Video DNA analysis?
+- Kind: owner decision (spend). Status: `open`.
+- Context: K25's draft from a reference is made from the free measures. Its remaining parts (the beats, and the genome) come from the Video DNA, which is a paid analysis. Nothing here runs it, because the loop does not spend money (hard stop).
+- What each option changes: (a) the owner allows one paid analysis of a reference, to finish the draft's beats and genome; (b) the draft stays on the free measures, and the beats and genome stay listed as unknown.
+- Blocks: the remainder of K25 only.
+- The loop recommends (b) until a reference is chosen for a paid analysis.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

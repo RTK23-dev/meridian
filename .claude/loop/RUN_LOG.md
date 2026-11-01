@@ -816,3 +816,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Parked: the safe-zone move into the post-render gate, which waits for Q32 (an owner decision; the loop recommends option a, and nothing is changed).
 - Decision recorded as Q38: K22 counts as done for K23, so K23 can start.
 - Next wake armed for 13:22 UTC (trig_01TEgKaBqTtDmsNKY9PfSMwD).
+
+## 2026-11-01 13:23 UTC: wake: K23 and K25 parked on owner decisions
+
+- Wake (13:22): CI on the head 0f72c31 was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- Read K23 (the agent-mode renderer). Its done-when is a rendered 3D data explainer, drawn from its cookbook in the local Chromium, with the check report in the log. Two things block it here. The explainer's cookbook names one library component (`captions.karaoke`); its 3D room, camera and scenes are not in the component library, and the preset preview draws them from a preset, not a cookbook. And the templates load GSAP from a CDN this sandbox cannot reach, so no frame can be checked. Decision: parked on Q39 (which scenes draw it), a rendering approach for the owner.
+- Read K25's remainder. The beats and the genome come from the Video DNA, a paid analysis. The loop does not spend money (a hard stop), so the remainder is parked on Q40.
+- Nothing is built in this wake. Records only: RUN_PLAN, OPEN_QUESTIONS (Q39, Q40), STATE, RUN_LOG.
+- Still unblocked: K28 (partly done): the store read of recorded runs and the export file. K24, K29 and K30 wait on K23 or on every unparked task.
+- Next wake armed for 13:44 UTC (trig_01ELgtutyHLNwojABqsPy3Ug).
