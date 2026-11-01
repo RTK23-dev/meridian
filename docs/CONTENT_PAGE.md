@@ -92,7 +92,7 @@ A section a person may not use falls back to Create.
 
 ## Video variations
 
-A **reusable format** is a draft session with an uploaded reference video, at least one attached Market research record and a plain-language instruction (10 characters or more). **Create video variations** (Batch → Video batches) makes 2 to 20 original draft videos from it and groups them into one batch:
+A **reusable format** is a draft session with an uploaded reference video, at least one attached Market research record, a **theme page** and a plain-language instruction (10 characters or more). The theme page is required because a video cannot start without one: its style, persona and voice kits are what the engine makes the video with. **Create video variations** (Batch → Video batches) makes 2 to 20 original draft videos from it and groups them into one batch:
 
 - Each new draft copies the source's instructions and attachments by value. The reference video is shared by its storage record; no bytes are copied. It gets one of 20 fixed, distinct structural angles. Every angle's instruction says to use the reference only for structure and pacing, to make new wording and visuals, never to copy footage, words, voice or music, and to leave out claims the evidence does not support.
 - The batch budget is split exactly in cents. Each video needs at least the master cost floor (`MASTER_COST_FLOOR_USD`) and at most $1,000.
@@ -128,4 +128,5 @@ The variations form has a **Video style** choice and a **Browse the style librar
 - **Auto is a rule table, not a model call.** The same research always gives the same preset. Nothing is judged by a model here.
 - **Recorded.** The CSV has a Style column and the manifest a `style` field. No style chosen means no style instruction and a null style.
 - **Not verified.** Whether a preset makes the engine's output look the way its description says needs a live run and someone looking at the videos.
+- **Does a style reach the engine?** Yes, as part of the brief. A draft's plain instructions, its angle instruction and its style instruction are joined into the production request's `brief.text` when the video is started. A test starts a variation through the real start path and reads the stored request to check that the source's instruction, the angle and the style are all in it. That proves the text is handed to the engine. It does not prove how the planner or the script writer weighs it, which needs a live run.
 

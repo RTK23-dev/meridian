@@ -118,6 +118,7 @@ export async function createVariations(
       marketAttachments: attachments.filter(
         (item) => item.kind === "source" && item.source_page === "market" && typeof item.snapshot === "string" && item.snapshot.trim().length > 0,
       ).length,
+      pageAttachments: attachments.filter((item) => item.kind === "source" && item.source_page === "page").length,
       instructions: messages.filter((item) => item.beat_role === null).map((item) => item.text),
       scriptLines: messages.filter((item) => item.beat_role !== null).length,
     });
@@ -253,10 +254,11 @@ export async function variationSourcesOf(sql: Sql, userId: string, input: { bran
     order by updated_at desc, id desc limit 200
   `;
   if (drafts.length === 0) return [];
-  const attachments = await sql<{ session_id: string; reference: number; market: number }>`
+  const attachments = await sql<{ session_id: string; reference: number; market: number; page: number }>`
     select a.session_id,
       count(*) filter (where a.kind = 'file' and a.purpose = 'reference_video')::int as reference,
-      count(*) filter (where a.kind = 'source' and a.source_page = 'market')::int as market
+      count(*) filter (where a.kind = 'source' and a.source_page = 'market')::int as market,
+      count(*) filter (where a.kind = 'source' and a.source_page = 'page')::int as page
     from content_factory_attachments a join content_factory_sessions s on s.id = a.session_id
     where s.organization_id = ${access.organizationId} and s.brand_id = ${input.brandId} and s.source_session_id is null and s.status = 'draft'
     group by a.session_id
@@ -273,6 +275,7 @@ export async function variationSourcesOf(sql: Sql, userId: string, input: { bran
       brandId: input.brandId,
       hasReferenceVideo: (counts?.reference ?? 0) > 0,
       marketAttachments: counts?.market ?? 0,
+      pageAttachments: counts?.page ?? 0,
       instructions: own.filter((row) => row.beat_role === null).map((row) => row.text),
       scriptLines: own.filter((row) => row.beat_role !== null).length,
     });

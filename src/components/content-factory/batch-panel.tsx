@@ -266,11 +266,11 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold">Create video variations</legend>
           <p className="text-sm text-fg-muted">
-            Pick a draft that has an uploaded reference video, attached Market research and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
+            Pick a draft that has an uploaded reference video, attached Market research, a theme page and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
           </p>
           {sources.length === 0 ? (
             <div className="space-y-1 text-sm text-fg-muted">
-              <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research and a plain instruction."}</p>
+              <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research, a theme page and a plain instruction."}</p>
               {notReady.length > 0 ? (
                 <ul className="list-disc pl-5">
                   {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg">{item.title}</span>: {item.problem}</li>)}

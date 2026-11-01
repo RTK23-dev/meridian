@@ -47,12 +47,13 @@ test("a budget that cannot cover the count, a count outside 2 to 20, and a per-v
 });
 
 test("a source draft needs a draft, a brand, an uploaded reference, Market research and a plain instruction, and no script lines", () => {
-  const good = { status: "draft", brandId: "b", hasReferenceVideo: true, marketAttachments: 1, instructions: ["Make a calm product demo."], scriptLines: 0 };
+  const good = { status: "draft", brandId: "b", hasReferenceVideo: true, marketAttachments: 1, pageAttachments: 1, instructions: ["Make a calm product demo."], scriptLines: 0 };
   assert.equal(sourceProblem(good), null);
   assert.match(sourceProblem({ ...good, status: "started" }) ?? "", /Only a draft/);
   assert.match(sourceProblem({ ...good, brandId: null }) ?? "", /no brand/);
   assert.match(sourceProblem({ ...good, hasReferenceVideo: false }) ?? "", /uploaded reference video/);
   assert.match(sourceProblem({ ...good, marketAttachments: 0 }) ?? "", /Market research/);
+  assert.match(sourceProblem({ ...good, pageAttachments: 0 }) ?? "", /theme page/);
   assert.match(sourceProblem({ ...good, scriptLines: 1 }) ?? "", /script lines/);
   assert.match(sourceProblem({ ...good, instructions: ["", "short"] }) ?? "", /plain-language instruction/);
 });

@@ -30,7 +30,7 @@ async function counts() {
   return row ?? { sessions: "-", batches: "-", items: "-", messages: "-", attachments: "-", requests: "-", audits: "-" };
 }
 
-type SourceOptions = { id: string; status?: string; reference?: boolean; referenceMediaType?: string; referenceKey?: string; market?: boolean; marketSnapshot?: string; instruction?: string | null; script?: boolean; brand?: string | null };
+type SourceOptions = { id: string; status?: string; reference?: boolean; referenceMediaType?: string; referenceKey?: string; market?: boolean; marketSnapshot?: string; instruction?: string | null; script?: boolean; brand?: string | null; page?: boolean };
 
 /** A source draft: one instruction (carrying the Market record), one reference file message, and optionally a script line. */
 async function source(options: SourceOptions): Promise<string> {
@@ -60,6 +60,12 @@ async function source(options: SourceOptions): Promise<string> {
       values (${`${id}_mkt`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'market', ${BRAND}, ${`rec_${id}`}, ${options.marketSnapshot ?? "A competitor opens on the problem."})
     `;
   }
+  if (options.page !== false) {
+    await db.sql`
+      insert into content_factory_attachments (id, organization_id, session_id, message_id, kind, source_page, source_brand_id, source_record_id, snapshot)
+      values (${`${id}_page`}, ${WS}, ${id}, ${`${id}_m2`}, 'source', 'page', ${BRAND}, 'page_var_1', ${"Kitchen hacks theme page."})
+    `;
+  }
   return id;
 }
 
@@ -67,6 +73,10 @@ before(async () => {
   db = await createTestDatabase();
   await seedWorkspace(db.sql, WS, BRAND);
   await seedWorkspace(db.sql, OTHER_WS);
+  await db.sql`
+    insert into theme_pages (id, organization_id, brand_id, name, niche, platform, style_kit_id, voice_kit_id)
+    values ('page_var_1', ${WS}, ${BRAND}, 'Kitchen hacks', 'kitchen', 'instagram', 'style_var_1', 'voice_var_1')
+  `;
   for (const [id, org, role] of [[ADMIN, WS, "admin"], [MEMBER, WS, "member"], [OUTSIDER, OTHER_WS, "admin"]] as const) {
     await db.sql`insert into "user" (id, name, email, "emailVerified") values (${id}, ${id}, ${`${id}@fixture.example`}, true)`;
     await db.sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${id}`}, ${org}, ${id}, ${role})`;
@@ -87,6 +97,7 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   const noInstruction = await source({ id: "s_noins", instruction: "short" });
   const scripted = await source({ id: "s_script", script: true });
   const noBrand = await source({ id: "s_nobrand", brand: null });
+  const noPage = await source({ id: "s_nopage", page: false });
   const before = await counts();
 
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: ok, count: 1, totalBudgetUsd: 10, approvedSample: true }), /between 2 and 20/);
@@ -103,6 +114,7 @@ test("every refusal writes nothing: count, budget, role, workspace, and a source
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: emptyMarket, count: 3, totalBudgetUsd: 10, approvedSample: true }), /Market research/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noInstruction, count: 3, totalBudgetUsd: 10, approvedSample: true }), /plain-language instruction/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: scripted, count: 3, totalBudgetUsd: 10, approvedSample: true }), /script lines/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noPage, count: 3, totalBudgetUsd: 10, approvedSample: true }), /theme page/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: noBrand, count: 3, totalBudgetUsd: 10, approvedSample: true }), /no brand/);
 
   assert.deepEqual(await counts(), before, "no session, message, attachment, batch, item, audit or engine request was written");
@@ -154,8 +166,8 @@ test("three variations are drafts with lineage, copied instructions and attachme
     assert.equal(files.length, 1);
     assert.equal(files[0]?.purpose, "reference_video");
     assert.equal(files[0]?.storage_key, `fixtures/${id}/reference.mp4`, "the reference is shared by its storage record, not re-uploaded");
-    const sources = await db.sql<{ source_record_id: string; snapshot: string }>`select source_record_id, snapshot from content_factory_attachments where session_id = ${row.id} and kind = 'source'`;
-    assert.deepEqual(sources.map((item) => item.source_record_id), [`rec_${id}`]);
+    const sources = await db.sql<{ source_record_id: string; snapshot: string }>`select source_record_id, snapshot from content_factory_attachments where session_id = ${row.id} and kind = 'source' order by source_record_id`;
+    assert.deepEqual(sources.map((item) => item.source_record_id), ["page_var_1", `rec_${id}`], "the theme page and the Market record are both copied");
     const own = await db.sql<{ n: string }>`select count(*)::text as n from content_factory_messages where id = ${files[0]?.message_id ?? ""} and session_id = ${row.id}`;
     assert.equal(own[0]?.n, "1", "each attachment sits on a message of its own copy");
   }
@@ -165,7 +177,7 @@ test("three variations are drafts with lineage, copied instructions and attachme
   const [sourceMessages] = await db.sql<{ n: string }>`select count(*)::text as n from content_factory_messages where session_id = ${id}`;
   assert.equal(sourceMessages?.n, "2");
   const [sourceAttachments] = await db.sql<{ n: string }>`select count(*)::text as n from content_factory_attachments where session_id = ${id}`;
-  assert.equal(sourceAttachments?.n, "2");
+  assert.equal(sourceAttachments?.n, "3");
 
   await assert.rejects(createBatch(db.sql, ADMIN, { brandId: BRAND, title: "Template", budgetUsd: 10, sessionIds: [id] }), /template other videos were made from/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: rows[0]?.id ?? "", count: 2, totalBudgetUsd: 5, approvedSample: true }), /original reusable draft/);
@@ -327,4 +339,30 @@ test("a style preset adds a style instruction to each draft and is recorded; Aut
   // Auto with research: the most common structure maps to a fixed preset. No research format leaves it a mix.
   const autoNoResearch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 6, approvedSample: true, stylePreset: "auto" });
   assert.notEqual(new Set(autoNoResearch.items.map((item) => item.style)).size, 0);
+});
+
+test("the style and the angle reach the engine: a variation started through the real start path stores a brief that contains both", async () => {
+  const { startRun } = await import("./service.ts");
+  const { stagesNeeded } = await import("../../../engine/api/index.ts");
+  const ports = {
+    monthBudget: { monthBudget: async () => ({ status: "known" as const, usd: 100 }) },
+    credentials: { get: async () => ({ status: "ready" as const, credential: { kind: "api_key" as const, secret: "fixture-not-a-key" } }) },
+    runtime: { handlers: Object.fromEntries(stagesNeeded(0).map((stage) => [stage, { async run() { throw new Error("not run by this test"); } }])) },
+  } as never;
+  const id = await source({ id: "s_reach" });
+  const batch = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, stylePreset: "tips_list" });
+  const first = batch.items[0];
+  assert.ok(first);
+  const outcome = await startRun(db.sql, ADMIN, { sessionId: first.sessionId }, { readiness: ports });
+  assert.equal(outcome.status, "started", outcome.status === "refused" ? [...outcome.problems, ...outcome.notConnected].join(" | ") : "");
+  const [row] = await db.sql<{ engine_request_id: string }>`select engine_request_id from content_factory_sessions where id = ${first.sessionId}`;
+  const [artifact] = await db.sql<{ body: string }>`
+    select body from engine_artifacts where request_id = ${row?.engine_request_id ?? ""} and type = 'production_request' order by created_at desc limit 1
+  `;
+  const request = JSON.parse(String(artifact?.body ?? "{}")) as { brief?: { text?: string } };
+  const brief = request.brief?.text ?? "";
+  assert.match(brief, /Make a calm product demo in the brand voice\./, "the source's own instruction is in the brief");
+  assert.match(brief, /Variation angle: Problem first\./, "the angle is in the brief");
+  assert.match(brief, /Style preset: Tips list\. Make a numbered tips video/, "the style is in the brief");
+  assert.match(brief, /no real person's likeness/, "and so is the safety line");
 });
