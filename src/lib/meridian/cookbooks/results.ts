@@ -12,7 +12,7 @@ export type RecordedRun = {
   version: number;
   values: Record<string, string | number | boolean>;
   /** How the run's cookbook was chosen (K11). */
-  how: "confirmed" | "changed" | "auto_accepted";
+  how: "confirmed" | "changed" | "auto_accepted" | "picked";
   /** The measures of the published output, when there is one. */
   measures: Measures | null;
 };
@@ -63,4 +63,37 @@ function meanOf(runs: readonly RecordedRun[], name: string): { mean: number | nu
   }
   const mean = values.length === 0 ? null : Math.round((values.reduce((total, value) => total + value, 0) / values.length) * 1000) / 1000;
   return { mean, measured: values.length, unknown };
+}
+
+export type ResultsExport = {
+  kind: "meridian.cookbook-results";
+  generatedAt: string;
+  runs: number;
+  /** Records that could not be read. They are counted here, so the export does not look like a complete set when it is not. */
+  unreadableRuns: number;
+  /** False when no run has a measure of its published output, which is so until a store keeps those measures. */
+  measuresRecorded: boolean;
+  note: string;
+  rows: ResultRow[];
+};
+
+/** The export for the research agents (K28): the table, with the counts that say how complete it is. Its time is passed in, so it is deterministic. */
+export function resultsExportOf(input: {
+  generatedAt: string;
+  runs: readonly RecordedRun[];
+  unreadable: number;
+  measureNames: readonly string[];
+}): ResultsExport {
+  const measuresRecorded = input.runs.some((run) => run.measures !== null);
+  return {
+    kind: "meridian.cookbook-results",
+    generatedAt: input.generatedAt,
+    runs: input.runs.length,
+    unreadableRuns: input.unreadable,
+    measuresRecorded,
+    note: measuresRecorded
+      ? "A measure is the mean over the runs that measured it. A missing measure is counted as unknown, not as 0. These are counts and means, not scores."
+      : "No run has a measure of its published output yet, so every measure is unknown. These are counts, not scores.",
+    rows: resultsTable(input.runs, input.measureNames),
+  };
 }

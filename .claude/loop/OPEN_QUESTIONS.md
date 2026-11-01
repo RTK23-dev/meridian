@@ -330,6 +330,22 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - Blocks: the remainder of K25 only.
 - The loop recommends (b) until a reference is chosen for a paid analysis.
 
+## Q41: Where do the measures of a published output live?
+- Kind: owner decision (the data model). Status: `open`.
+- Context: K28 wants the results table joined with the measures of each published output. Nothing stores those measures: the compare script writes a JSON file, and no table or column keeps them. So the store read gives every run an unknown measure (done: `cookbooks/recorded-runs.ts`), and the export file waits.
+- What each option changes: (a) a new record of the measures, written after each render (a migration on the content factory tables; it changes what is stored about a published video); (b) the measures are computed from the stored video when the export runs (no new storage, but each export runs the media functions over every video).
+- Blocks: the export file (K28).
+- The loop recommends (a), once the owner approves the migration. Nothing is written until then.
+
+## Q42: Four test-only modules explained, not wired: which to make work?
+- Kind: owner decision (what the product shows). Status: `open`.
+- Context: the owner's answer to Q3 is to make each of the 45 test-only modules work, or to say why one cannot. Four are explained here (13:48).
+  - `lib/progress/step-state.ts`: used only by `lib/create/steps.ts`, which no screen imports. Wiring it means the Create page's steps (brief, plan, review) show what the state says, which changes that page's flow.
+  - `lib/create/steps.ts`: the Create steps. No screen imports it; the step bar component is built with its own steps.
+  - `components/settings/connection-state.ts`: the label and action of a connection row. The settings screen builds its own "NOT CONNECTED" strings inline (`drive-connection.tsx`). Wiring replaces those strings with this function, a small change that needs a browser check.
+  - `render/splice-run.ts`: splices rendered windows into a master. Its window render returns not connected, so it cannot run until a render is connected. Wiring it changes the engine's render path (the render adapters, owned by the engine work).
+- The loop recommends wiring `connection-state.ts` next (it only tidies labels that already exist), and explaining the other three until the owner decides the Create flow and the render path.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.

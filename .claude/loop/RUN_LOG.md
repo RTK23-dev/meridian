@@ -825,3 +825,14 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Nothing is built in this wake. Records only: RUN_PLAN, OPEN_QUESTIONS (Q39, Q40), STATE, RUN_LOG.
 - Still unblocked: K28 (partly done): the store read of recorded runs and the export file. K24, K29 and K30 wait on K23 or on every unparked task.
 - Next wake armed for 13:44 UTC (trig_01ELgtutyHLNwojABqsPy3Ug).
+
+## 2026-11-01 13:48 UTC: wake: K28 store read, and four R5 modules explained
+
+- Wake (13:44): CI on the head 66b0b2f was fully green (all 13 check runs, including the aggregate check). The branch matched the remote.
+- K28, the store read: `cookbooks/recorded-runs.ts` reads each session that has a cookbook record (K13). A run gives its cookbook, version, values and how it was chosen. Its measures are null, since nothing stores the measures of a published output (Q41). A record that cannot be read is counted, not dropped. Three PGlite tests (a readable run, an unreadable one and a plain session, another workspace not read).
+- K28, the export builder: `resultsExportOf` in `cookbooks/results.ts` gives the export with its generation time, the run count, the unreadable count and whether any measure is recorded, with a note that says so. One test. The `how` type gains `picked`, the choice the selection record already makes when no selector is connected. The table does not read `how`, so nothing else changes.
+- The export file itself waits for Q41, so K28 is parked there.
+- R5: four test-only modules explained, not wired (Q42): `lib/progress/step-state.ts`, `lib/create/steps.ts`, `components/settings/connection-state.ts` and `render/splice-run.ts`. The recommended next unit is to wire `connection-state.ts`, whose labels the settings screen builds inline.
+- Checks: the results and recorded-runs tests passed 8 of 8. `npx eslint` on the four changed files exits 0. `npm run typecheck` exits 0.
+- Not checked: the export file, since no measures are stored to export. No live provider call was made.
+- Next wake armed for 14:09 UTC (trig_01XatwGoKN9BCwg7jxLmzjdA).

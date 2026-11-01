@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { resultsTable, type RecordedRun } from "./results.ts";
+import { resultsTable, type RecordedRun, resultsExportOf } from "./results.ts";
 
 const RUNS: RecordedRun[] = [
   { cookbookId: "ck_a", version: 1, values: { pace: 1 }, how: "confirmed", measures: { hardCuts: 9, meanMotion: 0.02 } },
@@ -38,4 +38,16 @@ test("the table does not depend on the order the runs were recorded in", () => {
   const once = JSON.stringify(resultsTable(RUNS, ["hardCuts"]));
   const reversed = JSON.stringify(resultsTable([...RUNS].reverse(), ["hardCuts"]));
   assert.equal(reversed, once);
+});
+
+test("the export names its generation time, the run count and the unreadable count, and says no measure is recorded when none is (K28)", () => {
+  const runs = [{ cookbookId: "ck_a", version: 1, values: { pace: 1 }, how: "confirmed" as const, measures: null }];
+  const exported = resultsExportOf({ generatedAt: "2026-11-01T14:00:00.000Z", runs, unreadable: 1, measureNames: ["hardCuts"] });
+  assert.equal(exported.kind, "meridian.cookbook-results");
+  assert.equal(exported.generatedAt, "2026-11-01T14:00:00.000Z");
+  assert.equal(exported.runs, 1);
+  assert.equal(exported.unreadableRuns, 1, "the unreadable record is counted");
+  assert.equal(exported.measuresRecorded, false);
+  assert.match(exported.note, /every measure is unknown/);
+  assert.equal(exported.rows.length, 2, "one all-runs row and one row for the setting");
 });
