@@ -581,3 +581,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: typecheck and eslint pass; the factory component and cookbook library tests pass (19). Not checked in a browser (ui-smoke runs the factory screens in CI).
 - Next: K20b2.
 - Next wake armed for 03:44 UTC (trig_01XVVZ19zZJrpRqSUzSBXm4g).
+
+## 2026-11-01 03:37 UTC: wake: release acceptance red on 00244ac; K20b1 reverted
+
+- Wake (03:27): the release acceptance failed on 00244ac in two checks (F1, F2: the Content page tabs). I reproduced both locally with the pre-installed Chromium (a scratch preload, outside the repo, gave it the path; no repo file changed).
+- Cause: the Content page's client bundle crashed with "node:crypto ... randomBytes ... in client code". K20b1 made the preset bar and the editor import the cookbook library's client code, which imports the engine contracts. `contracts/ids.ts` and `contracts/hash.ts` use `node:crypto`, which the browser does not have.
+- Fix: revert K20b1 (`d655807`, a new commit; no history rewritten). The local acceptance then passes: 30 of 30.
+- Likely also broken: the K19 route `/brands/$brandId/cookbooks` imports the same client code, and CI never opens it. Not verified in a browser yet; K19b verifies and fixes it.
+- Plan: K19b (RUN_PLAN): the server computes the cards and the settings; the browser code imports only types and plain helpers. Then re-add K20b1, and add the cookbook route to the acceptance.
+- Next wake armed for 03:57 UTC (trig_014K6Hm5YCTYS9hcfNdH1crk).
