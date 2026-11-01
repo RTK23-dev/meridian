@@ -4,7 +4,19 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { builtinCookbook } from "../../lib/meridian/cookbooks/builtin/index.ts";
-import { applyEdits, COPY_PREFIX, INSTRUCTION_MAX_CHARACTERS, instructionEdit, planSave, runSavePlan, setControlValue, type SaveCalls } from "./edit-model.ts";
+import {
+  applyEdits,
+  COPY_PREFIX,
+  INSTRUCTION_MAX_CHARACTERS,
+  instructionEdit,
+  planSave,
+  runSavePlan,
+  setControlValue,
+  STEP_LABEL_MAX_CHARACTERS,
+  stepLabelEdit,
+  stepParamValue,
+  type SaveCalls,
+} from "./edit-model.ts";
 
 const EXPLAINER = builtinCookbook("ck_3d_data_explainer");
 if (EXPLAINER === undefined) throw new Error("the explainer is built in");
@@ -140,4 +152,43 @@ test("a refused edit after the copy was made says the copy exists with the cookb
   const outcome = await runSavePlan("brand_1", steps, calls);
   assert.equal(outcome.ok, false);
   if (!outcome.ok) assert.match(outcome.reason, /The copy was made with the cookbook's own text, but the edits were not saved: a rule broke/);
+});
+
+test("a step's label is trimmed, and a blank label or one over the limit is refused (K20c)", () => {
+  assert.deepEqual(stepLabelEdit("  Write the hook  "), { ok: true, label: "Write the hook" });
+  assert.equal(stepLabelEdit("   ").ok, false, "a blank label is refused");
+  assert.equal(stepLabelEdit("x".repeat(STEP_LABEL_MAX_CHARACTERS)).ok, true, "exactly the limit is allowed");
+  const long = stepLabelEdit("x".repeat(STEP_LABEL_MAX_CHARACTERS + 1));
+  assert.equal(long.ok, false);
+  if (!long.ok) assert.match(long.reason, /at most 80 characters/);
+});
+
+test("a step keeps its settings: a known setting takes a value of its kind, and an unknown key or another kind is refused (K20c)", () => {
+  const script = EXPLAINER.steps.find((step) => step.id === "script");
+  if (script === undefined) throw new Error("the explainer has a script step");
+  assert.deepEqual(stepParamValue(script, "beats", 10), { ok: true, value: 10 });
+  const kind = stepParamValue(script, "beats", "ten");
+  assert.equal(kind.ok, false, "a word is not a number setting");
+  if (!kind.ok) assert.match(kind.reason, /beats takes a number, not a string/);
+  assert.equal(stepParamValue(script, "beats", Number.NaN).ok, false, "a number that is not finite is refused");
+  const unknown = stepParamValue(script, "no_such_setting", 1);
+  assert.equal(unknown.ok, false, "a setting the step does not have is refused");
+  if (!unknown.ok) assert.match(unknown.reason, /no setting no_such_setting/);
+});
+
+test("applying step edits changes the copy's label and setting, leaves the original alone, and refuses a step that does not exist (K20c)", () => {
+  const before = JSON.stringify(EXPLAINER);
+  const index = EXPLAINER.steps.findIndex((step) => step.id === "script");
+  assert.ok(index >= 0, "the explainer has a script step");
+  const edited = applyEdits(EXPLAINER, [
+    { kind: "step-label", index, label: "Write the hook" },
+    { kind: "step-param", index, key: "beats", value: 10 },
+  ]);
+  assert.equal(edited.ok, true);
+  if (!edited.ok) return;
+  assert.equal(edited.cookbook.steps[index]?.label, "Write the hook");
+  assert.equal(edited.cookbook.steps[index]?.params.beats, 10);
+  assert.equal(JSON.stringify(EXPLAINER), before, "the original cookbook is not changed");
+  assert.equal(applyEdits(EXPLAINER, [{ kind: "step-param", index: 999, key: "beats", value: 10 }]).ok, false, "a step that does not exist is refused");
+  assert.equal(applyEdits(EXPLAINER, [{ kind: "step-label", index, label: " " }]).ok, false, "a blank step label is refused");
 });

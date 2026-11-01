@@ -1,9 +1,9 @@
-// The cookbook editor's edit rules (round 3, K20b3): one control's value, and one role's instruction. Pure, so the rules are tested without a
-// browser. The rules are the same ones the validator and the server apply on save (K20b3b), so the editor refuses first and the server
-// checks again. Imports only the leaf control rules, so the browser can load it.
+// The cookbook editor's edit rules (round 3, K20b3 and K20c): one control's value, one role's instruction, and one step's label or setting.
+// Pure, so the rules are tested without a browser. The rules are the same ones the validator and the server apply on save (K20b3b), so the
+// editor refuses first and the server checks again. Imports only the leaf control rules, so the browser can load it.
 
-import { fitsControl, type Control, type ControlValue } from "../../lib/meridian/cookbooks/controls.ts";
-import type { Cookbook } from "../../lib/meridian/cookbooks/schema.ts";
+import { fitsControl, scalarSchema, type Control, type ControlValue, type Scalar } from "../../lib/meridian/cookbooks/controls.ts";
+import type { Cookbook, Step } from "../../lib/meridian/cookbooks/schema.ts";
 
 export type ControlEdit = { ok: true; values: Record<string, ControlValue> } | { ok: false; reason: string };
 
@@ -29,8 +29,44 @@ export function instructionEdit(text: string): InstructionEdit {
   return { ok: true, text };
 }
 
-/** One change the editor makes: a control's default, or the text of one instruction (by its place in the cookbook's list). */
-export type CookbookEdit = { kind: "control"; id: string; value: ControlValue } | { kind: "instruction"; index: number; text: string };
+/** The longest label a step can carry (the cookbook schema's limit for a step). */
+export const STEP_LABEL_MAX_CHARACTERS = 80;
+
+export type StepLabelEdit = { ok: true; label: string } | { ok: false; reason: string };
+
+/** A step's label: trimmed, it must say something and fit the schema's limit. The label stored is the trimmed text. */
+export function stepLabelEdit(label: string): StepLabelEdit {
+  const trimmed = label.trim();
+  if (trimmed === "") return { ok: false, reason: "A step needs a label. Give it a short name." };
+  if (trimmed.length > STEP_LABEL_MAX_CHARACTERS) {
+    return { ok: false, reason: `A step label is at most ${STEP_LABEL_MAX_CHARACTERS} characters; this one is ${trimmed.length}.` };
+  }
+  return { ok: true, label: trimmed };
+}
+
+export type StepParamEdit = { ok: true; value: Scalar } | { ok: false; reason: string };
+
+/**
+ * One setting of a step. The step keeps the settings it has: a key it does not have is refused, and so is a value of another kind (a
+ * number stays a number). The schema's own check runs too: a finite number, a string of at most 2000 characters.
+ */
+export function stepParamValue(step: Step, key: string, value: Scalar): StepParamEdit {
+  if (!Object.hasOwn(step.params, key)) return { ok: false, reason: `${step.label} has no setting ${key}.` };
+  const current = step.params[key];
+  if (typeof current !== typeof value) return { ok: false, reason: `${step.label}: ${key} takes a ${typeof current}, not a ${typeof value}.` };
+  if (!scalarSchema.safeParse(value).success) return { ok: false, reason: `${step.label}: ${key} is not a value the cookbook accepts.` };
+  return { ok: true, value };
+}
+
+/**
+ * One change the editor makes: a control's default, the text of one instruction (by its place in the cookbook's list), or one step's label
+ * or one of its settings (by the step's place in the list).
+ */
+export type CookbookEdit =
+  | { kind: "control"; id: string; value: ControlValue }
+  | { kind: "instruction"; index: number; text: string }
+  | { kind: "step-label"; index: number; label: string }
+  | { kind: "step-param"; index: number; key: string; value: Scalar };
 
 export type CookbookEdits = { ok: true; cookbook: Cookbook } | { ok: false; reason: string };
 
@@ -41,21 +77,34 @@ export type CookbookEdits = { ok: true; cookbook: Cookbook } | { ok: false; reas
 export function applyEdits(cookbook: Cookbook, edits: readonly CookbookEdit[]): CookbookEdits {
   const controls: Control[] = cookbook.controls.map((control) => ({ ...control }) as Control);
   const instructions = cookbook.instructions.map((instruction) => ({ ...instruction }));
+  const steps = cookbook.steps.map((step) => ({ ...step, params: { ...step.params } }));
   for (const edit of edits) {
     if (edit.kind === "control") {
       const control = controls.find((candidate) => candidate.id === edit.id);
       if (control === undefined) return { ok: false, reason: `There is no control ${edit.id}.` };
       if (!fitsControl(control, edit.value)) return { ok: false, reason: `${control.label}: that value is outside what the control allows.` };
       (control as { default: ControlValue }).default = edit.value;
-    } else {
+    } else if (edit.kind === "instruction") {
       const instruction = instructions[edit.index];
       if (instruction === undefined) return { ok: false, reason: `There is no instruction ${edit.index}.` };
       const checked = instructionEdit(edit.text);
       if (!checked.ok) return { ok: false, reason: checked.reason };
       instruction.text = checked.text;
+    } else {
+      const step = steps[edit.index];
+      if (step === undefined) return { ok: false, reason: `There is no step ${edit.index}.` };
+      if (edit.kind === "step-label") {
+        const checked = stepLabelEdit(edit.label);
+        if (!checked.ok) return { ok: false, reason: checked.reason };
+        step.label = checked.label;
+      } else {
+        const checked = stepParamValue(step, edit.key, edit.value);
+        if (!checked.ok) return { ok: false, reason: checked.reason };
+        step.params = { ...step.params, [edit.key]: checked.value };
+      }
     }
   }
-  return { ok: true, cookbook: { ...cookbook, controls, instructions } };
+  return { ok: true, cookbook: { ...cookbook, controls, instructions, steps } };
 }
 
 /** The server calls that save an edited cookbook, in order (K20b3b part 2). A built-in cookbook is copied first: its id is reserved, and admins

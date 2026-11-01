@@ -690,3 +690,12 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not covered: the single-save path of a workspace cookbook in a browser, and any live server. No live provider call was made.
 - Still open in K20: the editor's steps and inline validation on the generation and grading fields.
 - Next wake armed for 09:03 UTC (trig_01XTqaSPnH4asxHWexZQNdYF); the 08:50 wake was cancelled.
+
+## 2026-11-01 09:08 UTC: wake: K20c, the step rules of the cookbook editor
+
+- Wake (09:04, the scheduled wake): CI on the head 836406a was green (all 14 check runs). The local branch matched the remote, and the tree was clean.
+- Unit done (K20c): `components/cookbooks/edit-model.ts` gains the rules for a cookbook's steps. A step's label is trimmed and must be 1 to 80 characters. A step's setting must be one the step already has, with a value of the same kind (number, string or boolean), and the schema's own check runs on the value (a finite number, a string of at most 2000 characters). `applyEdits` takes two new edit kinds, `step-label` and `step-param`, and applies them to a copy, as it does the others.
+- Checks: `NODE_ENV=development node --experimental-strip-types --test src/components/cookbooks/edit-model.test.ts` passed 16 of 16 (13 before, 3 new). `npx eslint` on the two files exits 0. `npm run typecheck` exits 0.
+- Not checked: the form does not show step fields yet, so nothing is in a browser. No live provider call was made.
+- Still open in K20: K20d (the form's step fields, saved through the same plan) and K20e (inline validation on the generation and grading fields).
+- Next wake armed for 09:27 UTC (trig_01X3jEtbKyuveoLmcLSgzp4A).
