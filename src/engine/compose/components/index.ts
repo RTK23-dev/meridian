@@ -14,6 +14,7 @@ import { kineticPunchline } from "./kinetic.punchline/index.ts";
 import { kineticType } from "./kinetic.type/index.ts";
 import { labelPill } from "./label.pill/index.ts";
 import { listTierBoard } from "./list.tierBoard/index.ts";
+import { panelBars } from "./panel.bars/index.ts";
 import { priceReveal } from "./price.reveal/index.ts";
 import { productCard } from "./product.card/index.ts";
 import { reactLayout } from "./react.layout/index.ts";
@@ -32,6 +33,7 @@ export const COMPONENT_LIBRARY: ComponentLibrary = Object.freeze({
   [reactLayout.name]: reactLayout,
   [listTierBoard.name]: listTierBoard,
   [compareSplit.name]: compareSplit,
+  [panelBars.name]: panelBars,
   [priceReveal.name]: priceReveal,
   [chatThread.name]: chatThread,
   [kineticType.name]: kineticType,
