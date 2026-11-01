@@ -360,6 +360,7 @@ wake. Status: `pending`, `active`, `done` or `parked`, as in rounds 1 and 2.
 - Navigation entry, with the navigation tests updated.
 
 #### K20: The pipeline editor becomes the cookbook editor (D4)
+- Note (06:1x UTC): K20b3a done: `components/cookbooks/edit-model.ts`, the editor's rules: a control takes only a value that fits it (bounds, options, kind), and an instruction must say something and fit the 4000-character limit; 4 tests. K20b3b (the editor's controls and instruction fields, saved through `saveCookbookAction`, with the server checking again) is next.
 - Note (05:5x UTC): K20b2b done: each cookbook in the preset bar has a Show steps button, which opens its outline (`components/cookbooks/cookbook-outline.tsx`, read through `readCookbookAction`). The release acceptance passes locally (31 of 31). The acceptance does not click the button; its rendering is not checked in a browser here.
 - Note (05:2x UTC): K20b2a done: `components/cookbooks/outline-model.ts`, a pure read-only outline of one cookbook (steps in order with what each waits for and whether it is conditional; controls with defaults in words), with 3 tests. K20b2b (mount it in the editor, reading the cookbook through `readCookbookAction`) is next.
 - Note (05:0x UTC): K20b1 is re-applied on top of K19b, and the release acceptance passes locally (31 of 31, including F1, F2 and H1). The K20b2 and K20b3 split stands.

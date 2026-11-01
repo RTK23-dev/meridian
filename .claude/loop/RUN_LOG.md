@@ -638,3 +638,10 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Checks: typecheck and eslint pass; the factory and outline tests pass (15).
 - Next: K20b3 (the editor edits controls and per-role instructions).
 - Next wake armed for 06:12 UTC (trig_01GhMx3rmqm48iiUHUb1VnqP).
+
+## 2026-11-01 06:13 UTC: wake: K20b3a
+
+- Wake (06:12): CI on 38005f0 was fully green (every shard, ui-smoke, e2e, release-acceptance, typecheck, sidecar, PostgreSQL, and the aggregate check).
+- K20b3a done: `components/cookbooks/edit-model.ts`, the editor's rules. A control takes only a value that fits it (its bounds, options and kind), and an instruction must say something and fit the 4000-character limit. The same checks run again on save. 4 tests; typecheck and eslint pass.
+- Next: K20b3b (the editor's fields, saved through `saveCookbookAction`).
+- Next wake armed for 06:33 UTC (trig_01TQ7fWMKhVwea21iKBn5b8c).
