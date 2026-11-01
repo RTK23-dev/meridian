@@ -720,3 +720,13 @@ Append-only. One entry per unit of work, newest at the bottom.
 - Not checked: the factory's generation and grading panels, which are unchanged. No live provider call was made.
 - Still open in K20: the pipeline-model tests move (K20f, to check first, from the spec), and the decision in Q36.
 - Next wake armed for 10:20 UTC (trig_01D8pg22zXi4dhBrTXJ9L4t4).
+
+## 2026-11-01 10:22 UTC: wake: K20f parked on Q37
+
+- Wake (10:20): CI on the head b19780f was green (13 check runs; CodeRabbit skipped). The local branch matched the remote.
+- Read K20f, the last open item of K20: the spec says the pipeline-model tests move to the cookbook model and keep their cases. The file has three cases, and all three test `engineRows` (the factory's engine picker: Hypit and Manual Cloud availability). The cookbook model has no provider connection status; its eligibility (`cookbooks/eligibility.ts`) decides only from footage and budget.
+- Decision: K20f is parked on Q37, an owner decision. A move would add a provider connection rule to the cookbook's eligibility, which changes which ways a run may use, so the loop does not make it. The three cases stay where they are and keep passing, until the owner decides Q37 or K29 retires the picker.
+- K20 is marked done except K20f. Its other spec items are done: the cookbook editor edits steps, instructions and controls (K20b3 to K20d), refused fields show their message (K20e), and the factory line is saved only as a cookbook (K20a).
+- No code changed in this wake: the records only (RUN_PLAN, OPEN_QUESTIONS, STATE, RUN_LOG).
+- Next: K21 (partly done), the first unfinished task in order.
+- Next wake armed for 10:42 UTC (trig_01VSaY1LHmUafkKGFzLFD5LY).

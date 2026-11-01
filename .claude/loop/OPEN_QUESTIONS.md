@@ -301,6 +301,14 @@ Status: `open`, `decided by loop` (the loop chose, and you can confirm or revers
 - What would change if the owner chose otherwise: the server's validator clamps a stored value silently (`validatePipelineConfig` in `src/lib/meridian/factory/pipeline-config.ts`). If the owner wants that clamp reported, that is a change to factory validation and would be a separate unit.
 - Blocks: nothing.
 
+## Q37: Provider availability in the cookbook model: where does the Hypit and Manual Cloud rule live?
+- Kind: owner decision (provider logic). Status: `open`.
+- Context: K20's spec says the existing pipeline-model tests move to the cookbook model and keep their cases. The three cases in `src/components/factory/pipeline-model.test.ts` test `engineRows` (in `pipeline-model.ts`): the factory lists only Manual Cloud and Hypit; Hypit is configured only when its status says CONFIGURED; Manual Cloud follows the Google Drive status, and an unreadable status is not shown as connected. The cookbook model has no provider connection status. Its eligibility (`src/lib/meridian/cookbooks/eligibility.ts`) decides only from footage and budget. The factory editor still uses `engineRows`.
+- What the move would change: the cookbook's eligibility would gain a provider connection rule, so a way is unavailable when its provider is not connected. That changes which ways a run can use, which is provider logic, and the loop does not add it unasked.
+- Options: (a) add the connection rule to the cookbook's eligibility, and port the three cases to it; (b) keep the three cases with `engineRows` until K29 retires the old factory picker, then move them with it.
+- Blocks: K20f (the test move) and the removal of `pipeline-model.ts` in K29.
+- The loop's default is (b): nothing changes now, and the three cases keep passing where they are.
+
 ## Owner answers, 2026-10-31
 
 - Q1: the owner asked for examples first, before deciding. Examples are in the status reply. Still open.
