@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en" data-system="proposed">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian web design</title>
+  <meta name="description" content="The full Meridian web design, redesigned screen by screen: what each screen does, what it means, and what was checked on it.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,600..700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="prototype.css">
+  <link rel="stylesheet" href="presentation.css">
+</head>
+<body>
+  <a class="skip-link" href="#stage">Skip to the screens</a>
+  <main class="pres">
+    <nav class="pres-index" id="index" aria-label="Screens"></nav>
+    <section class="pres-stage" aria-label="Screens">
+      <div class="pres-bar">
+        <div class="pres-nav">
+          <button type="button" class="btn btn-secondary" id="prev">Previous</button>
+          <button type="button" class="btn btn-secondary" id="next">Next</button>
+          <span class="pres-count" id="count" aria-live="polite"></span>
+        </div>
+        <div class="seg pres-mode" role="group" aria-label="Frame width">
+          <button type="button" data-mode="desktop" aria-pressed="true">Desktop</button>
+          <button type="button" data-mode="phone" aria-pressed="false">Phone</button>
+        </div>
+      </div>
+      <div id="stage" tabindex="-1"></div>
+    </section>
+  </main>
+  <script type="module" src="presentation.mjs"></script>
+</body>
+</html>

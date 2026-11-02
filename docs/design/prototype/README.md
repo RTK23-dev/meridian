@@ -12,7 +12,7 @@ Module scripts do not load from `file://`, so serve the folder:
 
     cd docs/design/prototype && python3 -m http.server 8080
 
-then open http://localhost:8080/index.html.
+then open http://localhost:8080/index.html for the plates, or http://localhost:8080/presentation.html for the walkthrough of the full web design: fourteen screens and a cover, each with what it does, what it means, and what was checked on it. The walkthrough moves with Previous and Next, the arrow keys, or `#screen-id` in the address, and its Desktop and Phone control sets the frame width.
 
 ## Test it
 
@@ -28,15 +28,19 @@ The model tests check the canvas geometry against `src/engine/orchestrator/layou
 
     node docs/design/prototype/capture.mjs
 
+The walkthrough has its own checks: `capture-presentation.mjs` runs nine claims over the fourteen screens (each renders and is indexed, at most one red action, every disabled control says why, no sideways scroll at 1440 and 390, the phone layout, the keys, and a step chosen on the plan opens its details). It writes one PNG per screen into `presentation-screens/`, and `presentation-measurements.json`. It exits non-zero if a claim fails.
+
+    node docs/design/prototype/capture-presentation.mjs
+
 It uses the pre-installed Chromium at `/opt/pw-browsers/chromium` and the `playwright` package from the environment. Google Fonts must be reachable for the faces to show; without it the page falls back to the system faces, and the font check fails.
 
 ## Publish it
 
 The published Artifact is the same page with the stylesheet and both scripts inlined, so it is one file:
 
-    node docs/design/prototype/build-artifact.mjs <output.html>
+    node docs/design/prototype/build-artifact.mjs <output.html> [index|presentation]
 
-The build bundles `model.mjs`, `mount.mjs` and `app.mjs` into one script, in that order, and keeps the page content as it is in `index.html`. The publish skeleton supplies the document wrapper.
+`index` (the default) bundles `model.mjs`, `mount.mjs` and `app.mjs`, in that order, and keeps the page content as it is in `index.html`. `presentation` bundles `model.mjs`, `mount.mjs`, `screens.mjs` and `presentation.mjs`, with `prototype.css` and `presentation.css`. The build stops if a top-level name is declared twice, since the modules share one scope in the page. The publish skeleton supplies the document wrapper.
 
 ## Files
 
@@ -45,5 +49,9 @@ The build bundles `model.mjs`, `mount.mjs` and `app.mjs` into one script, in tha
 - `app.mjs`: the page controller. It mounts the plans, builds the state and cost plates from the model, and wires the brief and the switches. Text goes through `esc()`; no sample data reaches `innerHTML` unescaped.
 - `model.mjs`: the sample plan, the layout, the state words, the cost rules and the reducer. Its tests are `scripts/design-prototype-model.test.mjs`.
 - `capture.mjs`: the browser checks and the screenshots.
-- `build-artifact.mjs`: the single-file build for publishing.
-- `screens/`: screenshots of the page (1440 and 390 px, both themes, the shipped look), plus `measurements.json`.
+- `build-artifact.mjs`: the single-file build for publishing, for either entry.
+- `screens/`: screenshots of the plates (1440 and 390 px, both themes, the shipped look), plus `measurements.json`.
+- `presentation.html`, `presentation.css`, `presentation.mjs`: the walkthrough of the full web design. It has an index of the fourteen screens and a stage that draws each one in a frame that is its own container, so a frame reflows by the width it has.
+- `screens.mjs`: the fourteen screens and the cover: their markup, copy and notes. Every screen's red action is counted by the capture. Its `esc` comes from `mount.mjs`.
+- `capture-presentation.mjs`: the walkthrough's nine claims and its screenshots.
+- `presentation-screens/`: one PNG per screen, four phone frames, and `presentation-measurements.json`.

@@ -425,6 +425,46 @@ The globe mark is the logo's motion source, drawn from `docs/design/logo/`. Its 
 
 **Limits of the showcase.** Every number on the page is a sample. The measured results in the footnotes come from the capture, and the capture is the only place a claim is checked. Textures and grain are decoration by the rule above, and any change to them must keep every text contrast in section 6.
 
+## 17. The full web design
+
+The walkthrough is `docs/design/prototype/presentation.html`. It draws the whole web app in the proposal, one screen at a time: fourteen screens and a cover. Each screen comes with what it does, what it means for the person, and what was checked on it. It is a proposal. Nothing under `src/` changed, and no screen is built here.
+
+**The screens.**
+
+| Group | Screen | What it shows |
+|---|---|---|
+| Start | Sign in | One field and one red action. The copy says what the address is for. |
+| Start | First run, step 2 | Three steps with a progress bar. The workspace name is the only input. |
+| Home | Today | What needs the person, one row each with its state word and one action. Then what is running, then three figures. |
+| Home | Today, with nothing to do | The empty state names what will appear and gives the one way to start. |
+| Create | Brief | The brief, examples, the settings that apply, and reference files, which say NOT CONNECTED when they are not. |
+| Create | Plan | The step bar and the plan, in Strip and List views with filters. It is the same component as the plan in the plates. |
+| Create | Plan that could not be drawn | A failed plan says so, keeps the brief, and gives the request id. |
+| Create | Review | Four gates with their words, a preview that says nothing was made, recorded and estimated costs, and Approve disabled until Rights is cleared. |
+| Library | Library | Tiles, filters, and the details of the selected item. A tile with no preview says so. |
+| Insights | Insights, market | One chart, its source line, and a plain note on what it means. |
+| Settings | Connections | Each connection with its true state: connected, error, or NOT CONNECTED. |
+| Settings | Connect Google Ads | The three-step connection. The middle step says it leaves Meridian and publishes nothing. |
+| Settings | System | Recent jobs in a table. Ids are in full, and a duration that was not recorded says so. |
+| Overlay | Command palette | Opens over any screen, groups results by where they go, and shows each key. |
+
+**Principles the capture checks.** These are measured in the browser, so they are claims, not intentions:
+
+- At most one red fill per screen, counted from the colour drawn. Red marks the one thing that starts or commits the screen's work. Review has none, because its only action is blocked.
+- Every disabled control has a sentence beside it that says why, linked to the control for a screen reader.
+- Numbers say what they are: recorded, estimated, or not recorded. A missing value shows as missing, never as zero.
+- Sample data is labelled, and no screen shows a success that did not happen.
+- Colour is never the only signal. Each state has a word and a dot.
+- No sideways scroll at 1440 or 390 px.
+
+**The one red action.** Red fill appears on the action that starts or commits the screen: Sign in, Create, Plan it, Continue to Google, Open in review, Continue in first run. A disabled action is never red. The palette's selected row has a red edge, not a red fill.
+
+**The phone frame.** A frame narrower than 640 px takes the phone layout. The five places become a bottom bar, content stacks into one column, rows wrap, and the steps stack. The walkthrough can show any screen at 390 px, and a window at phone width gets the same layout. On a phone the plan is a list, not a canvas. That is an owner decision (section 13).
+
+**Verification.** `capture-presentation.mjs` checks nine claims in headless Chromium: every screen renders and is indexed; at most one red action; every disabled control says why; no sideways scroll at 1440 and 390; the phone layout; the arrow keys and the ends; and a step chosen on the plan screen opens its details. All nine hold. The single-file build of the walkthrough was also loaded in Chromium: 15 positions, the phone frame at 390 px, no sideways scroll, and no console errors.
+
+**Not verified.** Chromium only. The data is sample data. There is no screen reader pass and no real device. The Home, Library, Insights and Settings screens are proposals. Their copy is not checked against the app's routes or strings; the model tests check the plan's copy and nothing else. The owner decisions in section 13 apply to these screens too.
+
 ## Appendix A. Files
 
 | File | What it is |
@@ -436,7 +476,11 @@ The globe mark is the logo's motion source, drawn from `docs/design/logo/`. Its 
 | `docs/design/prototype/model.mjs` | The pure model |
 | `scripts/design-prototype-model.test.mjs` | Its tests (in `scripts/`, so CI runs them) |
 | `docs/design/prototype/capture.mjs` | Browser capture and the 28 measured claims |
-| `docs/design/prototype/build-artifact.mjs` | Builds the single-file page that is published (styles and scripts inlined) |
-| `docs/design/prototype/screens/` | Screenshots of the page and `measurements.json` |
-| `docs/design/prototype/README.md` | How to open, test and capture |
+| `docs/design/prototype/build-artifact.mjs` | Builds a single-file page for publishing (styles and scripts inlined): `index` (the plates) or `presentation` (the walkthrough) |
+| `docs/design/prototype/screens/` | Screenshots of the plates and `measurements.json` |
+| `docs/design/prototype/presentation.html`, `presentation.css`, `presentation.mjs` | The walkthrough of the full web design: the index, the stage, the frame width and the keys |
+| `docs/design/prototype/screens.mjs` | The fourteen screens and the cover: their markup, copy and notes |
+| `docs/design/prototype/capture-presentation.mjs` | Browser checks for the walkthrough (9 claims) and its screenshots |
+| `docs/design/prototype/presentation-screens/` | One screenshot per screen, four phone frames, and `presentation-measurements.json` |
+| `docs/design/prototype/README.md` | How to open, test, capture and publish |
 | `docs/design/research/sanity/` | The Sanity deep entry and its JSON evidence |

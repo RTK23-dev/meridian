@@ -1,0 +1,291 @@
+{
+  "url": "served from docs/design/prototype",
+  "results": {
+    "screens.all-render-and-are-indexed": {
+      "ok": true,
+      "detail": [
+        [
+          "cover",
+          "1 of 15",
+          true,
+          true
+        ],
+        [
+          "login",
+          "2 of 15",
+          true,
+          true
+        ],
+        [
+          "setup",
+          "3 of 15",
+          true,
+          true
+        ],
+        [
+          "home",
+          "4 of 15",
+          true,
+          true
+        ],
+        [
+          "home-empty",
+          "5 of 15",
+          true,
+          true
+        ],
+        [
+          "brief",
+          "6 of 15",
+          true,
+          true
+        ],
+        [
+          "plan",
+          "7 of 15",
+          true,
+          true
+        ],
+        [
+          "plan-error",
+          "8 of 15",
+          true,
+          true
+        ],
+        [
+          "review",
+          "9 of 15",
+          true,
+          true
+        ],
+        [
+          "library",
+          "10 of 15",
+          true,
+          true
+        ],
+        [
+          "insights",
+          "11 of 15",
+          true,
+          true
+        ],
+        [
+          "connections",
+          "12 of 15",
+          true,
+          true
+        ],
+        [
+          "connect",
+          "13 of 15",
+          true,
+          true
+        ],
+        [
+          "system",
+          "14 of 15",
+          true,
+          true
+        ],
+        [
+          "palette",
+          "15 of 15",
+          true,
+          true
+        ]
+      ]
+    },
+    "screens.no-console-errors": {
+      "ok": true,
+      "detail": []
+    },
+    "screens.one-red-action-at-most": {
+      "ok": true,
+      "detail": {
+        "login": 1,
+        "setup": 1,
+        "home": 1,
+        "home-empty": 1,
+        "brief": 1,
+        "plan": 0,
+        "plan-error": 0,
+        "review": 0,
+        "library": 1,
+        "insights": 0,
+        "connections": 0,
+        "connect": 1,
+        "system": 0,
+        "palette": 1
+      }
+    },
+    "screens.disabled-controls-say-why": {
+      "ok": true,
+      "detail": [
+        {
+          "id": "plan",
+          "label": "Resume the run",
+          "reason": true
+        },
+        {
+          "id": "review",
+          "label": "Approve",
+          "reason": true
+        }
+      ]
+    },
+    "screens.no-sideways-scroll.desktop": {
+      "ok": true,
+      "detail": {
+        "cover": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "login": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "setup": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "home": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "home-empty": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "brief": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "plan": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "plan-error": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "review": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "library": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "insights": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "connections": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "connect": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "system": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "palette": {
+          "scroll": 1440,
+          "client": 1440
+        }
+      }
+    },
+    "screens.no-sideways-scroll.phone": {
+      "ok": true,
+      "detail": {
+        "cover": {
+          "scroll": 390,
+          "client": 390
+        },
+        "login": {
+          "scroll": 390,
+          "client": 390
+        },
+        "setup": {
+          "scroll": 390,
+          "client": 390
+        },
+        "home": {
+          "scroll": 390,
+          "client": 390
+        },
+        "home-empty": {
+          "scroll": 390,
+          "client": 390
+        },
+        "brief": {
+          "scroll": 390,
+          "client": 390
+        },
+        "plan": {
+          "scroll": 390,
+          "client": 390
+        },
+        "plan-error": {
+          "scroll": 390,
+          "client": 390
+        },
+        "review": {
+          "scroll": 390,
+          "client": 390
+        },
+        "library": {
+          "scroll": 390,
+          "client": 390
+        },
+        "insights": {
+          "scroll": 390,
+          "client": 390
+        },
+        "connections": {
+          "scroll": 390,
+          "client": 390
+        },
+        "connect": {
+          "scroll": 390,
+          "client": 390
+        },
+        "system": {
+          "scroll": 390,
+          "client": 390
+        },
+        "palette": {
+          "scroll": 390,
+          "client": 390
+        }
+      }
+    },
+    "phone.frame-takes-the-phone-layout": {
+      "ok": true,
+      "detail": {
+        "frameWidth": 390,
+        "railBelowMain": true,
+        "railHeight": 59
+      }
+    },
+    "navigation.arrows-and-ends": {
+      "ok": true,
+      "detail": {
+        "afterTwo": "3 of 15",
+        "afterBack": "2 of 15",
+        "atEnd": true
+      }
+    },
+    "plan.selection-opens-details": {
+      "ok": true,
+      "detail": {
+        "selected": "s2",
+        "drawerOpen": true
+      }
+    }
+  }
+}
