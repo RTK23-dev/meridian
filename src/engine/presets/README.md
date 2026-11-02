@@ -2,7 +2,7 @@
 
 A style preset is a reusable "make videos in this style" package, built from one reference video and kept as data. It uses the
 existing contracts only: the style kit (`styleKitSchema`), a look (`LOOK_PRESETS`) and the genes (`GENE_IDS`). It adds no contract,
-so it needs no version bump. Whether presets get fields of their own is the owner's decision Q1 in `.claude/loop/OPEN_QUESTIONS.md`.
+so it needs no version bump. Whether presets get fields of their own is the owner's decision Q1 in `docs/decisions/OPEN_QUESTIONS.md`.
 
 ## Files
 

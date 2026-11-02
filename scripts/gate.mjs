@@ -1,5 +1,5 @@
 // The stability gate. It runs the checks that say whether the repository is in a known good state, in order, and prints each count
-// against the baseline recorded in .claude/loop/RUN_PLAN.md. It sends no provider request.
+// It sends no provider request.
 //
 // The gate exits 0 only when every required check passed. A check that could not run (the browser, for example) is reported as
 // "not run" and makes the gate incomplete, exit 2. It is never counted as a pass. The engine dry run is reported on its own line: it

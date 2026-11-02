@@ -115,7 +115,7 @@ runs the money and migration checks against a real PostgreSQL with pgvector.
 
 ## 9. Owner checklist
 
-Tick each line when it is done. The questions are in `.claude/loop/OPEN_QUESTIONS.md`, with what each one blocks.
+Tick each line when it is done. The questions are in `docs/decisions/OPEN_QUESTIONS.md`, with what each one blocks.
 
 - [ ] **Q2, the dry-run policy.** Choose step 6, option 1 (set the HyperFrames price) or option 2 (report the bill check as not proven offline).
 - [ ] **Q10, Q11 and Q13, decided by the loop.** Confirm each, or reverse it. Q10 is how the gate runs the source tests locally. Q11 is the hook-timing decisions. Q13 is the asset router's closure, which stays whole.
