@@ -93,8 +93,9 @@ export function EngineChoice({
           return (
             <div
               key={engine.id}
-              className={`space-y-3 rounded-lg border p-4 ${
-                selected === engine.id ? "border-fg bg-surface-2" : "border-border bg-surface"
+              // The chosen engine takes the full row and shows its details. The others stay one short row each, so the step stays short.
+              className={`rounded-lg border p-4 ${
+                selected === engine.id ? "space-y-3 border-fg bg-surface-2 md:col-span-2" : "space-y-1 border-border bg-surface"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -111,7 +112,7 @@ export function EngineChoice({
                   />
                   <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canAdmin ? "cursor-pointer" : ""}`}>
                     <span className="block text-lg font-semibold text-fg">{copy?.title ?? engine.label}</span>
-                    {copy ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
+                    {copy && selected === engine.id ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>

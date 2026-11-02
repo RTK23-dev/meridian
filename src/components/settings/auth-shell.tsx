@@ -12,13 +12,13 @@ export function MeridianMark({ className = "size-9" }: { className?: string }) {
   );
 }
 
-const LOOP = ["Gather", "Grade", "Make", "Publish", "Learn"] as const;
+const LOOP = ["Research", "Pick a format", "Make a batch", "Review", "Publish"] as const;
 
 /**
  * The left side of the sign-in and welcome screens. It says what Meridian does in one sentence, shows the loop it runs, and states
  * the two things people ask about first: where keys live, and that ads start paused.
  */
-export function BrandStage({ headline = "Watch the market. Make the next ad.", lead }: { headline?: string; lead?: ReactNode }) {
+export function BrandStage({ headline = "Research your niche. Make many original videos.", lead }: { headline?: string; lead?: ReactNode }) {
   return (
     <section aria-label="About Meridian" className="space-y-8">
       <div className="flex items-center gap-3">
@@ -29,7 +29,7 @@ export function BrandStage({ headline = "Watch the market. Make the next ad.", l
         <p className="eyebrow">For one brand at a time</p>
         <h2 className="text-2xl font-semibold leading-tight text-fg sm:text-3xl">{headline}</h2>
         <p className="max-w-prose text-lg text-fg-muted">
-          {lead ?? "Meridian keeps what you know about the brand, finds an opportunity, and makes the ads. You review them before they go out. Paid ads are created paused."}
+          {lead ?? "Meridian studies what works in your niche, turns it into a video format you can reuse, and makes a batch of original videos from it. You review every video before anything goes out. Nothing is spent until you set a budget."}
         </p>
       </div>
       <ol className="flex flex-wrap items-center gap-2" aria-label="The loop Meridian runs">
@@ -46,7 +46,7 @@ export function BrandStage({ headline = "Watch the market. Make the next ad.", l
         ))}
       </ol>
       <p className="max-w-prose text-sm text-fg-muted">
-        Each decision is stored with the engine and the evidence it used. New paid ads are created paused. Keys are saved encrypted on the server, and they are never shown again.
+        Each decision is stored with the evidence it used. Paid ads, if you use them, are always created paused. Keys are saved encrypted on the server, and they are never shown again.
       </p>
     </section>
   );

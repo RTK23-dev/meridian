@@ -16,7 +16,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
   return (
     <section aria-labelledby="pipeline-title" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 id="pipeline-title" className="text-section font-semibold text-fg">Advertising pipeline</h2>
+        <h2 id="pipeline-title" className="text-section font-semibold text-fg">From research to results</h2>
         <p className="text-sm text-fg-muted">{done} of {stages.length} stages done</p>
       </div>
       {/* One thin track above the stages, so progress reads at a glance. The width eases in when a stage changes state. */}
