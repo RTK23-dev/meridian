@@ -34,7 +34,7 @@ const check = (name, ok, detail) => {
 };
 const info = (name, detail) => { results[name] = { detail }; };
 
-async function open(width, height, { system = "proposed", theme = "dark", reduced = false, colorScheme } = {}) {
+async function open(width, height, { theme = "dark", reduced = false, colorScheme } = {}) {
   const context = await browser.newContext({
     viewport: { width, height },
     deviceScaleFactor: 1,
@@ -44,11 +44,10 @@ async function open(width, height, { system = "proposed", theme = "dark", reduce
   const page = await context.newPage();
   await page.goto(url, { waitUntil: "networkidle" });
   // The theme is set explicitly, because Playwright's default colour scheme is light and the page follows the system.
-  await page.evaluate(([s, t]) => {
-    document.documentElement.dataset.system = s;
+  await page.evaluate((t) => {
     if (t) document.documentElement.dataset.theme = t;
     else delete document.documentElement.dataset.theme;
-  }, [system, theme]);
+  }, theme);
   await page.waitForTimeout(300);
   await page.evaluate(() => document.fonts.ready);
   return { context, page };
@@ -297,13 +296,12 @@ async function open(width, height, { system = "proposed", theme = "dark", reduce
 }
 
 // ---- Screenshots, for the record. ----
-for (const [name, width, height, theme, system, full] of [
-  ["page-1440-dark-proposed", 1440, 1000, "dark", "proposed", false],
-  ["page-1440-light-proposed", 1440, 1000, "light", "proposed", false],
-  ["page-1440-dark-shipped", 1440, 1000, "dark", "shipped", false],
-  ["page-390-dark-proposed", 390, 844, "dark", "proposed", false],
+for (const [name, width, height, theme, full] of [
+  ["page-1440-dark", 1440, 1000, "dark", false],
+  ["page-1440-light", 1440, 1000, "light", false],
+  ["page-390-dark", 390, 844, "dark", false],
 ]) {
-  const { context, page } = await open(width, height, { theme, system });
+  const { context, page } = await open(width, height, { theme });
   await page.waitForTimeout(900);
   await page.screenshot({ path: join(screens, `${name}.png`), fullPage: full });
   await context.close();

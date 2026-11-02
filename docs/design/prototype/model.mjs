@@ -11,12 +11,6 @@ export const KIND_LABEL = Object.freeze({
   voice: "Voice", avatar: "Presenter", edit: "Edit", compose: "Compose", render: "Render",
 });
 
-/** The colour the shipped app gives each kind. The proposal removes it: colour carries state only. Used by the "shipped" view. */
-export const KIND_SHIPPED_ACCENT = Object.freeze({
-  reference: "muted", analysis: "info", script: "info", visual: "success", video: "accent",
-  voice: "warning", avatar: "accent", edit: "muted", compose: "muted", render: "success",
-});
-
 /**
  * The ten step states. Each has a word, a dot shape and a tone, so no state is carried by colour alone (Katana section j).
  * Words match the app's labels; the drift test reads orchestrator-presentation.ts. "NOT CONNECTED" stays in capitals because the

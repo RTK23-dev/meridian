@@ -82,7 +82,15 @@ const ids = await (async () => {
   for (const id of ids.slice(1)) {
     await page.click(`[data-go="${id}"]`);
     await page.waitForTimeout(60);
-    redCounts[id] = await page.evaluate(() => [...document.querySelector(".frame").querySelectorAll("button")].filter((b) => getComputedStyle(b).backgroundColor === "rgb(255, 46, 56)").length);
+    // The accent is read from the page, so the count holds for whichever accent the reader has chosen.
+    redCounts[id] = await page.evaluate(() => {
+      const probe = document.createElement("i");
+      probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--accent");
+      document.body.append(probe);
+      const accent = getComputedStyle(probe).color;
+      probe.remove();
+      return [...document.querySelector(".frame").querySelectorAll("button")].filter((b) => getComputedStyle(b).backgroundColor === accent).length;
+    });
   }
   check("screens.one-red-action-at-most", Object.values(redCounts).every((n) => n <= 1), redCounts);
   await context.close();
@@ -162,6 +170,39 @@ for (const [width, height, label] of [[1440, 1000, "desktop"], [390, 844, "phone
     drawerOpen: !document.querySelector(".plan .plan-drawer").hidden,
   }));
   check("plan.selection-opens-details", detail.selected === "s2" && detail.drawerOpen, detail);
+  await context.close();
+}
+
+// 8. The accent is the reader's choice. Choosing another one changes every accent use on the page (the buttons with an accent fill, and the
+//    globe's meridian), leaves the danger colour alone, and is kept when the page is opened again.
+{
+  const { context, page } = await open(1440, 1000);
+  await page.click('[data-go="home"]');
+  await page.waitForTimeout(60);
+  const accentNow = () => page.evaluate(() => {
+    const probe = document.createElement("i");
+    probe.style.color = getComputedStyle(document.documentElement).getPropertyValue("--accent");
+    document.body.append(probe);
+    const rgb = getComputedStyle(probe).color;
+    probe.remove();
+    return rgb;
+  });
+  const filledWith = (color) => page.evaluate((c) => [...document.querySelector(".frame").querySelectorAll("button")].filter((b) => getComputedStyle(b).backgroundColor === c).length, color);
+  const globeStroke = () => page.evaluate(() => getComputedStyle(document.querySelector(".globe-red")).stroke);
+  const dangerNow = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--danger").trim());
+
+  const before = { accent: await accentNow(), filled: 0, danger: await dangerNow() };
+  before.filled = await filledWith(before.accent);
+  await page.click('[data-set-accent="blue"]');
+  // The buttons ease their colour, so the new accent is read once the transition has finished.
+  await page.waitForTimeout(400);
+  const after = { accent: await accentNow(), danger: await dangerNow(), globe: await globeStroke() };
+  after.filled = await filledWith(after.accent);
+  check("accent.changes-every-accent-use", before.filled > 0 && after.accent !== before.accent && after.filled === before.filled && after.globe === after.accent && after.danger === before.danger, { before, after });
+
+  await page.reload({ waitUntil: "networkidle" });
+  const kept = await page.evaluate(() => document.querySelector('[data-set-accent="blue"]')?.getAttribute("aria-checked"));
+  check("accent.is-kept-when-the-page-opens-again", kept === "true", { kept });
   await context.close();
 }
 

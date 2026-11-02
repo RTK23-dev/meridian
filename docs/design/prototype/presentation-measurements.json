@@ -877,6 +877,28 @@
         "selected": "s2",
         "drawerOpen": true
       }
+    },
+    "accent.changes-every-accent-use": {
+      "ok": true,
+      "detail": {
+        "before": {
+          "accent": "rgb(255, 46, 56)",
+          "filled": 1,
+          "danger": "#FF4D6A"
+        },
+        "after": {
+          "accent": "rgb(77, 157, 255)",
+          "danger": "#FF4D6A",
+          "globe": "rgb(77, 157, 255)",
+          "filled": 1
+        }
+      }
+    },
+    "accent.is-kept-when-the-page-opens-again": {
+      "ok": true,
+      "detail": {
+        "kept": "true"
+      }
     }
   }
 }

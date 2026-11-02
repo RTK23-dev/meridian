@@ -216,6 +216,8 @@ The ring is `fg-primary` on red fills. Everywhere else it is `accent-red`, which
 
 Katana section 3.2 lists the uses of red. This plan adds one: the viewport box on a minimap, which Katana principle 1 already allows. The rest of the list is unchanged. A review fails a screen that has two red fills, or a red element outside the list.
 
+**The accent is chosen by the reader.** Red is the default accent. The reader can choose one of five presets (red, blue, violet, teal, magenta), and the choice applies everywhere the accent is used, in both themes: the single action, the focus, the selected tab and step, and the globe's meridian. The rule above now reads "two accent fills", not "two red fills". Each preset passes the contrast rules in both themes: text on the room at 4.5 to 1, and the label on the accent and on its hover at 4.5 to 1. The model tests check every preset. The danger colour marks a state, so it is not the accent and does not change.
+
 ### 6.4 Kind colours
 
 The shipped app colours each kind (`orchestrator-presentation.ts` lines 31 to 40: info, success, warning, accent and muted). In the shipped prototype view, the kind label takes that colour, and it competes with the state dot. The proposal removes the kind colours. A kind is a label and an icon. Colour carries state only.
@@ -365,7 +367,7 @@ Each phase keeps the existing gates: `npm test`, `npm run typecheck`, `npm run l
 
 ## 13. Decisions for the owner
 
-1. **The canonical system.** The owner's Katana decisions (red accent, black room, 2 px) are the base, but the app still runs AttentionOS violet. Should migration MX1 onwards start, or should the app stay on AttentionOS and take only the mechanisms (MX2 to MX7 work on either base)?
+1. **The canonical system. Decided by the owner:** Katana is the only design system, and it replaces the AttentionOS look. The prototype no longer offers AttentionOS. The app still runs AttentionOS violet. Migrating the app (MX1 onwards) has not started, and it changes `src/`, so it needs its own approval.
 2. **Phones.** The canvas is replaced by the list, not scrolled. (Overrides Katana section i.)
 3. **Canvas zoom.** Default 75%, not fit-to-width. (Overrides Katana section i.)
 4. **Push and overlay.** Overlay for spatial screens (the details panel), push for reading screens (the assistant). Confirm.
@@ -374,6 +376,7 @@ Each phase keeps the existing gates: `npm test`, `npm run typecheck`, `npm run l
 7. **Queued at the provider.** Added to the state set, with the info tone and a hollow dot.
 8. **Progressive wide-gamut colour.** Rejected (section 2.2). Confirm, or name the contrast check that would make it acceptable.
 9. **Sample content.** The prototype uses a sample plan, sample costs and sample models, labelled as samples. Confirm that is the right level for a design review. No live data was used.
+10. **The accent. Decided by the owner:** the accent is the reader's choice, applied site-wide, from the five presets in `docs/design/prototype/accent.mjs`. Red is the default. Each preset passes the contrast rules in both themes (section 6.3). The danger colour is a state, so it does not change.
 
 ---
 

@@ -10,11 +10,11 @@ const read = (name) => readFileSync(join(here, name), "utf8");
 
 // Each entry names its page, its stylesheets in cascade order, and its modules in dependency order.
 const ENTRIES = {
-  index: { html: "index.html", css: ["prototype.css"], modules: ["model.mjs", "mount.mjs", "app.mjs"] },
+  index: { html: "index.html", css: ["prototype.css"], modules: ["model.mjs", "mount.mjs", "accent.mjs", "app.mjs"] },
   presentation: {
     html: "presentation.html",
     css: ["prototype.css", "presentation.css"],
-    modules: ["model.mjs", "mount.mjs", "screens.mjs", "screens-start.mjs", "screens-workspace.mjs", "screens-settings.mjs", "screens-brand.mjs", "screens-all.mjs", "presentation.mjs"],
+    modules: ["model.mjs", "mount.mjs", "accent.mjs", "screens.mjs", "screens-start.mjs", "screens-workspace.mjs", "screens-settings.mjs", "screens-brand.mjs", "screens-all.mjs", "presentation.mjs"],
   },
 };
 

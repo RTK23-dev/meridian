@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-system="proposed">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -23,9 +23,12 @@
           <button type="button" class="btn btn-secondary" id="next">Next</button>
           <span class="pres-count" id="count" aria-live="polite"></span>
         </div>
-        <div class="seg pres-mode" role="group" aria-label="Frame width">
-          <button type="button" data-mode="desktop" aria-pressed="true">Desktop</button>
-          <button type="button" data-mode="phone" aria-pressed="false">Phone</button>
+        <div class="pres-controls">
+          <div class="seg accent-picker" data-accent-picker role="radiogroup" aria-label="Accent colour"></div>
+          <div class="seg pres-mode" role="group" aria-label="Frame width">
+            <button type="button" data-mode="desktop" aria-pressed="true">Desktop</button>
+            <button type="button" data-mode="phone" aria-pressed="false">Phone</button>
+          </div>
         </div>
       </div>
       <div id="stage" tabindex="-1"></div>

@@ -2,7 +2,7 @@
 // over the plan. Several plans on one page share a selection: a choice made in one is passed on through onSelect, and the page sends
 // the same select action to each of them.
 import {
-  FILTERS, GEOMETRY, KIND_LABEL, KIND_SHIPPED_ACCENT, REASON, STATE, STATE_COPY, costLabel, initialState, layoutSteps, reduce,
+  FILTERS, GEOMETRY, KIND_LABEL, REASON, STATE, STATE_COPY, costLabel, initialState, layoutSteps, reduce,
   restrictionText, visibleIds,
 } from "./model.mjs";
 
@@ -74,7 +74,7 @@ export function mountPlan(root, options) {
     if (step.state === "failed") classes.push("is-failed");
     if (step.state === "stale") classes.push("is-stale");
     if (dimmed) classes.push("is-dimmed");
-    return `<button type="button" class="${classes.join(" ")}" data-id="${step.id}" data-accent="${KIND_SHIPPED_ACCENT[step.kind]}" style="left:${node.x}px;top:${node.y}px" aria-label="${esc(accessibleName(step, text))}"${selected ? ' aria-current="true"' : ""}>
+    return `<button type="button" class="${classes.join(" ")}" data-id="${step.id}" style="left:${node.x}px;top:${node.y}px" aria-label="${esc(accessibleName(step, text))}"${selected ? ' aria-current="true"' : ""}>
       <span class="node-head"><span class="kind">${esc(KIND_LABEL[step.kind])}</span>${stateWord(step.state)}</span>
       <span class="title">${esc(step.title)}</span>
       <span class="model">${esc(modelText(step))}</span>
@@ -109,7 +109,7 @@ export function mountPlan(root, options) {
   function stripMarkup(ids) {
     const cards = reading.map((id) => byId.get(id)).filter((step) => ids.includes(step.id)).map((step) => {
       const text = costLabel(step.cost);
-      return `<button type="button" class="strip-card is-${step.state}" data-id="${step.id}" data-accent="${KIND_SHIPPED_ACCENT[step.kind]}" aria-label="${esc(accessibleName(step, text))}"${step.id === state.selectedId ? ' aria-current="true"' : ""}>
+      return `<button type="button" class="strip-card is-${step.state}" data-id="${step.id}" aria-label="${esc(accessibleName(step, text))}"${step.id === state.selectedId ? ' aria-current="true"' : ""}>
         <span class="strip-head"><span class="kind">${esc(KIND_LABEL[step.kind])}</span>${stateWord(step.state)}</span>
         <span class="title">${esc(step.title)}</span>
         <span class="model">${esc(modelText(step))}</span>

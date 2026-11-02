@@ -1,6 +1,7 @@
 // The page controller. It mounts each plan, builds the state and cost plates from the model, and wires the brief, the notices and the
 // switches. Every line of text comes from the model or from the page, and is escaped before it reaches the page.
 import { esc, mountPlan } from "./mount.mjs";
+import { wireAccent } from "./accent.mjs";
 import { COST_COPY, EXAMPLE_GOALS, SAMPLE_PLAN, STATE, STATE_COPY, costLabel, toastDuration } from "./model.mjs";
 
 const $ = (selector, scope = document) => scope.querySelector(selector);
@@ -91,19 +92,12 @@ function notify(kind, text) {
 $("#toast-success").addEventListener("click", () => notify("success", "Draft saved."));
 $("#toast-danger").addEventListener("click", () => notify("danger", "The run could not be planned. Nothing was started. Try again."));
 
-// ---- Switches: the look, the theme, colour off. The theme follows the system until a choice is made. ----
+// ---- Switches: the accent, the theme, colour off. The theme follows the system until a choice is made. ----
 function renderSwitches() {
-  const system = document.documentElement.dataset.system;
-  for (const button of document.querySelectorAll("[data-set-system]")) button.setAttribute("aria-checked", String(button.dataset.setSystem === system));
   const current = document.documentElement.dataset.theme ?? (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
   for (const button of document.querySelectorAll("[data-set-theme]")) button.setAttribute("aria-checked", String(button.dataset.setTheme === current));
 }
-for (const button of document.querySelectorAll("[data-set-system]")) {
-  button.addEventListener("click", () => {
-    document.documentElement.dataset.system = button.dataset.setSystem;
-    renderSwitches();
-  });
-}
+wireAccent(document, window);
 for (const button of document.querySelectorAll("[data-set-theme]")) {
   button.addEventListener("click", () => {
     document.documentElement.dataset.theme = button.dataset.setTheme;

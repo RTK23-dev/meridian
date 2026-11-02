@@ -1,10 +1,12 @@
 # Mixed-plan prototype
 
-A prototype of the proposal in `docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md`, set out as small plates. Each plate is one part of the design, with what it does and what it means. One structure, two systems: the shipped look (AttentionOS, from `src/styles.css`) and the proposal (Katana tokens from `docs/design/tokens/katana-tokens.json`). The switch is at the top of the page.
+A prototype of the design in `docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md`, set out as small plates. Each plate is one part of the design, with what it does and what it means. There is one design system, the Katana tokens from `docs/design/tokens/katana-tokens.json`. The shipped AttentionOS look is not offered here.
 
 All content is a sample. No provider was called and nothing ran. Costs, models and states are placeholders chosen to show every state.
 
 The theme follows the system setting until a choice is made with the Dark or Light control, which then overrides it.
+
+The accent is the colour of the one action, the focus and the selected state. It is red by default. The Accent colour control chooses one of five presets (red, blue, violet, teal, magenta), and the choice changes the accent everywhere on the page, in both themes. The danger colour does not change, because it marks a state, not the accent. Each preset passes the contrast rules in `accent.mjs` in both themes, and the model tests check that, so a preset that fails cannot be added. The choice is kept on this device only.
 
 ## Open it
 
@@ -50,7 +52,8 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 - `model.mjs`: the sample plan, the layout, the state words, the cost rules and the reducer. Its tests are `scripts/design-prototype-model.test.mjs`.
 - `capture.mjs`: the browser checks and the screenshots.
 - `build-artifact.mjs`: the single-file build for publishing, for either entry.
-- `screens/`: screenshots of the plates (1440 and 390 px, both themes, the shipped look), plus `measurements.json`.
+- `screens/`: screenshots of the plates (1440 px in both themes, and 390 px in dark), plus `measurements.json`.
+- `accent.mjs`: the accent presets, the contrast helpers, and the control that chooses one and keeps it. Both pages use it.
 - `presentation.html`, `presentation.css`, `presentation.mjs`: the walkthrough of the web design. It has an index of its screens and a stage that draws each one in a frame that is its own container, so a frame reflows by the width it has.
 - `screens.mjs`: the shared pieces (heads, tabs, tables, switches, sliders, notices, fields, plates), the first twelve screens, and the cover. Its `esc` comes from `mount.mjs`.
 - `screens-start.mjs`: the invitation, the product, docs and quickstart pages, and the not-found, no-access and admin-only states.

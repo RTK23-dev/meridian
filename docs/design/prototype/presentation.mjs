@@ -5,6 +5,9 @@ import { COVER, notesMarkup, railMarkup } from "./screens.mjs";
 import { GROUPS, SCREENS } from "./screens-all.mjs";
 import { esc, mountPlan } from "./mount.mjs";
 import { SAMPLE_PLAN } from "./model.mjs";
+import { wireAccent } from "./accent.mjs";
+
+wireAccent(document, window);
 
 // The walkthrough moves in the order the index lists the screens, so Next, Previous and the index always agree.
 const byId = new Map([COVER, ...SCREENS].map((screen) => [screen.id, screen]));

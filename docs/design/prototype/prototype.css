@@ -1,8 +1,7 @@
-/* The mixed-plan prototype, as a set of plates. Two looks share one structure:
-   - the proposal (the default): the Katana tokens, dark first, with the mixed plan's rules;
-   - the shipped look (data-system="shipped"): the AttentionOS tokens, as src/styles.css applies them today.
+/* The design system, as a set of plates and screens: the Katana tokens, dark first, with the plan's rules. It is the only system here.
    Dark is the first palette. The light palette applies under a light system setting and under data-theme="light". With no choice made,
-   the page follows the system. Every token is first defined on bare :root, so none is only inside a media query. */
+   the page follows the system. Every token is first defined on bare :root, so none is only inside a media query.
+   The accent (the red, by default) is set by the reader, from the presets in accent.mjs; the inline values it writes override these. */
 
 /* ---- Tokens ---- */
 :root {
@@ -105,100 +104,6 @@
   --guide: rgb(0 0 0 / 0.04);
   --dot: rgb(0 0 0 / 0.10);
   --grain: 0.04;
-}
-
-:root[data-system="shipped"] {
-  color-scheme: dark;
-  --room: #08070B;
-  --bg-base: #08070B;
-  --bg-raised: #111016;
-  --bg-overlay: #19161F;
-  --plate: #111016;
-  --border-hairline: #2C2637;
-  --border-strong: #6B6280;
-  --fg-primary: #F6F3FC;
-  --fg-secondary: #B9B3C7;
-  --fg-muted: #9A94A9;
-  --accent: #7838E8;
-  --accent-hover: #8847EF;
-  --accent-text: #AD78FF;
-  --accent-muted: #241734;
-  --on-accent: #FFFFFF;
-  --ring-on-accent: #FFFFFF;
-  --white-accent: #FFFFFF;
-  --success: #58D6A0;
-  --warning: #F2C46D;
-  --danger: #FF8A9B;
-  --info: #83B9FF;
-  --scrim: rgb(0 0 0 / 0.6);
-  --guide: rgb(255 255 255 / 0.03);
-  --dot: rgb(255 255 255 / 0.08);
-  --font-display: "Sora", "Inter", system-ui, sans-serif;
-  --font-text: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --display-weight: 500;
-  --display-stretch: 100%;
-  --label-transform: none;
-  --label-tracking: 0;
-  --r-control: 10px;
-  --r-card: 16px;
-  --r-chip: 6px;
-}
-@media (prefers-color-scheme: light) {
-  :root[data-system="shipped"]:not([data-theme="dark"]) {
-    color-scheme: light;
-    --room: #FAF9FC;
-    --bg-base: #FAF9FC;
-    --bg-raised: #F3F0F8;
-    --bg-overlay: #FFFFFF;
-    --plate: #F3F0F8;
-    --border-hairline: #E5E0EC;
-    --border-strong: #7A7086;
-    --fg-primary: #111016;
-    --fg-secondary: #635C70;
-    --fg-muted: #5E5769;
-    --accent: #6A2BDB;
-    --accent-hover: #5A1FC2;
-    --accent-text: #5A1FC2;
-    --accent-muted: #EFE8FD;
-    --on-accent: #FFFFFF;
-    --ring-on-accent: #FFFFFF;
-    --white-accent: #111016;
-    --success: #1F7A5A;
-    --warning: #8A5A00;
-    --danger: #C2362B;
-    --info: #0B5FB8;
-    --scrim: rgb(17 16 22 / 0.4);
-    --guide: rgb(0 0 0 / 0.03);
-    --dot: rgb(0 0 0 / 0.08);
-  }
-}
-:root[data-system="shipped"][data-theme="light"] {
-  color-scheme: light;
-  --room: #FAF9FC;
-  --bg-base: #FAF9FC;
-  --bg-raised: #F3F0F8;
-  --bg-overlay: #FFFFFF;
-  --plate: #F3F0F8;
-  --border-hairline: #E5E0EC;
-  --border-strong: #7A7086;
-  --fg-primary: #111016;
-  --fg-secondary: #635C70;
-  --fg-muted: #5E5769;
-  --accent: #6A2BDB;
-  --accent-hover: #5A1FC2;
-  --accent-text: #5A1FC2;
-  --accent-muted: #EFE8FD;
-  --on-accent: #FFFFFF;
-  --ring-on-accent: #FFFFFF;
-  --white-accent: #111016;
-  --success: #1F7A5A;
-  --warning: #8A5A00;
-  --danger: #C2362B;
-  --info: #0B5FB8;
-  --scrim: rgb(17 16 22 / 0.4);
-  --guide: rgb(0 0 0 / 0.03);
-  --dot: rgb(0 0 0 / 0.08);
 }
 
 /* ---- Base ---- */
@@ -405,11 +310,10 @@ kbd { font: 500 12px/16px var(--font-mono); border: 1px solid var(--border-stron
   transition: color var(--dur-fast), background-color var(--dur-fast);
 }
 .seg button + button { border-left: 1px solid var(--border-hairline); }
+.accent-picker .swatch { display: inline-block; width: 12px; height: 12px; margin-right: 8px; vertical-align: -1px; border-radius: 50%; border: 1px solid var(--border-strong); }
 .seg button:hover { color: var(--fg-primary); background: var(--bg-raised); }
 .seg button[aria-pressed="true"] { color: var(--fg-primary); background: var(--bg-overlay); }
 .seg button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--accent); }
-[data-system="shipped"] .seg button[aria-pressed="true"]::after { display: none; }
-[data-system="shipped"] .seg button[aria-pressed="true"] { box-shadow: inset 0 -2px 0 var(--accent); }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
 .zoom .mono { font-size: 13px; min-width: 44px; text-align: center; color: var(--fg-secondary); }
 .plan-frame {
@@ -462,8 +366,6 @@ kbd { font: 500 12px/16px var(--font-mono); border: 1px solid var(--border-stron
 .node[aria-current="true"]::before, .strip-card[aria-current="true"]::before, .node.is-running::before {
   content: ""; position: absolute; left: -1px; right: -1px; top: -1px; height: 2px; background: var(--accent);
 }
-[data-system="shipped"] .node[aria-current="true"]::before, [data-system="shipped"] .strip-card[aria-current="true"]::before, [data-system="shipped"] .node.is-running::before { display: none; }
-[data-system="shipped"] .node[aria-current="true"], [data-system="shipped"] .strip-card[aria-current="true"] { box-shadow: inset 2px 0 0 var(--accent); }
 .node.is-blocked { border-color: var(--border-strong); }
 .node.is-failed { border-color: var(--danger); }
 .node.is-stale { border: 2px dashed var(--border-strong); }
@@ -474,10 +376,6 @@ kbd { font: 500 12px/16px var(--font-mono); border: 1px solid var(--border-stron
 .model { font: 400 11px/16px var(--font-mono); color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-foot { margin-top: auto; padding-top: 6px; border-top: 1px solid var(--border-hairline); font: 400 13px/18px var(--font-mono); color: var(--fg-primary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .node-foot.is-missing { color: var(--fg-muted); font-family: var(--font-text); }
-[data-system="shipped"] .node[data-accent="info"] .kind { color: var(--info); }
-[data-system="shipped"] .node[data-accent="success"] .kind { color: var(--success); }
-[data-system="shipped"] .node[data-accent="warning"] .kind { color: var(--warning); }
-[data-system="shipped"] .node[data-accent="accent"] .kind { color: var(--accent-text); }
 .node.is-skeleton { cursor: default; }
 .node.is-skeleton .bar { display: block; height: 10px; background: var(--border-hairline); border-radius: 1px; margin-top: 8px; }
 .node.is-skeleton .bar.short { width: 45%; }
@@ -497,8 +395,6 @@ kbd { font: 500 12px/16px var(--font-mono); border: 1px solid var(--border-stron
 .index li:hover { background: var(--bg-raised); }
 .index li[aria-current="true"] { background: var(--accent-muted); }
 .index li[aria-current="true"]::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
-[data-system="shipped"] .index li[aria-current="true"]::before { display: none; }
-[data-system="shipped"] .index li[aria-current="true"] { box-shadow: inset 2px 0 0 var(--accent); }
 .step-btn { appearance: none; background: none; border: 0; padding: 0; color: var(--fg-primary); font: 600 15px/20px var(--font-text); text-align: left; cursor: pointer; }
 .step-btn:hover { text-decoration: underline; text-underline-offset: 3px; }
 .cell-mono { font: 400 13px/18px var(--font-mono); color: var(--fg-primary); text-align: right; font-variant-numeric: tabular-nums; }
