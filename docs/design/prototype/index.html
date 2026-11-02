@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en" data-system="proposed">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian mixed design prototype</title>
+  <meta name="description" content="The Meridian mixed design plan, shown as one structure in two systems: the shipped look and the proposal.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Sora:wght@500;600&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the content</a>
+  <header class="showcase-head">
+    <p class="kicker">Meridian · mixed design plan · prototype</p>
+    <p class="showcase-lede">One structure, two systems. Switch between the shipped look and the proposal. The screens, copy and states stay the same; only the system changes.</p>
+    <div class="switches">
+      <div class="seg" role="radiogroup" aria-label="Design system">
+        <button type="button" role="radio" aria-checked="false" data-set-system="shipped">Shipped now</button>
+        <button type="button" role="radio" aria-checked="true" data-set-system="proposed">Proposed</button>
+      </div>
+      <div class="seg" role="radiogroup" aria-label="Theme">
+        <button type="button" role="radio" aria-checked="false" data-set-theme="dark">Dark</button>
+        <button type="button" role="radio" aria-checked="false" data-set-theme="light">Light</button>
+      </div>
+      <label class="check"><input type="checkbox" id="greyscale"> Colour off (test every state reads without colour)</label>
+    </div>
+    <p class="note">Illustrative content. The plan, costs and models are samples. No provider was called and nothing ran.</p>
+  </header>
+
+  <div class="app" id="app">
+    <nav class="rail" aria-label="Places">
+      <a class="brand-mark" href="#brief" aria-label="Meridian, go to Home">
+        <svg viewBox="0 0 32 32" width="28" height="28" aria-hidden="true">
+          <circle cx="16" cy="16" r="11" fill="none" stroke="currentColor" stroke-opacity="0.6" stroke-width="1.25"/>
+          <ellipse cx="16" cy="16" rx="11" ry="3.4" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1"/>
+          <ellipse cx="16" cy="16" rx="5.2" ry="11" fill="none" stroke="currentColor" stroke-opacity="0.35" stroke-width="1"/>
+          <line class="meridian-red" x1="16" y1="4.6" x2="16" y2="27.4" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+        <span class="brand-word">Meridian</span>
+      </a>
+      <ul class="places">
+        <li><a href="#home" class="place"><span class="place-icon" aria-hidden="true">⌂</span><span>Home</span></a></li>
+        <li><a href="#create" class="place is-current" aria-current="page"><span class="place-icon" aria-hidden="true">+</span><span>Create</span></a></li>
+        <li><a href="#library" class="place"><span class="place-icon" aria-hidden="true">▤</span><span>Library</span></a></li>
+        <li><a href="#insights" class="place"><span class="place-icon" aria-hidden="true">∿</span><span>Insights</span></a></li>
+        <li><a href="#settings" class="place"><span class="place-icon" aria-hidden="true">⚙</span><span>Settings</span></a></li>
+      </ul>
+    </nav>
+
+    <main class="main" id="main">
+      <div class="tabs" role="tablist" aria-label="Create steps">
+        <button type="button" role="tab" id="tab-brief" aria-controls="panel-brief" aria-selected="true" data-tab="brief">1 Brief</button>
+        <button type="button" role="tab" id="tab-plan" aria-controls="panel-plan" aria-selected="false" tabindex="-1" data-tab="plan">2 Plan</button>
+        <button type="button" role="tab" id="tab-components" aria-controls="panel-components" aria-selected="false" tabindex="-1" data-tab="components">Components</button>
+      </div>
+
+      <section class="screen" id="panel-brief" role="tabpanel" aria-labelledby="tab-brief" data-screen="brief">
+        <div class="screen-body">
+          <div class="screen-head">
+            <div>
+              <p class="label">Create · Brief</p>
+              <h1 class="page-title">Plan a run</h1>
+              <p class="lede">Describe the video. The plan is drawn when you plan it.</p>
+            </div>
+            <button type="button" class="btn btn-secondary" id="assistant-toggle" aria-expanded="false" aria-controls="assistant">Ask the assistant</button>
+          </div>
+
+          <form class="brief" onsubmit="return false">
+            <label class="field-label" for="goal">What should the video do?</label>
+            <textarea id="goal" class="field field-area" rows="4" placeholder="For example: a 30-second video that shows the product in use, with captions."></textarea>
+
+            <p class="label group-label">Start from an example</p>
+            <ul class="chips" id="examples" aria-label="Example goals"></ul>
+
+            <dl class="facts">
+              <div><dt>Brand</dt><dd>Stored for this workspace</dd></div>
+              <div><dt>Format</dt><dd class="mono">9:16, 30 seconds</dd></div>
+              <div><dt>Budget</dt><dd class="mono">$0.50</dd></div>
+              <div><dt>Model</dt><dd>Stored for this workspace. Change it in Settings.</dd></div>
+            </dl>
+
+            <div class="row-nc">
+              <div>
+                <p class="row-title">Reference files</p>
+                <p class="row-reason"><span class="state-inline" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</span> Connect file storage in Settings to attach files.</p>
+              </div>
+            </div>
+
+            <div class="actions">
+              <button type="button" class="btn btn-primary" id="plan-the-run">Plan the run</button>
+            </div>
+          </form>
+        </div>
+        <aside class="assistant" id="assistant" aria-label="Assistant" hidden>
+          <div class="assistant-head">
+            <h2 class="section-title">Assistant</h2>
+            <button type="button" class="btn btn-quiet" id="assistant-close">Close assistant</button>
+          </div>
+          <p class="lede">Ask about this brief. Nothing runs from here.</p>
+          <label class="field-label" for="ask">Your question</label>
+          <input id="ask" class="field" type="text" disabled aria-describedby="ask-reason">
+          <p class="row-reason" id="ask-reason"><span class="state-inline" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</span> The assistant is not connected in this sample.</p>
+        </aside>
+      </section>
+
+      <section class="screen" id="panel-plan" role="tabpanel" aria-labelledby="tab-plan" data-screen="plan" hidden>
+        <div class="screen-body">
+          <div class="screen-head">
+            <div>
+              <p class="label">Create · Plan</p>
+              <h1 class="page-title" id="plan-title">A 30-second product video built from our brand photos</h1>
+              <p class="lede">Steps appear as the plan is drawn. Select one to see its details.</p>
+            </div>
+            <div class="actions-col">
+              <button type="button" class="btn btn-primary" id="resume" disabled aria-describedby="resume-reason">Resume the run</button>
+              <p class="row-reason" id="resume-reason"></p>
+            </div>
+          </div>
+
+          <div class="toolbar">
+            <div class="seg" role="group" aria-label="View">
+              <button type="button" data-view="canvas" aria-pressed="true">Canvas</button>
+              <button type="button" data-view="strip" aria-pressed="false">Strip</button>
+              <button type="button" data-view="list" aria-pressed="false">List</button>
+            </div>
+            <div class="seg" role="group" aria-label="Filter">
+              <button type="button" data-filter="all" aria-pressed="true">All steps</button>
+              <button type="button" data-filter="needs" aria-pressed="false">Needs you</button>
+              <button type="button" data-filter="running" aria-pressed="false">Running</button>
+            </div>
+            <p class="restriction" id="restriction" role="status"></p>
+            <div class="zoom" id="zoom-controls">
+              <button type="button" class="btn btn-quiet" id="zoom-out" aria-label="Zoom out">−</button>
+              <span class="mono" id="zoom-level" aria-live="off">75%</span>
+              <button type="button" class="btn btn-quiet" id="zoom-in" aria-label="Zoom in">+</button>
+            </div>
+            <button type="button" class="btn btn-quiet" id="redraw">Redraw plan</button>
+          </div>
+          <p class="notice" id="notice" role="status" hidden></p>
+
+          <div class="frame" id="frame" tabindex="0" role="region" aria-label="The plan. With it focused, arrow keys scroll and plus, minus and 0 zoom."></div>
+        </div>
+
+        <aside class="drawer" id="drawer" aria-labelledby="drawer-title" hidden>
+          <div class="drawer-head">
+            <p class="label" id="drawer-kind"></p>
+            <button type="button" class="btn btn-quiet" id="drawer-close" aria-label="Close step details">Close</button>
+          </div>
+          <div id="drawer-body"></div>
+        </aside>
+      </section>
+
+      <section class="screen" id="panel-components" role="tabpanel" aria-labelledby="tab-components" data-screen="components" hidden>
+        <div class="screen-body">
+          <div class="screen-head">
+            <div>
+              <p class="label">Components</p>
+              <h1 class="page-title">Components</h1>
+              <p class="lede">Every control and state, in both systems. Colour is never the only signal.</p>
+            </div>
+          </div>
+
+          <section class="block" aria-labelledby="c-buttons">
+            <h2 class="section-title" id="c-buttons">Buttons</h2>
+            <div class="specimens">
+              <div><p class="label">Primary</p><button type="button" class="btn btn-primary">Plan the run</button></div>
+              <div><p class="label">Primary, focus</p><button type="button" class="btn btn-primary is-focus">Plan the run</button></div>
+              <div><p class="label">Primary, disabled</p><button type="button" class="btn btn-primary" disabled>Resume the run</button><p class="row-reason">Two steps need you first.</p></div>
+              <div><p class="label">Secondary</p><button type="button" class="btn btn-secondary">Ask the assistant</button></div>
+              <div><p class="label">Secondary, hover</p><button type="button" class="btn btn-secondary is-hover">Ask the assistant</button></div>
+              <div><p class="label">Quiet, current</p><button type="button" class="btn btn-quiet is-current" aria-pressed="true">Canvas</button></div>
+              <div><p class="label">Danger</p><button type="button" class="btn btn-danger">Remove the run</button></div>
+            </div>
+          </section>
+
+          <section class="block" aria-labelledby="c-states">
+            <h2 class="section-title" id="c-states">Step states</h2>
+            <p class="lede">A word, a dot shape and a tone for each. The word is always shown.</p>
+            <ul class="states" id="state-legend"></ul>
+          </section>
+
+          <section class="block" aria-labelledby="c-toasts">
+            <h2 class="section-title" id="c-toasts">Notices</h2>
+            <p class="lede">A passing confirmation leaves by itself. A warning or a failure stays until you close it.</p>
+            <div class="actions">
+              <button type="button" class="btn btn-secondary" id="toast-success">Show a saved note</button>
+              <button type="button" class="btn btn-danger" id="toast-danger">Show a failure</button>
+            </div>
+          </section>
+
+          <section class="block" aria-labelledby="c-type">
+            <h2 class="section-title" id="c-type">Title sizes follow their container</h2>
+            <p class="lede">The title steps down when the space it sits in gets narrower, whatever the window width.</p>
+            <div class="tier-demo">
+              <div class="tier-box"><p class="label">Container 840 px</p><p class="page-title">Plan a run</p></div>
+              <div class="tier-box tier-narrow"><p class="label">Container 420 px</p><p class="page-title">Plan a run</p></div>
+            </div>
+          </section>
+
+          <section class="block" aria-labelledby="c-costs">
+            <h2 class="section-title" id="c-costs">Every number says what it is</h2>
+            <ul class="costs" id="cost-examples"></ul>
+          </section>
+
+          <section class="block" aria-labelledby="c-keys">
+            <h2 class="section-title" id="c-keys">Keyboard</h2>
+            <ul class="keys">
+              <li><kbd>Tab</kbd> walks the steps in reading order: column by column, top to bottom.</li>
+              <li><kbd>Enter</kbd> opens a step's details.</li>
+              <li><kbd>Esc</kbd> closes the details and returns focus to the step.</li>
+              <li><kbd>+</kbd> and <kbd>−</kbd> zoom the canvas, and <kbd>0</kbd> resets it to 75%. With the canvas itself focused, arrow keys scroll it.</li>
+            </ul>
+          </section>
+        </div>
+      </section>
+    </main>
+
+    <div class="toasts" id="toasts" aria-live="polite"></div>
+  </div>
+
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

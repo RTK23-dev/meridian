@@ -1,0 +1,47 @@
+{
+ "menuAria": [
+  {
+   "n": "PRODUCTS",
+   "expanded": null,
+   "haspopup": null,
+   "tag": "BUTTON",
+   "role": null
+  },
+  {
+   "n": "SOLUTIONS",
+   "expanded": null,
+   "haspopup": null,
+   "tag": "BUTTON",
+   "role": null
+  },
+  {
+   "n": "RESOURCES",
+   "expanded": null,
+   "haspopup": null,
+   "tag": "BUTTON",
+   "role": null
+  }
+ ],
+ "tabs": [
+  {
+   "label": "ASK AGENT",
+   "sel": "true",
+   "visible": true
+  },
+  {
+   "label": "HISTORY",
+   "sel": "false",
+   "visible": true
+  },
+  {
+   "label": "LINKS",
+   "sel": "false",
+   "visible": true
+  }
+ ],
+ "focusMenuBtn": {
+  "focusedOK": true,
+  "outline": "dotted 2px rgb(11, 11, 11)",
+  "outlineOffset": "2px"
+ }
+}

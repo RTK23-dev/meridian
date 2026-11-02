@@ -1,0 +1,174 @@
+{
+ "inspected": "2026-11-02",
+ "subject": "https://www.sanity.io/",
+ "method": "curl with the site build parameter; sha256 of the bytes received",
+ "entries": [
+  {
+   "url": "https://www.sanity.io/",
+   "file": "homepage.html",
+   "contentType": "text/html",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 390513,
+   "sha256": "293d56d2ac2fb4544208ff139ba810ec849495ff647e9cdfeefdef42b81685be",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/global.BIrt0173.css",
+   "file": "global.BIrt0173.css",
+   "contentType": "text/css",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 573542,
+   "sha256": "262be4fee659b54c62711b0ab94f76efff19e8fb8fad78b727ed2a487487d099",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/SyntaxHighlight.rkxHZqM4.css",
+   "file": "SyntaxHighlight.rkxHZqM4.css",
+   "contentType": "text/css",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 5176,
+   "sha256": "142249792e7ed2e45d6a44401ea50de72dd7eb2dfa89c6efa296987f2173fad5",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/VisualEditing-CNvAjHwz.Dlzplorv.css",
+   "file": "VisualEditing-CNvAjHwz.Dlzplorv.css",
+   "contentType": "text/css",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 7688,
+   "sha256": "5567f1cec4682869ec2f2b597ba4a87b0125ba0e00c9132d53ce4c3a77583cd0",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/static/styles/cookie-banner.css",
+   "file": "cookie-banner.css",
+   "contentType": "text/css",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 9794,
+   "sha256": "ff5afe801e349cf02d281655eb19de54d3d1b80d8831313dd3f4866e4af0268e",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/fonts/2d9917bc1d860291.woff2",
+   "file": "2d9917bc1d860291.woff2",
+   "contentType": "font/woff2",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 42216,
+   "sha256": "8245425af1dd54d2a6dc72cce0ff85bb1d038584491b756f3b36b0e8d03ad3a4",
+   "note": "first-party media/font"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/fonts/7dc24bd263824f8b.woff2",
+   "file": "7dc24bd263824f8b.woff2",
+   "contentType": "font/woff2",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 46628,
+   "sha256": "da1d95a46eb0c2d902b6ec04a2ed29ca04e47f0ffed06083d38a81ee8cfab033",
+   "note": "first-party media/font"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/fonts/897b3c1170a4c3bf.woff2",
+   "file": "897b3c1170a4c3bf.woff2",
+   "contentType": "font/woff2",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 11508,
+   "sha256": "62022901dcd0b226e65aa2bcf9bed80243b57fbc9086fa314c14cdd64c397905",
+   "note": "first-party media/font"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/BaseLayout.astro_astro_type_script_index_0_lang.BQ7wLtrj.js",
+   "file": "BaseLayout.astro_astro_type_script_index_0_lang.BQ7wLtrj.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 497,
+   "sha256": "1f74c565dbfcf07d2f84ee875b8e3df6a164bb56b3343f1b7ef9696813524a8b",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/Navbar.astro_astro_type_script_index_0_lang.nyrw1ZEO.js",
+   "file": "Navbar.astro_astro_type_script_index_0_lang.nyrw1ZEO.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 1186,
+   "sha256": "10e45789dc98288165b8c520f2d340187700e008646a59ef273dff6927805aca",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/SiteCampaign.astro_astro_type_script_index_0_lang.B0all7h2.js",
+   "file": "SiteCampaign.astro_astro_type_script_index_0_lang.B0all7h2.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 1101,
+   "sha256": "eb97df7fa4345bc1498d57e286c080605c0ef9ce4e186ee29e435db4915f4686",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/Tracking.astro_astro_type_script_index_0_lang.BM8Z83a2.js",
+   "file": "Tracking.astro_astro_type_script_index_0_lang.BM8Z83a2.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 854,
+   "sha256": "56d4226c4bfbda411faece24ce8daea3234d9786b9bfdacbb70e941413720e45",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/page.Ck3-EhwK.js",
+   "file": "page.Ck3-EhwK.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 145904,
+   "sha256": "cda8dd5b10139145b277e1a55084b3dc8682558a70263d088fcda8eac5cd989e",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/_theme.p7GfTtg2.js",
+   "file": "_theme.p7GfTtg2.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 1458,
+   "sha256": "4e2db74944b541ac6288948575d0399d9aecfefc57baef1684f23c93361a8467",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://www.sanity.io/_astro/defer-task.BHN7Bw-1.js",
+   "file": "defer-task.BHN7Bw-1.js",
+   "contentType": "text/javascript",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 589,
+   "sha256": "ec10a12f6740303a3daad6df077a56a1d20966a82f35006d5bf7643c6f176e1c",
+   "note": "first-party, served by the site"
+  },
+  {
+   "url": "https://cdn.sanity.io/files/3do82whm/next/bdd4149e4a4ac0e5d4c52086ba1530cd7236c0de.webm",
+   "file": "hero-bdd4149e.webm",
+   "contentType": "video/webm",
+   "status": 200,
+   "retrieved_utc": "2026-11-02T18:53:37.265Z",
+   "bytes": 17393536,
+   "sha256": "2f3678021a500de21d22115731aaee93f36b7c3823d3ac119c67e0a3ad5ee7f5",
+   "note": "first-party media/font"
+  }
+ ],
+ "not_retrieved": [
+  "third-party: cdn.usefathom.com/script.js",
+  "third-party: cmp.osano.com (consent)",
+  "third-party: www.googletagmanager.com/gtm.js",
+  "remaining site images (117) and SVGs (63): not retrieved, not needed for the system claims",
+  "remaining 4 hero/product videos (no src resolved in capture)"
+ ]
+}

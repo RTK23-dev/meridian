@@ -1,0 +1,113 @@
+[
+ {
+  "id": "G1-button-base",
+  "found": true,
+  "byteOffset": 24439,
+  "text": "._button_sfoeg_3{font-family:var(--font-mono);letter-spacing:0;text-box:trim-both cap alphabetic;text-transform:uppercase;font-size:.8125rem;font-style:normal;font-weight:400;line-height:1.3}._button_sfoeg_3 em,._button_sfoeg_3 i{text-transform:none}._button_sfoeg_3{border-radius:var(--radius-full);box-sizing:border-box;cursor:p",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G2-brand-mode",
+  "found": true,
+  "byteOffset": 25895,
+  "text": "._button_sfoeg_3[data-mode=brand],._button_sfoeg_3[data-mode=brand]:active{background-color:var(--color-brand);border-color:var(--color-brand);color:var(--color-black)}._button_sfoeg_3[data-mode=accen",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G3-brand-hover",
+  "found": true,
+  "byteOffset": 25742,
+  "text": "._button_sfoeg_3[data-mode=brand]:hover{background-color:var(--color-bg-inverse-base);border-color:var(--color-bg-inverse-base);color:var(--color-brand)}._button_sfoeg_3[data-mode=brand],._button_sfoe",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G4-primary-hover",
+  "found": true,
+  "byteOffset": 25391,
+  "text": "._button_sfoeg_3[data-mode=primary]:hover{background-color:var(--color-bg-base);border-color:var(--color-bg-inverse-base);color:var(--color-fg-base)}._button_sf",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G5-focus-visible",
+  "found": true,
+  "byteOffset": 21827,
+  "text": ":focus-visible{outline:var(--focus-ring-width) var(--focus-ring-style) var(--color-focus-ring);outline-offset:var(--focus-ring-offset)}[id]{",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G6-brand-token",
+  "found": true,
+  "byteOffset": 3527,
+  "text": "--color-brand:#f50;--color-gray-100:#ede",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G7-radius-full",
+  "found": true,
+  "byteOffset": 6424,
+  "text": "--radius-full:99999px;--sanity-id-textur",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G8-reduce-block",
+  "found": true,
+  "byteOffset": 242579,
+  "text": "prefers-reduced-motion:reduce){.motion-reduce\\:hidden{display:none}.motion-reduce\\:translate-y-0{--tw-translate-y:var(--spacing-0);translate",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G9-motion-reduce-util",
+  "found": true,
+  "byteOffset": 242610,
+  "text": ".motion-reduce\\:hidden{display:none}.motion-reduce\\:translat",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G10-spacing-widget-md",
+  "found": true,
+  "byteOffset": 6018,
+  "text": "--spacing-widget-md:calc((35 / 16) * 1rem);--spacing-widget-",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G11-gutter",
+  "found": true,
+  "byteOffset": 102927,
+  "text": "--gutter:4px;--max-width:1920px;--min-pa",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "G12-announcement-offset",
+  "found": true,
+  "byteOffset": 561437,
+  "text": "--announcement-banner-offset:0px;--annou",
+  "verifiedAgainstRaw": true,
+  "firstOccurrenceIsThis": true
+ },
+ {
+  "id": "S1-pre-transparent",
+  "found": true,
+  "file": "SyntaxHighlight.rkxHZqM4.css",
+  "byteOffset": 1642,
+  "text": "._root_pxga6_2 pre{background-color:#0000!important}[data-theme=dark]:is(._root_",
+  "verifiedAgainstRaw": true
+ },
+ {
+  "id": "H1-announcement-markup",
+  "found": true,
+  "file": "homepage.html",
+  "byteOffset": 13375,
+  "text": "ent:\"\";height:var(--announcement-banner-height);display:block}html[data-chat-pus"
+ }
+]

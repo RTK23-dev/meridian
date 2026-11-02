@@ -1,0 +1,210 @@
+{
+  "url": "served from docs/design/prototype",
+  "results": {
+    "theme.follows-system-and-explicit-choice": {
+      "ok": true,
+      "detail": {
+        "system-light": "rgb(255, 255, 255)",
+        "explicit-dark-on-light": "rgb(0, 0, 0)",
+        "system-dark": "rgb(0, 0, 0)",
+        "explicit-dark-on-dark": "rgb(0, 0, 0)"
+      }
+    },
+    "fonts.proposed.resolve": {
+      "ok": true,
+      "detail": [
+        [
+          "600 36px Archivo",
+          true
+        ],
+        [
+          "400 15px \"Instrument Sans\"",
+          true
+        ],
+        [
+          "400 13px \"JetBrains Mono\"",
+          true
+        ]
+      ]
+    },
+    "trim.supported": {
+      "ok": true,
+      "detail": {
+        "supported": true,
+        "btn": "cap alphabetic"
+      }
+    },
+    "tier.container.steps": {
+      "ok": true,
+      "detail": {
+        "closed": "36px",
+        "open": "28px",
+        "bodyWidthOpen": 632
+      }
+    },
+    "tier.proposed": {
+      "detail": {
+        "closed": "36px",
+        "open": "28px",
+        "bodyWidthOpen": 632
+      }
+    },
+    "tier.shipped.by-window": {
+      "ok": true,
+      "detail": {
+        "closed": "36px",
+        "open": "36px",
+        "bodyWidthOpen": 632
+      }
+    },
+    "tier.shipped": {
+      "detail": {
+        "closed": "36px",
+        "open": "36px",
+        "bodyWidthOpen": 632
+      }
+    },
+    "drawer.title-takes-focus": {
+      "ok": true,
+      "detail": {
+        "titleFocused": true
+      }
+    },
+    "overlay.canvas-still": {
+      "ok": true,
+      "detail": {
+        "layoutBefore": [
+          1352,
+          40,
+          232,
+          132
+        ],
+        "layoutAfter": [
+          1352,
+          40,
+          232,
+          132
+        ],
+        "drawerVisible": true
+      }
+    },
+    "overlay.selected-step-not-covered": {
+      "ok": true,
+      "detail": {
+        "right": 944,
+        "drawerLeft": 960
+      }
+    },
+    "drawer.escape.returns-focus": {
+      "ok": true,
+      "detail": {
+        "closed": true,
+        "focused": "s6"
+      }
+    },
+    "keyboard.reading-order": {
+      "ok": true,
+      "detail": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "BODY"
+      ]
+    },
+    "keyboard.skip-link-first": {
+      "ok": true,
+      "detail": {
+        "first": "skip-link"
+      }
+    },
+    "keyboard.arrows-scroll-plan": {
+      "ok": true,
+      "detail": {
+        "before": 0,
+        "after": 80
+      }
+    },
+    "restriction.count-in-words": {
+      "ok": true,
+      "detail": "Showing 2 of 8 steps: needs you. Show all steps"
+    },
+    "restriction.hidden-selection-never-silent": {
+      "ok": true,
+      "detail": {
+        "filter": "true",
+        "notice": "That step was hidden by the filter \"Needs you\". Showing all steps."
+      }
+    },
+    "loading.cls-zero": {
+      "ok": true,
+      "detail": {
+        "cls": 0,
+        "sources": []
+      }
+    },
+    "one-red-action.brief": {
+      "ok": true,
+      "detail": [
+        "Plan the run"
+      ]
+    },
+    "reduced-motion.no-loops": {
+      "ok": true,
+      "detail": {
+        "loops": 0
+      }
+    },
+    "phone.no-horizontal-scroll": {
+      "ok": true,
+      "detail": {
+        "scrollWidth": 390,
+        "clientWidth": 390
+      }
+    },
+    "phone.canvas-recomposed-as-list": {
+      "ok": true,
+      "detail": {
+        "canvasHidden": true,
+        "order": [
+          "s1",
+          "s2",
+          "s3",
+          "s4",
+          "s5",
+          "s6",
+          "s7",
+          "s8"
+        ]
+      }
+    },
+    "phone.details-sheet": {
+      "ok": true,
+      "detail": {
+        "top": 373,
+        "bottom": 844,
+        "width": 390,
+        "vh": 844
+      }
+    },
+    "greyscale.every-state-has-a-word": {
+      "ok": true,
+      "detail": [
+        "Planned",
+        "Running",
+        "Done",
+        "Reused",
+        "Skipped",
+        "Failed",
+        "NOT CONNECTED",
+        "Paused at budget",
+        "Queued at the provider",
+        "To re-run"
+      ]
+    }
+  }
+}

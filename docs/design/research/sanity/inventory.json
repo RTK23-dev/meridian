@@ -1,0 +1,708 @@
+{
+ "headerLinks": [
+  {
+   "t": "Home",
+   "href": "/",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Studio",
+   "href": "/studio",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Content AgentNew",
+   "href": "/content-agent",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "App SDK",
+   "href": "/app-sdk",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Media Library",
+   "href": "/media-library",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Content Releases",
+   "href": "/content-releases",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Agent API",
+   "href": "/agent-actions",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Content Lake",
+   "href": "/content-lake",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Sanity ContextNew",
+   "href": "/context",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "MCP ServerNew",
+   "href": "/mcp",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Functions",
+   "href": "/functions",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Live CDN",
+   "href": "/live-cdn",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "See what we announced",
+   "href": "/everything-2026-recap?ref=nav-cta",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "E-commerce & Retail",
+   "href": "/ecommerce",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Media & Publishing",
+   "href": "/media",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "SaaS",
+   "href": "/marketing",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Developers",
+   "href": "/developers",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Content Editors",
+   "href": "/content-editors",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Product Owners",
+   "href": "/product-owners",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Business Leaders",
+   "href": "/business-leaders",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Read the story",
+   "href": "/customers/tecovas",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Sanity 101New",
+   "href": "https://snty.link/101",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Sanity Learn",
+   "href": "/learn",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Pioneers",
+   "href": "/pioneers",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Frameworks",
+   "href": "/exchange/frameworks",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Templates",
+   "href": "/templates",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Tools and plugins",
+   "href": "/plugins",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Schemas and snippets",
+   "href": "/recipes",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Join our community",
+   "href": "https://snty.link/community",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Blog",
+   "href": "/blog",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Engineering",
+   "href": "/engineering",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Events & Webinars",
+   "href": "/events",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Customer stories",
+   "href": "/customers",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Guides",
+   "href": "/blog?category=guide",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Use Cases",
+   "href": "/use-cases",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "Read Grab your gear: The official Sanity swag store",
+   "href": "https://sanity.market",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "DOCS",
+   "href": "/docs?ref=navbar",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "ENTERPRISE",
+   "href": "/enterprise?ref=navbar",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "PRICING",
+   "href": "/pricing?ref=navbar",
+   "expanded": null,
+   "haspopup": null
+  },
+  {
+   "t": "LOG IN",
+   "href": "/entry?ref=navbar",
+   "expanded": null,
+   "haspopup": null
+  }
+ ],
+ "buttons": [
+  {
+   "t": "PREFERENCES",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Close this consent banner",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Close Cookie Preferences",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "PREFERENCES",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Close this consent banner",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Close Cookie Preferences",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "PRODUCTS",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "e6d30a4ed305"
+  },
+  {
+   "t": "SOLUTIONS",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "1118caffc9d5"
+  },
+  {
+   "t": "RESOURCES",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "9c51b33afd891210b768a934b349e9d1"
+  },
+  {
+   "t": "ASK AGENT",
+   "expanded": "false",
+   "haspopup": null,
+   "controls": "global-chat-sidebar"
+  },
+  {
+   "t": "Open menu",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "mobile-menu"
+  },
+  {
+   "t": "npm create sanity@latest",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "hero.ts",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "terminal",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "more",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Field actions",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Add a comment",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Field actions",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Add a comment",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Field actions",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Add a comment",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Image options",
+   "expanded": "false",
+   "haspopup": "menu",
+   "controls": null
+  },
+  {
+   "t": "Publish",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Content releases",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Field actions",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Add a comment",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Run Release",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "UPDATE REFERENCES",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "TRANSLATE WITH AI",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "DELEGATE FROM ELSEWHERE",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "HOW DO I SET UP SANITY CONTEXT?",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "HOW DO I CONNECT NEXT.JS TO SANITY?",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "WHAT CAN I AUTOMATE WITH FUNCTIONS?",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Send message",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "01",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "02",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "03",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "npm create sanity@latest",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "SUBSCRIBE",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Cookie preferences",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Ask agent",
+   "expanded": "false",
+   "haspopup": null,
+   "controls": "global-chat-sidebar"
+  },
+  {
+   "t": "Ask agent",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "assistant-panel-chat"
+  },
+  {
+   "t": "History",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "assistant-panel-history"
+  },
+  {
+   "t": "Links",
+   "expanded": null,
+   "haspopup": null,
+   "controls": "assistant-panel-links"
+  },
+  {
+   "t": "More options",
+   "expanded": "false",
+   "haspopup": "menu",
+   "controls": null
+  },
+  {
+   "t": "Close Sanity assistant",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "“Store any valid JSON document, with schemas living in your ",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  },
+  {
+   "t": "Send message",
+   "expanded": null,
+   "haspopup": null,
+   "controls": null
+  }
+ ],
+ "tabs": [
+  {
+   "t": "Ask agent",
+   "selected": "true"
+  },
+  {
+   "t": "History",
+   "selected": "false"
+  },
+  {
+   "t": "Links",
+   "selected": "false"
+  }
+ ],
+ "tablists": 1,
+ "dialogs": 8,
+ "videos": [
+  {
+   "src": "https://cdn.sanity.io/files/3do82whm/next/bdd4149e4a4ac0e5d4c52086ba1530cd7236c0de.webm",
+   "autoplay": false,
+   "muted": true,
+   "loop": true
+  },
+  {
+   "src": "",
+   "autoplay": false,
+   "muted": true,
+   "loop": true
+  },
+  {
+   "src": "",
+   "autoplay": false,
+   "muted": true,
+   "loop": true
+  },
+  {
+   "src": "",
+   "autoplay": false,
+   "muted": true,
+   "loop": true
+  },
+  {
+   "src": "",
+   "autoplay": true,
+   "muted": true,
+   "loop": true
+  }
+ ],
+ "iframes": [
+  "",
+  ""
+ ],
+ "canvases": 1,
+ "images": 117,
+ "headings": [
+  {
+   "tag": "H1",
+   "t": "The Content Operations Platform"
+  },
+  {
+   "tag": "H2",
+   "t": "Mirror how your content operations team works"
+  },
+  {
+   "tag": "H3",
+   "t": "Page title"
+  },
+  {
+   "tag": "H2",
+   "t": "Content Operations without the busywork"
+  },
+  {
+   "tag": "H2",
+   "t": "Power anything. One API, every platform"
+  },
+  {
+   "tag": "H2",
+   "t": "Everything your team needs in one place"
+  },
+  {
+   "tag": "H3",
+   "t": "The database optimized for content operations"
+  },
+  {
+   "tag": "H3",
+   "t": "Content workflows that mirror how you work"
+  },
+  {
+   "tag": "H3",
+   "t": "An agent to run content operations at scale"
+  },
+  {
+   "tag": "H3",
+   "t": "Programmable automation"
+  },
+  {
+   "tag": "H3",
+   "t": "Power web, mobile, or your own agent"
+  },
+  {
+   "tag": "H2",
+   "t": "Loved by 1M+ users and 6k+ teams"
+  },
+  {
+   "tag": "H2",
+   "t": "Enterprise-grade everything"
+  },
+  {
+   "tag": "H2",
+   "t": "Less talk, more code"
+  },
+  {
+   "tag": "H3",
+   "t": "CLI Install"
+  },
+  {
+   "tag": "H3",
+   "t": "MCP Server"
+  },
+  {
+   "tag": "H3",
+   "t": "Agent toolkit"
+  },
+  {
+   "tag": "H2",
+   "t": "Footer"
+  },
+  {
+   "tag": "H3",
+   "t": "PRODUCTS"
+  },
+  {
+   "tag": "H3",
+   "t": "RESOURCES"
+  },
+  {
+   "tag": "H3",
+   "t": "COMPANY"
+  },
+  {
+   "tag": "H3",
+   "t": "TRUST AND COMPLIANCE"
+  },
+  {
+   "tag": "H3",
+   "t": "KEEP IN TOUCH"
+  }
+ ],
+ "sections": 14,
+ "landmarks": {
+  "header": 5,
+  "nav": 5,
+  "main": 1,
+  "footer": 1
+ },
+ "hasSkipLink": true,
+ "hasDetailsSummary": 0,
+ "scrollableNodes": [
+  "div.flex-1",
+  "textarea#c235bcd4a877-Description.min-h-widget-md"
+ ],
+ "docHeight": 12694
+}
