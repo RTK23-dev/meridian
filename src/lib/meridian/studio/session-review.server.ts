@@ -185,6 +185,10 @@ export async function publishStudioVariant(userId: string, data: { brandId: stri
     `;
     if (!rows[0]) throw new Error("Variant not found.");
     if (rows[0].status !== "approved") throw new Error("Publish only an approved asset.");
+    // Refused before any decision row is written, so a refused test publish leaves nothing behind.
+    if (data.publisher === "test" && !isTestingRuntimeNow()) {
+      throw new Error("The test publisher is isolated to TestingRuntime and cannot be used in ProductionRuntime. Connect a live channel to publish.");
+    }
     const asset = await sql<{ mime_type: string; width: number | null; height: number | null; byte_size: number | null; kind: string }>`
       select mime_type, width, height, byte_size, kind from assets
       where creative_id = ${data.creativeId} and organization_id = ${access.organizationId}
