@@ -3,11 +3,11 @@ import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   EXAMPLE_GOALS, FILTERS, GEOMETRY, KIND_LABEL, SAMPLE_PLAN, STATE, costLabel, initialState, layoutSteps, reduce, restrictionText, toastDuration, visibleIds,
-} from "./model.mjs";
+} from "../docs/design/prototype/model.mjs";
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
-const layoutSource = source("../../../src/engine/orchestrator/layout.ts");
-const presentationSource = source("../../../src/components/content-factory/orchestrator-presentation.ts");
+const layoutSource = source("../src/engine/orchestrator/layout.ts");
+const presentationSource = source("../src/components/content-factory/orchestrator-presentation.ts");
 
 test("the canvas geometry is the engine's geometry", () => {
   const pairs = [["NODE_WIDTH", GEOMETRY.nodeWidth], ["NODE_HEIGHT", GEOMETRY.nodeHeight], ["COLUMN_GAP", GEOMETRY.columnGap], ["ROW_GAP", GEOMETRY.rowGap], ["CANVAS_PAD", GEOMETRY.canvasPad]];
