@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 1.1.0-beta.1 — prerelease
+
+The first 1.1 pre-release. It carries the 0.1.0-beta.17 work, the billing page, and the Cyclone fixes, all on one line.
+
+**Before you upgrade.** Paid work is refused until its limits are set on the billing page: the workspace monthly budget, each brand's budget, the factory's daily and total caps, the measure ceiling and the OpenRouter decision cap. Nothing is set by default. The environment variables `OPENROUTER_DECISION_MAX_USD_PER_CALL` and `CYCLONE_OBSERVATION_BUDGET` no longer do anything; the decision cap is set per workspace on the billing page.
+
+- **Billing and limits.** `/billing` lists every money and spend limit: the monthly budget, the measure ceiling, the decision cap per call, and per brand the brand budget and the factory's daily and total caps. Each change is audited with its value before and after. A paid step whose limit is unset is refused, and the refusal names where to set it.
+- **Batch and cookbooks.** A batch takes its style from the cookbook it names; the style control is a filter on the cookbooks. A style no cookbook carries is shown but cannot be chosen.
+- **Not yet on the billing page.** The factory's daily generation cap is still a value stored in the brand's cookbook. Moving it is planned.
 
 - Cyclone: a device counts as connected only when the gateway names it (its own status, or the fleet list that contains it). A gateway that only answers a capability list no longer does. Health reports the measured time of the check. Each gateway call has a 15-second limit. The screenshot the device takes is kept with the reference, and only a web address is kept. Evidence is labelled by what was observed, never as full evidence. The Settings tab shows the deployment's gateway and device read-only; a workspace cannot save them, and the connection test checks the deployment's device. Removed the unused `CYCLONE_OBSERVATION_BUDGET` reader and the unused Cyclone helpers.
 - Tidy-up: removed the monthly-budget server functions and query hook (the budget is set on the billing page), an unused combined spend-cap helper, and unused parameters and variables.
