@@ -99,6 +99,7 @@ const INVENTORY: Record<string, Entry> = {
 
   // Side effects. Each is disabled: its default transport refuses before any request is made, until its guard exists.
   "src/lib/meridian/providers/publish-action.ts": { kind: "side_effect", governed: "disabled", capability: "publish.paused_action", evidence: CAPABILITY_TEST, note: "The paused publish action. Off until a test proves its idempotency keys." },
+  "src/lib/meridian/factory/publish.ts": { kind: "side_effect", governed: "disabled", capability: "ads.meta_write", evidence: CAPABILITY_TEST, note: "The factory's paid Meta publish. Its write goes through the ads.meta_write gate, so nothing is sent. The token renewal before it is a token refresh (oauth/auto-refresh.ts), not a paid request." },
   "src/lib/meridian/storage/drive.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Google Drive writes and reads. Off; files are kept in Postgres." },
   "src/lib/meridian/storage/drive-resumable.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Resumable Drive uploads. Their transport comes from drive.ts, which is off." },
   "src/lib/meridian/alerts/deliver.ts": { kind: "side_effect", governed: "disabled", capability: "alerts.webhook", evidence: CAPABILITY_TEST, note: "Alert webhooks. Its only caller, the job executor, uses the same off capability." },
