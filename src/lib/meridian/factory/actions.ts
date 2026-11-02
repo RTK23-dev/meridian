@@ -3,6 +3,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
+import { withTransaction } from "../learning/store.ts";
 import { assertRole, isRole, type Role } from "@/lib/meridian/access";
 import { enforceNamedLimit } from "@/lib/meridian/security/limits";
 import { FACTORY_GRAPH, factoryRunJobs, isFactoryStage, type FactoryStage } from "./pipeline.ts";
@@ -730,19 +731,22 @@ export const setKillSwitch = createServerFn({ method: "POST" })
       engage: data.engage,
       actorId: context.userId,
     });
-    if (event.brandId) {
-      await sql`delete from factory_kill_switches where organization_id = ${event.organizationId} and brand_id = ${event.brandId}`;
-      await sql`
-        insert into factory_kill_switches (organization_id, brand_id, scope, engaged, actor_id)
-        values (${event.organizationId}, ${event.brandId}, 'brand', ${event.engaged}, ${event.actorId})
-      `;
-    } else {
-      await sql`delete from factory_kill_switches where organization_id = ${event.organizationId} and brand_id is null`;
-      await sql`
-        insert into factory_kill_switches (organization_id, brand_id, scope, engaged, actor_id)
-        values (${event.organizationId}, null, 'workspace', ${event.engaged}, ${event.actorId})
-      `;
-    }
+    // The old row is removed and the new one written together: a failed write must not leave the switch cleared.
+    await withTransaction(sql, async (tx) => {
+      if (event.brandId) {
+        await tx`delete from factory_kill_switches where organization_id = ${event.organizationId} and brand_id = ${event.brandId}`;
+        await tx`
+          insert into factory_kill_switches (organization_id, brand_id, scope, engaged, actor_id)
+          values (${event.organizationId}, ${event.brandId}, 'brand', ${event.engaged}, ${event.actorId})
+        `;
+      } else {
+        await tx`delete from factory_kill_switches where organization_id = ${event.organizationId} and brand_id is null`;
+        await tx`
+          insert into factory_kill_switches (organization_id, brand_id, scope, engaged, actor_id)
+          values (${event.organizationId}, null, 'workspace', ${event.engaged}, ${event.actorId})
+        `;
+      }
+    });
     return { ok: true as const, engaged: event.engaged, scope: event.scope };
   });
 

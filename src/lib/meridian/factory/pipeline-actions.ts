@@ -83,7 +83,7 @@ export const applyPipelinePreset = createServerFn({ method: "POST" })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
     const { sql, organizationId } = await requireBrand(context.userId, data.brandId, "member");
-    const preset = PIPELINE_PRESETS[data.presetName];
+    const preset = Object.hasOwn(PIPELINE_PRESETS, data.presetName) ? PIPELINE_PRESETS[data.presetName] : undefined;
     if (!preset) {
       throw new Error(`Unknown preset: ${data.presetName}`);
     }

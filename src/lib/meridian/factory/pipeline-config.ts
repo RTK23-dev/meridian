@@ -285,7 +285,7 @@ export function getDefaultPipelineConfig(): FactoryPipelineConfig {
 }
 
 export function getPresetConfig(presetName: string): FactoryPipelineConfig {
-  if (presetName in PIPELINE_PRESETS) {
+  if (Object.hasOwn(PIPELINE_PRESETS, presetName)) {
     const preset = PIPELINE_PRESETS[presetName as keyof typeof PIPELINE_PRESETS];
     return {
       presetName: preset.presetName,

@@ -108,3 +108,8 @@ test("preserves stage enable/disable toggles correctly", () => {
   const discoverStage = validated.stages.find((s) => s.id === "discover");
   assert.equal(discoverStage?.enabled, true);
 });
+
+test("an inherited object property is not a preset name", () => {
+  assert.equal(getPresetConfig("constructor").presetName, getDefaultPipelineConfig().presetName);
+  assert.equal(getPresetConfig("toString").presetName, getDefaultPipelineConfig().presetName);
+});

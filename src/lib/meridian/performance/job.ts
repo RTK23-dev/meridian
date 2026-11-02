@@ -127,7 +127,7 @@ export async function runPerformanceSync(
       )
       select
         ${crypto.randomUUID()}, ${job.organization_id}, ${job.brand_id}, ${event.creativeId}, ${platform},
-        ${event.impressions}, ${event.clicks}, ${event.conversions ?? 0}, ${event.spendCents}, ${event.revenueCents},
+        ${event.impressions}, ${event.clicks}, ${event.conversions ?? null}, ${event.spendCents}, ${event.revenueCents},
         ${event.observedOn}, ${platform}, 'performance.sync', ${event.externalId}
       where not exists (
         select 1 from performance_observations existing
