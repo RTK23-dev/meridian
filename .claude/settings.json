@@ -14,9 +14,7 @@
       "Monitor(*)",
       "mcp__github__*",
       "mcp__claude-code-remote__*",
-      "mcp__claude-artifacts__*"
-    ],
-    "deny": [
+      "mcp__claude-artifacts__*",
       "Read(**/.env*)",
       "Edit(**/.env*)",
       "Write(**/.env*)",
@@ -49,6 +47,9 @@
       "mcp__github__enable_pr_auto_merge",
       "mcp__github__actions_run_trigger",
       "mcp__claude-artifacts__delete_artifact"
+    ],
+    "deny": [
+      
     ]
   }
 }
