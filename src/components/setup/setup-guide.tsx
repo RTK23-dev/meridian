@@ -134,6 +134,7 @@ export function SetupGuide() {
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg">
             <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one decision engine key.</li>
             <li><strong>Fill in when you need it:</strong> a video maker key to render videos, and Google Drive to upload a reference video.</li>
+            <li><strong>Set before any paid step:</strong> your spending limits on <Link to="/billing" className="font-semibold underline underline-offset-4">Billing</Link>. Nothing is set for you, and Meridian refuses to spend until you set the monthly budget.</li>
             <li><strong>Skip for now:</strong> search keys, publishing, and everything under Optional connections. Pasting a public page URL on Market needs no key.</li>
           </ul>
         </section>

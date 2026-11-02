@@ -11,11 +11,23 @@ const noDatabase = (() => {
   throw new Error("no database read is expected");
 }) as unknown as Sql;
 
+// A stand-in database: every read returns the rows given, so the saved-key lookup sees either no entry or one.
+const databaseWith = (rows: unknown[]) => (() => Promise.resolve(rows)) as unknown as Sql;
+
+test("a metric provider with no key and no OAuth connection is not connected, not failed: a new workspace has tried nothing", async () => {
+  for (const provider of OAUTH_METRIC_PROVIDERS) {
+    const state = await providerCredentialState(databaseWith([]), { organizationId: "org_a", provider, sealed: "", encryptionKey: "", requireOAuth: true, env: {} });
+    assert.equal(state.state, "not_configured", provider);
+  }
+});
+
 test("a metric provider with only a saved key is unusable: the status says the OAuth connection is needed, and nothing is read", async () => {
   for (const provider of OAUTH_METRIC_PROVIDERS) {
-    const state = await providerCredentialState(noDatabase, { organizationId: "org_a", provider, sealed: "", encryptionKey: "", requireOAuth: true });
+    const state = await providerCredentialState(databaseWith([{ id: "cred_1", expires_at: null }]), { organizationId: "org_a", provider, sealed: "", encryptionKey: "", requireOAuth: true, env: {} });
+    // Google has no saved-key category, so a saved key cannot exist for it: it is simply not connected.
+    if (provider === "google") { assert.equal(state.state, "not_configured", provider); continue; }
     assert.equal(state.state, "unusable", provider);
-    assert.match(state.reason, /OAuth connection/);
+    assert.match(state.reason, /OAuth connection/, provider);
   }
 });
 

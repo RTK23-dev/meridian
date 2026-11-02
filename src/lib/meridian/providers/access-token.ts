@@ -100,6 +100,11 @@ export async function providerCredentialState(
 ): Promise<ProviderCredentialState> {
   try {
     if (input.requireOAuth === true && !input.sealed.trim()) {
+      // A saved key with no OAuth connection is a real problem: the key cannot read metrics. No key at all is just "not connected", and a
+      // new workspace must not see a failure for something it never tried.
+      const category = SAVED_KEY_CATEGORY[input.provider];
+      const saved = category ? await resolveCredential(sql, input.organizationId, category, input.env ?? process.env) : null;
+      if (!saved || (saved.status !== "ready" && saved.status !== "unusable")) return { state: "not_configured", reason: NO_CREDENTIAL_REASON };
       return { state: "unusable", reason: "Metric sync needs the workspace's OAuth connection; a saved key is not enough, so nothing was read." };
     }
     if (input.sealed.trim()) {
