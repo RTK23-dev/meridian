@@ -2,7 +2,8 @@
 // not set (which refuses the step it guards), and what it blocks. Only an admin can change a limit; a member reads them. Every change is saved
 // by the server, which checks the role and the tenancy again, and audits the change.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouterState } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input, PageHeader } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
@@ -11,6 +12,21 @@ import { useBillingPageQuery, useScopedMutation } from "@/lib/query/hooks";
 import { saveBillingLimitAction } from "@/lib/meridian/billing/actions";
 import { LIMIT_SPECS, limitStatusText, type LimitKind } from "@/lib/meridian/billing/limits";
 import type { BillingBrand, BillingPage } from "@/lib/meridian/billing/store";
+
+/** The monthly budget's field. A link to #monthly-budget scrolls to it and gives it focus. */
+const MONTHLY_BUDGET_FIELD_ID = "limit-workspace_monthly_budget-workspace";
+
+function FocusFromHash() {
+  const hash = useRouterState({ select: (state) => state.location.hash });
+  useEffect(() => {
+    if (hash.replace(/^#/, "") !== "monthly-budget") return;
+    const field = document.getElementById(MONTHLY_BUDGET_FIELD_ID);
+    if (!field) return;
+    field.scrollIntoView({ block: "center" });
+    field.focus();
+  }, [hash]);
+  return null;
+}
 
 export function BillingScreen({ organizationId }: { organizationId: string }) {
   const query = useBillingPageQuery(organizationId);
@@ -24,6 +40,7 @@ export function BillingScreen({ organizationId }: { organizationId: string }) {
         description="Every money and spend limit in Meridian, in one place. Nothing is set by default: a limit that is not set refuses the paid step it guards, and says so. Each change is recorded with its value before and after."
       />
       {page.canEdit ? null : <p className="text-sm text-fg-muted">Only a workspace admin can change these limits. You can read them here.</p>}
+      <FocusFromHash />
       <WorkspaceSection page={page} />
       <BrandsSection page={page} />
       <EstimatesSection page={page} />
@@ -38,6 +55,10 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
       <div className="space-y-1">
         <h2 id="billing-workspace" className="text-section font-semibold">Workspace</h2>
         <p className="text-muted">These limits apply to the whole workspace, across every brand.</p>
+        <p className="text-sm text-fg-muted">
+          The monthly budget is a limit Meridian enforces, not your OpenRouter account balance. It applies to each calendar month (UTC) across paid text and video.
+          Blank means no budget is set, so paid generation is blocked until one is saved. There is no default.
+        </p>
       </div>
       {workspace.policyReadable ? null : (
         <p className="text-sm text-danger" role="alert">The workspace's saved policy cannot be read, so the measure ceiling and the decision cap are unknown. {workspace.policyReason ?? ""}</p>
@@ -127,14 +148,13 @@ function LimitForm({
   return (
     <form
       className="space-y-2 border-b border-hairline pb-5 last:border-b-0 last:pb-0"
-      aria-label={label}
       onSubmit={(event) => {
         event.preventDefault();
         setSaved(null);
         save.mutate(shown);
       }}
     >
-      <Field label={label} hint={`${spec.blocks}${committed}`}>
+      <Field label={label} hint={`${spec.blocks}${committed}`} id={kind === "workspace_monthly_budget" ? MONTHLY_BUDGET_FIELD_ID : undefined}>
         <div className="flex flex-wrap items-center gap-3">
           <Input
             type="text"

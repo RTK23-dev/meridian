@@ -40,7 +40,7 @@ export const LIMIT_SPECS: Readonly<Record<LimitKind, LimitSpec>> = {
   workspace_monthly_budget: {
     label: "Monthly budget",
     scope: "workspace",
-    unit: "USD a month",
+    unit: "USD",
     min: 0,
     max: 9_999_999_999.99,
     decimals: 2,

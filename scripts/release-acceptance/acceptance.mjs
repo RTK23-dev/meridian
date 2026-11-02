@@ -284,8 +284,8 @@ try {
   });
   await page.screenshot({ path: join(out, "market-first-run-desktop.png"), fullPage: true });
 
-  await check("G7", "the monthly budget is one named field that /settings#monthly-budget scrolls to and focuses", async () => {
-    await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
+  await check("G7", "the monthly budget is one named field on the billing page that #monthly-budget scrolls to and focuses", async () => {
+    await page.goto(`${base}/billing#monthly-budget`, { waitUntil: "networkidle" });
     const field = page.getByLabel("Monthly budget (USD)");
     await field.waitFor();
     assert.equal(await focusedWithin(field), true, "the budget field must have focus");
@@ -339,6 +339,13 @@ try {
   });
 
   await check("G11", "openrouter: no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does", async () => {
+    // The decision cap has no default, and it is checked before the budget. Set it on the billing page first, so the budget check below is the one that refuses.
+    await page.goto(`${base}/billing`, { waitUntil: "networkidle" });
+    const decisionCap = page.getByLabel("Decision cap per call (USD per call)");
+    await decisionCap.waitFor();
+    await decisionCap.fill("0.05");
+    await decisionCap.press("Enter");
+    await page.getByText("Decision cap per call saved.").waitFor();
     // The testing runtime reads a recorded catalogue and answers the test from a recorded transport. No key is real and nothing is spent.
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
     const review = page.getByText("Review or change this step");
@@ -368,7 +375,7 @@ try {
     await budget.waitFor();
     assert.equal(await focusedWithin(budget), true, "the budget field must have focus");
     await budget.fill("5");
-    await page.getByRole("button", { name: "Save budget" }).click();
+    await budget.press("Enter");
     await page.getByText("Monthly budget saved.").waitFor();
     // With a budget, the recorded transport answers. The test passes, and OpenRouter is still not active.
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
@@ -583,12 +590,13 @@ try {
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await form.getByText("Browse the style library").click();
-    for (const label of ["Product promo", "Explainer", "Talking head", "Cinematic story", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
+    // Only the styles some cookbook carries are offered: the library lists those (Cinematic story has no cookbook yet).
+    for (const label of ["Product promo", "Explainer", "Talking head", "UGC style", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
     // Auto reads the research structure that repeats most (problem solution, in the seeded patterns) and says why.
-    await form.getByLabel("Video style").selectOption({ value: "auto" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "auto" });
     await form.getByText(/Auto picked Explainer because "problem solution"/).waitFor();
     // The Super preset: one different style per video.
-    await form.getByLabel("Video style").selectOption({ value: "super" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "super" });
     await form.getByLabel("Number of videos").fill("3");
     await form.getByLabel("Total batch budget (USD)").fill("7");
     await form.getByLabel("Sample of the first video").waitFor();
@@ -610,7 +618,7 @@ try {
     const form = page.getByRole("form", { name: "Create video variations" });
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
-    await form.getByLabel("Video style").selectOption({ value: "orchestrator" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "orchestrator" });
     await form.getByText(/makes one paid model call/).waitFor();
     await form.getByLabel("Number of videos").fill("2");
     await form.getByLabel("Total batch budget (USD)").fill("3.5");
