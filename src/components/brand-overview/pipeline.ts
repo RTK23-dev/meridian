@@ -88,12 +88,12 @@ export function pipelineStages(input: PipelineInput): PipelineStage[] {
   const definitions: Definition[] = [
     { key: "market", label: "Market", to: MARKET, count: counts.competitors, unit: "competitors", done: counts.competitors > 0, after: null, waiting: false, started: counts.observations > 0 },
     { key: "research", label: "Research", to: MARKET, count: research, unit: "items", done: research > 0, after: null, waiting: false, started: false },
-    { key: "opportunity", label: "Opportunity", to: OPPORTUNITIES, count: counts.openOpportunities, unit: "open", done: counts.openOpportunities > 0, after: "research", waiting: false, started: false },
+    { key: "opportunity", label: "Ideas", to: OPPORTUNITIES, count: counts.openOpportunities, unit: "open", done: counts.openOpportunities > 0, after: "research", waiting: false, started: false },
     { key: "decision", label: "Decision", to: OPPORTUNITIES, count: counts.decisions, unit: "decisions", done: counts.creatives > 0 || operating.generationRuns > 0, after: "opportunity", waiting: false, started: counts.openOpportunities > 0 },
     { key: "brief", label: "Brief", to: STUDIO, count: counts.briefs, unit: "briefs", done: counts.creatives > 0, after: "decision", waiting: false, started: false },
-    { key: "studio", label: "Studio", to: STUDIO, count: operating.generationRuns, unit: "generations", done: operating.generationRuns > 0, after: "brief", waiting: false, started: false },
+    { key: "studio", label: "Make", to: STUDIO, count: operating.generationRuns, unit: "made", done: operating.generationRuns > 0, after: "brief", waiting: false, started: false },
     { key: "review", label: "Review", to: REVIEWS, count: counts.reviews, unit: "open", done: decided > 0, after: "studio", waiting: counts.reviews > 0, started: false },
-    { key: "publish", label: "Publish", to: STUDIO, count: operating.publishedTests, unit: "ads", done: operating.publishedTests > 0, after: "review", waiting: false, started: false },
+    { key: "publish", label: "Publish", to: STUDIO, count: operating.publishedTests, unit: "published", done: operating.publishedTests > 0, after: "review", waiting: false, started: false },
     { key: "performance", label: "Performance", to: LEARNING, count: counts.performanceRows, unit: "rows", done: counts.performanceRows > 0, after: "publish", waiting: false, started: false },
     { key: "learning", label: "Learning", to: LEARNING, count: counts.patterns, unit: "patterns", done: counts.patterns > 0, after: "performance", waiting: false, started: false },
   ];

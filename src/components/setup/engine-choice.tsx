@@ -116,7 +116,7 @@ export function EngineChoice({
                   </label>
                 </div>
                 <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
-                  {isActive ? (isDefault ? "In use (default)" : "In use") : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
+                  {isActive ? (ready ? (isDefault ? "In use (default)" : "In use") : "Chosen, not ready") : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
                 </span>
               </div>
               {selected === engine.id ? (

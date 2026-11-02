@@ -13,7 +13,8 @@ export function openRouterProgress(input: { keySaved: boolean; testPassed: boole
   const steps: EngineStep[] = [
     { id: "saved", label: "Key saved", done: input.keySaved },
     { id: "tested", label: "Connection test passed", done: input.testPassed },
-    { id: "active", label: "OpenRouter is the active engine", done: input.active },
+    // Chosen is not working: a ready tick needs the engine to be able to answer too.
+    { id: "active", label: "OpenRouter is the active engine", done: input.active && input.testPassed },
   ];
   const next = !input.keySaved
     ? "Save your OpenRouter key below."
@@ -38,7 +39,7 @@ export function savedKeyEngineProgress(input: { engineLabel: string; keySaved: b
   const steps: EngineStep[] = [
     { id: "saved", label: "Key saved", done: input.keySaved },
     { id: "tested", label: "Configuration checked (no request sent to the provider)", done: input.ready },
-    { id: "active", label: `${input.engineLabel} is the active engine`, done: input.active },
+    { id: "active", label: `${input.engineLabel} is the active engine`, done: input.active && input.ready },
   ];
   const next = !input.keySaved
     ? `Save your ${input.engineLabel} key below.`
