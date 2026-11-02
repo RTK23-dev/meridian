@@ -77,10 +77,6 @@ export const VIDEO_COUNT_RANGE = probeRange(
   (value) => ({ generationParams: { ...DEFAULT_GENERATION_PARAMS, videoCount: value } }),
   (config) => config.generationParams.videoCount,
 );
-export const DURATION_RANGE = probeRange(
-  (value) => ({ generationParams: { ...DEFAULT_GENERATION_PARAMS, durationSeconds: value } }),
-  (config) => config.generationParams.durationSeconds,
-);
 export const DAILY_CAP_RANGE = probeRange(
   (value) => ({ generationParams: { ...DEFAULT_GENERATION_PARAMS, dailyGenerationCap: value } }),
   (config) => config.generationParams.dailyGenerationCap,

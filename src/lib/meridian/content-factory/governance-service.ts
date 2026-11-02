@@ -13,6 +13,7 @@ import {
   pillarMixOfCounts,
   pillarProblem,
   rightsProblem,
+  rubricNameProblem,
   scoresProblem,
   weightedTotal,
   type CadenceStatus,
@@ -239,8 +240,9 @@ export async function setCadence(sql: Sql, userId: string, input: { brandId: str
 
 export async function createRubric(sql: Sql, userId: string, input: { brandId: string; name: string; criteria: RubricCriterion[] }): Promise<{ id: string }> {
   const access = await requireBrand(sql, userId, input.brandId, "admin");
+  const nameProblem = rubricNameProblem(input.name);
+  if (nameProblem) throw new Error(nameProblem);
   const name = input.name.trim();
-  if (name.length === 0) throw new Error("Give the rubric a name.");
   const problem = criteriaProblem(input.criteria.map((criterion) => ({ name: criterion.name, weight: criterion.weight })));
   if (problem) throw new Error(problem);
   const id = randomUUID();

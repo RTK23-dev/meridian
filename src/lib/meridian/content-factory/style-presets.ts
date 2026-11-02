@@ -80,8 +80,6 @@ export const STYLE_PRESETS: readonly StylePreset[] = [
 export const STYLE_RULES =
   "This style steers the brief only; the engine decides how to produce it. Use no real person's likeness, and add no testimonial, result or claim that the attached evidence does not support.";
 
-export type StyleMode = "auto" | "super" | "none" | string;
-
 export const STYLE_AUTO = "auto";
 export const STYLE_SUPER = "super";
 /** The workspace's decision engine chooses: one model call, made when the batch is created, ranked over the library. */

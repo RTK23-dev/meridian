@@ -309,9 +309,6 @@ export function budgetPauseDetail(reason: string | null | undefined): string {
   return `${rest.charAt(0).toUpperCase()}${rest.slice(1)}`;
 }
 
-/** One recorded budget approval, as the plan's list shows it. */
-export type ApprovalRow = { id: string; actorId: string; previousUsd: number; approvedUsd: number; createdAt: string };
-
 /** The time an approval was made, for ordering. A time that cannot be read sorts as the oldest, so it never moves a row up. */
 function approvalTime(row: { createdAt: string }): number {
   const time = Date.parse(row.createdAt);

@@ -88,11 +88,6 @@ export function reportedCents(value: number | null | undefined): number | null {
   return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : null;
 }
 
-/** Cents as micro-units of USD. One cent is 10,000 micros. */
-export function centsToMicros(cents: number): bigint {
-  return BigInt(Math.round(cents * 10_000));
-}
-
 /** Who approved the production step: the person who approved the stage, or the person who started the run. */
 export async function approverOf(sql: Sql, scope: Scope, runId: string): Promise<string> {
   const approvals = await sql<{ approved_by: string }>`

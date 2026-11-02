@@ -18,22 +18,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 /** Where `RedirectToSignIn` sends signed-out visitors. Create this route. */
 export const SIGN_IN_PATH = "/login";
 
-/** Render children only when a user is present (real session, or the disabled-auth dev user). */
-export function SignedIn({ children }: { children: ReactNode }) {
-  const { user } = useCurrentUserState();
-  return user ? <>{children}</> : null;
-}
-
-/**
- * Render children only once we KNOW the visitor is signed out (`isPending` has
- * cleared and there is no user). Hidden while the session is still loading.
- */
-export function SignedOut({ children }: { children: ReactNode }) {
-  const { user, isPending } = useCurrentUserState();
-  if (isPending || user) return null;
-  return <>{children}</>;
-}
-
 /**
  * Client-side redirect to the sign-in route (TanStack `<Navigate>` — NOT a full
  * `window.location` reload). A hard navigation re-bootstraps the SPA and re-runs

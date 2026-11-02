@@ -21,21 +21,6 @@ export type SegmentRole =
   | "comparison"
   | "other";
 
-export type CreativeSegment = {
-  id?: string;
-  index: number;
-  role: SegmentRole;
-  startMs: number;
-  endMs: number;
-  confidence?: number;
-  probability?: number;
-  heuristicScore?: number;
-  modelQualityEstimate?: number;
-  evidenceState?: "OBSERVED" | "COMPUTED" | "INFERRED" | "LEARNED" | "VALIDATED";
-  description?: string;
-  evidenceRef?: string;
-};
-
 export type CreativeStructureKind =
   | "organic_short"
   | "ad_narrative"

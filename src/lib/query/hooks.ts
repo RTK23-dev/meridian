@@ -12,7 +12,7 @@ import { getStudioBriefReview, getStudioSession, listHeldBudgetReservations, lis
 import { getDistributionChannels, getOrganicDistribution } from "@/lib/meridian/distribution/actions";
 import { getPlatformAccountsAction } from "@/lib/meridian/accounts/actions";
 import { listThemePagesAction } from "@/lib/meridian/pages/actions";
-import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn, runAccountIntelligenceAnalysisFn } from "@/lib/meridian/jev/actions";
+import { getJevAccountIntelligenceFn, updateWhitespaceStatusFn } from "@/lib/meridian/jev/actions";
 import {
   listPublishingQueueAction,
   scheduleMultiAccountPublishAction,
@@ -336,11 +336,6 @@ export const useBrandQueueQuery = (brandId: string, enabled = true) => {
   });
 };
 
-export const useCalibrationQuery = (brandId: string, enabled = true) => {
-  const { userId, ready } = useSession();
-  return useQuery({ ...calibrationQueryOptions(userId, brandId), enabled: ready && enabled && !!brandId });
-};
-
 export const useIntegrationsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...integrationsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
@@ -445,7 +440,6 @@ export const useUncertainHoldsQuery = (organizationId: string, enabled = true) =
   const { userId, ready } = useSession();
   return useQuery({ ...uncertainHoldsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
-
 
 /** The jobs list polls only while a job is queued, retrying, or running. Otherwise it waits for focus or navigation. */
 export const useJobsQuery = (organizationId: string, enabled = true, filters: JobQueryFilters = EMPTY_JOB_QUERY) => {
@@ -684,13 +678,6 @@ export const useUpdateWhitespaceStatus = (brandId: string) => useScopedMutation(
   mutationKey: ["mutation", "whitespace.status", brandId],
   mutationFn: (vars: { opportunityId: string; status: "proposed" | "accepted" | "rejected" | "explored" }) =>
     updateWhitespaceStatusFn({ data: { brandId, ...vars } }),
-  invalidate: () => [qk.accountIntelligence(brandId)],
-});
-
-export const useRunAccountIntelligence = (brandId: string) => useScopedMutation({
-  mutationKey: ["mutation", "account-intelligence.run", brandId],
-  mutationFn: (vars: { platform: string; accountHandle: string; items: any[] }) =>
-    runAccountIntelligenceAnalysisFn({ data: { brandId, ...vars } }),
   invalidate: () => [qk.accountIntelligence(brandId)],
 });
 

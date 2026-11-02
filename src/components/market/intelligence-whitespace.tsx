@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { ArrowUpRight, CheckCircle2, Circle, XCircle, type LucideIcon } from "lucide-react";
 import { Badge, Button } from "@/components/ui";
 import type { WhitespaceOpportunity } from "@/lib/meridian/jev/account-engine";
+import { rankWhitespace } from "./whitespace-rank.ts";
 
 type WhitespaceStatus = WhitespaceOpportunity["status"];
 
@@ -14,18 +15,6 @@ const STATUS: Record<WhitespaceStatus, { label: string; variant: "neutral" | "in
 
 function finite(value: number): number | null {
   return Number.isFinite(value) ? value : null;
-}
-
-/** Highest expected win probability first. Unknown values sort last, so they never rank as zero. */
-export function rankWhitespace(items: readonly WhitespaceOpportunity[]): WhitespaceOpportunity[] {
-  return [...items].sort((left, right) => {
-    const a = finite(left.expectedWinProbability);
-    const b = finite(right.expectedWinProbability);
-    if (a === null && b === null) return left.unsaturatedAngle.localeCompare(right.unsaturatedAngle);
-    if (a === null) return 1;
-    if (b === null) return -1;
-    return b - a || left.unsaturatedAngle.localeCompare(right.unsaturatedAngle);
-  });
 }
 
 function percentText(value: number | null): string {

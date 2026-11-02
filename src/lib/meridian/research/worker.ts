@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { sourceKeyFor } from "../sources/credentials.ts";
 import { analyzeResearchTranscript } from "./analyzer.ts";
 import { metaSnapshotVideoUrl, isMp4 } from "./media.ts";
@@ -319,4 +318,3 @@ export async function executeResearchCollection(sql: Sql, job: ExecutableJob, pa
   return `ads:${collected.ads.length};analyzed:${analyzedCount};patterns:${patterns.length};opportunities:refreshed;${formatYield(yieldRow)}`;
 }
 
-export function newResearchRunId(): string { return randomUUID(); }

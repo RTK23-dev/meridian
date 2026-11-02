@@ -98,8 +98,6 @@ const KEY_LABEL: Record<CredentialCategory, string> = {
 
 /** Readiness as the resolver reports it. "usable" means a call would use the credential shown. */
 export type CredentialReadiness = CredentialState["state"];
-/** @deprecated Use CredentialReadiness. Kept so existing imports keep compiling. */
-export type PerceptionCredentialState = CredentialReadiness;
 
 export type ProviderConfigSummary = {
   category: ProviderCategory;

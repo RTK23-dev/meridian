@@ -58,19 +58,3 @@ export const OMNI_FIXTURE_MALFORMED = {
   ],
 };
 
-export const OMNI_FIXTURE_REMOTE_URI = {
-  interaction_id: "interactions/int-remote-uri-202",
-  status: "completed",
-  steps: [
-    {
-      type: "model_output",
-      content: [
-        {
-          type: "video",
-          mime_type: "video/mp4",
-          uri: "https://storage.googleapis.com/test-artifacts/output.mp4",
-        },
-      ],
-    },
-  ],
-};

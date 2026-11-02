@@ -24,7 +24,6 @@ export type BriefFrame = {
 
 /** The fields a person may edit. The rest are read as the brand or the product holds them. */
 export const EDITABLE_FRAME_FIELDS = ["platform", "budgetUsd", "visualReferences", "successCriteria"] as const;
-export type EditableFrameField = (typeof EDITABLE_FRAME_FIELDS)[number];
 
 export const PLATFORM_MAX = 120;
 export const SUCCESS_MAX = 500;

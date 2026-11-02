@@ -7,6 +7,3 @@ export function assetRoute(assetId: string): string {
   return `/api/assets/${encodeURIComponent(assetId)}`;
 }
 
-export function assetDownloadRoute(assetId: string): string {
-  return `${assetRoute(assetId)}?download=1`;
-}

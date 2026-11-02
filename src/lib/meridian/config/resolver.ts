@@ -21,11 +21,6 @@ export interface GoogleProviderConfig {
   isConfigured: boolean;
 }
 
-export interface ProviderSecretMask {
-  fingerprint?: string;
-  configured: boolean;
-}
-
 /** Shows the last four characters only, and only for a key long enough that four characters reveal little of it. */
 export function maskSecret(secret?: string): string | undefined {
   if (!secret || secret.trim().length < 8) return undefined;

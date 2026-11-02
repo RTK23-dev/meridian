@@ -245,14 +245,3 @@ export async function clusterStoredCreativeDna(
   return clusterAdsByEmbeddings(items, { minSimilarity: input.minSimilarity });
 }
 
-export function risingKeptRising(history: { week: string; rising: string[] }[]): number | null {
-  if (history.length < 3) return null;
-  const first = history[0]!;
-  if (first.rising.length === 0) return null;
-  const later = history.slice(1);
-  let kept = 0;
-  for (const concept of first.rising) {
-    if (later.every((week) => week.rising.includes(concept))) kept += 1;
-  }
-  return Math.round((kept / first.rising.length) * 1000) / 1000;
-}

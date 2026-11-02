@@ -105,25 +105,6 @@ export type AbstainedJevStatus = Exclude<JevAnswerStatus, "answered">;
 export type AnswerSemantics = "probability" | "categorical" | "ordered_score";
 export type AnswerCalibrationStatus = "uncalibrated" | "calibrated";
 
-export type RawJevAnswer =
-  | {
-      type: "choice";
-      choice: string;
-      probabilities: Record<string, number>;
-      confidence: number;
-    }
-  | {
-      type: "noul";
-      noul: number;
-    }
-  | {
-      type: "score";
-      score: number;
-      probabilities: Record<string, number>;
-      confidence: number;
-      legend?: Record<string, string>;
-    };
-
 export type AnsweredJevAnswer = {
   questionId: string;
   questionVersion: string;
@@ -174,8 +155,6 @@ export type AbstainedJevAnswer = {
 
 export type JevAnswer = AnsweredJevAnswer | AbstainedJevAnswer;
 
-export type MeridianJevAnswer = JevAnswer;
-
 export type JevDecisionRequest = {
   model?: string;
   provider?: string;
@@ -213,10 +192,6 @@ export type JevDecisionResponse = {
     comparedResponse: JevDecisionResponse;
   };
 };
-
-export interface JevClient {
-  decide(request: JevDecisionRequest): Promise<JevDecisionResponse>;
-}
 
 /** The one decision transport. Each workspace is served by one engine, so the id has one value. */
 export type JevProviderId = "typesafe_direct";

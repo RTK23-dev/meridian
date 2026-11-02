@@ -80,17 +80,6 @@ export function testImageProvider(allow: boolean, failuresLeft = 0): ImageProvid
   };
 }
 
-/** A live image adapter is selected only when that vendor is configured. A text key is not an image model. */
-export function selectImageProvider(env: { imageProvider?: string }, allowTest: boolean): ImageProvider {
-  if (env.imageProvider === "test:image") return testImageProvider(allowTest);
-  return {
-    id: "unconfigured",
-    generate() {
-      return { status: "failed", provider: "unconfigured", error: "No image provider is configured. Nothing was generated." };
-    },
-  };
-}
-
 export function startTestVideo(input: { prompt: string; seed: string; promptVersion: string }, allow: boolean): VideoJob {
   if (!allow) throw new Error("The test video provider is not enabled.");
   return {

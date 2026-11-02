@@ -270,12 +270,6 @@ export function resolveDriveAccess(organizationId?: string): Promise<DriveAccess
   return defaultAuth.access(organizationId);
 }
 
-/** A current access token for the workspace's credential, or null. For callers that need only the token. */
-export async function getGoogleDriveAccessToken(organizationId?: string): Promise<string | null> {
-  const access = await resolveDriveAccess(organizationId);
-  return access.ok ? access.token : null;
-}
-
 /** Drops cached tokens. Called with no workspace after a 401, and with a workspace after it connects or disconnects. */
 export function invalidateGoogleDriveAccessToken(organizationId?: string): void {
   defaultAuth.invalidate(organizationId);

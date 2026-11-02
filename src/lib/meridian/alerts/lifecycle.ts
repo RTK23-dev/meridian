@@ -8,10 +8,6 @@ export function alertSeverity(code: string): AlertEvent["severity"] {
   return "warning";
 }
 
-export function acknowledgeAlert(alert: AlertEvent): AlertEvent {
-  return { ...alert, acknowledged: true };
-}
-
 export function deliveryUrlAllowed(url: string): boolean {
   try {
     const parsed = new URL(url);

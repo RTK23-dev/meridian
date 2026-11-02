@@ -28,15 +28,6 @@ export function isPenalty(key: WeightKey): boolean {
   return PENALTIES.has(key);
 }
 
-/** Parses the text a person typed. Blank text, letters, and values outside 0 to 5 are rejected, not read as zero. */
-export function parseWeightText(text: string): { ok: true; value: number } | { ok: false; reason: string } {
-  const trimmed = text.trim();
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) return { ok: false, reason: "Enter a number from 0 to 5." };
-  const value = Number(trimmed);
-  if (value < WEIGHT_MIN || value > WEIGHT_MAX) return { ok: false, reason: "Enter a number from 0 to 5." };
-  return { ok: true, value };
-}
-
 export function weightShares(weights: ScoreWeights): Array<{ key: WeightKey; label: string; value: number; share: number; penalty: boolean }> {
   const total = WEIGHT_KEYS.reduce((sum, key) => sum + Math.max(0, weights[key]), 0);
   return WEIGHT_KEYS.map((key) => ({
