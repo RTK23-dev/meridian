@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Cyclone: a device counts as connected only when the gateway names it (its own status, or the fleet list that contains it). A gateway that only answers a capability list no longer does. Health reports the measured time of the check. Each gateway call has a 15-second limit. The screenshot the device takes is kept with the reference, and only a web address is kept. Evidence is labelled by what was observed, never as full evidence. The Settings tab shows the deployment's gateway and device read-only; a workspace cannot save them, and the connection test checks the deployment's device. Removed the unused `CYCLONE_OBSERVATION_BUDGET` reader and the unused Cyclone helpers.
+- Tidy-up: removed the monthly-budget server functions and query hook (the budget is set on the billing page), an unused combined spend-cap helper, and unused parameters and variables.
+
 Still a pre-release. Everything below is verified with fixtures and recorded data. No live provider run has been recorded (see docs/RELEASE_CHECKLIST.md).
 
 - **Batch is the admin's default Content section.** It opens on Video batches. The research-led Factory is an advanced tab.

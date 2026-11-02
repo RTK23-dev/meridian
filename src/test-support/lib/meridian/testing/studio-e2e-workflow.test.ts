@@ -10,7 +10,6 @@ process.env.MERIDIAN_TESTING_RUNTIME = "true";
 // production/image-durable.test.ts, because the image lifecycle reads and writes real production job and artifact rows.
 
 test("Studio E2E Workflow 2: Atomic Approval Gate & Double-Execution Guard (P0-3)", async () => {
-  const _planId = "plan-atomic-1";
   let planStatus = "awaiting_approval";
 
   // Simulate atomic update WHERE status = 'awaiting_approval'

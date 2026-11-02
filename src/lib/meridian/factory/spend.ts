@@ -249,14 +249,5 @@ export async function spendCapsOf(sql: Sql, organizationId: string, brandId: str
   return { totalCents: Number(rows[0]?.total_cents ?? 0), dailyCents: Number(rows[0]?.daily_cents ?? 0) };
 }
 
-/**
- * The cap a run is held to, in cents: the stricter of the run's own cap and the brand's declared cap, counting only the caps that are
- * set. Null when neither is set, which is how a full run without a cap is recognised.
- */
-export function effectiveCap(runCents: number, brandCents: number): number | null {
-  const set = [runCents, brandCents].filter((value) => value > 0);
-  return set.length === 0 ? null : Math.min(...set);
-}
-
 /** A run with no cost rows: nothing was metered, so every figure is zero and there is nothing to price. */
 export const NO_RUN_SPEND: RunSpend = { pricedMicros: 0, pricedDecisions: 0, tokenOnlyDecisions: 0, tokens: 0, providerCents: 0 };

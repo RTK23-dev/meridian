@@ -145,7 +145,7 @@ const engineFor = (jev: ReturnType<typeof stubEngine>, openai: ReturnType<typeof
   "openrouter-decisions": unselectedOpenRouterEngine(),
 });
 
-const healthyAnswers: Responder = (key, spec) => {
+const healthyAnswers: Responder = (_key, spec) => {
   if (spec.id === SAFETY.id) return answered(spec, { probability: 0.99, calibrated: true });
   if (spec.id === TONE.id) return answered(spec, { choice: "organic", confidence: 0.9 });
   if (spec.id === PRODUCT_IN_IMAGE.id) return answered(spec, { probability: 0.97, calibrated: true });
@@ -352,7 +352,7 @@ test("policy enforcement: a calibrated predicate is approved above its threshold
   const tenant = await studioTenant(sql, "gate-policy-bands");
   const run = async (probability: number) => {
     const jev = stubEngine("jev", {
-      respond: (key, spec) => (spec.id === SAFETY.id ? answered(spec, { probability, calibrated: true }) : answered(TONE, { choice: "organic" })),
+      respond: (_key, spec) => (spec.id === SAFETY.id ? answered(spec, { probability, calibrated: true }) : answered(TONE, { choice: "organic" })),
     });
     const openai = stubEngine("openai-decisions");
     return gate({ tenant, engines: engineFor(jev, openai), selection: { engineId: "jev", source: "workspace" } });
@@ -502,7 +502,7 @@ test("analysis questions are answered and recorded, but only gating questions de
   const sql = await getSql();
   const tenant = await studioTenant(sql, "gate-analysis-only");
   const jev = stubEngine("jev", {
-    respond: (key, spec) => (spec.id === TONE.id ? answered(spec, { probability: 0.1 }) : answered(SAFETY, { probability: 0.99, calibrated: true })),
+    respond: (_key, spec) => (spec.id === TONE.id ? answered(spec, { probability: 0.1 }) : answered(SAFETY, { probability: 0.99, calibrated: true })),
   });
   const result = await gate({
     tenant,

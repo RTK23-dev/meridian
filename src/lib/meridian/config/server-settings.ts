@@ -95,11 +95,6 @@ export function cycloneDeviceIdSetting(env: NodeJS.ProcessEnv = process.env): st
   return env.CYCLONE_DEVICE_ID;
 }
 
-/** The Cyclone observation budget, as text. The caller parses it and defaults a blank value. */
-export function cycloneObservationBudgetSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.CYCLONE_OBSERVATION_BUDGET;
-}
-
 /** The Google Drive folder the deployment files artifacts in. The caller trims it. */
 export function driveFolderIdSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
   return env.MERIDIAN_DRIVE_FOLDER_ID;

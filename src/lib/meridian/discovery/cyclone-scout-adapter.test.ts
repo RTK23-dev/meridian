@@ -195,3 +195,102 @@ test("CycloneScoutSourceAdapter checks /v1/device/status and fails if device is 
   assert.equal(check.connected, false);
   assert.match(check.reason || "", /not registered/i);
 });
+
+// Tidy-up review (Cyclone): each test below states a behaviour the adapter must have. They were written against the code as it was, and
+// the ones that failed were the bugs they name.
+
+function gatewayAnswering(routes: Record<string, { status: number; body?: unknown; delayMs?: number }>): typeof fetch {
+  return (async (url: string | URL | Request) => {
+    const path = new URL(String(url)).pathname;
+    const route = routes[path];
+    if (!route) return { ok: false, status: 404, json: async () => ({}) } as any;
+    if (route.delayMs) await new Promise((resolve) => setTimeout(resolve, route.delayMs));
+    return { ok: route.status >= 200 && route.status < 300, status: route.status, json: async () => route.body ?? {} } as any;
+  }) as typeof fetch;
+}
+
+test("a gateway that only answers /v1/capabilities is NOT connected: the target device was never seen (no fake success)", async () => {
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: gatewayAnswering({ "/v1/capabilities": { status: 200, body: { capabilities: ["observe"] } } }),
+  });
+  const check = await adapter.checkConnection();
+  assert.equal(check.connected, false, "a capability list says nothing about this device");
+  assert.match(check.reason || "", /device/i);
+  assert.equal((await adapter.health()).status, "UNAVAILABLE");
+});
+
+test("health reports the time the check took, not a fixed number", async () => {
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: gatewayAnswering({ "/v1/device/status": { status: 200, body: { status: "ready" }, delayMs: 40 } }),
+  });
+  const health = await adapter.health();
+  assert.equal(health.status, "HEALTHY");
+  assert.ok(health.latencyMs >= 30, `latency ${health.latencyMs} ms is measured, not invented`);
+});
+
+test("a gateway that never answers is given up on, so a discovery run is not held open", async () => {
+  const hangs = (async (_url: string | URL | Request, init?: RequestInit) =>
+    new Promise((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+    })) as typeof fetch;
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: hangs,
+    timeoutMs: 50,
+  });
+  const started = Date.now();
+  // The timeout timer is unref'd, so keep the event loop alive for the wait, as a running server does.
+  const keepAlive = setTimeout(() => undefined, 5000);
+  try {
+    const check = await adapter.checkConnection();
+    assert.equal(check.connected, false);
+    assert.ok(Date.now() - started < 2000, "the check stops at its timeout");
+  } finally {
+    clearTimeout(keepAlive);
+  }
+});
+
+test("the audio's first-seen time is the time the screen was observed, never the time the code ran", () => {
+  const adapter = new CycloneScoutSourceAdapter({ config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" } });
+  const card: CyclonePageCard = { nodeId: "n", role: "reel", children: [{ nodeId: "a", role: "text", text: "audio-trend-123" }, { nodeId: "b", role: "text", text: "@creator" }] };
+  const reel = adapter.parsePageCardToReel(card, "skincare", { observedAt: "2026-01-02T03:04:05.000Z" });
+  assert.equal(reel?.audio.firstSeenAt, "2026-01-02T03:04:05.000Z");
+});
+
+test("evidence availability says only what was observed: a page with no permalink and no metrics is not full evidence", async () => {
+  const bare = { session_id: "s2", observed_at: "2026-01-02T03:04:05.000Z", page_cards: [{ nodeId: "n", role: "reel", children: [{ nodeId: "a", role: "text", text: "@creator" }, { nodeId: "b", role: "text", text: "Some caption" }] }] };
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: gatewayAnswering({ "/v1/capabilities/observe": { status: 200, body: bare } }),
+  });
+  const [ref] = await adapter.discover({ niche: "skincare", limit: 5 } as any);
+  // Cyclone captures on-screen text and a screenshot, never the video file, so it can never claim full evidence.
+  assert.notEqual(ref?.evidenceAvailability, "FULL_EVIDENCE_AVAILABLE");
+  assert.equal(ref?.evidenceAvailability, "METADATA_AVAILABLE", "the caption and creator were observed");
+});
+
+test("the evidence Cyclone sees is kept with the reference: the screenshot survives discovery, and an unsafe address is dropped", async () => {
+  const body = {
+    session_id: "s1",
+    observed_at: "2026-01-02T03:04:05.000Z",
+    screenshot_url: "https://gateway.example.com/shots/1.png",
+    page_cards: [{ nodeId: "a", role: "reel", children: [{ nodeId: "t", role: "text", text: "Hello" }] }],
+  };
+  const adapter = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: gatewayAnswering({ "/v1/capabilities/observe": { status: 200, body } }),
+  });
+  const refs = await adapter.discover({ niche: "skincare", limit: 5 } as any);
+  assert.equal(refs.length, 1);
+  assert.equal((refs[0]?.metadata as any)?.screenshotUrl, "https://gateway.example.com/shots/1.png");
+
+  const unsafe = { ...body, screenshot_url: "javascript:alert(1)" };
+  const adapterUnsafe = new CycloneScoutSourceAdapter({
+    config: { gatewayUrl: "http://127.0.0.1:4000", deviceId: "pixel-8-pro-01" },
+    fetchFn: gatewayAnswering({ "/v1/capabilities/observe": { status: 200, body: unsafe } }),
+  });
+  const [unsafeRef] = await adapterUnsafe.discover({ niche: "skincare", limit: 5 } as any);
+  assert.equal((unsafeRef?.metadata as any)?.screenshotUrl, undefined, "a non-web address from the device is never stored");
+});

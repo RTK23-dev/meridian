@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
@@ -183,10 +183,6 @@ export const generationCatalogueQueryOptions = (userId: string | null | undefine
   queryFn: () => getGenerationCatalogue({ data: { organizationId } }),
   // The catalogue is read live when the page opens. A stale list is replaced on the next focus, and a save reads it again.
   staleTime: 0,
-});
-export const videoBudgetQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
-  queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
-  queryFn: () => getVideoBudget({ data: { organizationId } }),
 });
 /** The billing page: every limit of the workspace and of each brand, read from the stores that enforce them. */
 export const billingPageQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
@@ -450,10 +446,6 @@ export const useUncertainHoldsQuery = (organizationId: string, enabled = true) =
   return useQuery({ ...uncertainHoldsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
-export const useVideoBudgetQuery = (organizationId: string, enabled = true) => {
-  const { userId, ready } = useSession();
-  return useQuery({ ...videoBudgetQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
-};
 
 /** The jobs list polls only while a job is queued, retrying, or running. Otherwise it waits for focus or navigation. */
 export const useJobsQuery = (organizationId: string, enabled = true, filters: JobQueryFilters = EMPTY_JOB_QUERY) => {

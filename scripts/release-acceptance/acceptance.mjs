@@ -584,6 +584,17 @@ try {
     await page.getByText("Saved as your copy.").waitFor({ timeout: 30000 });
   });
 
+  await check("H3", "Cyclone is set by the deployment: its tab is read-only, names the environment variables, and offers no gateway field", async () => {
+    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    // The provider settings sit in a section that is closed by default: open it, then the Cyclone tab.
+    await page.locator("summary", { hasText: "Engine and provider settings" }).click();
+    await page.getByRole("button", { name: /^cyclone/ }).click();
+    const text = await page.locator("main").innerText();
+    assert.match(text, /set by the deployment's environment/);
+    assert.match(text, /CYCLONE_GATEWAY_URL/);
+    assert.equal(await page.getByLabel("Cyclone Gateway URL").count(), 0, "a workspace gateway field is not offered");
+  });
+
   await check("G17", "style presets: the library can be browsed, Auto explains its choice, the Super preset gives each video a different style, and the choice is recorded in the export", async () => {
     await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
     const form = page.getByRole("form", { name: "Create video variations" });

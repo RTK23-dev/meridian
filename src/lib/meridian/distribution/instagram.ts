@@ -153,7 +153,6 @@ async function send(transport: Transport, request: TransportRequest, uploadStart
  * documents, with trial_params as a nested object, on TRIAL_GRAPH_BASE.
  */
 function containerRequest(
-  options: { transport: Transport },
   account: string,
   headers: Record<string, string>,
   input: { videoUrl: string; caption: string; trial: TrialRequest | null },
@@ -192,7 +191,7 @@ export async function publishInstagramReel(
 
   const created = await send(
     options.transport,
-    containerRequest(options, account, headers, { videoUrl: input.videoUrl, caption: input.caption, trial }),
+    containerRequest(account, headers, { videoUrl: input.videoUrl, caption: input.caption, trial }),
     false,
   );
   if (!created.ok) return created.receipt;

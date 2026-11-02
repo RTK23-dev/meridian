@@ -7,7 +7,6 @@ import {
   artifactHostAllowlistSetting,
   cycloneDeviceIdSetting,
   cycloneGatewayUrlSetting,
-  cycloneObservationBudgetSetting,
   driveFolderIdSetting,
   emailApiUrlSetting,
   externalSemanticDimensionsSetting,
@@ -67,7 +66,6 @@ describe("the deployment setting accessors return the raw value", () => {
     ["openRouterDecisionsModelSetting", openRouterDecisionsModelSetting, "OPENROUTER_DECISIONS_MODEL"],
     ["artifactHostAllowlistSetting", artifactHostAllowlistSetting, "MERIDIAN_ARTIFACT_HOST_ALLOWLIST"],
     ["cycloneDeviceIdSetting", cycloneDeviceIdSetting, "CYCLONE_DEVICE_ID"],
-    ["cycloneObservationBudgetSetting", cycloneObservationBudgetSetting, "CYCLONE_OBSERVATION_BUDGET"],
     ["driveFolderIdSetting", driveFolderIdSetting, "MERIDIAN_DRIVE_FOLDER_ID"],
   ] as const;
 

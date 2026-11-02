@@ -20,45 +20,10 @@ import { openRouterSeam } from "../decisions/test-seam.ts";
 import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
-import { readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
-
-/** The workspace's monthly video budget in US dollars, or null when none is set. Any member may read it. */
-export const getVideoBudget = createServerFn({ method: "GET" })
-  .validator((input: unknown) => {
-    const obj = objectInput(input);
-    const organizationId = asText(obj.organizationId);
-    if (!organizationId) throw new Error("organizationId is required.");
-    return { organizationId };
-  })
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    // The membership check (viewer or above) runs inside, before the read.
-    return readWorkspaceVideoBudget(sql, { userId: context.userId, organizationId: data.organizationId });
-  });
-
-/** Saves, or clears with a blank value, the workspace's monthly video budget. Admin only; the role is checked on the server. */
-export const saveVideoBudget = createServerFn({ method: "POST" })
-  .validator((input: unknown) => {
-    const obj = objectInput(input);
-    const organizationId = asText(obj.organizationId);
-    if (!organizationId) throw new Error("organizationId is required.");
-    const value = obj.monthlyVideoBudgetUsd;
-    if (value !== null && value !== undefined && typeof value !== "string" && typeof value !== "number") {
-      throw new Error("The monthly video budget must be a number or blank.");
-    }
-    return { organizationId, monthlyVideoBudgetUsd: (value ?? null) as string | number | null };
-  })
-  .middleware([authMiddleware])
-  .handler(async ({ context, data }) => {
-    const sql = await getSql();
-    // The admin check runs inside, before the value is parsed or written.
-    return saveWorkspaceVideoBudget(sql, { userId: context.userId, organizationId: data.organizationId, value: data.monthlyVideoBudgetUsd });
-  });
 
 export const getProviderSettings = createServerFn({ method: "GET" })
   .validator((input: unknown) => {

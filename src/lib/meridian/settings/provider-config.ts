@@ -37,7 +37,8 @@ import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
-import { cycloneDeviceIdSetting, cycloneGatewayUrlSetting, cycloneObservationBudgetSetting, hypitBaseUrlSetting, perceptionModelSetting } from "../config/server-settings.ts";
+import { cycloneDeviceIdSetting, cycloneGatewayUrlSetting, hypitBaseUrlSetting, perceptionModelSetting } from "../config/server-settings.ts";
+import { CycloneScoutSourceAdapter } from "../discovery/cyclone-scout-adapter.ts";
 
 /**
  * Every provider category the settings summary and the save path know. The keyed categories are the resolver's categories:
@@ -283,24 +284,16 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["oauth_google_drive", "checksum_verification", "zero_fake_completion"],
   };
 
-  // 7. Cyclone Scout Category
-  const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
-  const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
-  const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || cycloneGatewayUrlSetting();
-  const cycloneApiKey = cycloneCreds?.apiKey || cycloneApiKeyFromEnv();
-  const cycloneConfigured = Boolean(cycloneGatewayUrl);
-
+  // 7. Cyclone Scout: set by the deployment's environment only (docs/PROVIDERS.md). Settings cannot change it, so this shows what the
+  // deployment holds. The key is never shown, only its fingerprint.
+  const cycloneGatewayUrl = cycloneGatewayUrlSetting() ?? "";
+  const cycloneDeviceId = cycloneDeviceIdSetting() ?? "";
   const cycloneSummary: ProviderConfigSummary = {
     category: "cyclone",
-    configured: cycloneConfigured,
-    source: cycloneCreds?.apiKey || cycloneCreds?.customFields?.gatewayUrl ? "workspace" : (cycloneGatewayUrlSetting() ? "deployment" : "default"),
-    keyFingerprint: fingerprint(cycloneApiKey),
-    settings: {
-      gatewayUrl: cycloneGatewayUrl || "http://127.0.0.1:4000",
-      deviceId: cycloneCreds?.customFields?.deviceId || cycloneDeviceIdSetting() || "",
-      observationBudget: Number(cycloneCreds?.customFields?.observationBudget || cycloneObservationBudgetSetting() || 20),
-      readOnlyMode: true,
-    },
+    configured: Boolean(cycloneGatewayUrl && cycloneDeviceId),
+    source: cycloneGatewayUrl ? "deployment" : "default",
+    keyFingerprint: fingerprint(cycloneApiKeyFromEnv()),
+    settings: { gatewayUrl: cycloneGatewayUrl, deviceId: cycloneDeviceId, readOnlyMode: true },
     capabilities: ["device_discovery", "page_card_observation", "session_binding", "zero_mutation_research"],
   };
 
@@ -314,15 +307,6 @@ export async function getWorkspaceProviderSettings(
   } as Record<ProviderCategory, ProviderConfigSummary>;
   for (const summary of genericSummaries) summaries[summary.category] = summary;
   return summaries;
-}
-
-/** The Cyclone entry's payload, or null when it cannot be read. Cyclone is not a resolver category. */
-async function savedCycloneCredentials(sql: Sql, organizationId: string, entryId: string): Promise<VaultCredentialPayload | null> {
-  try {
-    return await retrieveVaultCredential(sql, organizationId, entryId);
-  } catch {
-    return null;
-  }
 }
 
 /** One save as the service receives it. */
@@ -356,6 +340,9 @@ export async function saveWorkspaceProviderConfig(
 ): Promise<{ success: boolean; category: ProviderCategory }> {
   if (!isProviderCategory(input.category)) {
     throw new Error(`Unknown provider category: ${String(input.category)}.`);
+  }
+  if (input.category === "cyclone") {
+    throw new Error("Cyclone is set by the deployment's environment (CYCLONE_GATEWAY_URL, CYCLONE_DEVICE_ID and CYCLONE_API_KEY), so a workspace cannot save it.");
   }
 
   // A page limit is a whole number of pages, 1 or more. It is stored as that number, so a fraction, a negative or text never lands.
@@ -591,29 +578,12 @@ export async function testWorkspaceProviderConnection(
     }
 
     if (input.category === "cyclone") {
-      const credType = vaultTypeForCategory("cyclone");
-      const rows = await sql<{ id: string }>`select id from credential_vault where organization_id = ${input.organizationId} and credential_type = ${credType} limit 1`;
-      let gatewayUrl = cycloneGatewayUrlSetting() || "http://127.0.0.1:4000";
-      if (rows[0]) {
-        const creds = await retrieveVaultCredential(sql, input.organizationId, rows[0].id);
-        if (creds?.customFields?.gatewayUrl) {
-          // A gateway URL saved by a workspace is tenant input, so it must be a public http(s) address. Otherwise a saved value
-          // could point this server at an internal host. The operator's CYCLONE_GATEWAY_URL is trusted and is not checked here.
-          const saved = String(creds.customFields.gatewayUrl);
-          const issue = publicUrlIssue(saved);
-          if (issue) {
-            return { status: "ERROR", message: `The workspace's saved Cyclone gateway URL is not allowed. ${issue} No request was made.`, latencyMs: Date.now() - started };
-          }
-          gatewayUrl = saved;
-        }
-      }
-
-      const res = await fetch(`${gatewayUrl}/v1/device/status`, { signal: AbortSignal.timeout(3000) });
+      // The deployment's device, checked by the same check discovery uses. A workspace cannot point this at another gateway.
+      const check = await new CycloneScoutSourceAdapter().checkConnection();
       const latencyMs = Date.now() - started;
-      if (res.ok) {
-        return { status: "READY", message: "Cyclone device gateway responded successfully.", latencyMs };
-      }
-      return { status: "ERROR", message: `Cyclone gateway returned HTTP ${res.status}.`, latencyMs };
+      return check.connected
+        ? { status: "READY", message: "The Cyclone device answered through the deployment's gateway.", latencyMs }
+        : { status: "ERROR", message: check.reason ?? "The Cyclone device is not connected.", latencyMs };
     }
 
     if (input.category === "sources") {

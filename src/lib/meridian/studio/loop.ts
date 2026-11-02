@@ -221,13 +221,13 @@ export function runCoreLoop(input: {
       asset.lineage = { ...asset.lineage, qaDecision: reviewDecision, reviewDecision: reviewerApproved ? "approve" : reviewDecision, publicationId: externalId ?? "" };
     }
   }
-  const winnerRows = assets.filter((asset) => asset.kind === "image").map((asset, index) => performanceRow(input, `win-${index}`, 400, 40, 4));
+  const winnerRows = assets.filter((asset) => asset.kind === "image").map((_asset, index) => performanceRow(input, `win-${index}`, 400, 40, 4));
   const loserRows = input.losers.map((creative) => ({ ...performanceRow(input, creative.id, 400, 8, 0), creativeId: creative.id }));
   const patterns = learnPatterns({
     organizationId: input.organizationId,
     brandId: input.brandId,
     creatives: [
-      ...assets.filter((asset) => asset.kind === "image").map((asset, index) => generatedCreative(input, `win-${index}`, chosen.angle, "demonstration")),
+      ...assets.filter((asset) => asset.kind === "image").map((_asset, index) => generatedCreative(input, `win-${index}`, chosen.angle, "demonstration")),
       ...input.losers,
     ],
     observations: [...winnerRows, ...loserRows],

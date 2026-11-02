@@ -73,7 +73,6 @@ export const providerFieldsSchema = z.object({
   productionKey: z.string().trim(),
   perceptionKey: z.string().trim(),
   costPreference: z.enum(CLIENT_COST_MODES, { error: "Choose a cost mode: ZERO_SPEND, LOWEST_COST, BALANCED or QUALITY_FIRST." }),
-  gatewayUrl: z.string().trim(),
   // The same whole-number rule the server applies when it saves the sources settings.
   maxPages: z.string().trim().refine((value) => parsePageLimit(value) !== null, PAGE_LIMIT_MESSAGE),
 });

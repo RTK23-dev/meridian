@@ -5,9 +5,6 @@
 
 import { parseMonthlyVideoBudget } from "../settings/video-budget-model.ts";
 
-/** The page the limits are set on, and the page every refusal points to. */
-export const BILLING_PATH = "/billing";
-
 export const LIMIT_KINDS = [
   "workspace_monthly_budget",
   "measure_ceiling",
