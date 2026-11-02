@@ -1,8 +1,8 @@
 // The pure model behind the mixed-plan prototype. No DOM, no network. The sample plan is illustrative: no provider was called, and its
-// costs and models are placeholders chosen to show every state. model.test.mjs checks the geometry and the copy against the source
+// costs and models are placeholders chosen to show every state. scripts/design-prototype-model.test.mjs checks the geometry and the copy against the source
 // files they come from, so this model cannot drift from the engine's layout or the app's state words without a failing test.
 
-/** Canvas geometry. Mirrors src/engine/orchestrator/layout.ts; model.test.mjs reads that file and fails if the numbers differ. */
+/** Canvas geometry. Mirrors src/engine/orchestrator/layout.ts; scripts/design-prototype-model.test.mjs reads that file and fails if the numbers differ. */
 export const GEOMETRY = Object.freeze({ nodeWidth: 232, nodeHeight: 132, columnGap: 96, rowGap: 28, canvasPad: 40 });
 
 /** The ten step kinds, with the labels the app shows (src/components/content-factory/orchestrator-presentation.ts). */
@@ -61,7 +61,7 @@ export function costLabel(cost) {
   throw new Error(`no cost rule for ${cost.kind}`);
 }
 
-/** The example goals the brief offers. They fill the goal field only. Copied from the app; model.test.mjs checks them against the source. */
+/** The example goals the brief offers. They fill the goal field only. Copied from the app; scripts/design-prototype-model.test.mjs checks them against the source. */
 export const EXAMPLE_GOALS = Object.freeze([
   "A 30-second product video built from our brand photos",
   "Rebuild a viral reference as an on-brand version",

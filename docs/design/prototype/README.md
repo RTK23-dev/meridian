@@ -16,9 +16,9 @@ then open http://localhost:8080/index.html.
 
 ## Test it
 
-The model is pure and has no DOM. Its tests run with the rest of `npm test`:
+The model is pure and has no DOM. Its tests are in `scripts/design-prototype-model.test.mjs`, so `npm test` and the CI shards run them with the other script tests:
 
-    node --test "docs/design/**/*.test.mjs"
+    node --test scripts/design-prototype-model.test.mjs
 
 The model tests check the canvas geometry against `src/engine/orchestrator/layout.ts`, and the state words, kind labels and example goals against `src/components/content-factory/orchestrator-presentation.ts`. If the app's copy changes, they fail.
 
@@ -41,7 +41,7 @@ The build keeps the page content as it is in `index.html`, and the publish skele
 ## Files
 
 - `index.html`, `prototype.css`, `app.mjs`: the page and its view controller. Text goes through `esc()`; no sample data reaches `innerHTML` unescaped.
-- `model.mjs`, `model.test.mjs`: the sample plan, the layout, the state words, the cost rules and the reducer.
+- `model.mjs`: the sample plan, the layout, the state words, the cost rules and the reducer. Its tests are `scripts/design-prototype-model.test.mjs`.
 - `capture.mjs`: the browser checks and the screenshots.
 - `build-artifact.mjs`: the single-file build for publishing.
 - `screens/`: screenshots at 1440 and 390 px, both systems, both themes, plus `measurements.json`.

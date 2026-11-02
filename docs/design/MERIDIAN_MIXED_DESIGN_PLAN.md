@@ -45,7 +45,7 @@ These are found by reading it against the code and by running the checks. Sectio
 Each claim below has a test, a measurement, or both, and a file a reviewer can open.
 
 - The proposed tokens: 35 colour pairs meet their minimum in both themes, using the repo's own helper (`src/lib/meridian/a11y/contrast.ts`). Every ratio the Katana plan states in its colour table is the computed ratio, to two decimal places. The JSON matches the Katana plan's CSS block. (`src/lib/meridian/a11y/katana-tokens.test.ts`, 5 tests.)
-- The model: the canvas geometry equals `layout.ts`. The ten state words and the ten kind labels equal the app's strings. The example goals equal the app's. Selection survives every change of view. A filter never hides the selected step silently. A recorded zero shows as `$0.0000`, never "not recorded". (`docs/design/prototype/model.test.mjs`, 17 tests.)
+- The model: the canvas geometry equals `layout.ts`. The ten state words and the ten kind labels equal the app's strings. The example goals equal the app's. Selection survives every change of view. A filter never hides the selected step silently. A recorded zero shows as `$0.0000`, never "not recorded". (`scripts/design-prototype-model.test.mjs`, 17 tests.)
 - The rendered prototype, measured in headless Chromium by `docs/design/prototype/capture.mjs` (21 claims, all hold):
   - Archivo, Instrument Sans and JetBrains Mono resolve (`document.fonts.check`).
   - The browser supports `text-box: trim-both cap alphabetic`, and the buttons use it.
@@ -79,14 +79,14 @@ Each principle is adopted, with a Meridian meaning, a prototype test, and what i
 
 | Principle | Meridian meaning | Where it shows | Test |
 |---|---|---|---|
-| Identity-preserving representation | A step keeps its identity and its selection through canvas, strip, list and details. | Selection mark, `reduce()` | `model.test.mjs` selection tests; capture: keyboard and overlay |
+| Identity-preserving representation | A step keeps its identity and its selection through canvas, strip, list and details. | Selection mark, `reduce()` | `scripts/design-prototype-model.test.mjs` selection tests; capture: keyboard and overlay |
 | Semantic axes | Horizontal means the reading relation. Vertical means runs alongside. | `layoutSteps()`, column = dependency depth | layout tests |
 | Representation distance | Four distances for one plan: canvas, strip, list, details. | Segmented control, details panel | identity tests across views |
 | Positional hierarchy | Kind top left, state word top right, title, model, cost, in the same place on the card, strip card and details. | `.node`, `.strip-card`, `#drawer` | visual, section 9 |
 | Content-bearing colour | The colour of a plan comes from its work (a still, a clip), not from the interface. Kind colours are removed from the chrome. | Kind colours removed (section 6.4). No media in the prototype, so this is a rule, not a demonstration. | rule, not measured |
 | Attached context | Model, cost, reads, read-by and the reason sit beside the step, in the details panel. Nothing navigates the reader away. | `renderDrawer()` | capture: overlay |
 | Responsive recomposition | At phone width the browsing unit becomes the step, not the canvas. | Phone list, section 7.3 | capture: phone list and sheet |
-| Temporal hierarchy | Confirmations leave by themselves after 4 s. Warnings and failures stay until closed. Hover pauses the timer. | `toastDuration()` | `model.test.mjs` toast policy |
+| Temporal hierarchy | Confirmations leave by themselves after 4 s. Warnings and failures stay until closed. Hover pauses the timer. | `toastDuration()` | `scripts/design-prototype-model.test.mjs` toast policy |
 | Visible restriction | A filter names what it shows and how many. Its reset is one control. A hidden selection never fails silently. | `restrictionText()`, `reduce("select")` | capture: restriction |
 | Stable loading geometry | The skeleton has the same boxes as the loaded steps. The restriction line and the notice slot reserve their space. | Skeleton, reserved slots | capture: CLS 0 |
 
@@ -351,7 +351,7 @@ This plan adds steps to Katana's M0 to M6 (section m). It does not replace them.
 
 - **MX1. Tokens.** Add `katana-tokens.json` to the app's token path, next to the AttentionOS file. Extend `src/styles.contrast.test.ts` to read it (Katana M1 and M2). No visual change.
 - **MX2. Title tiers.** `.page-title` by container (`@container`). The screen body becomes the container in `src/components/shell.tsx` and `src/components/workspace.tsx`. Test: the title tier at two widths, with and without a pushed column.
-- **MX3. The state map.** `orchestrator-presentation.ts`: add "Queued at the provider" in its info tone, drop the kind accents, make state words sentence case. `orchestrator-presentation.test.ts` is rewritten for the new map (Katana M4 already says so). The prototype's `model.test.mjs` pattern (words equal the app's) is copied for it.
+- **MX3. The state map.** `orchestrator-presentation.ts`: add "Queued at the provider" in its info tone, drop the kind accents, make state words sentence case. `orchestrator-presentation.test.ts` is rewritten for the new map (Katana M4 already says so). The prototype's model test pattern (words equal the app's) is copied for it.
 - **MX4. The canvas.** Default zoom 75%. Phone list recomposition in `orchestrator-canvas.tsx`. The `layout.ts` constants stay. Test: the phone list keeps the reading order.
 - **MX5. Details panel and assistant.** Overlay for the details, push for the assistant, in `orchestrator-screen.tsx`. Test: a selected step's layout position is unchanged when the panel opens.
 - **MX6. Motion and shadow.** Remove `.signal-working`, `.signal-ring`, `.surface-glow`, `orch-pop`, `.attention-signal`'s inset shadow and the light overlay shadow. Test: no `box-shadow` with a blur in `src/**/*.tsx` or the stylesheet, and no infinite animation under reduced motion.
@@ -380,7 +380,7 @@ Each phase keeps the existing gates: `npm test`, `npm run typecheck`, `npm run l
 Run in this session, in the working tree (the work is not yet committed; see the note at the end of this section):
 
 - `src/lib/meridian/a11y/katana-tokens.test.ts`: 5 tests, pass.
-- `docs/design/prototype/model.test.mjs`: 17 tests, pass. Run by `npm test` through the new `docs/design/**/*.test.mjs` pattern.
+- `scripts/design-prototype-model.test.mjs`: 17 tests, pass. It sits in `scripts/`, which `npm test` and the CI shards already run.
 - `docs/design/prototype/capture.mjs`: 21 measured claims, all hold, with screenshots in `docs/design/prototype/screens/`. Results in `screens/measurements.json`.
 - `npx eslint` on the changed files: 0 errors, 0 warnings.
 - `npm run typecheck`: exit 0.
@@ -410,7 +410,8 @@ The commit is held. The designated branch `claude/nice-tesla-zrf6un` is already 
 | `docs/design/tokens/katana-tokens.json` | Proposed tokens, 35 contrast pairs |
 | `src/lib/meridian/a11y/katana-tokens.test.ts` | Checks the tokens, the drift from the Katana plan, and its stated ratios |
 | `docs/design/prototype/index.html`, `prototype.css`, `app.mjs` | The prototype: both systems, all screens |
-| `docs/design/prototype/model.mjs`, `model.test.mjs` | The pure model and its tests |
+| `docs/design/prototype/model.mjs` | The pure model |
+| `scripts/design-prototype-model.test.mjs` | Its tests (in `scripts/`, so CI runs them) |
 | `docs/design/prototype/capture.mjs` | Browser capture and the 21 measured claims |
 | `docs/design/prototype/build-artifact.mjs` | Builds the single-file page that is published (styles and scripts inlined) |
 | `docs/design/prototype/screens/` | Screenshots and `measurements.json` |
