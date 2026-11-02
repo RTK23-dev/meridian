@@ -13,7 +13,8 @@ export type ConnectionPhase = (typeof CONNECTION_PHASES)[number];
 
 /**
  * How long a recorded provider success counts as fresh. Past this window a stored success is DEGRADED, not HEALTHY. The value is one
- * day: the success is recorded only when someone checks or connects the provider, so a shorter window fails closed sooner.
+ * day: a success is recorded when someone checks or connects the provider, or when a real sync or publish is accepted (usage.ts), and a
+ * shorter window fails closed sooner.
  */
 export const PROVIDER_SUCCESS_FRESH_MS = 24 * 60 * 60 * 1000;
 

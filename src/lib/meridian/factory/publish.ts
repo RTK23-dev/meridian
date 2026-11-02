@@ -23,6 +23,8 @@ import type { RunSettings } from "./run-settings.ts";
 import type { TrialRequest } from "../distribution/trial.ts";
 import { trialDefaultForRunPage } from "../pages/store.ts";
 import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
+import { gatedTransport } from "../providers/capability.ts";
+import { anyStageConfirmed, observeProviderUse, recordProviderUse } from "../providers/usage.ts";
 
 /** The organic channel each platform a run names publishes through. A platform with no organic channel is reported, not skipped. */
 export const ORGANIC_CHANNEL_BY_PLATFORM: Readonly<Record<string, string>> = {
@@ -278,6 +280,11 @@ async function publishPaid(
     await recordPaidFailure(sql, scope, { provider: "meta", creativeId, objectType: "ad", status: "failed", reason: route.refused });
     return { outcome: "failed", error: route.refused };
   }
+  // The live Meta route records what the provider said on the workspace's connection. The testing runtime's fixture makes no request
+  // and records nothing, so a fixture result never marks a connection healthy. The default transport is the same write gate the
+  // publisher uses when none is given.
+  const live = route.engine.id === "meta";
+  const observed = observeProviderUse(gatedTransport("ads.meta_write"), "meta");
   let result: PublishEngineResult;
   try {
     result = await route.engine.publishPaused({
@@ -289,11 +296,23 @@ async function publishPaid(
       message: "",
       accessToken: route.accessToken ?? undefined,
       adAccountId: route.adAccountId,
+      transport: live ? observed.transport : undefined,
     });
   } catch (error) {
+    if (live) {
+      await recordProviderUse(sql, { organizationId: scope.organizationId, provider: "meta", refusedStatus: observed.refusedStatus(), succeeded: false });
+    }
     const reason = `The paid publisher did not return. Nothing is reported as paused. ${errorText(error)}`;
     await recordPaidFailure(sql, scope, { provider: route.engine.id, creativeId, objectType: "ad", status: "failed", reason });
     return { outcome: "failed", error: reason };
+  }
+  if (live) {
+    await recordProviderUse(sql, {
+      organizationId: scope.organizationId,
+      provider: "meta",
+      refusedStatus: observed.refusedStatus(),
+      succeeded: anyStageConfirmed(result.stages),
+    });
   }
   const recorded = await recordPaidStages(sql, scope, route.engine.id, creativeId, result);
   if (recorded.paused) return { outcome: "paused", error: "" };
