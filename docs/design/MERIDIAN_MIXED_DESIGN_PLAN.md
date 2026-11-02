@@ -427,26 +427,64 @@ The globe mark is the logo's motion source, drawn from `docs/design/logo/`. Its 
 
 ## 17. The full web design
 
-The walkthrough is `docs/design/prototype/presentation.html`. It draws the whole web app in the proposal, one screen at a time: fourteen screens and a cover. Each screen comes with what it does, what it means for the person, and what was checked on it. It is a proposal. Nothing under `src/` changed, and no screen is built here.
+The walkthrough is `docs/design/prototype/presentation.html`. It draws the web app in the proposal, one screen at a time: forty-eight screens and states, plus a cover. Each one comes with what it does, what it means for the person, and what was checked on it. Every screen the app has is included. The copy for the app's own screens is taken from the components that draw them. It is a proposal: nothing under `src/` changed, and no screen is built here.
 
-**The screens.**
+**Corrections to the first walkthrough.** The first version drew Settings with tabs the app does not have (Workspace, Brands, Connections, Team, Usage, System). The Settings screens now show the six tabs the app has: General, Members, Scoring weights, Alerts, Learning and Danger zone. The Connections and System screens are replaced by Integrations and Jobs & health, which are the app's own.
 
-| Group | Screen | What it shows |
+**The five places.** The proposal keeps the five places of the rail. Start and States are not places: they are the screens before sign-in, and the states a person meets when a page cannot be shown. Each app screen is filed under one place, and the table gives its route. The app routes under `brands/$brandId` for studio, factory, library, reviews, accounts, learning and opportunities are redirects into the Content page, so they have no screen of their own. `[_design]` is a development-only design-system page, and is not drawn.
+
+**The screens, and where each one lives in the app.**
+
+| Place | Walkthrough screen | App route |
 |---|---|---|
-| Start | Sign in | One field and one red action. The copy says what the address is for. |
-| Start | First run, step 2 | Three steps with a progress bar. The workspace name is the only input. |
-| Home | Today | What needs the person, one row each with its state word and one action. Then what is running, then three figures. |
-| Home | Today, with nothing to do | The empty state names what will appear and gives the one way to start. |
-| Create | Brief | The brief, examples, the settings that apply, and reference files, which say NOT CONNECTED when they are not. |
-| Create | Plan | The step bar and the plan, in Strip and List views with filters. It is the same component as the plan in the plates. |
-| Create | Plan that could not be drawn | A failed plan says so, keeps the brief, and gives the request id. |
-| Create | Review | Four gates with their words, a preview that says nothing was made, recorded and estimated costs, and Approve disabled until Rights is cleared. |
-| Library | Library | Tiles, filters, and the details of the selected item. A tile with no preview says so. |
-| Insights | Insights, market | One chart, its source line, and a plain note on what it means. |
-| Settings | Connections | Each connection with its true state: connected, error, or NOT CONNECTED. |
-| Settings | Connect Google Ads | The three-step connection. The middle step says it leaves Meridian and publishes nothing. |
-| Settings | System | Recent jobs in a table. Ids are in full, and a duration that was not recorded says so. |
-| Overlay | Command palette | Opens over any screen, groups results by where they go, and shows each key. |
+| Start | Sign in | `/login` |
+| Start | First run, step 2 | proposal; the app's own guide is `/setup` |
+| Start | Accept invitation | `/invite` |
+| Start | Product page | `/product` |
+| Start | Docs | `/docs` |
+| Start | Quickstart | `/quickstart` |
+| States | Page not found | any address that matches no screen |
+| States | No access | a permission refusal |
+| States | Admin only | usage, audit, alerts, webhooks, jobs, engine operations and exports, for a member |
+| Home | Today | proposal; the app's overview is `/` |
+| Home | Today, with nothing to do | proposal (an overview with no work) |
+| Home | Workspace overview | `/` |
+| Home | Brand overview | `/brands/$brandId` |
+| Home | Alerts center | `/alerts` |
+| Create | Brief | proposal (Content, Create) |
+| Create | Plan | proposal (the plan component, in Content) |
+| Create | Plan that could not be drawn | proposal |
+| Create | Review | proposal (Content, Review) |
+| Create | New brand | `/brands/new` |
+| Create | Content | `/brands/$brandId/content`, `/content-factory` |
+| Create | Cookbooks | `/brands/$brandId/cookbooks` |
+| Create | Orchestrator | `/orchestrator` |
+| Create | Brand brain | `/brands/$brandId/brain` |
+| Create | Products | `/brands/$brandId/products` |
+| Create | Pages | `/brands/$brandId/pages` |
+| Library | Library | proposal (what was made or kept) |
+| Library | Exports | `/exports` |
+| Insights | Insights, market | proposal (the Market tab) |
+| Insights | Market | `/brands/$brandId/market` |
+| Insights | Intelligence | `/brands/$brandId/intelligence` |
+| Insights | Calibration | `/brands/$brandId/calibration` |
+| Settings | General | `/settings`, General tab |
+| Settings | Members | `/settings`, Members tab |
+| Settings | Scoring weights | `/settings`, Scoring weights tab |
+| Settings | Alerts tab | `/settings`, Alerts tab (points to the Alerts center) |
+| Settings | Learning | `/settings`, Learning tab |
+| Settings | Danger zone | `/settings`, Danger zone tab |
+| Settings | Connect Google Ads | proposal of the connection flow, from `/integrations` |
+| Settings | Integrations | `/integrations` |
+| Settings | Setup guide | `/setup` |
+| Settings | Jobs & health | `/jobs` |
+| Settings | Engine operations | `/engine-ops` |
+| Settings | Billing and limits | `/billing` |
+| Settings | Usage & cost | `/usage` |
+| Settings | Audit log | `/audit` |
+| Settings | Webhook events | `/webhooks` |
+| Settings | Notification preferences | `/notifications` |
+| Overlay | Command palette | proposal; the app lists the sidebar and Settings links |
 
 **Principles the capture checks.** These are measured in the browser, so they are claims, not intentions:
 
@@ -457,13 +495,13 @@ The walkthrough is `docs/design/prototype/presentation.html`. It draws the whole
 - Colour is never the only signal. Each state has a word and a dot.
 - No sideways scroll at 1440 or 390 px.
 
-**The one red action.** Red fill appears on the action that starts or commits the screen: Sign in, Create, Plan it, Continue to Google, Open in review, Continue in first run. A disabled action is never red. The palette's selected row has a red edge, not a red fill.
+**The one red action.** A screen has at most one red fill: the action that starts or commits that screen's work. A disabled action is never red. A screen with nothing to commit (a report, a notice, a state) has no red at all. The palette's selected row has a red edge, not a red fill.
 
 **The phone frame.** A frame narrower than 640 px takes the phone layout. The five places become a bottom bar, content stacks into one column, rows wrap, and the steps stack. The walkthrough can show any screen at 390 px, and a window at phone width gets the same layout. On a phone the plan is a list, not a canvas. That is an owner decision (section 13).
 
-**Verification.** `capture-presentation.mjs` checks nine claims in headless Chromium: every screen renders and is indexed; at most one red action; every disabled control says why; no sideways scroll at 1440 and 390; the phone layout; the arrow keys and the ends; and a step chosen on the plan screen opens its details. All nine hold. The single-file build of the walkthrough was also loaded in Chromium: 15 positions, the phone frame at 390 px, no sideways scroll, and no console errors.
+**Verification.** `capture-presentation.mjs` checks nine claims in headless Chromium over all 49 positions (the cover and 48 screens and states). It reads the list from the page's own index. Every position renders and is indexed; at most one red action; every disabled control says why; no sideways scroll at 1440 and 390; the phone layout; the arrow keys and the ends; and a step chosen on the plan screen opens its details. All nine hold. The single-file build was loaded in Chromium: 49 positions, the phone frame at 390 px, no sideways scroll, and no console errors. The plates still hold their 28 claims.
 
-**Not verified.** Chromium only. The data is sample data. There is no screen reader pass and no real device. The Home, Library, Insights and Settings screens are proposals. Their copy is not checked against the app's routes or strings; the model tests check the plan's copy and nothing else. The owner decisions in section 13 apply to these screens too.
+**Not verified.** Chromium only. The data is sample data. There is no screen reader pass and no real device. The screens for the app's own routes are drawn from their components' copy. They are not checked against the running app, and no app route has changed. The proposal's structure (five places, one red action, a list instead of a canvas on phones) is still for the owner to decide, as section 13 sets out.
 
 ## Appendix A. Files
 
@@ -479,7 +517,9 @@ The walkthrough is `docs/design/prototype/presentation.html`. It draws the whole
 | `docs/design/prototype/build-artifact.mjs` | Builds a single-file page for publishing (styles and scripts inlined): `index` (the plates) or `presentation` (the walkthrough) |
 | `docs/design/prototype/screens/` | Screenshots of the plates and `measurements.json` |
 | `docs/design/prototype/presentation.html`, `presentation.css`, `presentation.mjs` | The walkthrough of the full web design: the index, the stage, the frame width and the keys |
-| `docs/design/prototype/screens.mjs` | The fourteen screens and the cover: their markup, copy and notes |
+| `docs/design/prototype/screens.mjs` | The shared pieces of every screen, the first twelve screens, and the cover |
+| `docs/design/prototype/screens-start.mjs`, `screens-workspace.mjs`, `screens-settings.mjs`, `screens-brand.mjs` | The other screens and states: public pages, workspace, Settings, and the brand pages, with their copy and notes |
+| `docs/design/prototype/screens-all.mjs` | The order of the screens and the index groups |
 | `docs/design/prototype/capture-presentation.mjs` | Browser checks for the walkthrough (9 claims) and its screenshots |
 | `docs/design/prototype/presentation-screens/` | One screenshot per screen, four phone frames, and `presentation-measurements.json` |
 | `docs/design/prototype/README.md` | How to open, test, capture and publish |

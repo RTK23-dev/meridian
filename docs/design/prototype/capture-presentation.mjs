@@ -45,7 +45,14 @@ async function open(width, height, { theme = "dark", phone = false } = {}) {
   return { context, page, errors };
 }
 
-const ids = ["cover", "login", "setup", "home", "home-empty", "brief", "plan", "plan-error", "review", "library", "insights", "connections", "connect", "system", "palette"];
+// The screens are read from the page's own index, so the capture checks every screen the walkthrough lists, in the order it lists them.
+const screenIds = (page) => page.$$eval("#index [data-go]", (els) => els.map((e) => e.dataset.go));
+const ids = await (async () => {
+  const { context, page } = await open(1440, 1000);
+  const list = await screenIds(page);
+  await context.close();
+  return list;
+})();
 
 // 1. Every screen renders: the cover and fourteen frames, and the count reads the position.
 {
@@ -63,7 +70,7 @@ const ids = ["cover", "login", "setup", "home", "home-empty", "brief", "plan", "
     reached.push([id, ok.count, ok.hasFrame, ok.current]);
   }
   const allCurrent = reached.every(([, , hasFrame, current]) => hasFrame && current);
-  check("screens.all-render-and-are-indexed", allCurrent && reached.length === 15, reached);
+  check("screens.all-render-and-are-indexed", allCurrent && reached.length === ids.length, reached);
   check("screens.no-console-errors", errors.length === 0, errors);
   await context.close();
 }
@@ -138,7 +145,8 @@ for (const [width, height, label] of [[1440, 1000, "desktop"], [390, 844, "phone
   const afterBack = await page.textContent("#count");
   await page.click('[data-go="palette"]');
   const atEnd = await page.evaluate(() => document.querySelector("#next").disabled);
-  check("navigation.arrows-and-ends", afterTwo === "3 of 15" && afterBack === "2 of 15" && atEnd, { afterTwo, afterBack, atEnd });
+  const total = ids.length;
+  check("navigation.arrows-and-ends", afterTwo === `3 of ${total}` && afterBack === `2 of ${total}` && atEnd, { afterTwo, afterBack, atEnd, total });
   await context.close();
 }
 

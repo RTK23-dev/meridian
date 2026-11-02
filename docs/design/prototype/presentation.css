@@ -138,7 +138,7 @@
 
 /* ---- Settings: connection rows and a dense system table ---- */
 .dtable { display: grid; border-top: 1px solid var(--border-hairline); }
-.dtable .row { display: grid; grid-template-columns: 140px 168px minmax(0, 1fr) 100px 116px; gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-hairline); font: 400 14px/20px var(--font-text); color: var(--fg-secondary); }
+.dtable .row { display: grid; grid-template-columns: var(--cols, 140px 168px minmax(0, 1fr) 100px 116px); gap: 16px; align-items: center; padding: 12px 0; border-bottom: 1px solid var(--border-hairline); font: 400 14px/20px var(--font-text); color: var(--fg-secondary); }
 .dtable .row.head { font: 600 11px/16px var(--font-text); text-transform: var(--label-transform); letter-spacing: var(--label-tracking); color: var(--fg-muted); border-bottom-color: var(--border-strong); padding: 8px 0; }
 .dtable .mono { font: 400 13px/18px var(--font-mono); color: var(--fg-primary); font-variant-numeric: tabular-nums; }
 .dtable .is-missing { font-family: var(--font-text); color: var(--fg-muted); }
@@ -166,6 +166,54 @@
 .note-plate dd { color: var(--fg-secondary); font-size: 15px; line-height: 23px; margin-top: 2px; }
 .note-plate ul { display: grid; gap: 8px; color: var(--fg-secondary); font-size: 14px; line-height: 21px; }
 .note-plate li::before { content: "—"; color: var(--fg-muted); margin-right: 8px; }
+
+/* ---- The screens' own pieces: plates, forms in a grid, a drawn switch and slider, notices, and the pages around the app ---- */
+.plate-block { display: grid; gap: 12px; padding: 22px; border: 1px solid var(--border-hairline); border-radius: var(--r-card); background: var(--plate); align-content: start; min-width: 0; }
+.plate-block .row-title { font-size: 16px; line-height: 22px; }
+.stack { display: grid; gap: 12px; min-width: 0; }
+.also { display: flex; flex-wrap: wrap; gap: 8px; }
+.inline-field { display: flex; flex-wrap: wrap; gap: 12px 16px; align-items: flex-end; min-width: 0; }
+.inline-field > .field-box { flex: 1 1 240px; min-width: 0; }
+.field-box { display: grid; gap: 6px; min-width: 0; }
+.field-box .field { width: 100%; }
+.off-action { display: grid; gap: 8px; justify-items: start; }
+.off-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.fields-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 20px; min-width: 0; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+.grid-2 > * { min-width: 0; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; list-style: none; margin: 0; padding: 0; min-width: 0; }
+.figures-5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.limit { display: grid; gap: 10px; padding: 14px 0; border-top: 1px solid var(--border-hairline); min-width: 0; }
+.limit-actions { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.switch-row { display: flex; gap: 14px; align-items: flex-start; min-width: 0; }
+.switch { position: relative; flex: none; width: 44px; height: 24px; margin-top: 2px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-raised); }
+.switch[aria-checked="true"] { background: var(--accent); border-color: var(--accent); }
+.switch .knob { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--fg-primary); transition: transform var(--dur-fast) var(--ease); }
+.switch[aria-checked="true"] .knob { transform: translateX(20px); background: var(--on-accent); }
+.switch[aria-disabled="true"] { opacity: 0.6; }
+.wrow { display: grid; gap: 8px; min-width: 0; }
+.slide-row { display: flex; align-items: center; gap: 14px; min-width: 0; }
+.slide { position: relative; flex: 1 1 auto; height: 24px; min-width: 0; }
+.slide::before { content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--border-strong); }
+.slide .fill { position: absolute; left: 0; top: 50%; height: 2px; margin-top: -1px; background: var(--fg-primary); }
+.slide .thumb { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--fg-primary); }
+.share-list { display: grid; gap: 10px; list-style: none; margin: 0; padding: 0; }
+.share-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: baseline; font: 400 14px/20px var(--font-text); color: var(--fg-secondary); }
+.share-list li .bar { grid-column: 1 / -1; }
+.bar { display: block; height: 6px; border-radius: 999px; background: var(--fg-muted); }
+.bar[data-penalty="true"] { background: transparent; border: 1px dashed var(--border-strong); }
+.bar-inline { display: inline-block; height: 6px; margin-left: 10px; vertical-align: middle; border-radius: 999px; background: var(--fg-muted); max-width: 40%; }
+.notice { margin: 0; padding: 14px 16px; border: 1px solid var(--border-hairline); border-radius: var(--r-card); background: var(--plate); color: var(--fg-secondary); font: 400 14px/21px var(--font-text); }
+.notice[data-tone="danger"] { border-color: var(--danger); }
+.steps-list { list-style: none; margin: 0; padding: 0; }
+/* A row with one block, or with a text block and an action, takes the full width for its text, instead of the state column's width. */
+.rows > li:has(> div:only-child) { grid-template-columns: minmax(0, 1fr); }
+.rows > li:has(> div:nth-child(2).row-action:last-child) { grid-template-columns: minmax(0, 1fr) auto; }
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.public { display: grid; gap: 16px; max-width: 820px; margin: 0 auto; padding: 40px 0 56px; min-width: 0; }
+.dtable .row-title, .dtable .row-note { display: block; }
+.public-narrow { max-width: 560px; }
+.public .scr-title { font-size: 40px; line-height: 44px; }
 
 /* ---- The cover ---- */
 .cover { display: grid; gap: 32px; padding-top: 24px; }
@@ -213,6 +261,15 @@
   .pres { padding: 24px 0 120px; }
   .cover-title { font-size: 56px; line-height: 0.98; }
   .notes { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A narrow frame stacks the screens' own grids: forms, pairs of plates, the three-up cards and the five figures. */
+@container screen (max-width: 640px) {
+  .fields-grid, .grid-2, .grid-3, .figures-5 { grid-template-columns: minmax(0, 1fr); }
+  .inline-field { flex-direction: column; align-items: stretch; }
+  .inline-field > .field-box { flex: none; }
+  .public .scr-title { font-size: 30px; line-height: 36px; }
+  .plate-block { padding: 18px; }
 }
 
 /* Motion: the loading mark turns while a run works, and the palette opens at once. Reduced motion stops the turn. */

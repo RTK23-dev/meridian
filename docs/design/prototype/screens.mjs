@@ -15,11 +15,11 @@ export const railMarkup = (place) => `<nav class="app-rail" aria-label="Places">
 </nav>`;
 
 /** A progress bar: done steps have a filled number, the current one is red, the rest are muted. */
-const steps = (items) => `<div class="steps" role="list" aria-label="Progress">${items.map(([label, state], i) => `<div class="step" role="listitem" data-state="${state}"${state === "current" ? ' aria-current="step"' : ""}><span class="n" aria-hidden="true">${state === "done" ? "✓" : i + 1}</span>${label}</div>`).join("")}</div>`;
+export const steps = (items) => `<div class="steps" role="list" aria-label="Progress">${items.map(([label, state], i) => `<div class="step" role="listitem" data-state="${state}"${state === "current" ? ' aria-current="step"' : ""}><span class="n" aria-hidden="true">${state === "done" ? "✓" : i + 1}</span>${label}</div>`).join("")}</div>`;
 
-const tabs = (items, current) => `<div class="pres-tabs">${items.map((t) => `<span${t === current ? ' aria-current="true"' : ""}>${t}</span>`).join("")}</div>`;
+export const tabs = (items, current) => `<div class="pres-tabs">${items.map((t) => `<span${t === current ? ' aria-current="true"' : ""}>${t}</span>`).join("")}</div>`;
 
-const head = (kicker, title, lede = "", actions = "") => `<div class="scr-head"><div><p class="label">${kicker}</p><h1 class="scr-title">${title}</h1>${lede ? `<p class="scr-lede">${lede}</p>` : ""}</div>${actions ? `<div class="scr-actions">${actions}</div>` : ""}</div>`;
+export const head = (kicker, title, lede = "", actions = "") => `<div class="scr-head"><div><p class="label">${kicker}</p><h1 class="scr-title">${title}</h1>${lede ? `<p class="scr-lede">${lede}</p>` : ""}</div>${actions ? `<div class="scr-actions">${actions}</div>` : ""}</div>`;
 
 const CHIPS = [
   "A 30-second product video built from our brand photos",
@@ -60,7 +60,36 @@ const libraryTiles = TILES.map(([title, word, tone, date], i) => `<button type="
 
 const SHARED_SHELL_NOTE = "Each screen is the proposed design at the width shown. Sample names, numbers and dates are placeholders.";
 
-export const SCREENS = [
+// ---- Shared pieces for every screen module. Each draws with the same classes and the same states, so a new screen reads like the others. ----
+
+/** A table drawn the way the app draws its lists: headers, then rows of cells. `widths` sets the columns as CSS track sizes. */
+export const grid = (label, widths, headers, rows) => `<div class="dtable" role="table" aria-label="${esc(label)}" style="--cols:${widths}">
+  <div class="row head" role="row">${headers.map((h) => `<span role="columnheader">${h}</span>`).join("")}</div>
+  ${rows.map((cells) => `<div class="row" role="row">${cells.map((c) => `<span role="cell">${c}</span>`).join("")}</div>`).join("")}
+</div>`;
+
+/** A state word with its dot. The tone colours it, and the word says it, so colour is never the only signal. */
+export const word = (tone, dot, text) => `<span class="state-word" data-tone="${tone}"><span class="dot dot-${dot}" aria-hidden="true"></span>${text}</span>`;
+
+/** A switch, drawn as a specimen. Its state is in words beside the knob. */
+export const switchRow = (name, on, hint = "") => `<div class="switch-row"><span class="switch" role="switch" aria-checked="${on ? "true" : "false"}" aria-label="${esc(name)}"><span class="knob" aria-hidden="true"></span></span><span><span class="row-title">${esc(name)}</span><span class="row-note">${on ? "On" : "Off"}${hint ? `. ${hint}` : ""}</span></span></div>`;
+
+/** A slider at a value on a scale of 0 to `max`, with the typed value beside it. */
+export const slider = (value, max = 5) => `<span class="slide-row"><span class="slide" aria-hidden="true"><span class="fill" style="width:${(value / max) * 100}%"></span><span class="thumb" style="left:${(value / max) * 100}%"></span></span><span class="mono">${value.toFixed(1)}</span></span>`;
+
+/** A notice: what is true now, in a sentence, with a tone. */
+export const notice = (tone, text) => `<p class="notice" data-tone="${tone}">${text}</p>`;
+
+/** A labelled field, drawn. A value is shown as typed; an empty field shows its placeholder, and the hint says what the field does. */
+export const fieldBox = (id, label, value, hint = "", placeholder = "") => `<div class="field-box"><label class="field-label" for="${id}">${label}</label><input id="${id}" class="field" type="text" ${value ? `value="${esc(value)}"` : `placeholder="${esc(placeholder)}"`} aria-describedby="${id}-hint"><p class="row-reason" id="${id}-hint">${hint}</p></div>`;
+
+/** A button that is off, with the reason in words beside it. The reason is linked to the button, so a screen reader reads both. */
+export const offAction = (label, id, why, variant = "btn-secondary") => `<div class="off-action"><button type="button" class="btn ${variant}" disabled aria-describedby="${id}">${label}</button><p class="row-reason" id="${id}">${why}</p></div>`;
+
+/** A bordered block with a label and its body, for a group of related things on one screen. */
+export const plate = (label, body) => `<section class="plate-block"><p class="label">${label}</p>${body}</section>`;
+
+export const BASE_SCREENS = [
   // ---------------------------------------------------------------- Sign in
   {
     id: "login", group: "Start", label: "Sign in", title: "Sign in", shell: "bare",
@@ -299,23 +328,6 @@ export const SCREENS = [
     },
   },
 
-  // ---------------------------------------------------------------- Settings, connections
-  {
-    id: "connections", group: "Settings", label: "Connections", title: "Settings, connections", place: "settings",
-    html: `${head("Settings", "Settings", "Connect, configure and check the system. Each connection shows its true state.")}
-      ${tabs(["Workspace", "Brands", "Connections", "Team", "Usage", "System"], "Connections")}
-      <ul class="rows">
-        <li><div><p class="state-word" data-tone="success"><span class="dot dot-filled" aria-hidden="true"></span>Connected</p></div><div><p class="row-title">Meta</p><p class="row-note">Posts and ads can be published. Last checked two hours ago.</p></div><div class="row-action"><button type="button" class="btn btn-secondary">Manage</button></div></li>
-        <li><div><p class="state-word" data-tone="danger"><span class="dot dot-cross" aria-hidden="true"></span>Error</p></div><div><p class="row-title">TikTok</p><p class="row-note">The token was refused on 30 October. Reconnect to publish again.</p></div><div class="row-action"><button type="button" class="btn btn-secondary">Reconnect</button></div></li>
-        <li><div><p class="state-word" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</p></div><div><p class="row-title">Google Ads</p><p class="row-note">Connect to publish ads. Nothing is published until you connect.</p></div><div class="row-action"><button type="button" class="btn btn-secondary">Connect</button></div></li>
-      </ul>`,
-    notes: {
-      does: "Lists each connection with its true state in words, the reason in one sentence, and one action.",
-      means: "A connection that is not connected is said so plainly. Nothing shows as working when it is not.",
-      checks: ["No red fill: every action is secondary", "Each state has a word and a reason", "The reason names the next step"],
-    },
-  },
-
   // ---------------------------------------------------------------- Connect an account
   {
     id: "connect", group: "Settings", label: "Connect an account", title: "Connect Google Ads", place: "settings",
@@ -330,26 +342,6 @@ export const SCREENS = [
       does: "Connecting an account is a short sequence with the same progress bar as the Create flow. The middle step says what happens outside Meridian.",
       means: "The person knows they are leaving, and that this step publishes nothing.",
       checks: ["One red action: Continue to Google", "The progress bar uses the same states as the Create flow", "Cancel is quiet, so it does not look like a second choice"],
-    },
-  },
-
-  // ---------------------------------------------------------------- Settings, system
-  {
-    id: "system", group: "Settings", label: "System", title: "Settings, system", place: "settings",
-    html: `${head("Settings", "System", "Jobs, health and the audit trail. Ids are shown in full, and a value that was not recorded says so.")}
-      ${tabs(["Workspace", "Brands", "Connections", "Team", "Usage", "System"], "System")}
-      <div class="dtable" role="table" aria-label="Recent jobs">
-        <div class="row head" role="row"><span role="columnheader">Job</span><span role="columnheader">State</span><span role="columnheader">Step</span><span role="columnheader">Started</span><span role="columnheader">Duration</span></div>
-        <div class="row" role="row"><span class="mono" role="cell">job_7f3c2a9e</span><span class="state-word" role="cell" data-tone="success"><span class="dot dot-filled" aria-hidden="true"></span>Done</span><span role="cell">Render, 9:16 MP4</span><span class="mono" role="cell">09:14:02</span><span class="mono" role="cell">1 m 42 s</span></div>
-        <div class="row" role="row"><span class="mono" role="cell">job_1b08d4c1</span><span class="state-word" role="cell" data-tone="accent"><span class="dot dot-filled" aria-hidden="true"></span>Running</span><span role="cell">Still 1</span><span class="mono" role="cell">09:21:37</span><span class="mono" role="cell">0 m 38 s</span></div>
-        <div class="row" role="row"><span class="mono" role="cell">job_c26a90e3</span><span class="state-word" role="cell" data-tone="warning"><span class="dot dot-pause" aria-hidden="true"></span>Paused at budget</span><span role="cell">Voice-over</span><span class="mono" role="cell">08:50:11</span><span class="mono is-missing" role="cell">not recorded</span></div>
-        <div class="row" role="row"><span class="mono" role="cell">job_9e41f7aa</span><span class="state-word" role="cell" data-tone="danger"><span class="dot dot-cross" aria-hidden="true"></span>Failed</span><span role="cell">Analysis of the brand photos</span><span class="mono" role="cell">08:12:45</span><span class="mono" role="cell">0 m 06 s</span></div>
-        <div class="row" role="row"><span class="mono" role="cell">job_40d2b18f</span><span class="state-word" role="cell" data-tone="success"><span class="dot dot-filled" aria-hidden="true"></span>Done</span><span role="cell">Script</span><span class="mono" role="cell">08:10:03</span><span class="mono" role="cell">0 m 21 s</span></div>
-      </div>`,
-    notes: {
-      does: "Shows recent jobs in a dense table. Ids are in full, and a duration that was not recorded says so instead of showing zero.",
-      means: "When something needs checking, the person can see the id, the state and the time without opening anything.",
-      checks: ["No red fill", "A missing duration reads not recorded, never zero", "The table has real headers, rows and cells for a screen reader"],
     },
   },
 
@@ -388,7 +380,7 @@ export const COVER = {
   html: `<div class="cover">
     <p class="label">Meridian · Web design · Redesign</p>
     <h1 class="cover-title">Meridian, redesigned, screen by screen.</h1>
-    <p class="cover-lede">Fourteen screens across the five places of the app, plus sign-in, first run, and the command palette. One system throughout: the plan at any distance, words before colour, red for the one thing happening now, and nothing shown that is not real.</p>
+    <p class="cover-lede">Forty-eight screens and states: the five places of the app, the brand workspace, the Settings pages, the public pages, and the command palette. One system throughout: the plan at any distance, words before colour, red for the one thing happening now, and nothing shown that is not real.</p>
     <div class="cover-grid">
       <article class="note-plate">
         <p class="label">How to read a screen</p>
@@ -410,12 +402,6 @@ export const COVER = {
   </div>`,
   notes: null,
 };
-
-/** The index, in order: a group label and the screens in it. */
-export const GROUPS = ["Start", "Home", "Create", "Library", "Insights", "Settings", "Overlay"].map((name) => ({
-  label: name,
-  ids: [...(name === "Start" ? [COVER] : []), ...SCREENS.filter((s) => s.group === name)].map((s) => s.id),
-}));
 
 /** The notes for a screen, drawn beneath its frame. */
 export const notesMarkup = (notes) => {

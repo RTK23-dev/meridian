@@ -1,11 +1,14 @@
 // The walkthrough. It shows one screen at a time with its notes, mounts the plan where a screen has one, and keeps the index, the count
 // and the address in step. Previous and Next, the arrow keys, and the Desktop and Phone switch move through it. Keys typed in a field,
 // and keys pressed inside a plan (where the arrows scroll the plan), stay with that field or plan.
-import { COVER, GROUPS, SCREENS, notesMarkup, railMarkup } from "./screens.mjs";
+import { COVER, notesMarkup, railMarkup } from "./screens.mjs";
+import { GROUPS, SCREENS } from "./screens-all.mjs";
 import { esc, mountPlan } from "./mount.mjs";
 import { SAMPLE_PLAN } from "./model.mjs";
 
-const ORDER = [COVER, ...SCREENS];
+// The walkthrough moves in the order the index lists the screens, so Next, Previous and the index always agree.
+const byId = new Map([COVER, ...SCREENS].map((screen) => [screen.id, screen]));
+const ORDER = GROUPS.flatMap((group) => group.ids.map((id) => byId.get(id)));
 const stage = document.querySelector("#stage");
 const index = document.querySelector("#index");
 const count = document.querySelector("#count");

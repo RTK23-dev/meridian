@@ -12,7 +12,7 @@ Module scripts do not load from `file://`, so serve the folder:
 
     cd docs/design/prototype && python3 -m http.server 8080
 
-then open http://localhost:8080/index.html for the plates, or http://localhost:8080/presentation.html for the walkthrough of the full web design: fourteen screens and a cover, each with what it does, what it means, and what was checked on it. The walkthrough moves with Previous and Next, the arrow keys, or `#screen-id` in the address, and its Desktop and Phone control sets the frame width.
+then open http://localhost:8080/index.html for the plates, or http://localhost:8080/presentation.html for the walkthrough of the web design: forty-eight screens and states, plus a cover, each with what it does, what it means, and what was checked on it. The walkthrough moves in the order the index lists the screens, with Previous and Next, the arrow keys, or `#screen-id` in the address. Its Desktop and Phone control sets the frame width.
 
 ## Test it
 
@@ -28,7 +28,7 @@ The model tests check the canvas geometry against `src/engine/orchestrator/layou
 
     node docs/design/prototype/capture.mjs
 
-The walkthrough has its own checks: `capture-presentation.mjs` runs nine claims over the fourteen screens (each renders and is indexed, at most one red action, every disabled control says why, no sideways scroll at 1440 and 390, the phone layout, the keys, and a step chosen on the plan opens its details). It writes one PNG per screen into `presentation-screens/`, and `presentation-measurements.json`. It exits non-zero if a claim fails.
+The walkthrough has its own checks: `capture-presentation.mjs` runs nine claims over every position in the index, read from the page itself (the cover and 48 screens and states). Each renders and is indexed, at most one red action, every disabled control says why, no sideways scroll at 1440 and 390, the phone layout, the keys, and a step chosen on the plan opens its details. It writes one PNG per screen into `presentation-screens/`, and `presentation-measurements.json`. It exits non-zero if a claim fails.
 
     node docs/design/prototype/capture-presentation.mjs
 
@@ -40,7 +40,7 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 
     node docs/design/prototype/build-artifact.mjs <output.html> [index|presentation]
 
-`index` (the default) bundles `model.mjs`, `mount.mjs` and `app.mjs`, in that order, and keeps the page content as it is in `index.html`. `presentation` bundles `model.mjs`, `mount.mjs`, `screens.mjs` and `presentation.mjs`, with `prototype.css` and `presentation.css`. The build stops if a top-level name is declared twice, since the modules share one scope in the page. The publish skeleton supplies the document wrapper.
+`index` (the default) bundles `model.mjs`, `mount.mjs` and `app.mjs`, in that order, and keeps the page content as it is in `index.html`. `presentation` bundles `model.mjs`, `mount.mjs`, `screens.mjs`, `screens-start.mjs`, `screens-workspace.mjs`, `screens-settings.mjs`, `screens-brand.mjs`, `screens-all.mjs` and `presentation.mjs`, with `prototype.css` and `presentation.css`. The modules come in that order because the page shares one scope. The build stops if a top-level name is declared twice, since the modules share one scope in the page. The publish skeleton supplies the document wrapper.
 
 ## Files
 
@@ -51,7 +51,12 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 - `capture.mjs`: the browser checks and the screenshots.
 - `build-artifact.mjs`: the single-file build for publishing, for either entry.
 - `screens/`: screenshots of the plates (1440 and 390 px, both themes, the shipped look), plus `measurements.json`.
-- `presentation.html`, `presentation.css`, `presentation.mjs`: the walkthrough of the full web design. It has an index of the fourteen screens and a stage that draws each one in a frame that is its own container, so a frame reflows by the width it has.
-- `screens.mjs`: the fourteen screens and the cover: their markup, copy and notes. Every screen's red action is counted by the capture. Its `esc` comes from `mount.mjs`.
+- `presentation.html`, `presentation.css`, `presentation.mjs`: the walkthrough of the web design. It has an index of its screens and a stage that draws each one in a frame that is its own container, so a frame reflows by the width it has.
+- `screens.mjs`: the shared pieces (heads, tabs, tables, switches, sliders, notices, fields, plates), the first twelve screens, and the cover. Its `esc` comes from `mount.mjs`.
+- `screens-start.mjs`: the invitation, the product, docs and quickstart pages, and the not-found, no-access and admin-only states.
+- `screens-workspace.mjs`: the workspace overview, the alerts center, exports, and a new brand.
+- `screens-settings.mjs`: the six tabs of Settings (General, Members, Scoring weights, Alerts, Learning, Danger zone) and the pages it links to: billing, usage, integrations, setup, jobs, engine operations, audit, webhooks and notifications.
+- `screens-brand.mjs`: the brand pages: the brand overview, content, cookbooks, the orchestrator, the brain, products, pages, market, intelligence and calibration.
+- `screens-all.mjs`: the order of the screens, and the index groups (Start, Home, Create, Library, Insights, Settings, States, Overlay). Each screen's red action is counted by the capture.
 - `capture-presentation.mjs`: the walkthrough's nine claims and its screenshots.
 - `presentation-screens/`: one PNG per screen, four phone frames, and `presentation-measurements.json`.
