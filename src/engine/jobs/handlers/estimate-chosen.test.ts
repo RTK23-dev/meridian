@@ -130,7 +130,7 @@ test("chosenCallPricesOf prices a choice at the router's own catalog estimate, a
   assert.match(offline.notes.join(" "), /NOT_CONNECTED/);
 });
 
-test("extendForPlan with chosen prices holds the chosen total, and in cap mode refuses an over-budget chosen total with the reason", async () => {
+test("extendForPlan with chosen prices holds the chosen total; an over-budget chosen total is held with a note, not refused (D12)", async () => {
   const plan = planFixture();
   const shot = firstGenerate(plan);
   const store = memoryLedgerStore();
@@ -145,9 +145,9 @@ test("extendForPlan with chosen prices holds the chosen total, and in cap mode r
   });
   assert.equal(held.reservation.state, "reserved");
 
-  // A chosen model that costs more than the request budget: nothing is held, and the gate fails with the reason (no partial run).
+  // A chosen model that costs more than the request budget is held with a note: the gate passes, and each call is gated by the line (D12).
   const over: ChosenCallPrices = new Map([[callPriceKey(shot.shotId, "shot"), { provider: "openrouter:vendor/dear", perCallUsd: 6 }]]);
-  const refused = await extendForPlan(store, {
+  const noted = await extendForPlan(store, {
     requestId: REQ,
     workspaceId: WS,
     reservationId: HOLD,
@@ -157,16 +157,15 @@ test("extendForPlan with chosen prices holds the chosen total, and in cap mode r
     now: NOW,
     chosenPrices: over,
   });
-  assert.equal(refused.gate.pass, false);
-  assert.equal(refused.reservation, null);
-  const detail = refused.gate.checks.find((item) => item.rule === "reservation_succeeded")?.detail ?? "";
-  assert.match(detail, /request budget 4 USD is below the reservation/);
-  assert.match(detail, /1 call priced at the chosen model's catalog price/);
-  assert.equal((await store.getReservation(HOLD))?.state, "reserved", "the hold is kept as intake made it");
+  assert.equal(noted.gate.pass, true, "a chosen total above the budget is not refused");
+  assert.equal(noted.reservation?.state, "reserved");
+  assert.ok((noted.reservation?.reservedUsd ?? 0) > 4, "the hold is the chosen total, above the 4 USD budget");
 
-  // A chosen total within budget is held, and the reservation covers the chosen call.
+  // A chosen total within budget is held, and the reservation covers the chosen call. It is a fresh hold, so the total above does not raise it.
+  const withinStore = memoryLedgerStore();
+  await reserveFixed(withinStore, { requestId: REQ, workspaceId: WS, mode: "cap", requestBudgetUsd: 10, workspaceMonthBudgetUsd: 100, now: NOW, reservationId: HOLD });
   const within: ChosenCallPrices = new Map([[callPriceKey(shot.shotId, "shot"), { provider: "openrouter:vendor/cheap", perCallUsd: 0.2 }]]);
-  const ok = await extendForPlan(store, {
+  const ok = await extendForPlan(withinStore, {
     requestId: REQ,
     workspaceId: WS,
     reservationId: HOLD,

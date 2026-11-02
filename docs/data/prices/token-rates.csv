@@ -1,0 +1,4 @@
+model,input_usd_per_million_tokens,output_usd_per_million_tokens
+anthropic/claude-opus-5.5,4,20
+anthropic/claude-sonnet-5.5,2,10
+anthropic/claude-haiku-5.5,1,5

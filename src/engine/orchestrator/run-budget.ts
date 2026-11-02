@@ -1,14 +1,17 @@
-// A run's budget (Bible 14.1, budget/reserve.ts and budget/reconcile.ts). A run takes one reservation for the money the plan may still
-// spend, under a request row of its own (format orchestrator_run). Each paid step's call is authorized against that reservation and
-// settled to its bill. When the run stops, the unspent part is released, so the workspace month gets it back.
+// A run's budget (Bible 14.1, budget/reserve.ts and budget/reconcile.ts). A run takes one reservation for the money its line leaves, under a
+// request row of its own (format orchestrator_run). Each paid step's call is authorized against that reservation and settled to its bill.
+// When the run stops, the unspent part is released, so the workspace month gets it back.
 //
-// The reservation is the run's hard limit. A call that would take the run past it is refused before it is made, and a run whose
-// remaining budget does not fit the workspace month is refused before it starts. Nothing here calls a provider.
+// A budget is a line (owner direction 2026-10-23, decision D12). The reservation's request budget is what the run may still spend: the
+// line less what is committed before the run, so a call starts only while the run's committed spend is below it. The run opens only while
+// its workspace month's committed spend is below the month budget. A call that starts may take the run past the line; the overshoot is
+// recorded. Nothing here calls a provider.
 
-import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema, sumUsd } from "../contracts/index.ts";
+import { BUDGET_RESERVATION_SCHEMA, budgetReservationSchema } from "../contracts/index.ts";
 import { newId } from "../contracts/ids.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
+import { roundUpUsd, startsBelowLine } from "../budget/line.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
 import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts";
 
@@ -20,34 +23,33 @@ export type RunBudget = {
 
 export type OpenRunBudget = { status: "open"; budget: RunBudget } | { status: "refused"; reasons: string[] };
 
-/** Up to four decimals, rounded up: the hold is never smaller than what the run may spend. */
-function roundUpUsd(value: number): number {
-  return Math.ceil(value * 10000 - 1e-6) / 10000;
-}
-
 /**
- * Take the run's reservation for what the plan has not yet spent. Refused, with the reasons, when nothing is left to spend, when the
- * workspace month cannot cover it, or when the reservation does not match its contract. A refused run is not started.
+ * Take the run's reservation for what the plan may still spend: its line less what is committed before the run. Refused, with the reasons,
+ * when the line is already reached, or when the workspace month is at its own budget. A refused run is not started: it waits for an
+ * approval, which raises the budget. Money is in USD, to four decimals.
  */
 export async function openRunBudget(
   sql: Sql,
   opts: {
     organizationId: string;
     planId: string;
-    planBudgetUsd: number;
-    requestBudgetUsd: number;
+    /** The run's line: the lower of the plan's budget and the budget the user set (envelope.ts lineOf). */
+    lineUsd: number;
+    /** What is committed before the run: the stored outputs, the failed holds and the waiting holds (run.ts). */
     spentUsd: number;
     workspaceBudget: WorkspaceBudgetSource;
     now: () => string;
   },
 ): Promise<OpenRunBudget> {
-  const remaining = roundUpUsd(opts.planBudgetUsd - opts.spentUsd);
-  if (remaining <= 0) {
+  if (!startsBelowLine(opts.spentUsd, opts.lineUsd)) {
     return {
       status: "refused",
-      reasons: [`the plan has spent $${opts.spentUsd.toFixed(4)} of its $${opts.planBudgetUsd.toFixed(4)} budget, so no paid step can run; raise the budget to run it again`],
+      reasons: [
+        `the plan has committed $${opts.spentUsd.toFixed(4)} against its $${opts.lineUsd.toFixed(4)} budget, so no paid step can run until the budget is raised`,
+      ],
     };
   }
+  const remaining = roundUpUsd(opts.lineUsd - opts.spentUsd);
 
   const requestId = newId("req_");
   const reservationId = newId("res_");
@@ -55,11 +57,16 @@ export async function openRunBudget(
   const month = await opts.workspaceBudget.monthBudget({ organizationId: opts.organizationId, requestId, now: createdAt });
   if (month.status !== "known") return { status: "refused", reasons: [month.reason] };
 
+  // The run opens while its month's committed spend is below the month budget. Each call is then checked against the month line (authorizeCall).
   const ledger = scopedLedgerStore(sql, opts.organizationId, reservationId);
-  const totals = await ledger.sumForMonth(opts.organizationId, createdAt.slice(0, 7));
-  const committedUsd = sumUsd([totals.reservedUsd, remaining]);
-  if (committedUsd > month.usd) {
-    return { status: "refused", reasons: [`workspace monthly budget ${month.usd} USD would be exceeded: ${committedUsd} USD committed`] };
+  const monthCommittedUsd = await ledger.committedForMonth(opts.organizationId, createdAt.slice(0, 7));
+  if (!startsBelowLine(monthCommittedUsd, month.usd)) {
+    return {
+      status: "refused",
+      reasons: [
+        `workspace monthly budget reached: $${monthCommittedUsd.toFixed(4)} is committed against the $${month.usd.toFixed(4)} budget, so the run is not started`,
+      ],
+    };
   }
 
   const reservation = budgetReservationSchema.safeParse({
@@ -72,7 +79,7 @@ export async function openRunBudget(
     estimateUsd: remaining,
     redoAllowanceUsd: 0,
     reservedUsd: remaining,
-    requestBudgetUsd: opts.requestBudgetUsd,
+    requestBudgetUsd: remaining,
     workspaceMonthBudgetUsd: month.usd,
     state: "reserved",
     createdAt,

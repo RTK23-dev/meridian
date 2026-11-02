@@ -4,7 +4,7 @@ import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { executeApprovedCreativePlan, generateStudioVariants } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 
 /** Runs `run` with the given runtime variables, then restores the prior values. */
 async function withRuntime<T>(

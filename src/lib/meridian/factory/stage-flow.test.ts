@@ -14,7 +14,7 @@ import {
   stubImageProvider,
   studioTenant,
   type FactoryTenant,
-} from "../testing/produce-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 
 // The testing runtime enables the image double and the testing artifact store. Production never selects either.
 process.env.MERIDIAN_TESTING_RUNTIME = "true";
@@ -94,6 +94,8 @@ test("full with no spend cap stops before any spend, with the reason on the run"
   const tenant = await studioTenant(sql, "stage-full-nocap");
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["image"], providers: { image: "google_nano_banana" } });
   await planRowsFor(sql, tenant, runId, ["image"]);
+  // No cap of any kind: the brand's caps are unset (zero), which the factory refuses on before any spend.
+  await sql`update factory_spend_caps set daily_cents = 0, total_cents = 0 where organization_id = ${tenant.organizationId} and brand_id = ${tenant.brandId}`;
   const stub = stubImageProvider();
   try {
     assert.equal(await stage(sql, tenant, runId, "factory.produce"), "stopped:factory.produce");
@@ -153,7 +155,8 @@ test("the brand's daily cap applies to a run that has spent it today", async () 
   const tenant = await studioTenant(sql, "stage-daily-cap");
   await sql`
     insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
-    values (${tenant.organizationId}, ${tenant.brandId}, 30, 0, ${tenant.userId})
+    values (${tenant.organizationId}, ${tenant.brandId}, 30, 1000000, ${tenant.userId})
+    on conflict (organization_id, brand_id) do update set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents
   `;
   const runId = await factoryRunFor(sql, tenant, { automation: "full", formats: ["image"], providers: { image: "google_nano_banana" } });
   await planRowsFor(sql, tenant, runId, ["image"]);

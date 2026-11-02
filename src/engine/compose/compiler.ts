@@ -20,11 +20,11 @@ import {
   type EdlClip,
   type EditDecisionList,
   type EdlLayer,
-  type LookPreset,
   type VisualTreatment,
 } from "../contracts/index.ts";
 import { attributeJson, escapeHtml } from "./html.ts";
 import { COMPONENT_LIBRARY } from "./components/index.ts";
+import { resolveLook } from "./looks.ts";
 import { RESERVED_PROP_DURATION, type ComponentDefinition, type ComponentLibrary } from "./library.ts";
 import { parseStyleKit, styleKitCss } from "./styleKit.ts";
 
@@ -40,17 +40,6 @@ const MAX_VOLUME = 3.98;
 
 /** The layers a visual treatment changes: the footage. Captions, graphics and stickers are never mirrored, framed or tinted (contract v11). */
 const FOOTAGE_LAYERS: ReadonlySet<EdlLayer> = new Set<EdlLayer>(["base", "cutaway", "presenter"]);
-
-/**
- * The Meridian-owned overlay of each look (contract v11): its colour, its blend mode and its opacity at full strength. A look is a preset
- * name, so the composition never receives CSS from the EDL.
- */
-const LOOK_OVERLAY: Record<LookPreset, { color: string; blend: string; opacity: number }> = {
-  warm: { color: "#ff8c42", blend: "overlay", opacity: 0.45 },
-  cool: { color: "#3d7bd9", blend: "overlay", opacity: 0.4 },
-  faded: { color: "#d8cfc4", blend: "screen", opacity: 0.25 },
-  mono: { color: "#808080", blend: "saturation", opacity: 1 },
-};
 
 /** Grain is a fractal-noise tile drawn in the composition itself (no asset to register). Every special character is percent-encoded. */
 const GRAIN_URL =
@@ -330,7 +319,7 @@ function overlayElements(visual: VisualTreatment): string[] {
   const box = `position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:${z};`;
   const overlays: string[] = [];
   if (visual.look !== undefined && visual.look.strength > 0) {
-    const look = LOOK_OVERLAY[visual.look.preset];
+    const look = resolveLook(visual.look.preset);
     overlays.push(
       `<div id="fx-look" class="fx-overlay" style="${box}background:${look.color};mix-blend-mode:${look.blend};opacity:${num(look.opacity * visual.look.strength)};"></div>`,
     );

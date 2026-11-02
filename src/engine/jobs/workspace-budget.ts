@@ -1,6 +1,7 @@
 // The workspace monthly budget for estimate_reserve (Bible 14.1 step 2), read from Meridian's Settings (owner decision
 // 2026-10-14: a "Monthly video budget (USD)" per workspace, no default). An unset budget is not connected, so nothing is
-// reserved and the request says why; a made-up amount is never returned.
+// reserved and the request says why; a made-up amount is never returned. A budget is a line (owner direction 2026-10-23, D12):
+// there is no tolerance to read.
 
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { WorkspaceBudgetSource } from "./handlers/estimate-reserve.ts";
@@ -20,7 +21,7 @@ export function workspaceBudgetFromSettings(read: MonthlyBudgetReader): Workspac
       if (usd === null) {
         return {
           status: "not_connected",
-          reason: "no monthly budget is set for this workspace; set \"Monthly budget (USD)\" in Settings",
+          reason: "no monthly budget is set for this workspace; set the monthly budget on the Billing page",
         };
       }
       return { status: "known", usd };

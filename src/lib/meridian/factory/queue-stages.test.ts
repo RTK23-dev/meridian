@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { FACTORY_GRAPH } from "./pipeline.ts";
 import { queueStagesFrom } from "./queue-stages.ts";
-import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../testing/factory-fixtures.ts";
+import { FACTORY_TEST_BRAND, FACTORY_TEST_ORG, FACTORY_TEST_RUN, makeFactoryTestSql, seedFactoryRun } from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 
 const MANUAL = { automation: "manual" };
 

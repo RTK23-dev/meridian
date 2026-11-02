@@ -3,9 +3,9 @@ import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { requireBrand } from "../brand-membership.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { failingSql } from "../testing/opportunity-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { failingSql } from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 
 // The action module uses the "@/" alias, so the hook is registered before it is imported.
 enableAppAliases();

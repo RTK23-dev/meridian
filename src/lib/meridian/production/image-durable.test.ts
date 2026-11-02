@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
-import { TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 import {
   PNG,
   imagePlan,
@@ -11,7 +11,7 @@ import {
   reservationsOf,
   stubGoogleImage,
   studioTenant,
-} from "../testing/durable-image-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { materializeImageArtifact, materializeVideoArtifact, completeProductionJob } from "./materialization.ts";
 import { pollProductionJobs } from "./poller.ts";
 

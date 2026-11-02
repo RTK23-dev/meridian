@@ -3,8 +3,8 @@ import test, { after } from "node:test";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { saveWorkspaceProviderConfig, testWorkspaceProviderConnection, type ProviderCategory } from "./provider-config.ts";
-import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 
 // Used only by this test process: the vault encrypts saved values with this master key.
 process.env.TOKEN_ENCRYPTION_KEY = "test-encryption-key-for-provider-connection";

@@ -15,6 +15,7 @@
  * This is separate from the Google sign-in on the Integrations screen (oauth/flow.server.ts). That flow requests the Google
  * Ads scope and does not authorize Drive. Never fabricates tokens when credentials are unset.
  */
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { createSign } from "node:crypto";
 import type { WorkspaceRefreshTokenLookup } from "./drive-connection-store.ts";
 import { GOOGLE_TOKEN_URL } from "./drive-oauth-config.ts";
@@ -259,7 +260,7 @@ const defaultAuth = createGoogleDriveAuth({
   lookupWorkspaceRefreshToken: async (organizationId) => {
     const { getSql } = await import("../../db.ts");
     const { lookupWorkspaceRefreshToken } = await import("./drive-connection-store.ts");
-    return lookupWorkspaceRefreshToken(await getSql(), organizationId, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+    return lookupWorkspaceRefreshToken(await getSql(), organizationId, tokenEncryptionKey() ?? "");
   },
   log: (message) => console.error(`[google-auth] ${message}`),
 });

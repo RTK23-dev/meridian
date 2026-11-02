@@ -838,6 +838,112 @@ gap is that the URL is not checked against public addresses, and the connection 
 (`production/artifact-finalizer.ts`). The fix is to share that download with the engine through a neutral module. The change is an eng-pipeline
 change, so it is recorded in the plan (M1.3) and not made here.
 
+## 2026-10-23: the budget run: budget lines, category budgets, the model brief, approvals and the default model family off
+
+Branch `run/orchestrator-budgets-2026-10-23`. Governing plan: `run/REPLAN_2026-10-23.md`. Decisions: D1 to D17 in `run/DECISIONS_2026-10-23.md`.
+State: `run/RUN_STATE.md`. This entry replaces the earlier paragraph for this run, which described the rule that D12 superseded (D2). The
+earlier commits remain in git.
+
+**Integration of origin/main.** `40a17cf2` merges origin/main `671f076f` into the run. The conflicts were in CLAUDE.md (main's consolidated
+rules, with the budget sentence then set to the line rule in `8ef72ca5`), in this file (both 2026-10-23 entries kept in time order), and in
+the handoff and the Bible, which auto-merged. The merge keeps the default model family off, which main's notes rule out (open item 4).
+`34f31e55` then sets three settings tests to the status main reports for a usable saved key. No provider logic changed.
+
+**Decisions D12 to D17.** Recorded in `18175b03` (D12 to D16) and `f0eb8049` (D17).
+- D12: a budget is a line. A paid step starts only while committed spend is below its budget. Committed spend is the settled cost of finished
+  steps, plus the holds of calls in flight or queued, plus the holds of failed paid calls. A call in flight finishes. At the line the project
+  pauses with a reason. D2 is superseded.
+- D13: every approval of a paused plan's budget is recorded.
+- D14: a queued video or avatar job counts until its poll settles it.
+- D15: measure mode for unpriced video, held to a per-second ceiling.
+- D16: a brand's policy can only switch model families off.
+- D17: a paid step starts only if its own hold fits: committed spend plus the hold must not be above the line. This takes the stricter
+  reading of D12's first open question, so one step cannot pass the line by its estimate.
+
+**Brief-path budget line (contract v11; `bbba4799`, `7ad9ae32`).** The brief path reads the budget as a line. A call starts only while the
+committed spend of its request and of its workspace month is below their budgets, and only if its own hold fits under both. A call at a line
+is refused even with a zero estimate. A reservation is never paused at a line, and it is marked exceeded only when a bill takes a line. The
+contract set is `engine-contracts@11`; its lead approval is pending (Bible section 4, v11). There is no migration. The two optional columns
+that migration 0115 added are kept and are no longer written.
+
+**Queued holds (migration 0117; D14; `ff5ef05b`, `d8f104f9`, `4ead4dbb`).** A queued video or avatar job keeps its hold on its row until its
+poll settles it. `held_usd` is the hold of the row in total, and `hold_usd` the hold of one submit. A settled job is charged its reported bill,
+or its hold when no bill is reported. A failed job keeps its hold as a failed hold. A re-run while the job waits submits nothing and reports
+the step as queued. A waiting job with no recorded hold refuses the run. A job closes once, so a job that failed and then completed no longer
+counts its hold and its bill together (`d8f104f9`). A retry that the router refuses because its run has ended closes the row as failed, with
+its hold charged. D14 names the column `estimate_usd`; the migration names are `held_usd` and `hold_usd`.
+
+**Approval audit and brand override (migrations 0118 and 0119; D13, D16; `66d2ade0`, `f867dcc6`).** Each approval of a paused plan's budget is
+written in the same statement as the plan's budget update. The audit row holds the actor, the previous budget, the approved budget and the
+pause reason at the time. A refused approval writes neither. The brand override store keeps one set of disabled families for each brand, and
+a plan records its brand (0119). The effective set is the union with the workspace's, so a brand can only switch families off. The brief path
+has no approval flow, so it writes no audit row (D13).
+
+**The orchestrator line (`45ce8ff1`, `f867dcc6`).**
+- Planning: the planning call is a paid call and follows the same rule. A draft whose hold does not fit the budget is refused before any call
+  (D17). The planner prompt is `orchestrator_plan@4`: D5 set @3 for the category split, and @4 states the budget as a line.
+- Validation: `validatePlan` reports each set category's position against its line. A plan whose estimate is above its budget is accepted
+  with a note (D12, D17).
+- Executor: a paid step starts only while committed spend is below its line and its own hold fits under it. The run pauses before the first
+  step that does not fit, with the reason "budget reached, project not finished: the next step's hold of $H would take the spend past the $L
+  budget (committed $S)". A category pause names the category.
+- Run: the run totals each category from stored outputs and failed holds (D8), counts the holds of waiting jobs (D14), and refuses a run with
+  a waiting job that has no recorded hold.
+
+**Measure mode (D15; `ff5ef05b`, `6862bb52`, `f867dcc6`, `a5490585`).** An admin may start a run in measure mode. A video or avatar step with
+no engine price then runs, held to the workspace's per-second ceiling times its length in seconds. The initial ceiling is 0.50 USD per second,
+adjustable within the range set in `policy-store.ts`. A reported bill replaces the hold. The average cost per second is computed from reported bills only. It is shown,
+and it never sets a hold. Other unpriced steps are still refused. Planning and editing store an unpriced video or avatar step with a note; the
+run refuses it unless measure mode is on (`a5490585`).
+
+**The policy row refuses rather than resets (`5342dce3`, `a5490585`).** The workspace policy row (migration 0114) drops the key that D12 retired,
+and changes nothing else in the row. A missing key takes its initial value. A row that does not validate is unreadable. Planning, runs, edits,
+the model list and the factory's shot connection then refuse, with a reason to save the policy again. No family is reset to the initial list,
+and none is switched on.
+
+**The brand's families on every route (`5342dce3`, `a5490585`, `f867dcc6`).** A plan's disabled families are the workspace's plus its brand's.
+Planning, editing and running read that set. The asset router excludes it from every route it builds for a plan run, fallbacks included. A
+plan with no brand uses the workspace's set alone.
+
+**Fixes after the independent reviews.** The review findings are not recorded in the repository. The worktrees `qa-review` (detached at
+`bbba4799`) and `qa-review-2` (detached at `f867dcc6`) hold the commits the fixes follow. The fixes are `d8f104f9` (a job closes once, and a
+failed job is not paid again), `4ead4dbb` (the executor takes a line in the queued-hold test), `5342dce3` (an unreadable policy refuses; role
+and tenancy tests for each server function, against a migrated database), and `a5490585` (the brand's families on every route; measured edits
+match planning). Before the merge, `4be77e79` moved a Node-only import out of the client bundle, which the browser check had found, and
+`6854260b` kept the policy save message.
+
+**Gates.** On the release commit's tree before the release commit: `npm test` 6400 tests, 6359 passing, 0 failing, 41 skipped. `npm run typecheck` passes. `npm run lint` has 0 errors and 4 warnings that were already on main. The build result is in the release entry.
+
+**No live run.** None has happened, and the first live test has not been run. No provider key is set in this environment.
+
+**Open items.**
+
+Open, from the lead's list:
+1. Resolved. A provider fallback's billed failure is counted in the plan's own total: a failed target keeps its bill, a failed queued job is
+   charged the larger of its hold and its bill, and a budget refusal through a fallback pauses the run. The shot handler keeps a failed
+   attempt's bill as a decision, because stage outputs have no cost field (`83727a10`, `4d6681ff`, `0b70fb27`, `ea133954`).
+2. The retry after a settle conflict. When a settle loses its claim to another settle, the poll closes the row as failed and charges its hold.
+   A later bill for that job is then not stored (`asset-poll.test.ts`). Whether the poll should retry instead is pending the owner's decision.
+3. The consolidated CLAUDE.md question. Main's `e3bfd3a5` consolidated the working rules into the file this branch carries. The earlier file's
+   Process and Known conflicts sections are not in it. The main checkout (branch `integrate/claude-status`) still has the earlier form, with
+   the hard-limit sentence. Which file governs is open.
+
+For the owner:
+4. The default model family (D1) is off in every workspace in the merged tree. Main's operating brief bars a global exclusion and scopes
+   exclusions to one provider endpoint (the Bible's note before E1 in section 19, the handoff's phase 0 note, and `CONTENT_FACTORY_PLAN.md` D1).
+   The merge kept D1. This is not resolved in code.
+5. A draft with no brand named records the acting brand, so that brand's families apply (`STATUS_APPROVALS_BRAND.md`). The brief said no brand.
+   The owner should confirm this.
+6. Two runs in one workspace can each start a call below the line at the same moment, so the overshoot can be one call per concurrent run (D12).
+7. The engine reads only a per-second USD video price at 1080p (D10). Other price forms are the owner's call.
+
+In the code, not verified live (`STATUS_APPROVALS_BRAND.md`, open items 1, 3 to 5):
+8. The poll router now receives the plan's families. The brief path's shot and voice routes still receive no switched-off family list, so a
+   route-table fallback there could reach a switched-off family. No orchestrator run reaches those routes.
+9. The composer's model list uses the workspace's families, not the brand's. The planner still refuses a model the brand switched off.
+10. Resolved. An unreadable policy row refuses planning, runs and edits, and the policy panel has a form that saves the policy again (`4fe78df7`).
+11. `brand_id` has no foreign key or organization check in the database (0119). The server functions check it.
+
 ## 2026-10-23: Veo 3.1 removed from the engine
 
 The owner asked why Veo 3.1 was still in the engine after the move to the latest models, and asked for it to be removed and replaced with the

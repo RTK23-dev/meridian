@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../../../lib/meridian/credentials/secret-settings.ts";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { invalidateGoogleDriveAccessToken } from "@/lib/meridian/storage/google-auth";
@@ -26,7 +27,7 @@ export const Route = createFileRoute("/api/drive/callback")({
           userId,
           origin: url.origin,
           env: process.env,
-          masterKey: process.env.TOKEN_ENCRYPTION_KEY?.trim() ?? "",
+          masterKey: tokenEncryptionKey()?.trim() ?? "",
           fetch: (input, init) => globalThis.fetch(input, init),
         });
         if (!finished.ok) return new Response(finished.message, { status: finished.status, headers });

@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { failingSql, seedBrandBrain, seedOpportunity } from "../testing/opportunity-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { failingSql, seedBrandBrain, seedOpportunity } from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { rerankBrand } from "./rerank.ts";
 
 // The refresh action imports modules that use the "@/" alias, so the alias hook is registered before it is loaded.

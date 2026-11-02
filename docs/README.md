@@ -2,13 +2,14 @@
 
 The [README](../README.md) says what Meridian is and how to run it. These documents go further. If a document and the app disagree, the app is what is running and the document should be corrected.
 
-Starting a new chat about Meridian? Open [LAUNCHPAD.md](LAUNCHPAD.md) first: it has the opening prompt, the current state and the open decisions.
+Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first: where it stands, measured, with what is built, tested, browser-checked and live. [LAUNCHPAD.md](LAUNCHPAD.md) describes beta.13 and is superseded.
 
 ## Run the product
 
 | Document | Read it for |
 | --- | --- |
 | [../wiki/Home.md](../wiki/Home.md) | The short guide: setup, the product loop, and where keys go |
+| [FIRST_TEST_RUN.md](FIRST_TEST_RUN.md) | The first test run, step by step: what is ready, what needs the owner's keys, what to record |
 | [SETUP.md](SETUP.md) | Installing, the first run, saving keys, connecting Drive, deploying |
 | [OPERATIONS.md](OPERATIONS.md) | Processes, health, backups, exports and troubleshooting |
 | [PROVIDERS.md](PROVIDERS.md) | Every provider, where its key is saved, and the deployment opt-ins |

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"handle","type":"string","label":"Handle","default":"@meridian"},{"id":"prompt","type":"string","label":"Prompt","default":"Follow for more"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":2000,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="cta.follow" data-width="1080" data-height="1920">
+  <div class="cf-track">
+    <div class="cf-pill">
+      <span class="cf-prompt"></span>
+      <span class="cf-handle"></span>
+    </div>
+  </div>
+  <style>
+    .cf-track {
+      position: absolute;
+      left: 6%;
+      width: 82%;
+      top: 66%;
+      display: flex;
+      justify-content: center;
+    }
+    .cf-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45em;
+      padding: 18px 40px;
+      border-radius: 999px;
+      background: var(--kit-primary);
+      color: var(--kit-background);
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 44px;
+      white-space: nowrap;
+      box-shadow: 0 10px 32px rgba(0, 0, 0, 0.35);
+      opacity: 0;
+    }
+    .cf-handle {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      color: var(--kit-accent);
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
+      var pill = document.querySelector(".cf-pill");
+      var promptEl = document.querySelector(".cf-prompt");
+      var handleEl = document.querySelector(".cf-handle");
+      var seconds = vars.durationMs / 1000;
+      var prompt = typeof vars.prompt === "string" && vars.prompt !== "" ? vars.prompt : "Follow for more";
+      promptEl.textContent = prompt;
+      handleEl.textContent = String(vars.handle || "");
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(pill, { scale: 1 - 0.08 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.35, ease: "back.out(1.4)" }, 0.2);
+      tl.set({}, {}, seconds);
+      window.__timelines["cta.follow"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

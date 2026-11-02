@@ -120,7 +120,7 @@ async function brandOf(sql: Sql, organizationId: string, requestId: string): Pro
 }
 
 /** Six frames of the stored take as PNG data URLs. A frame call the media functions refuse is missing evidence, not a guess. */
-async function framesOf(ctx: StageContext, ports: CheckTakePorts, take: Take, bytes: Uint8Array<ArrayBuffer>): Promise<Array<{ atMs: number; imageUrl: string }> | null> {
+async function framesOf(ports: CheckTakePorts, take: Take, bytes: Uint8Array<ArrayBuffer>): Promise<Array<{ atMs: number; imageUrl: string }> | null> {
   const atMs = frameTimesFor(take.durationMs);
   if (atMs.length === 0) return null;
   try {
@@ -159,7 +159,7 @@ function attemptOf(ctx: StageContext): number {
 export async function checkOneTake(ctx: StageContext, ports: CheckTakePorts): Promise<{ run: TakeCheckRun; verdictArtifactId: string; shotId: string }> {
   const { takeArtifact, take, shot } = await takeInputsOf(ctx);
   const bytes = await bytesOf(ctx, ports, take);
-  const frames = await framesOf(ctx, ports, take, bytes);
+  const frames = await framesOf(ports, take, bytes);
   const measurements = ports.measure
     ? await ports.measure({ take, bytes })
     : ports.detectors

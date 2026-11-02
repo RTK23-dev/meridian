@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { approveCreative, organicRowsFor, paidRowsFor, producedCreative, runFor, stage } from "../testing/factory-launch-fixtures.ts";
-import { approveStage, runRow, studioTenant } from "../testing/produce-fixtures.ts";
+import { approveCreative, organicRowsFor, paidRowsFor, producedCreative, runFor, stage } from "../../../test-support/lib/meridian/testing/factory-launch-fixtures.ts";
+import { approveStage, runRow, studioTenant } from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 
 // NORTH_STAR section 8, item 8 and the back half of section 7. The front half (discover, grade, pick, template) has its own suites
 // (gather.test.ts, grade-jev.test.ts, pick-surfaces.test.ts, run-finish.test.ts), and the organic measured leg needs a connected

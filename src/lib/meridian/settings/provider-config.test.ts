@@ -9,8 +9,8 @@ import {
 } from "./provider-config.ts";
 import { resolveCredential } from "../credentials/resolve.ts";
 import { CREDENTIAL_VAULT_TYPE, credentialStateOf, type CredentialCategory, type CredentialState } from "../credentials/contract.ts";
-import { openTestBackends, vaultRowId, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, vaultRowId, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import type { Sql } from "../learning/store.ts";
 
@@ -282,29 +282,38 @@ for (const { name, sql } of backends) {
     });
   });
 
-  test(`[${name}] Cyclone: a gateway URL saved by a workspace must be a public address, and no request is made for an internal one`, async () => {
-    const internal = await studioTenant(sql, "test-cyclone-internal");
-    await storeVaultCredential(sql, internal.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "http://169.254.169.254/" } });
-    const publicGateway = await studioTenant(sql, "test-cyclone-public");
-    await storeVaultCredential(sql, publicGateway.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "https://gateway.example.com" } });
+  test(`[${name}] Cyclone is set by the deployment: a workspace cannot save it, a workspace URL is never requested, and the test checks the deployment's device`, async () => {
+    const tenant = await studioTenant(sql, "test-cyclone-deployment");
+    await assert.rejects(
+      saveWorkspaceProviderConfig(sql, { organizationId: tenant.organizationId, actorId: tenant.userId, category: "cyclone", settings: { gatewayUrl: "https://gateway.example.com" } }),
+      /set by the deployment's environment/,
+    );
+    await storeVaultCredential(sql, tenant.organizationId, "provider_config:cyclone", { accessToken: "", customFields: { gatewayUrl: "https://workspace-gateway.example.com" } });
 
     const realFetch = globalThis.fetch;
     const requested: string[] = [];
     globalThis.fetch = (async (input: unknown) => {
       requested.push(String(input));
-      return new Response("", { status: 200 });
+      return new Response(JSON.stringify({ status: "ready" }), { status: 200 });
     }) as typeof fetch;
+    const savedEnv = { gateway: process.env.CYCLONE_GATEWAY_URL, device: process.env.CYCLONE_DEVICE_ID };
     try {
-      const refused = await testWorkspaceProviderConnection(sql, { organizationId: internal.organizationId, category: "cyclone" });
-      assert.equal(refused.status, "ERROR");
-      assert.match(refused.message, /not allowed/, "the saved internal address is refused");
-      assert.deepEqual(requested, [], "no request is made to a refused address");
+      delete process.env.CYCLONE_GATEWAY_URL;
+      delete process.env.CYCLONE_DEVICE_ID;
+      const unset = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "cyclone" });
+      assert.equal(unset.status, "ERROR");
+      assert.match(unset.message, /not configured/);
+      assert.deepEqual(requested, [], "no request is made while the deployment has no gateway");
 
-      const allowed = await testWorkspaceProviderConnection(sql, { organizationId: publicGateway.organizationId, category: "cyclone" });
-      assert.equal(allowed.status, "READY", "a public https gateway that answers is ready");
-      assert.deepEqual(requested, ["https://gateway.example.com/v1/device/status"]);
+      process.env.CYCLONE_GATEWAY_URL = "http://127.0.0.1:4001";
+      process.env.CYCLONE_DEVICE_ID = "pixel-test-01";
+      const set = await testWorkspaceProviderConnection(sql, { organizationId: tenant.organizationId, category: "cyclone" });
+      assert.equal(set.status, "READY", "the deployment's device answers");
+      assert.deepEqual(requested, ["http://127.0.0.1:4001/v1/device/status?device_id=pixel-test-01"], "only the deployment's gateway is asked");
     } finally {
       globalThis.fetch = realFetch;
+      if (savedEnv.gateway === undefined) delete process.env.CYCLONE_GATEWAY_URL; else process.env.CYCLONE_GATEWAY_URL = savedEnv.gateway;
+      if (savedEnv.device === undefined) delete process.env.CYCLONE_DEVICE_ID; else process.env.CYCLONE_DEVICE_ID = savedEnv.device;
     }
   });
 

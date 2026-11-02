@@ -47,6 +47,11 @@ export const REVIEW_RESULT_SCHEMA = "meridian.review_result/v1";
 export type PostRenderScope = { organizationId: string; requestId: string; rendered: RenderedVideo; edl: EditDecisionList };
 
 export type PostRenderPorts = {
+  /**
+   * Records the measures of the output after its review (K28, decision Q41): the readings the gate used. Absent, nothing is recorded.
+   * A reading that was not taken is null, never 0.
+   */
+  recordMeasures?: (input: { organizationId: string; requestId: string; measures: Record<string, number | null>; recordedAt: string }) => Promise<void>;
   /** The API gateway the final Critic calls go through (never fetch, never a provider name). */
   gateway: Gateway;
   /** The media functions: frames, loudness and the timeline of the rendered file. */
@@ -326,6 +331,21 @@ export function createPostRenderReviewHandler(ports: PostRenderPorts): StageHand
         forbiddenTerms,
         critic,
       });
+      // The measures of this output are kept for the cookbook results (K28, decision Q41). Each is the reading the gate used, or null when it
+      // was not taken. Nothing is recorded as 0 for an unknown value.
+      if (ports.recordMeasures !== undefined) {
+        await ports.recordMeasures({
+          organizationId: scope.organizationId,
+          requestId: scope.requestId,
+          measures: {
+            integrated_lufs: loudness.integratedLufs,
+            true_peak_dbtp: loudness.truePeakDbtp,
+            longest_silence_ms: silence.longestMs,
+            duration_ms: rendered.durationMs,
+          },
+          recordedAt: (ports.now ?? (() => new Date().toISOString()))(),
+        });
+      }
       const review = reviewResultSchema.parse({
         schema: REVIEW_RESULT_SCHEMA,
         videoId: rendered.videoId,

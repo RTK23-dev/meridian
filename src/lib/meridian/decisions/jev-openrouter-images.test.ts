@@ -7,13 +7,14 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import type { JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
-import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
+import { PNG, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateQuestion, type GateResult } from "./gate.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenRouterDecisionsEngine, type OpenRouterCheckStore, OPENROUTER_DECISIONS_EXAMPLE_MODEL } from "./openrouter-engine.ts";
 import type { DecisionEngine, DecisionEngineId, DecisionRequest, DecisionResult } from "./types.ts";
 import { memoryDecisionHolds } from "./holds.ts";
+import { recordedDecisionCap } from "../../../test-support/lib/meridian/testing/decision-cap.ts";
 
 const KEY = "sk-or-v1-jev-image-fixture-secret-0123456789";
 
@@ -60,7 +61,7 @@ function openRouterWith(): { engine: OpenRouterDecisionsEngine; requests: Record
   }) as typeof fetch;
   const keys = { async keyFor() { return { secret: KEY, fingerprint: "sk-or-…6789", reason: "" }; } };
   const store: OpenRouterCheckStore = { async workspaceModel() { return OPENROUTER_DECISIONS_EXAMPLE_MODEL; }, async latestCheck() { return null; } };
-  const engine = new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(), fetchImpl, keys, store, deploymentModel: undefined, catalog: recordedDecisionCatalogSource() });
+  const engine = new OpenRouterDecisionsEngine({ maxUsdPerCall: recordedDecisionCap, holds: memoryDecisionHolds(), fetchImpl, keys, store, deploymentModel: undefined, catalog: recordedDecisionCatalogSource() });
   return { engine, requests };
 }
 

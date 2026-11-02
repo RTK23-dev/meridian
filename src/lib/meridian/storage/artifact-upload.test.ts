@@ -11,7 +11,7 @@ import {
 } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { startDriveSession, sendDriveChunk, type ResumableTransport } from "./drive-resumable.ts";
-import { fakeDriveUpload, FAKE_DRIVE_SESSION_PREFIX, patternBytes } from "./fake-drive-upload.ts";
+import { fakeDriveUpload, FAKE_DRIVE_SESSION_PREFIX, patternBytes } from "../../../test-support/lib/meridian/storage/fake-drive-upload.ts";
 import { openSessionUri, sealSessionUri } from "./session-seal.ts";
 
 /** The key that seals session URIs in these tests. Every store here is given it explicitly. */

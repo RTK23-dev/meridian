@@ -48,6 +48,15 @@ export const thresholds = {
     validationAttemptsBeforeEscalation: 2,
   },
 
+  // Hook timing at plan time (docs/engine/RESEARCH_SHORT_FORM_2026-10.md, section 4). These come from platform guidance, not the Bible,
+  // so each is a tunable whose bounds the lead confirms. windowMs and latestMs are sourced (TikTok ads guidance: the proposition by 3 s,
+  // a hook by 6 s). maxShotMs is a hypothesis (a change about every 5 to 7 s), so the plan gate reports it as a note and never fails on it.
+  hook: {
+    windowMs: tunable(3000, 2000, 4000),
+    latestMs: tunable(6000, 4000, 8000),
+    maxShotMs: tunable(7000, 4000, 10000),
+  },
+
   // 6.7 check_take and 12.2 take gate.
   take: {
     durationTolerance: tunable(0.1, 0.02, 0.3),

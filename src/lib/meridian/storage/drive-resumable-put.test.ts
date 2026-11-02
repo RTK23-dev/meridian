@@ -4,7 +4,7 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { GoogleDriveClient } from "./drive.ts";
-import { fakeDriveUpload, patternBytes } from "./fake-drive-upload.ts";
+import { fakeDriveUpload, patternBytes } from "../../../test-support/lib/meridian/storage/fake-drive-upload.ts";
 
 // GoogleDriveClient.put for a file over 5 MB goes through the resumable path. Drive is stubbed (no network), and the session
 // is recorded in Postgres through the same connection the application uses.

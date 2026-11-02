@@ -1,4 +1,4 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { copyClaimRejections, prohibitedClaimRejection, PROHIBITED_CLAIM_RULE, UNSUPPORTED_CLAIM_RULE } from "../decisions/deterministic.ts";

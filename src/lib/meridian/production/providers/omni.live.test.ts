@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../../db.ts";
-import { studioTenant } from "../../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../../vault/service.ts";
-import { fixedLookup } from "../../credentials/fixtures.ts";
+import { fixedLookup } from "../../../../test-support/lib/meridian/credentials/fixtures.ts";
 import { GeminiOmniVideoProvider, buildOmniTextToVideoPayload } from "./omni.ts";
 import type { CreativeSpec } from "../types.ts";
 

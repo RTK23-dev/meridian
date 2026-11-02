@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { loadLibraryCreatives } from "./listing.ts";
 
 const PG_TEST_URL = process.env.MERIDIAN_PG_TEST_URL?.trim();

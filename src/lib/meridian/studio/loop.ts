@@ -1,3 +1,5 @@
+// Test harness (Q18, decision b). This loop runs on test providers only, and no screen or product path calls it. Its output is fixture output,
+// not a product result, and it must not be shown as one. It stays as a harness for its tests until the owner decides otherwise.
 import { walkToQa, advanceAsset, type AssetLineage, type AssetState } from "../assets/pipeline.ts";
 import { assertSameTenant, type BrainSlice, type LearnedPattern, type ObservedCreative, type PerformanceRow, type ProductFact, type RejectionFact } from "../domain.ts";
 import { fingerprintCreative, type CreativeFingerprint } from "../intelligence/fingerprint.ts";
@@ -219,13 +221,13 @@ export function runCoreLoop(input: {
       asset.lineage = { ...asset.lineage, qaDecision: reviewDecision, reviewDecision: reviewerApproved ? "approve" : reviewDecision, publicationId: externalId ?? "" };
     }
   }
-  const winnerRows = assets.filter((asset) => asset.kind === "image").map((asset, index) => performanceRow(input, `win-${index}`, 400, 40, 4));
+  const winnerRows = assets.filter((asset) => asset.kind === "image").map((_asset, index) => performanceRow(input, `win-${index}`, 400, 40, 4));
   const loserRows = input.losers.map((creative) => ({ ...performanceRow(input, creative.id, 400, 8, 0), creativeId: creative.id }));
   const patterns = learnPatterns({
     organizationId: input.organizationId,
     brandId: input.brandId,
     creatives: [
-      ...assets.filter((asset) => asset.kind === "image").map((asset, index) => generatedCreative(input, `win-${index}`, chosen.angle, "demonstration")),
+      ...assets.filter((asset) => asset.kind === "image").map((_asset, index) => generatedCreative(input, `win-${index}`, chosen.angle, "demonstration")),
       ...input.losers,
     ],
     observations: [...winnerRows, ...loserRows],

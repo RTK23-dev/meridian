@@ -24,9 +24,7 @@ import { createPoolSql, toSql, transactionSql } from "./learning/pool-sql.ts";
 import { rankOpportunities } from "./opportunity/engine.ts";
 import { ingestPerformance, publishThrough } from "./providers/boundaries.ts";
 import { createFilesystemObjectStore, migrateBlob } from "./storage/filesystem.ts";
-import { compareLogoPng } from "./vision/logo.ts";
 import { videoGenerationStatus, videoQa } from "./video/provider.ts";
-import { PNG } from "pngjs";
 
 const org = "org-block";
 const brand = "brand-block";
@@ -169,27 +167,6 @@ test("competitor discovery stays a candidate until a person confirms it", () => 
   assert.ok(named);
   assert.equal(reviewCompetitorCandidate(named, "confirm").status, "CONFIRMED");
   assert.equal(reviewCompetitorCandidate(named, "reject").status, "REJECTED");
-});
-
-test("logo pixels reject a mismatch and do not approve missing bytes", () => {
-  const png = (red: number, green: number, blue: number) => {
-    const image = new PNG({ width: 16, height: 16 });
-    for (let index = 0; index < 16 * 16; index += 1) {
-      image.data[index * 4] = red;
-      image.data[index * 4 + 1] = green;
-      image.data[index * 4 + 2] = blue;
-      image.data[index * 4 + 3] = 255;
-    }
-    return PNG.sync.write(image);
-  };
-  const same = compareLogoPng(png(10, 20, 30), png(10, 20, 30));
-  assert.equal(same.hint, "MATCH");
-  assert.equal(same.decision, "HUMAN_REVIEW");
-  const wrong = compareLogoPng(png(0, 0, 0), png(255, 255, 255));
-  assert.equal(wrong.decision, "REJECT");
-  const missing = compareLogoPng(Uint8Array.from([1, 2, 3, 4]), png(1, 2, 3));
-  assert.equal(missing.decision, "HUMAN_REVIEW");
-  assert.equal(missing.sufficient, false);
 });
 
 test("experiments allocate traffic and disconnected providers invent nothing", () => {

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { loadCatalog } from "./catalog.ts";
-import { examplePlan } from "./example.ts";
+import { examplePlan } from "./fixtures/example-run.ts";
 import { priceStep, textInputTokensOf } from "./validate.ts";
 
 const catalog = loadCatalog(JSON.parse(readFileSync(new URL("./fixtures/openrouter-catalog-2026-10-20.json", import.meta.url), "utf8"))).byId;

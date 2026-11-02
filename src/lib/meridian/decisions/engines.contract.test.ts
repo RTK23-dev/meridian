@@ -4,7 +4,7 @@ import type { JevDecisionRequest, JevDecisionResponse, JevProvider, JevProviderH
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenAiDecisionsEngine } from "./openai-engine.ts";
 import { evaluateDecisionPolicy, CREATIVE_QA_POLICY } from "./policy.ts";
-import { CONTRACT_CHOICE, CONTRACT_EXPECTED, CONTRACT_KEYS, CONTRACT_PREDICATE, CONTRACT_SCORE, contractPngBytes, contractRequest } from "./contract-fixtures.ts";
+import { CONTRACT_CHOICE, CONTRACT_EXPECTED, CONTRACT_KEYS, CONTRACT_PREDICATE, CONTRACT_SCORE, contractPngBytes, contractRequest } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import type { DecisionRequest, DecisionResult } from "./types.ts";
 
 // Both engines run the same provider-neutral fixtures. The JEV side uses a router stub shaped like the existing JEV

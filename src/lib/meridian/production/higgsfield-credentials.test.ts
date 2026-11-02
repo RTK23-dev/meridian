@@ -5,8 +5,8 @@ import { HiggsfieldProvider } from "./providers/higgsfield.ts";
 import { ProductionRouter } from "./router.ts";
 import type { CreativeSpec } from "./types.ts";
 import { CREDENTIAL_VAULT_TYPE } from "../credentials/contract.ts";
-import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 
 // Used only by this test process: the vault encrypts saved keys with this master key.

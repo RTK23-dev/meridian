@@ -1,3 +1,4 @@
+import { rollupCosts, stageRollupOf } from "./cost.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { sourceKeyFor } from "../sources/credentials.ts";
 import { authMiddleware } from "@/lib/auth/middleware";
@@ -158,6 +159,17 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
       order by created_at desc
       limit 40
     `;
+    // The stage rollup of the same rows, read only (B12, Q27). The budget check stays out. Cost per variant is null when no variant is counted.
+    const stageRollup = stageRollupOf(costs.map((row) => ({ stage: row.stage, cents: row.cents, seconds: row.seconds })));
+    const rolledUp = rollupCosts({ stages: stageRollup.stages, decodedAds: 0, variants: factoryCreatives.length, winningVariants: 0 });
+    const stageCostsView = {
+      rows: costs.length,
+      unpricedRows: stageRollup.unpricedRows,
+      stages: stageRollup.stages,
+      pricedTotalCents: rolledUp.totalCents,
+      variants: factoryCreatives.length,
+      costPerVariantCents: rolledUp.costPerVariantCents,
+    };
     const creativeIds = factoryCreatives.map((row) => row.creative_id);
     const organicReceipts = creativeIds.length === 0 ? [] : await sql<{ creative_id: string; platform: string; status: string; external_id: string | null; error: string | null }>`
       select creative_id, platform, status, external_id, error from organic_posts
@@ -329,6 +341,7 @@ export const getFactoryBoard = createServerFn({ method: "POST" })
         snapshotWithoutVideo: row.snapshot_without_video,
       })),
       cap: caps[0] ? { dailyCents: caps[0].daily_cents, totalCents: caps[0].total_cents } : { dailyCents: 0, totalCents: 0 },
+      stageCosts: stageCostsView,
       killSwitch: {
         workspace: kill.some((row) => row.scope === "workspace" && row.engaged),
         brand: kill.some((row) => row.scope === "brand" && row.engaged),
@@ -672,13 +685,9 @@ export const setFactoryControls = createServerFn({ method: "POST" })
     const body = objectInput(input);
     const level = parseFactoryLevel(body.level);
     const ceiling = parseFactoryLevel(body.ceiling);
-    const dailyCents = Number(body.dailyCents);
-    const totalCents = Number(body.totalCents);
     if (level == null || ceiling == null) throw new Error("Choose factory levels 0–3.");
-    if (!Number.isInteger(dailyCents) || !Number.isInteger(totalCents) || dailyCents < 0 || totalCents < 0) {
-      throw new Error("Spend caps must be whole cents.");
-    }
-    return { brandId: clip(body.brandId, 80, "Brand", true), level, ceiling, dailyCents, totalCents };
+    // The spend caps are not set here: the billing page is the one place a cap is written.
+    return { brandId: clip(body.brandId, 80, "Brand", true), level, ceiling };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -692,11 +701,6 @@ export const setFactoryControls = createServerFn({ method: "POST" })
       insert into factory_settings (organization_id, brand_id, level, ceiling, updated_by)
       values (${organizationId}, ${data.brandId}, ${data.level}, ${data.ceiling}, ${context.userId})
       on conflict (organization_id, brand_id) do update set level = excluded.level, ceiling = excluded.ceiling, updated_by = excluded.updated_by, updated_at = now()
-    `;
-    await sql`
-      insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
-      values (${organizationId}, ${data.brandId}, ${data.dailyCents}, ${data.totalCents}, ${context.userId})
-      on conflict (organization_id, brand_id) do update set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents, updated_by = excluded.updated_by, updated_at = now()
     `;
     return { ok: true as const };
   });

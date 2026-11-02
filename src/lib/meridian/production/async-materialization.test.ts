@@ -16,7 +16,7 @@ import {
   productionJobs,
   reservationsFor,
   type Tenant,
-} from "../testing/production-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/production-fixtures.ts";
 import type { ProductionJob } from "./types.ts";
 import { finalizeProductionArtifact } from "./artifact-finalizer.ts";
 import { pollProductionJobs } from "./poller.ts";

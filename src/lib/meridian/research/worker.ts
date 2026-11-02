@@ -17,6 +17,7 @@ import { snapshotMediaAllowed } from "../factory/sources.ts";
 import { emptyYield, formatYield } from "../factory/yield.ts";
 import { jevDecisionService } from "../jev/service.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
+import { whisperxModelSetting } from "../config/server-settings.ts";
 
 const MAX_VIDEO_BYTES = 24_000_000;
 const MAX_RUN_MEDIA_BYTES = 100_000_000;
@@ -43,7 +44,7 @@ async function recordAdFailure(sql: Sql, input: { organizationId: string; brandI
 
 async function transcriptForVideo(sql: Sql, videoBytes: Uint8Array, input: { organizationId: string; brandId: string; adId: string }): Promise<TranscriptionResult> {
   const hash = sha256(videoBytes);
-  const model = process.env.WHISPERX_MODEL?.trim() || "small";
+  const model = whisperxModelSetting()?.trim() || "small";
   const cached = await sql<{ id: string; status: string; transcript: string; segments: string; duration_ms: number | null }>`
     select id, status, transcript, segments, duration_ms from research_transcript_cache
     where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and content_hash = ${hash} and provider = 'local:whisperx' and model = ${model}

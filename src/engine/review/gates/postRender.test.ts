@@ -23,6 +23,12 @@ function check(result: { gate: { checks: { rule: string; pass: boolean; detail?:
   return found;
 }
 
+function cleanPostRenderInputWith(ocrChange: { textBoxes?: NonNullable<PostRenderInput["ocr"]>["textBoxes"] }): PostRenderInput {
+  const input = cleanPostRenderInput();
+  const ocr = input.ocr ?? { captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: [] };
+  return { ...input, ocr: { ...ocr, textBoxes: ocrChange.textBoxes } };
+}
+
 function withInput(render: CleanRender, change: Partial<PostRenderInput>): PostRenderInput {
   return { ...cleanPostRenderInput(render), ...change };
 }
@@ -42,6 +48,25 @@ describe("post_render gate: a clean video passes (Bible 12.3)", () => {
     assert.equal(outcome.gate.pass, true, outcome.gate.checks.filter((item) => !item.pass).map((item) => item.rule).join(", "));
     assert.deepEqual(outcome.failures, []);
     assert.equal(decideGate(outcome.gate, {}).verdict, "pass");
+  });
+});
+
+describe("post_render gate: the on-screen text stays clear of the Reels zones (Q32)", () => {
+  it("text inside the top header fails the check and the gate; text clear of the zones passes it", () => {
+    const box = (y: number) => ({ text: "Send BLEND", box: { x: 0.1, y, width: 0.5, height: 0.05 } });
+    const inZone = checkPostRender(cleanPostRenderInputWith({ textBoxes: [box(0.02)] }));
+    assert.equal(inZone.gate.pass, false);
+    assert.equal(inZone.gate.checks.find((item) => item.rule === "text_in_safe_zones")?.pass, false);
+    const clear = checkPostRender(cleanPostRenderInputWith({ textBoxes: [box(0.4)] }));
+    assert.equal(clear.gate.checks.find((item) => item.rule === "text_in_safe_zones")?.pass, true);
+  });
+
+  it("text boxes that were not measured are not evaluated, so the gate goes to review rather than passing", () => {
+    const outcome = checkPostRender(cleanPostRenderInputWith({ textBoxes: undefined }));
+    const check = outcome.gate.checks.find((item) => item.rule === "text_in_safe_zones");
+    assert.equal(check?.pass, false);
+    assert.match(check?.detail ?? "", /not evaluated/);
+    assert.equal(outcome.gate.pass, false);
   });
 });
 

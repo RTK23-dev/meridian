@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -64,7 +65,7 @@ export const disconnectDrive = createServerFn({ method: "POST" })
     const result = await disconnectDriveWorkspace(await getSql(), {
       organizationId: data.organizationId,
       userId: context.userId,
-      masterKey: process.env.TOKEN_ENCRYPTION_KEY?.trim() ?? "",
+      masterKey: tokenEncryptionKey()?.trim() ?? "",
       fetch: (input, init) => globalThis.fetch(input, init),
       invalidate: () => invalidateGoogleDriveAccessToken(data.organizationId),
     });

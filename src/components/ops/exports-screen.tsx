@@ -12,6 +12,7 @@ import { getPerformanceRowsForExport } from "@/lib/meridian/performance/actions"
 import { auditExportNote } from "./audit-model";
 import { exportFilename } from "./format";
 import { RefusalNotice } from "./ops-shared";
+import { ExportPackagePanel } from "./export-package-panel";
 import { libraryExportRows, opportunityExportRows, rowsNote } from "./exports-model";
 
 export function ExportsScreen() {
@@ -72,6 +73,7 @@ export function ExportsScreen() {
       )}
 
       <div className="grid gap-4 lg:grid-cols-2">
+        <ExportPackagePanel organizationId={organizationId} brandId={brandId} />
         <ExportPanel
           id="opportunities-export"
           title="Opportunities"

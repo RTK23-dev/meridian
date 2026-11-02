@@ -17,6 +17,7 @@
  * - Audits all credential mutations without logging secret values.
  */
 
+import { cycloneApiKey as cycloneApiKeyFromEnv } from "../credentials/secret-settings.ts";
 import { randomUUID } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
 import { withTransaction } from "../learning/store.ts";
@@ -36,6 +37,8 @@ import { selectPerceptionProvider } from "../perception/run.ts";
 import { publicUrlIssue } from "../sources/public-url.ts";
 import { getGoogleDriveAuthStatus } from "../storage/google-auth.ts";
 import { PAGE_LIMIT_MESSAGE, parsePageLimit } from "./page-limit.ts";
+import { cycloneDeviceIdSetting, cycloneGatewayUrlSetting, hypitBaseUrlSetting, perceptionModelSetting } from "../config/server-settings.ts";
+import { CycloneScoutSourceAdapter } from "../discovery/cyclone-scout-adapter.ts";
 
 /**
  * Every provider category the settings summary and the save path know. The keyed categories are the resolver's categories:
@@ -220,7 +223,7 @@ export async function getWorkspaceProviderSettings(
     ...credentialFields(perceptionState),
     settings: {
       provider: "gemini",
-      model: process.env.PERCEPTION_MODEL || "gemini-2.5-flash",
+      model: perceptionModelSetting() || "gemini-2.5-flash",
       modalities: ["image", "video_frames", "ocr"],
     },
     capabilities: ["video_transcription", "scene_detection", "ocr_extraction", "multimodal_pacing"],
@@ -230,7 +233,7 @@ export async function getWorkspaceProviderSettings(
   const genericCategories = KEYED_PROVIDER_CATEGORIES.filter((category) => !SPECIFIC_KEYED.has(category));
   const genericStates = await Promise.all(genericCategories.map((category) => credentialStateFor(sql, organizationId, category)));
   const genericSummaries = genericCategories.map((category, index) =>
-    keyedSummary(category, genericStates[index], category === "hypit" ? { baseUrlConfigured: Boolean(process.env.HYPIT_BASE_URL?.trim()) } : {}),
+    keyedSummary(category, genericStates[index], category === "hypit" ? { baseUrlConfigured: Boolean(hypitBaseUrlSetting()?.trim()) } : {}),
   );
   const metaAdState = genericStates[genericCategories.indexOf("meta_ad_library")];
 
@@ -262,7 +265,7 @@ export async function getWorkspaceProviderSettings(
     settings: {
       // The same resolution the studio routes a run with (production/cost-mode.ts).
       costPreference: resolveCostMode(productionSettings.costPreference),
-      hypitConfigured: Boolean(process.env.HYPIT_BASE_URL),
+      hypitConfigured: Boolean(hypitBaseUrlSetting()),
     },
     capabilities: ["gemini_omni_video", "image_to_video", "manual_cloud_handoff", "durable_job_polling"],
   };
@@ -281,24 +284,16 @@ export async function getWorkspaceProviderSettings(
     capabilities: ["oauth_google_drive", "checksum_verification", "zero_fake_completion"],
   };
 
-  // 7. Cyclone Scout Category
-  const cycloneEntryId = vaultMap.get(vaultTypeForCategory("cyclone"));
-  const cycloneCreds = cycloneEntryId ? await savedCycloneCredentials(sql, organizationId, cycloneEntryId.id) : null;
-  const cycloneGatewayUrl = (cycloneCreds?.customFields?.gatewayUrl as string) || process.env.CYCLONE_GATEWAY_URL;
-  const cycloneApiKey = cycloneCreds?.apiKey || process.env.CYCLONE_API_KEY;
-  const cycloneConfigured = Boolean(cycloneGatewayUrl);
-
+  // 7. Cyclone Scout: set by the deployment's environment only (docs/PROVIDERS.md). Settings cannot change it, so this shows what the
+  // deployment holds. The key is never shown, only its fingerprint.
+  const cycloneGatewayUrl = cycloneGatewayUrlSetting() ?? "";
+  const cycloneDeviceId = cycloneDeviceIdSetting() ?? "";
   const cycloneSummary: ProviderConfigSummary = {
     category: "cyclone",
-    configured: cycloneConfigured,
-    source: cycloneCreds?.apiKey || cycloneCreds?.customFields?.gatewayUrl ? "workspace" : (process.env.CYCLONE_GATEWAY_URL ? "deployment" : "default"),
-    keyFingerprint: fingerprint(cycloneApiKey),
-    settings: {
-      gatewayUrl: cycloneGatewayUrl || "http://127.0.0.1:4000",
-      deviceId: cycloneCreds?.customFields?.deviceId || process.env.CYCLONE_DEVICE_ID || "",
-      observationBudget: Number(cycloneCreds?.customFields?.observationBudget || process.env.CYCLONE_OBSERVATION_BUDGET || 20),
-      readOnlyMode: true,
-    },
+    configured: Boolean(cycloneGatewayUrl && cycloneDeviceId),
+    source: cycloneGatewayUrl ? "deployment" : "default",
+    keyFingerprint: fingerprint(cycloneApiKeyFromEnv()),
+    settings: { gatewayUrl: cycloneGatewayUrl, deviceId: cycloneDeviceId, readOnlyMode: true },
     capabilities: ["device_discovery", "page_card_observation", "session_binding", "zero_mutation_research"],
   };
 
@@ -312,15 +307,6 @@ export async function getWorkspaceProviderSettings(
   } as Record<ProviderCategory, ProviderConfigSummary>;
   for (const summary of genericSummaries) summaries[summary.category] = summary;
   return summaries;
-}
-
-/** The Cyclone entry's payload, or null when it cannot be read. Cyclone is not a resolver category. */
-async function savedCycloneCredentials(sql: Sql, organizationId: string, entryId: string): Promise<VaultCredentialPayload | null> {
-  try {
-    return await retrieveVaultCredential(sql, organizationId, entryId);
-  } catch {
-    return null;
-  }
 }
 
 /** One save as the service receives it. */
@@ -354,6 +340,9 @@ export async function saveWorkspaceProviderConfig(
 ): Promise<{ success: boolean; category: ProviderCategory }> {
   if (!isProviderCategory(input.category)) {
     throw new Error(`Unknown provider category: ${String(input.category)}.`);
+  }
+  if (input.category === "cyclone") {
+    throw new Error("Cyclone is set by the deployment's environment (CYCLONE_GATEWAY_URL, CYCLONE_DEVICE_ID and CYCLONE_API_KEY), so a workspace cannot save it.");
   }
 
   // A page limit is a whole number of pages, 1 or more. It is stored as that number, so a fraction, a negative or text never lands.
@@ -589,29 +578,12 @@ export async function testWorkspaceProviderConnection(
     }
 
     if (input.category === "cyclone") {
-      const credType = vaultTypeForCategory("cyclone");
-      const rows = await sql<{ id: string }>`select id from credential_vault where organization_id = ${input.organizationId} and credential_type = ${credType} limit 1`;
-      let gatewayUrl = process.env.CYCLONE_GATEWAY_URL || "http://127.0.0.1:4000";
-      if (rows[0]) {
-        const creds = await retrieveVaultCredential(sql, input.organizationId, rows[0].id);
-        if (creds?.customFields?.gatewayUrl) {
-          // A gateway URL saved by a workspace is tenant input, so it must be a public http(s) address. Otherwise a saved value
-          // could point this server at an internal host. The operator's CYCLONE_GATEWAY_URL is trusted and is not checked here.
-          const saved = String(creds.customFields.gatewayUrl);
-          const issue = publicUrlIssue(saved);
-          if (issue) {
-            return { status: "ERROR", message: `The workspace's saved Cyclone gateway URL is not allowed. ${issue} No request was made.`, latencyMs: Date.now() - started };
-          }
-          gatewayUrl = saved;
-        }
-      }
-
-      const res = await fetch(`${gatewayUrl}/v1/device/status`, { signal: AbortSignal.timeout(3000) });
+      // The deployment's device, checked by the same check discovery uses. A workspace cannot point this at another gateway.
+      const check = await new CycloneScoutSourceAdapter().checkConnection();
       const latencyMs = Date.now() - started;
-      if (res.ok) {
-        return { status: "READY", message: "Cyclone device gateway responded successfully.", latencyMs };
-      }
-      return { status: "ERROR", message: `Cyclone gateway returned HTTP ${res.status}.`, latencyMs };
+      return check.connected
+        ? { status: "READY", message: "The Cyclone device answered through the deployment's gateway.", latencyMs }
+        : { status: "ERROR", message: check.reason ?? "The Cyclone device is not connected.", latencyMs };
     }
 
     if (input.category === "sources") {

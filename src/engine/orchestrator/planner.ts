@@ -9,9 +9,11 @@
 
 import type { CatalogEntry, CatalogKind } from "./catalog.ts";
 import { orchestratorPlanSchema, type ModelRef, type OrchestratorPlan } from "./contracts.ts";
-import { textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
+import { hasPriceBasis, textInputTokensOf, validatePlan, KIND_CATALOG } from "./validate.ts";
+import { BUDGET_CATEGORIES, categoryBudgetsOf } from "./categories.ts";
 import { runRole, type RoleDeps } from "../claude/client.ts";
 import { RoleAnswerError } from "../claude/errors.ts";
+import type { TokenCount } from "../claude/rates.ts";
 import { orchestratorPlan, ORCHESTRATOR_MAX_CANDIDATES_PER_KIND, type OrchestratorPlanInput } from "../claude/roles/orchestrator_plan.ts";
 
 /** What the user gave the run: the format to rebuild or make, their inputs, and Meridian's brand and product context. */
@@ -21,6 +23,10 @@ export type PlannerBrief = {
   userInputs: string;
   brand: { name: string; summary: string };
   budgetUsd: number;
+  /** The category budgets the user set, in USD (categories.ts). A category the user did not set is the orchestrator's to split. */
+  copyBudgetUsd?: number;
+  creativeBudgetUsd?: number;
+  voiceBudgetUsd?: number;
 };
 
 /** One text completion from the orchestrating model. Injected: production passes the gateway's call, tests pass a recording. */
@@ -41,6 +47,13 @@ export function candidateList(catalog: Map<string, CatalogEntry>): string {
     .join("\n\n");
 }
 
+/** The category budgets the user set, for the prompt. A category the user did not set is the orchestrator's to split under the total. */
+function categoryLine(brief: PlannerBrief): string {
+  const budgets = categoryBudgetsOf(brief);
+  const set = BUDGET_CATEGORIES.filter((category) => budgets[category] !== undefined).map((category) => `${category} ${budgets[category]}`);
+  return set.length === 0 ? "none set; split the total yourself" : set.join(", ");
+}
+
 export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, CatalogEntry>): { system: string; user: string } {
   const stepKinds = Object.keys(KIND_CATALOG).join(", ");
   const system = [
@@ -51,6 +64,7 @@ export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, Cat
     '"params" (flat object of strings, numbers, booleans or null), "estimateUsd" (a number, or null when you do not know the cost).',
     `Step kinds: reference, analysis, script, visual, video, voice, avatar, edit, compose, render. Kinds that call a model are: ${stepKinds}.`,
     "Use only model ids from the candidate list below. A step that makes no model call has model null.",
+    "Copy is the analysis and script steps, creative the visual, video and avatar steps, voice the voice steps. A category the brief sets is the most its steps may cost.",
     "If you do not know a step's cost, say null: such a step will not run.",
   ].join("\n");
   const user = [
@@ -59,6 +73,7 @@ export function buildPlannerPrompt(brief: PlannerBrief, catalog: Map<string, Cat
     `User inputs: ${brief.userInputs}`,
     `Brand: ${brief.brand.name}. ${brief.brand.summary}`,
     `Budget (USD): ${brief.budgetUsd}`,
+    `Category budgets (USD): ${categoryLine(brief)}`,
     "",
     "Candidate models from the live catalog:",
     candidateList(catalog),
@@ -107,16 +122,20 @@ export async function planWithModel(opts: {
   if (parsed.data.orchestrator.provider !== opts.orchestrator.provider || parsed.data.orchestrator.id !== opts.orchestrator.id) {
     return { ok: false, reasons: [`the plan names ${parsed.data.orchestrator.id}, but it was written by ${opts.orchestrator.id}, so it is refused`] };
   }
-  const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
+  const checked = validatePlan(parsed.data, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), planning: true });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }
 
-/** The live candidates the orchestrator may choose from: up to the per-kind cap of each kind, in the catalog's order. */
+/**
+ * The live candidates the orchestrator may choose from: up to the per-kind cap of each kind, in the catalog's order. Only a model the engine
+ * can price for its kind is a candidate: a step that uses an unpriced model is refused, so it is not offered.
+ */
 export function candidatesFor(catalog: Map<string, CatalogEntry>): Array<{ id: string; name: string; kind: CatalogKind }> {
   const taken = new Map<CatalogKind, number>();
   const out: Array<{ id: string; name: string; kind: CatalogKind }> = [];
   for (const entry of catalog.values()) {
+    if (!hasPriceBasis(entry)) continue;
     const count = taken.get(entry.kind) ?? 0;
     if (count >= ORCHESTRATOR_MAX_CANDIDATES_PER_KIND) continue;
     taken.set(entry.kind, count + 1);
@@ -138,8 +157,19 @@ export type RoleCallScope = {
  * The plan written by the user's chosen model, through the Claude client (orchestrator_plan role): reserved, budgeted and on the ledger.
  * Fail closed. The chosen model must be a live text model with a per-token price in the catalog, or no call is made. A refused call, a
  * failed call, an answer that does not match the plan contract, and a plan the engine refuses all give no plan, with the reasons.
+ *
+ * The call is held for `estimateTokens` when the caller sized it (service.ts sizes the catalog and the brief, and checks the hold against the
+ * budget with that same count). Absent: the role's own estimate.
  */
-export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRef; brief: PlannerBrief; catalog: Map<string, CatalogEntry> }): Promise<PlanOutcome> {
+export async function planWithRole(
+  opts: RoleCallScope & {
+    orchestrator: ModelRef;
+    brief: PlannerBrief;
+    catalog: Map<string, CatalogEntry>;
+    disabledFamilies?: readonly string[];
+    estimateTokens?: TokenCount;
+  },
+): Promise<PlanOutcome> {
   const id = opts.orchestrator.id;
   const entry = opts.catalog.get(id);
   if (!entry) return { ok: false, reasons: [`orchestrator ${id} is not in the live catalog, so no call is made`] };
@@ -165,6 +195,7 @@ export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRe
       signal: opts.signal,
       input,
       chosenModel: { modelId: id, price: { promptUsdPerToken, completionUsdPerToken } },
+      estimateTokens: opts.estimateTokens,
     });
   } catch (error) {
     if (error instanceof RoleAnswerError) return { ok: false, reasons: ["the orchestrating model's answer did not match the plan contract"] };
@@ -175,7 +206,8 @@ export async function planWithRole(opts: RoleCallScope & { orchestrator: ModelRe
   if (outcome.status === "refused") return { ok: false, reasons: [`the orchestrating model's call was refused: ${outcome.reason}`] };
   if (outcome.status === "duplicate") return { ok: false, reasons: ["this plan call already has a stored answer that is not read here, so it is not asked again"] };
 
-  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief) });
+  // Planning (D15): an unpriced video or avatar step is stored with a note that it needs measure mode, and the run decides (validate.ts).
+  const checked = validatePlan(outcome.value, opts.catalog, { textInputTokens: textInputTokensOf(opts.brief), disabledFamilies: opts.disabledFamilies, planning: true });
   if (!checked.ok) return { ok: false, reasons: checked.reasons };
   return { ok: true, plan: checked.plan, order: checked.order };
 }

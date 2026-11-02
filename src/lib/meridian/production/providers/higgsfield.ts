@@ -22,6 +22,7 @@ import type { Sql } from "../../learning/store.ts";
 import { loadDefaultSql, resolveHiggsfieldCredential, type CredentialEnv } from "../../credentials/resolve.ts";
 import type { CredentialResolution } from "../../credentials/contract.ts";
 import { gatedFetch, isCapabilityDisabledError } from "../../providers/capability.ts";
+import { higgsfieldModelSetting } from "../../config/server-settings.ts";
 
 /** A workspace's usable key, or the reason there is none. The provider is never called without a usable key. */
 type KeyAccess = { ok: true; apiKey: string } | { ok: false; reason: string };
@@ -170,7 +171,7 @@ export class HiggsfieldProvider implements ProductionProvider {
   }
 
   getModel(): HiggsfieldModel {
-    const configured = process.env.HIGGSFIELD_MODEL?.trim();
+    const configured = higgsfieldModelSetting()?.trim();
     if (configured && configured in HIGGSFIELD_MODELS) {
       return configured as HiggsfieldModel;
     }

@@ -73,6 +73,8 @@ import { searchStock } from "../assets/stock.ts";
 import { createGateway, type Gateway } from "../gateway/gateway.ts";
 import { gatewayDownloader } from "../gateway/download.ts";
 import { modelCatalogCache, type ModelCatalogSource } from "../gateway/catalog.ts";
+import { withModelPolicy } from "../gateway/catalog-policy.ts";
+import { readOrchestratorPolicy, requireOrchestratorPolicy } from "../orchestrator/policy-store.ts";
 import { meridianCredentialSource } from "../gateway/meridian.ts";
 import { fetchHttpTransport } from "../gateway/transport.ts";
 import type { MediaFunctions } from "../media/interface.ts";
@@ -100,6 +102,7 @@ import { createRenderHandler, type RenderPorts } from "./handlers/render.ts";
 import { createVariantsHandler, type VariantPorts } from "./handlers/variants.ts";
 import { createDeliverHandler, type DeliverPorts } from "./handlers/deliver.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
+import { sqlOutputMeasures } from "./output-measures-sql.ts";
 import { sqlSamplingPorts } from "./sampling-store.ts";
 import { decisionsOf, gateResultsOf } from "./engine-reads-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
@@ -159,7 +162,12 @@ export type EngineComposition = {
    * orchestrator's visual and voice steps make their asset through it (orchestrator/production.ts). Absent without shot ports: those steps
    * then report not_connected.
    */
-  assetRouter?: (scope: { organizationId: string; requestId: string; reservationId: string }) => AsyncAssetRouter;
+  /**
+   * `disabledFamilies` are the families this run switches off (D16: the workspace's, with a plan's brand families added). The router
+   * then refuses those models on every route, its fallbacks included, and its catalog reads leave them out. Absent: the workspace's
+   * families, as the rest of the composition reads them.
+   */
+  assetRouter?: (scope: { organizationId: string; requestId: string; reservationId: string; disabledFamilies?: readonly string[] }) => AsyncAssetRouter;
   /** The workspace's monthly budget (Bible 14.1 step 2). Production: workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql)). */
   workspaceBudget: WorkspaceBudgetSource;
   /** The clock as an ISO time (ledger entries, artifacts). Defaults to the wall clock. */
@@ -270,8 +278,9 @@ function rolesFor(composition: EngineComposition): (scope: { organizationId: str
  */
 function routerFor(composition: EngineComposition, ports: ShotPorts, profiles: ReadonlyMap<string, VideoProfile>) {
   const now = composition.now ?? isoNow;
-  return (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string }): AsyncAssetRouter =>
+  return (scope: { sql: Sql; organizationId: string; requestId: string; reservationId: string; disabledFamilies?: readonly string[] }): AsyncAssetRouter =>
     createAssetRouter({
+      ...(scope.disabledFamilies === undefined ? {} : { disabledFamilies: scope.disabledFamilies }),
       gateway: composition.gateway,
       ledger: scopedLedgerStore(scope.sql, scope.organizationId, scope.reservationId),
       cache: sqlAssetCache(scope.sql, scope.organizationId),
@@ -570,6 +579,18 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
   const workspaceBudget = workspaceBudgetFromSettings(meridianMonthlyBudgetReader(sql));
   // The shot ports (Bible 6.6, 6.7): the take and image stores under each request's brand, the video profiles of the listing, and the
   // connection check that refuses a shot before any paid call when the media functions or the workspace's Drive are not connected.
+  // The workspace's switched-off model families (owner direction 2026-10-23): the catalog and the video profiles both read them on every call,
+  // so a switched-off family is in neither the models a chooser sees nor the profiles a route is given.
+  // An unreadable stored policy throws its reason here: no family is read as on or off by a guess (fail closed).
+  const switchedOffFamiliesOf = async (organizationId: string): Promise<readonly string[]> => (await requireOrchestratorPolicy(sql, organizationId)).disabledModelFamilies;
+  // The shot's connection check reads the same policy first: an unreadable row refuses the shot before routing or any paid call.
+  const connectionOf = productionShotConnection({ sql, gateway, mediaFunctionsMode });
+  const shotConnection = async (organizationId: string): Promise<string | null> => {
+    const policy = await readOrchestratorPolicy(sql, organizationId);
+    return policy.status === "unreadable" ? policy.reason : connectionOf(organizationId);
+  };
+  // One catalog cache for the composition: a run's own families (D16) filter it per read, so no run pays for a second listing read.
+  const catalogCache = modelCatalogCache({ gateway });
   const shotPorts: ShotPorts = {
     media,
     objects,
@@ -579,13 +600,16 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
         { objects, brandOf: ({ organizationId, requestId }) => brandOfRequest(sql, organizationId, requestId) },
         { organizationId: scope.organizationId, requestId: scope.requestId },
       ),
-    videoProfiles: videoProfileLoader({ gateway }),
-    catalog: modelCatalogCache({ gateway }),
-    shotConnection: productionShotConnection({ sql, gateway, mediaFunctionsMode }),
+    videoProfiles: videoProfileLoader({ gateway, familiesFor: switchedOffFamiliesOf }),
+    catalog: withModelPolicy(catalogCache, switchedOffFamiliesOf),
+    shotConnection,
     // check_take reads a take's black frames, flicker and motion from the same media functions (gate-measures.ts). Not connected, each
     // reads as missing evidence and escalates; it is never read as a pass.
     detectors: media,
   };
+  // The ports of one run (D16): the same ports, with the catalog read through the run's own families. Absent families: the workspace's.
+  const portsFor = (families: readonly string[] | undefined): ShotPorts =>
+    families === undefined ? shotPorts : { ...shotPorts, catalog: withModelPolicy(catalogCache, async () => families) };
   // The analysis, voice and write_script ports (Bible 6.2, 6.3; contract v8). Their Claude deps and asset router are per reservation, so
   // they are built from the composition, lazily: each call reads the composition's gateway, clock and stores for its own job.
   // The reference store reads an uploaded reference video under its brand. Production: Meridian's store. A test passes its own (ProductionDeps).
@@ -602,7 +626,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       deepgram: deepgramBillReader({ gateway, projects }),
     },
     render: productionRenderPorts({ sql, gateway, objects, media, mediaLinks, now: isoNow }),
-    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow }),
+    postRender: productionPostRenderPorts({ gateway, media, objects, now: isoNow, recordMeasures: sqlOutputMeasures(sql) }),
     providerUrl: productionProviderUrl({ gateway, mediaLinks }),
     // Intake's VideoDNA lookup (Bible 6.1 step 5). Without it the request gate reads "the lookup has not run" and every production request fails
     // at intake; with it, a stored analysis of the same reference is the hit and no stored analysis is a miss (video-dna-cache.ts).
@@ -619,7 +643,7 @@ export function productionComposition(sql: Sql, deps: ProductionDeps = {}): Engi
       loadKits: kitPorts(sql).loadKits,
       roleDeps: (scope) => rolesFor(composition)(scope),
     },
-    assetRouter: (scope) => routerFor(composition, shotPorts, new Map<string, VideoProfile>())({ sql, ...scope }),
+    assetRouter: (scope) => routerFor(composition, portsFor(scope.disabledFamilies), new Map<string, VideoProfile>())({ sql, ...scope }),
     // The rights check reads the licence record of each take and voice track (review 2026-10-22 production licence port). The deployment's
     // list names the providers whose outputs are licensed; unset, only reviewer clips pass and the check fails closed.
     preRender: {

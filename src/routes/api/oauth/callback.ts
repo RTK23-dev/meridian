@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../../../lib/meridian/credentials/secret-settings.ts";
 import { createFileRoute } from "@tanstack/react-router";
 import { getSql } from "@/lib/db";
 import { exchangeOauthCode, hashOauthState, isAllowedOauthOrigin, sealSecret } from "@/lib/meridian/oauth/flow.server";
@@ -31,9 +32,9 @@ export const Route = createFileRoute("/api/oauth/callback")({
         const redirectUri = `${match.redirectOrigin}/api/oauth/callback?provider=${provider}`;
         const exchanged = await exchangeOauthCode(provider, { code, redirectUri, env: process.env }, liveTransport());
         if ("error" in exchanged) return new Response(exchanged.error, { status: 502 });
-        const sealed = sealSecret(exchanged.accessToken, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+        const sealed = sealSecret(exchanged.accessToken, tokenEncryptionKey() ?? "");
         if (typeof sealed !== "string") return new Response(sealed.error, { status: 500 });
-        const sealedRefresh = exchanged.refreshToken ? sealSecret(exchanged.refreshToken, process.env.TOKEN_ENCRYPTION_KEY ?? "") : "";
+        const sealedRefresh = exchanged.refreshToken ? sealSecret(exchanged.refreshToken, tokenEncryptionKey() ?? "") : "";
         if (typeof sealedRefresh !== "string") return new Response(sealedRefresh.error, { status: 500 });
         // The token's expiry is kept when the provider states one, so a token that has passed it is not reported as usable (review 2026-10-22, item 6).
         const expiresAt = exchanged.expiresIn === null ? null : new Date(Date.now() + exchanged.expiresIn * 1000).toISOString();

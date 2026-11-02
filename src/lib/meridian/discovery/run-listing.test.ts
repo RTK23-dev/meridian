@@ -5,10 +5,10 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
-import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 import type { Sql } from "../learning/store.ts";
 import { saveWorkspaceProviderConfig } from "../settings/provider-config.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { SourceRegistry } from "../sources/registry.ts";
 import { YouTubeSourceAdapter } from "../sources/adapters/youtube.ts";
 import { discoverySourceStatuses } from "./planner.ts";

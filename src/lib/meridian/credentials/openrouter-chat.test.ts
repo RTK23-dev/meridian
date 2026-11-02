@@ -4,7 +4,7 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { resolveDeploymentOnlyKey } from "./resolve.ts";
-import { withEnv } from "./test-databases.ts";
+import { withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 
 // Stub values only. No test in this file calls a live provider.
 const DEPLOYMENT_OPENROUTER = "deployment-openrouter-key-7777";

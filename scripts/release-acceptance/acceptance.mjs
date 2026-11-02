@@ -284,8 +284,8 @@ try {
   });
   await page.screenshot({ path: join(out, "market-first-run-desktop.png"), fullPage: true });
 
-  await check("G7", "the monthly budget is one named field that /settings#monthly-budget scrolls to and focuses", async () => {
-    await page.goto(`${base}/settings#monthly-budget`, { waitUntil: "networkidle" });
+  await check("G7", "the monthly budget is one named field on the billing page that #monthly-budget scrolls to and focuses", async () => {
+    await page.goto(`${base}/billing#monthly-budget`, { waitUntil: "networkidle" });
     const field = page.getByLabel("Monthly budget (USD)");
     await field.waitFor();
     assert.equal(await focusedWithin(field), true, "the budget field must have focus");
@@ -339,6 +339,13 @@ try {
   });
 
   await check("G11", "openrouter: no budget refuses before anything is sent, the link focuses the budget field, a passed test does not activate OpenRouter, and choosing it does", async () => {
+    // The decision cap has no default, and it is checked before the budget. Set it on the billing page first, so the budget check below is the one that refuses.
+    await page.goto(`${base}/billing`, { waitUntil: "networkidle" });
+    const decisionCap = page.getByLabel("Decision cap per call (USD per call)");
+    await decisionCap.waitFor();
+    await decisionCap.fill("0.05");
+    await decisionCap.press("Enter");
+    await page.getByText("Decision cap per call saved.").waitFor();
     // The testing runtime reads a recorded catalogue and answers the test from a recorded transport. No key is real and nothing is spent.
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
     const review = page.getByText("Review or change this step");
@@ -368,7 +375,7 @@ try {
     await budget.waitFor();
     assert.equal(await focusedWithin(budget), true, "the budget field must have focus");
     await budget.fill("5");
-    await page.getByRole("button", { name: "Save budget" }).click();
+    await budget.press("Enter");
     await page.getByText("Monthly budget saved.").waitFor();
     // With a budget, the recorded transport answers. The test passes, and OpenRouter is still not active.
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
@@ -538,18 +545,69 @@ try {
     assert.doesNotMatch(await page.locator("main").innerText(), /Started \d+ videos?\./);
   });
 
+  // The cookbook library (K19): the route opens, lists its built-in cookbooks, and does not crash the page. K19b moved its client code
+  // off the engine; this check is the browser proof that the route loads.
+  await page.goto(`${base}${brandPath}/cookbooks`, { waitUntil: "networkidle" });
+  await check("H1", "The cookbook library opens and lists its built-in cookbooks, with no error page", async () => {
+    await page.getByRole("heading", { name: "Cookbooks", exact: true, level: 1 }).waitFor({ timeout: 30000 });
+    await page.getByRole("list", { name: "Cookbooks" }).waitFor({ timeout: 30000 });
+    const text = await page.locator("main").innerText();
+    if (!text.includes("3D data explainer")) throw new Error("the 3D data explainer card is missing from the library");
+    if (/something went wrong|not available|Module .* externalized/i.test(text) && !text.includes("3D data explainer")) throw new Error("the library shows an error page");
+  });
+
+  // The cookbook editor (K20b3): on the factory page, a built-in cookbook's steps open, Edit opens the form, and a changed instruction saves
+  // as the person's copy. The server checks the whole cookbook on save; this is the browser proof of that path.
+  // The factory line is the Batch section of the Content page (the factory route redirects there, section=ads).
+  await page.goto(`${base}${brandPath}/content?section=ads`, { waitUntil: "networkidle" });
+  await check("H2", "The cookbook editor opens from a built-in's steps, and a changed instruction saves as the person's copy", async () => {
+    // The factory line is the Factory Line tab of the Research-led runs section of the Batch section.
+    await page.getByRole("tab", { name: "Research-led runs (advanced)" }).click();
+    await page.getByRole("tab", { name: "Factory Line", exact: true }).click();
+    const showSteps = page.getByRole("button", { name: "Show steps" }).first();
+    await showSteps.waitFor({ timeout: 30000 }).catch(async (error) => {
+      await page.screenshot({ path: join(out, "cookbook-editor-missing.png"), fullPage: true });
+      throw new Error(`${error.message.split("\n")[0]} at ${page.url()}: ${(await page.locator("main").innerText()).replace(/\s+/g, " ").slice(0, 300)}`);
+    });
+    await showSteps.click();
+    await page.getByRole("region", { name: /Steps of/ }).waitFor({ timeout: 30000 });
+    await page.getByRole("button", { name: /^Edit( a copy)?$/ }).first().click();
+    const form = page.getByRole("form", { name: /^Edit / });
+    await form.waitFor({ timeout: 30000 });
+    // The steps section (K20d): each step has a name field, so the form shows the steps as well as the instructions.
+    await form.getByRole("textbox", { name: "Step name" }).first().waitFor({ timeout: 30000 });
+    // A blank instruction is refused next to its field (K20e), then the valid text is entered and saved.
+    await form.locator("textarea").first().fill("   ");
+    await form.getByText(/cannot be empty/).first().waitFor({ timeout: 30000 });
+    await form.locator("textarea").first().fill("Acceptance edit: open on a number that counts up.");
+    await form.getByRole("button", { name: "Save as my copy" }).click();
+    await page.getByText("Saved as your copy.").waitFor({ timeout: 30000 });
+  });
+
+  await check("H3", "Cyclone is set by the deployment: its tab is read-only, names the environment variables, and offers no gateway field", async () => {
+    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+    // The provider settings sit in a section that is closed by default: open it, then the Cyclone tab.
+    await page.locator("summary", { hasText: "Engine and provider settings" }).click();
+    await page.getByRole("button", { name: /^cyclone/ }).click();
+    const text = await page.locator("main").innerText();
+    assert.match(text, /set by the deployment's environment/);
+    assert.match(text, /CYCLONE_GATEWAY_URL/);
+    assert.equal(await page.getByLabel("Cyclone Gateway URL").count(), 0, "a workspace gateway field is not offered");
+  });
+
   await check("G17", "style presets: the library can be browsed, Auto explains its choice, the Super preset gives each video a different style, and the choice is recorded in the export", async () => {
     await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
     const form = page.getByRole("form", { name: "Create video variations" });
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await form.getByText("Browse the style library").click();
-    for (const label of ["Product promo", "Explainer", "Talking head", "Cinematic story", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
+    // Only the styles some cookbook carries are offered: the library lists those (Cinematic story has no cookbook yet).
+    for (const label of ["Product promo", "Explainer", "Talking head", "UGC style", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
     // Auto reads the research structure that repeats most (problem solution, in the seeded patterns) and says why.
-    await form.getByLabel("Video style").selectOption({ value: "auto" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "auto" });
     await form.getByText(/Auto picked Explainer because "problem solution"/).waitFor();
     // The Super preset: one different style per video.
-    await form.getByLabel("Video style").selectOption({ value: "super" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "super" });
     await form.getByLabel("Number of videos").fill("3");
     await form.getByLabel("Total batch budget (USD)").fill("7");
     await form.getByLabel("Sample of the first video").waitFor();
@@ -571,7 +629,7 @@ try {
     const form = page.getByRole("form", { name: "Create video variations" });
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
-    await form.getByLabel("Video style").selectOption({ value: "orchestrator" });
+    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "orchestrator" });
     await form.getByText(/makes one paid model call/).waitFor();
     await form.getByLabel("Number of videos").fill("2");
     await form.getByLabel("Total batch budget (USD)").fill("3.5");

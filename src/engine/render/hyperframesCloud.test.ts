@@ -9,7 +9,7 @@ import { describe, it } from "node:test";
 import { EngineError, renderedVideoSchema, type GateResult } from "../contracts/index.ts";
 import { edlFixture, FIXTURE_IDS, scenePlanFixture, styleKitFixture, WORKSPACE_ID } from "../contracts/fixtures/index.ts";
 import { memoryLedgerStore, type LedgerStore } from "../budget/store.ts";
-import { reserve } from "../budget/reserve.ts";
+import { authorizeCall, reserve } from "../budget/reserve.ts";
 import { compile } from "../compose/compiler.ts";
 import {
   createHyperframesCloudAdapter,
@@ -37,7 +37,7 @@ import {
   uploadStart,
   VIDEO_BYTES,
   VIDEO_URL,
-} from "./recorded.ts";
+} from "./test/hyperframes-recorded.ts";
 
 const FAKE_KEY = "test-key-not-a-real-credential";
 const text = (value: string) => new TextEncoder().encode(value);
@@ -407,16 +407,26 @@ describe("renderComposition: budget, idempotency, integrity", () => {
     assert.equal((await ledger.listEntries(reservationId)).length, 1, "the ledger keeps one entry for the key");
   });
 
-  it("makes no request and writes no entry when the budget refuses the render", async () => {
+  it("makes no request and writes no entry when the budget line refuses the render", async () => {
     const { ledger, reservationId } = await reservedLedger(0.001);
-    assert.equal((await ledger.getReservation(reservationId))?.state, "paused");
+    // A paid call that fills the 0.001 USD line exactly: the render starts at the line, so the budget refuses it (D12, D17).
+    const earlier = await authorizeCall(ledger, {
+      reservationId,
+      stage: "produce_shot",
+      provider: "openrouter",
+      model: "fixture-model",
+      estimateUsd: 0.001,
+      idempotencyKey: "earlier-call-at-the-line",
+      at: "2026-10-13T09:00:30.000Z",
+    });
+    assert.equal(earlier.status, "authorized", "the earlier call's hold fits the 0.001 USD line exactly, so it starts");
     const { transport, seen } = scripted([]);
     await assert.rejects(
       renderComposition(renderRequest(reservationId), deps(transport, ledger)),
       (error: unknown) => error instanceof EngineError && error.kind === "conflict" && /refused by the budget/.test(error.message),
     );
     assert.equal(seen.length, 0);
-    assert.equal((await ledger.listEntries(reservationId)).length, 0);
+    assert.equal((await ledger.listEntries(reservationId)).length, 1, "only the earlier call is recorded");
   });
 
   it("makes no request and writes no entry when no key is available", async () => {

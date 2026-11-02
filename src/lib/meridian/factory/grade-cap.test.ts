@@ -1,9 +1,9 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DecisionRequest, DecisionResult, DecisionUsage } from "../decisions/types.ts";
 import type { Sql } from "../learning/store.ts";
-import { FixtureDecisionEngine } from "../testing/decision-fixtures.ts";
+import { FixtureDecisionEngine } from "../../../test-support/lib/meridian/testing/decision-fixtures.ts";
 import {
   FACTORY_TEST_BRAND,
   FACTORY_TEST_ORG,
@@ -13,7 +13,7 @@ import {
   makeFactoryTestSql,
   seedFactoryRun,
   seedJobRow,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { CREATIVE_DNA_VERSION, dnaField, emptyCreativeDna, type AdFormat } from "./creative-dna.ts";
 import { cappedGradeReason } from "./grade.ts";
 import { TOKEN_PRICES } from "./price-table.ts";
@@ -68,6 +68,7 @@ async function setBrandCaps(sql: Sql, caps: { dailyCents: number; totalCents: nu
   await sql`
     insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
     values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, ${caps.dailyCents}, ${caps.totalCents}, 'user-1')
+    on conflict (organization_id, brand_id) do update set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents
   `;
 }
 
@@ -163,7 +164,7 @@ test("a total cap reached during the stage refuses the next ad's engine call, re
   const perAd = await engineCallsForOneAd();
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: OPENAI_RUN, level: 0 });
-  await setBrandCaps(sql, { dailyCents: 0, totalCents: 10 });
+  await setBrandCaps(sql, { dailyCents: 100000, totalCents: 10 });
   await seedAds(sql, ["ad-1", "ad-2"]);
   const engine = engineWith(TEN_CENTS_PER_CALL);
 
@@ -183,7 +184,7 @@ test("a daily cap reached during the stage refuses the next ad's engine call the
   const perAd = await engineCallsForOneAd();
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: OPENAI_RUN, level: 0 });
-  await setBrandCaps(sql, { dailyCents: 10, totalCents: 0 });
+  await setBrandCaps(sql, { dailyCents: 10, totalCents: 1000000 });
   await seedAds(sql, ["ad-1", "ad-2"]);
   const engine = engineWith(TEN_CENTS_PER_CALL);
 
@@ -215,7 +216,7 @@ test("a kill switch engaged during the stage refuses the next ad's engine call",
 test("a cap already reached when the stage starts refuses every ad's call: no call is made, each ad records the reason, and the run pauses", async () => {
   const sql = await makeFactoryTestSql();
   await seedFactoryRun(sql, { settings: OPENAI_RUN, level: 0 });
-  await setBrandCaps(sql, { dailyCents: 0, totalCents: 10 });
+  await setBrandCaps(sql, { dailyCents: 100000, totalCents: 10 });
   await seedAds(sql, ["ad-1", "ad-2"]);
   // Ten cents were already spent on this run. Grade is not a spend stage, so the stage starts and each ad's call is checked.
   await sql`
@@ -244,7 +245,7 @@ test("a capped ad keeps the engine grade an earlier run stored, and makes no cal
   assert.deepEqual(before.map((row) => row.jev_status), ["engine", "engine"]);
   // The grade of ad-1 was made under other question versions, so it is not reused and the ad needs a call.
   await sql`update ad_timelines set jev_question_versions = '["stale@0"]' where research_ad_id = 'ad-1'`;
-  await setBrandCaps(sql, { dailyCents: 0, totalCents: 10 });
+  await setBrandCaps(sql, { dailyCents: 100000, totalCents: 10 });
   const engine = engineWith(TEN_CENTS_PER_CALL);
 
   assert.equal(await runGrade(sql, engine), "stopped:factory.grade");

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"title","type":"string","label":"Title","default":"Data"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":2400,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="panel.bars" data-width="1080" data-height="1920">
+  <div class="pb-panel">
+    <div class="pb-title"></div>
+    <div class="pb-plot"></div>
+  </div>
+  <style>
+    .pb-panel {
+      position: absolute;
+      left: 10%;
+      width: 80%;
+      top: 36%;
+      padding: 36px 40px 32px;
+      border-radius: 24px;
+      background: var(--kit-background);
+      border: 2px solid var(--kit-primary);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+    }
+    .pb-title {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 48px;
+      color: var(--kit-text);
+      margin-bottom: 28px;
+    }
+    .pb-plot {
+      display: flex;
+      align-items: flex-end;
+      gap: 18px;
+      height: 520px;
+    }
+    .pb-col {
+      flex: 1 1 0;
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .pb-value {
+      font-family: var(--kit-font-body), sans-serif;
+      font-weight: 700;
+      font-size: 30px;
+      color: var(--kit-text);
+      margin-bottom: 8px;
+      white-space: nowrap;
+      opacity: 0;
+    }
+    .pb-bar {
+      width: 100%;
+      background: var(--kit-accent);
+      border-radius: 10px 10px 0 0;
+      transform: scaleY(0);
+      transform-origin: bottom center;
+    }
+    .pb-label {
+      margin-top: 12px;
+      max-width: 100%;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 26px;
+      color: var(--kit-secondary);
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var panel = document.querySelector(".pb-panel");
+      var titleEl = document.querySelector(".pb-title");
+      var plot = document.querySelector(".pb-plot");
+      var seconds = vars.durationMs / 1000;
+      titleEl.textContent = String(vars.title || "");
+      var bars = Array.isArray(vars.bars) ? vars.bars : [];
+      // The scale is the largest value; a panel of zeros uses a scale of one, so no bar divides by zero.
+      var max = 0;
+      bars.forEach(function (bar) {
+        if (bar.value > max) max = bar.value;
+      });
+      if (!(max > 0)) max = 1;
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(panel, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, 0);
+      bars.forEach(function (bar, index) {
+        var col = document.createElement("div");
+        col.className = "pb-col";
+        var value = document.createElement("div");
+        value.className = "pb-value";
+        value.textContent = String(Math.round(bar.value * 10) / 10);
+        var barEl = document.createElement("div");
+        barEl.className = "pb-bar";
+        barEl.style.background = accent;
+        barEl.style.height = Math.round((bar.value / max) * 400) + "px";
+        var label = document.createElement("div");
+        label.className = "pb-label";
+        label.textContent = String(bar.label);
+        col.appendChild(value);
+        col.appendChild(barEl);
+        col.appendChild(label);
+        plot.appendChild(col);
+        var start = 0.3 + index * 0.08;
+        tl.fromTo(barEl, { scaleY: 0 }, { scaleY: 1, duration: 0.6, ease: "power2.out" }, start);
+        tl.fromTo(value, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, start + 0.5);
+      });
+      tl.set({}, {}, seconds);
+      window.__timelines["panel.bars"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { studioTenant, PNG_BASE64 } from "../testing/durable-image-fixtures.ts";
+import { studioTenant, PNG_BASE64 } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { FRAME_SELECTION_VERSION } from "../decisions/frames.ts";
 import { sampleTimestamps, type FrameExtractor } from "../video/sample-frames.ts";
 import { solidFrame } from "../video/inspect.ts";

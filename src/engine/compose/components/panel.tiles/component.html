@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html data-composition-variables='[{"id":"title","type":"string","label":"Title","default":"Data"},{"id":"durationMs","type":"number","label":"Duration (ms)","default":2200,"min":1,"max":60000,"step":1,"unit":"ms"}]'>
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+</head>
+<body>
+<div data-composition-id="panel.tiles" data-width="1080" data-height="1920">
+  <div class="pt-panel">
+    <div class="pt-title"></div>
+    <div class="pt-grid"></div>
+  </div>
+  <style>
+    .pt-panel {
+      position: absolute;
+      left: 10%;
+      width: 80%;
+      top: 36%;
+      padding: 36px 40px 40px;
+      border-radius: 24px;
+      background: var(--kit-background);
+      border: 2px solid var(--kit-primary);
+      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+      opacity: 0;
+    }
+    .pt-title {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 48px;
+      color: var(--kit-text);
+      margin-bottom: 28px;
+    }
+    .pt-grid {
+      display: grid;
+      gap: 20px;
+    }
+    .pt-tile {
+      padding: 26px 24px;
+      border-radius: 18px;
+      background: rgba(0, 0, 0, 0.25);
+      border: 2px solid var(--kit-primary);
+      text-align: center;
+      opacity: 0;
+    }
+    .pt-value {
+      font-family: var(--kit-font-display), sans-serif;
+      font-weight: 800;
+      font-size: 72px;
+      line-height: 1.05;
+      color: var(--kit-text);
+      white-space: nowrap;
+    }
+    .pt-label {
+      margin-top: 10px;
+      font-family: var(--kit-font-body), sans-serif;
+      font-size: 28px;
+      color: var(--kit-secondary);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  </style>
+  <script>
+    (function () {
+      var vars = window.__hyperframes.getVariables();
+      var kit = getComputedStyle(document.documentElement);
+      var accent = kit.getPropertyValue("--kit-accent").trim();
+      var panel = document.querySelector(".pt-panel");
+      var titleEl = document.querySelector(".pt-title");
+      var grid = document.querySelector(".pt-grid");
+      var seconds = vars.durationMs / 1000;
+      titleEl.textContent = String(vars.title || "");
+      var tiles = Array.isArray(vars.tiles) ? vars.tiles : [];
+      // One column for a single tile, two for two to four tiles, three for five or six, so the grid stays full at each count.
+      var columns = tiles.length <= 1 ? 1 : tiles.length <= 4 ? 2 : 3;
+      grid.style.gridTemplateColumns = "repeat(" + columns + ", minmax(0, 1fr))";
+      var tl = gsap.timeline({ paused: true });
+      tl.fromTo(panel, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, 0);
+      tiles.forEach(function (tile, index) {
+        var box = document.createElement("div");
+        box.className = "pt-tile";
+        var value = document.createElement("div");
+        value.className = "pt-value";
+        value.style.color = accent;
+        value.textContent = String(tile.value);
+        var label = document.createElement("div");
+        label.className = "pt-label";
+        label.textContent = String(tile.label);
+        box.appendChild(value);
+        box.appendChild(label);
+        grid.appendChild(box);
+        var start = 0.3 + index * 0.12;
+        tl.fromTo(box, { opacity: 0, scale: 0.92 }, { opacity: 1, scale: 1, duration: 0.45, ease: "back.out(1.4)" }, start);
+      });
+      tl.set({}, {}, seconds);
+      window.__timelines["panel.tiles"] = tl;
+    })();
+  </script>
+</div>
+</body>
+</html>

@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { seedOpportunity } from "../testing/opportunity-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { seedOpportunity } from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { MIN_DIRECTION_REASON_LENGTH } from "../studio/brief-service.contract.ts";
 
 enableAppAliases();

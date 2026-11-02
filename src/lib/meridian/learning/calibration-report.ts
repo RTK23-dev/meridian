@@ -31,6 +31,9 @@ export type CalibrationBin = {
   observedRate: number | null;
 };
 
+/** One filled bin of the reliability curve: the mean stated score in the bin and the rate of approvals in it. */
+export type ReliabilityPoint = { predicted: number; observed: number; count: number };
+
 const BIN_COUNT = 5;
 
 type CalibrationReportBase = {
@@ -56,6 +59,7 @@ export type CalibrationReportState =
       brierScore: number;
       calibrationError: number;
       bins: CalibrationBin[];
+      reliability: ReliabilityPoint[];
       note: string;
     });
 
@@ -137,6 +141,11 @@ export function buildCalibrationReport(
     brierScore,
     calibrationError,
     bins,
+    reliability: bins.flatMap((bin) =>
+      bin.count > 0 && bin.meanPredicted !== null && bin.observedRate !== null
+        ? [{ predicted: bin.meanPredicted, observed: bin.observedRate, count: bin.count }]
+        : [],
+    ),
     note: `Measured on ${n} recorded outcomes. These are stated scores compared with outcomes. They are not applied to any threshold or decision.`,
   };
 }

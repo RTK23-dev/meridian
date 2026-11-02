@@ -3,6 +3,7 @@ import { isCapabilityDisabledError } from "../providers/capability.ts";
 import type { Transport } from "../providers/http.ts";
 import { inspectVideo } from "../video/inspect.ts";
 import type { HypitJobContract } from "./contract.ts";
+import { hypitBaseUrlSetting } from "../config/server-settings.ts";
 
 /**
  * Talks to a separately deployed Hypit process.
@@ -37,7 +38,7 @@ const STATUSES = new Set<HypitRemoteStatus>(["queued", "running", "succeeded", "
  * resolved it through the credential resolver, so this function never reads a token from the environment.
  */
 export function hypitConnection(env: { baseUrl?: string; token?: string | null } = {}): HypitConnection {
-  const raw = (env.baseUrl ?? process.env.HYPIT_BASE_URL ?? "").trim();
+  const raw = (env.baseUrl ?? hypitBaseUrlSetting() ?? "").trim();
   if (!raw) {
     return {
       status: "EXTERNAL_CONNECTION_REQUIRED",

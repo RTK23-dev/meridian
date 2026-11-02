@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createHash, randomUUID } from "node:crypto";
 import { getSql } from "../../../db.ts";
-import { createTenantFixture } from "../../testing/production-fixtures.ts";
-import { studioTenant } from "../../testing/durable-image-fixtures.ts";
+import { createTenantFixture } from "../../../../test-support/lib/meridian/testing/production-fixtures.ts";
+import { studioTenant } from "../../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { storeVaultCredential } from "../../vault/service.ts";
 import {
   GeminiOmniVideoProvider,

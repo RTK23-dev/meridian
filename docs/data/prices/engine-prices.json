@@ -1,0 +1,130 @@
+{
+  "version": "prices@2",
+  "entries": {
+    "kling_v3_standard": {
+      "unit": "per_second",
+      "usd": 0.126,
+      "source": "list_oct_2026"
+    },
+    "seedance_2_5": {
+      "unit": "per_second",
+      "usd": 0.1028,
+      "source": "list_oct_2026"
+    },
+    "seedance_2_0_mini": {
+      "unit": "per_second",
+      "usd": 0.0336,
+      "source": "list_oct_2026"
+    },
+    "wan_3_0": {
+      "unit": "per_second",
+      "usd": 0.2,
+      "source": "openrouter_listing"
+    },
+    "wan_2_6": {
+      "unit": "per_second",
+      "usd": 0.15,
+      "source": "openrouter_listing"
+    },
+    "i2v_pinned_model": {
+      "unit": "per_model",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "heygen_avatar_iv": {
+      "unit": "per_second",
+      "usd": 0.05,
+      "source": "list_oct_2026"
+    },
+    "seedream_5_flash": {
+      "unit": "per_image",
+      "usd": 0.018,
+      "source": "list_oct_2026"
+    },
+    "seedream_4_5": {
+      "unit": "per_image",
+      "usd": 0.04,
+      "source": "list_oct_2026"
+    },
+    "nano_banana_2": {
+      "unit": "per_token",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "gpt_image_2": {
+      "unit": "per_token",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "eleven_v4": {
+      "unit": "per_million_characters",
+      "usd": 40,
+      "source": "list_oct_2026"
+    },
+    "gemini_3_8_flash_tts": {
+      "unit": "per_million_output_tokens",
+      "usd": 9,
+      "source": "openrouter_listing"
+    },
+    "deepgram_nova3_prerecorded": {
+      "unit": "per_minute",
+      "usd": 0.0043,
+      "source": "third_party_unverified"
+    },
+    "stt_vendor": {
+      "unit": "per_minute",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "lipsync_vendor": {
+      "unit": "per_call",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "background_removal_vendor": {
+      "unit": "per_call",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "upscaling_vendor": {
+      "unit": "per_call",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "pexels": {
+      "unit": "per_call",
+      "usd": 0,
+      "source": "list_oct_2026"
+    },
+    "pixabay": {
+      "unit": "per_call",
+      "usd": 0,
+      "source": "list_oct_2026"
+    },
+    "code_component": {
+      "unit": "per_call",
+      "usd": 0,
+      "source": "list_oct_2026"
+    },
+    "existing_asset": {
+      "unit": "per_call",
+      "usd": 0,
+      "source": "list_oct_2026"
+    },
+    "render_hyperframes_cloud": {
+      "unit": "per_minute",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "render_remotion_lambda": {
+      "unit": "per_minute",
+      "usd": null,
+      "source": "list_oct_2026"
+    },
+    "render_shotstack": {
+      "unit": "per_minute",
+      "usd": 0.2,
+      "source": "list_oct_2026"
+    }
+  }
+}

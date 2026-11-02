@@ -57,7 +57,7 @@ export const SEED_PRIORS = {
   },
   speechProsodyWpm: {
     sweetSpotMin: seedPrior(140, "Initial heuristic lower bound for short-form speech pace"),
-    sweetSpotMax: seedPrior(185, "Initial heuristic upper bound for short-form speech pace"),
+    sweetSpotMax: seedPrior(180, "Initial heuristic upper bound for short-form speech pace"),
   },
   nicheBaselineViews: {
     dtcBeauty: seedPrior(15000, "Initial niche median views estimate"),

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CreativeDecisionEngine } from "./engine.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 
 const brief = {
   title: "Sleep Calm Gummies",

@@ -10,7 +10,8 @@ export interface DiscoveredAudioTrend {
   isTrending: boolean;
   reelCount?: number;
   originalCreatorHandle?: string;
-  firstSeenAt: string;
+  /** When the screen showing the sound was observed. Absent when the gateway sent no observation time. */
+  firstSeenAt?: string;
 }
 
 export interface DiscoveredReelItem {

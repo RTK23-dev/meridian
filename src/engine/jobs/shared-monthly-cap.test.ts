@@ -82,15 +82,17 @@ function textHold(usd: number, label: string): Promise<{ status: "held"; id: str
   return reserveGenerationCall(db.sql, input, usd);
 }
 
-test("a text hold counts against the month, so a video reservation that would pass the cap alone is paused", async () => {
+test("a text hold counts against the month: a video reservation is never paused at creation (D12), and the text call after it is refused (D17)", async () => {
   await db.sql`delete from model_runs where organization_id = ${ORG}`;
   await db.sql`delete from engine_reservations where organization_id = ${ORG}`;
   const held = await textHold(0.05, "first");
   assert.equal(held.status, "held");
 
   const video = await reserveVideo();
-  assert.equal(video.reservation.state, "paused", "0.05 of text plus 0.9595 of video is over the $1 cap");
-  assert.ok(video.alerts.some((alert) => alert.scope === "workspace_month"), "the alert names the workspace month");
+  assert.equal(video.reservation.state, "reserved", "a budget is a line: a reservation is never paused at creation (D12)");
+  const after = await textHold(0.01, "after");
+  assert.equal(after.status, "refused", "the month's held spend is past the cap, so a further paid text call does not start (D17)");
+  if (after.status === "refused") assert.match(after.reason, /monthly budget/);
 });
 
 test("a video reservation counts against the month, so a text hold that would pass the cap alone is refused, and the exact fit is held", async () => {
@@ -143,19 +145,14 @@ test("a released hold stops counting for the video engine as well as for text", 
   assert.equal((await sqlLedgerStore(db.sql, ORG).sumForMonth(ORG, month)).reservedUsd, 0, "a released hold does not count");
 });
 
-test("concurrent text holds and video reservations never commit more than the cap between them", async () => {
+test("concurrent paid text calls start only while the month fits: at most the calls that fit under the cap start (D17)", async () => {
   await db.sql`delete from model_runs where organization_id = ${ORG}`;
   await db.sql`delete from engine_reservations where organization_id = ${ORG}`;
-  const textAttempts = Array.from({ length: 6 }, (_, index) => textHold(0.02, `race-${index}`));
-  const videoAttempts = Array.from({ length: 3 }, () => reserveVideo());
-  const [texts, videos] = await Promise.all([Promise.all(textAttempts), Promise.all(videoAttempts)]);
-
-  const heldText = texts.filter((result) => result.status === "held").length;
-  const reservedVideo = videos.filter((result) => result.reservation.state === "reserved").length;
-  const committed = heldText * 0.02 + reservedVideo * VIDEO_RESERVED;
-  assert.ok(committed <= CAP + 1e-9, `committed ${committed} must not exceed the cap ${CAP}`);
-  assert.ok(reservedVideo <= 1, "one video reservation at most fits beside the rest");
-  // With the video reservation accepted, two text holds at most fit beside it. With it paused, text may fill the rest of the month.
-  if (reservedVideo === 1) assert.ok(heldText <= 2, "two text holds at most fit beside an accepted video reservation");
-  assert.ok(Math.abs((await monthlyHeldUsd(db.sql, ORG)) - committed) < 1e-9, "the stored spend is exactly what was accepted");
+  const attempts = Array.from({ length: 6 }, (_, index) => textHold(0.3, `race-${index}`));
+  const texts = await Promise.all(attempts);
+  const started = texts.filter((result) => result.status === "held").length;
+  assert.equal(started, 3, "three holds of $0.30 fit a $1 cap; the fourth would take the month past it");
+  const held = await monthlyHeldUsd(db.sql, ORG);
+  assert.ok(held <= CAP + 1e-9, `the held spend ${held} must not exceed the cap ${CAP}`);
+  assert.ok(Math.abs(held - 0.9) < 1e-9, "the stored spend is exactly what started");
 });

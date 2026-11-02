@@ -4,9 +4,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { recordedDecisionCatalogSource } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
 import { OPENROUTER_DECISIONS_EXAMPLE_MODEL, OpenRouterDecisionsEngine, type OpenRouterCheckStore, type OpenRouterKeySource } from "./openrouter-engine.ts";
 import type { OpenRouterCheckRecord } from "./openrouter-settings.ts";
+import { recordedDecisionCap } from "../../../test-support/lib/meridian/testing/decision-cap.ts";
 
 const ORG = "org_readiness_stale";
 const CURRENT_FINGERPRINT = "sk-or-…new1";
@@ -47,7 +48,7 @@ function check(overrides: Partial<OpenRouterCheckRecord>): OpenRouterCheckRecord
 }
 
 function engine(keys: OpenRouterKeySource, checks: OpenRouterCheckStore) {
-  return new OpenRouterDecisionsEngine({
+  return new OpenRouterDecisionsEngine({ maxUsdPerCall: recordedDecisionCap,
     keys,
     store: checks,
     deploymentModel: undefined,

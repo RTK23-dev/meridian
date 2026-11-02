@@ -11,6 +11,9 @@
 //   the durable poll (engine.asset_poll, asset-poll.ts) settles it when the provider has finished, and stores the step's output so the next
 //   run of the plan reuses it. A video step names its model class in params.model_class (planner prompt v2 asks for it). An avatar step
 //   reads its presenter image (a visual step) and its voice steps. Without a durable poll connected, neither step is connected.
+//   A queued job keeps its hold until the poll settles it (D14): a step with a job still waiting for its cache key reports queued and submits
+//   nothing. A job the poll closed as failed is refused, not submitted again: its hold is already counted (D14). A step with no engine price
+//   runs only in measure mode (D15), held to the ceiling times its length; otherwise it is refused.
 //
 // Not connected, and so reported as not_connected by the executor because they have no handler: edit, compose and render. The engine's
 // edit and render stages run inside a production request, on its artifacts (EDL, voice timings, kit inputs). A plan step carries none of
@@ -24,11 +27,14 @@ import { contentHash } from "../contracts/hash.ts";
 import type { ResolvedRoute } from "../gateway/gateway.ts";
 import type { ChatMessage } from "../gateway/openrouter.ts";
 import { paidCall, type LockableLedger } from "../gateway/paid.ts";
+import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { NodeKind, PlanNode } from "./contracts.ts";
-import { CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
+import { BilledStopError, CallRefusedError, NotConnectedError, StepQueuedError, type Handlers, type NodeHandler, type NodeOutput } from "./execute.ts";
 import { assetSpecSchema, MODEL_CHOICE_REASON_MAX, type AssetSpec, type ModelChoice } from "../contracts/assets.ts";
 import type { AsyncAssetRouter, ProduceInput, ProduceOutcome } from "../assets/router.ts";
 import type { AssetJob } from "../assets/job.ts";
+import { jobStatusOf, openQueuedJob } from "./holds.ts";
+import { holdUsdOf, type MeasureOptions } from "./measure.ts";
 
 export const ANALYSIS_MAX_TOKENS = 1200;
 export const SCRIPT_MAX_TOKENS = 2000;
@@ -90,6 +96,13 @@ export type ProductionDeps = {
    * are not connected, so nothing is submitted that no poll would ever collect.
    */
   queueAsset?: (entry: QueuedAsset) => Promise<void>;
+  /**
+   * The database the run's queued jobs are kept in (orchestrator_asset_jobs). A video or avatar step with a job still waiting for its cache
+   * key reports queued and submits nothing (D14). Absent: that guard is off, and a repeat submit is answered by the router as a duplicate.
+   */
+  sql?: Sql;
+  /** Measure mode (D15): a video or avatar step with no engine price may run, held to the ceiling times its length. Absent or null: off. */
+  measure?: MeasureOptions | null;
   /** The time the orchestrating catalog was read (ISO). The model choice of an asset step carries it. */
   catalogReadAt: string;
 };
@@ -103,6 +116,10 @@ export type QueuedAsset = {
   input: ProduceInput;
   job: AssetJob;
   runAfterMs: number;
+  /** The hold of this submit (D14): the engine's estimate, or in measure mode the ceiling times the length. It counts until the poll settles it. */
+  hold: number;
+  /** The clip's length in seconds when the step names a positive one, or null. A settled clip with a reported bill is measured by it. */
+  seconds: number | null;
 };
 
 type TextStepSpec<T> = {
@@ -342,6 +359,14 @@ function assetSpecFor(
   }
 }
 
+/**
+ * The error a stopped outcome throws. An outcome that follows a bill (billedUsd above zero) carries it on a BilledStopError, so the executor
+ * charges the bill (D12, D14): a bill is never dropped. Without a bill it is the error the outcome always threw.
+ */
+function stoppedWith(error: Error, billedUsd: number | undefined): Error {
+  return billedUsd === undefined || billedUsd === 0 ? error : new BilledStopError(error.message, billedUsd);
+}
+
 /** What one router outcome means for a step: the asset's uri is the output; every other outcome stops the step with its reason. */
 export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
   switch (outcome.status) {
@@ -350,23 +375,33 @@ export function outputOf(outcome: ProduceOutcome, kind: AssetKind): NodeOutput {
     case "not_connected":
       throw new NotConnectedError(outcome.reasons.join("; ") || `no ${kind} provider is connected`);
     case "refused":
-      throw new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`);
+      throw stoppedWith(new CallRefusedError(`the budget refused this ${kind}, so it was not made: ${outcome.reasons.join("; ")}`), outcome.billedUsd);
     case "duplicate":
-      throw new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`);
+      throw stoppedWith(
+        new CallRefusedError(`this ${kind} was already made and its answer was not stored, so it is not paid again; edit the step to run it again`),
+        outcome.billedUsd,
+      );
     case "queued":
-      throw new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`);
+      throw stoppedWith(new CallRefusedError(`this ${kind} waits for a free slot and was not sent; run the plan again`), outcome.billedUsd);
     case "failed":
-      throw new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300));
+      throw stoppedWith(new Error(`the ${kind} provider refused the request: ${outcome.error.kind}`.slice(0, 300)), outcome.billedUsd);
     case "unsettled":
-      throw new Error(`the ${kind} submit is unsettled at its provider (${outcome.reason}); an operator settles it before the step runs again`.slice(0, 300));
+      throw stoppedWith(
+        new Error(`the ${kind} submit is unsettled at its provider (${outcome.reason}); an operator settles it before the step runs again`.slice(0, 300)),
+        outcome.billedUsd,
+      );
     case "unavailable":
-      throw new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300));
+      throw stoppedWith(new Error(`no ${kind} target produced an asset: ${outcome.reasons.join("; ")}`.slice(0, 300)), outcome.billedUsd);
     default:
       throw new Error(`the ${kind} asset's outcome is not known yet, so the step does not count it: ${(outcome as { status: string }).status}`.slice(0, 300));
   }
 }
 
-function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voiceId: string | null): ProduceInput {
+/**
+ * The router's input for a step. A measured clip names its measure hold, so the ledger holds the money the plan holds (D15); a priced step
+ * names none.
+ */
+function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voiceId: string | null, measureHoldUsd: number | null): ProduceInput {
   return {
     spec,
     workspaceId: deps.organizationId,
@@ -375,6 +410,7 @@ function routedInput(deps: ProductionDeps, spec: AssetSpec, kind: AssetKind, voi
     stage: `orchestrator_${kind}`,
     voiceId,
     voiceProvider: null,
+    ...(measureHoldUsd === null ? {} : { measureHoldUsd }),
   };
 }
 
@@ -386,7 +422,7 @@ function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler 
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
     const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
     const voiceId = kind === "voice" ? requireText(node, "voice") : null;
-    const report = await router.produce(routedInput(deps, spec, kind, voiceId));
+    const report = await router.produce(routedInput(deps, spec, kind, voiceId, null));
     return outputOf(report.outcome, kind);
   };
 }
@@ -395,6 +431,11 @@ function assetStep(deps: ProductionDeps, kind: "visual" | "voice"): NodeHandler 
  * A video or avatar step. The provider takes the job and makes it later, so the router only submits: an accepted job is queued, and the
  * durable poller (engine.asset_poll) settles it. A later run of the plan finds the stored output. Anything that is not a queued job is
  * an outcome, handled as the inline steps handle theirs.
+ *
+ * The money of the step (D14, D15). A job already waiting for this cache key has its hold counted, so the step reports queued and nothing
+ * is submitted. A job the poll closed as failed has its hold counted as a failed hold, so it is not submitted again either: the step is
+ * refused, and it runs again only once it is edited. Otherwise the step must have a hold: its engine estimate, or in measure mode its ceiling
+ * times its length. A step with no hold does not run. The accepted job is queued with its hold, which the poll keeps counted until it settles it.
  */
 function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHandler {
   return async ({ node, key, upstream, upstreamKinds }): Promise<NodeOutput> => {
@@ -403,15 +444,31 @@ function queuedAssetStep(deps: ProductionDeps, kind: "video" | "avatar"): NodeHa
     const queue = deps.queueAsset;
     if (queue === undefined) throw new NotConnectedError("no durable poll is connected for queued assets, so nothing is submitted");
     if (node.model === null) throw new CallRefusedError(`the ${kind} step names no model, so no asset is made`);
+    if (deps.sql !== undefined && (await openQueuedJob(deps.sql, deps.organizationId, deps.planId, key))) {
+      throw new StepQueuedError(`the ${kind} is still queued at its provider. Its hold is already counted, so nothing is submitted; run the plan again once its poll has settled it.`);
+    }
+    if (deps.sql !== undefined && (await jobStatusOf(deps.sql, deps.organizationId, deps.planId, key)) === "failed") {
+      throw new CallRefusedError("this job failed earlier and its hold is already counted, so it is not paid again; edit the step to run it again");
+    }
+    const hold = holdUsdOf(node, deps.measure ?? null);
+    if (hold === null) throw new CallRefusedError(`the ${kind} step has no price and measure mode is off, so nothing is submitted`);
     const spec = assetSpecFor(deps, node, key, kind, upstream, upstreamKinds);
-    const input = routedInput(deps, spec, kind, null);
+    // A measured clip has no engine estimate, so its hold is the measure hold, and the router's ledger holds that same amount (D15).
+    const measureHoldUsd = node.estimateUsd === null ? hold : null;
+    const input = routedInput(deps, spec, kind, null, measureHoldUsd);
     const report = await router.submit(input);
     if (report.step.status === "submitted") {
-      await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs });
+      await queue({ planId: deps.planId, stepId: node.id, cacheKey: key, kind, input, job: report.step.job, runAfterMs: report.step.runAfterMs, hold, seconds: secondsOf(node) });
       throw new StepQueuedError(`the ${kind} is accepted by its provider and queued. Its poll is durable; run the plan again once it has finished to use it.`);
     }
     return outputOf(report.step, kind);
   };
+}
+
+/** A step's length in seconds when it names a positive one, or null. A queued clip keeps it, so a settled clip can be measured. */
+function secondsOf(node: PlanNode): number | null {
+  const seconds = node.params.seconds;
+  return typeof seconds === "number" && Number.isFinite(seconds) && seconds > 0 ? seconds : null;
 }
 
 /** A parameter the step must name as text, or a refusal that says which one is missing. */

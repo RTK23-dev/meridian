@@ -87,6 +87,8 @@ export function OpenRouterDecisionControls({
   const blockerText = `${testError?.message ?? ""} ${test?.message ?? ""}`;
   // The ledger refuses a call with this wording before it sends anything. Only claim it when the refusal says so.
   const { blocked: budgetBlocked, nothingSent } = budgetBlocker(blockerText);
+  // The decision cap has no default: an unset cap refuses the test before the budget is read, and it has its own way out.
+  const capBlocked = /decision cap/i.test(blockerText) && !budgetBlocked;
   const unchanged = draft.trim() === model.model;
   const savable = chosen !== null && !unchanged;
 
@@ -197,8 +199,14 @@ export function OpenRouterDecisionControls({
         {testError ? <PlainErrorMessage message={testError.message} raw={testError.raw} /> : null}
         {budgetBlocked ? (
           <p className="text-sm" role="status">
-            <Link to="/settings" hash="monthly-budget" className="font-semibold underline underline-offset-2">Set the monthly budget (USD)</Link>
+            <Link to="/billing" hash="monthly-budget" className="font-semibold underline underline-offset-2">Set the monthly budget (USD)</Link>
             , then test again.{nothingSent ? " The budget check ran before any request, so nothing was sent to OpenRouter and nothing was spent." : ""}
+          </p>
+        ) : null}
+        {capBlocked ? (
+          <p className="text-sm" role="status">
+            <Link to="/billing" className="font-semibold underline underline-offset-2">Set the decision cap per call on the billing page</Link>
+            , then test again. Nothing was sent to OpenRouter and nothing was spent.
           </p>
         ) : null}
         {test ? (

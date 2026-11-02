@@ -7,6 +7,7 @@
  * A database error is left as a database error. Only a full window throws RateLimitError.
  */
 import { consumeWindow, type WindowQuery } from "./shared-limit.ts";
+import { trustProxyHeaders } from "../config/server-settings.ts";
 
 export function createRateLimit(limit: number, windowMs: number) {
   const hits = new Map<string, number[]>();
@@ -136,7 +137,7 @@ export async function enforceNamedLimit(name: NamedLimit, key: string): Promise<
 export function clientKey(request: Request): string {
   // Forwarding headers are client-controlled unless the deployment explicitly declares a trusted proxy.
   // Do not let arbitrary callers rotate spoofed IPs to evade the process-local budget.
-  if (process.env.MERIDIAN_TRUST_PROXY_HEADERS !== "true") return "untrusted-client";
+  if (!trustProxyHeaders()) return "untrusted-client";
   const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
   if (forwarded && forwarded.length <= 80) return forwarded;
   const realIp = request.headers.get("x-real-ip")?.trim();
@@ -175,6 +176,6 @@ export async function attemptedAccount(request: Request): Promise<string | undef
  */
 export function authAttemptKey(request: Request, account: string | undefined): string {
   const route = new URL(request.url).pathname;
-  if (process.env.MERIDIAN_TRUST_PROXY_HEADERS === "true") return `${route}|client:${clientKey(request)}`;
+  if (trustProxyHeaders()) return `${route}|client:${clientKey(request)}`;
   return account ? `${route}|account:${account}` : `${route}|untrusted-client`;
 }

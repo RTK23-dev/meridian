@@ -12,7 +12,14 @@ redo, downgrade and escalate), **5.4** (tables, with `migrations/0077_engine_cor
 | `registry.ts` | The 14 stage specs and `engine.poll`: job type, group, timeout class, attempts, paid flag, artifact reads and writes, gate. Idempotency key builder. |
 | `settings.ts` | The values engine config does not hold yet: priority numbers, poll backoff, analysis retries (see STATUS.md). |
 | `types.ts` | Events, stage outputs, the job payload and its zod schema, handler and runtime types, `withTimeout`, the `not_implemented` error. |
-| `orchestrator.ts` | **Pure** core. `advance(state, event)` applies one event and returns the next state, the jobs now ready, and the effects to persist. No I/O, no clock. |
+| `orchestrator.ts` | **Pure** core. `advance(state, event)` applies one event and returns the next state, the jobs now ready, and the effects to persist. No I/O, no clock. It dispatches each event to the family modules below, and keeps the start and the control events (dead, resume, human choice). |
+| `orchestrator-state.ts` | The state shapes, the limits, and the checks and lookups more than one family uses. |
+| `orchestrator-single.ts` | The single-node results: intake, the script, the plan, the estimate, the gates and delivery. |
+| `orchestrator-shots.ts` | The shot results: produce, hold, the take check, the rounds and the shot escalations. |
+| `orchestrator-branch.ts` | The branch results: edit, compose, the pre-render and post-render reviews, and the revisions. |
+| `orchestrator-variants.ts` | The variant results: the variant runs, their produce and check, and the assembly. |
+| `orchestrator-remake.ts` | The remake events: a shot remade while it is still making, and a remake of a delivered request. |
+| `orchestrator-schedule.ts` | Scheduling: every node whose inputs are ready and not yet queued is queued after an event. |
 | `orchestrator-sql.ts` | The thin SQL layer. Starts a request, applies one event under a row lock, writes effects and state, inserts jobs on Meridian's `jobs` table, records dead engine jobs the engine never saw. |
 | `dispatch.ts` | `executeEngineJob(sql, job, runtime)`: what Meridian's worker runs for every `engine.*` job. Called from the one branch in `src/lib/meridian/jobs/execute.ts`. |
 | `poller.ts` | Asynchronous provider calls: store the external reference on a poll job, backoff, finish or fail the stage, time out. |

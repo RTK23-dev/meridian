@@ -14,6 +14,7 @@ const ENGINE_ID = /^[A-Za-z0-9_-]{1,100}$/;
 export type StageMetricsInput = { organizationId: string; since: string };
 export type DeadJobsInput = { requestId: string; limit: number };
 export type ReplayInput = { requestId: string; jobId: string };
+export type AlertsInput = { organizationId: string };
 
 function fields(input: unknown): Record<string, unknown> {
   return input && typeof input === "object" && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
@@ -34,6 +35,11 @@ function workspaceId(value: unknown): string {
   const id = text(value);
   if (!id || id.length > 100) throw new Error("Choose a workspace.");
   return id;
+}
+
+/** The alerts of one workspace. Only the workspace id is kept; any other field is dropped. */
+export function alertsInput(input: unknown): AlertsInput {
+  return { organizationId: workspaceId(fields(input).organizationId) };
 }
 
 /** The stage metrics of one workspace. A missing start time means the last seven days, measured from `now`. */

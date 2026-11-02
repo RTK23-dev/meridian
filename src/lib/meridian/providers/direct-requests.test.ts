@@ -62,7 +62,6 @@ const INVENTORY: Record<string, Entry> = {
   "src/lib/meridian/embeddings/external.ts": { kind: "paid", governed: "disabled", capability: "embeddings.external", evidence: CAPABILITY_TEST, note: "A paid embeddings API. Off until it is held in the ledger." },
 
   // Connection tests and probes that a person starts
-  "src/lib/meridian/settings/provider-config.ts": { kind: "probe", governed: "n/a", note: "An explicit connection test a person starts. The provider may bill it." },
   "src/lib/meridian/providers/connect.ts": { kind: "probe", governed: "n/a", note: "Connection checks for a saved credential." },
   "src/lib/meridian/providers/live.ts": { kind: "probe", governed: "none", note: "Live status probes for providers. Not held in the ledger." },
 

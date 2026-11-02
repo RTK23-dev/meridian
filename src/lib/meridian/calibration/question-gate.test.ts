@@ -1,10 +1,10 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { runEngineGate, type GateResult } from "../decisions/gate.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { COPY_EVIDENCE, GRADED_QUESTION, probabilityEngine, type Tenant } from "../testing/question-calibration-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { COPY_EVIDENCE, GRADED_QUESTION, probabilityEngine, type Tenant } from "../../../test-support/lib/meridian/testing/question-calibration-fixtures.ts";
 import { QUESTION_CALIBRATION_METHOD } from "./question-method.ts";
 import { recordQuestionCalibrations, type CalibrationScope } from "./question-store.ts";
 

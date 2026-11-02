@@ -151,7 +151,7 @@ export async function monthlyHeldUsd(sql: Sql, organizationId: string): Promise<
 
 /** What a paid call is told when its workspace has no monthly budget. Paid generation is blocked until one is set. */
 export const NO_MONTHLY_BUDGET_REASON =
-  "No monthly budget is set for this workspace, so paid generation is blocked. Set a monthly budget in Settings. Nothing was sent.";
+  "No monthly budget is set for this workspace, so paid generation is blocked. Set the monthly budget on the Billing page. Nothing was sent.";
 
 /**
  * Writes the hold for one call, or refuses it. The workspace's row lock, which the video engine also takes, makes the month check and the

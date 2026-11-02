@@ -46,7 +46,7 @@ import type { EngineRuntime, ShotSummary, StageOutput } from "../../jobs/types.t
 import { fakeObjects, gatewayWith, json, PNG_1X1, recordedTransport } from "../../jobs/test/harness.ts";
 import type { RenderAdapter, RenderSubmitInput } from "../../render/hyperframesCloud.ts";
 
-/** The workspace clock of the fixtures. Only the artifact rows carry it; the engine's own events take the real clock. */
+/** The workspace clock of the fixtures. The artifact rows carry it; the engine's own clock in chainWorld starts in the same month. */
 const CREATED = "2026-10-15T10:00:00.000Z";
 const EPOCH_MS = Date.UTC(2026, 9, 13, 9, 0, 0);
 const ID_IN_TEXT = /\b([a-z]+_)([0-9A-HJKMNP-TV-Z]{26})\b/g;
@@ -315,7 +315,7 @@ export async function chainWorld(sql: Sql, organizationId: string): Promise<Chai
       objects,
       measureBlackFrames: async (input) => input.times.map((atMs) => ({ atMs, black: false })),
       measureOverlays: async ({ edl }) => drawnOverlays(edl).map((item) => ({ clipId: item.clipId, present: true })),
-      measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"] }),
+      measureOcr: async () => ({ captionWordsChecked: 24, captionWordsMismatched: 0, onScreenText: ["Send BLEND to get the link"], textBoxes: [] }),
       forbiddenTerms: async () => ["miracle cure"],
       now,
     },

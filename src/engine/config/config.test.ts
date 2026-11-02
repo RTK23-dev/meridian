@@ -32,7 +32,7 @@ test("every Tunable in the config has floor <= value <= ceiling", () => {
   collectTunables(weights, "weights", found);
   collectTunables(budgets, "budgets", found);
   collectTunables(adapters, "adapters", found);
-  assert.equal(found.length, 79, `expected 79 tunables (thresholds 46, weights 16, budgets 1, adapters 16), found ${found.length}`);
+  assert.equal(found.length, 82, `expected 82 tunables (thresholds 49, weights 16, budgets 1, adapters 16), found ${found.length}`);
   for (const [path, value] of found) {
     assert.ok(value.floor <= value.value && value.value <= value.ceiling, `${path} is outside its bounds`);
     assert.ok(Number.isFinite(value.value), `${path} is not finite`);
@@ -47,8 +47,8 @@ test("each config file carries its version string", () => {
   assert.equal(adapters.version, "adapters@1");
 });
 
-test("the contract set is at version 11 (the visual treatments of a repurposed cut, Bible section 4 v11 note)", () => {
-  assert.equal(CONTRACTS_VERSION, "engine-contracts@11");
+test("the contract set is at version 14 (the cookbook selector role, Bible section 4 v14 note)", () => {
+  assert.equal(CONTRACTS_VERSION, "engine-contracts@14");
 });
 
 test("the speech targets name no model (the live catalog chooses one, Bible 10.5), and each keeps its price key", () => {

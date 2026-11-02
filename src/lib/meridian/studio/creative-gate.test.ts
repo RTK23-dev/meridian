@@ -1,4 +1,4 @@
-import { unselectedOpenRouterEngine } from "../testing/openrouter-engine-stub.ts";
+import { unselectedOpenRouterEngine } from "../../../test-support/lib/meridian/testing/openrouter-engine-stub.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -13,7 +13,7 @@ import type { JevAnswer, JevQuestionSpec } from "../jev/types.ts";
 import { CREATIVE_QUESTIONS } from "../jev/questions/creative.ts";
 import { abstainAll, type DecisionEngine, type DecisionEngineId, type DecisionRequest, type DecisionResult } from "../decisions/types.ts";
 import type { DecisionEngineRegistry } from "../decisions/dispatcher.ts";
-import { PNG, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { PNG, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { generatedImageVisual, videoVisualEvidence, writeJudgment, type VisualEvidence } from "./image-qc.server.ts";
 import { sampleTimestamps, type FrameExtractor } from "../video/sample-frames.ts";
 import { FRAME_SELECTION_VERSION } from "../decisions/frames.ts";

@@ -1,5 +1,11 @@
 # STATUS: engine compose (W9): compiler, style kit, fourteen components, golden frames
 
+## Look registry (coding loop, T11, 2026-10-29)
+
+- The overlay of each look moved from `compiler.ts` to `looks.ts` (`LOOK_OVERLAYS`, `resolveLook`). The compiler reads the look through `resolveLook`, which refuses any name that is not in `LOOK_PRESETS` with `invalid_input`.
+- The overlay values did not change. `looks.test.ts` pins each of the four values to the table the compiler drew before. `catalog.test.ts` checks that every look a repurpose option sets resolves in the registry, and that each look is offered by exactly one option.
+- No contract change. The snapshot fixture (`snapshots/edl-fixture`) has no look overlay, so the pinned-value test is the check that the output is unchanged.
+
 ## Decision (lead, 2026-10-15): stop-motion frame floor is 24, and overshoot is refused, not clamped
 
 This supersedes decisions 1 and 3 of the chain work below (floor 2; overshoot clamped). Decisions 2, 4, 5 and 6 still stand.

@@ -158,7 +158,9 @@ export function parseSignalSeries(stderr: string, scale: number): TimelineSample
 export function parseLoudnessSeries(stderr: string): LoudnessSample[] {
   const samples: LoudnessSample[] = [];
   let pendingMs: number | null = null;
-  const valueLine = new RegExp(`${LOUDNESS_KEY.replace(/\./g, "\\.")}=(-?\\d+(?:\\.\\d+)?|-inf)`);
+  // ffmpeg prints "nan" for a momentary window of digital silence (all-zero samples, for example a hard mute), as well as "-inf". Both
+  // are silence. Any other text on the value line is still refused below, because the frame then has no value line.
+  const valueLine = new RegExp(`${LOUDNESS_KEY.replace(/\./g, "\\.")}=(-?\\d+(?:\\.\\d+)?|-inf|nan)`);
   for (const line of stderr.split("\n")) {
     const frame = FRAME_LINE.exec(line);
     if (frame) {
@@ -174,7 +176,7 @@ export function parseLoudnessSeries(stderr: string): LoudnessSample[] {
         throw new EngineError("provider", "a loudness value has no frame time", { stage: STAGE });
       }
       const text = value[1] ?? "-inf";
-      const lufs = text === "-inf" ? null : Number(text);
+      const lufs = text === "-inf" || text === "nan" ? null : Number(text);
       samples.push({
         atMs: pendingMs,
         lufs: lufs === null || lufs <= LOUDNESS_GATE_LUFS ? null : lufs,

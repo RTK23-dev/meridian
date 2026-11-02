@@ -18,6 +18,7 @@ import {
   type DecisionEngineHealth,
   type DecisionEngineId,
 } from "./types.ts";
+import { openRouterDecisionsModelSetting } from "../config/server-settings.ts";
 
 export type JevBackendOption = { backend: JevBackend; label: string; health: DecisionEngineHealth };
 
@@ -83,7 +84,7 @@ async function openrouterModelFor(sql: Sql | undefined, organizationId: string |
       return { model: "", source: "workspace", reason: "The workspace's OpenRouter decision model could not be read." };
     }
   }
-  const resolved = resolveOpenRouterDecisionModel({ workspace, deployment: process.env.OPENROUTER_DECISIONS_MODEL });
+  const resolved = resolveOpenRouterDecisionModel({ workspace, deployment: openRouterDecisionsModelSetting() });
   return resolved.ok ? { model: resolved.model, source: resolved.source } : { model: resolved.model, source: resolved.source, reason: resolved.reason };
 }
 

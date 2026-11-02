@@ -9,7 +9,7 @@ import type {
   JevDecisionResponse,
   JevProvider,
 } from "./types.ts";
-import { fixedLookup, notConfiguredLookup } from "../credentials/fixtures.ts";
+import { fixedLookup, notConfiguredLookup } from "../../../test-support/lib/meridian/credentials/fixtures.ts";
 
 const sampleRequest: JevDecisionRequest = {
   organizationId: "org-test",

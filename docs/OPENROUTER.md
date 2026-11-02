@@ -76,7 +76,7 @@ The other 25 decision models in the recorded catalogue (`nace-ai/…`, `perplexi
 
 ## The per-call ceiling
 
-Before a decision is sent, its cost is bounded from the request it would send, and the call is refused if that bound is above the deployment's limit, `OPENROUTER_DECISION_MAX_USD_PER_CALL` (default `0.05`). The bound is:
+Before a decision is sent, its cost is bounded from the request it would send, and the call is refused if that bound is above the workspace's per-call cap, set on the Billing page (`/billing`). The cap has no default: until it is set, every OpenRouter decision is refused, and nothing is sent. The bound is:
 
 - **Input:** the request's UTF-8 byte count at the catalogued input price. A tokenizer produces at most one token per byte, so this is an upper bound on the input tokens. It is capped at the model's context length, because a model cannot bill more input than its context holds.
 - **A call with an image:** the whole context at the input price. The catalogue does not say how many tokens an image takes, so an image call is bounded by the most it could be.

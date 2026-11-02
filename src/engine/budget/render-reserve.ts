@@ -4,7 +4,7 @@
 
 import { budgetReservationSchema, type BudgetReservation } from "../contracts/ledger.ts";
 import { sumUsd } from "../contracts/money.ts";
-import { limitReasons } from "./preflight.ts";
+import { positionOfLine } from "./line.ts";
 import type { LedgerStore } from "./store.ts";
 
 export type ReserveRenderInput = {
@@ -31,7 +31,14 @@ export async function reserveRenderLine(store: LedgerStore, input: ReserveRender
   const estimateUsd = sumUsd([input.estimateUsd]);
   const totals = await store.sumForMonth(input.workspaceId, input.now.slice(0, 7));
   const monthUsd = sumUsd([totals.reservedUsd, estimateUsd]);
-  const { reasons } = limitReasons({ requestBudgetUsd: input.requestBudgetUsd, workspaceMonthBudgetUsd: input.workspaceMonthBudgetUsd, now: input.now }, estimateUsd, monthUsd);
+  // The hold is checked against each line the way a paid step is (D17): it starts only if it fits below its line.
+  const reasons: string[] = [];
+  if (positionOfLine(estimateUsd, input.requestBudgetUsd) === "over_budget") {
+    reasons.push(`the request budget of $${input.requestBudgetUsd.toFixed(4)} is below this render's hold of $${estimateUsd.toFixed(4)}`);
+  }
+  if (positionOfLine(monthUsd, input.workspaceMonthBudgetUsd) === "over_budget") {
+    reasons.push(`the workspace month would take $${monthUsd.toFixed(4)} over its $${input.workspaceMonthBudgetUsd.toFixed(4)} budget`);
+  }
   const paused = reasons.length > 0;
 
   const reservation = budgetReservationSchema.parse({

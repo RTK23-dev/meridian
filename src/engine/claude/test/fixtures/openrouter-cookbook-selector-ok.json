@@ -1,0 +1,21 @@
+{
+  "id": "gen-1762000000-cookbookselector",
+  "model": "anthropic/claude-haiku-5.5",
+  "object": "chat.completion",
+  "choices": [
+    {
+      "index": 0,
+      "finish_reason": "stop",
+      "message": {
+        "role": "assistant",
+        "content": "{\"picks\":[{\"cookbookId\":\"ck_3d_data_explainer\",\"version\":2,\"reason\":\"A numbers-led story suits aerial shots of the data, and the run has no footage to use.\",\"values\":{\"pace\":1.2}}]}"
+      }
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 1850,
+    "completion_tokens": 88,
+    "total_tokens": 1938,
+    "cost": 0.0021
+  }
+}

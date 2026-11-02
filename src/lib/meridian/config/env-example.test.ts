@@ -23,7 +23,7 @@ const ENV_EXAMPLE = join(ROOT, ".env.example");
  * A name here is not required in .env.example.
  */
 const ALLOWED_UNLISTED: Record<string, string> = {
-  MERIDIAN_PG_TEST_URL: "read only by credentials/test-databases.ts, a test helper. It is set on the command line for npm test.",
+  MERIDIAN_PG_TEST_URL: "read only by test-support/lib/meridian/credentials/test-databases.ts, a test helper. It is set on the command line for npm test.",
 };
 
 /** Vite's own build-time values. They are set by Vite, not by a deployment, so they are not listed. */

@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { randomUUID } from "node:crypto";
 import { encryptPayload, decryptPayload } from "./crypto.ts";
 import type { Sql } from "../learning/store.ts";
@@ -21,7 +22,7 @@ export type VaultCredentialPayload = {
 };
 
 function resolveMasterKey(overrideKey?: string): string {
-  const key = overrideKey || process.env.TOKEN_ENCRYPTION_KEY || "";
+  const key = overrideKey || tokenEncryptionKey() || "";
   if (!key.trim()) {
     throw new Error("TOKEN_ENCRYPTION_KEY is not configured.");
   }

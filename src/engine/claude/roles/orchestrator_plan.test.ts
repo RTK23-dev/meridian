@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { loadPrompt } from "../../prompts/load.ts";
-import { orchestratorPlan, orchestratorPlanInputSchema, orchestratorUserContent, type OrchestratorPlanInput } from "./orchestrator_plan.ts";
+import { orchestratorBriefSchema, orchestratorPlan, orchestratorPlanInputSchema, orchestratorUserContent, type OrchestratorPlanInput } from "./orchestrator_plan.ts";
 
 const input: OrchestratorPlanInput = {
   brief: {
@@ -16,16 +16,32 @@ const input: OrchestratorPlanInput = {
 };
 
 describe("orchestrator_plan role", () => {
-  it("runs on the direction tier at the plan stage, against orchestrator_plan@2, which has the four prompt parts", () => {
+  it("runs on the direction tier at the plan stage, against orchestrator_plan@4, which has the four prompt parts", () => {
     assert.equal(orchestratorPlan.role, "orchestrator_plan");
     assert.equal(orchestratorPlan.capability, "llm.direction");
     assert.equal(orchestratorPlan.stage, "plan");
     const prompt = loadPrompt(orchestratorPlan.prompt);
-    assert.equal(prompt.id, "orchestrator_plan@2");
+    assert.equal(prompt.id, "orchestrator_plan@4");
     assert.match(prompt.text, /params\.model_class/, "the video class is named in the rules");
+    assert.match(prompt.text, /copyBudgetUsd/, "the category budgets are named in the rules, so the split is delegated to the orchestrator");
+    assert.match(prompt.text, /A paid step starts only while the committed spend is below the budget/, "rule 7 states the budget as a line (D12)");
+    assert.match(prompt.text, /the project pauses until an admin raises the budget/, "rule 7 says the project pauses at the line");
+    assert.doesNotMatch(prompt.text, /tolerance/i, "no tolerance is named: a budget is a line (D12)");
     for (const heading of ["## Role and rules", "## Reference material", "## Task input", "## Output contract"]) {
       assert.match(prompt.text, new RegExp(`^${heading}$`, "m"));
     }
+  });
+
+  it("takes optional category budgets: each is a positive amount, and a category the user leaves unset is absent from the brief", () => {
+    const set = orchestratorBriefSchema.parse({ ...input.brief, copyBudgetUsd: 0.5, creativeBudgetUsd: 1.25 });
+    assert.equal(set.copyBudgetUsd, 0.5);
+    assert.equal(set.voiceBudgetUsd, undefined);
+    assert.equal(orchestratorBriefSchema.safeParse({ ...input.brief, copyBudgetUsd: 0 }).success, false);
+    assert.equal(orchestratorBriefSchema.safeParse({ ...input.brief, voiceBudgetUsd: -1 }).success, false);
+    assert.doesNotMatch(JSON.stringify(orchestratorUserContent(input)), /copyBudgetUsd/, "an unset category is not in the brief the orchestrator reads");
+    const shown = orchestratorUserContent({ ...input, brief: { ...input.brief, copyBudgetUsd: 0.5 } });
+    const text = shown.map((part) => ("text" in part ? part.text : "")).join("\n");
+    assert.match(text, /"copyBudgetUsd":0\.5/);
   });
 
   it("takes a brief, the orchestrating model's id and at most 160 candidates", () => {
@@ -50,5 +66,14 @@ describe("orchestrator_plan role", () => {
     const text = content.map((part) => (part.type === "text" ? part.text : "")).join("\n");
     assert.match(text, /<untrusted-data name="brief">/);
     assert.match(text, /<untrusted-data name="candidates">/);
+  });
+
+  it("sends the model brief as reference text, ahead of the untrusted blocks, so the candidates still decide what exists", () => {
+    const texts = orchestratorUserContent(input).map((part) => (part.type === "text" ? part.text : ""));
+    const brief = texts.findIndex((text) => text.includes("# model_brief@1"));
+    const untrusted = texts.findIndex((text) => text.includes('<untrusted-data name="brief">'));
+    assert.ok(brief !== -1, "the model brief is in the user message");
+    assert.ok(brief < untrusted, "the model brief comes before the brief block");
+    assert.match(texts[brief] ?? "", /The candidates decide what exists\./);
   });
 });

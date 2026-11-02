@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
+import { Link } from "@tanstack/react-router";
 import { Button, Field, Input, errorText } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -9,7 +10,7 @@ import { useWorkspace } from "@/components/workspace";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { GenerationModelSettings } from "@/components/generation-model-settings";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
-import { SetupPanel, VideoBudgetForm } from "./setup-panel";
+import { SetupPanel } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { useScopedMutation } from "@/lib/query/hooks";
@@ -78,9 +79,13 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {renameRaw ? <FormError message={plainServerError(renameRaw, "settings")} raw={renameRaw} /> : null}
       </section>
 
-      <section aria-labelledby="monthly-budget-title" className="panel">
-        <h2 id="monthly-budget-title" className="sr-only">Monthly budget</h2>
-        <VideoBudgetForm organizationId={organizationId} canAdmin={canAdmin} />
+      <section aria-labelledby="billing-limits-title" className="panel">
+        <h2 id="billing-limits-title" className="text-section font-semibold text-fg">Billing and limits</h2>
+        <p className="mt-1 text-sm text-fg-muted">
+          The monthly budget, the brand budgets, the factory caps, the measure ceiling and the decision cap are set in one place.
+          Nothing is set by default: a limit that is not set refuses the paid step it guards.
+        </p>
+        <p className="mt-3"><Link to="/billing" className="font-semibold underline underline-offset-2">Open billing and limits</Link></p>
       </section>
 
       <details className="group rounded-xl border border-border bg-surface p-5">

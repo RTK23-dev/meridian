@@ -320,14 +320,14 @@ test("with no monthly budget source the request pauses on budget: nothing is hel
   assert.doesNotThrow(() => validateStageOutput(output, ctx.payload));
 });
 
-test("a month that the hold would exceed pauses the request with the reason; the paused hold holds nothing", async () => {
+test("a month that the hold would exceed is held with a note, not paused: calls are gated by their line (D12)", async () => {
   const requestArtifactId = await storeRequest(fixtureRequest());
   const { output, ctx } = await runIntake(portsWith({ workspaceBudget: monthSource(0.1) }), requestArtifactId, "4");
 
-  assert.equal(output.budgetReservationId, null);
-  assert.match(output.budgetPause ?? "", /workspace monthly budget 0\.1 USD would be exceeded/);
-  assert.deepEqual(await reservationRow(preflightReservationId(REQ, "4")), { state: "paused", reservedUsd: 0.52 });
-  assert.equal(await ledgerCount(preflightReservationId(REQ, "4")), 0, "no call was made");
+  assert.equal(output.budgetPause, null, "a hold above the month is a note, not a pause");
+  assert.equal(output.budgetReservationId, preflightReservationId(REQ, "4"));
+  assert.deepEqual(await reservationRow(preflightReservationId(REQ, "4")), { state: "reserved", reservedUsd: 0.52 });
+  assert.equal(await ledgerCount(preflightReservationId(REQ, "4")), 0, "intake itself makes no paid call");
   assert.doesNotThrow(() => validateStageOutput(output, ctx.payload));
 });
 

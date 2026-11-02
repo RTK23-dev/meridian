@@ -9,7 +9,7 @@ import {
   makeFactoryTestSql,
   seedFactoryRun,
   seedJobRow,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { CREATIVE_DNA_VERSION, dnaField, emptyCreativeDna, type AdFormat } from "./creative-dna.ts";
 import { learningScopesOf, pickConceptsForRun } from "./pick.ts";
 

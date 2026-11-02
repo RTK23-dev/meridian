@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ProductFact } from "../domain.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 
 // The server module uses the "@/" alias, so the alias hook is registered before the module is loaded.
 enableAppAliases();

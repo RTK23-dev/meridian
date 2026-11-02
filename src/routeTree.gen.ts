@@ -19,7 +19,9 @@ import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
+import { Route as AppBillingRouteImport } from './routes/_app/billing'
 import { Route as AppContentFactoryRouteImport } from './routes/_app/content-factory'
+import { Route as AppEngineOpsRouteImport } from './routes/_app/engine-ops'
 import { Route as AppExportsRouteImport } from './routes/_app/exports'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
 import { Route as AppInviteRouteImport } from './routes/_app/invite'
@@ -46,6 +48,7 @@ import { Route as AppBrandsBrandIdAccountsRouteImport } from './routes/_app/bran
 import { Route as AppBrandsBrandIdBrainRouteImport } from './routes/_app/brands/$brandId/brain'
 import { Route as AppBrandsBrandIdCalibrationRouteImport } from './routes/_app/brands/$brandId/calibration'
 import { Route as AppBrandsBrandIdContentRouteImport } from './routes/_app/brands/$brandId/content'
+import { Route as AppBrandsBrandIdCookbooksRouteImport } from './routes/_app/brands/$brandId/cookbooks'
 import { Route as AppBrandsBrandIdFactoryRouteImport } from './routes/_app/brands/$brandId/factory'
 import { Route as AppBrandsBrandIdIntelligenceRouteImport } from './routes/_app/brands/$brandId/intelligence'
 import { Route as AppBrandsBrandIdLearningRouteImport } from './routes/_app/brands/$brandId/learning'
@@ -106,9 +109,19 @@ const AppAuditRoute = AppAuditRouteImport.update({
   path: '/audit',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBillingRoute = AppBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppContentFactoryRoute = AppContentFactoryRouteImport.update({
   id: '/content-factory',
   path: '/content-factory',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEngineOpsRoute = AppEngineOpsRouteImport.update({
+  id: '/engine-ops',
+  path: '/engine-ops',
   getParentRoute: () => AppRoute,
 } as any)
 const AppExportsRoute = AppExportsRouteImport.update({
@@ -243,6 +256,12 @@ const AppBrandsBrandIdContentRoute = AppBrandsBrandIdContentRouteImport.update({
   path: '/brands/$brandId/content',
   getParentRoute: () => AppRoute,
 } as any)
+const AppBrandsBrandIdCookbooksRoute =
+  AppBrandsBrandIdCookbooksRouteImport.update({
+    id: '/brands/$brandId/cookbooks',
+    path: '/brands/$brandId/cookbooks',
+    getParentRoute: () => AppRoute,
+  } as any)
 const AppBrandsBrandIdFactoryRoute = AppBrandsBrandIdFactoryRouteImport.update({
   id: '/brands/$brandId/factory',
   path: '/brands/$brandId/factory',
@@ -308,7 +327,9 @@ export interface FileRoutesByFullPath {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/billing': typeof AppBillingRoute
   '/content-factory': typeof AppContentFactoryRoute
+  '/engine-ops': typeof AppEngineOpsRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
@@ -334,6 +355,7 @@ export interface FileRoutesByFullPath {
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
   '/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
+  '/brands/$brandId/cookbooks': typeof AppBrandsBrandIdCookbooksRoute
   '/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -355,7 +377,9 @@ export interface FileRoutesByTo {
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
+  '/billing': typeof AppBillingRoute
   '/content-factory': typeof AppContentFactoryRoute
+  '/engine-ops': typeof AppEngineOpsRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
   '/invite': typeof AppInviteRoute
@@ -382,6 +406,7 @@ export interface FileRoutesByTo {
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
   '/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
+  '/brands/$brandId/cookbooks': typeof AppBrandsBrandIdCookbooksRoute
   '/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -405,7 +430,9 @@ export interface FileRoutesById {
   '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
+  '/_app/billing': typeof AppBillingRoute
   '/_app/content-factory': typeof AppContentFactoryRoute
+  '/_app/engine-ops': typeof AppEngineOpsRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/integrations': typeof AppIntegrationsRoute
   '/_app/invite': typeof AppInviteRoute
@@ -432,6 +459,7 @@ export interface FileRoutesById {
   '/_app/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/_app/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
   '/_app/brands/$brandId/content': typeof AppBrandsBrandIdContentRoute
+  '/_app/brands/$brandId/cookbooks': typeof AppBrandsBrandIdCookbooksRoute
   '/_app/brands/$brandId/factory': typeof AppBrandsBrandIdFactoryRoute
   '/_app/brands/$brandId/intelligence': typeof AppBrandsBrandIdIntelligenceRoute
   '/_app/brands/$brandId/learning': typeof AppBrandsBrandIdLearningRoute
@@ -456,7 +484,9 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/billing'
     | '/content-factory'
+    | '/engine-ops'
     | '/exports'
     | '/integrations'
     | '/invite'
@@ -482,6 +512,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
     | '/brands/$brandId/content'
+    | '/brands/$brandId/cookbooks'
     | '/brands/$brandId/factory'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -503,7 +534,9 @@ export interface FileRouteTypes {
     | '/$'
     | '/alerts'
     | '/audit'
+    | '/billing'
     | '/content-factory'
+    | '/engine-ops'
     | '/exports'
     | '/integrations'
     | '/invite'
@@ -530,6 +563,7 @@ export interface FileRouteTypes {
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
     | '/brands/$brandId/content'
+    | '/brands/$brandId/cookbooks'
     | '/brands/$brandId/factory'
     | '/brands/$brandId/intelligence'
     | '/brands/$brandId/learning'
@@ -552,7 +586,9 @@ export interface FileRouteTypes {
     | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
+    | '/_app/billing'
     | '/_app/content-factory'
+    | '/_app/engine-ops'
     | '/_app/exports'
     | '/_app/integrations'
     | '/_app/invite'
@@ -579,6 +615,7 @@ export interface FileRouteTypes {
     | '/_app/brands/$brandId/brain'
     | '/_app/brands/$brandId/calibration'
     | '/_app/brands/$brandId/content'
+    | '/_app/brands/$brandId/cookbooks'
     | '/_app/brands/$brandId/factory'
     | '/_app/brands/$brandId/intelligence'
     | '/_app/brands/$brandId/learning'
@@ -683,11 +720,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppAuditRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/billing': {
+      id: '/_app/billing'
+      path: '/billing'
+      fullPath: '/billing'
+      preLoaderRoute: typeof AppBillingRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/content-factory': {
       id: '/_app/content-factory'
       path: '/content-factory'
       fullPath: '/content-factory'
       preLoaderRoute: typeof AppContentFactoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/engine-ops': {
+      id: '/_app/engine-ops'
+      path: '/engine-ops'
+      fullPath: '/engine-ops'
+      preLoaderRoute: typeof AppEngineOpsRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/exports': {
@@ -872,6 +923,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppBrandsBrandIdContentRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/brands/$brandId/cookbooks': {
+      id: '/_app/brands/$brandId/cookbooks'
+      path: '/brands/$brandId/cookbooks'
+      fullPath: '/brands/$brandId/cookbooks'
+      preLoaderRoute: typeof AppBrandsBrandIdCookbooksRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/_app/brands/$brandId/factory': {
       id: '/_app/brands/$brandId/factory'
       path: '/brands/$brandId/factory'
@@ -949,7 +1007,9 @@ interface AppRouteChildren {
   AppSplatRoute: typeof AppSplatRoute
   AppAlertsRoute: typeof AppAlertsRoute
   AppAuditRoute: typeof AppAuditRoute
+  AppBillingRoute: typeof AppBillingRoute
   AppContentFactoryRoute: typeof AppContentFactoryRoute
+  AppEngineOpsRoute: typeof AppEngineOpsRoute
   AppExportsRoute: typeof AppExportsRoute
   AppIntegrationsRoute: typeof AppIntegrationsRoute
   AppInviteRoute: typeof AppInviteRoute
@@ -966,6 +1026,7 @@ interface AppRouteChildren {
   AppBrandsBrandIdBrainRoute: typeof AppBrandsBrandIdBrainRoute
   AppBrandsBrandIdCalibrationRoute: typeof AppBrandsBrandIdCalibrationRoute
   AppBrandsBrandIdContentRoute: typeof AppBrandsBrandIdContentRoute
+  AppBrandsBrandIdCookbooksRoute: typeof AppBrandsBrandIdCookbooksRoute
   AppBrandsBrandIdFactoryRoute: typeof AppBrandsBrandIdFactoryRoute
   AppBrandsBrandIdIntelligenceRoute: typeof AppBrandsBrandIdIntelligenceRoute
   AppBrandsBrandIdLearningRoute: typeof AppBrandsBrandIdLearningRoute
@@ -983,7 +1044,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppSplatRoute: AppSplatRoute,
   AppAlertsRoute: AppAlertsRoute,
   AppAuditRoute: AppAuditRoute,
+  AppBillingRoute: AppBillingRoute,
   AppContentFactoryRoute: AppContentFactoryRoute,
+  AppEngineOpsRoute: AppEngineOpsRoute,
   AppExportsRoute: AppExportsRoute,
   AppIntegrationsRoute: AppIntegrationsRoute,
   AppInviteRoute: AppInviteRoute,
@@ -1000,6 +1063,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppBrandsBrandIdBrainRoute: AppBrandsBrandIdBrainRoute,
   AppBrandsBrandIdCalibrationRoute: AppBrandsBrandIdCalibrationRoute,
   AppBrandsBrandIdContentRoute: AppBrandsBrandIdContentRoute,
+  AppBrandsBrandIdCookbooksRoute: AppBrandsBrandIdCookbooksRoute,
   AppBrandsBrandIdFactoryRoute: AppBrandsBrandIdFactoryRoute,
   AppBrandsBrandIdIntelligenceRoute: AppBrandsBrandIdIntelligenceRoute,
   AppBrandsBrandIdLearningRoute: AppBrandsBrandIdLearningRoute,

@@ -13,7 +13,7 @@
 // error before any call.
 
 import { runRole, type RoleDeps } from "../../claude/client.ts";
-import { scriptwriter, type ScriptwriterAnswer, type ScriptwriterInput } from "../../claude/roles/scriptwriter.ts";
+import { scriptwriter, scriptwriterWithCookbook, type ScriptwriterAnswer, type ScriptwriterInput } from "../../claude/roles/scriptwriter.ts";
 import {
   EngineError,
   productionRequestSchema,
@@ -63,6 +63,7 @@ function writerInputOf(input: {
   wordsPerMinute: number;
   claims: string[];
   forbidden: string[];
+  cookbookInstructions?: string;
 }): ScriptwriterInput {
   const brief = input.request.brief;
   if (brief === undefined) throw refuse("write_script runs for a brief request, and this request has no brief");
@@ -94,6 +95,7 @@ function writerInputOf(input: {
     forbidden: input.forbidden,
     // The reference's speech language (the DNA transcript's): the writer's language when the brief states none (contract v8, lead 2026-10-17).
     referenceLanguage: input.dna.transcript.language ?? null,
+    ...(input.cookbookInstructions === undefined ? {} : { cookbookInstructions: input.cookbookInstructions }),
   };
 }
 
@@ -143,13 +145,15 @@ export function createWriteScriptHandler(ports: WriteScriptPorts): StageHandler 
       const forbidden = kits.productKit?.forbidden ?? [];
 
       const deps = ports.roleDeps({ organizationId: ctx.organizationId, requestId: ctx.requestId, reservationId });
-      const outcome = await runRole(deps, scriptwriter, {
+      // A run made from a cookbook reads the cookbook's instructions (scriptwriter@3); every other run keeps scriptwriter@2.
+      const writer = request.cookbook?.instructions.script === undefined ? scriptwriter : scriptwriterWithCookbook;
+      const outcome = await runRole(deps, writer, {
         requestId: ctx.requestId,
         workspaceId: ctx.organizationId,
         reservationId,
         attempt: attemptNumber(ctx.payload.attempt),
         signal: ctx.signal,
-        input: writerInputOf({ request, dna, wordsPerMinute, claims, forbidden }),
+        input: writerInputOf({ request, dna, wordsPerMinute, claims, forbidden, cookbookInstructions: request.cookbook?.instructions.script }),
       });
       if (outcome.status === "refused") {
         throw new EngineError("conflict", `the budget refused the scriptwriter call: ${outcome.reason}`, { stage: ctx.stage });

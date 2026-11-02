@@ -128,3 +128,17 @@ test("the screen text names the state: not calibrated with the count below the t
   assert.match(at, /^Measured on 200 recorded outcomes, not applied to any decision\./);
   assert.doesNotMatch(below, /Brier/);
 });
+
+test("the reliability curve lists each filled bin, and a row with no score is left out (from the retired calibration/report)", () => {
+  const report = buildCalibrationReport([row(0.8, true), row(0.8, false), row(0.2, false), { predicted: null, observed: true }], { minimumSample: 1 });
+  assert.equal(report.state, "measured");
+  if (report.state !== "measured") return;
+  assert.equal(report.bins.reduce((sum, bin) => sum + bin.count, 0), 3, "the row with no score is not counted");
+  assert.deepEqual(
+    report.reliability.map((point) => point.count),
+    report.bins.filter((bin) => bin.count > 0).map((bin) => bin.count),
+    "one point per filled bin",
+  );
+  assert.equal(report.reliability.find((point) => point.count === 2)?.observed, 0.5);
+  assert.match(report.note, /Measured on 3/);
+});

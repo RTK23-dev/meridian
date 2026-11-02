@@ -22,7 +22,7 @@ export type VariantReservationInput = {
   workspaceMonthBudgetUsd: number | null;
   /** The estimates of the variants that are funded, summed. Zero funds nothing new. */
   plannedUsd: number;
-  /** ISO time of the raise. Its month must be the reservation's month (holds are counted in the month they were made). */
+  /** ISO time of the raise. Its month must be the reservation's month (a reservation is dated by the month it was made). */
   now: string;
 };
 
@@ -79,9 +79,9 @@ export async function extendForVariants(store: LedgerStore, input: VariantReserv
     if (monthBudget === null) {
       return refused("the workspace monthly budget is not connected, so the reservation cannot be raised; no variant is funded beyond it");
     }
-    const totals = await store.sumForMonth(current.workspaceId, month);
-    const otherReservationsUsd = roundUsd(Math.max(0, totals.reservedUsd - current.reservedUsd));
-    const monthTotal = sumUsd([otherReservationsUsd, target]);
+    // The month's committed spend already holds this reservation's committed calls (D12), so the funding adds only what is planned.
+    const monthCommittedUsd = await store.committedForMonth(current.workspaceId, month);
+    const monthTotal = sumUsd([monthCommittedUsd, planned]);
     if (monthTotal > monthBudget) {
       return refused(`the workspace monthly budget of ${monthBudget} USD would be exceeded: ${monthTotal} USD committed; no variant is funded`);
     }

@@ -3,6 +3,7 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { BudgetExceededError, BudgetLedgerService, toMicros } from "./budget-ledger.ts";
+import { seedTestBrandBudget } from "../../../test-support/lib/meridian/testing/budget-seed.ts";
 
 async function createTenant(sql: Sql, label: string) {
   const suffix = `${label}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -10,6 +11,7 @@ async function createTenant(sql: Sql, label: string) {
   const brandId = `brand-cap-${suffix}`;
   await sql`insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, 'test-user')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, 'test-user')`;
+  await seedTestBrandBudget(sql, organizationId, brandId);
   return { organizationId, brandId };
 }
 

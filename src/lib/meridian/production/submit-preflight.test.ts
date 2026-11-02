@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { injectProvider, job } from "../testing/production-fixtures.ts";
+import { injectProvider, job } from "../../../test-support/lib/meridian/testing/production-fixtures.ts";
 import { productionRouter } from "./router.ts";
 import { submitWithPreflight } from "./submit.ts";
 import type { CreativeSpec } from "./types.ts";

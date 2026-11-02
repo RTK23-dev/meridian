@@ -11,10 +11,10 @@ import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 import type { ResearchSegment } from "../research/schema.ts";
 import { synthesizeResearchTranscript } from "../research/analyzer.ts";
 import { resolveDeploymentOnlyKey } from "../credentials/resolve.ts";
-import { openTestBackends, withEnv } from "../credentials/test-databases.ts";
+import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { setMonthlyBudget } from "../testing/monthly-budget.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
 import { storedGenerationModel, storedGenerationModels, saveGenerationModel, type GenerationTask } from "../settings/generation-models.ts";
 
 /**

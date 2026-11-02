@@ -202,21 +202,17 @@ export function decisionModelCeilingUsd(
   return decisionCallCeilingUsd(entry, { requestBytes: entry.contextLength, hasImages: true });
 }
 
-/** The default per-call ceiling, in USD. The deployment sets its own with OPENROUTER_DECISION_MAX_USD_PER_CALL. */
-export const DEFAULT_DECISION_MAX_USD_PER_CALL = 0.05;
+/** What an OpenRouter decision is refused for when its workspace has no per-call cap. Set on the Billing page; there is no default. */
+export const DECISION_CAP_NOT_SET_REASON =
+  "No cap is set for one OpenRouter decision, so no decision was sent. Set the decision cap on the Billing page. Nothing was sent.";
 
 /**
- * The per-call ceiling the deployment allows. An unset variable uses the default. A set variable that is not a positive number is
- * refused, so a mistyped limit can never allow more than it says.
+ * The per-call cap the workspace allows, from its saved policy (null when unset). Unset refuses the decision: there is no deployment
+ * variable and no built-in value. The cap is read through the workspace's policy, so a set cap is always one the workspace chose.
  */
-export function decisionCallCapUsd(): { ok: true; usd: number } | { ok: false; reason: string } {
-  const raw = process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-  if (raw === undefined || raw.trim() === "") return { ok: true, usd: DEFAULT_DECISION_MAX_USD_PER_CALL };
-  const usd = Number(raw);
-  if (!Number.isFinite(usd) || usd <= 0) {
-    return { ok: false, reason: "OPENROUTER_DECISION_MAX_USD_PER_CALL is not a positive number, so no decision was sent." };
-  }
-  return { ok: true, usd };
+export function decisionCallCapUsd(maxUsd: number | null): { ok: true; usd: number } | { ok: false; reason: string } {
+  if (maxUsd === null || !Number.isFinite(maxUsd) || maxUsd <= 0) return { ok: false, reason: DECISION_CAP_NOT_SET_REASON };
+  return { ok: true, usd: maxUsd };
 }
 
 /**

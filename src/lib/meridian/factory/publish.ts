@@ -13,6 +13,7 @@
  * Each path writes its own receipt: organic_posts for an organic post, and provider_objects with surface `paid` for a paid object. A
  * receipt is written after the provider call returns, or as a recorded failure. Nothing here sets a campaign or an ad to ACTIVE.
  */
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import type { Sql } from "../learning/store.ts";
 import { publishCreativeToChannels, type PublishChannelResult } from "../distribution/service.ts";
 import { metaPublishEngine, publishEngineById, type PublishEngine, type PublishEngineResult } from "../publishing/engine.ts";
@@ -183,7 +184,7 @@ export function liveRouteFor(input: { accessToken: string | null; adAccountId: s
  */
 export async function paidRouteFor(sql: Sql, scope: Scope, input: { countries: readonly string[]; pageId: string; link: string }): Promise<PaidRoute> {
   if (isTestingRuntimeNow()) return { engine: publishEngineById("test"), accessToken: null, adAccountId: "" };
-  const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", tokenEncryptionKey() ?? "");
   return liveRouteFor({
     accessToken: credential.status === "connected" ? credential.accessToken : null,
     adAccountId: await savedAdAccountId(sql, scope.organizationId, scope.brandId, AD_ACCOUNT_PLATFORM.meta),

@@ -3,7 +3,7 @@ import test from "node:test";
 import { DeepStudyService } from "./deep-study-service.ts";
 import { JevDecisionService } from "../jev/service.ts";
 import { JevRouter, TypeSafeDirectJevProvider } from "../jev/router.ts";
-import { fixedLookup } from "../credentials/fixtures.ts";
+import { fixedLookup } from "../../../test-support/lib/meridian/credentials/fixtures.ts";
 import type { ContrastSubject } from "./contrast-engine.ts";
 import type { EvidenceBundle } from "../evidence/types.ts";
 import type { DiscoveredReelItem } from "../discovery/types.ts";

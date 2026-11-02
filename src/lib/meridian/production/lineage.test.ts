@@ -3,8 +3,8 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
-import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
-import { insertExecutingPlan, imagePlan, stubGoogleImage, studioTenant } from "../testing/durable-image-fixtures.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
+import { insertExecutingPlan, imagePlan, stubGoogleImage, studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { reconstructCreativeLineage } from "./lineage.ts";
 
 // The artifact store and the test image double are testing-runtime only. Production never selects either.

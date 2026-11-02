@@ -12,7 +12,7 @@ import { startEngineRequest } from "../../../engine/jobs/orchestrator-sql.ts";
 import { defaultRepurposeSettings } from "../../../engine/repurpose/resolve.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { sealSecret } from "../oauth/flow.server.ts";
-import { fakeMeta, type FakeMeta } from "../testing/meta-paused-fake.ts";
+import { fakeMeta, type FakeMeta } from "../../../test-support/lib/meridian/testing/meta-paused-fake.ts";
 import { startRepurpose } from "./repurpose.ts";
 import { recordRepurposeReview, repurposeReviewsOf } from "./repurpose-review.ts";
 import { createRepurposedPausedAd, type CreatePausedAdOutcome } from "./repurpose-paused-ad.ts";

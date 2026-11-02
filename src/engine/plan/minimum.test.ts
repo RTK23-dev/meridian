@@ -3,7 +3,7 @@ import test from "node:test";
 import { personaFixture, productionRequestFixture } from "../contracts/fixtures/index.ts";
 import { EngineError, sumUsd, type VisualType } from "../contracts/index.ts";
 import { shotCost, usdUnits } from "./cost.ts";
-import { fixtureKits, fixtureShots, fixtureStyle } from "./fixtureInputs.ts";
+import { fixtureKits, fixtureShots, fixtureStyle } from "../test/plan-fixture-inputs.ts";
 import {
   cheapestOption,
   minimumMasterBudgetUsd,

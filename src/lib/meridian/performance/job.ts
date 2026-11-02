@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import type { Sql } from "../learning/store.ts";
 import { liveTransport, type Transport } from "../providers/http.ts";
 import { startOperation } from "../observability/redact.ts";
@@ -48,7 +49,7 @@ export async function runPerformanceSync(
   }
   // Metrics are read only through the workspace's own connected account. The token is its sealed OAuth token. Without one, the
   // job records NOT_CONNECTED and makes no provider request. No environment token is used.
-  const credential = await loadTenantProviderToken(sql, job.organization_id, provider, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  const credential = await loadTenantProviderToken(sql, job.organization_id, provider, tokenEncryptionKey() ?? "");
   if (credential.status === "NOT_CONNECTED") {
     await markNotConnected(sql, job.organization_id, provider, credential.error);
     operation.finish(false, 0, credential.error);

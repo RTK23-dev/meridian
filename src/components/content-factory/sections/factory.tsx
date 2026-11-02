@@ -1,7 +1,8 @@
 import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Button, Field, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger, Input } from "@/components/ui";
+import { Button, Field, ScreenSkeleton, SelectInput, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
@@ -116,7 +117,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
   const [builderKey, setBuilderKey] = useState(0);
   const controlsForm = useForm<FactoryControlsInput>({
     resolver: zodResolver(factoryControlsSchema),
-    defaultValues: { level: "0", ceiling: "1", daily: "", total: "" },
+    defaultValues: { level: "0", ceiling: "1" },
     mode: "onBlur",
   });
   const factoryFormsDirty = builderDirty || controlsForm.formState.isDirty;
@@ -151,7 +152,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
   });
   const saveControls = useScopedMutation({
     mutationKey: factoryKey("controls"),
-    mutationFn: (controls: { level: number; ceiling: number; dailyCents: number; totalCents: number }) => setFactoryControls({ data: { brandId, ...controls } }),
+    mutationFn: (controls: { level: number; ceiling: number }) => setFactoryControls({ data: { brandId, ...controls } }),
     invalidate: () => [qk.factory(brandId), qk.pipelineConfig(brandId)],
     onSuccess: () => setNote("Factory controls saved."),
   });
@@ -388,6 +389,18 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                 </li>
               ))}
             </ol>
+            <div className="space-y-1 text-sm">
+              <p className="font-semibold">Stage totals, read only</p>
+              <p className="text-muted">
+                From the last {board.stageCosts.rows} cost rows. {board.stageCosts.unpricedRows} row(s) have no price and are not in the totals.
+                {board.stageCosts.variants > 0 && board.stageCosts.costPerVariantCents !== null ? ` About $${(board.stageCosts.costPerVariantCents / 100).toFixed(2)} per variant.` : " No cost per variant: no variant is counted."}
+              </p>
+              <ul>
+                {board.stageCosts.stages.map((stage) => (
+                  <li key={stage.stage}>{stage.stage}: ${(stage.cents / 100).toFixed(2)} over {stage.seconds} s</li>
+                ))}
+              </ul>
+            </div>
             {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
@@ -441,13 +454,13 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
         <TabsContent value="tests" className="space-y-4">
           <section className="space-y-4">
-            <h2 className="text-section font-semibold">Caps and kill switch</h2>
-            <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. Spending starts only after the owner sets a cap. Automation never invents a live campaign.</p>
+            <h2 className="text-section font-semibold">Levels and kill switch</h2>
+            <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. The factory does not spend until both caps are set, and the caps are set on the <Link to="/billing" className="font-semibold underline underline-offset-2">billing page</Link>. Automation never invents a live campaign.</p>
             {canOwnControls ? (
               <form
                 className="grid gap-3 md:grid-cols-2"
                 onSubmit={controlsForm.handleSubmit((values) => {
-                  void saveControls.mutateAsync(factoryControlsPayload(values, board.cap)).then(() => controlsForm.reset(values, { keepValues: true }), () => undefined);
+                  void saveControls.mutateAsync(factoryControlsPayload(values)).then(() => controlsForm.reset(values, { keepValues: true }), () => undefined);
                 })}
                 onKeyDown={(event) => submitOnShortcut(event)}
               >
@@ -461,12 +474,10 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                     {([0, 1] as const).map((value) => <option key={value} value={String(value)}>{value} · {FACTORY_LEVEL_LABELS[value]}</option>)}
                   </SelectInput>
                 </Field>
-                <Field label="Daily spend cap (USD)" error={controlsForm.formState.errors.daily?.message}><Input {...controlsForm.register("daily")} type="number" min="0" step="0.01" placeholder={String(board.cap.dailyCents / 100)} /></Field>
-                <Field label="Total spend cap (USD)" error={controlsForm.formState.errors.total?.message}><Input {...controlsForm.register("total")} type="number" min="0" step="0.01" placeholder={String(board.cap.totalCents / 100)} /></Field>
                 <FormDiscardBar dirty={controlsForm.formState.isDirty} subject="factory controls" onDiscard={() => controlsForm.reset()} className="md:col-span-2" />
-                <Button type="submit" disabled={saveControls.isPending || controlsForm.formState.isSubmitting}>{saveControls.isPending || controlsForm.formState.isSubmitting ? "Saving…" : "Save caps and level"}</Button>
+                <Button type="submit" disabled={saveControls.isPending || controlsForm.formState.isSubmitting}>{saveControls.isPending || controlsForm.formState.isSubmitting ? "Saving…" : "Save levels"}</Button>
               </form>
-            ) : <p className="text-sm text-muted">Only workspace owners set factory levels and spend caps.</p>}
+            ) : <p className="text-sm text-muted">Only workspace owners set factory levels.</p>}
             {canAdmin ? (
               <Button
                 type="button"

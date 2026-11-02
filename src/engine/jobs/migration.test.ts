@@ -9,6 +9,7 @@ import { createTestDatabase, migrationFiles, type TestDatabase } from "../test/p
 const ENGINE_TABLES = [
   "engine_requests",
   "engine_artifacts",
+  "engine_output_measures",
   "engine_gate_results",
   "engine_decisions",
   "engine_ledger",

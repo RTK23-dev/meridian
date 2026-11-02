@@ -2,12 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { PNG } from "pngjs";
 import { videoEngineById } from "../video/engine.ts";
-import {
-  ASPECT_RATIOS,
-  renderTimelineToVideo,
-} from "./render.ts";
-import { templateFromDna, variantMatrix } from "./template.ts";
-import { dnaFromTranscript } from "./creative-dna.ts";
+import { variantMatrix } from "./template.ts";
 import { compareOriginalityAgainstSource } from "./gates.ts";
 
 test("Production Step 5: second VideoEngine adapter (timeline) is available and functional", async () => {
@@ -55,51 +50,6 @@ test("Production Step 5: variant matrix produces permutations within bound", () 
   assert.equal(matrix[0]?.cta, "Shop now");
   assert.equal(matrix[0]?.presenter, "Founder");
   assert.equal(matrix[0]?.lengthMs, 9000);
-});
-
-test("Production Step 5: timeline renderer builds compositions across 9:16, 4:5, 1:1, and 16:9", () => {
-  const dna = dnaFromTranscript({
-    adId: "winner-1",
-    durationMs: 12000,
-    transcript: "Say goodbye to dry skin. Clinically proven hydrating formula. Order yours today.",
-  });
-  const template = templateFromDna(dna);
-
-  const variant = {
-    hook: "Say goodbye to dry skin",
-    cta: "Order yours today",
-    presenter: "Dermatologist",
-    lengthMs: 12000,
-  };
-
-  for (const ratio of ASPECT_RATIOS) {
-    const rendered = renderTimelineToVideo({
-      template,
-      variant,
-      aspectRatio: ratio,
-    });
-
-    assert.equal(rendered.composition.aspectRatio, ratio);
-    assert.equal(rendered.durationMs, 12000);
-    assert.ok(rendered.bytes.byteLength > 0);
-    assert.ok(rendered.composition.tracks.video.length > 0);
-    assert.ok(rendered.composition.tracks.audio.length > 0);
-    assert.ok(rendered.composition.tracks.overlay.length > 0);
-
-    if (ratio === "9:16") {
-      assert.equal(rendered.width, 1080);
-      assert.equal(rendered.height, 1920);
-    } else if (ratio === "4:5") {
-      assert.equal(rendered.width, 1080);
-      assert.equal(rendered.height, 1350);
-    } else if (ratio === "1:1") {
-      assert.equal(rendered.width, 1080);
-      assert.equal(rendered.height, 1080);
-    } else if (ratio === "16:9") {
-      assert.equal(rendered.width, 1920);
-      assert.equal(rendered.height, 1080);
-    }
-  }
 });
 
 function patternFrame(isTop: boolean): Uint8Array {

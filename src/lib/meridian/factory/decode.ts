@@ -21,6 +21,7 @@ import {
 import { semanticEmbed } from "../embeddings/semantic.ts";
 import { completeGenerationTask, extractJson } from "../providers/chat.server.ts";
 import type { Sql } from "../learning/store.ts";
+import { ffmpegPathSetting } from "../config/server-settings.ts";
 
 const execFile = promisify(execFileCallback);
 
@@ -82,7 +83,7 @@ export async function detectScenes(
     ffprobePath?: string;
   } = {},
 ): Promise<{ scenes: DetectedScene[]; cutsPerSecond: number; totalDurationMs: number }> {
-  const ffmpegPath = options.ffmpegPath || process.env.FFMPEG_PATH || "ffmpeg";
+  const ffmpegPath = options.ffmpegPath || ffmpegPathSetting() || "ffmpeg";
   const inspected = inspectVideo(videoBytes);
   const detectedDuration =
     options.durationMs ?? inspected.durationMs ?? (inspected.frames.length > 0 ? inspected.frames.length * 3000 : 3000);

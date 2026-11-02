@@ -1,6 +1,17 @@
 # Changelog
 
-## Unreleased
+## 1.1.0-beta.1 — prerelease
+
+The first 1.1 pre-release. It carries the 0.1.0-beta.17 work, the billing page, and the Cyclone fixes, all on one line.
+
+**Before you upgrade.** Paid work is refused until its limits are set on the billing page: the workspace monthly budget, each brand's budget, the factory's daily and total caps, the measure ceiling and the OpenRouter decision cap. Nothing is set by default. The environment variables `OPENROUTER_DECISION_MAX_USD_PER_CALL` and `CYCLONE_OBSERVATION_BUDGET` no longer do anything; the decision cap is set per workspace on the billing page.
+
+- **Billing and limits.** `/billing` lists every money and spend limit: the monthly budget, the measure ceiling, the decision cap per call, and per brand the brand budget and the factory's daily and total caps. Each change is audited with its value before and after. A paid step whose limit is unset is refused, and the refusal names where to set it.
+- **Batch and cookbooks.** A batch takes its style from the cookbook it names; the style control is a filter on the cookbooks. A style no cookbook carries is shown but cannot be chosen.
+- **Not yet on the billing page.** The factory's daily generation cap is still a value stored in the brand's cookbook. Moving it is planned.
+
+- Cyclone: a device counts as connected only when the gateway names it (its own status, or the fleet list that contains it). A gateway that only answers a capability list no longer does. Health reports the measured time of the check. Each gateway call has a 15-second limit. The screenshot the device takes is kept with the reference, and only a web address is kept. Evidence is labelled by what was observed, never as full evidence. The Settings tab shows the deployment's gateway and device read-only; a workspace cannot save them, and the connection test checks the deployment's device. Removed the unused `CYCLONE_OBSERVATION_BUDGET` reader and the unused Cyclone helpers.
+- Tidy-up: removed the monthly-budget server functions and query hook (the budget is set on the billing page), an unused combined spend-cap helper, and unused parameters and variables.
 
 Still a pre-release. Everything below is verified with fixtures and recorded data. No live provider run has been recorded (see docs/RELEASE_CHECKLIST.md).
 
@@ -14,6 +25,12 @@ Still a pre-release. Everything below is verified with fixtures and recorded dat
 - **The orchestrator can choose the style.** One call to the workspace's decision engine ranks the style library for the brand, the source instruction and the research; the videos take the styles in that order. It fails closed with its reason when the engine is not connected. A variation's source must now carry a theme page, because a video cannot start without one.
 - **`npm run check:deployment`** lists missing or unsafe settings by name, never by value.
 - Migration 0138 adds the lineage columns for variations (`source_session_id`, `variation_angle`). It only adds nullable columns.
+
+**Tidy, no behaviour change.** Removed two unused modules (`src/lib/env.server.ts`, `src/lib/meridian/intelligence/combinations.ts`). Test
+helpers moved out of production folders into `src/test-support/` and `src/engine/test/`, with one shared Node test alias hook; the recorded
+OpenRouter catalogue the testing runtime reads now lives in `src/lib/meridian/decisions/`. The root planning prompt moved to
+`docs/planning/`. Added `docs/STATE_2026-10-28.md` (where Meridian stands, measured) and `docs/FIRST_TEST_RUN.md` (the first run, step by
+step). The engine's dry acceptance (`npm run engine:e1 -- --dry-run`) is red on the render's bill check, as before; see the runbook, step 6.
 
 ## 0.1.0-beta.16 — prerelease
 
@@ -33,6 +50,34 @@ OpenRouter decision routing with a live catalogue and a per-call ceiling, JEV im
 **Known issues.**
 - No live run of any provider, publish, paid call or billing path has been made. The live steps are for the owner to run.
 - An OpenRouter request that errors or times out may have been billed. Its hold stays until an administrator releases it.
+
+## 0.1.0-beta.16 — prerelease
+
+The budget run. A budget is a line: a paid step starts only while its request's and its workspace month's committed spend is below their budgets, and its own hold fits within them. Queued paid work counts until it settles. Every approval is audited. A brand's policy can only switch model families off. Measure mode lets an admin run an unpriced video at a per-second ceiling. Main's changes since beta.15 are merged in, including the removal of Veo from the fixed routes.
+
+**Upgrade notes.** Three migrations are new: `0117_orchestrator_queued_holds.sql` (queued holds and measurements), `0118_orchestrator_budget_approvals.sql` (the approval audit) and `0119_orchestrator_brand_policy.sql` (brand overrides and the plan's brand). The orchestrator policy requires its model families: a stored policy that does not parse refuses planning, runs and edits until it is saved again, and a row without the measure ceiling takes 0.50 USD per second. The reservation's allowance fields are retired (contract v11); stored rows keep them.
+
+- **The budget is a line.** A paid call starts only while the committed spend of its request and its workspace month is below their budgets, and its own hold fits within them (D12, D17). A call already in flight finishes, and its overshoot is recorded. The run pauses at the line with "budget reached, project not finished" until an admin raises the budget. The tolerance is removed.
+- **Queued paid work counts until it settles.** A video or avatar job keeps its hold in the plan's spend across runs. A failed job is charged the larger of its hold and its bill, and a re-run does not resubmit a job that failed (D14).
+- **Approvals are audited.** Every approval records its actor, the previous and approved budgets and the pause reason, in the same statement as the plan's update. An approval at a category pause raises that category's line. An approval cannot clear a pause at the workspace month line (D13, D18).
+- **Brand overrides only switch families off.** A plan's brand may switch off more model families than the workspace. It cannot switch on a family the workspace has switched off, on any route (D16).
+- **Measure mode (admin).** An admin may run an unpriced video or avatar at the workspace's per-second ceiling, which starts at 0.50 USD. The measured average cost per second is shown from reported bills only (D15).
+- **Money fixes from the reviews.** A fallback's billed failure keeps its bill. A budget refusal through a fallback pauses the run. Output is saved as each step completes. An unknown hold is never zero. An unusable cost charges its hold. The planning hold equals its check.
+- **Screens.** The policy panel has the ceiling, the brand overrides, and a form that saves an unreadable policy again. The plans screen shows the budget-reached alert, the approval list, the measured average and, for admins, the measure choice.
+- **Tests.** 6400 tests: 6359 passing, 0 failing, 41 skipped. Typecheck passes. Lint has 0 errors and 4 warnings that were already on main. The build passes; its migration step was skipped here because no database URL is set.
+
+**Known issues.**
+
+- No live run has happened, and the first live test has not been run. No provider key is set in this environment. Cents-per-second prices are deferred, so a measured clip's cost is known only from the provider's reported bill.
+- A text step whose output cannot be saved keeps its cost, and a re-run refuses it as already made. Edit the step to run it again.
+- A retry after a settle conflict closes the job as failed and drops the other settle's bill. This is pending the owner's decision (D18).
+- A shot attempt that fails after billing keeps its bill as a decision record only, because stage outputs have no cost field.
+- The brief path's shot and voice routes receive no switched-off family list. No orchestrator run reaches them.
+- Planning spend is outside the plan's line (D12).
+- The default model family (Veo, D1) is off in every workspace. It conflicts with main's operating brief, and the owner has not decided (PHASE_LOG open item 4).
+- The consolidated `CLAUDE.md` on main drops the earlier process rules. Which file governs is open (PHASE_LOG open item 3).
+- A draft with no brand named records the acting brand (PHASE_LOG open item 5).
+- Child tables lack `organization_id` columns; their parents enforce tenancy.
 
 ## 0.1.0-beta.15 — prerelease
 

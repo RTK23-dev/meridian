@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { fakeMeta } from "../testing/meta-paused-fake.ts";
+import { fakeMeta } from "../../../test-support/lib/meridian/testing/meta-paused-fake.ts";
 import type { Transport, TransportRequest, TransportResponse } from "./http.ts";
 import { GRAPH } from "./meta.ts";
 import {

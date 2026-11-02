@@ -50,5 +50,5 @@ test("an engine that fails, abstains, answers nothing or chooses outside the lib
   const none = rankingFromDecision(decision(undefined));
   assert.ok(!none.ok && /no answer/.test(none.reason));
   const outside = rankingFromDecision(decision(answered({ choice: "cinematic", answer: "cinematic" })));
-  assert.ok(!outside.ok && /not in the library/.test(outside.reason));
+  assert.ok(!outside.ok && /no cookbook carries/.test(outside.reason));
 });

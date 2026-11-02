@@ -7,6 +7,7 @@ import {
 } from "../hypit/client.ts";
 import type { HypitJobContract } from "../hypit/contract.ts";
 import { videoGenerationStatus } from "./provider.ts";
+import { hypitBaseUrlSetting } from "../config/server-settings.ts";
 
 export type VideoEngineStatus =
   | { status: "NOT_CONNECTED"; provider: string; detail: string }
@@ -36,7 +37,7 @@ export function hypitVideoEngine(): VideoEngine {
   return {
     id: "hypit",
     status() {
-      const snapshot = videoGenerationStatus({ baseUrl: process.env.HYPIT_BASE_URL });
+      const snapshot = videoGenerationStatus({ baseUrl: hypitBaseUrlSetting() });
       return snapshot.status === "CONFIGURED"
         ? { status: "CONFIGURED", provider: "hypit", detail: snapshot.detail }
         : { status: "NOT_CONNECTED", provider: "hypit", detail: snapshot.detail };

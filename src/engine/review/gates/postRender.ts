@@ -21,6 +21,7 @@ import {
 import { shotIdOf, truePeakWithinLimit } from "../../edit/rules.ts";
 import { FINAL_RUBRIC_ITEMS } from "../../claude/roles/critic_final.ts";
 import { check, asShotIds, EDL_FPS, gateResult, notEvaluated, stringsIn } from "./common.ts";
+import { validateReelsSafeZones, type SafeZoneBox } from "./safe-zones.ts";
 import type { CriticFinalOutcome } from "../criticFinal.ts";
 import type { GoldMetrics } from "../gold.ts";
 import { checkKey } from "../gold.ts";
@@ -35,7 +36,13 @@ export type OverlayMeasurement = { clipId: string; present: boolean | null };
 /** Whether the frame at atMs is black. black null means the frame could not be measured. */
 export type BlackFrameMeasurement = { atMs: number; black: boolean | null };
 /** OCR of the captions against the script, and the text read from the screen. */
-export type OcrMeasurement = { captionWordsChecked: number; captionWordsMismatched: number; onScreenText: string[] };
+export type OcrMeasurement = {
+  captionWordsChecked: number;
+  captionWordsMismatched: number;
+  onScreenText: string[];
+  /** Each text box on screen, normalised to the frame. Absent when the boxes were not measured (the safe-zone check is then not evaluated). */
+  textBoxes?: Array<{ text: string; box: SafeZoneBox }>;
+};
 /** EBU R128 loudness and the true peak of the MP4 (media loudness). null means not measurable. */
 export type LoudnessMeasurement = { integratedLufs: number | null; truePeakDbtp: number | null };
 /** The longest silence in the MP4 (media timeline), or null when it cannot be measured. */
@@ -155,6 +162,7 @@ export const POST_RENDER_RULE_NAMES = [
   "overlays_present",
   "black_frames_absent",
   "captions_ocr_match_script",
+  "text_in_safe_zones",
   "forbidden_terms_absent",
   "critic_final_answered",
   ...FINAL_RUBRIC_ITEMS.map((item) => `rubric_${item}`),
@@ -307,6 +315,22 @@ export function checkPostRender(input: PostRenderInput): PostRenderOutcome {
         value: mismatched,
         limit: 0,
         detail: `${input.ocr.captionWordsChecked} caption words read, ${mismatched} do not match the script`,
+      }),
+    );
+  }
+
+  // 7b. The on-screen text sits clear of the Reels zones (the safe-zone check moved here from the retired slop gate, Q32). Not evaluated when
+  // the text boxes were not measured, which fails the gate, as the other OCR checks do.
+  const textBoxes = input.ocr?.textBoxes;
+  if (textBoxes === undefined) {
+    checks.push(notEvaluated("text_in_safe_zones", "the on-screen text boxes were not measured"));
+  } else {
+    const zones = validateReelsSafeZones(textBoxes);
+    checks.push(
+      check("text_in_safe_zones", zones.isSafe, {
+        value: zones.violations.length,
+        limit: 0,
+        detail: zones.isSafe ? undefined : `${zones.violations.length} text box(es) inside a Reels zone`,
       }),
     );
   }

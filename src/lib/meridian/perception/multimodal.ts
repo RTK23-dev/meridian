@@ -19,6 +19,7 @@ import type {
   PerceptionMediaKind,
   PerceptionResult,
 } from "./types.ts";
+import { perceptionModelSetting } from "../config/server-settings.ts";
 
 export const GEMINI_PERCEPTION_PROMPT_VERSION = "gemini-perception.v2";
 /** The most media one call may carry. A video is judged on at most this many frames, never on the whole video. */
@@ -159,7 +160,7 @@ export class GeminiPerceptionProvider implements MultimodalPerceptionProvider {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
 
-  constructor(model = process.env.PERCEPTION_MODEL || "gemini-2.5-flash", options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
+  constructor(model = perceptionModelSetting() || "gemini-2.5-flash", options: { fetchImpl?: typeof fetch; timeoutMs?: number } = {}) {
     this.model = model;
     this.fetchImpl = options.fetchImpl ?? gatedFetch("perception.gemini");
     this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;

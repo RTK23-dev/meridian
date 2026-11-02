@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import { manifestFromCreativePlan } from "./creative-manifest.ts";
-import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 
 test("a manifest built from a plan reports QC as pending with no check claimed as passed", () => {
   const plan = CreativeDecisionEngine.createPlan({

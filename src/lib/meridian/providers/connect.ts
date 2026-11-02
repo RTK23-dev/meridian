@@ -1,3 +1,4 @@
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import { createServerFn } from "@tanstack/react-start";
 import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
@@ -47,7 +48,7 @@ async function saveProbe(organizationId: string, provider: LiveProvider, userId:
     organizationId,
     provider,
     sealed,
-    encryptionKey: process.env.TOKEN_ENCRYPTION_KEY ?? "",
+    encryptionKey: tokenEncryptionKey() ?? "",
     env: process.env,
     expiresAt: secrets[0]?.expires_at ? new Date(secrets[0].expires_at).toISOString() : null,
     hasRefresh: (secrets[0]?.sealed_refresh ?? "").trim() !== "",

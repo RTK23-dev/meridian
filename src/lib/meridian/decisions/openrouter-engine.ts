@@ -41,6 +41,8 @@ import {
   decisionCallCeilingUsd,
   liveDecisionCatalog,
 } from "./decision-catalog.ts";
+import { openRouterDecisionsModelSetting } from "../config/server-settings.ts";
+import { readOrchestratorPolicy } from "../../../engine/orchestrator/policy-store.ts";
 
 export const OPENROUTER_DECISIONS_ADAPTER_VERSION = "openrouter-decisions-adapter.v1";
 export const OPENROUTER_DECISIONS_ENDPOINT = "https://openrouter.ai/api/alpha/decisions";
@@ -393,6 +395,12 @@ const databaseKeys: OpenRouterKeySource = {
   },
 };
 
+/** The workspace's saved per-call cap (the Billing page's decision cap). Null when unset, or when the saved policy cannot be read. */
+const databaseMaxUsdPerCall = async (organizationId: string): Promise<number | null> => {
+  const read = await readOrchestratorPolicy(await loadDefaultSql(), organizationId);
+  return read.status === "ok" ? read.policy.decisionMaxUsdPerCall : null;
+};
+
 const databaseStore: OpenRouterCheckStore = {
   async workspaceModel(organizationId) {
     return readOpenRouterModel(await loadDefaultSql(), organizationId);
@@ -425,6 +433,8 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     catalog?: DecisionCatalogSource;
     /** The budget hold each call is written to. The workspace's ledger unless a test gives its own. */
     holds?: DecisionHolds;
+    /** The workspace's per-call cap in USD, or null when unset (the decision is refused). Read from its saved policy unless a test gives its own. */
+    maxUsdPerCall?: (organizationId: string) => Promise<number | null>;
   } = {}) {
     this.catalog = options.catalog ?? liveDecisionCatalog;
     this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
@@ -433,8 +443,11 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
     this.timeoutMs = options.timeoutMs ?? OPENROUTER_DECISIONS_TIMEOUT_MS;
     this.keys = options.keys ?? databaseKeys;
     this.store = options.store ?? databaseStore;
-    this.deploymentModel = options.deploymentModel ?? process.env.OPENROUTER_DECISIONS_MODEL;
+    this.deploymentModel = options.deploymentModel ?? openRouterDecisionsModelSetting();
+    this.maxUsdPerCall = options.maxUsdPerCall ?? databaseMaxUsdPerCall;
   }
+
+  private readonly maxUsdPerCall: (organizationId: string) => Promise<number | null>;
 
   private readonly catalog: DecisionCatalogSource;
 
@@ -569,7 +582,7 @@ export class OpenRouterDecisionsEngine implements DecisionEngine {
       const message = `${model.model} is not in the live catalogue of decision models, so nothing was sent.`;
       return finish({ answers: abstainAll(request, { status: "unsupported", reason: message, model: requestedModel, provider: PROVIDER }), failure: { kind: "unknown_model", message } });
     }
-    const cap = decisionCallCapUsd();
+    const cap = decisionCallCapUsd(await this.maxUsdPerCall(request.organizationId));
     if (!cap.ok) {
       return finish({ answers: abstainAll(request, { status: "unsupported", reason: cap.reason, model: requestedModel, provider: PROVIDER }), failure: { kind: "invalid_request", message: cap.reason } });
     }

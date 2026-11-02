@@ -1,6 +1,6 @@
 # Release checklist: from beta to stable
 
-The current version is a pre-release. These gates must all be recorded before the label changes. A gate is recorded by writing the date, the commit, and the evidence (ids, costs, output) under it. A fixture result never counts for a live gate.
+The current version is 1.1.0-beta.1, a pre-release. The gates below are for the stable label only: a pre-release goes out with the open ones listed in its notes. These gates must all be recorded before the label changes. A gate is recorded by writing the date, the commit, and the evidence (ids, costs, output) under it. A fixture result never counts for a live gate.
 
 ## Done (fixtures and recorded data)
 
@@ -22,4 +22,4 @@ The current version is a pre-release. These gates must all be recorded before th
 
 ## Then
 
-Change the version, move the Unreleased notes under it in CHANGELOG.md, and remove "pre-release" from the README only after every box above has evidence next to it.
+For stable: change the version to 1.1.0 (no beta suffix), move the notes under it in CHANGELOG.md, and remove "pre-release" from the README, only after every box above has evidence next to it. The pre-release version change to 1.1.0-beta.1 was made before these gates, as a pre-release.

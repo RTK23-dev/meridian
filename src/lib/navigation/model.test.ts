@@ -28,7 +28,7 @@ test("workspace pages list the workspace overview and the Settings group, and no
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
   assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content is a workspace screen");
-  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "settings"]);
+  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "engine-ops", "settings"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);
   }
@@ -50,12 +50,12 @@ test("the sidebar shows the core loop and no longer lists the six screens that m
     for (const id of moved) assert.equal(ids.includes(id), false, `${id} must not be in the sidebar`);
   }
   const brandIds = sidebarGroups({ brandId: "brand-1", reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-  assert.equal(brandIds.length, 11, "7 brand screens and 4 settings screens");
+  assert.equal(brandIds.length, 13, "8 brand screens and 5 settings screens");
 });
 
 test("the Settings screen lists every screen that moved out of the sidebar, with its route", () => {
-  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.to), ["/usage", "/alerts", "/audit", "/webhooks", "/exports", "/notifications"]);
-  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.label), ["Usage & cost", "Alerts center", "Audit log", "Webhook events", "Exports", "Notification preferences"], "labels are accessible names, so they must not change");
+  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.to), ["/billing", "/usage", "/alerts", "/audit", "/webhooks", "/exports", "/notifications"]);
+  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.label), ["Billing and limits", "Usage & cost", "Alerts center", "Audit log", "Webhook events", "Exports", "Notification preferences"], "labels are accessible names, so they must not change");
 });
 
 test("every brand screen except the overview names a next step that is also in the sidebar", () => {
@@ -176,7 +176,7 @@ function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): str
 
 test("the brand sidebar opens the Content page from one item, and keeps Calibration under Results", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
-  assert.deepEqual(itemIds(groups, "content"), ["content"], "ideas, create, review, library, publish, results and ads are sections of that page");
+  assert.deepEqual(itemIds(groups, "content"), ["content", "cookbooks"], "ideas, create, review, library, publish, results and ads are sections of the content page; cookbooks is its own screen");
   const content = groups.flatMap((group) => group.items).find((item) => item.id === "content");
   assert.equal(content?.to, "/brands/b1/content", "the sidebar item opens the brand's content page");
   assert.deepEqual(itemIds(groups, "results"), ["calibration"]);

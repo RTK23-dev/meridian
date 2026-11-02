@@ -12,6 +12,8 @@ const PINNED = {
   "scriptwriter@1": "sha256:e97b4e3426bc77af9e7221e8916c6c45267779d5ab3ab230a82bcd03502d867a",
   "model_chooser@1": "sha256:8e1b9bd1c4cffa8d532bae1053aa5d0f985415b9dbc6317f92e195fec84a3eb4",
   "scriptwriter@2": "sha256:ba5d1406721ea0a7d1d42d8bbde7734759c16c500b2a52acba80baea7f8c6710",
+  "scriptwriter@3": "sha256:d4b896f608d624bee8574d1f505de11cab0069fd601191cff6dc1e8b00be25af",
+  "cookbook_selector@1": "sha256:73fa74e0e72afbe1b806cf4ceab81ef74711e57ef4bbd8d5332a0e1d3aea1614",
 } as const;
 
 describe("prompt loading", () => {

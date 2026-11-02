@@ -1,4 +1,8 @@
+import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, DisabledReason } from "@/components/ui";
+import type { CookbookCard } from "@/components/cookbooks/library-model";
+import { CookbookOutline } from "@/components/cookbooks/cookbook-outline";
 import { PRESET_KEYS, PRESET_LABEL, presetSettingLines, type PresetKey } from "./pipeline-model";
 
 /**
@@ -11,13 +15,21 @@ export function PresetBar({
   matchKey,
   onFill,
   onSave,
+  brandId,
+  cookbooks = [],
 }: {
   canEdit: boolean;
   busy: string | null;
   matchKey: PresetKey | null;
   onFill: (key: PresetKey) => void;
   onSave: (key: PresetKey) => void;
+  /** The brand, for the link to its cookbook library. */
+  brandId?: string;
+  /** The brand's other cookbooks (not the factory presets), listed read-only. */
+  cookbooks?: readonly CookbookCard[];
 }) {
+  // The cookbook whose steps are open below the list (K20b2b). One at a time, so the panel stays short.
+  const [shown, setShown] = useState<string | null>(null);
   return (
     <section aria-labelledby="factory-presets" className="space-y-4">
       <div className="space-y-1">
@@ -69,6 +81,37 @@ export function PresetBar({
           </article>
         ))}
       </div>
+
+      {cookbooks.length > 0 && brandId !== undefined ? (
+        <section aria-labelledby="factory-cookbooks" className="space-y-3">
+          <div className="space-y-1">
+            <h4 id="factory-cookbooks" className="font-semibold text-fg">Other cookbooks in this brand</h4>
+            <p className="max-w-3xl text-sm text-fg-muted">
+              These are read-only here. Open the cookbook library to change one or make a copy.{" "}
+              <Link to="/brands/$brandId/cookbooks" params={{ brandId }} className="underline underline-offset-4">Open the cookbook library</Link>
+            </p>
+          </div>
+          <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            {cookbooks.map((card) => (
+              <li key={`${card.source}:${card.cookbookId}`} className="flex flex-col gap-2 panel">
+                <span className="font-semibold text-fg">{card.label}</span>
+                <span className="text-sm text-fg-muted">{card.summary}</span>
+                <span className="text-xs font-semibold text-fg-muted">{card.badge}</span>
+                <Button
+                  type="button"
+                  variant="quiet"
+                  size="sm"
+                  aria-expanded={shown === card.cookbookId}
+                  onClick={() => setShown(shown === card.cookbookId ? null : card.cookbookId)}
+                >
+                  {shown === card.cookbookId ? "Hide steps" : "Show steps"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+          {shown !== null ? <CookbookOutline brandId={brandId} cookbookId={shown} canEdit={canEdit} /> : null}
+        </section>
+      ) : null}
     </section>
   );
 }

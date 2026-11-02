@@ -61,7 +61,6 @@ function storedFieldsOf(summaries: Record<ProviderCategory, ProviderConfigSummar
     productionKey: "",
     perceptionKey: "",
     costPreference: String(summaries?.production?.settings.costPreference || "BALANCED") as ProviderFieldsInput["costPreference"],
-    gatewayUrl: String(summaries?.cyclone?.settings.gatewayUrl || "http://127.0.0.1:4000"),
     maxPages: String(summaries?.sources?.settings.maxPagesPerRun || "50"),
   };
 }
@@ -81,7 +80,6 @@ function isKeyCategory(category: ProviderCategory): category is KeyCategory {
 const FIELDS_SAVED_BY: Partial<Record<ProviderCategory, Array<FieldPath<ProviderFieldsInput>>>> = {
   jev: ["jevKey"],
   production: ["productionKey", "costPreference"],
-  cyclone: ["gatewayUrl"],
   sources: ["maxPages"],
   perception: ["perceptionKey"],
   storage: [],
@@ -111,7 +109,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   const [discardRequested, setDiscardRequested] = useState(false);
   useEffect(() => {
     const stored = storedFieldsOf(summaries);
-    for (const key of ["costPreference", "gatewayUrl", "maxPages"] as const) {
+    for (const key of ["costPreference", "maxPages"] as const) {
       if (!providerForm.getFieldState(key).isDirty) providerForm.resetField(key, { defaultValue: stored[key] });
     }
   }, [summaries, providerForm]);
@@ -128,7 +126,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
       // again. Another category's draft is left as it is.
       if (isKeyCategory(input.category)) providerForm.resetField(KEY_FIELD[input.category], { defaultValue: "" });
       if (input.settings?.costPreference !== undefined) providerForm.resetField("costPreference", { defaultValue: String(input.settings.costPreference) as ProviderFieldsInput["costPreference"] });
-      if (input.settings?.gatewayUrl !== undefined) providerForm.resetField("gatewayUrl", { defaultValue: String(input.settings.gatewayUrl) });
       if (input.settings?.maxPages !== undefined) providerForm.resetField("maxPages", { defaultValue: String(input.settings.maxPages) });
     },
   });
@@ -180,8 +177,6 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     const settingsToSave: Record<string, unknown> = {};
     if (category === "production") {
       settingsToSave.costPreference = values.costPreference;
-    } else if (category === "cyclone") {
-      settingsToSave.gatewayUrl = values.gatewayUrl;
     } else if (category === "sources") {
       settingsToSave.maxPages = Number(values.maxPages);
     }
@@ -359,16 +354,18 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
           ) : null}
 
           {activeTab === "cyclone" ? (
-            <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="Cyclone Gateway URL" error={fieldErrors.gatewayUrl?.message}>
-                <Input
-                  {...providerForm.register("gatewayUrl")}
-                  placeholder="http://127.0.0.1:4000"
-                  disabled={!canAdmin}
-                />
-              </Field>
-
-              <div className="sm:col-span-2 border-t border-line pt-3 text-xs text-muted">
+            <div className="grid gap-3 sm:col-span-2">
+              <p className="text-sm">
+                The Cyclone gateway and device are set by the deployment's environment: CYCLONE_GATEWAY_URL, CYCLONE_DEVICE_ID and
+                CYCLONE_API_KEY. Settings here cannot change them.
+              </p>
+              <dl className="grid gap-1 text-sm sm:grid-cols-[max-content_1fr] sm:gap-x-4">
+                <dt className="text-muted">Gateway</dt>
+                <dd className="break-all">{summaries?.cyclone?.settings.gatewayUrl ? String(summaries.cyclone.settings.gatewayUrl) : "Not set"}</dd>
+                <dt className="text-muted">Device</dt>
+                <dd>{summaries?.cyclone?.settings.deviceId ? String(summaries.cyclone.settings.deviceId) : "Not set"}</dd>
+              </dl>
+              <div className="border-t border-line pt-3 text-xs text-muted">
                 <strong>Read-only observation</strong>: Cyclone observations are read-only. Meridian
                 never automates likes, follows, comments, DMs, or competitor interactions.
               </div>

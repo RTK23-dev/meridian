@@ -1,5 +1,9 @@
 # Launchpad
 
+> **Superseded (2026-10-28).** This describes release `0.1.0-beta.13` and migrations up to `0107`. The current release is `0.1.0-beta.16`
+> with migrations up to `0137`. Start with [STATE_2026-10-28.md](STATE_2026-10-28.md) and then [FIRST_TEST_RUN.md](FIRST_TEST_RUN.md). The
+> owner decisions it lists are still open, and the state document lists them with their current status.
+
 Start here to open a new Claude chat with the whole Meridian context. Copy the **Opening prompt** below into the new chat, and attach the
 repository (`RTK23-dev/meridian`, branch `main`). The prompt points the new session at the files that hold the current state, so it does
 not rely on memory of this conversation.

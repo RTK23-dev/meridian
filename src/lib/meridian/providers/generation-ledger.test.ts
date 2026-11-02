@@ -4,9 +4,9 @@
 
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { openTestBackends } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { setMonthlyBudget } from "../testing/monthly-budget.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
 import {
   boundGenerationCall,
   DEFAULT_GENERATION_CEILING_USD,

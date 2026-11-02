@@ -2,8 +2,9 @@
 // contract v6). A call's actual cost is the provider's verified bill, or a confirmation that the call created no job. An estimate is
 // never an actual. Without a bill or a confirmation the call stays held at its reservation, and the hold counts toward the budget.
 
-import { EngineError, providerRefSchema, roundUsd, sumUsd, type BudgetReservation } from "../contracts/index.ts";
+import { budgetReservationSchema, EngineError, providerRefSchema, roundUsd, sumUsd, type BudgetReservation } from "../contracts/index.ts";
 import { committedFor, type BudgetAlert } from "./reserve.ts";
+import { startsBelowLine } from "./line.ts";
 import type { LedgerRow, LedgerStore } from "./store.ts";
 
 export type ReconcileInput = {
@@ -51,8 +52,7 @@ function billUsdUp(usd: number): number {
 /**
  * Settle a call to the provider's verified bill. Settling a call twice with the same bill changes nothing; a different bill for a
  * settled call is a conflict. The bill is recorded even when it is above the call's authorized amount: it was spent. What happens
- * next depends on the reservation's mode (settleAndCheck): in cap mode the reservation is marked exceeded and no further paid call is
- * authorized for it.
+ * next depends on the reservation's mode and its lines (settleAndCheck).
  */
 export async function reconcileCall(store: LedgerStore, input: ReconcileInput): Promise<ReconcileResult> {
   const loaded = await loadCall(store, input.idempotencyKey);
@@ -100,42 +100,73 @@ export async function confirmAbsentCall(store: LedgerStore, input: { idempotency
   return settleAndCheck(store, reservation, entry);
 }
 
+/** The reservation's state with a new reason, or without the reason when it is reserved again (contract: exceeded needs a reason). */
+function withState(reservation: BudgetReservation, state: "reserved" | "exceeded", reason?: string): BudgetReservation {
+  const { pausedReason: _previous, ...rest } = reservation;
+  return budgetReservationSchema.parse(state === "exceeded" ? { ...rest, state, pausedReason: reason } : { ...rest, state });
+}
+
 /**
- * After a call settles: the reservation's committed amount is what its calls cost, with a hold for each unsettled call. When that is
- * above what the reservation was authorized for, a verified bill has overrun it. In cap mode the reservation becomes exceeded, so no
- * further paid call is authorized for it, and the monthly total keeps the bill (exceeded counts toward the month). In warn mode it is
- * raised with an alert, and in observe mode it is raised silently.
+ * After a call settles (D12). The reservation's committed spend is compared with its hold: when it is above, the hold is raised to it and
+ * the overrun is an alert, in every mode but observe. In cap mode the reservation is marked exceeded only at a line: when the request's
+ * committed spend (every reservation of the request) or the workspace month's committed spend is at or above its budget. It is not marked
+ * for an overrun of its hold alone, and a mark clears when no line is reached any more. Warn raises the hold and returns the alerts;
+ * observe raises it silently.
  */
 async function settleAndCheck(store: LedgerStore, reservation: BudgetReservation, entry: LedgerRow): Promise<ReconcileResult> {
   const committedUsd = await committedFor(store, reservation.reservationId);
-  if (committedUsd <= reservation.reservedUsd) {
+  const holdOverrun = committedUsd > reservation.reservedUsd;
+  if (reservation.mode !== "cap" && !holdOverrun) {
     return { entry, reservation, alerts: [], settled: true };
   }
 
+  const requestBudget = reservation.requestBudgetUsd;
+  const monthBudget = reservation.workspaceMonthBudgetUsd;
+  const requestCommittedUsd = await store.committedForRequest(reservation.requestId);
+  const monthCommittedUsd = monthBudget === undefined ? 0 : await store.committedForMonth(reservation.workspaceId, entry.at.slice(0, 7));
+  const requestAtLine = requestBudget !== undefined && !startsBelowLine(requestCommittedUsd, requestBudget);
+  const monthAtLine = monthBudget !== undefined && !startsBelowLine(monthCommittedUsd, monthBudget);
+  const atLine = requestAtLine || monthAtLine;
+
   const message = `settled ${entry.stage} call takes reservation ${reservation.reservationId} to ${committedUsd} USD, above its ${reservation.reservedUsd} USD`;
-  const alerts: BudgetAlert[] = [
-    { kind: "overrun", scope: "call", limitUsd: reservation.reservedUsd, committedUsd, message },
-  ];
-  if (reservation.requestBudgetUsd !== undefined && committedUsd > reservation.requestBudgetUsd) {
+  const alerts: BudgetAlert[] = [];
+  if (holdOverrun) {
+    alerts.push({ kind: "overrun", scope: "call", limitUsd: reservation.reservedUsd, committedUsd, message });
+  }
+  if (requestBudget !== undefined && requestCommittedUsd > requestBudget) {
     alerts.push({
       kind: "overrun",
       scope: "request",
-      limitUsd: reservation.requestBudgetUsd,
-      committedUsd,
-      message: `the request's settled spend is ${committedUsd} USD, above its ${reservation.requestBudgetUsd} USD budget`,
+      limitUsd: requestBudget,
+      committedUsd: requestCommittedUsd,
+      message: `the request's settled spend is ${requestCommittedUsd} USD, above its ${requestBudget} USD budget`,
+    });
+  }
+  if (reservation.mode === "cap" && monthBudget !== undefined && monthCommittedUsd > monthBudget) {
+    alerts.push({
+      kind: "overrun",
+      scope: "workspace_month",
+      limitUsd: monthBudget,
+      committedUsd: monthCommittedUsd,
+      message: `the workspace month's settled spend is ${monthCommittedUsd} USD, above its ${monthBudget} USD budget`,
     });
   }
 
-  const next: BudgetReservation =
-    reservation.mode === "cap"
-      ? {
-          ...reservation,
-          state: "exceeded",
-          reservedUsd: roundUsd(committedUsd),
-          pausedReason: `${message}; no further paid call is authorized for this reservation`,
-        }
-      : { ...reservation, reservedUsd: roundUsd(committedUsd) };
-  await store.updateReservation(next);
+  let next: BudgetReservation = holdOverrun ? { ...reservation, reservedUsd: roundUsd(committedUsd) } : reservation;
+  if (reservation.mode === "cap") {
+    const lineReason = requestAtLine
+      ? `the request has committed ${requestCommittedUsd} USD, at or above its ${requestBudget} USD budget`
+      : `the workspace month has committed ${monthCommittedUsd} USD, at or above its ${monthBudget} USD budget`;
+    const reason = `${lineReason}; no further paid call starts while it is at its budget line`;
+    if (atLine && (reservation.state === "reserved" || reservation.state === "exceeded")) {
+      next = withState(next, "exceeded", reason);
+    } else if (!atLine && reservation.state === "exceeded") {
+      next = withState(next, "reserved");
+    }
+  }
+  if (next !== reservation) {
+    await store.updateReservation(next);
+  }
   return {
     entry,
     reservation: next,

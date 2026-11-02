@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { getSql } from "../../db.ts";
 import { markPlanAwaitingApproval, transitionCreativePlan } from "./state-transition.server.ts";
 
@@ -95,6 +95,10 @@ test("recording awaiting approval for a plan in another tenant is refused", asyn
 });
 
 test("Studio production flow cannot bypass CreativePlan transition authority", async () => {
-  const source = await readFile(new URL("../studio/session.server.ts", import.meta.url), "utf8");
-  assert.doesNotMatch(source, /update\s+creative_plans/i);
+  // The studio session is split across session*.server.ts, so the check reads the whole family. The guard keeps a bad path from passing.
+  const studio = new URL("../studio/", import.meta.url);
+  const files = (await readdir(studio)).filter((file) => /^session(-[a-z]+)?\.server\.ts$/.test(file));
+  assert.ok(files.includes("session.server.ts"), "the studio session module is found");
+  const sources = await Promise.all(files.map((file) => readFile(new URL(file, studio), "utf8")));
+  assert.doesNotMatch(sources.join("\n"), /update\s+creative_plans/i);
 });

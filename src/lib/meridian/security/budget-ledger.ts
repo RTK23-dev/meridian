@@ -28,6 +28,20 @@ export class InvalidBudgetCapError extends Error {
   }
 }
 
+/**
+ * A paid step asked for a brand budget that has never been set. No budget is a refusal, never a default: the brand's budget is set on the
+ * Billing page, and nothing is reserved until it is (no precoded caps; fail closed).
+ */
+export class BudgetNotSetError extends Error {
+  constructor(message: string = BRAND_BUDGET_NOT_SET_REASON) {
+    super(message);
+    this.name = "BudgetNotSetError";
+  }
+}
+
+export const BRAND_BUDGET_NOT_SET_REASON =
+  "No budget is set for this brand, so paid generation is blocked. Set the brand budget on the Billing page. Nothing was sent.";
+
 export function toMicros(usd: number): bigint {
   if (typeof usd !== "number" || !Number.isFinite(usd) || Number.isNaN(usd) || usd < 0) {
     throw new InvalidBudgetCapError(`Invalid USD amount: ${usd}`);
@@ -123,36 +137,37 @@ export interface BudgetReservation {
 }
 
 export class BudgetLedgerService {
-  /**
-   * Ensures a budget account exists for the tenant, optionally updating the spend cap.
-   */
-  static async getOrCreateAccount(
-    sql: Sql,
-    organizationId: string,
-    brandId: string,
-    initialCapUsd = 100.0
-  ): Promise<BudgetAccount> {
-    const capMicros = validateCap(initialCapUsd);
+  /** The brand's budget account, or null when no budget has been set for the brand. Read only: it never creates an account. */
+  static async getAccount(sql: Sql, organizationId: string, brandId: string): Promise<BudgetAccount | null> {
     const existing = await sql<AccountRow>`
       select id, organization_id, brand_id, max_spend_micros, spent_micros, reserved_micros, created_at, updated_at
       from budget_accounts
       where organization_id = ${organizationId} and brand_id = ${brandId}
       limit 1
     `;
+    const row = existing[0];
+    if (!row) return null;
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      brandId: row.brand_id,
+      maxSpendMicros: BigInt(row.max_spend_micros),
+      spentMicros: BigInt(row.spent_micros),
+      reservedMicros: BigInt(row.reserved_micros),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
 
-    if (existing.length > 0) {
-      const row = existing[0];
-      return {
-        id: row.id,
-        organizationId: row.organization_id,
-        brandId: row.brand_id,
-        maxSpendMicros: BigInt(row.max_spend_micros),
-        spentMicros: BigInt(row.spent_micros),
-        reservedMicros: BigInt(row.reserved_micros),
-        createdAt: row.created_at,
-        updatedAt: row.updated_at,
-      };
-    }
+  /**
+   * Ensures a budget account exists for the tenant. The account is created only with an explicit cap: a brand with no account and no cap
+   * is a BudgetNotSetError, never a default. An existing account is returned as it is; its cap changes only through setBrandBudget.
+   */
+  static async getOrCreateAccount(sql: Sql, organizationId: string, brandId: string, initialCapUsd?: number): Promise<BudgetAccount> {
+    const existing = await this.getAccount(sql, organizationId, brandId);
+    if (existing) return existing;
+    if (initialCapUsd === undefined) throw new BudgetNotSetError();
+    const capMicros = validateCap(initialCapUsd);
 
     const id = randomUUID();
     const rows = await sql<AccountRow>`
@@ -164,6 +179,40 @@ export class BudgetLedgerService {
     `;
 
     const row = rows[0];
+    return {
+      id: row.id,
+      organizationId: row.organization_id,
+      brandId: row.brand_id,
+      maxSpendMicros: BigInt(row.max_spend_micros),
+      spentMicros: BigInt(row.spent_micros),
+      reservedMicros: BigInt(row.reserved_micros),
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  /**
+   * Sets the brand's budget (the cap of its account), creating the account if it does not exist yet. A cap below what the brand has already
+   * spent or holds is refused, so a budget can never be set under money that is already committed. The only write path to a brand cap.
+   */
+  static async setBrandBudget(sql: Sql, params: { organizationId: string; brandId: string; capUsd: number }): Promise<BudgetAccount> {
+    // Zero is a budget: it stops the brand's paid work. There is no cleared budget, because a cleared one would be a default.
+    const capMicros = validateCap(params.capUsd);
+    const id = randomUUID();
+    const rows = await sql<AccountRow>`
+      insert into budget_accounts (id, organization_id, brand_id, max_spend_micros, spent_micros, reserved_micros)
+      values (${id}, ${params.organizationId}, ${params.brandId}, ${capMicros.toString()}, 0, 0)
+      on conflict (organization_id, brand_id) do update
+        set max_spend_micros = excluded.max_spend_micros, updated_at = now()
+        where budget_accounts.spent_micros + budget_accounts.reserved_micros <= excluded.max_spend_micros
+      returning id, organization_id, brand_id, max_spend_micros, spent_micros, reserved_micros, created_at, updated_at
+    `;
+    const row = rows[0];
+    if (!row) {
+      const current = await this.getAccount(sql, params.organizationId, params.brandId);
+      const committed = current ? toUsd(current.spentMicros + current.reservedMicros) : 0;
+      throw new InvalidBudgetCapError(`The brand budget cannot be below the $${committed.toFixed(2)} already spent or held for this brand.`);
+    }
     return {
       id: row.id,
       organizationId: row.organization_id,
@@ -197,7 +246,8 @@ export class BudgetLedgerService {
       throw new InvalidBudgetCapError(`Reservation amount must be positive, got: ${params.amountMicros}`);
     }
 
-    const account = await this.getOrCreateAccount(sql, params.organizationId, params.brandId);
+    const account = await this.getAccount(sql, params.organizationId, params.brandId);
+    if (!account) throw new BudgetNotSetError();
 
     const reservationId = randomUUID();
     const amount = params.amountMicros.toString();

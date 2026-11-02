@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { openTestBackends } from "../credentials/test-databases.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import type { Sql } from "../learning/store.ts";
 import { monthlyVideoBudgetUsd, parseMonthlyVideoBudget, readWorkspaceVideoBudget, saveWorkspaceVideoBudget } from "./video-budget.ts";
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { REVIEW_PAGE_MAX, REVIEW_PAGE_SIZE, loadReviewPage, reviewPage, reviewsHaveMore } from "./listing.ts";
 import { REVIEW_REASON_CODES, REVIEW_REASON_LABELS, isReviewReasonCode, reviewReasonOptions } from "./reasons.ts";
 

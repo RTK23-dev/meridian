@@ -34,6 +34,8 @@ import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 const ORG = "org_produce_test";
 const BRAND = "brand_produce_test";
 const KLING = "openrouter:kwaivgi/kling-v3.0-std";
+/** The provider a billed attempt names in these tests: an adapter id, not a model. */
+const BILLED_PROVIDER = "openrouter:test/billed-attempt";
 const RESERVATION = fixtureId("res_", 900);
 const NOW = Date.parse("2026-10-14T10:00:00.000Z");
 
@@ -297,6 +299,14 @@ describe("prompt, spec and identity helpers", () => {
     assert.deepEqual(refused, { status: "refused", reasons: ["over budget"], decisions: report.decisions });
   });
 
+  test("a failed attempt's bill is carried on the production, and an attempt the provider did not bill carries no bill", () => {
+    const error = { kind: "content_policy" as const, retryable: false, message: "refused" };
+    const billed = productionFromReport({ outcome: { status: "failed", providerId: BILLED_PROVIDER, error, billedUsd: 0.25 }, decisions: [], alerts: [], attempts: [] });
+    assert.deepEqual(billed, { status: "failed", providerId: BILLED_PROVIDER, error, decisions: [], billedUsd: 0.25 });
+    const unbilled = productionFromReport({ outcome: { status: "failed", providerId: BILLED_PROVIDER, error, billedUsd: 0 }, decisions: [], alerts: [], attempts: [] });
+    assert.deepEqual(unbilled, { status: "failed", providerId: BILLED_PROVIDER, error, decisions: [] });
+  });
+
   test("the router generator asks the router for one shot, on the request's reservation, and returns its report", async () => {
     const seen: string[] = [];
     const generator = routerGenerator(() => ({
@@ -391,6 +401,67 @@ describe("the produce_shot stage on PostgreSQL", () => {
     if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
     assert.deepEqual(result.output.hold, { kind: "refused", errorKind: "content_policy", hint: "content_policy" });
     assert.equal(result.output.takeId, null);
+  });
+
+  test("a shot's failed attempt's bill is kept on its hold: the hold is still the planner's refusal, and a decision names the bill", async () => {
+    const shot = generateShot(fixtureId("shot_", 80));
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const { ports } = portsFor({
+      generator: generatorAnswering({
+        status: "failed",
+        providerId: BILLED_PROVIDER,
+        error: { kind: "content_policy", retryable: false, message: "Generation refused by content moderation policy" },
+        decisions: [],
+        billedUsd: 0.25,
+      }),
+    });
+    const result = await createProduceShotHandler(ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.deepEqual(result.output.hold, { kind: "refused", errorKind: "content_policy", hint: "content_policy" });
+    assert.equal(result.output.takeId, null);
+    assert.deepEqual(
+      result.output.decisions?.map((decision) => [decision.chose, decision.reason.includes("billed $0.2500")]),
+      [[BILLED_PROVIDER, true]],
+      "the bill is on the hold, and the decision names the provider that billed it",
+    );
+  });
+
+  test("a budget refusal after a billed attempt keeps the bill on its hold, and the hold is still the budget's reason", async () => {
+    const shot = generateShot(fixtureId("shot_", 81));
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const reason = "call produce_shot would take the request to 0.75 USD, above its 0.7 USD budget, so it does not start";
+    const { ports } = portsFor({ generator: generatorAnswering({ status: "refused", reasons: [reason], decisions: [], billedUsd: 0.25 }) });
+    const result = await createProduceShotHandler(ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId }));
+    if (result.kind !== "done" || result.output.stage !== "produce_shot") throw new Error("expected a produce output");
+    assert.deepEqual(result.output.hold, { kind: "budget", reason });
+    assert.equal(
+      result.output.decisions?.some((decision) => decision.reason.includes("billed $0.2500")),
+      true,
+      "the bill of the attempt that was refused is kept",
+    );
+  });
+
+  test("a stop that throws keeps the bill in its message, and a bill that is not a usable amount is refused, never held as free", async () => {
+    const shot = generateShot(fixtureId("shot_", 82));
+    const { requestId, planArtifactId } = await requestWith([shot]);
+    const stopped = portsFor({ generator: generatorAnswering({ status: "unavailable", reasons: ["no target answered"], decisions: [], billedUsd: 0.25 }) });
+    await assert.rejects(
+      createProduceShotHandler(stopped.ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })),
+      (error: unknown) => error instanceof EngineError && error.kind === "provider" && /billed \$0\.2500/.test(error.message),
+    );
+    const unusable = portsFor({
+      generator: generatorAnswering({
+        status: "failed",
+        providerId: BILLED_PROVIDER,
+        error: { kind: "content_policy", retryable: false, message: "refused" },
+        decisions: [],
+        billedUsd: Number.NaN,
+      }),
+    });
+    await assert.rejects(
+      createProduceShotHandler(unusable.ports).run(contextFor({ requestId, planArtifactId, shotId: shot.shotId })),
+      (error: unknown) => error instanceof EngineError && error.kind === "internal",
+    );
   });
 
   test("a failure that is not a refusal is thrown, so the job retries and is never reported as a hold", async () => {

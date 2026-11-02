@@ -5,6 +5,13 @@ visual requests fail the gate (they name beats the writer has not written), its 
 the format minimum is not checked (write_script does it). `gates/preRender.ts`: `checkPreRender` takes `script` (the resolved words) for the
 slideshow risk and the promised-beats check. No gate id was added: write_script has no gate (`../jobs/STATUS.md`).
 
+## Hook timing at plan time (coding loop, T12, 2026-10-29)
+
+- The plan gate adds two checks for the shots that carry the script's hook beat: `hook_within_window` (the hook starts by `thresholds.hook.windowMs`, 3 s, sourced from TikTok's ads guidance) and `hook_by_latest` (by `latestMs`, 6 s, sourced the same way). A late hook names its own shots as failing. A request with no script is not evaluated, which fails the gate (fail closed). Code: `gates/hookTiming.ts`.
+- The longest shot (`maxShotMs`, 7 s) is a hypothesis, so it is a note from `planTimingNotesOf` and never fails the gate.
+- The three values are tunables with bounds for the lead to confirm. `config.test.ts` counts them (79 became 82). `thresholds@3` is unchanged, and the lead decides whether this section warrants `thresholds@4`.
+- The on-screen text rate (5 to 10 words per second) is not checked here. It needs word timing on the caption lines, which the plan does not have yet.
+
 ## W2 wiring pass (branch `eng-e45-leftovers-2`): decision 8 partly answered
 
 Not run in this pass. The measurements the review gates read are now wired in `jobs/`, with no change to `takeCheck.ts` (it already takes

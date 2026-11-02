@@ -211,7 +211,8 @@ export class ResearchPlanner {
         const cycloneAdapter = registry.get("cyclone_scout");
         if (cycloneAdapter && request.includeCycloneIfAvailable !== false) {
           const health = await cycloneAdapter.health().catch(() => ({ status: "NOT_CONFIGURED" as const }));
-          const isConnected = health.status === "HEALTHY" || health.status === "CONFIGURED";
+          // The adapter reports HEALTHY only when the gateway named this device (checkConnection). Anything else is not used.
+          const isConnected = health.status === "HEALTHY";
           executions.push({
             adapterId: "cyclone_scout",
             sourceKind: "cyclone_scout",

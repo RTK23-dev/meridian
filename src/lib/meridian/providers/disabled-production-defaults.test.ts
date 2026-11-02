@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { after, afterEach, before, beforeEach, describe, mock, test } from "node:test";
-import { contractRequest } from "../decisions/contract-fixtures.ts";
+import { contractRequest } from "../../../test-support/lib/meridian/decisions/contract-fixtures.ts";
 import { sealSecret } from "../oauth/flow.server.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { OpenAiDecisionsEngine } from "../decisions/openai-engine.ts";
@@ -21,7 +21,7 @@ import type { CredentialResolution } from "../credentials/contract.ts";
 import { solidFrame } from "../video/inspect.ts";
 import { AD_ACCOUNT_PLATFORM } from "./ad-account.ts";
 import { publishPausedStages } from "./live.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 
 // The brand-level publish imports modules under the "@/" alias, so the alias hook is registered before it is loaded.
 enableAppAliases();

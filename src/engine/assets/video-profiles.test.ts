@@ -81,3 +81,23 @@ test("a video class with no profile is refused with the gaps' reasons; an image 
   ]);
   assert.equal(noEligibleVideoModel({ modelClass: "image.keyframe", profiles: new Map(), gaps: [] }), null);
 });
+
+test("a switched-off family has no profile, with its reason; the families are read on every load, and the listing is kept", async () => {
+  const VEO = "google/veo-3.1";
+  const script = scripted({ [LISTING]: json(200, fixture("video-models.json")) });
+  let families: string[] = ["google/veo"];
+  const loader = videoProfileLoader({ gateway: gatewayFor(script.transport), familiesFor: async () => families });
+
+  const off = await loader.loadVideoProfiles("org_1");
+  assert.equal(off.has(VEO), false, "Veo has no profile while its family is switched off, so no route can call it");
+  assert.equal(off.has(KLING), true, "the other models keep their profiles");
+  assert.deepEqual(
+    loader.gapsFor("org_1").filter((gap) => gap.model === VEO),
+    [{ model: VEO, reason: `${VEO} is switched off by the workspace's model policy` }],
+  );
+
+  families = [];
+  const on = await loader.loadVideoProfiles("org_1");
+  assert.equal(on.has(VEO), true, "Veo is back once its family is switched on");
+  assert.equal(script.requests.length, 1, "the listing is kept; only the policy is read again");
+});

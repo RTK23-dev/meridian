@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import type { Transport } from "../providers/http.ts";
 import { storeVaultCredential } from "../vault/service.ts";
 import { TRIAL_CHECK_MAX_CHECKS } from "./trial.ts";

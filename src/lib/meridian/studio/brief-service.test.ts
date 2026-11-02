@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { setMonthlyBudget } from "../testing/monthly-budget.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
 import {
   BRAIN,
   BRIEF,
@@ -16,15 +16,15 @@ import {
   createBrief,
   registryWith,
   stubEngine,
-} from "../testing/brief-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
 import {
   addMember,
   failingSql,
   seedBrandBrain,
   seedCompetitorCreative,
   seedOpportunity,
-} from "../testing/opportunity-fixtures.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+} from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 import { briefGateJudge, createGatedBrief, type BriefGateOptions } from "./brief-service.server.ts";
 import type { BriefRecord } from "./brief-service.contract.ts";
 import { briefStatusFor, loadBriefReviewDisclosure } from "./brief-review.server.ts";

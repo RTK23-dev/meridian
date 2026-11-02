@@ -13,6 +13,7 @@ import { resolveOpenRouterDecisionModel } from "./openrouter-engine.ts";
 import { readOpenRouterModel } from "./openrouter-settings.ts";
 import type { EngineSelection } from "./selection.ts";
 import type { DecisionEngineId, DecisionRequest } from "./types.ts";
+import { openRouterDecisionsModelSetting } from "../config/server-settings.ts";
 
 const ACCEPTS_IMAGES: Record<DecisionEngineId, boolean> = {
   jev: false,
@@ -58,7 +59,7 @@ export async function resolveImageSupport(input: {
       return { takesImages: false, resolved: { jevBackend: backend }, reason: "JEV through TypeSafe takes text evidence only." };
     }
     const workspace = await readOpenRouterModel(input.sql, input.organizationId);
-    const model = resolveOpenRouterDecisionModel({ workspace, deployment: process.env.OPENROUTER_DECISIONS_MODEL });
+    const model = resolveOpenRouterDecisionModel({ workspace, deployment: openRouterDecisionsModelSetting() });
     if (!model.ok) return { takesImages: false, resolved: { jevBackend: backend }, reason: model.reason };
     const takesImages = decisionModelProfile(model.model)?.inputModalities.includes("image") ?? false;
     return {

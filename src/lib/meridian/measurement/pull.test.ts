@@ -5,7 +5,7 @@ import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import type { Transport } from "../providers/http.ts";
 import type { OrganicMetricsReading, OrganicTelemetryMetrics } from "../distribution/types.ts";
-import { factoryRunFor, studioTenant, type FactoryTenant } from "../testing/produce-fixtures.ts";
+import { factoryRunFor, studioTenant, type FactoryTenant } from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 import { MetricLinkError, listLinkedMetrics, recordLinkedMetric, type LinkedMetricRow } from "./creative-linkage.ts";
 import { paidInsightsWithTransport, pullRunMeasurements, type MeasurementScope } from "./pull.ts";
 

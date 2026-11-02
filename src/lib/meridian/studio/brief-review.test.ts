@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createPoolSql, getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { failingSql } from "../testing/opportunity-fixtures.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { BRAND_QUESTION, BRIEF, approvesBrief, createBrief, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
+import { failingSql } from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { BRAND_QUESTION, BRIEF, approvesBrief, createBrief, registryWith, stubEngine } from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
 import { BRIEF_REVIEW_MINIMUM_ROLE, loadBriefReviewDisclosure, reviewBrief, briefStatusFor, productionRefusalFor } from "./brief-review.server.ts";
 import { loadGatedJevDecision } from "./session.server.ts";
 

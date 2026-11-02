@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
-import { factoryRunFor, planRowsFor, runRow, stageJob, stubImageProvider, studioTenant, type FactoryTenant } from "../testing/produce-fixtures.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
+import { factoryRunFor, planRowsFor, runRow, stageJob, stubImageProvider, studioTenant, type FactoryTenant } from "../../../test-support/lib/meridian/testing/produce-fixtures.ts";
 import type { CreativeSpec, ProductionJob } from "../production/types.ts";
 
 // The testing runtime enables the image double and the testing artifact store. Production never selects either.
@@ -12,7 +12,7 @@ process.env.MERIDIAN_TESTING_RUNTIME = "true";
 // The stage and the poller use the "@/" alias through their server modules, so the alias hook is registered before they load.
 enableAppAliases();
 const { executeFactoryJob } = await import("./worker.ts");
-const fixtures = await import("../testing/production-fixtures.ts");
+const fixtures = await import("../../../test-support/lib/meridian/testing/production-fixtures.ts");
 const { productionRouter } = await import("../production/router.ts");
 const { pollProductionJobs } = await import("../production/poller.ts");
 

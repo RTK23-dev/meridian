@@ -4,7 +4,9 @@ import { z } from "zod";
 import { idSchema } from "./ids.ts";
 import { usdSchema } from "./money.ts";
 import { kitRefSchema } from "./kits.ts";
+import { contentHashSchema } from "./hash.ts";
 import { nonBlankText, positiveMsSchema } from "./primitives.ts";
+import { cookbookInstructionRoleSchema } from "./cookbook-roles.ts";
 
 export const BEAT_ROLES = ["hook", "setup", "item", "proof", "twist", "payoff", "cta"] as const;
 export const beatRoleSchema = z.enum(BEAT_ROLES);
@@ -23,6 +25,32 @@ export const GENE_IDS = [
 ] as const;
 export const geneIdSchema = z.enum(GENE_IDS);
 export type GeneId = z.infer<typeof geneIdSchema>;
+
+/**
+ * The roles a cookbook's instructions can reach (contract v13). The engine's roles read the instruction of their own role, if the request
+ * carries one. This list is the cookbook library's list too (src/lib/meridian/cookbooks/controls.ts).
+ */
+export { COOKBOOK_INSTRUCTION_ROLES, cookbookInstructionRoleSchema } from "./cookbook-roles.ts";
+
+/** The total text a cookbook may send with one request, in characters (contract v13). */
+export const COOKBOOK_INSTRUCTIONS_MAX = 16000;
+
+/**
+ * A cookbook the request was made from (contract v13, round 3). The id and version name the cookbook; valuesHash names the values the person
+ * chose; instructions carries the text per role. The instructions are data: a role reads them as a delimited block and never as rules.
+ */
+export const cookbookRefSchema = z
+  .strictObject({
+    id: z.string().regex(/^ck_[a-z0-9_]{3,60}$/, { message: "a cookbook id starts with ck_" }),
+    version: z.int().min(1),
+    valuesHash: contentHashSchema,
+    instructions: z.partialRecord(cookbookInstructionRoleSchema, z.string().min(1).max(4000)),
+  })
+  .refine(
+    (ref) => Object.values(ref.instructions).reduce((total, text) => total + (text?.length ?? 0), 0) <= COOKBOOK_INSTRUCTIONS_MAX,
+    { message: `the cookbook instructions are over ${COOKBOOK_INSTRUCTIONS_MAX} characters in total` },
+  );
+export type CookbookRef = z.infer<typeof cookbookRefSchema>;
 
 export const PRIORITIES = ["rush", "normal", "batch"] as const;
 
@@ -87,6 +115,8 @@ export const productionRequestSchema = z.object({
     keep: z.array(geneIdSchema),
     change: z.array(z.string().min(1)),
   }),
+  /** The cookbook the request was made from, when one was used (contract v13). Optional, so earlier requests parse unchanged. */
+  cookbook: cookbookRefSchema.optional(),
   /** The script the producer sends (the words to speak). Exactly one of `script` and `brief` is present (contract v8). */
   script: z
     .object({

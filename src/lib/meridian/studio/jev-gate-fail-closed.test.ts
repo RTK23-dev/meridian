@@ -4,7 +4,7 @@ import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { executeApprovedCreativePlan, generateStudioVariants } from "./session.server.ts";
-import { TEST_PLAN_LINEAGE } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 
 /**
  * M2 regression: the JEV gate must fail closed before any write or billable generation.

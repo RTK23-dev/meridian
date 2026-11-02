@@ -3,14 +3,14 @@ import test from "node:test";
 import { getSql } from "../../db.ts";
 import { CreativeDecisionEngine } from "../creative/engine.ts";
 import { executeApprovedCreativePlan } from "../studio/session.server.ts";
-import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../testing/plan-lineage.ts";
+import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 import {
   insertExecutingPlan,
   jobsOf,
   reservationsOf,
   stubGoogleImage,
   studioTenant,
-} from "../testing/durable-image-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { completeProductionJob, settleCarouselParent } from "./materialization.ts";
 import { pollProductionJobs } from "./poller.ts";
 

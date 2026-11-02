@@ -1,14 +1,13 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button, ErrorState, Field, Input } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
-import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation, useVideoBudgetQuery } from "@/lib/query/hooks";
-import { removeProviderConfig, saveProviderConfig, saveVideoBudget, testProviderConnection } from "@/lib/meridian/settings/server-actions";
+import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
+import { removeProviderConfig, saveProviderConfig, testProviderConnection } from "@/lib/meridian/settings/server-actions";
 import { keyOwnerNote, splitOperatorHint } from "./key-copy";
 import { OperatorVariables } from "./operator-note";
-import { parseMonthlyVideoBudget } from "@/lib/meridian/settings/video-budget-model";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
   rowsIn,
@@ -128,108 +127,6 @@ function GroupBlock({
   );
 }
 
-/**
- * The workspace's "Monthly video budget (USD)". Blank means no budget is set; there is no default. Only an admin can change
- * it, and the server checks the role again.
- */
-export function VideoBudgetForm({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
-  const budget = useVideoBudgetQuery(organizationId);
-  const saved = budget.data?.monthlyVideoBudgetUsd ?? null;
-  const [draft, setDraft] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const save = useScopedMutation({
-    mutationKey: ["mutation", "settings.video-budget.save", organizationId],
-    mutationFn: (value: string) => saveVideoBudget({ data: { organizationId, monthlyVideoBudgetUsd: value } }),
-    invalidate: () => [qk.videoBudget(organizationId)],
-    onSuccess: (result) => {
-      setDraft(null);
-      setMessage(result.monthlyVideoBudgetUsd === null ? "Monthly budget cleared. No budget is set." : "Monthly budget saved.");
-    },
-  });
-
-  const inputRef = useRef<HTMLInputElement>(null);
-  // A blocker elsewhere links here with #monthly-budget. Read the router's location as well as the browser URL:
-  // client-side navigation uses history.pushState, which does not dispatch a native hashchange event.
-  const routeHash = useRouterState({ select: (state) => state.location.hash });
-  useLayoutEffect(() => {
-    const hash = routeHash.replace(/^#/, "");
-    if (hash !== "monthly-budget" && window.location.hash !== "#monthly-budget") return;
-    const field = inputRef.current;
-    if (!field) return;
-    field.scrollIntoView({ block: "center" });
-    // The field is disabled while its saved value loads. This effect runs again when loading ends,
-    // and layout-effect timing makes the focus visible before the client-side navigation settles.
-    if (!field.disabled) field.focus();
-  }, [budget.isPending, budget.isError, routeHash]);
-
-  const shown = draft ?? (saved === null ? "" : saved.toFixed(2));
-  const parsed = parseMonthlyVideoBudget(shown);
-  const failure = save.error ? plainError(save.error) : null;
-  const current = budget.isError
-    ? "The budget could not be loaded. Nothing is assumed."
-    : budget.isPending
-      ? "Loading the budget..."
-      : saved === null
-        ? "No budget is set."
-        : `The budget is ${saved.toFixed(2)} USD a month.`;
-
-  return (
-    <div id="monthly-budget" className="scroll-mt-24 space-y-3 border-t border-border pt-4" data-row="monthly_video_budget">
-      <div className="space-y-1">
-        <p className="font-semibold text-fg">Monthly budget (USD)</p>
-        <p className="text-sm text-fg-muted">
-          This workspace's hard monthly cap, in US dollars, on all paid generation together: video, copy and scripts,
-          research analysis, brand brain suggestions, Factory image labels and OpenRouter decisions. It is a limit Meridian
-          enforces, not your OpenRouter account balance. Blank means no budget is set, so paid generation, and the
-          OpenRouter connection test, are blocked until one is saved. Each call is also capped on its own. There is no
-          default. {current}
-        </p>
-      </div>
-      {!canAdmin ? (
-        <p className="text-sm text-fg-muted">Only a workspace admin can change the budget.</p>
-      ) : (
-        <>
-          {failure ? <PlainErrorMessage message={failure.message} raw={failure.raw} /> : null}
-          {message ? <p className="text-sm text-success" role="status">{message}</p> : null}
-          <form
-            className="flex flex-wrap items-end gap-3"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!parsed.ok || save.isPending || budget.isPending) return;
-              setMessage(null);
-              void save.mutateAsync(shown).catch(() => undefined);
-            }}
-          >
-            <div className="min-w-0 flex-1 basis-full sm:min-w-[16rem] sm:basis-auto">
-              <Field
-                label="Monthly budget (USD)"
-                hint="A number of 0 or more, with at most two decimals. Leave blank for no budget."
-                error={parsed.ok ? undefined : parsed.message}
-              >
-                <Input
-                  ref={inputRef}
-                  inputMode="decimal"
-                  value={shown}
-                  onChange={(event) => setDraft(event.target.value)}
-                  placeholder="No budget set"
-                  disabled={save.isPending || budget.isPending || budget.isError}
-                />
-              </Field>
-            </div>
-            <Button type="submit" variant="secondary" disabled={!parsed.ok || draft === null || save.isPending || budget.isPending}>
-              {save.isPending ? "Saving..." : "Save budget"}
-            </Button>
-          </form>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * Check key for a row that offers it. The server reads the key through the resolver and calls no provider, so the answer says
- * the key is readable (CONFIGURED). It is never shown as a provider connection; only READY would be, and no Setup check returns it.
- */
 export function TestConnection({
   row,
   organizationId,

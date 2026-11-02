@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { getSql } from "../../db.ts";
-import { createTenantFixture, execute, injectProvider, job } from "../testing/production-fixtures.ts";
+import { createTenantFixture, execute, injectProvider, job } from "../../../test-support/lib/meridian/testing/production-fixtures.ts";
 
 const MODEL = "gemini-omni-1.1-flash";
 

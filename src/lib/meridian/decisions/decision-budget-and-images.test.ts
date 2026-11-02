@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import type { JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
-import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from "../testing/decision-catalog-fixture.ts";
+import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from "./recorded-decision-catalog.ts";
 import { resolveImageSupport } from "./capabilities.ts";
 import { DecisionCatalogSource } from "./decision-catalog.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
@@ -76,7 +76,7 @@ function counting(response: () => Response | Promise<Response>) {
 }
 
 function engineWith(options: { fetchImpl: typeof fetch; catalog: DecisionCatalogSource; workspaceModel?: string | null }): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(),
+  return new OpenRouterDecisionsEngine({ maxUsdPerCall: async () => currentCapUsd, holds: memoryDecisionHolds(),
     fetchImpl: options.fetchImpl,
     keys,
     store: { ...noCheck, async workspaceModel() { return options.workspaceModel ?? OPENROUTER_DECISIONS_EXAMPLE_MODEL; } },
@@ -85,13 +85,14 @@ function engineWith(options: { fetchImpl: typeof fetch; catalog: DecisionCatalog
   });
 }
 
+/** The workspace's cap for the test that is running: the recorded default, or the value the test gives (blank is unset, which refuses). */
+let currentCapUsd: number | null = 0.05;
+
 function withLimit<T>(value: string | undefined, run: () => Promise<T>): Promise<T> {
-  const saved = process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-  if (value === undefined) delete process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-  else process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL = value;
+  const saved = currentCapUsd;
+  currentCapUsd = value === undefined ? 0.05 : value.trim() === "" ? null : Number(value);
   return run().finally(() => {
-    if (saved === undefined) delete process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-    else process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL = saved;
+    currentCapUsd = saved;
   });
 }
 

@@ -8,7 +8,7 @@ import {
   makeFactoryTestSql,
   seedFactoryRun,
   seedJobRow,
-} from "../testing/factory-fixtures.ts";
+} from "../../../test-support/lib/meridian/testing/factory-fixtures.ts";
 import { predictionFingerprint, type GradeRecord } from "./prediction.ts";
 import { factoryRunViewsFor } from "./run-view.ts";
 

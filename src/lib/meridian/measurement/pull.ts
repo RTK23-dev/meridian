@@ -11,6 +11,7 @@
  * Every row goes through `recordLinkedMetric`, so it is linked to its creative and to a receipt of its surface, or it is refused. A
  * metric the source did not report is stored as null, never as zero. A repeated pull of the same observation stores nothing twice.
  */
+import { tokenEncryptionKey } from "../credentials/secret-settings.ts";
 import type { Sql } from "../learning/store.ts";
 import { resolveOrganicConnection, isOrganicPlatform } from "../distribution/connection.ts";
 import { listDistributionChannels } from "../distribution/registry.ts";
@@ -95,7 +96,7 @@ async function defaultPaidInsights(sql: Sql, scope: MeasurementScope, target: Pa
   if (target.provider !== "meta" && target.provider !== "tiktok" && target.provider !== "google") {
     return { notReported: `${target.provider} has no insights reader. Nothing was measured.` };
   }
-  const credential = await loadTenantProviderToken(sql, scope.organizationId, target.provider, process.env.TOKEN_ENCRYPTION_KEY ?? "");
+  const credential = await loadTenantProviderToken(sql, scope.organizationId, target.provider, tokenEncryptionKey() ?? "");
   if (credential.status === "NOT_CONNECTED") return { notReported: credential.error };
   return {
     notReported: "The paid pull needs the ad account's currency and timezone, which are not stored for this receipt. Nothing was stored.",

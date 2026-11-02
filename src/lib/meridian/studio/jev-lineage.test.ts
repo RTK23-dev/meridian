@@ -12,11 +12,11 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
-import { approvesBriefCalibrated, registryWith, stubEngine } from "../testing/brief-fixtures.ts";
-import { seedBrandBrain, seedOpportunity } from "../testing/opportunity-fixtures.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
-import { setMonthlyBudget } from "../testing/monthly-budget.ts";
-import { enableAppAliases } from "../testing/module-aliases.ts";
+import { approvesBriefCalibrated, registryWith, stubEngine } from "../../../test-support/lib/meridian/testing/brief-fixtures.ts";
+import { seedBrandBrain, seedOpportunity } from "../../../test-support/lib/meridian/testing/opportunity-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
+import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
+import { enableAppAliases } from "../../../test-support/lib/meridian/testing/module-aliases.ts";
 
 // The studio server functions use the "@/" alias, so the alias hook is registered before they are loaded.
 enableAppAliases();

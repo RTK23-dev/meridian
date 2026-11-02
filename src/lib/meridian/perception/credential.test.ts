@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
 import { storeVaultCredential } from "../vault/service.ts";
-import { studioTenant } from "../testing/durable-image-fixtures.ts";
+import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { PERCEPTION_CREDENTIAL_TYPE, fingerprintOf, resolvePerceptionCredential } from "./credential.ts";
 import { perceptionReadiness } from "./run.ts";
 import { GeminiPerceptionProvider } from "./multimodal.ts";
