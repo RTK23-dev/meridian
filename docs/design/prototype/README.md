@@ -1,6 +1,6 @@
 # Mixed-plan prototype
 
-A clickable prototype of the proposal in `docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md`. One structure, two systems: the shipped look (AttentionOS, from `src/styles.css`) and the proposal (Katana tokens from `docs/design/tokens/katana-tokens.json`). The switch is at the top of the page.
+A prototype of the proposal in `docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md`, set out as small plates. Each plate is one part of the design, with what it does and what it means. One structure, two systems: the shipped look (AttentionOS, from `src/styles.css`) and the proposal (Katana tokens from `docs/design/tokens/katana-tokens.json`). The switch is at the top of the page.
 
 All content is a sample. No provider was called and nothing ran. Costs, models and states are placeholders chosen to show every state.
 
@@ -16,7 +16,7 @@ then open http://localhost:8080/index.html.
 
 ## Test it
 
-The model is pure and has no DOM. Its tests are in `scripts/design-prototype-model.test.mjs`, so `npm test` and the CI shards run them with the other script tests:
+The model is pure and has no DOM. Its tests are in `scripts/design-prototype-model.test.mjs` (20 tests, including the copy for each state and cost), so `npm test` and the CI shards run them with the other script tests:
 
     node --test scripts/design-prototype-model.test.mjs
 
@@ -24,7 +24,7 @@ The model tests check the canvas geometry against `src/engine/orchestrator/layou
 
 ## Measure it
 
-`capture.mjs` runs the page in headless Chromium and checks the 21 claims in the plan: theme following the system and an explicit choice, fonts, title tiers, layout position under the details panel, keyboard order and the skip link, restriction, layout shift on redraw, reduced motion, phone width and greyscale. It writes screenshots and `screens/measurements.json`, and exits non-zero if a claim fails.
+`capture.mjs` runs the page in headless Chromium and checks the 28 claims in the plan: the theme, fonts, title tiers, the brief, the details panel, the shared selection, the overview map, the keyboard, restriction, layout shift on redraw, reduced motion, the phone, and the state copy. It writes screenshots and `screens/measurements.json`, and exits non-zero if a claim fails.
 
     node docs/design/prototype/capture.mjs
 
@@ -36,12 +36,14 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 
     node docs/design/prototype/build-artifact.mjs <output.html>
 
-The build keeps the page content as it is in `index.html`, and the publish skeleton supplies the document wrapper.
+The build bundles `model.mjs`, `mount.mjs` and `app.mjs` into one script, in that order, and keeps the page content as it is in `index.html`. The publish skeleton supplies the document wrapper.
 
 ## Files
 
-- `index.html`, `prototype.css`, `app.mjs`: the page and its view controller. Text goes through `esc()`; no sample data reaches `innerHTML` unescaped.
+- `index.html`, `prototype.css`: the page of plates and its styles.
+- `mount.mjs`: the plan component. It is mounted in each plate that shows a plan, with only the controls that plate asks for.
+- `app.mjs`: the page controller. It mounts the plans, builds the state and cost plates from the model, and wires the brief and the switches. Text goes through `esc()`; no sample data reaches `innerHTML` unescaped.
 - `model.mjs`: the sample plan, the layout, the state words, the cost rules and the reducer. Its tests are `scripts/design-prototype-model.test.mjs`.
 - `capture.mjs`: the browser checks and the screenshots.
 - `build-artifact.mjs`: the single-file build for publishing.
-- `screens/`: screenshots at 1440 and 390 px, both systems, both themes, plus `measurements.json`.
+- `screens/`: screenshots of the page (1440 and 390 px, both themes, the shipped look), plus `measurements.json`.

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
-  EXAMPLE_GOALS, FILTERS, GEOMETRY, KIND_LABEL, SAMPLE_PLAN, STATE, costLabel, initialState, layoutSteps, reduce, restrictionText, toastDuration, visibleIds,
+  COST_COPY, EXAMPLE_GOALS, FILTERS, GEOMETRY, KIND_LABEL, SAMPLE_PLAN, STATE, STATE_COPY, costLabel, initialState, layoutSteps, reduce, restrictionText, toastDuration, visibleIds,
 } from "../docs/design/prototype/model.mjs";
 
 const source = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
@@ -154,4 +154,26 @@ test("a cost is recorded, estimated, not recorded or absent, and never a made-up
 
 test("an unknown action is an error", () => {
   assert.throws(() => reduce(initialState(), { type: "explode" }), /unknown action/);
+});
+
+test("every state says what it means and what to do next, in full sentences", () => {
+  for (const key of Object.keys(STATE)) {
+    const copy = STATE_COPY[key];
+    assert.ok(copy, `${key} has copy`);
+    for (const field of ["meaning", "next"]) {
+      assert.ok(copy[field].length > 10, `${key}.${field} is a sentence`);
+      assert.match(copy[field], /[.!?]$/, `${key}.${field} ends a sentence`);
+    }
+  }
+  assert.deepEqual(Object.keys(STATE_COPY).sort(), Object.keys(STATE).sort());
+});
+
+test("the cost copy covers every kind of figure the cost labels can show", () => {
+  assert.deepEqual(Object.keys(COST_COPY).sort(), ["estimate", "none", "recorded", "unknown"]);
+  for (const text of Object.values(COST_COPY)) assert.match(text, /[.!?]$/);
+});
+
+test("the copy uses no dash as an aside, so every sentence reads plainly", () => {
+  const copy = [...Object.values(STATE_COPY).flatMap((c) => [c.meaning, c.next]), ...Object.values(COST_COPY)];
+  for (const sentence of copy) assert.doesNotMatch(sentence, /[\u2013\u2014]/, sentence);
 });

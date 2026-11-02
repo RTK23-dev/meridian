@@ -34,40 +34,32 @@
         "btn": "cap alphabetic"
       }
     },
-    "tier.container.steps": {
+    "tier.column.steps": {
       "ok": true,
       "detail": {
-        "closed": "36px",
-        "open": "28px",
-        "bodyWidthOpen": 632
+        "wide": "36px",
+        "narrow": "28px"
       }
     },
-    "tier.proposed": {
-      "detail": {
-        "closed": "36px",
-        "open": "28px",
-        "bodyWidthOpen": 632
-      }
-    },
-    "tier.shipped.by-window": {
+    "tier.masthead.steps": {
       "ok": true,
       "detail": {
-        "closed": "36px",
-        "open": "36px",
-        "bodyWidthOpen": 632
+        "masthead": "104px"
       }
     },
-    "tier.shipped": {
-      "detail": {
-        "closed": "36px",
-        "open": "36px",
-        "bodyWidthOpen": 632
-      }
-    },
-    "drawer.title-takes-focus": {
+    "tier.masthead.phone": {
       "ok": true,
       "detail": {
-        "titleFocused": true
+        "phoneMasthead": "44px"
+      }
+    },
+    "assistant.narrows-the-brief-column": {
+      "ok": true,
+      "detail": {
+        "before": 516.65625,
+        "after": 216.65625,
+        "planBefore": 1352,
+        "planAfter": 1352
       }
     },
     "overlay.canvas-still": {
@@ -91,8 +83,14 @@
     "overlay.selected-step-not-covered": {
       "ok": true,
       "detail": {
-        "right": 944,
-        "drawerLeft": 960
+        "right": 814,
+        "drawerLeft": 830
+      }
+    },
+    "drawer.title-takes-focus": {
+      "ok": true,
+      "detail": {
+        "titleFocused": true
       }
     },
     "drawer.escape.returns-focus": {
@@ -100,6 +98,37 @@
       "detail": {
         "closed": true,
         "focused": "s6"
+      }
+    },
+    "thread.selection-shared": {
+      "ok": true,
+      "detail": {
+        "main": "s2",
+        "strip": "s2",
+        "filter": "s2",
+        "overview": "s2"
+      }
+    },
+    "overview.is-a-map-above-the-canvas": {
+      "ok": true,
+      "detail": {
+        "isOverview": true,
+        "mapHeight": 64.96875,
+        "mapTop": 2940.984375,
+        "frameTop": 3121.953125
+      }
+    },
+    "overview.click-pans-the-canvas": {
+      "ok": true,
+      "detail": {
+        "before": 0,
+        "after": 1324
+      }
+    },
+    "keyboard.skip-link-first": {
+      "ok": true,
+      "detail": {
+        "first": "skip-link"
       }
     },
     "keyboard.reading-order": {
@@ -113,20 +142,14 @@
         "s6",
         "s7",
         "s8",
-        "BODY"
+        "DIV"
       ]
-    },
-    "keyboard.skip-link-first": {
-      "ok": true,
-      "detail": {
-        "first": "skip-link"
-      }
     },
     "keyboard.arrows-scroll-plan": {
       "ok": true,
       "detail": {
-        "before": 0,
-        "after": 80
+        "left": 644,
+        "right": 724
       }
     },
     "restriction.count-in-words": {
@@ -143,8 +166,7 @@
     "loading.cls-zero": {
       "ok": true,
       "detail": {
-        "cls": 0,
-        "sources": []
+        "cls": 0
       }
     },
     "one-red-action.brief": {
@@ -169,7 +191,7 @@
     "phone.canvas-recomposed-as-list": {
       "ok": true,
       "detail": {
-        "canvasHidden": true,
+        "view": "list",
         "order": [
           "s1",
           "s2",
@@ -185,26 +207,34 @@
     "phone.details-sheet": {
       "ok": true,
       "detail": {
-        "top": 373,
-        "bottom": 844,
-        "width": 390,
-        "vh": 844
+        "bottomGap": 0,
+        "width": 270,
+        "rootWidth": 270
       }
     },
-    "greyscale.every-state-has-a-word": {
+    "states.ten-distinct-complete": {
       "ok": true,
-      "detail": [
-        "Planned",
-        "Running",
-        "Done",
-        "Reused",
-        "Skipped",
-        "Failed",
-        "NOT CONNECTED",
-        "Paused at budget",
-        "Queued at the provider",
-        "To re-run"
-      ]
+      "detail": {
+        "states": 10,
+        "distinct": 10,
+        "complete": true,
+        "costs": 4
+      }
+    },
+    "money.four-tiles": {
+      "ok": true,
+      "detail": {
+        "costs": 4
+      }
+    },
+    "greyscale.applies": {
+      "ok": true,
+      "detail": {
+        "filter": "grayscale(1)"
+      }
+    },
+    "claims": {
+      "detail": 28
     }
   }
 }

@@ -21,10 +21,12 @@ const body = html.match(/<body>([\s\S]*?)<\/body>/)[1]
   .replace(/<script type="module" src="app\.mjs"><\/script>/, "")
   .trim();
 
-// The two modules become one script. Their exports and imports are removed; names do not collide.
-const model = read("model.mjs").replace(/^export /gm, "");
-const app = read("app.mjs").replace(/^import \{[\s\S]*?\} from "\.\/model\.mjs";\n/m, "");
-if (/^import /m.test(app) || /^export /m.test(model + app)) throw new Error("an import or export was left in the inlined script");
+// The modules become one script, in dependency order. Relative imports and exports are removed; the names do not collide.
+const modules = ["model.mjs", "mount.mjs", "app.mjs"].map((name) =>
+  read(name).replace(/^import [\s\S]*?from "\.\/[^"]+";\n/gm, "").replace(/^export /gm, ""),
+);
+const script = modules.join("\n");
+if (/^import /m.test(script) || /^export /m.test(script)) throw new Error("an import or export was left in the inlined script");
 
 const page = `<title>${title}</title>
 <meta name="claude:viewport-fit-sides" content="cover">
@@ -34,8 +36,7 @@ ${read("prototype.css")}
 </style>
 ${body}
 <script type="module">
-${model}
-${app}
+${script}
 </script>
 `;
 

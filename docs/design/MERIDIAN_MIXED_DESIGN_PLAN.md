@@ -1,6 +1,6 @@
 # Meridian mixed design plan: Katana, Onlab's distances and Sanity's mechanisms
 
-Status: proposal for owner review. Written 2026-11-02. This document changes no app code. It adds the proposed token file (`docs/design/tokens/katana-tokens.json`), a clickable prototype in `docs/design/prototype/`, and the Sanity evidence in `docs/design/research/sanity/`. Open the prototype from `docs/design/prototype/README.md`.
+Status: proposal for owner review. Written 2026-11-02. This document changes no app code. It adds the proposed token file (`docs/design/tokens/katana-tokens.json`), a prototype in `docs/design/prototype/`, set out as small plates (each part, with what it does and what it means), and the Sanity evidence in `docs/design/research/sanity/`. Open the prototype from `docs/design/prototype/README.md`.
 
 Scope: the design system, the Create flow (Brief, Plan, step details), the component states and the accessibility rules. Home, Library, Insights and Settings are covered only where the mixed rules change them (section 4.6).
 
@@ -45,21 +45,23 @@ These are found by reading it against the code and by running the checks. Sectio
 Each claim below has a test, a measurement, or both, and a file a reviewer can open.
 
 - The proposed tokens: 35 colour pairs meet their minimum in both themes, using the repo's own helper (`src/lib/meridian/a11y/contrast.ts`). Every ratio the Katana plan states in its colour table is the computed ratio, to two decimal places. The JSON matches the Katana plan's CSS block. (`src/lib/meridian/a11y/katana-tokens.test.ts`, 5 tests.)
-- The model: the canvas geometry equals `layout.ts`. The ten state words and the ten kind labels equal the app's strings. The example goals equal the app's. Selection survives every change of view. A filter never hides the selected step silently. A recorded zero shows as `$0.0000`, never "not recorded". (`scripts/design-prototype-model.test.mjs`, 17 tests.)
-- The rendered prototype, measured in headless Chromium by `docs/design/prototype/capture.mjs` (21 claims, all hold):
-  - Archivo, Instrument Sans and JetBrains Mono resolve (`document.fonts.check`).
-  - The browser supports `text-box: trim-both cap alphabetic`, and the buttons use it.
-  - The title is 36 px in the full work area and 28 px when the assistant pushes it to 664 px. The shipped title stays at 36 px.
-  - Opening the step details does not move the step's layout position (`offsetLeft`, `offsetTop`). The selected step's right edge stays 16 px clear of the overlay.
-  - Tab walks the eight steps in reading order. Escape closes the details and returns focus to the step.
+- The model: the canvas geometry equals `layout.ts`. The ten state words and the ten kind labels equal the app's strings. The example goals equal the app's. Selection survives every change of view. A filter never hides the selected step silently. A recorded zero shows as `$0.0000`, never "not recorded". (`scripts/design-prototype-model.test.mjs`, 20 tests, including the copy for each state and cost.)
+- The rendered prototype, measured in headless Chromium by `docs/design/prototype/capture.mjs` (28 claims, all hold):
+  - The theme follows the system setting when nothing is chosen, and an explicit Dark or Light choice overrides it.
+  - Archivo, Instrument Sans and JetBrains Mono resolve (`document.fonts.check`). The browser supports `text-box: trim-both cap alphabetic`, and the buttons use it.
+  - Titles follow their space. A title in a full-width column is 36 px and in a sixty-percent column 28 px. The masthead is 104 px on a wide window and 44 px on a phone.
+  - Opening the assistant narrows the brief's column by more than 200 px. The plan on the page does not move.
+  - Opening the step details does not move the step's layout position (`offsetLeft`, `offsetTop`). The selected step's right edge stays 16 px clear of the overlay, and the step's title takes focus. Escape closes the details and returns focus to the step.
+  - A step chosen in one plate is selected in every other plate on the page (the thread).
+  - The overview is a map above its canvas. A click on the map moves the canvas to that place.
+  - The skip link is the first stop in the focus order. Tab walks the eight steps in reading order. With the plan focused, arrow keys scroll it.
   - "Needs you" reads "Showing 2 of 8 steps". Selecting a hidden step clears the filter and says so.
   - Redrawing the plan produces a layout shift of 0 (Chromium's Cumulative Layout Shift).
   - Under reduced motion, no infinite animation runs.
-  - The skip link is the first stop in the focus order. With the plan focused, arrow keys scroll it.
-  - The title of the step details takes focus when the step opens.
-  - At 390 px the page has no horizontal scroll. The canvas is replaced by the list, and the list keeps the reading order. The details panel is a sheet inside the screen.
-  - One red-filled button on the Brief screen.
-  - In greyscale, the ten state words are present and distinct.
+  - At 390 px the page has no horizontal scroll. The plan is drawn as its list, in the same order, and its details rise as a sheet.
+  - One red-filled button in the brief.
+  - The ten states and the four cost tiles are present, and each state has a distinct word, a meaning and a next step.
+  - Colour off applies to the page.
 
 ### 1.3 What the checks did not establish
 
@@ -104,7 +106,7 @@ Limits. Onlab is an editorial archive with a custom pointer and a 34vw word. The
 | Named motion budget, but per component (§11, R01) | **Adapt**: one global rule | Sanity's rule is partial and its marquee keeps moving under reduced motion. Meridian's global rule is already complete. | capture: no infinite animations |
 | Hidden theme shortcut, Shift+L (§13) | **Adapt**: documented under "?" | A feature that cannot be found is not a feature. | keyboard list in the Components screen |
 | Mega-menu buttons without `aria-expanded` (§13, aria.json) | **Adopt the check**: every disclosure exposes its state | The assistant toggle sets `aria-expanded` in the prototype. | section 9 checklist |
-| Agent panel uses the tab pattern correctly (§13) | **Adopt**: `role="tablist"`, roving `tabindex`, arrow keys | The Brief, Plan and Components tabs in the prototype | keyboard check |
+| Agent panel uses the tab pattern correctly (§13) | **Adopt where tabs exist**: `role="tablist"`, roving `tabindex`, arrow keys | The prototype has no tabs now. Its contents rail marks the chapter in view with `aria-current`. | keyboard check |
 | Skip link fourth in the focus order (§13) | **Adopt the rule**: the skip link is the first stop | Keyboard path | section 10 |
 | Layout stable under load, CLS 0 (§14) | **Adopt** | Matches Onlab's stable loading geometry | capture: CLS 0 |
 | Demonstration, not decoration (§16) | **Adopt as a rule** | The empty and login states show a real state, labelled as an example, not an ornament | section 4.6 |
@@ -304,7 +306,7 @@ Katana section h is the table; this section records what changes.
 - **Buttons.** Four variants, as Katana section 8. The primary is the one red fill on a screen (Katana section 14.7). White is kept for switches, checkboxes and progress. Heights: 40 px, 44 px on touch.
 - **Disabled.** A disabled control has its reason in words beside it, tied with `aria-describedby`. The Resume action on the Plan screen does this, and names the steps.
 - **Disclosures.** Every disclosure exposes `aria-expanded`. The assistant toggle does (measured in the prototype). Sanity's mega-menus do not (ENTRY.md §13), and Meridian's brand switcher and account menu must.
-- **Tabs.** `role="tablist"`, `aria-selected`, roving `tabindex`, arrow keys move between them, and the selected tab has a 2 px red underline. The prototype's Brief, Plan and Components tabs do this.
+- **Tabs.** Where an app uses tabs: `role="tablist"`, `aria-selected`, roving `tabindex`, arrow keys move between them, and the selected tab has a 2 px red underline. The prototype has none; it is one scrolling page of plates, with a contents rail.
 - **Segmented controls.** `aria-pressed` on each view and filter button. The current one has a 2 px red base.
 - **Step cards and rows.** Section 4.2 to 4.4. The selected card has a 2 px red top mark (canvas and strip) or left mark (list).
 - **Notices.** Section 8.4. The toast's status bar is 2 px on the left, in the tone.
@@ -316,8 +318,8 @@ Katana section h is the table; this section records what changes.
 
 - **Order.** Tab walks the steps in reading order: column by column, top to bottom (measured: 8 of 8). The skip link is the first stop (Sanity's fourth-stop finding).
 - **Enter** opens a step's details. **Escape** closes them and returns focus to the step (measured).
-- **Arrow keys** move between tabs. With the canvas itself focused, arrows scroll it, `+` and `−` zoom, and `0` resets the zoom to 75%. Fit-to-width is not used (section 4.2).
-- **Shortcuts.** The Components screen lists the keys. The `?` sheet and Ctrl or Cmd + K (command palette) are in Katana section j and are not built in the prototype.
+- **Arrow keys** scroll the canvas when it has focus. `+` and `−` zoom it, and `0` resets the zoom to 75%. Fit-to-width is not used (section 4.2).
+- **Shortcuts.** The Keyboard plate lists the keys. The `?` sheet and Ctrl or Cmd + K (command palette) are in Katana section j and are not built in the prototype.
 - **Colour off.** Every state reads in greyscale (measured: ten distinct words).
 - **Contrast.** 35 pairs, in both themes, against the repo's helper (section 6.1).
 - **Focus.** A 2 px outline with a 2 px offset in accent red, or `fg-primary` on a red fill (section 6.2). It is never removed.
@@ -380,8 +382,8 @@ Each phase keeps the existing gates: `npm test`, `npm run typecheck`, `npm run l
 Run in this session, in the working tree (the work is not yet committed; see the note at the end of this section):
 
 - `src/lib/meridian/a11y/katana-tokens.test.ts`: 5 tests, pass.
-- `scripts/design-prototype-model.test.mjs`: 17 tests, pass. It sits in `scripts/`, which `npm test` and the CI shards already run.
-- `docs/design/prototype/capture.mjs`: 21 measured claims, all hold, with screenshots in `docs/design/prototype/screens/`. Results in `screens/measurements.json`.
+- `scripts/design-prototype-model.test.mjs`: 20 tests, pass. It sits in `scripts/`, which `npm test` and the CI shards already run.
+- `docs/design/prototype/capture.mjs`: 28 measured claims, all hold, with screenshots in `docs/design/prototype/screens/`. Results in `screens/measurements.json`.
 - `npx eslint` on the changed files: 0 errors, 0 warnings.
 - `npm run typecheck`: exit 0.
 
@@ -402,6 +404,27 @@ The commit is held. The designated branch `claude/nice-tesla-zrf6un` is already 
 
 ---
 
+## 16. The showcase as plates
+
+The prototype is a set of small plates, not a set of screens. Each plate is one part of the design, and carries three things: what it does, what it means for the work, and a specimen that shows it. A reader can take in one plate at a time.
+
+**Plate anatomy.** An index number and a label, then a title in the display face, then two rows: **Does** (the behaviour, in one or two sentences) and **Means** (the consequence for a person doing the work). A specimen follows, and a footnote gives the measured result where there is one. Plates sit on a twelve-column grid, at spans of 12, 7, 6 or 5. Where a plate is taller than its neighbour, it keeps its own height.
+
+**Spacing.** A 4 px base. Chapters have 96 px above them. Plates are 24 px apart, with 32 px inside (22 px on a phone). The page is 1,280 px at most, with a 200 px contents rail on the left at desktop widths. A phone has one column and 20 px either side.
+
+**Type.** Archivo sets every title, in weight 600 with a width of 92%, so headings read as engineered rather than soft. The masthead title steps by its container, 56, 80 and 104 px. Plate titles are 28 px. Instrument Sans sets the text. JetBrains Mono sets every label, index number and figure, so digits line up. Labels are small, uppercase and tracked at 0.12em (sentence case in the shipped look, which does not use them).
+
+**Texture.** Three textures, each with no meaning of its own, and none of them lowering a contrast:
+- a faint twelve-column guide behind the page (3 to 4% of the ink colour), so the grid can be felt;
+- a dot field on each specimen and on the globe mark (10% of the ink colour in the proposal), so a specimen reads as a board, not a blank box;
+- a grain layer on each plate (4 to 5% opacity), which gives the surface a printed quality.
+
+The globe mark is the logo's motion source, drawn from `docs/design/logo/`. Its red meridian turns slowly. It is the only ambient motion on the page, and reduced motion stops it.
+
+**One selection, many plates.** A step chosen in any plate is chosen in every plate. The thread belongs to the plan, so the page is read as one object, not as separate demonstrations.
+
+**Limits of the showcase.** Every number on the page is a sample. The measured results in the footnotes come from the capture, and the capture is the only place a claim is checked. Textures and grain are decoration by the rule above, and any change to them must keep every text contrast in section 6.
+
 ## Appendix A. Files
 
 | File | What it is |
@@ -409,11 +432,11 @@ The commit is held. The designated branch `claude/nice-tesla-zrf6un` is already 
 | `docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md` | This plan |
 | `docs/design/tokens/katana-tokens.json` | Proposed tokens, 35 contrast pairs |
 | `src/lib/meridian/a11y/katana-tokens.test.ts` | Checks the tokens, the drift from the Katana plan, and its stated ratios |
-| `docs/design/prototype/index.html`, `prototype.css`, `app.mjs` | The prototype: both systems, all screens |
+| `docs/design/prototype/index.html`, `prototype.css`, `app.mjs`, `mount.mjs` | The page of plates, its styles, its controller, and the plan component that is mounted in the plates |
 | `docs/design/prototype/model.mjs` | The pure model |
 | `scripts/design-prototype-model.test.mjs` | Its tests (in `scripts/`, so CI runs them) |
-| `docs/design/prototype/capture.mjs` | Browser capture and the 21 measured claims |
+| `docs/design/prototype/capture.mjs` | Browser capture and the 28 measured claims |
 | `docs/design/prototype/build-artifact.mjs` | Builds the single-file page that is published (styles and scripts inlined) |
-| `docs/design/prototype/screens/` | Screenshots and `measurements.json` |
+| `docs/design/prototype/screens/` | Screenshots of the page and `measurements.json` |
 | `docs/design/prototype/README.md` | How to open, test and capture |
 | `docs/design/research/sanity/` | The Sanity deep entry and its JSON evidence |

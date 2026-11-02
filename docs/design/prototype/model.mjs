@@ -189,3 +189,28 @@ export function restrictionText(state, plan = SAMPLE_PLAN) {
   const shown = visibleIds(state, plan).length;
   return `Showing ${shown} of ${plan.steps.length} steps: ${FILTERS[state.filter].label.toLowerCase()}.`;
 }
+
+/**
+ * What each state means and what the person does next. Plain sentences, each one a full claim. The plates on the page render these,
+ * and scripts/design-prototype-model.test.mjs checks that every state has both.
+ */
+export const STATE_COPY = Object.freeze({
+  planned: { meaning: "Waiting for the steps it reads. It runs once they are done.", next: "Nothing to do yet." },
+  running: { meaning: "The model is working on it now.", next: "Changes wait until it finishes." },
+  done: { meaning: "Finished. The result is kept and its cost is recorded.", next: "Nothing to do." },
+  cache_hit: { meaning: "A matching result already exists, so nothing new was made or paid for.", next: "Nothing to do." },
+  skipped: { meaning: "The plan does not need it for this brief.", next: "Change the plan if you want it to run." },
+  failed: { meaning: "It ran and did not succeed. The reason is kept with the step.", next: "Read the reason, then run the step again." },
+  not_connected: { meaning: "The provider it needs is not connected, so it did not run.", next: "Connect the provider in Settings." },
+  paused: { meaning: "The budget for this run is used up, so the run stopped here.", next: "Raise the budget in Settings to continue." },
+  queued: { meaning: "The provider accepted the job and has not finished it yet.", next: "Check again later. Nothing is needed from you." },
+  stale: { meaning: "A step it reads has changed, so this result is out of date.", next: "Run the step again." },
+});
+
+/** What each kind of cost figure says about itself. The figures themselves come from costLabel. */
+export const COST_COPY = Object.freeze({
+  recorded: "The amount the provider charged for this step.",
+  estimate: "The planned amount, before the step runs. Nothing is paid yet.",
+  unknown: "No amount is known. It is never shown as zero.",
+  none: "The step calls no model, so it has no model cost.",
+});
