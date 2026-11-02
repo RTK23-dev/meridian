@@ -21,7 +21,7 @@ export type AccessTokenResolution =
 export type StoredTokenExpiry = {
   /** When the access token expires (ISO), or null when the provider stated none. */
   expiresAt?: string | null;
-  /** Whether a refresh token is stored. A refresh is a manual step on the Connections screen; nothing renews a token on use. */
+  /** Whether a refresh token is stored. A sync or a publish renews a token about to expire (oauth/auto-refresh.ts), and the Connections screen can refresh it by hand. */
   hasRefresh?: boolean;
   /** The time the token is checked (ISO). Defaults to now. */
   now?: string;

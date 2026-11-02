@@ -122,6 +122,13 @@ test("a Meta error that is not a token problem is not a refusal, even when its t
   assert.equal(isRefusal("meta", { status: 200, body: "{}", headers: {} }), false);
 });
 
+test("an OAuth invalid_grant is a refusal from any provider, because the refresh token itself was revoked or expired", () => {
+  const revoked = JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." });
+  assert.equal(isRefusal("google", { status: 400, body: revoked, headers: {} }), true);
+  assert.equal(isRefusal("tiktok", { status: 400, body: revoked, headers: {} }), true);
+  assert.equal(isRefusal("google", { status: 400, body: JSON.stringify({ error: "invalid_request" }), headers: {} }), false);
+});
+
 test("the code 190 rule applies to Meta only, and a body code from another provider is not read as a refusal", () => {
   const body = JSON.stringify({ error: { code: 190 } });
   assert.equal(isRefusal("tiktok", { status: 400, body, headers: {} }), false);

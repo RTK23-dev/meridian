@@ -24,6 +24,8 @@ import type { TrialRequest } from "../distribution/trial.ts";
 import { trialDefaultForRunPage } from "../pages/store.ts";
 import { AD_ACCOUNT_PLATFORM, savedAdAccountId } from "../providers/ad-account.ts";
 import { gatedTransport } from "../providers/capability.ts";
+import { liveTransport } from "../providers/http.ts";
+import { renewStoredToken } from "../oauth/auto-refresh.ts";
 import { anyStageConfirmed, observeProviderUse, recordProviderUse } from "../providers/usage.ts";
 
 /** The organic channel each platform a run names publishes through. A platform with no organic channel is reported, not skipped. */
@@ -186,6 +188,8 @@ export function liveRouteFor(input: { accessToken: string | null; adAccountId: s
  */
 export async function paidRouteFor(sql: Sql, scope: Scope, input: { countries: readonly string[]; pageId: string; link: string }): Promise<PaidRoute> {
   if (isTestingRuntimeNow()) return { engine: publishEngineById("test"), accessToken: null, adAccountId: "" };
+  // A stored Meta token about to lapse is renewed first (oauth/auto-refresh.ts), so the route reads the renewed token.
+  await renewStoredToken(sql, { organizationId: scope.organizationId, provider: "meta", encryptionKey: tokenEncryptionKey() ?? "", env: process.env, transport: liveTransport() });
   const credential = await loadTenantProviderToken(sql, scope.organizationId, "meta", tokenEncryptionKey() ?? "");
   return liveRouteFor({
     accessToken: credential.status === "connected" ? credential.accessToken : null,

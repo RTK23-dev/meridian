@@ -9,6 +9,7 @@ import { ingestPerformanceRows } from "./sync.ts";
 import { loadTenantProviderToken, validatePerformanceOwnership } from "./ownership.ts";
 import { savedAdAccountId } from "../providers/ad-account.ts";
 import { observeProviderUse, recordProviderUse } from "../providers/usage.ts";
+import { renewStoredToken } from "../oauth/auto-refresh.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
 
@@ -50,6 +51,8 @@ export async function runPerformanceSync(
     operation.finish(false, 1, `${provider} performance sync is not implemented.`);
     throw new Error(`${provider} performance sync is not implemented. No observations were stored.`);
   }
+  // A stored token about to lapse is renewed first, so this sync does not start with a token its provider has expired (oauth/auto-refresh.ts).
+  await renewStoredToken(sql, { organizationId: job.organization_id, provider, encryptionKey: tokenEncryptionKey() ?? "", env: process.env, transport });
   // Metrics are read only through the workspace's own connected account. The token is its sealed OAuth token. Without one, the
   // job records NOT_CONNECTED and makes no provider request. No environment token is used.
   const credential = await loadTenantProviderToken(sql, job.organization_id, provider, tokenEncryptionKey() ?? "");

@@ -83,6 +83,20 @@ The rule is tested at the function, integration and browser boundaries. `provide
 
 A stale connection stops performance sync from being planned until a real request is accepted or someone checks the provider again.
 
+## Renewing stored tokens
+
+A performance sync, a paused publish and a factory paid publish renew the workspace's stored OAuth token when it is within five minutes
+of its stated expiry (`oauth/auto-refresh.ts`). Each renews with the stored refresh token, through the routine the Connections screen's
+Refresh button uses, and stores the new token sealed. Provider lifetimes differ: Google's access token lasts about an hour, TikTok's about
+a day, so renewal runs on use, not on a timer.
+
+- A renewal the provider refuses (`invalid_grant`, HTTP 401 or 403, or Meta's invalid-token code) marks the connection FAILED.
+- Any other renewal failure changes nothing, and the token keeps its expiry.
+- Two requests that renew at once do not overwrite each other: the write only applies to the token it read. The other renewal stays.
+- A token with no stated expiry is not renewed, and the testing runtime renews nothing.
+
+`oauth/auto-refresh.test.ts` covers the due check, a renewal, a refusal, a failure, a missing refresh token and the race.
+
 ## Recording real use
 
 A performance sync and a paused publish make real provider requests, and their outcome is written to the workspace's connection by

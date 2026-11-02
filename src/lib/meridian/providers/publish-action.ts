@@ -3,8 +3,9 @@ import { authMiddleware } from "@/lib/auth/middleware";
 import { getSql } from "@/lib/db";
 import { assertRole, isRole } from "@/lib/meridian/access";
 import { startOperation, redactSecrets } from "../observability/redact.ts";
-import type { Transport } from "./http.ts";
+import { liveTransport, type Transport } from "./http.ts";
 import type { PausedStage } from "./live.ts";
+import { renewStoredToken } from "../oauth/auto-refresh.ts";
 import { anyStageConfirmed, observeProviderUse, recordProviderUse } from "./usage.ts";
 
 function clip(value: unknown, max: number): string {
@@ -60,6 +61,8 @@ export async function publishPausedForBrand(
     brandId: input.brandId,
   });
   const env = input.env ?? process.env;
+  // A stored token about to lapse is renewed first, so the publish does not start with a token its provider has expired (oauth/auto-refresh.ts).
+  await renewStoredToken(sql, { organizationId: input.organizationId, provider: input.provider, encryptionKey: env.TOKEN_ENCRYPTION_KEY ?? "", env, transport: liveTransport() });
   const secrets = await sql<{ sealed_token: string; sealed_refresh: string; expires_at: string | null }>`
     select sealed_token, sealed_refresh, expires_at from provider_secrets
     where organization_id = ${input.organizationId} and provider = ${input.provider}
