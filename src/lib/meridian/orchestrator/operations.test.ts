@@ -182,7 +182,7 @@ describe("the orchestrator's server functions: the role and the tenancy of each 
       message: "the workspace's orchestrator policy is unreadable; state the model families when you save it again",
     });
     const saved = await saveWorkspacePolicyAs(db.sql, OTHER_ADMIN, { brandId: OTHER_BRAND, disabledModelFamilies: ["vendor-o"], measureCeilingUsdPerSecond: 4 });
-    assert.deepEqual(saved.policy, { disabledModelFamilies: ["vendor-o"], measureCeilingUsdPerSecond: 4 });
+    assert.deepEqual(saved.policy, { disabledModelFamilies: ["vendor-o"], measureCeilingUsdPerSecond: 4, decisionMaxUsdPerCall: null }, "the decision cap is not set by this save: it stays unset");
     assert.deepEqual((await readWorkspacePolicyAs(db.sql, OTHER_ADMIN, { brandId: OTHER_BRAND })).policy, saved.policy, "the saved policy is read back");
   });
 
@@ -207,11 +207,11 @@ describe("the orchestrator's server functions: the role and the tenancy of each 
     assert.match(approvals[0]?.reason ?? "", /^category copy; copy budget reached/);
   });
 
-  test("a total approval at a workspace month pause is refused with the reason to raise the monthly budget in settings, and changes nothing", async () => {
+  test("a total approval at a workspace month pause is refused with the reason to raise the monthly budget on the Billing page, and changes nothing", async () => {
     await pausedAt("plan_ops_month", BRIEF, "budget reached, project not finished: the workspace month has committed 5 USD, at or above its 5 USD budget, so no paid call starts");
     const before = await getPlan(db.sql, ORG, "plan_ops_month");
     const refused = await approveBudgetAs(db.sql, ADMIN, { brandId: BRAND, planId: "plan_ops_month", budgetUsd: 20 });
-    assert.deepEqual(refused.outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget in settings"] });
+    assert.deepEqual(refused.outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget on the Billing page"] });
     assert.deepEqual(await getPlan(db.sql, ORG, "plan_ops_month"), before, "the plan is exactly as it was: its status, budgets and brief");
     assert.deepEqual((await listApprovalsAs(db.sql, VIEWER, { brandId: BRAND, planId: "plan_ops_month" })).approvals, [], "a refused approval records nothing");
   });

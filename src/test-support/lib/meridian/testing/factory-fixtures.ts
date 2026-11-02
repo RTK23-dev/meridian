@@ -18,6 +18,7 @@ import { SourceRegistry } from "../../../../lib/meridian/sources/registry.ts";
 import type { SourceAdapter, SourceHealth, SourceKind, SourceReference } from "../../../../lib/meridian/sources/types.ts";
 import type { Transport } from "../../../../lib/meridian/providers/http.ts";
 import { notConnectedApifyClient } from "../../../../lib/meridian/sources/apify/client.ts";
+import { seedTestBrandBudget, seedTestBrandCaps } from "./budget-seed.ts";
 
 export const FACTORY_TEST_ORG = "org-factory";
 export const FACTORY_TEST_BRAND = "brand-factory";
@@ -67,6 +68,8 @@ export async function seedFactoryRun(
     insert into brands (id, organization_id, name, created_by, website, country_market)
     values (${FACTORY_TEST_BRAND}, ${FACTORY_TEST_ORG}, 'Brand', 'user-1', ${input.website ?? ""}, ${input.country ?? ""})
   `;
+  await seedTestBrandBudget(sql, FACTORY_TEST_ORG, FACTORY_TEST_BRAND);
+  await seedTestBrandCaps(sql, FACTORY_TEST_ORG, FACTORY_TEST_BRAND);
   await sql`
     insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, created_by, settings)
     values (${FACTORY_TEST_RUN}, ${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, ${input.niche ?? "skincare"}, ${input.level},

@@ -11,6 +11,7 @@ import { productionRouter } from "../../../../lib/meridian/production/router.ts"
 import type { CreativeSpec, ProductionJob, ProductionProvider } from "../../../../lib/meridian/production/types.ts";
 import { BudgetLedgerService } from "../../../../lib/meridian/security/budget-ledger.ts";
 import { executeApprovedCreativePlan } from "../../../../lib/meridian/studio/session.server.ts";
+import { seedTestBrandBudget } from "./budget-seed.ts";
 
 export type SubmitOutcome = (spec: CreativeSpec, submissionIndex: number) => Promise<ProductionJob>;
 export type PollOutcome = (providerJobId: string) => Promise<ProductionJob>;
@@ -137,6 +138,7 @@ export async function createTenantFixture(
   const decisionId = `jev-prod-${suffix}`;
   await sql`insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, 'test-user')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, 'test-user')`;
+  await seedTestBrandBudget(sql, organizationId, brandId);
   await sql`
     insert into jev_decisions (
       id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,

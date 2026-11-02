@@ -9,7 +9,6 @@ import {
   cycloneGatewayUrlSetting,
   cycloneObservationBudgetSetting,
   driveFolderIdSetting,
-  openRouterDecisionMaxUsdPerCallSetting,
   emailApiUrlSetting,
   externalSemanticDimensionsSetting,
   externalSemanticModelSetting,
@@ -69,7 +68,6 @@ describe("the deployment setting accessors return the raw value", () => {
     ["artifactHostAllowlistSetting", artifactHostAllowlistSetting, "MERIDIAN_ARTIFACT_HOST_ALLOWLIST"],
     ["cycloneDeviceIdSetting", cycloneDeviceIdSetting, "CYCLONE_DEVICE_ID"],
     ["cycloneObservationBudgetSetting", cycloneObservationBudgetSetting, "CYCLONE_OBSERVATION_BUDGET"],
-    ["openRouterDecisionMaxUsdPerCallSetting", openRouterDecisionMaxUsdPerCallSetting, "OPENROUTER_DECISION_MAX_USD_PER_CALL"],
     ["driveFolderIdSetting", driveFolderIdSetting, "MERIDIAN_DRIVE_FOLDER_ID"],
   ] as const;
 

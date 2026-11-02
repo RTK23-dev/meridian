@@ -108,18 +108,20 @@ const AUTO_BY_STRUCTURE: Record<string, string> = {
 };
 
 /**
- * The preset for each video of a batch of `count`, in order. One preset repeats for every video; Auto repeats the preset its table gives for
- * the most common research structure, or the Super mix when there is no research format; Super walks the whole library, so a batch of
- * eight tries eight styles. Returns null for an unknown choice, which the caller refuses.
+ * The preset for each video of a batch of `count`, in order, from the styles in `pool` (decision 5: the styles a cookbook carries, so the
+ * default is the whole library). One preset repeats for every video; Auto repeats the preset its table gives for the most common research
+ * structure when that preset is in the pool, or the Super mix when it is not or there is no research format; Super walks the pool, so a batch
+ * of eight tries eight styles. Returns null for a choice that is not in the pool, which the caller refuses.
  */
-export function presetsForBatch(choice: string, count: number, topStructure: string | null): StylePreset[] | null {
-  const mix = () => Array.from({ length: count }, (_, index) => STYLE_PRESETS[index % STYLE_PRESETS.length] as StylePreset);
+export function presetsForBatch(choice: string, count: number, topStructure: string | null, pool: readonly StylePreset[] = STYLE_PRESETS): StylePreset[] | null {
+  if (pool.length === 0) return null;
+  const mix = () => Array.from({ length: count }, (_, index) => pool[index % pool.length] as StylePreset);
   if (choice === STYLE_SUPER) return mix();
   if (choice === STYLE_AUTO) {
     const picked = topStructure !== null ? presetById(AUTO_BY_STRUCTURE[topStructure] ?? "") : null;
-    return picked ? Array.from({ length: count }, () => picked) : mix();
+    return picked && pool.some((preset) => preset.id === picked.id) ? Array.from({ length: count }, () => picked) : mix();
   }
-  const one = presetById(choice);
+  const one = pool.find((preset) => preset.id === choice) ?? null;
   return one ? Array.from({ length: count }, () => one) : null;
 }
 
@@ -127,18 +129,20 @@ export function presetsForBatch(choice: string, count: number, topStructure: str
  * The preset for each video from a ranked list of preset ids (best first), as the decision engine ranked them. The first `count` take one
  * each in rank order, and a batch longer than the list starts over. An id that is not in the library is dropped; with none left, null.
  */
-export function presetsFromRanking(ranked: readonly string[], count: number): StylePreset[] | null {
-  const known = ranked.map((id) => presetById(id)).filter((preset): preset is StylePreset => preset !== null);
+export function presetsFromRanking(ranked: readonly string[], count: number, pool: readonly StylePreset[] = STYLE_PRESETS): StylePreset[] | null {
+  const known = ranked.map((id) => pool.find((preset) => preset.id === id)).filter((preset): preset is StylePreset => preset !== undefined);
   if (known.length === 0) return null;
   return Array.from({ length: count }, (_, index) => known[index % known.length] as StylePreset);
 }
 
 /** The sentence Auto's choice is explained with, so the person can see why. */
-export function autoReason(topStructure: string | null): string {
+export function autoReason(topStructure: string | null, pool: readonly StylePreset[] = STYLE_PRESETS): string {
   const picked = topStructure !== null ? presetById(AUTO_BY_STRUCTURE[topStructure] ?? "") : null;
-  return picked
+  return picked && pool.some((preset) => preset.id === picked.id)
     ? `Auto picked ${picked.label} because "${topStructure!.replaceAll("_", " ")}" is the structure that repeats most in your research.`
-    : "Auto found no repeating structure in your research, so it mixes every style across the batch.";
+    : pool.length === STYLE_PRESETS.length
+      ? "Auto found no repeating structure in your research, so it mixes every style across the batch."
+      : "Auto found no repeating structure in your research that a cookbook carries, so it mixes the styles that have a cookbook across the batch.";
 }
 
 export function styleInstruction(preset: StylePreset): string {

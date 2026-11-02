@@ -27,7 +27,8 @@ async function seedNight(sql: Sql, caps: NightCaps, spentCents: number): Promise
   `;
   await sql`
     insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
-    values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, ${caps.brandDailyCents ?? 0}, ${caps.brandTotalCents ?? 0}, 'user-1')
+    values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, ${caps.brandDailyCents ?? 100000}, ${caps.brandTotalCents ?? 1000000}, 'user-1')
+    on conflict (organization_id, brand_id) do update set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents
   `;
   await sql`update brands set run_defaults = ${JSON.stringify(caps.runDefaults ?? {})} where id = ${FACTORY_TEST_BRAND}`;
   if (spentCents > 0) {

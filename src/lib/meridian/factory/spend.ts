@@ -154,6 +154,9 @@ export async function capStopForRun(
   runId: string,
   runCaps: { totalCents: number | null; dailyCents: number | null },
 ): Promise<string | null> {
+  // The brand's caps are required before any factory spend: a brand with no caps is refused, not left without a limit.
+  const unset = brandCapsSetReason(await spendCapsOf(sql, organizationId, brandId));
+  if (unset) return unset;
   const run = await meteredSpendOf(sql, organizationId, brandId, runId);
   return capStopReason({
     capCents: runCaps.totalCents,
@@ -225,6 +228,15 @@ export async function runSpendFor(sql: Sql, organizationId: string, brandId: str
     result.set(runId, current);
   }
   return result;
+}
+
+/** What a factory spend is refused for when the brand has no daily and total cap. Set on the Billing page; never a default. */
+export const BRAND_CAPS_NOT_SET_REASON =
+  "No spend cap is set for this brand, so the factory does not spend. Set its daily and total caps on the Billing page. Nothing was spent.";
+
+/** The reason the brand's caps refuse spend, or null when both its daily and its total cap are set (above zero). Pure. */
+export function brandCapsSetReason(caps: { totalCents: number; dailyCents: number }): string | null {
+  return caps.totalCents > 0 && caps.dailyCents > 0 ? null : BRAND_CAPS_NOT_SET_REASON;
 }
 
 /** The brand's declared caps, from factory_spend_caps. A brand with no row has none, which reads as zero. */

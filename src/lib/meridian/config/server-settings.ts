@@ -100,11 +100,6 @@ export function cycloneObservationBudgetSetting(env: NodeJS.ProcessEnv = process
   return env.CYCLONE_OBSERVATION_BUDGET;
 }
 
-/** The per-call ceiling for an OpenRouter decision, as text. The caller parses it and refuses a value that is not a positive number. */
-export function openRouterDecisionMaxUsdPerCallSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
-  return env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-}
-
 /** The Google Drive folder the deployment files artifacts in. The caller trims it. */
 export function driveFolderIdSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
   return env.MERIDIAN_DRIVE_FOLDER_ID;

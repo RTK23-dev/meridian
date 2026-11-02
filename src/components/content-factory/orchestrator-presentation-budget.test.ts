@@ -75,8 +75,8 @@ test("a pause names the line it stopped at, read from the pause event's reason: 
   assert.equal(budgetPauseHeading("voice"), "Voice budget reached, project not finished");
 });
 
-test("a month pause says the month is at its budget and to raise the monthly budget in settings, and its reason keeps the run's words", () => {
-  assert.equal(MONTH_PAUSE_SENTENCE, "The workspace month is at its budget; raise the monthly budget in settings.");
+test("a month pause says the month is at its budget and to raise the monthly budget on the Billing page, and its reason keeps the run's words", () => {
+  assert.equal(MONTH_PAUSE_SENTENCE, "The workspace month is at its budget; raise the monthly budget on the Billing page.");
   assert.equal(
     budgetPauseDetail(MONTH_REASON),
     "The workspace month has committed 40 USD, at or above its 40 USD budget, so no paid call starts",

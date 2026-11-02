@@ -3,8 +3,9 @@
 // without that key, and its other keys are read as they are. Every read and write is scoped to the organization. The stored JSON is validated
 // here on every read and write. The families are required: a row without them, or with malformed ones, is unreadable, and no family is filled
 // in from the initial list (that would switch every family back on). The ceiling applies only to a measure run an admin starts, so a row without
-// it takes the initial ceiling. A workspace with no row reads the initial policy. The read reports an unreadable row, and planning, runs and
-// edits refuse with its reason. Nothing is reset, and no family is switched on by it. Browser-safe for the schema and the types: no Node-only
+// it has no ceiling (unset), and a measure run is refused until one is set on the Billing page (no precoded caps). The decision cap per call
+// (decisionMaxUsdPerCall) is read the same way: unset refuses every OpenRouter decision. A workspace with no row reads the initial policy,
+// which has no caps. The read reports an unreadable row, and planning, runs and edits refuse with its reason. Nothing is reset, and no family is switched on by it. Browser-safe for the schema and the types: no Node-only
 // imports (the measure options are a type only).
 
 import { z } from "zod";
@@ -17,24 +18,33 @@ const familySchema = z.string().min(2).max(120).regex(/^[a-z0-9][a-z0-9._-]*(\/[
 
 /**
  * The measure ceiling: the most a video or avatar step without a price is held to, per second of its length (D15). The workspace may set it
- * from one cent to five dollars a second. The initial value is a starting point, adjustable like the families.
+ * from one cent to five dollars a second. It has no default: null (unset) refuses a measure run until an admin sets it on the Billing page.
  */
 export const MEASURE_CEILING_RANGE = { min: 0.01, max: 5 } as const;
-export const INITIAL_MEASURE_CEILING_USD_PER_SECOND = 0.5;
 const measureCeilingSchema = z.number().finite().min(MEASURE_CEILING_RANGE.min).max(MEASURE_CEILING_RANGE.max);
+
+/**
+ * The most one OpenRouter decision may cost before it is sent, in USD. It has no default: null (unset) refuses every OpenRouter decision until
+ * an admin sets it on the Billing page. Between one tenth of a cent and one dollar.
+ */
+export const DECISION_CAP_RANGE = { min: 0.001, max: 1 } as const;
+const decisionCapSchema = z.number().finite().min(DECISION_CAP_RANGE.min).max(DECISION_CAP_RANGE.max);
 
 export const orchestratorPolicySchema = z
   .object({
     disabledModelFamilies: z.array(familySchema).max(20),
-    measureCeilingUsdPerSecond: measureCeilingSchema,
+    measureCeilingUsdPerSecond: measureCeilingSchema.nullable(),
+    decisionMaxUsdPerCall: decisionCapSchema.nullable(),
   })
   .strict();
 
 export type OrchestratorPolicy = z.infer<typeof orchestratorPolicySchema>;
 
+/** The policy a workspace with no saved row reads: the initial families, and no caps. A cap is never filled in. */
 export const INITIAL_POLICY: OrchestratorPolicy = {
   disabledModelFamilies: [...INITIAL_DISABLED_MODEL_FAMILIES],
-  measureCeilingUsdPerSecond: INITIAL_MEASURE_CEILING_USD_PER_SECOND,
+  measureCeilingUsdPerSecond: null,
+  decisionMaxUsdPerCall: null,
 };
 
 /** The reason a stored row that does not validate is refused for. Planning, runs and edits give it; the policy read reports it. */
@@ -54,7 +64,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function initialPolicy(): OrchestratorPolicy {
-  return { disabledModelFamilies: [...INITIAL_POLICY.disabledModelFamilies], measureCeilingUsdPerSecond: INITIAL_POLICY.measureCeilingUsdPerSecond };
+  return { ...INITIAL_POLICY, disabledModelFamilies: [...INITIAL_POLICY.disabledModelFamilies] };
 }
 
 /**
@@ -66,8 +76,9 @@ function initialPolicy(): OrchestratorPolicy {
 export function policyFrom(stored: unknown): PolicyRead {
   if (!isRecord(stored)) return { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
   const current = Object.fromEntries(Object.entries(stored).filter(([key]) => key !== RETIRED_TOLERANCE_KEY));
-  const withCeiling = "measureCeilingUsdPerSecond" in current ? current : { ...current, measureCeilingUsdPerSecond: INITIAL_POLICY.measureCeilingUsdPerSecond };
-  const parsed = orchestratorPolicySchema.safeParse(withCeiling);
+  // A cap that is absent is unset (null), never the initial value. A cap that is present must validate.
+  const withCaps = { measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null, ...current };
+  const parsed = orchestratorPolicySchema.safeParse(withCaps);
   return parsed.success ? { status: "ok", policy: parsed.data } : { status: "unreadable", reason: UNREADABLE_POLICY_REASON };
 }
 
@@ -107,7 +118,7 @@ export async function requireOrchestratorPolicy(sql: Sql, organizationId: string
  */
 export async function writeOrchestratorPolicy(
   sql: Sql,
-  input: { organizationId: string; actorId: string; patch: { disabledModelFamilies?: string[]; measureCeilingUsdPerSecond?: number } },
+  input: { organizationId: string; actorId: string; patch: { disabledModelFamilies?: string[]; measureCeilingUsdPerSecond?: number | null; decisionMaxUsdPerCall?: number | null } },
 ): Promise<OrchestratorPolicy> {
   const read = await readOrchestratorPolicy(sql, input.organizationId);
   const families = input.patch.disabledModelFamilies?.map(normalizeModelId);
@@ -117,6 +128,7 @@ export async function writeOrchestratorPolicy(
     ...base,
     ...(families !== undefined ? { disabledModelFamilies: families } : {}),
     ...(input.patch.measureCeilingUsdPerSecond !== undefined ? { measureCeilingUsdPerSecond: input.patch.measureCeilingUsdPerSecond } : {}),
+    ...(input.patch.decisionMaxUsdPerCall !== undefined ? { decisionMaxUsdPerCall: input.patch.decisionMaxUsdPerCall } : {}),
   });
   await sql`
     insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
@@ -139,5 +151,8 @@ export type MeasureDecision = { status: "off"; measure: null } | { status: "on";
 export function measureModeFor(policy: OrchestratorPolicy, request: { measure: boolean; admin: boolean }): MeasureDecision {
   if (!request.measure) return { status: "off", measure: null };
   if (!request.admin) return { status: "refused", reason: "Only a workspace admin may run a plan in measure mode." };
+  if (policy.measureCeilingUsdPerSecond === null) {
+    return { status: "refused", reason: "No measure ceiling is set for this workspace, so a measure run did not start. Set the measure ceiling on the Billing page." };
+  }
   return { status: "on", measure: { ceilingUsdPerSecond: policy.measureCeilingUsdPerSecond } };
 }

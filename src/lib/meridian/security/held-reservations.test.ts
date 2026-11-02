@@ -4,6 +4,7 @@ import { getSql } from "../../db.ts";
 import type { Sql } from "../learning/store.ts";
 import { BudgetLedgerService } from "./budget-ledger.ts";
 import { listHeldReservations, resolveHeldReservation } from "./held-reservations.ts";
+import { seedTestBrandBudget } from "../../../test-support/lib/meridian/testing/budget-seed.ts";
 
 /**
  * Held-reservation reconciliation: a reservation whose provider outcome is uncertain stays
@@ -24,6 +25,7 @@ async function insertTenant(sql: Sql, suffix: string, members: { userId: string;
     await sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${member.userId}`}, ${organizationId}, ${member.userId}, ${member.role})`;
   }
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, ${creator})`;
+  await seedTestBrandBudget(sql, organizationId, brandId);
   return { organizationId, brandId };
 }
 

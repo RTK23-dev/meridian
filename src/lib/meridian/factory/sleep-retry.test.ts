@@ -29,7 +29,8 @@ async function seedSleepMode(sql: Sql): Promise<void> {
   `;
   await sql`
     insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
-    values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, 0, 5000, 'user-1')
+    values (${FACTORY_TEST_ORG}, ${FACTORY_TEST_BRAND}, 100000, 5000, 'user-1')
+    on conflict (organization_id, brand_id) do update set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents
   `;
 }
 

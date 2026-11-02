@@ -28,6 +28,7 @@ import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
 import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings, getVideoBudget } from "@/lib/meridian/settings/server-actions";
+import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
@@ -187,6 +188,15 @@ export const videoBudgetQueryOptions = (userId: string | null | undefined, organ
   queryKey: userScopedQueryKey(userId, qk.videoBudget(organizationId)),
   queryFn: () => getVideoBudget({ data: { organizationId } }),
 });
+/** The billing page: every limit of the workspace and of each brand, read from the stores that enforce them. */
+export const billingPageQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.billing(organizationId)),
+  queryFn: () => getBillingPage({ data: { organizationId } }),
+});
+export const useBillingPageQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...billingPageQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
 /** Filters for the jobs list. The default is the first, unfiltered page, which is what route prefetch loads. */
 export type JobQueryFilters = { status: string; type: string; brandId: string; page: number };
 export const EMPTY_JOB_QUERY: JobQueryFilters = { status: "", type: "", brandId: "", page: 0 };

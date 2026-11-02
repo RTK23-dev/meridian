@@ -162,7 +162,7 @@ describe("planStoredDraft: the chosen model plans a stored draft, on a hold, thr
   test("a workspace month that is not known refuses the call before any hold, with the source's reason", async () => {
     await draft(db, "plan_svc_nomonth");
     const ids = { request: "req_01JABCDEFGHJKMNPQRSTVWXYZ7", reservation: "res_01JABCDEFGHJKMNPQRSTVWXYZ7" };
-    const reason = "no monthly video budget is set for this workspace; set \"Monthly video budget (USD)\" in Settings";
+    const reason = "no monthly video budget is set for this workspace; set the monthly budget on the Billing page";
     const scope = { ...scopeFor(db, [], ids), workspaceBudget: monthOf({ status: "not_connected", reason }) };
     const outcome = await planStoredDraft(scope, "plan_svc_nomonth");
     assert.equal(outcome.status, "refused");

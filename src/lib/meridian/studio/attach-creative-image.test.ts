@@ -370,7 +370,7 @@ test("an ambiguous provider failure keeps the reservation held, records the job 
 test("an attach the budget cannot cover is refused before any provider call, and leaves no job", async () => {
   const { sql, tenant, creativeId } = await creativeFor("attach-budget");
   await storeProductionKey(sql, tenant.organizationId, "attach-workspace-key-8888");
-  await BudgetLedgerService.getOrCreateAccount(sql, tenant.organizationId, tenant.brandId, 0.5);
+  await BudgetLedgerService.setBrandBudget(sql, { organizationId: tenant.organizationId, brandId: tenant.brandId, capUsd: 0.5 });
   const provider = imageProvider();
   try {
     await assert.rejects(attach(tenant, creativeId), /Budget limit exceeded/);

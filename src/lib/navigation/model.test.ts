@@ -54,8 +54,8 @@ test("the sidebar shows the core loop and no longer lists the six screens that m
 });
 
 test("the Settings screen lists every screen that moved out of the sidebar, with its route", () => {
-  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.to), ["/usage", "/alerts", "/audit", "/webhooks", "/exports", "/notifications"]);
-  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.label), ["Usage & cost", "Alerts center", "Audit log", "Webhook events", "Exports", "Notification preferences"], "labels are accessible names, so they must not change");
+  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.to), ["/billing", "/usage", "/alerts", "/audit", "/webhooks", "/exports", "/notifications"]);
+  assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.label), ["Billing and limits", "Usage & cost", "Alerts center", "Audit log", "Webhook events", "Exports", "Notification preferences"], "labels are accessible names, so they must not change");
 });
 
 test("every brand screen except the overview names a next step that is also in the sidebar", () => {

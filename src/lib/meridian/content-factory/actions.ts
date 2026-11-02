@@ -120,6 +120,8 @@ export const createContentVariations = createServerFn({ method: "POST" })
       useResearchFormat: body.useResearchFormat === true,
       approvedSample: body.approvedSample === true,
       stylePreset: typeof body.stylePreset === "string" ? body.stylePreset.slice(0, 40) : "none",
+      // The cookbook the batch is made from. It decides the style of every video (decision 5); blank means the style choice is a filter.
+      cookbookId: typeof body.cookbookId === "string" ? body.cookbookId.trim().slice(0, 80) : "",
     };
   })
   .middleware([authMiddleware])

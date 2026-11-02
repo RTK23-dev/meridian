@@ -18,7 +18,7 @@ import { withTransaction, type Sql } from "../learning/store.ts";
 import { adsMustPause } from "./kill-switch.ts";
 import { assertAutopilotLevelAllowed } from "./autopilot.ts";
 import type { FactoryStage } from "./pipeline.ts";
-import { brandCapFiguresOf, capOrNull } from "./spend.ts";
+import { brandCapFiguresOf, brandCapsSetReason, capOrNull } from "./spend.ts";
 import { capStopReason } from "./stage-decision.ts";
 import { factoryLevelOfAutomation, runSettingsFromStorage, type RunSettings } from "./run-settings.ts";
 import { challengerArmOf, holdoutArmOf } from "./sleep-holdout.ts";
@@ -346,11 +346,12 @@ async function runNight(
   const runTotalCap = capOrNull(defaults.caps.totalCents);
   const runDailyCap = capOrNull(defaults.caps.dailyCents);
   const brand = await brandCapFiguresOf(sql, organizationId, brandId);
-  const anyCapSet = [runTotalCap, runDailyCap, capOrNull(brand.brandCapCents), capOrNull(brand.brandDailyCapCents)].some((cap) => cap !== null);
-  if (!anyCapSet) {
+  // The brand's daily and total caps are required (set on the Billing page): a night for a brand without them does not run.
+  const brandUnset = brandCapsSetReason({ totalCents: brand.brandCapCents, dailyCents: brand.brandDailyCapCents });
+  if (brandUnset) {
     return conclude({
       end: "stopped",
-      reason: "No spend cap is set for this brand, so sleep mode did not run. Set a cap in the Factory, and the night will run within it.",
+      reason: `${brandUnset} Sleep mode did not run.`,
       summary: "Stopped: no spend cap is set.",
       runStatus: null,
       runError: "",

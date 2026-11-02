@@ -12,6 +12,7 @@ import { DEFAULT_RUN_SETTINGS, factoryLevelOfAutomation, type AutomationMode, ty
 import { productionRouter } from "../../../../lib/meridian/production/router.ts";
 import type { ImageGenerationInput, ImageGenerationOutcome, ProductionImageProvider } from "../../../../lib/meridian/production/image-providers.ts";
 import { PNG, studioTenant } from "./durable-image-fixtures.ts";
+import { seedTestBrandCaps } from "./budget-seed.ts";
 
 export { studioTenant };
 
@@ -24,6 +25,7 @@ export async function factoryRunFor(
   settings: Partial<Omit<RunSettings, "caps">> & { automation: AutomationMode; caps?: Partial<RunSettings["caps"]> },
 ): Promise<string> {
   const runId = randomUUID();
+  await seedTestBrandCaps(sql, tenant.organizationId, tenant.brandId);
   const effective: RunSettings = { ...DEFAULT_RUN_SETTINGS, ...settings, caps: { ...DEFAULT_RUN_SETTINGS.caps, ...(settings.caps ?? {}) } };
   await sql`
     insert into factory_runs (id, organization_id, brand_id, niche, level, status, current_stage, error, created_by, settings)

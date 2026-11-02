@@ -25,6 +25,7 @@ import {
 import type { OpenRouterCheckRecord } from "./openrouter-settings.ts";
 import type { DecisionRequest } from "./types.ts";
 import { memoryDecisionHolds } from "./holds.ts";
+import { recordedDecisionCap } from "../../../test-support/lib/meridian/testing/decision-cap.ts";
 
 const KEY = "sk-or-v1-fixture-secret-0123456789abcdef";
 const KEY_FINGERPRINT = "sk-or-…cdef";
@@ -108,7 +109,7 @@ const noCheck: OpenRouterCheckStore = {
 };
 
 function engine(options: { fetchImpl?: typeof fetch; store?: OpenRouterCheckStore; keys?: OpenRouterKeySource; deploymentModel?: string; catalog?: DecisionCatalogSource } = {}): OpenRouterDecisionsEngine {
-  return new OpenRouterDecisionsEngine({ holds: memoryDecisionHolds(), keys: keySource, store: noCheck, deploymentModel: undefined, catalog: recordedDecisionCatalogSource(), ...options });
+  return new OpenRouterDecisionsEngine({ maxUsdPerCall: recordedDecisionCap, holds: memoryDecisionHolds(), keys: keySource, store: noCheck, deploymentModel: undefined, catalog: recordedDecisionCatalogSource(), ...options });
 }
 
 /** A Decisions response body for the given answers. */

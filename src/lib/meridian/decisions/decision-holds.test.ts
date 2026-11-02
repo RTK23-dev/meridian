@@ -6,7 +6,7 @@
 
 import assert from "node:assert/strict";
 import test, { after } from "node:test";
-import { openTestBackends, withEnv } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
+import { openTestBackends } from "../../../test-support/lib/meridian/credentials/test-databases.ts";
 import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { setMonthlyBudget } from "../../../test-support/lib/meridian/testing/monthly-budget.ts";
 import { recordedDecisionCatalogSource } from "./recorded-decision-catalog.ts";
@@ -90,7 +90,7 @@ function request(organizationId: string, brandId: string): DecisionRequest {
   } as DecisionRequest;
 }
 
-function engineWith(organizationId: string, holds: DecisionHolds, fetchImpl: typeof fetch): OpenRouterDecisionsEngine {
+function engineWith(organizationId: string, holds: DecisionHolds, fetchImpl: typeof fetch, capUsd: number | null = 0.05): OpenRouterDecisionsEngine {
   return new OpenRouterDecisionsEngine({
     holds,
     fetchImpl,
@@ -98,6 +98,7 @@ function engineWith(organizationId: string, holds: DecisionHolds, fetchImpl: typ
     store: noCheck,
     deploymentModel: undefined,
     catalog: recordedDecisionCatalogSource(),
+    maxUsdPerCall: async () => capUsd,
   });
 }
 
@@ -177,9 +178,7 @@ test("a request the ledger refuses is never sent, and the answer carries the led
 test("a call above the per-call limit is refused before any hold is written, so nothing is held and nothing is sent", async () => {
   const holds = memoryDecisionHolds();
   const { fetch, calls } = fakeFetch(() => json(ANSWERED_BODY));
-  const result = await withEnv({ OPENROUTER_DECISION_MAX_USD_PER_CALL: "0.0000001" }, () =>
-    engineWith(ORG, holds, fetch).decide(request(ORG, BRAND)),
-  );
+  const result = await engineWith(ORG, holds, fetch, 0.0000001).decide(request(ORG, BRAND));
 
   assert.equal(calls.length, 0);
   assert.equal(result.failure?.kind, "budget_refused");

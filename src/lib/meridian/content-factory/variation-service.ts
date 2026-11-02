@@ -9,7 +9,9 @@ import { withTransaction, type Sql } from "../learning/store.ts";
 import { SESSION_REFUSAL, sessionAccess } from "./service.ts";
 import { getBatch, type BatchSummary } from "./batch-service.ts";
 import { angleInstruction, sourceProblem, splitBudget, VARIATION_ANGLES, type VariationAngle } from "./variations.ts";
-import { isStyleChoice, presetsForBatch, presetsFromRanking, STYLE_ORCHESTRATOR, styleInstruction } from "./style-presets.ts";
+import { isStyleChoice, presetById, presetsForBatch, presetsFromRanking, STYLE_AUTO, STYLE_ORCHESTRATOR, STYLE_PRESETS, STYLE_SUPER, styleInstruction, type StylePreset } from "./style-presets.ts";
+import { libraryFor, readCookbookFor } from "../cookbooks/service.ts";
+import { coveredStyles, styleOfCookbook, type StyleCookbook } from "../cookbooks/style-map.ts";
 import { chooseStyleWithEngine, type StyleChooser, type StyleRanking } from "./style-chooser.ts";
 import { formatFromPatterns, researchAngles, type FormatOutcome, type StoredPattern } from "./research-format.ts";
 
@@ -70,13 +72,13 @@ async function audit(sql: Sql, entry: { organizationId: string; brandId: string;
 export async function createVariations(
   sql: Sql,
   userId: string,
-  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean; stylePreset?: string; chooseStyle?: StyleChooser },
+  input: { sourceSessionId: string; count: number; totalBudgetUsd: number; title?: string; useResearchFormat?: boolean; approvedSample?: boolean; stylePreset?: string; cookbookId?: string; chooseStyle?: StyleChooser },
 ): Promise<BatchSummary> {
   // The person reads a sample of the format first and approves it. Without that approval nothing is written.
   if (input.approvedSample !== true) throw new Error("Read the sample video and approve the format first. Nothing was created.");
   const split = splitBudget(input.totalBudgetUsd, input.count);
   if (!split.ok) throw new Error(split.reason);
-  const stylePreset = input.stylePreset ?? "none";
+  let stylePreset = input.stylePreset ?? "none";
   if (stylePreset !== "none" && !isStyleChoice(stylePreset)) throw new Error("Choose a style from the list, Auto or the Super preset.");
   const source = await sessionAccess(sql, userId, input.sourceSessionId);
   if (source.source_session_id !== null) throw new Error("Choose the original reusable draft, not a video variation, as the source.");
@@ -86,6 +88,33 @@ export async function createVariations(
   const brandId = source.brand_id;
   const organizationId = source.organization_id;
   let batchId: string = randomUUID();
+
+  // Decision 5: a cookbook decides a video's style. A batch that names a cookbook takes that cookbook's style for every video. A batch that
+  // does not name one chooses a style, and the choice is a filter over the cookbooks the brand can use: Auto, the Super mix and the orchestrator
+  // pick among the styles some cookbook carries, and a style no cookbook carries is refused with the reason. Nothing is written by this step.
+  let pool: readonly StylePreset[] = STYLE_PRESETS;
+  let batchCookbookId: string | null = null;
+  {
+    const library = await libraryFor(sql, { organizationId, brandId });
+    const cookbooks: StyleCookbook[] = [...library.builtins, ...library.workspace.map((stored) => stored.cookbook)];
+    const carried = new Set<string>(coveredStyles(cookbooks));
+    pool = STYLE_PRESETS.filter((preset) => carried.has(preset.id));
+    if (input.cookbookId !== undefined && input.cookbookId !== "") {
+      const read = await readCookbookFor(sql, { organizationId, brandId, cookbookId: input.cookbookId });
+      if (!read.ok) throw new Error(read.reason);
+      const cookbook = read.value.cookbook;
+      const style = styleOfCookbook(cookbook);
+      if (style === null) throw new Error(`The cookbook "${cookbook.label}" has no style, so a batch cannot brief from it. Choose a cookbook that has a style.`);
+      stylePreset = style;
+      pool = STYLE_PRESETS.filter((preset) => preset.id === style);
+      batchCookbookId = cookbook.cookbookId;
+    } else if (stylePreset === "none") {
+      throw new Error("Choose a cookbook for the batch. A cookbook decides each video's style.");
+    } else if (stylePreset !== STYLE_AUTO && stylePreset !== STYLE_SUPER && stylePreset !== STYLE_ORCHESTRATOR && !pool.some((preset) => preset.id === stylePreset)) {
+      throw new Error(`No cookbook carries the ${presetById(stylePreset)?.label ?? stylePreset} style yet, so this batch cannot use it. Choose another style.`);
+    }
+    if (pool.length === 0) throw new Error("No cookbook in this workspace carries a style yet, so a batch cannot be made. Add a cookbook that has a style.");
+  }
 
   // The orchestrator's choice: one call to the workspace's decision engine, made before anything is written and before the source row is locked.
   // The source is checked first, so a call is never spent on a source that would be refused. A refusal from the engine stops here, with its reason.
@@ -104,6 +133,7 @@ export async function createVariations(
       organizationId,
       brandId,
       facts: { brandName: brand?.name ?? "the brand", instruction: instructionRows.map((row) => row.text).join(" "), patterns: await brandPatterns(sql, organizationId, brandId) },
+      pool,
     });
     if (!result.ok) throw new Error(`${result.reason} No style was chosen, so nothing was created.`);
     ranking = result;
@@ -193,13 +223,13 @@ export async function createVariations(
     // Styles: one preset for every video, Auto (from the research structure that repeats most) or the Super mix. None adds nothing.
     let styles: ReturnType<typeof presetsForBatch> = null;
     if (ranking !== null) {
-      styles = presetsFromRanking(ranking.ranked, input.count);
+      styles = presetsFromRanking(ranking.ranked, input.count, pool);
       if (styles === null) throw new Error("The decision engine's ranking held no style from the library. Nothing was created.");
     } else if (stylePreset !== "none") {
       const patterns = await brandPatterns(tx, organizationId, brandId);
       const outcome = formatFromPatterns(patterns);
       const top = outcome.ok ? (outcome.format.structures[0]?.value ?? null) : null;
-      styles = presetsForBatch(stylePreset, input.count, top);
+      styles = presetsForBatch(stylePreset, input.count, top, pool);
       if (styles === null) throw new Error("Choose a style from the list, Auto or the Super preset.");
     }
 
@@ -260,7 +290,7 @@ export async function createVariations(
       action: "content_factory.variations_batch_created",
       objectType: "content_factory_batch",
       objectId: batchId,
-      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true", style: stylePreset, ...(ranking ? { styleEngine: ranking.engine, styleModel: ranking.model, styleConfidence: ranking.confidence === null ? "unknown" : String(ranking.confidence) } : {}) },
+      metadata: { sourceSessionId: source.id, itemCount: String(input.count), budgetUsd: totalUsd.toFixed(2), researchAngles: String(fromResearch.length), sampleApproved: "true", style: stylePreset, cookbookId: batchCookbookId ?? "", ...(ranking ? { styleEngine: ranking.engine, styleModel: ranking.model, styleConfidence: ranking.confidence === null ? "unknown" : String(ranking.confidence) } : {}) },
     });
   });
   return getBatch(sql, userId, { batchId });

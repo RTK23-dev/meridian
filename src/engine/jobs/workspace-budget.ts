@@ -21,7 +21,7 @@ export function workspaceBudgetFromSettings(read: MonthlyBudgetReader): Workspac
       if (usd === null) {
         return {
           status: "not_connected",
-          reason: "no monthly budget is set for this workspace; set \"Monthly budget (USD)\" in Settings",
+          reason: "no monthly budget is set for this workspace; set the monthly budget on the Billing page",
         };
       }
       return { status: "known", usd };

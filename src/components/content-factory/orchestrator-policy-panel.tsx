@@ -9,14 +9,11 @@ import { getBrandPolicyFor, getOrchestratorPolicyFor, saveBrandPolicyFor, saveOr
 import { hasRole } from "@/lib/meridian/access";
 import { INITIAL_POLICY } from "@/engine/orchestrator/policy-store";
 import {
-  CEILING,
   UNREADABLE_POLICY_SENTENCE,
   brandFamiliesAfter,
   brandFamilyRows,
-  ceilingText,
   familiesFromText,
   isUnreadablePolicyError,
-  parseCeiling,
   withFamily,
   workspaceFamilyRows,
   type FamilyRow,
@@ -179,16 +176,13 @@ function UnreadablePolicy({
   onSaved: () => void;
 }) {
   const [families, setFamilies] = useState(INITIAL_POLICY.disabledModelFamilies.join(", "));
-  const [ceilingDraft, setCeilingDraft] = useState(String(INITIAL_POLICY.measureCeilingUsdPerSecond));
   const [saving, setSaving] = useState(false);
-  const ceiling = parseCeiling(ceilingDraft);
 
   async function replace() {
-    if (ceiling === null) return;
     setSaving(true);
     onMessage(null);
     try {
-      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: familiesFromText(families), measureCeilingUsdPerSecond: ceiling } });
+      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: familiesFromText(families) } });
       onMessage("Saved. The stored policy can be read again, and every run from now on uses these values.");
       onSaved();
     } catch (error) {
@@ -206,7 +200,8 @@ function UnreadablePolicy({
       {canAdmin ? (
         <>
           <p className="text-sm text-fg-muted">
-            The values below are the engine's initial values, because the stored ones cannot be read. Saving replaces the stored policy with them.
+            The families below are the engine's initial values, because the stored ones cannot be read. Saving replaces the stored policy with them.
+            The measure ceiling and the decision cap are then unset: set them on the <a className="font-semibold underline underline-offset-2" href="/billing">billing page</a>.
           </p>
           <Input
             id="policy-unreadable-families"
@@ -215,21 +210,8 @@ function UnreadablePolicy({
             value={families}
             onChange={(event) => setFamilies(event.target.value)}
           />
-          <Input
-            id="policy-unreadable-ceiling"
-            type="number"
-            inputMode="decimal"
-            min={CEILING.min}
-            max={CEILING.max}
-            step="0.01"
-            label="Measure ceiling (USD per second)"
-            className="sm:max-w-40"
-            value={ceilingDraft}
-            onChange={(event) => setCeilingDraft(event.target.value)}
-            error={ceiling === null ? `Enter a ceiling from $${CEILING.min.toFixed(2)} to $${CEILING.max.toFixed(2)} per second.` : undefined}
-          />
           <div className="flex flex-wrap items-center gap-3">
-            <Button size="sm" onClick={() => void replace()} disabled={saving || ceiling === null}>
+            <Button size="sm" onClick={() => void replace()} disabled={saving}>
               Replace the stored policy
             </Button>
             {message ? (
@@ -280,9 +262,7 @@ function WorkspacePolicy({
   const { policy, initial } = data;
   const [families, setFamilies] = useState<string[]>(policy.disabledModelFamilies);
   const [typed, setTyped] = useState("");
-  const [ceilingDraft, setCeilingDraft] = useState(String(policy.measureCeilingUsdPerSecond));
   const [saving, setSaving] = useState(false);
-  const ceiling = parseCeiling(ceilingDraft);
   const rows = workspaceFamilyRows({ defaults: initial.disabledModelFamilies, switchedOff: families });
 
   function addTyped() {
@@ -291,11 +271,10 @@ function WorkspacePolicy({
   }
 
   async function save() {
-    if (ceiling === null) return;
     setSaving(true);
     onMessage(null);
     try {
-      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: families, measureCeilingUsdPerSecond: ceiling } });
+      await saveOrchestratorPolicyFor({ data: { brandId, disabledModelFamilies: families } });
       onMessage("Saved. Every run that starts from now on uses these values.");
       onSaved();
     } catch (error) {
@@ -336,24 +315,12 @@ function WorkspacePolicy({
         </div>
       </div>
 
-      <Input
-        id="policy-ceiling"
-        type="number"
-        inputMode="decimal"
-        min={CEILING.min}
-        max={CEILING.max}
-        step="0.01"
-        label="Measure ceiling (USD per second)"
-        hint={`The most a video or avatar step with no engine price is held to, for each second of its length, in a run an admin starts in measure mode. Initial value: ${ceilingText(initial.measureCeilingUsdPerSecond)}.`}
-        className="sm:max-w-40"
-        value={ceilingDraft}
-        disabled={!canAdmin}
-        onChange={(event) => setCeilingDraft(event.target.value)}
-        error={ceiling === null ? `Enter a ceiling from $${CEILING.min.toFixed(2)} to $${CEILING.max.toFixed(2)} per second.` : undefined}
-      />
+      <p className="text-sm text-fg-muted">
+        The measure ceiling and the decision cap are set on the <a className="font-semibold underline underline-offset-2" href="/billing">billing page</a>, with every other limit.
+      </p>
 
       <div className="flex flex-wrap items-center gap-3">
-        <Button size="sm" onClick={() => void save()} disabled={saving || !canAdmin || ceiling === null}>
+        <Button size="sm" onClick={() => void save()} disabled={saving || !canAdmin}>
           Save the policy
         </Button>
         {message ? (

@@ -8,6 +8,8 @@ import { userScopedQueryKey } from "@/lib/query/keys";
 import { createContentBatch, createContentVariations, getContentBatch, createContentDemoBatch, getContentResearchFormat, getContentVariationSources, listContentBatches, retryContentBatchItem, startContentBatch } from "@/lib/meridian/content-factory/actions";
 import { batchManifestJson, batchSummaryCsv, stateCounts, type BatchItemState } from "@/lib/meridian/content-factory/batch";
 import { autoReason, presetsForBatch, STYLE_AUTO, STYLE_ORCHESTRATOR, STYLE_PRESETS, STYLE_SUPER, styleInstruction } from "@/lib/meridian/content-factory/style-presets";
+import { listCookbooksAction } from "@/lib/meridian/cookbooks/actions";
+import { BRIEF_STYLE_IDS, coveredStyles, cookbooksForStyle, isBriefStyleId, styleLabel, type StyleCookbook } from "@/lib/meridian/cookbooks/style-map";
 import { describeFormat, researchAngles } from "@/lib/meridian/content-factory/research-format";
 import { angleInstruction, DEFAULT_VARIATIONS, MAX_VARIATIONS, MIN_VARIATIONS, minItemCents, splitBudget, VARIATION_ANGLES } from "@/lib/meridian/content-factory/variations";
 
@@ -68,8 +70,22 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const [variationError, setVariationError] = useState<string | null>(null);
   const [useResearch, setUseResearch] = useState(false);
   const [approvedSample, setApprovedSample] = useState(false);
-  const [style, setStyle] = useState("none");
+  // Decision 5: the style is a filter on the cookbooks, and the cookbook a batch is made from decides each video's style.
+  const [style, setStyle] = useState<string>(STYLE_AUTO);
+  const [cookbookId, setCookbookId] = useState("");
   const queryClient = useQueryClient();
+
+  const cookbookLibrary = useQuery({
+    queryKey: userScopedQueryKey(user?.id, ["content-factory", "batch-cookbooks", brandId]),
+    queryFn: () => listCookbooksAction({ data: { brandId } }),
+  });
+  const cookbooks: Array<StyleCookbook & { label: string }> = cookbookLibrary.data ? [...cookbookLibrary.data.builtins, ...cookbookLibrary.data.workspace.map((stored) => stored.cookbook)] : [];
+  const carried = coveredStyles(cookbooks);
+  // The styles a batch can use: the ones some cookbook carries. A style with no cookbook is shown, but disabled, with the reason.
+  const poolPresets = STYLE_PRESETS.filter((preset) => carried.includes(preset.id as (typeof BRIEF_STYLE_IDS)[number]));
+  const isSpecific = isBriefStyleId(style);
+  const styleCookbooks: Array<StyleCookbook & { label: string }> = isSpecific ? cookbooksForStyle(style, cookbooks) : [];
+  const chosenCookbookId = styleCookbooks.some((cookbook) => cookbook.cookbookId === cookbookId) ? cookbookId : (styleCookbooks[0]?.cookbookId ?? "");
 
   const batches = useQuery({
     queryKey: userScopedQueryKey(user?.id, ["content-factory", "batches", brandId]),
@@ -121,13 +137,13 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
   const variationCount = Number(count);
   const variationTotal = total.trim() === "" ? Number.NaN : Number(total);
   const variationSplit = splitBudget(variationTotal, variationCount);
-  const canVary = !busy && chosenSource !== "" && variationSplit.ok && approvedSample;
+  const canVary = !busy && chosenSource !== "" && variationSplit.ok && approvedSample && poolPresets.length > 0 && (!isSpecific || chosenCookbookId !== "");
 
   // The first video as it would be made: its angle, its share of the budget and the exact instruction it is given. Nothing is generated.
   const sampleAngle = (useResearch && format.data?.ok ? researchAngles(format.data.format, Math.max(1, variationCount || 1))[0] : undefined) ?? VARIATION_ANGLES[0];
   // The style of the first video, as it would be briefed. Auto reads the structure that repeats most in the research, with a reason shown.
   const topStructure = format.data?.ok ? (format.data.format.structures[0]?.value ?? null) : null;
-  const sampleStyle = style === "none" || style === STYLE_ORCHESTRATOR ? null : (presetsForBatch(style, Math.max(1, variationCount || 1), topStructure)?.[0] ?? null);
+  const sampleStyle = style === STYLE_ORCHESTRATOR ? null : (presetsForBatch(style, Math.max(1, variationCount || 1), topStructure, poolPresets)?.[0] ?? null);
   const sampleShare = variationSplit.ok ? (variationSplit.cents[0] ?? 0) / 100 : null;
 
   async function vary() {
@@ -136,11 +152,12 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
     setNotice(null);
     setItemError(null);
     try {
-      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample, stylePreset: style } });
+      const made = await createContentVariations({ data: { sourceSessionId: chosenSource, count: variationCount, totalBudgetUsd: variationTotal, useResearchFormat: useResearch && format.data?.ok === true, approvedSample, stylePreset: style, cookbookId: isSpecific ? chosenCookbookId : "" } });
       setSelectedId(made.id);
       setTotal("");
       setApprovedSample(false);
-      setStyle("none");
+      setStyle(STYLE_AUTO);
+      setCookbookId("");
       await batches.refetch();
       void queryClient.invalidateQueries({ predicate: (query) => query.queryKey.some((part) => typeof part === "string" && part.startsWith("content-factory")) });
       onBatchCreated?.();
@@ -310,22 +327,34 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                 value={total}
                 onChange={(event) => setTotal(event.target.value)}
               />
-              <Field label="Video style" hint="Optional. A style tells the planner what kind of video to brief. It does not change how the engine renders.">
-                <SelectInput value={style} onChange={(event) => setStyle(event.target.value)}>
-                  <option value="none">No style preset</option>
-                  <option value={STYLE_ORCHESTRATOR}>Let the orchestrator choose (asks your decision engine)</option>
+              <Field label="Style (filters the cookbooks)" hint="The cookbook decides each video's style, and it sets how the video is briefed. A style with no cookbook yet is shown, but cannot be chosen. The style does not change how the engine renders.">
+                <SelectInput value={style} onChange={(event) => { setStyle(event.target.value); setCookbookId(""); }}>
                   <option value={STYLE_AUTO}>Auto from my research (a fixed rule, no model call)</option>
-                  <option value={STYLE_SUPER}>Super preset: a different style for each video</option>
-                  {STYLE_PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
+                  <option value={STYLE_ORCHESTRATOR}>Let the orchestrator choose (asks your decision engine)</option>
+                  <option value={STYLE_SUPER}>Super: a different cookbook style for each video</option>
+                  {BRIEF_STYLE_IDS.map((id) => (
+                    <option key={id} value={id} disabled={!carried.includes(id)}>{carried.includes(id) ? styleLabel(id) : `${styleLabel(id)} (no cookbook yet)`}</option>
+                  ))}
                 </SelectInput>
               </Field>
-              {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure)}</p> : null}
+              {isSpecific ? (
+                <Field label="Cookbook" hint="Every video in the batch is made from this cookbook, and takes its style. Its controls can be changed on the cookbook.">
+                  {styleCookbooks.length > 0 ? (
+                    <SelectInput value={chosenCookbookId} onChange={(event) => setCookbookId(event.target.value)}>
+                      {styleCookbooks.map((cookbook) => <option key={cookbook.cookbookId} value={cookbook.cookbookId}>{cookbook.label}</option>)}
+                    </SelectInput>
+                  ) : <p className="text-sm text-fg-muted">No cookbook carries this style yet.</p>}
+                </Field>
+              ) : null}
+              {cookbookLibrary.isError ? <p role="alert" className="text-sm text-danger">The cookbooks could not be loaded, so a batch cannot be made. Try again.</p> : null}
+              {poolPresets.length === 0 && cookbookLibrary.isSuccess ? <p className="text-sm text-fg-muted">No cookbook in this brand carries a style yet, so a batch cannot be made.</p> : null}
+              {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure, poolPresets)}</p> : null}
               {style === STYLE_ORCHESTRATOR ? <p className="text-sm text-fg-muted">When you create the videos, your active decision engine is asked once to rank the styles for this brand, the source instruction and your research, and the videos take the styles in that order. This makes one paid model call. If the engine is not connected, or does not answer, nothing is created and you are told why.</p> : null}
-              {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style in the library, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1))} {Math.min(STYLE_PRESETS.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
+              {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style that a cookbook carries, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(poolPresets.length, Math.max(1, variationCount || 1))} {Math.min(poolPresets.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
               <details className="rounded-md border border-border p-3 text-sm">
                 <summary className="cursor-pointer font-semibold">Browse the style library</summary>
                 <ul className="mt-2 space-y-2">
-                  {STYLE_PRESETS.map((preset) => (
+                  {poolPresets.map((preset) => (
                     <li key={preset.id}><span className="font-semibold">{preset.label}</span>: {preset.bestFor} <span className="text-fg-muted">{preset.look}</span></li>
                   ))}
                 </ul>

@@ -56,7 +56,7 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
       insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
       values (${ORG_C}, ${JSON.stringify({ disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 2, budgetTolerance: { percent: 5, cents: 10 } })}::jsonb, 'user_c', now())
     `;
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { status: "ok", policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 2 } });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_C), { status: "ok", policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 2, decisionMaxUsdPerCall: null } });
   });
 
   test("a change that does not validate throws and writes nothing", async () => {
@@ -65,13 +65,26 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
     assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_A), before);
   });
 
-  test("the measure ceiling starts at 0.50 USD a second, and is stored in the same row as the families", async () => {
-    assert.equal(INITIAL_POLICY.measureCeilingUsdPerSecond, 0.5);
+  test("the measure ceiling and the decision cap start unset, and are stored in the same row as the families", async () => {
+    assert.equal(INITIAL_POLICY.measureCeilingUsdPerSecond, null, "no ceiling is precoded");
+    assert.equal(INITIAL_POLICY.decisionMaxUsdPerCall, null, "no decision cap is precoded");
     const families = await requireOrchestratorPolicy(db.sql, ORG_A);
     const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { measureCeilingUsdPerSecond: 1.25 } });
     assert.deepEqual(stored, { ...families, measureCeilingUsdPerSecond: 1.25 }, "the families stay as they were, and the ceiling changes");
     const rows = await db.sql<{ policy_json: string }>`select policy::text as policy_json from orchestrator_policies where organization_id = ${ORG_A}`;
     assert.deepEqual(JSON.parse(rows[0]?.policy_json ?? "{}"), stored, "both values are in the one stored row");
+  });
+
+  test("the decision cap takes 0.001 to 1 USD a call, is stored in the same row, and a value outside it writes nothing", async () => {
+    const stored = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { decisionMaxUsdPerCall: 0.05 } });
+    assert.equal(stored.decisionMaxUsdPerCall, 0.05);
+    assert.equal((await requireOrchestratorPolicy(db.sql, ORG_A)).decisionMaxUsdPerCall, 0.05, "the stored cap is read back");
+    for (const value of [0.0009, 1.01, 0, -1, Number.NaN]) {
+      await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { decisionMaxUsdPerCall: value } }), `${value} is outside the range`);
+    }
+    assert.equal((await requireOrchestratorPolicy(db.sql, ORG_A)).decisionMaxUsdPerCall, 0.05, "the refused values wrote nothing");
+    const cleared = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_A, actorId: "user_a", patch: { decisionMaxUsdPerCall: null } });
+    assert.equal(cleared.decisionMaxUsdPerCall, null, "null clears the cap: it is unset again, and refuses decisions");
   });
 
   test("the measure ceiling takes 0.01 to 5 USD a second, and a value outside it writes nothing", async () => {
@@ -98,11 +111,11 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
     await assert.rejects(requireOrchestratorPolicy(db.sql, ORG_D), { message: UNREADABLE_POLICY_REASON });
   });
 
-  test("a save over an unreadable row must state the families; with them the row is readable again, and an absent ceiling takes its initial value", async () => {
+  test("a save over an unreadable row must state the families; with them the row is readable again, and an absent ceiling is unset", async () => {
     await assert.rejects(writeOrchestratorPolicy(db.sql, { organizationId: ORG_D, actorId: "user_d", patch: { measureCeilingUsdPerSecond: 1 } }), { message: UNREADABLE_POLICY_FAMILIES_REASON });
     assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_D), UNREADABLE, "the refused save wrote nothing");
     const saved = await writeOrchestratorPolicy(db.sql, { organizationId: ORG_D, actorId: "user_d", patch: { disabledModelFamilies: ["vendor-y"] } });
-    assert.deepEqual(saved, { disabledModelFamilies: ["vendor-y"], measureCeilingUsdPerSecond: 0.5 });
+    assert.deepEqual(saved, { disabledModelFamilies: ["vendor-y"], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null });
     assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_D), { status: "ok", policy: saved });
   });
 
@@ -120,12 +133,12 @@ describe("orchestrator policy store (migration 0114; D12 retires the tolerance)"
     assert.deepEqual(await disabledFamiliesFor(db.sql, ORG_F, "plan_policy_none"), [...INITIAL_POLICY.disabledModelFamilies], "a workspace with no row plans with the initial families");
   });
 
-  test("a row with its families and no ceiling is readable: the ceiling takes its initial value, and the families are kept", async () => {
+  test("a row with its families and no ceiling is readable: the ceiling is unset, and the families are kept", async () => {
     await db.sql`
       insert into orchestrator_policies (organization_id, policy, updated_by, updated_at)
       values (${ORG_G}, ${JSON.stringify({ disabledModelFamilies: ["example/family"] })}::jsonb, 'user_g', now())
     `;
-    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_G), { status: "ok", policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 } });
+    assert.deepEqual(await readOrchestratorPolicy(db.sql, ORG_G), { status: "ok", policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null } });
   });
 });
 
@@ -146,18 +159,18 @@ test("a stored value that is not an object, or whose families are not a list, is
   assert.deepEqual(policyFrom({ disabledModelFamilies: null }), UNREADABLE);
   assert.deepEqual(policyFrom("not an object"), UNREADABLE);
   assert.deepEqual(policyFrom(["google/veo"]), UNREADABLE);
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } });
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } }, "a row with no ceiling takes the initial ceiling");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5, decisionMaxUsdPerCall: null } });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null } }, "a row with no ceiling has none: unset, not a default");
 });
 
 test("policyFrom drops the retired budgetTolerance key before it parses, and keeps the families of the row", () => {
   assert.deepEqual(policyFrom({ disabledModelFamilies: [], budgetTolerance: { percent: 10, cents: 25 } }), {
     status: "ok",
-    policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 },
-  }, "the retired key is dropped, and a row without a ceiling takes the initial one");
+    policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null },
+  }, "the retired key is dropped, and a row without a ceiling has none");
   assert.deepEqual(policyFrom({ disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5, budgetTolerance: { percent: 10, cents: 25 } }), {
     status: "ok",
-    policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5 },
+    policy: { disabledModelFamilies: ["example/family"], measureCeilingUsdPerSecond: 0.5, decisionMaxUsdPerCall: null },
   });
   assert.deepEqual(policyFrom({ measureCeilingUsdPerSecond: 0.5, budgetTolerance: { percent: 10, cents: 25 } }), UNREADABLE, "a row with no families is unreadable: the initial families are not filled in");
   assert.deepEqual(policyFrom({ budgetTolerance: { percent: 10, cents: 25 } }), UNREADABLE, "a row that is only the retired key is unreadable, and no family is switched on");
@@ -167,18 +180,21 @@ test("a present measure ceiling is checked by the same strict parse as the famil
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5, extra: true }).success, false, "an unknown key is refused");
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [] }).success, false, "the schema has no default: the reader fills the initial ceiling in before it parses");
   assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.001 }).success, false);
-  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 5 }).success, true, "the top of the range is in it");
+  assert.equal(orchestratorPolicySchema.safeParse({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 5, decisionMaxUsdPerCall: null }).success, true, "the top of the range is in it");
   assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 9 }), UNREADABLE, "a ceiling out of range makes the stored row unreadable");
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 } });
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.5 } }, "a missing ceiling takes its initial value: only a measure run reads it");
-  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: null }), UNREADABLE, "a present ceiling must validate: null is not filled in with the initial value");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: 2 }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: 2, decisionMaxUsdPerCall: null } });
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [] }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null } }, "a missing ceiling is unset: a measure run is refused until one is set");
+  assert.deepEqual(policyFrom({ disabledModelFamilies: [], measureCeilingUsdPerSecond: null }), { status: "ok", policy: { disabledModelFamilies: [], measureCeilingUsdPerSecond: null, decisionMaxUsdPerCall: null } }, "null is the unset value, and it reads as unset");
   assert.deepEqual(policyFrom({ measureCeilingUsdPerSecond: 2 }), UNREADABLE, "a row without families is unreadable, whatever its ceiling");
   assert.deepEqual(policyFrom({}), UNREADABLE, "an empty row, the table's default, has no families and is unreadable");
 });
 
 test("measure mode is off unless it is asked for; an admin's run takes the workspace's ceiling, and anyone else who asks is refused", () => {
-  const policy = { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.75 };
+  const policy = { disabledModelFamilies: [], measureCeilingUsdPerSecond: 0.75, decisionMaxUsdPerCall: null };
   assert.deepEqual(measureModeFor(policy, { measure: false, admin: true }), { status: "off", measure: null });
+  const unset = measureModeFor({ ...policy, measureCeilingUsdPerSecond: null }, { measure: true, admin: true });
+  assert.equal(unset.status, "refused", "an admin's run is refused while no ceiling is set");
+  assert.match(unset.status === "refused" ? unset.reason : "", /Billing page/);
   assert.deepEqual(measureModeFor(policy, { measure: false, admin: false }), { status: "off", measure: null }, "a run that does not ask takes none, whatever the role");
   assert.deepEqual(measureModeFor(policy, { measure: true, admin: true }), { status: "on", measure: { ceilingUsdPerSecond: 0.75 } });
   const refused = measureModeFor(policy, { measure: true, admin: false });

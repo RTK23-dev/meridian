@@ -7,8 +7,8 @@ import test from "node:test";
 import {
   DECISION_CATALOG_CACHE_MS,
   DECISION_CATALOG_FAILURE_CACHE_MS,
-  DEFAULT_DECISION_MAX_USD_PER_CALL,
   DecisionCatalogSource,
+  DECISION_CAP_NOT_SET_REASON,
   decisionCallCapUsd,
   decisionCallCeilingUsd,
   decisionModelCeilingUsd,
@@ -131,20 +131,14 @@ test("a price string is read as USD per token, and an absent, non-numeric or neg
   assert.equal(parseUsdPerToken("-0.1"), null);
 });
 
-test("the per-call limit defaults to the documented value, reads the deployment variable, and refuses a value that is not a positive number", () => {
-  const saved = process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-  try {
-    delete process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-    assert.deepEqual(decisionCallCapUsd(), { ok: true, usd: DEFAULT_DECISION_MAX_USD_PER_CALL });
-    process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL = "0.01";
-    assert.deepEqual(decisionCallCapUsd(), { ok: true, usd: 0.01 });
-    for (const bad of ["0", "-1", "abc", "Infinity"]) {
-      process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL = bad;
-      assert.equal(decisionCallCapUsd().ok, false, `${bad} is refused, so a mistyped limit never allows more than it says`);
-    }
-  } finally {
-    if (saved === undefined) delete process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL;
-    else process.env.OPENROUTER_DECISION_MAX_USD_PER_CALL = saved;
+test("the per-call cap is the workspace's saved cap: unset refuses the decision, and a set cap is used as it is saved", () => {
+  // Unset (null) has no default and refuses, so no decision is sent on a limit nobody set.
+  assert.deepEqual(decisionCallCapUsd(null), { ok: false, reason: DECISION_CAP_NOT_SET_REASON });
+  assert.match(DECISION_CAP_NOT_SET_REASON, /Billing page/);
+  assert.deepEqual(decisionCallCapUsd(0.01), { ok: true, usd: 0.01 });
+  // A saved value that is not a positive number refuses too: a bad cap never allows more than it says.
+  for (const bad of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+    assert.equal(decisionCallCapUsd(bad).ok, false, `${bad} is refused`);
   }
 });
 

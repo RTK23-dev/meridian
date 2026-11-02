@@ -197,7 +197,7 @@ export function OpenRouterDecisionControls({
         {testError ? <PlainErrorMessage message={testError.message} raw={testError.raw} /> : null}
         {budgetBlocked ? (
           <p className="text-sm" role="status">
-            <Link to="/settings" hash="monthly-budget" className="font-semibold underline underline-offset-2">Set the monthly budget (USD)</Link>
+            <Link to="/billing" className="font-semibold underline underline-offset-2">Set the monthly budget on the billing page</Link>
             , then test again.{nothingSent ? " The budget check ran before any request, so nothing was sent to OpenRouter and nothing was spent." : ""}
           </p>
         ) : null}

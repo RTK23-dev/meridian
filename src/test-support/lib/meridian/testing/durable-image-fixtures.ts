@@ -7,6 +7,7 @@ import type { Sql } from "../../../../lib/meridian/learning/store.ts";
 import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "./plan-lineage.ts";
 import { productionRouter } from "../../../../lib/meridian/production/router.ts";
 import type { ImageGenerationInput, ImageGenerationOutcome, ProductionImageProvider } from "../../../../lib/meridian/production/image-providers.ts";
+import { seedTestBrandBudget } from "./budget-seed.ts";
 
 // A 1x1 PNG. The durable artifact path verifies it by its magic bytes, as it would any provider image.
 export const PNG_BASE64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==";
@@ -25,6 +26,7 @@ export async function studioTenant(sql: Sql, label: string) {
   await sql`insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, ${userId})`;
   await sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${suffix}`}, ${organizationId}, ${userId}, 'member')`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, ${userId})`;
+  await seedTestBrandBudget(sql, organizationId, brandId);
   await sql`
     insert into jev_decisions (
       id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,

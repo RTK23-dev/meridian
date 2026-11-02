@@ -268,7 +268,7 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
     assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_copy_auditfail", 10), []);
   });
 
-  test("a workspace month pause is refused for every approval, with the reason to raise the month in settings, and nothing changes", async () => {
+  test("a workspace month pause is refused for every approval, with the reason to raise the month on the Billing page, and nothing changes", async () => {
     // The workspace month is at its budget: the run's call is refused, and the run pauses at that step (execute.ts, D17).
     await storedPlan("plan_approval_month", 0.5);
     const handlers = standIn();
@@ -292,7 +292,7 @@ describe("approving a paused plan's budget (owner direction 2026-10-23)", () => 
     const total = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_month", budgetUsd: 2, actorId: "user_admin_a" });
     const copy = await approvePlanBudget(db.sql, { organizationId: ORG, planId: "plan_approval_month", budgetUsd: 2, actorId: "user_admin_a", category: "copy" });
     for (const outcome of [total, copy]) {
-      assert.deepEqual(outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget in settings"] });
+      assert.deepEqual(outcome, { status: "refused", reasons: ["the workspace month is at its budget; raise the monthly budget on the Billing page"] });
     }
     assert.deepEqual(await getPlan(db.sql, ORG, "plan_approval_month"), before, "a refused approval changes nothing: the plan, its status and its budgets");
     assert.deepEqual(await listBudgetApprovals(db.sql, ORG, "plan_approval_month", 10), [], "a refused approval writes no audit row");

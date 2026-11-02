@@ -46,7 +46,7 @@ const MONTH_PAUSE_RE = new RegExp(MONTH_PAUSE);
  * Why an approval of a month pause is refused. The month budget is set in settings, not on the plan, so no approval of the plan clears a pause
  * at the month line: the refusal says where the budget is raised.
  */
-const MONTH_REFUSAL = "the workspace month is at its budget; raise the monthly budget in settings";
+const MONTH_REFUSAL = "the workspace month is at its budget; raise the monthly budget on the Billing page";
 
 /** The brief's key of each category's line. categories.ts categoryBudgetsOf reads the same keys. */
 const LINE_KEY: Record<BudgetCategory, string> = { copy: "copyBudgetUsd", creative: "creativeBudgetUsd", voice: "voiceBudgetUsd" };

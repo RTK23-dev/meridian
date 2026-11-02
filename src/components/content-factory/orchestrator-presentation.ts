@@ -277,7 +277,7 @@ export function pauseCategoryOf(reason: string | null | undefined): PauseCategor
 export type PauseLine = "total" | "month" | PauseCategory;
 
 /** What the alert says for a pause at the workspace month. The month is set in settings, so no approval of the plan clears it. */
-export const MONTH_PAUSE_SENTENCE = "The workspace month is at its budget; raise the monthly budget in settings.";
+export const MONTH_PAUSE_SENTENCE = "The workspace month is at its budget; raise the monthly budget on the Billing page.";
 
 /**
  * The line a pause stopped at, read from the pause event's reason, which carries no line field of its own. A month refusal names the workspace

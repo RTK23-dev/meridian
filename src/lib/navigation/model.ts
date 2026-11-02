@@ -18,6 +18,7 @@ export function brandIdFromPath(pathname: string): string | undefined {
  * step from Settings, the command palette finds them, and no route changes. Labels are the accessible names, so they stay.
  */
 export const SETTINGS_SCREEN_LINKS: NavItem[] = [
+  { id: "billing", label: "Billing and limits", to: "/billing" },
   { id: "usage", label: "Usage & cost", to: "/usage" },
   { id: "alerts", label: "Alerts center", to: "/alerts" },
   { id: "audit", label: "Audit log", to: "/audit" },

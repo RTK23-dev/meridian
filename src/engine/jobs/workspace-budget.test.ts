@@ -19,7 +19,7 @@ test("a read that fails is not connected, and nothing is reserved", async () => 
 test("an unset budget is not connected and names where to set it, never a number", async () => {
   const result = await workspaceBudgetFromSettings(async () => null).monthBudget(scope);
   assert.equal(result.status, "not_connected");
-  assert.match(result.status === "not_connected" ? result.reason : "", /Monthly budget \(USD\)/);
+  assert.match(result.status === "not_connected" ? result.reason : "", /set the monthly budget on the Billing page/);
 });
 
 test("a read that fails is not connected", async () => {

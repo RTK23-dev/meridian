@@ -10,6 +10,7 @@ import { BudgetExceededError, BudgetLedgerService, toMicros } from "../security/
 import { executeApprovedCreativePlan } from "./session.server.ts";
 import { TEST_PLAN_LINEAGE, TEST_PRODUCTION_CONTEXT } from "../../../test-support/lib/meridian/testing/plan-lineage.ts";
 import { storeVaultCredential } from "../vault/service.ts";
+import { seedTestBrandBudget } from "../../../test-support/lib/meridian/testing/budget-seed.ts";
 
 // The vault encrypts each workspace's saved production key with this master key. Only this test process uses it.
 process.env.TOKEN_ENCRYPTION_KEY = process.env.TOKEN_ENCRYPTION_KEY || "test-master-key-reservation-0123456789abcdef";
@@ -68,6 +69,8 @@ async function createTenantFixture(sql: Sql, label: string, planCapUsd: number |
   // The workspace has its own saved production key, so the provider is ready for this workspace through the real readiness check.
   await storeVaultCredential(sql, organizationId, "provider_config:production", { accessToken: "", apiKey: "test-workspace-gemini-key" });
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${organizationId}, ${brandId}, 'test-user')`;
+  // A brand budget is set for the test, as the Billing page would set it: a brand with none refuses paid work.
+  await seedTestBrandBudget(sql, organizationId, brandId);
   await sql`
     insert into jev_decisions (
       id, organization_id, brand_id, correlation_id, question_id, question_version, subject_type, subject_id,
