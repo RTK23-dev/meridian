@@ -159,6 +159,10 @@ export async function saveBillingLimit(
 
   // The limit and its audit row are one transaction: a limit is never live without its record, and two admins saving at once take turns.
   return withTransaction(sql, async (tx) => {
+    // Saves in one workspace take turns. The decision cap and the measure ceiling share one stored policy that is read, changed and written
+    // whole, so without this two admins saving at the same moment could write back each other's old value.
+    const workspace = await tx<{ id: string }>`select id from organizations where id = ${input.organizationId} for update`;
+    if (!workspace[0]) throw new Error("That workspace is not available to you.");
     switch (input.kind) {
       case "workspace_monthly_budget": {
         // The monthly budget keeps its own writer and its own audit row (video_budget.updated), so the engine and the text path read one figure.

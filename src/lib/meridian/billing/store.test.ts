@@ -203,3 +203,16 @@ describe("a limit and its audit row are one transaction", () => {
     }
   });
 });
+
+describe("two limits saved at the same moment", () => {
+  test("the decision cap and the measure ceiling both keep their value", async () => {
+    await Promise.all([
+      saveBillingLimit(db.sql, { userId: ADMIN, organizationId: ORG, kind: "decision_cap", brandId: null, value: 0.04 }),
+      saveBillingLimit(db.sql, { userId: ADMIN, organizationId: ORG, kind: "measure_ceiling", brandId: null, value: 0.02 }),
+    ]);
+    const page = await readBillingPage(db.sql, { userId: ADMIN, organizationId: ORG });
+    const text = JSON.stringify(page);
+    assert.match(text, /0\.04/);
+    assert.match(text, /0\.02/);
+  });
+});
