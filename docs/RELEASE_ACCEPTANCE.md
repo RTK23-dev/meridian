@@ -110,8 +110,9 @@ A performance sync and a paused publish make real provider requests, and their o
 - A refusal also turns that provider's scheduled performance sync off, as a disconnect does, so a refused token is not called on every
   cadence. An accepted request turns it back on. A disconnected provider's schedules are not changed.
 - Any other failure (a bad request, a rate limit, a server error, a timeout) changes nothing, because it says nothing about the credential.
-- Not yet covered: TikTok sends its token errors in the response body with HTTP 200, and this repo does not map those codes yet. A TikTok
-  token that fails that way is not marked FAILED by use. The one-day window still turns its status DEGRADED.
+- A refusal also includes OAuth `invalid_grant` (any provider) and TikTok's token codes in a 200 body: 40102 and 40105 for an access token,
+  40103 and 40107 for a refresh token. The codes come from the official TikTok Business SDK's `NumericErrorCodes`. Codes the SDK does not
+  name as a credential refusal (for example 40104, an empty token) are not counted.
 - A disconnected connection is never written, and a missing connection row is not created.
 - The testing runtime's fixture publisher makes no request and records nothing.
 

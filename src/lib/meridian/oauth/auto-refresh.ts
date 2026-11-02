@@ -44,6 +44,12 @@ export async function renewStoredToken(
   `;
   const row = rows[0];
   if (!row || !renewalDue(row.expires_at, now)) return "not_due";
+  // A disconnected connection makes no request, so its stored refresh token is not used to renew anything.
+  const connection = await sql<{ disconnected_at: unknown }>`
+    select disconnected_at from provider_connections
+    where organization_id = ${input.organizationId} and provider = ${input.provider} limit 1
+  `;
+  if (connection[0]?.disconnected_at) return "not_due";
   if (!row.sealed_refresh.trim()) return "no_refresh_token";
   const refreshToken = openSecret(row.sealed_refresh, input.encryptionKey);
   if (typeof refreshToken !== "string") return "failed";

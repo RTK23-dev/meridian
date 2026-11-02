@@ -122,6 +122,15 @@ test("a Meta error that is not a token problem is not a refusal, even when its t
   assert.equal(isRefusal("meta", { status: 200, body: "{}", headers: {} }), false);
 });
 
+test("TikTok's token codes in a 200 body are refusals; its success code and the codes the SDK does not name as credential refusals are not", () => {
+  const tiktok = (code: number) => ({ status: 200, body: JSON.stringify({ code, message: "stub" }), headers: {} });
+  for (const code of [40102, 40103, 40105, 40107]) assert.equal(isRefusal("tiktok", tiktok(code)), true, `TikTok ${code}`);
+  assert.equal(isRefusal("tiktok", tiktok(0)), false, "code 0 is success");
+  assert.equal(isRefusal("tiktok", tiktok(40104)), false, "an empty token is not a refused credential");
+  assert.equal(isRefusal("tiktok", tiktok(40114)), false, "logout is not named by the SDK");
+  assert.equal(isRefusal("meta", tiktok(40105)), false, "TikTok's codes mean nothing to Meta");
+});
+
 test("an OAuth invalid_grant is a refusal from any provider, because the refresh token itself was revoked or expired", () => {
   const revoked = JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." });
   assert.equal(isRefusal("google", { status: 400, body: revoked, headers: {} }), true);

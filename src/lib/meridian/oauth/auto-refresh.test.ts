@@ -124,6 +124,17 @@ for (const backend of backends) {
     assert.equal(await readStatus(sql, organizationId, "google"), "HEALTHY");
   });
 
+  test(`[${backend.name}] a disconnected connection is never renewed, and no request is sent`, async () => {
+    const organizationId = await seedWorkspace(sql, "google", { expiresAt: new Date(NOW - 1000).toISOString(), hasRefresh: true });
+    await sql`update provider_connections set disconnected_at = now() where organization_id = ${organizationId} and provider = 'google'`;
+    const before = await readSecrets(sql, organizationId, "google");
+    const endpoint = tokenEndpoint(GOOGLE_RENEWED);
+    const outcome = await renewStoredToken(sql, { organizationId, provider: "google", encryptionKey: KEY, env: {}, transport: endpoint.transport, now: NOW });
+    assert.equal(outcome, "not_due");
+    assert.equal(endpoint.requests.length, 0);
+    assert.deepEqual(await readSecrets(sql, organizationId, "google"), before);
+  });
+
   test(`[${backend.name}] a due token with no stored refresh token is reported, not requested`, async () => {
     const organizationId = await seedWorkspace(sql, "google", { expiresAt: new Date(NOW - 1000).toISOString(), hasRefresh: false });
     const endpoint = tokenEndpoint(GOOGLE_RENEWED);
