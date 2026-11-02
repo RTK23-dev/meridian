@@ -79,7 +79,7 @@ list of what stays unknown until one live analysis runs.
 | The full Video DNA | One live analysis of the reference, then cached |
 | A screen to install a preset | A button on the theme page, once the owner confirms presets as a product feature |
 
-These are recorded as Q30 in `.claude/loop/OPEN_QUESTIONS.md`.
+These are recorded as Q30 in `docs/decisions/OPEN_QUESTIONS.md`.
 
 ## 7. Test: an original video made from the preset (2026-10-31)
 

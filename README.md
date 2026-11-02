@@ -34,7 +34,8 @@ The loop, in either case:
 | --- | --- |
 | **Setup guide** | A short path: create a brand, choose a decision engine and save its key. OpenRouter shows key saved, test passed and engine active as separate steps. Optional connections sit behind "Open this step" |
 | **Market** | Paste one public page URL, with no setup, and see what was read, what is new, what was blocked and what to do next. Searching by phrase is a separate, optional step with your own developer key |
-| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Batch opens on Video batches: use an uploaded reference video and attached Market evidence in a reusable draft, create 2–20 original draft variations with a bounded total budget, then explicitly start the batch and review/export each video. The research-led run builder remains an advanced option. Live provider generation and owner acceptance are not yet verified. |
+| **Content** | One page per brand. Create and Batch are the first sections; Ideas, Review, Library, Publish and Results follow. Batch opens on Video batches: use an uploaded reference video and attached Market evidence in a reusable draft, create 2–20 original draft variations with a bounded total budget, then explicitly start the batch and review/export each video. A batch takes its style from a cookbook (a saved recipe for one kind of video, see [docs/COOKBOOKS.md](docs/COOKBOOKS.md)); the style control filters the cookbooks. The research-led run builder remains an advanced option. Live provider generation and owner acceptance are not yet verified. |
+| **Billing** | Every money limit in one place: the workspace monthly budget, each brand's budget, the factory's daily and total caps, the measure ceiling and the OpenRouter decision cap. Nothing is set by default, and paid work is refused until its limit is set. Only an admin can change a limit, and each change is audited |
 | **Integrations** | Every connection, with what it needs and its state |
 | **Jobs & health** | Queued work, the worker and the scheduler |
 | **Settings** | The workspace, its members, scoring weights, alerts, learning, and the uncertain model-call holds |
@@ -45,7 +46,7 @@ These rules hold across the code, and tests enforce them.
 
 - **Fail closed.** Unknown stays unknown. A service that is not connected returns NOT_CONNECTED, never success. A saved key reads "Saved, not checked live"; only a recorded successful provider request makes a connection healthy, and only for a day.
 - **No fake success.** No invented costs, metrics, ads, receipts or connected states.
-- **Spending is bounded.** Every paid model call is held in a ledger before it is sent, against a monthly budget that is a hard limit. A call whose outcome is unknown keeps its hold and is not retried until an administrator releases it, with a reason, in an audited step.
+- **Spending is bounded.** Every paid model call is held in a ledger before it is sent, against limits you set on the Billing page. A paid step whose limit is unset is refused, and the refusal says where to set it. A call whose outcome is unknown keeps its hold and is not retried until an administrator releases it, with a reason, in an audited step.
 - **Unsafe paths are off.** Twenty paid or side-effecting paths stay disabled until they have an idempotency guard and a test: they refuse before any request is made, and they are never retried. The list and the reasons are in [docs/OUTBOUND_REQUESTS.md](docs/OUTBOUND_REQUESTS.md).
 - **Outputs are data.** Source text, ad text, transcripts, fetched pages and provider outputs are validated and never executed or passed on as instructions.
 - **Roles and tenancy.** Owners and admins change settings, keys and brands. Members create and review. Viewers read. Every mutation checks the role on the server, and every server function checks the workspace.
@@ -68,6 +69,7 @@ Then:
 3. Follow the **Setup guide**. The required steps are a brand and a decision engine.
 4. Fill the brand brain. The required fields are positioning, target customers, tone, and prohibited claims.
 5. Add provider keys later, when you have them.
+6. Before any paid step runs, open **Billing** and set the limits. Nothing is set by default, so paid work is refused until you do.
 
 `npm run setup` does the `.env` step on its own and is safe to run again.
 
@@ -79,7 +81,7 @@ Keys for a workspace are saved in the app. A few values belong to the deployment
 
 ## Where it stands
 
-This is a pre-release, `0.1.0-beta.16`. Everything was checked with fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider run is recorded.** Live provider behavior, real credentials, billing and publishing are unverified until the keys are on the server and someone runs them.
+This is a pre-release, `1.1.0-beta.1`. Everything was checked with fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider run is recorded.** Live provider behavior, real credentials, billing and publishing are unverified until the keys are on the server and someone runs them.
 
 What still needs a key or a decision. The code path exists, and it stays not connected until the server has the credential or you set the number:
 

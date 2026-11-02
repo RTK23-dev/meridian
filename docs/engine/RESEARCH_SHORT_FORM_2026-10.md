@@ -1,6 +1,6 @@
 # Short-form video: what the platforms and the editing practice say
 
-Status: research note, written by the coding loop as task T2 of `.claude/loop/RUN_PLAN.md`. It sets no product behaviour by itself. Its rules become configuration in T12, with the defaults and labels given in section 4.
+Status: research note, written by the coding loop as task T2 of the run plan (`RUN_PLAN.md`, removed from the repository with the rest of the coding-loop state in 1.1.0-beta.1). It sets no product behaviour by itself. Its rules become configuration in T12, with the defaults and labels given in section 4.
 
 Retrieved 2026-10-29. Method: web search, standard mode, first for the three platforms' own creator guidance (restricted to their help, ads and creator domains), then for editing practice. Claims below were read from search-result summaries. The source pages were not opened, so each platform figure should be checked on its page before it is quoted anywhere outside the engine.
 

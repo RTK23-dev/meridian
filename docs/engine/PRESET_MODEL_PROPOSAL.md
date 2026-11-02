@@ -1,6 +1,6 @@
 # Preset model: inventory and proposal
 
-Status: proposal, written by the coding loop as task T10 of `.claude/loop/RUN_PLAN.md`. T10 changed no code. T11 has since moved the look overlay table to `src/engine/compose/looks.ts`, and the compiler reads it through `resolveLook` (see `src/engine/compose/STATUS.md`). The rest of this proposal is unchanged. Every reference below was read from the file at the commit it was written on. The open decision it depends on is Q1 in `.claude/loop/OPEN_QUESTIONS.md`.
+Status: proposal, written by the coding loop as task T10 of the run plan (`RUN_PLAN.md`, removed from the repository with the rest of the coding-loop state in 1.1.0-beta.1). T10 changed no code. T11 has since moved the look overlay table to `src/engine/compose/looks.ts`, and the compiler reads it through `resolveLook` (see `src/engine/compose/STATUS.md`). The rest of this proposal is unchanged. Every reference below was read from the file at the commit it was written on. The open decision it depends on is Q1 in `docs/decisions/OPEN_QUESTIONS.md`.
 
 ## 1. What counts as a preset here
 

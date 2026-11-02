@@ -1,7 +1,7 @@
 # Cookbook presets: coding plan
 
 Status: approved plan, 2026-10-31. The owner answered the decisions (section 10). The task list the coding loop works from is round 3 of
-`.claude/loop/RUN_PLAN.md` (K0 to K30); the C numbers in section 9 map onto it.
+the run plan (`RUN_PLAN.md`, removed from the repository with the rest of the coding-loop state in 1.1.0-beta.1) (K0 to K30); the C numbers in section 9 map onto it.
 
 ## 1. The idea in one paragraph
 
