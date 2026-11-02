@@ -5,6 +5,7 @@ import { assertRole, isRole } from "@/lib/meridian/access";
 import { startOperation, redactSecrets } from "../observability/redact.ts";
 import type { Transport } from "./http.ts";
 import type { PausedStage } from "./live.ts";
+import { anyStageConfirmed, observeProviderUse, recordProviderUse } from "./usage.ts";
 
 function clip(value: unknown, max: number): string {
   return typeof value === "string" ? value.trim().slice(0, max) : "";
@@ -116,9 +117,10 @@ export async function publishPausedForBrand(
     }
   }
   const bodies: string[] = [];
-  const transport = input.transport ?? gatedTransport("publish.paused_action");
+  // Every provider request of this publish goes through the observer, so a refusal is recorded on the connection (see usage.ts).
+  const observed = observeProviderUse(input.transport ?? gatedTransport("publish.paused_action"), input.provider);
   const recording: Transport = async (request) => {
-    const response = await transport(request);
+    const response = await observed.transport(request);
     bodies.push(redactSecrets(response.body).slice(0, 500));
     return response;
   };
@@ -142,6 +144,7 @@ export async function publishPausedForBrand(
     });
     if (video && video.status !== "stored") {
       const status = video.status === "NOT_CONNECTED" ? "NOT_CONNECTED" : "failed";
+      await recordProviderUse(sql, { organizationId: input.organizationId, provider: input.provider, refusedStatus: observed.refusedStatus(), succeeded: false });
       const record = operation.finish(false, 1, video.error);
       return {
         correlationId: String(record.correlationId),
@@ -179,6 +182,13 @@ export async function publishPausedForBrand(
     transport: recording,
   });
   if (confirmedVideo) stages = [{ objectType: "video", status: "stored", externalId: confirmedVideo.externalId, reused: confirmedVideo.reused, error: "" }, ...stages];
+  // A stage the provider confirmed is a result the provider accepted. A refusal, if any, wins over it (see usage.ts).
+  await recordProviderUse(sql, {
+    organizationId: input.organizationId,
+    provider: input.provider,
+    refusedStatus: observed.refusedStatus(),
+    succeeded: anyStageConfirmed(stages),
+  });
   const evidence = redactSecrets(bodies.join("\n")).slice(0, 2000);
   const writes = stageWrites({
     organizationId: input.organizationId,

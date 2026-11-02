@@ -75,13 +75,36 @@ with a reason of at least ten characters, and the second hold still `uncertain`.
 ## Stale readiness
 
 A recorded provider success is HEALTHY only while it is fresh. The window is one day (`PROVIDER_SUCCESS_FRESH_MS` in `providers/phase.ts`).
-The success is recorded only when someone checks or connects the provider, so a shorter window fails closed sooner: a success older than a day
-reads DEGRADED with "The last successful request is stale.", and a success that cannot be read as a time is DEGRADED too.
+The success is recorded when someone checks or connects the provider, and when a performance sync or a paused publish is accepted by the
+provider (see "Recording real use" below). A success older than a day reads DEGRADED with "The last successful request is stale.", and a
+success that cannot be read as a time is DEGRADED too.
 
 The rule is tested at the function, integration and browser boundaries. `providers/stored-freshness.test.ts` calls the function the Integrations and Performance screens call, with fresh, stale, 90-day, unreadable and boundary inputs. `providers/connection-state.test.ts` runs the stored-connection status path and asserts DEGRADED. The browser pass seeds a 25-hour-old Meta success and a deterministic sealed dummy token encrypted with an acceptance-only key. The token is not a provider credential; the browser only reads the Integrations status, and no probe is invoked. The browser asserts that the actual card says DEGRADED and explains that the last success is stale, never HEALTHY or live-verified.
 
-A stale connection stops performance sync from being planned until someone checks the provider again. Performance sync does not record a
-success, so re-checking is the only way back to HEALTHY.
+A stale connection stops performance sync from being planned until a real request is accepted or someone checks the provider again.
+
+## Recording real use
+
+A performance sync and a paused publish make real provider requests, and their outcome is written to the workspace's connection by
+`providers/usage.ts`. The rules, for each operation:
+
+- The provider accepted the request and its result was used (rows read, or a publish stage confirmed): the success is refreshed and any
+  earlier error is cleared. The status reads HEALTHY again without a manual test.
+- The provider refused a request: the connection is FAILED, with the reason and the status. A refusal is HTTP 401 or 403 from any
+  provider, or Meta's invalid-token error (code 190, which Meta sends as HTTP 400). The earlier success stays on record. A refusal wins
+  over a success in the same operation. Someone must test the connection to clear it.
+- A refusal also turns that provider's scheduled performance sync off, as a disconnect does, so a refused token is not called on every
+  cadence. An accepted request turns it back on. A disconnected provider's schedules are not changed.
+- Any other failure (a bad request, a rate limit, a server error, a timeout) changes nothing, because it says nothing about the credential.
+- Not yet covered: TikTok sends its token errors in the response body with HTTP 200, and this repo does not map those codes yet. A TikTok
+  token that fails that way is not marked FAILED by use. The one-day window still turns its status DEGRADED.
+- A disconnected connection is never written, and a missing connection row is not created.
+- The testing runtime's fixture publisher makes no request and records nothing.
+
+`providers/usage.test.ts` checks these rules on the embedded database, and `performance/job.test.ts` checks the sync path. A guard,
+`providers/connection-writers.test.ts`, fails when a new file writes provider connections, until it is listed there with its reason. A paid publish
+through the factory and the admin paused publish record through the same function; their wiring is typechecked and linted, and no
+automated test exercises a live publish.
 
 ## The saved-key wording
 

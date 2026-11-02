@@ -8,6 +8,7 @@ import { loadProviderInsights } from "./fetch.ts";
 import { ingestPerformanceRows } from "./sync.ts";
 import { loadTenantProviderToken, validatePerformanceOwnership } from "./ownership.ts";
 import { savedAdAccountId } from "../providers/ad-account.ts";
+import { observeProviderUse, recordProviderUse } from "../providers/usage.ts";
 
 type Job = { id: string; organization_id: string; brand_id: string | null };
 
@@ -24,6 +25,8 @@ export async function runPerformanceSync(
   transport: Transport = liveTransport(),
 ): Promise<string> {
   const provider = typeof payload.provider === "string" ? payload.provider : "meta";
+  // Every provider request of this sync goes through the observer, so a refusal is seen wherever it happens (see providers/usage.ts).
+  const observed = observeProviderUse(transport, provider);
   const operation = startOperation({
     provider,
     operation: "performance.sync",
@@ -56,8 +59,9 @@ export async function runPerformanceSync(
     throw new Error(`NOT_CONNECTED: ${credential.error}`);
   }
   if (provider === "meta") {
-    const account = await verifyMetaAdAccountAccess(credential.accessToken, externalAdId, transport);
+    const account = await verifyMetaAdAccountAccess(credential.accessToken, externalAdId, observed.transport);
     if (!account.ok) {
+      await recordProviderUse(sql, { organizationId: job.organization_id, provider, refusedStatus: observed.refusedStatus(), succeeded: false });
       operation.finish(false, 1, account.error);
       throw new Error(account.error);
     }
@@ -93,9 +97,10 @@ export async function runPerformanceSync(
       advertiserId: provider === "tiktok" ? accountId : undefined,
       customerId: provider === "google" ? accountId : undefined,
     },
-    transport,
+    observed.transport,
   );
   if ("error" in loaded) {
+    await recordProviderUse(sql, { organizationId: job.organization_id, provider, refusedStatus: observed.refusedStatus(), succeeded: false });
     operation.finish(false, 1, loaded.error);
     throw new Error(loaded.error);
   }
@@ -135,6 +140,8 @@ export async function runPerformanceSync(
       )
     `;
   }
+  // The provider answered and its rows were used, so the connection's success is refreshed, even when every row was a duplicate.
+  await recordProviderUse(sql, { organizationId: job.organization_id, provider, refusedStatus: observed.refusedStatus(), succeeded: true });
   const record = operation.finish(true, 1, `stored:${ingested.stored.length}`);
   if (!shouldEnqueueLearning(ingested.stored.length)) return `stored:0;duplicates:${ingested.duplicates};correlation:${record.correlationId}`;
   const learningId = crypto.randomUUID();

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Provider status follows real use.** A performance sync or a paused publish now records its outcome on the workspace's connection. A request the provider accepts refreshes the success, so a connection that was DEGRADED because its last test was over a day old reads HEALTHY again without a manual test. A request the provider refuses (HTTP 401 or 403, or Meta's invalid-token code 190) marks the connection FAILED with its reason, until someone tests it. Other failures change nothing. TikTok's body-level token errors are not mapped yet. The rules are in `docs/RELEASE_ACCEPTANCE.md` under "Recording real use" and in `src/lib/meridian/providers/usage.ts`.
+
 ## 1.1.0-beta.1 — prerelease
 
 The first 1.1 pre-release. It carries the 0.1.0-beta.17 work, the billing page, and the Cyclone fixes, all on one line.
