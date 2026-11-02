@@ -21,22 +21,39 @@ function responseWith(status: number): Transport {
 
 type Row = { status: string; last_error: string; last_success_at: unknown };
 
-async function seedConnection(
-  sql: Sql,
-  provider: string,
-  row: { status: string; lastError?: string; lastSuccessAt?: string | null; disconnectedAt?: string | null },
-): Promise<string> {
-  const organizationId = `org-usage-${randomUUID()}`;
-  await sql`
-    insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, 'test')
-    on conflict (id) do nothing
-  `;
+type SeedRow = { status: string; lastError?: string; lastSuccessAt?: string | null; disconnectedAt?: string | null };
+
+async function addConnection(sql: Sql, organizationId: string, provider: string, row: SeedRow): Promise<void> {
   await sql`
     insert into provider_connections (id, organization_id, provider, status, last_error, last_success_at, disconnected_at)
     values (${randomUUID()}, ${organizationId}, ${provider}, ${row.status}, ${row.lastError ?? ""},
       ${row.lastSuccessAt ?? null}, ${row.disconnectedAt ?? null})
   `;
+}
+
+async function seedConnection(sql: Sql, provider: string, row: SeedRow): Promise<string> {
+  const organizationId = `org-usage-${randomUUID()}`;
+  await sql`
+    insert into organizations (id, name, slug, created_by) values (${organizationId}, ${organizationId}, ${organizationId}, 'test')
+    on conflict (id) do nothing
+  `;
+  await addConnection(sql, organizationId, provider, row);
   return organizationId;
+}
+
+/** One performance schedule for a provider, as the performance screen creates it: id perf:<org>:<brand>:<provider>. */
+async function seedSchedule(sql: Sql, organizationId: string, provider: string, enabled: boolean): Promise<void> {
+  await sql`
+    insert into job_schedules (id, organization_id, brand_id, job_type, every_seconds, next_run, enabled)
+    values (${`perf:${organizationId}:brand-a:${provider}`}, ${organizationId}, null, 'performance.sync', 3600, now(), ${enabled})
+  `;
+}
+
+async function scheduleEnabled(sql: Sql, organizationId: string, provider: string): Promise<boolean | null> {
+  const rows = await sql<{ enabled: boolean }>`
+    select enabled from job_schedules where id = ${`perf:${organizationId}:brand-a:${provider}`}
+  `;
+  return rows[0]?.enabled ?? null;
 }
 
 async function readRow(sql: Sql, organizationId: string, provider: string): Promise<Row | null> {
@@ -183,5 +200,24 @@ for (const backend of backends) {
     assert.equal(await phaseOf(), "HEALTHY");
     await recordProviderUse(sql, { organizationId, provider: "meta", refusedStatus: 401, succeeded: false });
     assert.equal(await phaseOf(), "FAILED");
+  });
+
+  test(`[${backend.name}] a refusal stops only that provider's performance schedule, and an accepted request starts it again`, async () => {
+    const organizationId = await seedConnection(sql, "meta", { status: "HEALTHY" });
+    await addConnection(sql, organizationId, "tiktok", { status: "HEALTHY" });
+    await seedSchedule(sql, organizationId, "meta", true);
+    await seedSchedule(sql, organizationId, "tiktok", true);
+    await recordProviderUse(sql, { organizationId, provider: "meta", refusedStatus: 403, succeeded: false });
+    assert.equal(await scheduleEnabled(sql, organizationId, "meta"), false);
+    assert.equal(await scheduleEnabled(sql, organizationId, "tiktok"), true, "another provider's schedule is not touched");
+    await recordProviderUse(sql, { organizationId, provider: "meta", refusedStatus: null, succeeded: true });
+    assert.equal(await scheduleEnabled(sql, organizationId, "meta"), true);
+  });
+
+  test(`[${backend.name}] a disconnected provider's schedules are not changed by a later use`, async () => {
+    const organizationId = await seedConnection(sql, "meta", { status: "DISCONNECTED", disconnectedAt: "2026-11-01T00:00:00.000Z" });
+    await seedSchedule(sql, organizationId, "meta", false);
+    await recordProviderUse(sql, { organizationId, provider: "meta", refusedStatus: null, succeeded: true });
+    assert.equal(await scheduleEnabled(sql, organizationId, "meta"), false);
   });
 }

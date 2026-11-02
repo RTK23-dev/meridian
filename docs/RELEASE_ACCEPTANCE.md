@@ -93,13 +93,16 @@ A performance sync and a paused publish make real provider requests, and their o
 - The provider refused a request: the connection is FAILED, with the reason and the status. A refusal is HTTP 401 or 403 from any
   provider, or Meta's invalid-token error (code 190, which Meta sends as HTTP 400). The earlier success stays on record. A refusal wins
   over a success in the same operation. Someone must test the connection to clear it.
+- A refusal also turns that provider's scheduled performance sync off, as a disconnect does, so a refused token is not called on every
+  cadence. An accepted request turns it back on. A disconnected provider's schedules are not changed.
 - Any other failure (a bad request, a rate limit, a server error, a timeout) changes nothing, because it says nothing about the credential.
 - Not yet covered: TikTok sends its token errors in the response body with HTTP 200, and this repo does not map those codes yet. A TikTok
   token that fails that way is not marked FAILED by use. The one-day window still turns its status DEGRADED.
 - A disconnected connection is never written, and a missing connection row is not created.
 - The testing runtime's fixture publisher makes no request and records nothing.
 
-`providers/usage.test.ts` checks these rules on the embedded database, and `performance/job.test.ts` checks the sync path. A paid publish
+`providers/usage.test.ts` checks these rules on the embedded database, and `performance/job.test.ts` checks the sync path. A guard,
+`providers/connection-writers.test.ts`, fails when a new file writes provider connections, until it is listed there with its reason. A paid publish
 through the factory and the admin paused publish record through the same function; their wiring is typechecked and linted, and no
 automated test exercises a live publish.
 

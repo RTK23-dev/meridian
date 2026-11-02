@@ -75,6 +75,24 @@ export function anyStageConfirmed(stages: readonly { status: string; externalId:
 
 export type ProviderUseRecord = "refused" | "succeeded" | "unchanged";
 
+/**
+ * Turns a provider's performance schedules on or off for one workspace. Only while the connection is connected: a disconnected one keeps
+ * the schedules it has, as the disconnect path leaves them. The schedules follow the same rule as connect.ts: a refused connection stops
+ * its scheduled sync, so a refused token is not called again on every cadence.
+ */
+async function setPerformanceSchedules(sql: Sql, organizationId: string, provider: string, enabled: boolean): Promise<void> {
+  await sql`
+    update job_schedules set enabled = ${enabled}
+    where organization_id = ${organizationId}
+      and job_type = 'performance.sync'
+      and id like ${`perf:${organizationId}:%:${provider}`}
+      and exists (
+        select 1 from provider_connections
+        where organization_id = ${organizationId} and provider = ${provider} and disconnected_at is null
+      )
+  `;
+}
+
 /** Writes one operation's outcome to its connection. Returns what was written, so callers and tests can see the decision. */
 export async function recordProviderUse(sql: Sql, use: ProviderUse): Promise<ProviderUseRecord> {
   if (use.refusedStatus !== null) {
@@ -84,6 +102,7 @@ export async function recordProviderUse(sql: Sql, use: ProviderUse): Promise<Pro
       update provider_connections set status = 'FAILED', last_error = ${detail}, updated_at = now()
       where organization_id = ${use.organizationId} and provider = ${use.provider} and disconnected_at is null
     `;
+    await setPerformanceSchedules(sql, use.organizationId, use.provider, false);
     return "refused";
   }
   if (use.succeeded) {
@@ -92,6 +111,7 @@ export async function recordProviderUse(sql: Sql, use: ProviderUse): Promise<Pro
       set status = 'HEALTHY', last_error = '', last_success_at = now(), updated_at = now()
       where organization_id = ${use.organizationId} and provider = ${use.provider} and disconnected_at is null
     `;
+    await setPerformanceSchedules(sql, use.organizationId, use.provider, true);
     return "succeeded";
   }
   return "unchanged";
