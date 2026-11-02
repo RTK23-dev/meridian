@@ -180,3 +180,26 @@ describe("saving a limit", () => {
     assert.ok(rows.some((row) => row.action === "billing.brand_budget.updated"), "brand budget changes are audited too");
   });
 });
+
+describe("a limit and its audit row are one transaction", () => {
+  test("when the audit row cannot be written, the limit is not saved", async () => {
+    await db.sql`
+      create or replace function billing_test_fail_audit() returns trigger as $$ begin raise exception 'audit unavailable'; end $$ language plpgsql
+    `;
+    await db.sql`
+      create trigger billing_test_fail_audit before insert on audit_log for each row
+      when (new.action = 'billing.factory_daily_cap.updated') execute function billing_test_fail_audit()
+    `;
+    try {
+      await assert.rejects(
+        saveBillingLimit(db.sql, { userId: ADMIN, organizationId: ORG, kind: "factory_daily_cap", brandId: SECOND, value: 5 }),
+        /audit unavailable/,
+      );
+      const rows = await db.sql<{ daily_cents: number }>`select daily_cents from factory_spend_caps where organization_id = ${ORG} and brand_id = ${SECOND}`;
+      assert.equal(rows.length, 0, "no cap was written without its audit row");
+    } finally {
+      await db.sql`drop trigger if exists billing_test_fail_audit on audit_log`;
+      await db.sql`drop function if exists billing_test_fail_audit()`;
+    }
+  });
+});

@@ -271,6 +271,11 @@ export async function withReservationLedger<T>(
   fn: (store: LedgerStore & CallTelemetryStore) => Promise<T>,
 ): Promise<T> {
   return transaction(sql, async (tx) => {
+    // The workspace row first, then the reservation row, the order every other budget path takes (withWorkspaceLedger locks the workspace
+    // and then touches reservations). Two different runs of one workspace therefore cannot both read the same month total and both pass
+    // the monthly line. Locking in one order everywhere also keeps the two lock kinds from deadlocking.
+    const workspace = await tx<{ id: string }>`select id from organizations where id = ${organizationId} for update`;
+    if (!workspace[0]) throw new EngineError("not_found", `workspace ${organizationId} does not exist`);
     const locked = await tx<{ id: string }>`
       select id from engine_reservations where id = ${reservationId} and organization_id = ${organizationId} for update
     `;

@@ -13,6 +13,8 @@ import type { Sql } from "../../lib/meridian/learning/store.ts";
 import { releaseReservation } from "../budget/reconcile.ts";
 import { roundUpUsd, startsBelowLine } from "../budget/line.ts";
 import { scopedLedgerStore } from "../jobs/asset-stores-sql.ts";
+import { transaction } from "../jobs/orchestrator-sql.ts";
+import { sqlLedgerStore } from "../jobs/sql-ledger-store.ts";
 import type { WorkspaceBudgetSource } from "../jobs/handlers/estimate-reserve.ts";
 
 export type RunBudget = {
@@ -57,18 +59,7 @@ export async function openRunBudget(
   const month = await opts.workspaceBudget.monthBudget({ organizationId: opts.organizationId, requestId, now: createdAt });
   if (month.status !== "known") return { status: "refused", reasons: [month.reason] };
 
-  // The run opens while its month's committed spend is below the month budget. Each call is then checked against the month line (authorizeCall).
   const ledger = scopedLedgerStore(sql, opts.organizationId, reservationId);
-  const monthCommittedUsd = await ledger.committedForMonth(opts.organizationId, createdAt.slice(0, 7));
-  if (!startsBelowLine(monthCommittedUsd, month.usd)) {
-    return {
-      status: "refused",
-      reasons: [
-        `workspace monthly budget reached: $${monthCommittedUsd.toFixed(4)} is committed against the $${month.usd.toFixed(4)} budget, so the run is not started`,
-      ],
-    };
-  }
-
   const reservation = budgetReservationSchema.safeParse({
     schema: BUDGET_RESERVATION_SCHEMA,
     reservationId,
@@ -89,11 +80,25 @@ export async function openRunBudget(
     return { status: "refused", reasons: [`the run's hold does not match the reservation contract, so the run is not started: ${detail}`] };
   }
 
-  await sql`
-    insert into engine_requests (id, organization_id, format_id, priority, status, current_stage, state, pause_reason)
-    values (${requestId}, ${opts.organizationId}, 'orchestrator_run', 'normal', 'running', 'run', ${JSON.stringify({ kind: "orchestrator_run", planId: opts.planId })}, '')
-  `;
-  await ledger.createReservation(reservation.data);
+  // The run opens while its month's committed spend is below the month budget. The check and the hold are made together under the workspace
+  // lock, so two runs of different plans cannot both read the same month total and both open. Each call is then checked against the month
+  // line again (authorizeCall).
+  const refused = await transaction(sql, async (tx) => {
+    const workspace = await tx<{ id: string }>`select id from organizations where id = ${opts.organizationId} for update`;
+    if (!workspace[0]) return `workspace ${opts.organizationId} does not exist, so the run is not started`;
+    const locked = sqlLedgerStore(tx, opts.organizationId);
+    const monthCommittedUsd = await locked.committedForMonth(opts.organizationId, createdAt.slice(0, 7));
+    if (!startsBelowLine(monthCommittedUsd, month.usd)) {
+      return `workspace monthly budget reached: $${monthCommittedUsd.toFixed(4)} is committed against the $${month.usd.toFixed(4)} budget, so the run is not started`;
+    }
+    await tx`
+      insert into engine_requests (id, organization_id, format_id, priority, status, current_stage, state, pause_reason)
+      values (${requestId}, ${opts.organizationId}, 'orchestrator_run', 'normal', 'running', 'run', ${JSON.stringify({ kind: "orchestrator_run", planId: opts.planId })}, '')
+    `;
+    await locked.createReservation(reservation.data);
+    return null;
+  });
+  if (refused) return { status: "refused", reasons: [refused] };
   return { status: "open", budget: { ledger, reservationId, requestId } };
 }
 

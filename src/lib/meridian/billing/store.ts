@@ -6,7 +6,7 @@
 
 import { randomUUID } from "node:crypto";
 import { assertRole, isRole, type Role } from "../access.ts";
-import type { Sql } from "../learning/store.ts";
+import { withTransaction, type Sql } from "../learning/store.ts";
 import { BudgetLedgerService, toUsd } from "../security/budget-ledger.ts";
 import { monthlyVideoBudgetUsd, saveWorkspaceVideoBudget } from "../settings/video-budget.ts";
 import { budgets } from "../../../engine/config/budgets.ts";
@@ -157,53 +157,56 @@ export async function saveBillingLimit(
   const objectType = brandId ? "brand" : "organization";
   const objectId = brandId ?? input.organizationId;
 
-  switch (input.kind) {
-    case "workspace_monthly_budget": {
-      // The monthly budget keeps its own writer and its own audit row (video_budget.updated), so the engine and the text path read one figure.
-      const before = await monthlyVideoBudgetUsd(sql, input.organizationId);
-      await saveWorkspaceVideoBudget(sql, { userId: input.userId, organizationId: input.organizationId, value: value === null ? null : value });
-      await auditLimit(sql, { ...input, objectType, objectId, before, after: value });
-      return { kind: input.kind, brandId, value };
+  // The limit and its audit row are one transaction: a limit is never live without its record, and two admins saving at once take turns.
+  return withTransaction(sql, async (tx) => {
+    switch (input.kind) {
+      case "workspace_monthly_budget": {
+        // The monthly budget keeps its own writer and its own audit row (video_budget.updated), so the engine and the text path read one figure.
+        const before = await monthlyVideoBudgetUsd(tx, input.organizationId);
+        await saveWorkspaceVideoBudget(tx, { userId: input.userId, organizationId: input.organizationId, value: value === null ? null : value });
+        await auditLimit(tx, { ...input, objectType, objectId, before, after: value });
+        return { kind: input.kind, brandId, value };
+      }
+      case "measure_ceiling":
+      case "decision_cap": {
+        const read = await readOrchestratorPolicy(tx, input.organizationId);
+        const before = read.status === "ok" ? (input.kind === "measure_ceiling" ? read.policy.measureCeilingUsdPerSecond : read.policy.decisionMaxUsdPerCall) : null;
+        const patch = input.kind === "measure_ceiling" ? { measureCeilingUsdPerSecond: value } : { decisionMaxUsdPerCall: value };
+        await writeOrchestratorPolicy(tx, { organizationId: input.organizationId, actorId: input.userId, patch });
+        await auditLimit(tx, { ...input, objectType, objectId, before, after: value });
+        return { kind: input.kind, brandId, value };
+      }
+      case "brand_budget": {
+        if (value === null || brandId === null) throw new Error("Enter the brand budget in US dollars. Enter 0 to stop all paid work for this brand.");
+        const before = (await BudgetLedgerService.getAccount(tx, input.organizationId, brandId))?.maxSpendMicros;
+        await BudgetLedgerService.setBrandBudget(tx, { organizationId: input.organizationId, brandId, capUsd: value });
+        await auditLimit(tx, { ...input, objectType, objectId, before: before === undefined ? null : toUsd(before), after: value });
+        return { kind: input.kind, brandId, value };
+      }
+      case "factory_daily_cap":
+      case "factory_total_cap": {
+        if (brandId === null) throw new Error("A factory cap belongs to one brand.");
+        const rows = await tx<{ daily_cents: number; total_cents: number }>`
+          select daily_cents, total_cents from factory_spend_caps
+          where organization_id = ${input.organizationId} and brand_id = ${brandId} limit 1 for update
+        `;
+        const currentDaily = rows[0] && rows[0].daily_cents > 0 ? rows[0].daily_cents / 100 : null;
+        const currentTotal = rows[0] && rows[0].total_cents > 0 ? rows[0].total_cents / 100 : null;
+        const daily = input.kind === "factory_daily_cap" ? value : currentDaily;
+        const total = input.kind === "factory_total_cap" ? value : currentTotal;
+        const problem = factoryCapsProblem(daily, total);
+        if (problem) throw new Error(problem);
+        const before = input.kind === "factory_daily_cap" ? currentDaily : currentTotal;
+        // Unset is stored as zero, which the factory reads as no cap and refuses on.
+        await tx`
+          insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
+          values (${input.organizationId}, ${brandId}, ${centsOf(daily) ?? 0}, ${centsOf(total) ?? 0}, ${input.userId})
+          on conflict (organization_id, brand_id) do update
+            set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents, updated_by = excluded.updated_by, updated_at = now()
+        `;
+        await auditLimit(tx, { ...input, objectType, objectId, before, after: value });
+        return { kind: input.kind, brandId, value };
+      }
     }
-    case "measure_ceiling":
-    case "decision_cap": {
-      const read = await readOrchestratorPolicy(sql, input.organizationId);
-      const before = read.status === "ok" ? (input.kind === "measure_ceiling" ? read.policy.measureCeilingUsdPerSecond : read.policy.decisionMaxUsdPerCall) : null;
-      const patch = input.kind === "measure_ceiling" ? { measureCeilingUsdPerSecond: value } : { decisionMaxUsdPerCall: value };
-      await writeOrchestratorPolicy(sql, { organizationId: input.organizationId, actorId: input.userId, patch });
-      await auditLimit(sql, { ...input, objectType, objectId, before, after: value });
-      return { kind: input.kind, brandId, value };
-    }
-    case "brand_budget": {
-      if (value === null || brandId === null) throw new Error("Enter the brand budget in US dollars. Enter 0 to stop all paid work for this brand.");
-      const before = (await BudgetLedgerService.getAccount(sql, input.organizationId, brandId))?.maxSpendMicros;
-      await BudgetLedgerService.setBrandBudget(sql, { organizationId: input.organizationId, brandId, capUsd: value });
-      await auditLimit(sql, { ...input, objectType, objectId, before: before === undefined ? null : toUsd(before), after: value });
-      return { kind: input.kind, brandId, value };
-    }
-    case "factory_daily_cap":
-    case "factory_total_cap": {
-      if (brandId === null) throw new Error("A factory cap belongs to one brand.");
-      const rows = await sql<{ daily_cents: number; total_cents: number }>`
-        select daily_cents, total_cents from factory_spend_caps
-        where organization_id = ${input.organizationId} and brand_id = ${brandId} limit 1
-      `;
-      const currentDaily = rows[0] && rows[0].daily_cents > 0 ? rows[0].daily_cents / 100 : null;
-      const currentTotal = rows[0] && rows[0].total_cents > 0 ? rows[0].total_cents / 100 : null;
-      const daily = input.kind === "factory_daily_cap" ? value : currentDaily;
-      const total = input.kind === "factory_total_cap" ? value : currentTotal;
-      const problem = factoryCapsProblem(daily, total);
-      if (problem) throw new Error(problem);
-      const before = input.kind === "factory_daily_cap" ? currentDaily : currentTotal;
-      // Unset is stored as zero, which the factory reads as no cap and refuses on.
-      await sql`
-        insert into factory_spend_caps (organization_id, brand_id, daily_cents, total_cents, updated_by)
-        values (${input.organizationId}, ${brandId}, ${centsOf(daily) ?? 0}, ${centsOf(total) ?? 0}, ${input.userId})
-        on conflict (organization_id, brand_id) do update
-          set daily_cents = excluded.daily_cents, total_cents = excluded.total_cents, updated_by = excluded.updated_by, updated_at = now()
-      `;
-      await auditLimit(sql, { ...input, objectType, objectId, before, after: value });
-      return { kind: input.kind, brandId, value };
-    }
-  }
+  });
 }
