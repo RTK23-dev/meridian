@@ -3,7 +3,6 @@ import { Link } from "@tanstack/react-router";
 import type { UseFormRegisterReturn } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { Button, DisabledReason, Field, Card, Textarea } from "@/components/ui";
 import { FormDiscardBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -11,16 +10,7 @@ import { IdeaToTestBadge, Term } from "@/components/glossary";
 import { copy, decisionOutcome, percentOrUnknown } from "@/lib/copy";
 import { alternativeDirections, briefableDirection, directionSourceLabel, type DirectionCandidate } from "./direction.ts";
 import type { StudioData } from "./types.ts";
-
-/** The shortest reason that can accept a direction. The server enforces the same length. */
-export const DIRECTION_REASON_MIN = 20;
-
-/** The reason that accepts a direction or asks for the next brief. Trimmed, and at least the server's length. */
-export const directionReasonSchema = z.object({
-  reason: z.string().trim().min(DIRECTION_REASON_MIN, `Write at least ${DIRECTION_REASON_MIN} characters.`),
-});
-
-export type DirectionReasonInput = z.input<typeof directionReasonSchema>;
+import { DIRECTION_REASON_MIN, directionReasonSchema, type DirectionReasonInput } from "./direction-reason.ts";
 
 /**
  * The required reason for accepting a direction. It is recorded with the decision, who made it and when. It does not mean

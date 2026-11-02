@@ -105,7 +105,3 @@ export function creativeLineage(input: {
   ];
 }
 
-/** Neighbors of one node. Used by retrieval instead of a decorative graph. */
-export function neighbors(edges: GraphEdge[], node: string, relation?: GraphEdge["relation"]): GraphEdge[] {
-  return edges.filter((edge) => (edge.from === node || edge.to === node) && (!relation || edge.relation === relation));
-}

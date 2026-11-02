@@ -29,5 +29,3 @@ export const serverStudioGenerationSchema = studioGenerationSchema.extend({
   briefId: z.string().min(1, "Brief ID is required"),
 });
 
-export type ServerStudioGeneration = z.infer<typeof serverStudioGenerationSchema>;
-

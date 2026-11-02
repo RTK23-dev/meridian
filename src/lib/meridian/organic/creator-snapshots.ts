@@ -73,28 +73,6 @@ export async function recordCreatorSnapshot(sql: Sql, input: RecordCreatorSnapsh
   return result;
 }
 
-export async function getLatestCreatorSnapshot(sql: Sql, organizationId: string, creatorId: string): Promise<CreatorSnapshot | null> {
-  const rows = await sql<CreatorSnapshot>`
-    select
-      id,
-      creator_id as "creatorId",
-      organization_id as "organizationId",
-      followers_count as "followersCount",
-      median_views as "medianViews",
-      median_likes as "medianLikes",
-      median_comments as "medianComments",
-      reel_sample_size as "reelSampleSize",
-      baseline_status as "baselineStatus",
-      baseline_reason as "baselineReason",
-      captured_at as "capturedAt"
-    from creator_snapshots
-    where organization_id = ${organizationId} and creator_id = ${creatorId}
-    order by captured_at desc
-    limit 1
-  `;
-  return rows[0] ?? null;
-}
-
 /**
  * The latest baseline that may be reused: one that was measured, or found insufficient, within the last `days` days. A baseline
  * that failed to be fetched is not reused, so the next run asks again.

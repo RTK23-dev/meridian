@@ -246,22 +246,6 @@ async function createOrReuse(
   return { status: "stored", externalId: id, reused: false };
 }
 
-export async function setMetaStatus(
-  credentials: MetaCredentials,
-  externalId: string,
-  status: "PAUSED" | "ACTIVE",
-  transport: Transport,
-): Promise<{ ok: boolean; error: string }> {
-  if (!externalId.trim()) return { ok: false, error: "No external id to update." };
-  const result = await sendWithRetry(transport, {
-    method: "POST",
-    url: `${GRAPH}/${externalId}`,
-    headers: authHeaders(credentials.accessToken),
-    body: JSON.stringify({ status }),
-  });
-  return { ok: result.ok, error: result.ok ? "" : result.error || "Meta did not confirm the status change." };
-}
-
 export function metaInsightsUrl(externalId: string): string {
   return `${GRAPH}/${externalId}/insights?fields=impressions,reach,clicks,spend,actions&date_preset=yesterday`;
 }

@@ -618,4 +618,3 @@ export class GeminiOmniVideoProvider implements ProductionProvider {
   }
 }
 
-export const geminiOmniVideoProvider = new GeminiOmniVideoProvider();

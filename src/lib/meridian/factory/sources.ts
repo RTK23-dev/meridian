@@ -50,8 +50,6 @@ export const FACTORY_SOURCES = [
   },
 ] as const;
 
-export type FactorySourceId = (typeof FACTORY_SOURCES)[number]["id"];
-
 export function snapshotMediaAllowed(env: { RESEARCH_SNAPSHOT_MEDIA?: string } = process.env): boolean {
   return env.RESEARCH_SNAPSHOT_MEDIA?.trim() === "1";
 }

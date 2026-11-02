@@ -12,7 +12,6 @@
  */
 
 import { clamp01 } from "../domain.ts";
-import type { NarrativeBeat } from "./account-engine.ts";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,14 +41,6 @@ export type AudioProsodyFeatures = {
   silenceRatio?: number;
   /** Background music tempo in BPM, if present. */
   musicBpm?: number;
-};
-
-export type NarrativeBeatScore = {
-  beat: NarrativeBeat;
-  presenceScore: number;
-  durationSec: number;
-  qualityScore: number;
-  notes: string;
 };
 
 export type MultimodalInput = {

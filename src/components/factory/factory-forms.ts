@@ -11,8 +11,6 @@ export const factoryRunSchema = z.object({
   niche: z.string().trim().min(1, "Niche is required.").max(80, "Niche is too long."),
 });
 
-export type FactoryRunInput = z.input<typeof factoryRunSchema>;
-
 const levelField = z.string().refine((value) => parseFactoryLevel(value) !== null, "Choose factory levels 0–3.");
 
 /** setFactoryControls: levels are 0 to 3, and the running level cannot pass the ceiling. The spend caps are set on the billing page. */

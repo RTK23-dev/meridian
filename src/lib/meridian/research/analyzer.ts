@@ -17,8 +17,6 @@ export function researchAnalysisKey(input: { sourceId: string; transcript: strin
     .digest("hex");
 }
 
-export type ResearchSynthesisModel = ResearchTextModel;
-
 export async function synthesizeResearchTranscript(input: {
   sourceId: string;
   transcript: string;

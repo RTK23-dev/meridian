@@ -14,7 +14,6 @@ import type {
   JevAnswer,
   JevDecisionRequest,
   JevDecisionResponse,
-  JevQuestionType,
 } from "../jev/types.ts";
 
 export const DECISION_ENGINE_IDS = ["jev", "openai-decisions", "openrouter-decisions"] as const;
@@ -26,11 +25,6 @@ export function isDecisionEngineId(value: unknown): value is DecisionEngineId {
 
 /** Neutral names for the question primitives. `noul` is the registry's historical name for a predicate. */
 export type DecisionQuestionKind = "predicate" | "choice" | "score";
-
-export function questionKindOf(type: JevQuestionType): DecisionQuestionKind {
-  if (type === "noul") return "predicate";
-  return type;
-}
 
 export type DecisionImageMimeType = "image/png" | "image/jpeg" | "image/webp" | "image/gif";
 

@@ -7,7 +7,8 @@ import { BriefReviewPanel } from "@/components/brief-review-panel";
 import { Button, Card, DisabledReason, Input, Textarea } from "@/components/ui";
 import { frameEditProblem, frameFieldText, PLATFORM_MAX, SUCCESS_MAX, type BriefFrame, type FrameEdit, type FrameSource } from "@/lib/meridian/brief/frame";
 import { briefChanges, BRIEF_FIELD_LABELS, type BriefChange } from "./brief-diff.ts";
-import { DIRECTION_REASON_MIN, DirectionReasonField, directionReasonSchema, type DirectionReasonInput } from "./direction-step.tsx";
+import { DirectionReasonField } from "./direction-step.tsx";
+import { DIRECTION_REASON_MIN, directionReasonSchema, type DirectionReasonInput } from "./direction-reason.ts";
 import type { StudioBrief, StudioData } from "./types.ts";
 
 type BriefStepProps = {

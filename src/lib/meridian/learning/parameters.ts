@@ -17,7 +17,6 @@ import type { Sql } from "./store.ts";
 import { latestCalibrationReport, learnedWeightUsable } from "./calibration-gate.ts";
 
 export type ParameterState = "seed_prior" | "candidate_fit" | "fitted" | "validated" | "retired";
-export type ModelParameterStatus = ParameterState;
 
 export type ModelParameterRecord = {
   id: string;
@@ -165,87 +164,3 @@ export async function upsertModelParameter(
   };
 }
 
-export async function getModelParameter(
-  sql: Sql,
-  organizationId: string,
-  parameterName: string,
-  version?: string,
-  brandId = "system",
-  population = "global",
-): Promise<ModelParameterRecord | null> {
-  if (version) {
-    const rows = await sql<any>`
-      select
-        id,
-        organization_id as "organizationId",
-        brand_id as "brandId",
-        population,
-        parameter_name as "parameterName",
-        version,
-        state,
-        prior_value as "priorValue",
-        posterior_value as "posteriorValue",
-        sample_size as "sampleSize",
-        calibration_metrics as "calibrationMetrics",
-        provenance_filter as "provenanceFilter",
-        notes,
-        fit_date as "fitDate",
-        created_at as "createdAt",
-        updated_at as "updatedAt"
-      from model_parameters
-      where organization_id = ${organizationId}
-        and brand_id = ${brandId}
-        and population = ${population}
-        and parameter_name = ${parameterName}
-        and version = ${version}
-      limit 1
-    `;
-    const r = rows[0];
-    if (!r) return null;
-    return {
-      ...r,
-      sampleSize: Number(r.sampleSize),
-      priorValue: Number(r.priorValue),
-      posteriorValue: r.posteriorValue != null ? Number(r.posteriorValue) : null,
-      evidenceCount: Number(r.sampleSize),
-      parameterValue: { prior: Number(r.priorValue), posterior: r.posteriorValue != null ? Number(r.posteriorValue) : null },
-      calibrationScore: typeof r.calibrationMetrics?.score === "number" ? r.calibrationMetrics.score : null,
-    };
-  }
-
-  const rows = await sql<any>`
-    select
-      id,
-      organization_id as "organizationId",
-      brand_id as "brandId",
-      population,
-      parameter_name as "parameterName",
-      version,
-      state,
-      prior_value as "priorValue",
-      posterior_value as "posteriorValue",
-      sample_size as "sampleSize",
-      calibration_metrics as "calibrationMetrics",
-      provenance_filter as "provenanceFilter",
-      notes,
-      fit_date as "fitDate",
-      created_at as "createdAt",
-      updated_at as "updatedAt"
-    from model_parameters
-    where organization_id = ${organizationId}
-      and parameter_name = ${parameterName}
-    order by updated_at desc
-    limit 1
-  `;
-  const r = rows[0];
-  if (!r) return null;
-  return {
-    ...r,
-    sampleSize: Number(r.sampleSize),
-    priorValue: Number(r.priorValue),
-    posteriorValue: r.posteriorValue != null ? Number(r.posteriorValue) : null,
-    evidenceCount: Number(r.sampleSize),
-    parameterValue: { prior: Number(r.priorValue), posterior: r.posteriorValue != null ? Number(r.posteriorValue) : null },
-    calibrationScore: typeof r.calibrationMetrics?.score === "number" ? r.calibrationMetrics.score : null,
-  };
-}

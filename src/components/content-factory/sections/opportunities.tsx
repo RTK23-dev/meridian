@@ -9,7 +9,7 @@ import { useDismissOpportunities, useOpportunitiesQuery, useScopedMutation, useT
 import { qk } from "@/lib/query/keys";
 import { downloadCsv } from "@/lib/csv";
 import { directionReasonProblem } from "@/lib/meridian/opportunity/direction-reason";
-import { usePageCommands } from "@/components/page-commands";
+import { usePageCommands } from "@/components/page-commands-context";
 import { CategoryFilter, CategoryLegend, HoldBanner } from "@/components/opportunities/opportunity-parts";
 import { OpportunitySheet } from "@/components/opportunities/opportunity-sheet";
 import { OpportunityTable } from "@/components/opportunities/opportunity-table";

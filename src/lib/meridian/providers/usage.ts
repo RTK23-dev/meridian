@@ -36,13 +36,51 @@ function metaErrorCode(body: string): number | null {
 }
 
 /**
+ * TikTok Business API codes that name the credential as refused, from the official SDK's NumericErrorCodes
+ * (python_sdk/business_api_client/tiktok_business/tiktok_code.py): 40102 access token expired, 40105 access token invalid, 40103 refresh
+ * token expired, 40107 refresh token invalid. Left out on purpose: 40104 (an empty token, a request-building fault here), 40114
+ * (advertiser logout, not explained by the SDK) and 40115 and 40116 (request signing, which concerns the app, not the token).
+ * TikTok sends these in the JSON body with HTTP 200, which the SDK checks after the HTTP status.
+ */
+const TIKTOK_REFUSAL_CODES = new Set([40102, 40103, 40105, 40107]);
+
+/** The numeric top-level `code` in a JSON body, or null. TikTok puts its error code there. */
+function topLevelCode(body: string): number | null {
+  try {
+    const parsed = JSON.parse(body) as { code?: unknown } | null;
+    return typeof parsed?.code === "number" ? parsed.code : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The OAuth 2.0 error string in a JSON body (RFC 6749), or null. Used for `invalid_grant`, which means the refresh token itself was
+ * revoked or has expired.
+ */
+function oauthErrorString(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown } | null;
+    return typeof parsed?.error === "string" ? parsed.error : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Whether one response refuses the credential. HTTP 401 or 403 does, from any provider. Meta also sends an invalid or expired token as
- * HTTP 400 with error code 190, so that code counts as a refusal whatever the status. Other provider error bodies are not read here:
- * a body code that is not mapped is not treated as a refusal.
+ * HTTP 400 with error code 190, so that code counts as a refusal whatever the status. An OAuth `invalid_grant` (Google sends it as HTTP
+ * 400 when a refresh token is revoked) is a refusal from any provider. Other provider error bodies are not read here: a body code that
+ * is not mapped is not treated as a refusal.
  */
 export function isRefusal(provider: string, response: TransportResponse): boolean {
   if (isRefusalStatus(response.status)) return true;
-  return provider === "meta" && metaErrorCode(response.body) === META_INVALID_TOKEN_CODE;
+  if (provider === "meta" && metaErrorCode(response.body) === META_INVALID_TOKEN_CODE) return true;
+  if (provider === "tiktok") {
+    const code = topLevelCode(response.body);
+    if (code !== null && TIKTOK_REFUSAL_CODES.has(code)) return true;
+  }
+  return oauthErrorString(response.body) === "invalid_grant";
 }
 
 /**

@@ -88,6 +88,14 @@ export function cadenceProblem(videosPerWeek: number): string | null {
   return null;
 }
 
+/** The problem with a rubric's name, or null. Checked after trimming, so the stored name is the one the limit is about. */
+export function rubricNameProblem(name: string): string | null {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return "Give the rubric a name.";
+  if (trimmed.length > RUBRIC_NAME_MAX) return `The rubric name is longer than ${RUBRIC_NAME_MAX} characters.`;
+  return null;
+}
+
 export type RubricCriterion = { name: string; weight: number };
 
 export function criteriaProblem(criteria: readonly RubricCriterion[]): string | null {

@@ -2,7 +2,11 @@
 
 ## Unreleased
 
-- **Provider status follows real use.** A performance sync or a paused publish now records its outcome on the workspace's connection. A request the provider accepts refreshes the success, so a connection that was DEGRADED because its last test was over a day old reads HEALTHY again without a manual test. A request the provider refuses (HTTP 401 or 403, or Meta's invalid-token code 190) marks the connection FAILED with its reason, until someone tests it. Other failures change nothing. TikTok's body-level token errors are not mapped yet. The rules are in `docs/RELEASE_ACCEPTANCE.md` under "Recording real use" and in `src/lib/meridian/providers/usage.ts`.
+- **Stored OAuth tokens are renewed on use.** A sync, a paused publish or a factory paid publish renews a token within five minutes of its stated expiry, with its refresh token. A refused renewal marks the connection FAILED. Before this, a token expired after an hour (Google) or a day (TikTok) until someone pressed Refresh. See `docs/RELEASE_ACCEPTANCE.md`, "Renewing stored tokens".
+- **A refused provider's scheduled sync stops.** A refusal turns that provider's performance schedule off, as a disconnect does; an accepted request turns it back on.
+- **A rubric name is checked against its limit.** Creating a rubric refused no name length before; now a name over 80 characters is refused.
+- **Dead code removed.** 49 unused exports and their helpers, and the imports they left behind.
+- **Provider status follows real use.** A performance sync or a paused publish now records its outcome on the workspace's connection. A request the provider accepts refreshes the success, so a connection that was DEGRADED because its last test was over a day old reads HEALTHY again without a manual test. A request the provider refuses (HTTP 401 or 403, or Meta's invalid-token code 190) marks the connection FAILED with its reason, until someone tests it. Other failures change nothing. TikTok's token codes in a successful-looking body (40102, 40103, 40105, 40107, from its official SDK) count as refusals too. The rules are in `docs/RELEASE_ACCEPTANCE.md` under "Recording real use" and in `src/lib/meridian/providers/usage.ts`.
 
 ## 1.1.0-beta.1 — prerelease
 
@@ -55,7 +59,7 @@ OpenRouter decision routing with a live catalogue and a per-call ceiling, JEV im
 - No live run of any provider, publish, paid call or billing path has been made. The live steps are for the owner to run.
 - An OpenRouter request that errors or times out may have been billed. Its hold stays until an administrator releases it.
 
-## 0.1.0-beta.16 — prerelease
+## Budget run — branch release/0.1.0-beta.16, not released
 
 The budget run. A budget is a line: a paid step starts only while its request's and its workspace month's committed spend is below their budgets, and its own hold fits within them. Queued paid work counts until it settles. Every approval is audited. A brand's policy can only switch model families off. Measure mode lets an admin run an unpriced video at a per-second ceiling. Main's changes since beta.15 are merged in, including the removal of Veo from the fixed routes.
 

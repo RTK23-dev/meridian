@@ -53,9 +53,6 @@ export interface MaterializedArtifact {
   subjectLabel: string;
 }
 
-/** Kept for the video callers that predate the modality dispatch. */
-export type MaterializedVideo = MaterializedArtifact;
-
 interface ManifestLike {
   brand?: { product?: string; audience?: string };
   hook?: { type?: string; text?: string };

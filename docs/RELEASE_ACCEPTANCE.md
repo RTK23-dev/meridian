@@ -83,6 +83,20 @@ The rule is tested at the function, integration and browser boundaries. `provide
 
 A stale connection stops performance sync from being planned until a real request is accepted or someone checks the provider again.
 
+## Renewing stored tokens
+
+A performance sync, a paused publish and a factory paid publish renew the workspace's stored OAuth token when it is within five minutes
+of its stated expiry (`oauth/auto-refresh.ts`). Each renews with the stored refresh token, through the routine the Connections screen's
+Refresh button uses, and stores the new token sealed. Provider lifetimes differ: Google's access token lasts about an hour, TikTok's about
+a day, so renewal runs on use, not on a timer.
+
+- A renewal the provider refuses (`invalid_grant`, HTTP 401 or 403, or Meta's invalid-token code) marks the connection FAILED.
+- Any other renewal failure changes nothing, and the token keeps its expiry.
+- Two requests that renew at once do not overwrite each other: the write only applies to the token it read. The other renewal stays.
+- A token with no stated expiry is not renewed, and the testing runtime renews nothing.
+
+`oauth/auto-refresh.test.ts` covers the due check, a renewal, a refusal, a failure, a missing refresh token and the race.
+
 ## Recording real use
 
 A performance sync and a paused publish make real provider requests, and their outcome is written to the workspace's connection by
@@ -96,8 +110,9 @@ A performance sync and a paused publish make real provider requests, and their o
 - A refusal also turns that provider's scheduled performance sync off, as a disconnect does, so a refused token is not called on every
   cadence. An accepted request turns it back on. A disconnected provider's schedules are not changed.
 - Any other failure (a bad request, a rate limit, a server error, a timeout) changes nothing, because it says nothing about the credential.
-- Not yet covered: TikTok sends its token errors in the response body with HTTP 200, and this repo does not map those codes yet. A TikTok
-  token that fails that way is not marked FAILED by use. The one-day window still turns its status DEGRADED.
+- A refusal also includes OAuth `invalid_grant` (any provider) and TikTok's token codes in a 200 body: 40102 and 40105 for an access token,
+  40103 and 40107 for a refresh token. The codes come from the official TikTok Business SDK's `NumericErrorCodes`. Codes the SDK does not
+  name as a credential refusal (for example 40104, an empty token) are not counted.
 - A disconnected connection is never written, and a missing connection row is not created.
 - The testing runtime's fixture publisher makes no request and records nothing.
 

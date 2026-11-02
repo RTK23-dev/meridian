@@ -47,7 +47,7 @@ test("a stored access token past its stated expiry is unusable, with or without 
   const expired = await providerCredentialState(noDatabase, { organizationId: "org_a", provider: "linkedin", sealed, encryptionKey: key, expiresAt: past, hasRefresh: false, now });
   assert.equal(expired.state, "unusable");
   assert.match(expired.reason, /expired/);
-  // Nothing renews a token on use: a refresh is a manual step, so the reason says to refresh it, and the token is not sent.
+  // This read does not renew: a sync or a publish renews a token before it reads it (oauth/auto-refresh.ts). An expired token here is reported, and not sent.
   const refreshable = await providerCredentialState(noDatabase, { organizationId: "org_a", provider: "linkedin", sealed, encryptionKey: key, expiresAt: past, hasRefresh: true, now });
   assert.equal(refreshable.state, "unusable");
   assert.match(refreshable.reason, /Refresh it on the Connections screen/);

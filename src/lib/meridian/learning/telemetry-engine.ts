@@ -275,22 +275,6 @@ export async function recordTelemetryObservation(
   return stored.length > 0 ? "recorded" : "duplicate";
 }
 
-/**
- * Ingests a batch of telemetry records.
- */
-export async function recordBatchTelemetry(
-  sql: Sql,
-  records: TelemetryRecordInput[],
-  halfLifeDays = 14,
-): Promise<TelemetryRecord[]> {
-  const results: TelemetryRecord[] = [];
-  for (const record of records) {
-    const res = await recordTelemetry(sql, record, halfLifeDays);
-    results.push(res);
-  }
-  return results;
-}
-
 // ---------------------------------------------------------------------------
 // Telemetry Querying
 // ---------------------------------------------------------------------------

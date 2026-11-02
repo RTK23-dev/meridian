@@ -102,11 +102,6 @@ export function isHeld(item: Pick<OpportunityRow, "decision" | "status">): boole
   return item.decision === "HUMAN_REVIEW" && item.status === "open";
 }
 
-/** Matches the server: a rejected or dismissed opportunity cannot be dismissed again or sent to Studio. */
-export function canDismiss(status: string): boolean {
-  return status !== "rejected" && status !== "dismissed";
-}
-
 /** Matches `dismissOpportunity` on the server, which declines only open ideas in bulk. An accepted idea is declined from its own sheet. */
 export function isBulkSelectable(status: string): boolean {
   return status === "open";

@@ -4,14 +4,6 @@ export type TrafficVariant = {
   weight: number;
 };
 
-export type ExperimentPlan = {
-  hypothesis: string;
-  primaryMetric: "ctr" | "cvr" | "roas";
-  secondaryMetrics: string[];
-  attributionWindowDays: number;
-  variants: TrafficVariant[];
-};
-
 /** Weights are the split. This is not a comparison of two creatives without an allocation. */
 export function assertAllocation(variants: TrafficVariant[]): void {
   if (variants.length < 2) throw new Error("An experiment needs a control and at least one variant.");

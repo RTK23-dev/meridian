@@ -39,13 +39,6 @@ function clamp01(value: number): number {
   return value;
 }
 
-export function clampWeight(value: number): number {
-  if (!Number.isFinite(value)) return 0;
-  if (value < 0) return 0;
-  if (value > 5) return 5;
-  return Math.round(value * 1000) / 1000;
-}
-
 /** Rejects blank and non-numeric text. An empty string is not zero. */
 export function parseWeight(value: unknown, label: string): number {
   const text = typeof value === "number" ? String(value) : typeof value === "string" ? value.trim() : "";

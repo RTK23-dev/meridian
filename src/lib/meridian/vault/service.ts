@@ -3,15 +3,6 @@ import { randomUUID } from "node:crypto";
 import { encryptPayload, decryptPayload } from "./crypto.ts";
 import type { Sql } from "../learning/store.ts";
 
-export type StoredCredential = {
-  id: string;
-  organizationId: string;
-  credentialType: string;
-  expiresAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-};
-
 export type VaultCredentialPayload = {
   accessToken: string;
   refreshToken?: string;

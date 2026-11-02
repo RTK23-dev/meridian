@@ -67,7 +67,8 @@ export async function loadTenantProviderToken(
     if (typeof opened !== "string" || !opened.trim()) {
       return { status: "NOT_CONNECTED", error: typeof opened === "string" ? `The tenant ${label} credential is empty. No observations were stored.` : `${opened.error} No observations were stored.` };
     }
-    // A token past its stated expiry is not requested (review 2026-10-22, item 6). Nothing renews it on use, so the reason says what to do.
+    // A token past its stated expiry is not requested (review 2026-10-22, item 6). The sync renews a token about to expire before this read
+    // (oauth/auto-refresh.ts). One that could not be renewed is reported here, so the reason says what to do.
     const expired = expiredReason({
       expiresAt: credentials[0]?.expires_at ? new Date(credentials[0].expires_at).toISOString() : null,
       hasRefresh: (credentials[0]?.sealed_refresh ?? "").trim() !== "",
