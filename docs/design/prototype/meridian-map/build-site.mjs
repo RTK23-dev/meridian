@@ -22,7 +22,7 @@ const body = html.match(/<body>([\s\S]*?)<\/body>/)[1]
   .trim();
 
 // The modules become one script, in dependency order. Imports and exports are removed; the names must not collide, so the build checks.
-const modules = ["world-lines.mjs", "map-model.mjs", "site.mjs"].map((file) =>
+const modules = ["world-field.mjs", "map-model.mjs", "halftone.mjs", "site.mjs"].map((file) =>
   read(file).replace(/^import [\s\S]*?from "\.\/[^"]+";\n/gm, "").replace(/^export /gm, ""),
 );
 const script = modules.join("\n");

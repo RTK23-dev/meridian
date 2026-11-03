@@ -1,5 +1,5 @@
-// The rules behind the site's background, with no DOM. The map is the world's depth map (world-lines.mjs), drawn one 4 px cell at a time.
-// The page moves along the meridian line: the scroll position sets a latitude, and the map shows the cells at that latitude. Each screen
+// The rules behind the site's background, with no DOM. The map is the world's signed distance from the coast (world-field.mjs), drawn as a
+// halftone by halftone.mjs. The page moves along the meridian line: the scroll position sets a latitude, and the map is drawn at that latitude. Each screen
 // is one stop on the route, and the route loops: after the last stop the map carries on over the pole and back to the first stop.
 
 // One map cell is half a degree, and one screen cell is 4 px, so the map is drawn at 8 px per degree.

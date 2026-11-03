@@ -4,12 +4,8 @@
     "parity.map-matches-the-published-site-at-defaults": {
       "ok": true,
       "detail": {
-        "site": 3381322702,
-        "tuner": 3381322702,
-        "colours": [
-          "#1c1c1f",
-          "#0b0b0c"
-        ]
+        "site": 4185230083,
+        "tuner": 4185230083
       }
     },
     "parity.bill-matches-the-published-site-at-defaults": {
@@ -19,13 +15,11 @@
         "tuner": 865
       }
     },
-    "parity.two-colours-at-defaults": {
+    "parity.blocks-mixed-from-the-ground-and-ink-at-defaults": {
       "ok": true,
       "detail": {
-        "colours": [
-          "#1c1c1f",
-          "#0b0b0c"
-        ]
+        "off": 0,
+        "colours": 51
       }
     },
     "site.no-console-errors": {
@@ -41,47 +35,267 @@
         "stop": "1 · Start"
       }
     },
-    "readout.depth-lines-at-the-published-spacing": {
+    "readout.shows-the-ink-and-the-blocks": {
       "ok": true,
       "detail": {
-        "lines": "18.5% of cells"
+        "coverage": "32.1% of the window",
+        "blocks": 28276
       }
     },
-    "spacing.six-cells-gives-the-measured-density": {
+    "spacing.finer-contours-change-the-pattern": {
       "ok": true,
       "detail": {
-        "lines": "33.6% of cells"
+        "before": 2538242525,
+        "finer": 223707788
+      }
+    },
+    "grid.wider-spacing-draws-fewer-blocks": {
+      "ok": true,
+      "detail": {
+        "atSix": 27763,
+        "atTwelve": 7310
       }
     },
     "ground.light-ground-draws-light-map-and-dark-text": {
       "ok": true,
       "detail": {
         "colours": [
+          "#ccccca",
+          "#959595",
+          "#cccccb",
+          "#8e8e8e",
+          "#525253",
+          "#888889",
+          "#8b8b8c",
+          "#bcbcbb",
+          "#888888",
+          "#ebebe9",
+          "#c4c4c3",
+          "#ececea",
+          "#f4f4f2",
+          "#e4e4e3",
+          "#bebebc",
+          "#eaeae8",
+          "#e6e6e4",
+          "#c2c2c2",
+          "#c6c6c4",
+          "#c7c7c6",
+          "#969697",
+          "#656567",
+          "#989898",
+          "#bdbdbb",
+          "#818182",
+          "#848485",
+          "#e1e1e0",
+          "#ececeb",
+          "#ededeb",
+          "#e3e3e2",
+          "#a4a4a4",
+          "#37373a",
+          "#a6a6a6",
+          "#6c6c6d",
           "#1c1c1f",
-          "#f4f4f2"
+          "#696969",
+          "#d2d2d1",
+          "#d5d5d4",
+          "#cacac9",
+          "#a2a2a2",
+          "#cbcbc9",
+          "#e2e2e1",
+          "#68686a",
+          "#79797a",
+          "#babab9",
+          "#cececd",
+          "#d1d1d0",
+          "#c0c0c0",
+          "#929293",
+          "#9b9b9b",
+          "#767678",
+          "#7a7a7b",
+          "#e5e5e4",
+          "#8b8b8b",
+          "#e8e8e6",
+          "#e9e9e7",
+          "#868687",
+          "#8f8f90",
+          "#d3d3d2",
+          "#c5c5c4",
+          "#c6c6c5",
+          "#bbbbba",
+          "#5b5b5c",
+          "#5f5f60",
+          "#acacac",
+          "#d8d8d6",
+          "#dcdcda",
+          "#b3b3b3",
+          "#a5a5a6",
+          "#6d6d6e",
+          "#666668",
+          "#676769",
+          "#858585",
+          "#6b6b6c",
+          "#d4d4d3",
+          "#9f9fa0",
+          "#525254",
+          "#bcbcba",
+          "#cdcdcc",
+          "#b1b1b1",
+          "#b2b2b2",
+          "#38383b",
+          "#39393b",
+          "#505052",
+          "#515153",
+          "#b8b8b7",
+          "#b9b9b8",
+          "#cfcfce",
+          "#999999",
+          "#d7d7d6",
+          "#c1c1c1",
+          "#cececc",
+          "#686869",
+          "#67676a",
+          "#6e6e70",
+          "#707071",
+          "#cfcfcf",
+          "#8f8f8f",
+          "#5c5c5d",
+          "#eeeeec",
+          "#b4b4b4",
+          "#ababaa",
+          "#ababab",
+          "#bebebe",
+          "#bfbfbf",
+          "#d6d6d5",
+          "#dbdbd9",
+          "#838384",
+          "#939393",
+          "#c8c8c7",
+          "#c9c9c8",
+          "#828283",
+          "#5e5e5f",
+          "#5d5d5e",
+          "#7d7d7d",
+          "#7e7e7e",
+          "#919192",
+          "#aaaaa9",
+          "#606061",
+          "#b6b6b5",
+          "#b5b5b5",
+          "#9a9a9a",
+          "#bdbdbd",
+          "#7c7c7d",
+          "#2f2f32",
+          "#949494",
+          "#9e9e9e",
+          "#9f9f9f",
+          "#d0d0d0",
+          "#737374",
+          "#48484b",
+          "#646466",
+          "#8c8c8c",
+          "#e7e7e5",
+          "#a0a0a0",
+          "#717172",
+          "#848484",
+          "#7d7d7e",
+          "#e1e1df",
+          "#dadad8",
+          "#7b7b7c",
+          "#2e2e31",
+          "#a7a7a7",
+          "#a8a8a7",
+          "#c3c3c2",
+          "#d9d9d7",
+          "#727273",
+          "#979797",
+          "#8e8e8f",
+          "#8a8a8b",
+          "#8d8d8d",
+          "#5a5a5b",
+          "#3a3a3c",
+          "#a9a9a8",
+          "#59595b",
+          "#808081",
+          "#a5a5a5",
+          "#a7a7a6",
+          "#7f7f7f",
+          "#808080",
+          "#69696a",
+          "#747475",
+          "#3f3f40",
+          "#3e3e41",
+          "#757577",
+          "#a7a7a5",
+          "#89898a",
+          "#1d1d20",
+          "#1e1e21",
+          "#777778",
+          "#525255",
+          "#535356",
+          "#626262",
+          "#7c7c7c",
+          "#aeaeae",
+          "#b0b0b0",
+          "#e5e5e3",
+          "#dfdfdd",
+          "#dededd",
+          "#4f4f51",
+          "#39393c",
+          "#47474a",
+          "#6f6f70",
+          "#787879",
+          "#868686",
+          "#909091",
+          "#9d9d9e",
+          "#9e9e9f",
+          "#9d9d9d",
+          "#616162",
+          "#878788",
+          "#969696",
+          "#adadae",
+          "#f3f3f1",
+          "#5f5f61",
+          "#d0d0cf",
+          "#8d8d8e",
+          "#e0e0de",
+          "#2d2d2f",
+          "#2d2d30",
+          "#636365",
+          "#7f7f80",
+          "#636364",
+          "#6e6e6f",
+          "#878787",
+          "#626263",
+          "#757576",
+          "#4a4a4c",
+          "#545456",
+          "#242426",
+          "#242427",
+          "#4a4a4b",
+          "#cdcdcb"
         ],
         "ink": "rgb(10, 10, 10)"
       }
     },
-    "zoom.coarser-cells-when-pixel-and-zoom-grow-together": {
+    "zoom.changes-the-pattern": {
       "ok": true,
       "detail": {
-        "cols": 180,
-        "rows": 113
+        "paper": 3509126570,
+        "zoomed": 2648198670
       }
     },
-    "presets.bold-sets-its-spacing-and-pixels": {
+    "presets.bold-sets-its-spacing-and-grid": {
       "ok": true,
       "detail": {
         "step": "9",
-        "pixel": "6"
+        "pitch": "8"
       }
     },
     "presets.reset-restores-the-published-site": {
       "ok": true,
       "detail": {
         "step": "12",
-        "pixel": "4",
+        "pitch": "6",
         "bg": "#0b0b0c"
       }
     },
@@ -95,8 +309,11 @@
           "meridian",
           "meridianOn",
           "meridianOpacity",
+          "pitch",
+          "block",
+          "sharp",
           "step",
-          "pixel",
+          "jitter",
           "zoom",
           "glide",
           "grainOn",
@@ -125,7 +342,7 @@
     "playback.autoplay-moves-down-the-route": {
       "ok": true,
       "detail": {
-        "scrollY": 551
+        "scrollY": 540
       }
     },
     "playback.scrub-moves-to-the-chosen-stop": {
@@ -137,8 +354,8 @@
     "motion.reduced-holds-the-map-still": {
       "ok": true,
       "detail": {
-        "early": 3376567446,
-        "late": 3376567446
+        "early": 3807196742,
+        "late": 3807196742
       }
     },
     "layout.no-sideways-scroll.phone": {

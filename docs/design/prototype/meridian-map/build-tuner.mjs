@@ -1,5 +1,5 @@
 // Builds the single-file simulator for publishing: the page, its styles and its scripts inlined. The depth-field data is included so the
-// spacing can be changed on the page. Usage: node build-tuner.mjs <output.html>
+// contour spacing can be changed on the page. Usage: node build-tuner.mjs <output.html>
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -18,7 +18,7 @@ const title = html.match(/<title>([\s\S]*?)<\/title>/)[1];
 const fonts = [...head.matchAll(/<link rel="(?:preconnect|stylesheet)"[^>]*>/g)].map((m) => m[0]).filter((tag) => tag.includes("fonts.g"));
 const body = html.match(/<body>([\s\S]*?)<\/body>/)[1].replace(/<script type="module" src="[^"]+"><\/script>/, "").trim();
 
-const modules = ["world-field.mjs", "map-model.mjs", "tuner.mjs"].map((file) =>
+const modules = ["world-field.mjs", "map-model.mjs", "halftone.mjs", "tuner.mjs"].map((file) =>
   read(file).replace(/^import [\s\S]*?from "\.\/[^"]+";\n/gm, "").replace(/^export /gm, ""),
 );
 const script = modules.join("\n");

@@ -1,11 +1,13 @@
 // The simulator: the site background, drawn by the same rules, with every value open to change. At the defaults it draws the same pixels as
-// the published site. Changes are kept on this device, and can be copied out as JSON or as a settings object, and pasted back in.
+// the published site, because both draw through halftone.mjs. Changes are kept on this device, and can be copied out as JSON or as a
+// settings object, and pasted back in.
 import { WORLD_FIELD } from "./world-field.mjs";
-import { ROUTE, latitudeAt, sampleIndex, decodeField, linesFromField, billWeight, BAYER4, printed, printFractionFor, PRINT_CURVES } from "./map-model.mjs";
+import { ROUTE, latitudeAt, decodeField, billWeight, BAYER4, printed, printFractionFor, PRINT_CURVES } from "./map-model.mjs";
+import { HALFTONE_DEFAULTS, drawHalftone } from "./halftone.mjs";
 
 const DEFAULTS = Object.freeze({
   bg: "#0B0B0C", line: "#1C1C1F", money: "#F5C518", meridian: "#FF2E38", meridianOn: true, meridianOpacity: 0.7,
-  step: 12, pixel: 4, zoom: 8, glide: 0.14,
+  ...HALFTONE_DEFAULTS, glide: 0.14,
   grainOn: true, grain: 0.07,
   billBand: 0.6, billCurve: "smoothstep", billPrint: 24,
   route: [47, 23, 0, -23, -41],
@@ -13,9 +15,9 @@ const DEFAULTS = Object.freeze({
 });
 const PRESETS = Object.freeze({
   "As published": {},
-  Quiet: { line: "#161618", grain: 0.04, step: 16, meridianOpacity: 0.5 },
-  Bold: { line: "#2A2A2F", grain: 0.12, step: 9, pixel: 6, zoom: 12 },
-  Coarse: { pixel: 8, zoom: 16, step: 18 },
+  Quiet: { line: "#161618", grain: 0.04, step: 16, block: 0.75, jitter: 0.06, meridianOpacity: 0.5 },
+  Bold: { line: "#2A2A2F", grain: 0.12, step: 9, pitch: 8, block: 0.95, sharp: 3, zoom: 12 },
+  Coarse: { pitch: 10, zoom: 16, step: 18 },
   Paper: { bg: "#F4F4F2", line: "#DCDCD7", money: "#D9A400", meridian: "#C8102E", grain: 0.05 },
   "Slow glide": { glide: 0.04, speed: 0.2 },
 });
@@ -26,7 +28,7 @@ const STOP_NAMES = ["Start", "Create", "Library", "Insights", "Settings"];
 const SPEC = [
   { group: "Colour", items: [
     { key: "bg", type: "color", label: "Ground" },
-    { key: "line", type: "color", label: "Depth line" },
+    { key: "line", type: "color", label: "Block colour" },
     { key: "money", type: "color", label: "Bill yellow" },
     { key: "meridian", type: "color", label: "Meridian line" },
     { key: "meridianOn", type: "bool", label: "Show the meridian" },
@@ -35,9 +37,12 @@ const SPEC = [
     { key: "grain", type: "range", min: 0, max: 0.25, step: 0.01, label: "Grain strength" },
   ] },
   { group: "Map", items: [
-    { key: "step", type: "range", min: 2, max: 24, step: 1, label: "Contour spacing (cells)", help: "12 is the published site." },
-    { key: "pixel", type: "range", min: 2, max: 8, step: 1, label: "Pixel size (screen px per cell)" },
-    { key: "zoom", type: "range", min: 4, max: 24, step: 1, label: "Zoom (px per degree)", help: "Degrees per cell is pixel size divided by zoom. 4 over 8 is the published 0.5." },
+    { key: "step", type: "range", min: 2, max: 24, step: 1, label: "Contour spacing (cells)", help: "A cell is half a degree. 12 is the published site." },
+    { key: "pitch", type: "range", min: 3, max: 14, step: 1, label: "Grid spacing (screen px)", help: "The distance between block centres. 6 is the published site." },
+    { key: "block", type: "range", min: 0.3, max: 1, step: 0.05, label: "Largest block (share of the grid)", help: "How much of its grid cell the darkest block fills." },
+    { key: "sharp", type: "range", min: 0.5, max: 4, step: 0.25, label: "Band sharpness", help: "Higher values make each band narrower, with more ground between bands." },
+    { key: "jitter", type: "range", min: 0, max: 0.3, step: 0.01, label: "Opacity variation between blocks" },
+    { key: "zoom", type: "range", min: 4, max: 24, step: 1, label: "Zoom (px per degree)", help: "The map is centred on the meridian. 8 is the published site." },
   ] },
   { group: "Motion", items: [
     { key: "glide", type: "range", min: 0.02, max: 1, step: 0.01, label: "Glide (how fast the map follows)" },
@@ -97,24 +102,11 @@ function start() {
   const grainEl = document.querySelector(".grain");
   const stopCount = ROUTE.length;
 
-  // ---- The depth lines for the current spacing, rebuilt only when the spacing changes. ----
-  let lines = null;
-  let linesStep = null;
-  function currentLines() {
-    if (linesStep !== settings.step) {
-      lines = linesFromField(field, 720, 360, settings.step);
-      linesStep = settings.step;
-    }
-    return lines;
-  }
-  const lineShare = () => currentLines().reduce((a, b) => a + b, 0) / (720 * 360);
-
   // ---- The palette, as the page's own colours, so the text, the rules and the map follow one set. ----
   const hex = (value) => {
     const n = parseInt(value.slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   };
-  let palette = null;
   // The text follows the ground: dark text on a light ground, light text on a dark one, whatever the system theme is.
   const brightness = (value) => {
     const [r, g, b] = hex(value).map((c) => {
@@ -123,8 +115,11 @@ function start() {
     });
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
+  // Every change to the drawing bumps `version`, so the map is drawn again on the next frame.
+  let version = 0;
+  let palette = null;
   function applyPalette() {
-    palette = { bg: hex(settings.bg), line: hex(settings.line), money: hex(settings.money) };
+    palette = { bg: settings.bg, line: settings.line, money: settings.money, moneyRgb: hex(settings.money) };
     const light = brightness(settings.bg) > 0.4;
     root.style.setProperty("--map-bg", settings.bg);
     root.style.setProperty("--map-line", settings.line);
@@ -134,40 +129,20 @@ function start() {
     root.style.setProperty("--rule", light ? "#CFCFCA" : "#2A2A2D");
     root.style.colorScheme = light ? "light" : "dark";
     for (const b of bills) b.last = -1;
-    mapVersion += 1;
+    version += 1;
   }
 
-  // ---- The map: one canvas pixel per screen cell, scaled up with no smoothing. ----
-  let cols = 0;
-  let rows = 0;
-  let image = null;
-  let mapVersion = 0;
+  // ---- The map: a halftone at full resolution, the canvas sized to the window at the screen's pixel density. ----
+  let stats = { blocks: 0, coverage: 0 };
   let lastKey = "";
-  function sizeMap() {
-    cols = Math.ceil(innerWidth / settings.pixel);
-    rows = Math.ceil(innerHeight / settings.pixel);
-    canvas.width = cols;
-    canvas.height = rows;
-    canvas.style.width = `${cols * settings.pixel}px`;
-    canvas.style.height = `${rows * settings.pixel}px`;
-    image = ctx.createImageData(cols, rows);
-    mapVersion += 1;
-  }
-  function drawMap(latC) {
-    const d = image.data;
-    const depth = currentLines();
-    const degPerCell = settings.pixel / settings.zoom;
-    for (let r = 0; r < rows; r += 1) {
-      for (let c = 0; c < cols; c += 1) {
-        const rgb = depth[sampleIndex(c, r, latC, cols, rows, 720, 360, degPerCell)] ? palette.line : palette.bg;
-        const k = (r * cols + c) * 4;
-        d[k] = rgb[0];
-        d[k + 1] = rgb[1];
-        d[k + 2] = rgb[2];
-        d[k + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    canvas.style.width = `${innerWidth}px`;
+    canvas.style.height = `${innerHeight}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    version += 1;
   }
 
   // ---- The bills. ----
@@ -186,9 +161,9 @@ function start() {
         const i = y * b.w + x;
         const k = i * 4;
         if (printed(BAYER4[(y & 3) * 4 + (x & 3)], amount, b.weights[i])) {
-          d[k] = palette.money[0];
-          d[k + 1] = palette.money[1];
-          d[k + 2] = palette.money[2];
+          d[k] = palette.moneyRgb[0];
+          d[k + 1] = palette.moneyRgb[1];
+          d[k + 2] = palette.moneyRgb[2];
           d[k + 3] = 255;
         } else {
           d[k + 3] = 0;
@@ -233,7 +208,8 @@ function start() {
     root.style.scrollSnapType = settings.snap && !playing && !scrubbing ? "y mandatory" : "none";
   }
 
-  // ---- The route and the position. ----
+  // ---- The route and the position. The loop works as on the site: a swipe past the loop screen lands on the first stop, and the map is
+  //      the same picture, because a half turn of the map is the same part of the world. ----
   const routeLats = () => [...settings.route, settings.route[0] - 180];
   let current = settings.route[0];
   let playing = false;
@@ -241,7 +217,10 @@ function start() {
   const progress = () => window.scrollY / Math.max(1, innerHeight);
   const toScroll = (p) => window.scrollTo({ top: p * innerHeight, behavior: "instant" });
   window.addEventListener("scroll", () => {
-    if (!playing && window.scrollY >= stopCount * innerHeight - 1) toScroll(0);
+    if (window.scrollY >= stopCount * innerHeight - 1) {
+      window.scrollTo({ top: window.scrollY - stopCount * innerHeight, behavior: "instant" });
+      current = latitudeAt(progress(), routeLats());
+    }
   }, { passive: true });
 
   // ---- The frame: glide the map toward the position, redraw what changed, and keep the readout current. ----
@@ -268,10 +247,9 @@ function start() {
     const target = latitudeAt(p, routeLats());
     current = reduce.matches ? target : current + (target - current) * settings.glide;
     if (Math.abs(target - current) < 1e-4) current = target;
-    const latQ = Math.round(current / 0.5) * 0.5;
-    const key = `${latQ}|${mapVersion}|${cols}|${rows}`;
+    const key = `${current.toFixed(3)}|${version}|${innerWidth}x${innerHeight}`;
     if (key !== lastKey) {
-      drawMap(latQ);
+      stats = drawHalftone(ctx, field, { width: innerWidth, height: innerHeight, centreLat: current, zoom: settings.zoom }, settings, palette);
       lastKey = key;
     }
     for (const b of bills) {
@@ -283,31 +261,30 @@ function start() {
     }
     const here = Math.round(p) % stopCount;
     navLinks.forEach((link, i) => link.setAttribute("aria-current", String(i === here)));
-    readout(p, latQ);
+    readout(p, current);
   }
 
-  // ---- The readout: where the page is, which stop, the latitude, and how much of the map is drawn as lines. ----
+  // ---- The readout: where the page is, which stop, the latitude, how much of the window is ink, and how many blocks are drawn. ----
   const out = {
     stop: document.querySelector("#r-stop"),
     lat: document.querySelector("#r-lat"),
     position: document.querySelector("#r-position"),
     bill: document.querySelector("#r-bill"),
-    lines: document.querySelector("#r-lines"),
-    cells: document.querySelector("#r-cells"),
+    coverage: document.querySelector("#r-coverage"),
+    blocks: document.querySelector("#r-blocks"),
     fps: document.querySelector("#r-fps"),
   };
   let readAt = 0;
-  function readout(p, latQ) {
+  function readout(p, lat) {
     if (performance.now() - readAt < 150) return;
     readAt = performance.now();
     const here = Math.round(p) % stopCount;
-    const north = latQ >= 0 ? `${Math.abs(latQ).toFixed(1)}° N` : `${Math.abs(latQ).toFixed(1)}° S`;
     out.stop.textContent = `${here + 1} · ${STOP_NAMES[here]}`;
-    out.lat.textContent = north;
+    out.lat.textContent = `${Math.abs(lat).toFixed(1)}° ${lat >= 0 ? "N" : "S"}`;
     out.position.textContent = `${p.toFixed(2)} of ${stopCount}`;
     out.bill.textContent = `${Math.round(printAmount(bills[Math.min(bills.length - 1, here)]) * 100)}% printed`;
-    out.lines.textContent = `${(lineShare() * 100).toFixed(1)}% of cells`;
-    out.cells.textContent = `${cols} × ${rows} cells`;
+    out.coverage.textContent = `${(stats.coverage * 100).toFixed(1)}% of the window`;
+    out.blocks.textContent = `${stats.blocks.toLocaleString("en-GB")} blocks`;
     out.fps.textContent = `${fps} fps`;
   }
 
@@ -360,7 +337,7 @@ function start() {
     settings[key] = normal(key, value);
     save(settings);
     if (["bg", "line", "money"].includes(key)) applyPalette();
-    if (["step", "pixel", "zoom"].includes(key)) sizeMap();
+    version += 1;
     if (key === "meridian" || key === "meridianOn" || key === "meridianOpacity") applyMeridian();
     if (key === "grain" || key === "grainOn") applyGrain();
     if (key === "snap") applySnap();
@@ -371,7 +348,7 @@ function start() {
     for (const key of Object.keys(DEFAULTS)) settings[key] = normal(key, next[key] ?? DEFAULTS[key]);
     save(settings);
     applyPalette();
-    sizeMap();
+    version += 1;
     applyMeridian();
     applyGrain();
     applySnap();
@@ -409,7 +386,7 @@ function start() {
     }
   });
   document.querySelector("#copy-code").addEventListener("click", async () => {
-    exportText.value = `// Paste into map-model.mjs or site.mjs in place of the current values.\nexport const SETTINGS = ${settingsJSON()};\n`;
+    exportText.value = `// Settings from the simulator. The grid values go in HALFTONE_DEFAULTS in halftone.mjs, and the colours go in :root in site.css.\nexport const SETTINGS = ${settingsJSON()};\n`;
     try {
       await navigator.clipboard.writeText(exportText.value);
       say("Copied as a settings object.");
@@ -461,14 +438,14 @@ function start() {
   // ---- Start. ----
   buildControls();
   applyPalette();
-  sizeMap();
+  sizeCanvas();
   makeGrain();
   applyGrain();
   applyMeridian();
   applySnap();
   setPlayLabel();
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => applyPalette());
-  window.addEventListener("resize", () => sizeMap());
+  window.addEventListener("resize", () => sizeCanvas());
   requestAnimationFrame(frame);
 }
 

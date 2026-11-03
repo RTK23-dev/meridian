@@ -1,5 +1,6 @@
-/* The site background is a depth map drawn in two colours that sit close to the page: the map ground and its line. The page moves down
-   the meridian line, one screen per stop, and each screen snaps into place. Yellow is the money colour, used only on the bills. */
+/* The site background is the depth map drawn as a square halftone: blocks at full resolution, sized and inked by tone, on a ground close to
+   the page. The page moves down the meridian line, one screen per stop, and each screen snaps into place. Yellow is the money colour,
+   used only on the bills. */
 :root {
   color-scheme: dark;
   --map-bg: #0B0B0C;
@@ -43,7 +44,6 @@ body {
 
 #map {
   position: fixed; top: 0; left: 0; z-index: 0; pointer-events: none;
-  image-rendering: pixelated; image-rendering: crisp-edges;
 }
 .meridian {
   position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; z-index: 1; pointer-events: none;

@@ -56,6 +56,18 @@ const mapDigest = (page) => page.evaluate(() => {
   }
   return { colours: [...colours].map((c) => `#${c.toString(16).padStart(6, "0")}`), hash, cols: canvas.width, rows: canvas.height };
 });
+// The digest once the map has stopped gliding: it is taken again until two readings in a row agree, so a map still moving toward its stop
+// is not compared with one that has arrived.
+async function settledDigest(page) {
+  let last = await mapDigest(page);
+  for (let i = 0; i < 30; i += 1) {
+    await page.waitForTimeout(250);
+    const next = await mapDigest(page);
+    if (next.hash === last.hash) return next;
+    last = next;
+  }
+  return last;
+}
 const billPrinted = (page, index) => page.evaluate((i) => {
   const canvas = document.querySelectorAll("canvas.bill")[i];
   const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
@@ -64,6 +76,36 @@ const billPrinted = (page, index) => page.evaluate((i) => {
   return n;
 }, index);
 const readout = (page, id) => page.textContent(`#${id}`);
+// Every pixel of the map is a mix of the ground and the block colour, since the blocks are drawn at varied opacity. Returns how many pixels
+// are more than two steps off the line between the two colours, and how many colours there are.
+const mixOf = (page, ground, ink) => page.evaluate(([bgHex, lineHex]) => {
+  const parse = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const [ar, ag, ab] = parse(bgHex);
+  const [br, bg, bb] = parse(lineHex);
+  const [dr, dg, db] = [br - ar, bg - ag, bb - ab];
+  const len = dr * dr + dg * dg + db * db;
+  const canvas = document.querySelector("#map");
+  const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  const colours = new Set();
+  let off = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    colours.add((r << 16) | (g << 8) | b);
+    const t = Math.min(1, Math.max(0, ((r - ar) * dr + (g - ag) * dg + (b - ab) * db) / len));
+    if (Math.abs(r - (ar + t * dr)) > 2 || Math.abs(g - (ag + t * dg)) > 2 || Math.abs(b - (ab + t * db)) > 2) off += 1;
+  }
+  return { off, distinct: colours.size };
+}, [ground, ink]);
+// Sets a range or colour control the way a reader does: the value, then the input event the drawer listens for.
+const setRange = (page, id, value) => page.evaluate(([i, v]) => {
+  const el = document.querySelector(`#${i}`);
+  el.value = v;
+  el.dispatchEvent(new Event("input", { bubbles: true }));
+}, [id, value]);
+// The number of blocks the simulator reports it drew.
+const blockCount = async (page) => Number((await readout(page, "r-blocks")).replace(/[^0-9]/g, ""));
 const settle = (page, ms = 1200) => page.waitForTimeout(ms);
 
 // ---- 1. Parity: at its defaults the simulator draws the same map as the published site, at the same position. ----
@@ -71,43 +113,54 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   const site = await open("index.html");
   await site.page.evaluate(() => window.scrollTo({ top: window.innerHeight, behavior: "instant" }));
   await settle(site.page);
-  const siteDigest = await mapDigest(site.page);
+  const siteDigest = await settledDigest(site.page);
   const siteBill = await billPrinted(site.page, 1);
   await site.context.close();
 
   const tuner = await open("tuner.html");
   await tuner.page.evaluate(() => window.scrollTo({ top: window.innerHeight, behavior: "instant" }));
   await settle(tuner.page);
-  const tunerDigest = await mapDigest(tuner.page);
+  const tunerDigest = await settledDigest(tuner.page);
   const tunerBill = await billPrinted(tuner.page, 1);
-  check("parity.map-matches-the-published-site-at-defaults", siteDigest.hash === tunerDigest.hash && tunerDigest.colours.length === 2, { site: siteDigest.hash, tuner: tunerDigest.hash, colours: tunerDigest.colours });
+  const tunerMix = await mixOf(tuner.page, "#0B0B0C", "#1C1C1F");
+  check("parity.map-matches-the-published-site-at-defaults", siteDigest.hash === tunerDigest.hash, { site: siteDigest.hash, tuner: tunerDigest.hash });
   check("parity.bill-matches-the-published-site-at-defaults", siteBill === tunerBill, { site: siteBill, tuner: tunerBill });
-  check("parity.two-colours-at-defaults", tunerDigest.colours.length === 2, { colours: tunerDigest.colours });
+  check("parity.blocks-mixed-from-the-ground-and-ink-at-defaults", tunerMix.off === 0 && tunerMix.distinct > 2, { off: tunerMix.off, colours: tunerMix.distinct });
   check("site.no-console-errors", tuner.errors.length === 0 && site.errors.length === 0, { tuner: tuner.errors, site: site.errors });
   await tuner.context.close();
 }
 
-// ---- 2. The readout shows the real state: the stop, the latitude, and the depth lines at the published spacing. ----
+// ---- 2. The readout shows the real state: the stop, the latitude, and how much of the window is ink and how many blocks are drawn. ----
 {
   const { context, page } = await open("tuner.html");
   await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
   await settle(page);
   check("readout.starts-at-the-first-stop", (await readout(page, "r-stop")).startsWith("1 ·"), { stop: await readout(page, "r-stop") });
-  check("readout.depth-lines-at-the-published-spacing", (await readout(page, "r-lines")) === "18.5% of cells", { lines: await readout(page, "r-lines") });
+  const coverage = await readout(page, "r-coverage");
+  const blocks = await blockCount(page);
+  check("readout.shows-the-ink-and-the-blocks", /^\d+\.\d% of the window$/.test(coverage) && blocks > 0, { coverage, blocks });
   await context.close();
 }
 
-// ---- 3. Each value changes the map: spacing changes the depth lines, the ground changes the colour, the zoom changes the cells. ----
+// ---- 3. Each value changes the map: the contour spacing changes the pattern, the grid spacing changes how many blocks are drawn, the
+//      ground changes the colour, and the zoom changes the pattern. ----
 {
   const { context, page } = await open("tuner.html");
   await page.evaluate(() => window.scrollTo({ top: window.innerHeight, behavior: "instant" }));
   await settle(page);
-  await page.fill("#k-step", "6");
-  await page.dispatchEvent("#k-step", "input");
+  const before = await mapDigest(page);
+  const blocksBefore = await blockCount(page);
+  await setRange(page, "k-step", "6");
   await settle(page, 700);
-  check("spacing.six-cells-gives-the-measured-density", (await readout(page, "r-lines")) === "33.6% of cells", { lines: await readout(page, "r-lines") });
-  await page.fill("#k-step", "12");
-  await page.dispatchEvent("#k-step", "input");
+  const finer = await mapDigest(page);
+  check("spacing.finer-contours-change-the-pattern", finer.hash !== before.hash, { before: before.hash, finer: finer.hash });
+  await setRange(page, "k-step", "12");
+  await settle(page, 500);
+  await setRange(page, "k-pitch", "12");
+  await settle(page, 700);
+  const blocksWide = await blockCount(page);
+  check("grid.wider-spacing-draws-fewer-blocks", blocksWide < blocksBefore, { atSix: blocksBefore, atTwelve: blocksWide });
+  await setRange(page, "k-pitch", "6");
   await settle(page, 500);
 
   await page.evaluate(() => {
@@ -120,17 +173,10 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   const ink = await page.evaluate(() => getComputedStyle(document.querySelector(".lede")).color);
   check("ground.light-ground-draws-light-map-and-dark-text", paper.colours.includes("#f4f4f2") && ink === "rgb(10, 10, 10)", { colours: paper.colours, ink });
 
-  await page.evaluate(() => {
-    const el = document.querySelector("#k-pixel");
-    el.value = "8";
-    el.dispatchEvent(new Event("input", { bubbles: true }));
-    const z = document.querySelector("#k-zoom");
-    z.value = "16";
-    z.dispatchEvent(new Event("input", { bubbles: true }));
-  });
+  await setRange(page, "k-zoom", "16");
   await settle(page, 700);
-  const coarse = await mapDigest(page);
-  check("zoom.coarser-cells-when-pixel-and-zoom-grow-together", coarse.cols < 300 && coarse.cols > 150, { cols: coarse.cols, rows: coarse.rows });
+  const zoomed = await mapDigest(page);
+  check("zoom.changes-the-pattern", zoomed.hash !== paper.hash, { paper: paper.hash, zoomed: zoomed.hash });
   await context.close();
 }
 
@@ -139,12 +185,12 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   const { context, page } = await open("tuner.html");
   await page.click("text=Bold");
   await settle(page, 300);
-  const bold = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pixel: document.querySelector("#k-pixel").value }));
-  check("presets.bold-sets-its-spacing-and-pixels", bold.step === "9" && bold.pixel === "6", bold);
+  const bold = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pitch: document.querySelector("#k-pitch").value }));
+  check("presets.bold-sets-its-spacing-and-grid", bold.step === "9" && bold.pitch === "8", bold);
   await page.click("#reset");
   await settle(page, 300);
-  const back = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pixel: document.querySelector("#k-pixel").value, bg: document.querySelector("#k-bg").value }));
-  check("presets.reset-restores-the-published-site", back.step === "12" && back.pixel === "4" && back.bg.toUpperCase() === "#0B0B0C", back);
+  const back = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pitch: document.querySelector("#k-pitch").value, bg: document.querySelector("#k-bg").value }));
+  check("presets.reset-restores-the-published-site", back.step === "12" && back.pitch === "6" && back.bg.toUpperCase() === "#0B0B0C", back);
   await context.close();
 }
 
@@ -155,7 +201,7 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   await settle(page, 200);
   const exported = await page.inputValue("#io");
   const parsed = JSON.parse(exported);
-  check("io.export-holds-every-value", parsed.step === 12 && parsed.pixel === 4 && parsed.route.length === 5, { keys: Object.keys(parsed) });
+  check("io.export-holds-every-value", parsed.step === 12 && parsed.pitch === 6 && parsed.zoom === 8 && parsed.route.length === 5, { keys: Object.keys(parsed) });
   await page.fill("#k-step", "20");
   await page.dispatchEvent("#k-step", "input");
   await settle(page, 200);
