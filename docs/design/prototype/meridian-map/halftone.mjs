@@ -10,7 +10,7 @@ const LEVELS = 8;
 
 // The defaults: the published look. Pitch is the grid's spacing in screen pixels; block is the largest square as a share of the pitch;
 // sharp makes the tone bands crisper; step is the spacing of the bands in map cells; jitter is how far the opacity varies from block to block.
-export const HALFTONE_DEFAULTS = Object.freeze({ pitch: 6, block: 0.9, sharp: 2, step: 12, jitter: 0.12, zoom: 8 });
+export const HALFTONE_DEFAULTS = Object.freeze({ pitch: 8, block: 1, sharp: 2, step: 11, jitter: 0.3, zoom: 8 });
 
 const wrap = (value, period) => ((value % period) + period) % period;
 const wrapLat = (lat) => wrap(lat + 90, 180) - 90;

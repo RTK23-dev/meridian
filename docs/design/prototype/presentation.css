@@ -2,8 +2,25 @@
    and the plan. Every screen is drawn inside a frame that is its own container, so each screen reflows by the width it has: a frame at
    phone width takes the phone layout, whatever the window is. */
 
+/* ---- The site background: the same map as the site, behind everything. Its ground and line are the site's, in both themes, so the
+   walkthrough's frames and plates sit on the same ground the site's pages do. background.mjs draws the map and moves it to the group
+   on show. ---- */
+:root { --map-bg: #0B0B0C; --map-line: #1C1C1F; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) { --map-bg: #F4F4F2; --map-line: #DCDCD7; }
+}
+:root[data-theme="light"] { --map-bg: #F4F4F2; --map-line: #DCDCD7; }
+html { background: var(--map-bg); }
+body { background: transparent; }
+#map { position: fixed; top: 0; left: 0; z-index: 0; pointer-events: none; }
+.meridian {
+  position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; z-index: 1; pointer-events: none;
+  background: var(--accent); opacity: 0.7;
+}
+.grain { position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.07; }
+
 /* ---- The walkthrough: an index on the left, the stage on the right ---- */
-.pres { position: relative; z-index: 1; max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 56px; padding: 40px 0 140px; }
+.pres { position: relative; z-index: 3; max-width: 1360px; margin: 0 auto; display: grid; grid-template-columns: 224px minmax(0, 1fr); gap: 56px; padding: 40px 0 140px; }
 .pres-index { position: sticky; top: 28px; align-self: start; display: grid; gap: 22px; }
 .pres-group { display: grid; gap: 2px; }
 .pres-group .label { padding-left: 14px; margin-bottom: 6px; }

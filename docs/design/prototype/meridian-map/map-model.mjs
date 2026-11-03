@@ -6,6 +6,10 @@
 export const CELL_DEG = 0.5;
 export const CELL_PX = 4;
 
+// How fast the map follows the scroll: each frame it closes this share of the gap to the latitude of the screen, so 1 is at once and small
+// values lag behind. Shared by the site and the simulator.
+export const GLIDE = 0.69;
+
 // The stops, in order, as the latitude each screen sits at. The loop stop is the first stop again, a half turn of the map further on.
 export const ROUTE = Object.freeze([
   { id: "cover", lat: 47, place: "Switzerland" },

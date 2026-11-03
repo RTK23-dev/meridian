@@ -2,12 +2,12 @@
 // the published site, because both draw through halftone.mjs. Changes are kept on this device, and can be copied out as JSON or as a
 // settings object, and pasted back in.
 import { WORLD_FIELD } from "./world-field.mjs";
-import { ROUTE, latitudeAt, decodeField, billWeight, BAYER4, printed, printFractionFor, PRINT_CURVES } from "./map-model.mjs";
+import { ROUTE, GLIDE, latitudeAt, decodeField, billWeight, BAYER4, printed, printFractionFor, PRINT_CURVES } from "./map-model.mjs";
 import { HALFTONE_DEFAULTS, drawHalftone } from "./halftone.mjs";
 
 const DEFAULTS = Object.freeze({
   bg: "#0B0B0C", line: "#1C1C1F", money: "#F5C518", meridian: "#FF2E38", meridianOn: true, meridianOpacity: 0.7,
-  ...HALFTONE_DEFAULTS, glide: 0.14,
+  ...HALFTONE_DEFAULTS, glide: GLIDE,
   grainOn: true, grain: 0.07,
   billBand: 0.6, billCurve: "smoothstep", billPrint: 24,
   route: [47, 23, 0, -23, -41],
@@ -16,8 +16,8 @@ const DEFAULTS = Object.freeze({
 const PRESETS = Object.freeze({
   "As published": {},
   Quiet: { line: "#161618", grain: 0.04, step: 16, block: 0.75, jitter: 0.06, meridianOpacity: 0.5 },
-  Bold: { line: "#2A2A2F", grain: 0.12, step: 9, pitch: 8, block: 0.95, sharp: 3, zoom: 12 },
-  Coarse: { pitch: 10, zoom: 16, step: 18 },
+  Bold: { line: "#2A2A2F", grain: 0.12, step: 9, pitch: 10, block: 0.95, sharp: 3, zoom: 12 },
+  Coarse: { pitch: 12, zoom: 16, step: 18 },
   Paper: { bg: "#F4F4F2", line: "#DCDCD7", money: "#D9A400", meridian: "#C8102E", grain: 0.05 },
   "Slow glide": { glide: 0.04, speed: 0.2 },
 });

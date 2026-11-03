@@ -6,8 +6,11 @@ import { GROUPS, SCREENS } from "./screens-all.mjs";
 import { esc, mountPlan } from "./mount.mjs";
 import { SAMPLE_PLAN } from "./model.mjs";
 import { wireAccent } from "./accent.mjs";
+import { startBackground } from "./background.mjs";
 
 wireAccent(document, window);
+// The site's background sits behind the walkthrough, and moves to the group of the screen on show.
+const background = startBackground(document.querySelector("#map"), document.querySelector(".grain"));
 
 // The walkthrough moves in the order the index lists the screens, so Next, Previous and the index always agree.
 const byId = new Map([COVER, ...SCREENS].map((screen) => [screen.id, screen]));
@@ -28,6 +31,7 @@ index.innerHTML = GROUPS.map((group) => `<div class="pres-group"><p class="label
 }).join("")}</div>`).join("");
 
 const find = (id) => Math.max(0, ORDER.findIndex((s) => s.id === id));
+const groupOf = new Map(GROUPS.flatMap((group) => group.ids.map((id) => [id, group.label])));
 
 function frameMarkup(screen) {
   const shell = screen.shell === "bare"
@@ -43,6 +47,7 @@ function render() {
   for (const plan of mounted) plan.destroy();
   mounted = [];
   const screen = ORDER[current];
+  background.follow(groupOf.get(screen.id));
   stage.innerHTML = screen.id === "cover" ? screen.html : frameMarkup(screen);
   for (const root of stage.querySelectorAll('[data-mount="plan"]')) {
     mounted.push(mountPlan(root, {

@@ -154,13 +154,13 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   await settle(page, 700);
   const finer = await mapDigest(page);
   check("spacing.finer-contours-change-the-pattern", finer.hash !== before.hash, { before: before.hash, finer: finer.hash });
-  await setRange(page, "k-step", "12");
+  await setRange(page, "k-step", "11");
   await settle(page, 500);
   await setRange(page, "k-pitch", "12");
   await settle(page, 700);
   const blocksWide = await blockCount(page);
-  check("grid.wider-spacing-draws-fewer-blocks", blocksWide < blocksBefore, { atSix: blocksBefore, atTwelve: blocksWide });
-  await setRange(page, "k-pitch", "6");
+  check("grid.wider-spacing-draws-fewer-blocks", blocksWide < blocksBefore, { atDefault: blocksBefore, atTwelve: blocksWide });
+  await setRange(page, "k-pitch", "8");
   await settle(page, 500);
 
   await page.evaluate(() => {
@@ -186,11 +186,11 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   await page.click("text=Bold");
   await settle(page, 300);
   const bold = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pitch: document.querySelector("#k-pitch").value }));
-  check("presets.bold-sets-its-spacing-and-grid", bold.step === "9" && bold.pitch === "8", bold);
+  check("presets.bold-sets-its-spacing-and-grid", bold.step === "9" && bold.pitch === "10", bold);
   await page.click("#reset");
   await settle(page, 300);
   const back = await page.evaluate(() => ({ step: document.querySelector("#k-step").value, pitch: document.querySelector("#k-pitch").value, bg: document.querySelector("#k-bg").value }));
-  check("presets.reset-restores-the-published-site", back.step === "12" && back.pitch === "6" && back.bg.toUpperCase() === "#0B0B0C", back);
+  check("presets.reset-restores-the-published-site", back.step === "11" && back.pitch === "8" && back.bg.toUpperCase() === "#0B0B0C", back);
   await context.close();
 }
 
@@ -201,7 +201,7 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   await settle(page, 200);
   const exported = await page.inputValue("#io");
   const parsed = JSON.parse(exported);
-  check("io.export-holds-every-value", parsed.step === 12 && parsed.pitch === 6 && parsed.zoom === 8 && parsed.route.length === 5, { keys: Object.keys(parsed) });
+  check("io.export-holds-every-value", parsed.step === 11 && parsed.pitch === 8 && parsed.zoom === 8 && parsed.glide === 0.69 && parsed.route.length === 5, { keys: Object.keys(parsed) });
   await page.fill("#k-step", "20");
   await page.dispatchEvent("#k-step", "input");
   await settle(page, 200);
@@ -209,7 +209,7 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   await page.click("#apply-json");
   await settle(page, 300);
   const restored = await page.evaluate(() => document.querySelector("#k-step").value);
-  check("io.paste-restores-the-values", restored === "12", { step: restored });
+  check("io.paste-restores-the-values", restored === "11", { step: restored });
   await page.fill("#io", "not settings");
   await page.click("#apply-json");
   await settle(page, 200);
@@ -254,6 +254,35 @@ const settle = (page, ms = 1200) => page.waitForTimeout(ms);
   const sideways = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check("layout.no-sideways-scroll.phone", sideways <= 0, { sideways });
   check("layout.phone-no-console-errors", errors.length === 0, errors);
+  await context.close();
+}
+
+// ---- 9. The settings the owner chose are the site's defaults: pasted into the simulator they come back out unchanged, and the map they
+//      draw is the published site's map. ----
+const OWNER_SETTINGS = {
+  bg: "#0B0B0C", line: "#1C1C1F", money: "#F5C518", meridian: "#FF2E38", meridianOn: true, meridianOpacity: 0.7,
+  pitch: 8, block: 1, sharp: 2, step: 11, jitter: 0.3, zoom: 8, glide: 0.69,
+  grainOn: true, grain: 0.07, billBand: 0.6, billCurve: "smoothstep", billPrint: 24,
+  route: [47, 23, 0, -23, -41], snap: true, speed: 0.5,
+};
+{
+  const site = await open("index.html");
+  await site.page.evaluate(() => window.scrollTo({ top: window.innerHeight, behavior: "instant" }));
+  const siteDigest = await settledDigest(site.page);
+  await site.context.close();
+
+  const { context, page } = await open("tuner.html");
+  await page.fill("#io", JSON.stringify(OWNER_SETTINGS, null, 2));
+  await page.click("#apply-json");
+  await settle(page, 300);
+  await page.click("#copy-json");
+  await settle(page, 200);
+  const roundTrip = JSON.parse(await page.inputValue("#io"));
+  const differs = Object.keys(OWNER_SETTINGS).filter((k) => JSON.stringify(roundTrip[k]) !== JSON.stringify(OWNER_SETTINGS[k]));
+  check("owner-settings.round-trip-through-the-simulator", differs.length === 0, { differs });
+  await page.evaluate(() => window.scrollTo({ top: window.innerHeight, behavior: "instant" }));
+  const pastedDigest = await settledDigest(page);
+  check("owner-settings.draw-the-published-site", pastedDigest.hash === siteDigest.hash, { site: siteDigest.hash, pasted: pastedDigest.hash });
   await context.close();
 }
 

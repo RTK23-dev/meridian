@@ -206,6 +206,67 @@ for (const [width, height, label] of [[1440, 1000, "desktop"], [390, 844, "phone
   await context.close();
 }
 
+// 9. The site's background sits behind the walkthrough: its map is drawn in the site's two colours, and it moves to the group on show. A
+//    group sits at its stop, Home sits with Start, and States holds the place the walkthrough was at.
+{
+  const { context, page, errors } = await open(1440, 900);
+  const digest = () => page.evaluate(() => {
+    const canvas = document.querySelector("#map");
+    const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    let hash = 0;
+    for (let i = 0; i < data.length; i += 4) hash = (hash * 31 + ((data[i] << 16) | (data[i + 1] << 8) | data[i + 2])) >>> 0;
+    return hash;
+  });
+  // The map has stopped gliding when two readings in a row agree.
+  const settled = async () => {
+    let last = await digest();
+    for (let i = 0; i < 30; i += 1) {
+      await page.waitForTimeout(250);
+      const next = await digest();
+      if (next === last) return next;
+      last = next;
+    }
+    return last;
+  };
+  const firstOf = (label) => page.evaluate((name) => [...document.querySelectorAll(".pres-group")].find((g) => g.querySelector("p.label").textContent === name).querySelector("button").dataset.go, label);
+  const goTo = (id) => page.evaluate((i) => { location.hash = i; }, id);
+  // The two colours of the map: every pixel is a mix of the ground and the line, as on the site.
+  const mix = await page.evaluate(() => {
+    const style = getComputedStyle(document.documentElement);
+    const hex = (v) => [1, 3, 5].map((i) => parseInt(v.trim().slice(i, i + 2), 16));
+    const a = hex(style.getPropertyValue("--map-bg"));
+    const b = hex(style.getPropertyValue("--map-line"));
+    const d = b.map((c, i) => c - a[i]);
+    const len = d[0] * d[0] + d[1] * d[1] + d[2] * d[2];
+    const canvas = document.querySelector("#map");
+    const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+    const colours = new Set();
+    let off = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      const px = [data[i], data[i + 1], data[i + 2]];
+      colours.add((px[0] << 16) | (px[1] << 8) | px[2]);
+      const t = Math.min(1, Math.max(0, px.reduce((s, c, k) => s + (c - a[k]) * d[k], 0) / len));
+      if (px.some((c, k) => Math.abs(c - (a[k] + t * d[k])) > 2)) off += 1;
+    }
+    return { off, colours: colours.size };
+  });
+  check("background.drawn-as-blocks-mixed-from-ground-and-line", mix.off === 0 && mix.colours > 2, mix);
+  const start = await settled();
+  await goTo(await firstOf("Home"));
+  const home = await settled();
+  await goTo(await firstOf("Create"));
+  const create = await settled();
+  await goTo(await firstOf("Settings"));
+  const settings = await settled();
+  await goTo(await firstOf("States"));
+  const states = await settled();
+  check("background.home-sits-with-start", home === start, { start, home });
+  check("background.create-moves-to-its-stop", create !== start, { start, create });
+  check("background.states-hold-the-place-of-settings", states === settings, { settings, states });
+  check("background.no-console-errors", errors.length === 0, errors);
+  await context.close();
+}
+
 // ---- Screenshots, one per screen: the frame at desktop width, and the phone frame for the screens that matter most at phone width. ----
 {
   const { context, page } = await open(1440, 1000);

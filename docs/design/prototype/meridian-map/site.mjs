@@ -1,7 +1,7 @@
 // The site: the background as a square halftone of the depth map, drawn at full resolution, with the yellow bills printed by dither. The map
 // follows the scroll position down the meridian. The drawing is shared with the simulator through halftone.mjs.
 import { WORLD_FIELD } from "./world-field.mjs";
-import { ROUTE, loopLatitudes, latitudeAt, decodeField, BAYER4, billWeight, printed, printFraction } from "./map-model.mjs";
+import { ROUTE, GLIDE, loopLatitudes, latitudeAt, decodeField, BAYER4, billWeight, printed, printFraction } from "./map-model.mjs";
 import { HALFTONE_DEFAULTS, drawHalftone } from "./halftone.mjs";
 
 function start() {
@@ -107,7 +107,7 @@ function start() {
   function frame() {
     const p = progress();
     target = latitudeAt(p, lats);
-    current = reduce.matches ? target : current + (target - current) * 0.14;
+    current = reduce.matches ? target : current + (target - current) * GLIDE;
     if (Math.abs(target - current) < 1e-4) current = target;
     const key = `${current.toFixed(3)}|${palette.key}|${innerWidth}x${innerHeight}`;
     if (key !== lastKey) {

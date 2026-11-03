@@ -60,27 +60,31 @@ test("a flat field of crests draws every block at the full size, and nothing is 
   const { blocks, coverage } = drawHalftone(ctx, field, view, HALFTONE_DEFAULTS, palette);
   const side = HALFTONE_DEFAULTS.pitch * HALFTONE_DEFAULTS.block;
   const rects = allRects(ctx.log);
-  assert.equal(blocks, 40 * 20);
-  assert.equal(rects.length, 40 * 20);
+  const cells = Math.ceil(240 / HALFTONE_DEFAULTS.pitch) * Math.ceil(120 / HALFTONE_DEFAULTS.pitch);
+  assert.equal(blocks, cells);
+  assert.equal(rects.length, cells);
   for (const r of rects) assert.ok(Math.abs(r.w - side) < 1e-9 && Math.abs(r.h - side) < 1e-9, `side ${r.w}`);
   assert.ok(Math.abs(coverage - (side * side) / (HALFTONE_DEFAULTS.pitch ** 2)) < 1e-9, `coverage ${coverage}`);
   assert.deepEqual(ctx.log.background, { x: 0, y: 0, w: 240, h: 120, style: palette.bg });
 });
 
-test("the blocks shrink with the tone: halfway down a band the square is half the full size", () => {
+test("the blocks shrink with the tone: a square's side follows the square root of its ink", () => {
   const ctx = recordingContext();
-  const field = new Int8Array(720 * 360).fill(3);
+  const distance = 3;
+  const field = new Int8Array(720 * 360).fill(distance);
+  const ink = inkAt(distance, HALFTONE_DEFAULTS.step, HALFTONE_DEFAULTS.sharp);
+  const side = HALFTONE_DEFAULTS.pitch * HALFTONE_DEFAULTS.block * Math.sqrt(ink);
+  const cells = Math.ceil(120 / HALFTONE_DEFAULTS.pitch) * Math.ceil(60 / HALFTONE_DEFAULTS.pitch);
   const { blocks, coverage } = drawHalftone(ctx, field, { width: 120, height: 60, centreLat: 0, zoom: 8 }, HALFTONE_DEFAULTS, palette);
-  const side = HALFTONE_DEFAULTS.pitch * HALFTONE_DEFAULTS.block * Math.sqrt(0.25);
-  assert.equal(blocks, 20 * 10);
+  assert.equal(blocks, cells);
   for (const r of allRects(ctx.log)) assert.ok(Math.abs(r.w - side) < 1e-9, `side ${r.w}`);
-  // Two hundred blocks, each side * side, over a window of 120 by 60 pixels.
-  assert.ok(Math.abs(coverage - (200 * side * side) / (120 * 60)) < 1e-9, `coverage ${coverage}`);
+  assert.ok(Math.abs(coverage - (cells * side * side) / (120 * 60)) < 1e-9, `coverage ${coverage}`);
+  assert.ok(side < HALFTONE_DEFAULTS.pitch * HALFTONE_DEFAULTS.block, "smaller than a full block");
 });
 
 test("a field halfway between two crests draws no blocks at all", () => {
   const ctx = recordingContext();
-  const field = new Int8Array(720 * 360).fill(6);
+  const field = new Int8Array(720 * 360).fill(Math.round(HALFTONE_DEFAULTS.step / 2));
   const { blocks, coverage } = drawHalftone(ctx, field, { width: 120, height: 60, centreLat: 0, zoom: 8 }, HALFTONE_DEFAULTS, palette);
   assert.equal(blocks, 0);
   assert.equal(coverage, 0);

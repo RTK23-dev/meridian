@@ -5,7 +5,7 @@
       "ok": true,
       "detail": {
         "off": 0,
-        "colours": 50
+        "colours": 39
       }
     },
     "site.stops-and-loop-screen-present": {
@@ -26,8 +26,8 @@
     "map.changes-with-the-scroll": {
       "ok": true,
       "detail": {
-        "at0": 2000514728,
-        "at2": 2989433494
+        "at0": 1129776182,
+        "at2": 728775075
       }
     },
     "bills.print-more-in-the-middle": {
@@ -53,8 +53,8 @@
     "loop.jump-changes-no-pixel": {
       "ok": true,
       "detail": {
-        "first": 2000514728,
-        "back": 2000514728
+        "first": 1129776182,
+        "back": 1129776182
       }
     },
     "layout.no-sideways-scroll.desktop": {
@@ -72,8 +72,8 @@
     "motion.reduced-holds-the-map-still": {
       "ok": true,
       "detail": {
-        "early": 3807196742,
-        "late": 3807196742
+        "early": 8818243,
+        "late": 8818243
       }
     }
   }
