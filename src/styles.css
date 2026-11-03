@@ -272,24 +272,17 @@
 .page-enter { animation: fade 280ms ease-out both; }details > summary { transition: color 160ms ease; }
 details > summary:hover { color: var(--color-fg); }
 
-/* The navigation glass: the rail, the top bar and the phone bar sit on a dark frosted blur of the map, so the map shows through softened and the
-   navigation reads as one layer over it. The tokens inside are the dark ones, so the text on the glass is light in both themes. */
-/* The navigation glass: the rail, the top bar and the phone bar sit on a frosted blur of the page beneath them. In dark, the glass is dark and
-   its text is light. In light, the glass only takes the page a little darker, and its text is the light theme's dark text. */
+/* The navigation glass: the rail, the top bar and the phone bar sit on a frosted blur of the page beneath them, with only a faint tint. The
+   tint is barely there in either theme, so the page's own text colours are the ones that read on it. */
 .nav-glass {
   -webkit-backdrop-filter: blur(18px) saturate(140%);
   backdrop-filter: blur(18px) saturate(140%);
 }
 :root[data-theme="dark"] .nav-glass {
-  --fg-primary: #FFFFFF; --fg-secondary: #DADADA; --fg-muted: #BDBDBD;
-  --border-hairline: #2A2A2A; --border-strong: #6B6B6B; --bg-raised: #161616; --bg-overlay: #1C1C1C;
-  --color-fg-primary: #FFFFFF; --color-fg-secondary: #DADADA; --color-fg-muted: #BDBDBD;
-  --color-hairline: #2A2A2A; --color-border-strong: #6B6B6B; --color-raised: #161616; --color-overlay: #1C1C1C;
-  color: var(--color-fg-primary);
-  background-color: rgb(0 0 0 / 0.7);
+  background-color: rgb(255 255 255 / 0.04);
 }
 :root[data-theme="light"] .nav-glass {
-  background-color: rgb(0 0 0 / 0.1);
+  background-color: rgb(0 0 0 / 0.04);
 }
 
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map and the grain are fixed
