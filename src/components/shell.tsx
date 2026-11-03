@@ -32,6 +32,11 @@ export function Shell({ children }: { children: ReactNode }) {
 function ShellChrome({ children }: { children: ReactNode }) {
   const { data, reload } = useWorkspace();
   const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/$/, "") || "/" });
+  // On a phone the page scrolls inside <main>, so a new page starts at its top. On desktop the window scrolls, and the router resets it.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [path]);
   const matches = useMatches();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -215,10 +220,12 @@ function ShellChrome({ children }: { children: ReactNode }) {
     </div>;
   };
 
-  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[64px_1fr]" : "lg:grid lg:grid-cols-[232px_1fr]"}`}>
+  return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[64px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[232px_1fr]"}`}>
     <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
-    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 nav-glass p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
-    <div className="flex min-h-screen min-w-0 flex-col">
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+    {/* On a phone the page fills the visible height (dvh, so Safari's address and bottom bars are not counted) and only the page scrolls, so the
+        five places stay on screen. On desktop the page grows and the window scrolls, as before. */}
+    <div className="flex h-dvh min-w-0 flex-col lg:h-auto lg:min-h-screen">
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
       <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
@@ -242,7 +249,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </header>
       <div className="nav-glass border-b border-hairline px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="@container page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
+      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 pb-6 sm:px-6 lg:overflow-visible lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
@@ -253,7 +260,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </main>
       {/* The five places, as on the walkthrough's phone frame. A place with no screen on this page is shown as unavailable. */}
-      <nav aria-label="Quick navigation" className="nav-glass fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-hairline pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav aria-label="Quick navigation" className="shrink-0 grid grid-cols-5 border-t border-hairline bg-ground pb-[env(safe-area-inset-bottom)] lg:hidden">
         {tabs.map((tab) => {
           const Icon = PLACE_ICONS[tab.place];
           const here = currentPlace === tab.place;

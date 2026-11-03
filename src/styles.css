@@ -302,6 +302,11 @@ details > summary:hover { color: var(--color-fg); }
   html[data-rail] .site-meridian { display: block; }
 }
 .site-grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.07; }
+/* On a phone and a tablet the map and the grain are not drawn. The page sits on the plain ground, which reads cleaner at that size and
+   keeps the content in front. The desktop keeps the full site background. */
+@media (max-width: 63.99rem) {
+  .site-map, .site-grain { display: none; }
+}
 
 /* The line into a running step of the Content Factory board. Its dashes move down the line while the step works. The reduced-motion rule
    below cuts the movement, so the line is then a steady dashed line. */
