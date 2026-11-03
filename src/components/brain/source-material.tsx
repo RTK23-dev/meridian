@@ -134,7 +134,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         aria-describedby="material-drop-hint"
-        className={cn("space-y-3 rounded-lg border-2 border-dashed p-5", dragging ? "border-fg bg-surface-2" : "border-border-strong")}
+        className={cn("space-y-3 rounded-sharp border-2 border-dashed p-5", dragging ? "border-fg-primary bg-overlay" : "border-border-strong")}
       >
         <p className="font-semibold">{dragging ? "Release to store and suggest from this file" : "Drop a document here"}</p>
         <p id="material-drop-hint" className="text-sm text-fg-muted">Suggestions wait in the list below. Nothing changes until you accept one.</p>
@@ -160,7 +160,7 @@ export function SourceMaterial({ brandId, canEdit, saved, formDirty, onPasteDirt
     {status ? (
       status.tone === "danger"
         ? <PlainErrorMessage message={status.message} raw={status.detail ?? ""} />
-        : <p role="status" aria-live="polite" className="text-sm text-fg">{status.message}</p>
+        : <p role="status" aria-live="polite" className="text-sm text-fg-primary">{status.message}</p>
     ) : null}
 
     {canEdit ? (

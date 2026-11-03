@@ -35,7 +35,7 @@ export function ResearchFilterBar({ filters, update, reset, topics, activeCount,
       <CapturedDateFilter from={filters.capturedFrom} to={filters.capturedTo} onChange={(range) => { update("capturedFrom", range.from); update("capturedTo", range.to); }} />
     </div>
 
-    <details className="border-t border-border py-3">
+    <details className="border-t border-hairline py-3">
       <summary className="flex min-h-11 cursor-pointer items-center font-semibold">More filters</summary>
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Field label="Has analysis field"><SelectInput value={filters.field} onChange={(event) => update("field", event.currentTarget.value)}>
@@ -73,7 +73,7 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
   const [open, setOpen] = useState(false);
   const selected: DateRange | undefined = from || to ? { from: from ?? undefined, to: to ?? undefined } : undefined;
   return <div className="space-y-2">
-    <span className="block text-sm font-semibold text-fg">Captured</span>
+    <span className="block text-sm font-semibold text-fg-primary">Captured</span>
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button type="button" variant="secondary" aria-haspopup="dialog" aria-expanded={open} className="w-full justify-start">
@@ -88,21 +88,21 @@ function CapturedDateFilter({ from, to, onChange }: { from: Date | null; to: Dat
           defaultMonth={from ?? to ?? undefined}
           onSelect={(range) => onChange({ from: range?.from ?? null, to: range?.to ?? null })}
           classNames={{
-            root: "text-sm text-fg",
+            root: "text-sm text-fg-primary",
             months: "flex flex-col gap-4",
             month: "space-y-3",
             month_caption: "flex h-11 items-center justify-center font-semibold",
             nav: "flex items-center gap-1",
-            button_previous: "inline-grid size-11 place-items-center rounded-md hover:bg-surface-2",
-            button_next: "inline-grid size-11 place-items-center rounded-md hover:bg-surface-2",
+            button_previous: "inline-grid size-11 place-items-center rounded-sharp hover:bg-overlay",
+            button_next: "inline-grid size-11 place-items-center rounded-sharp hover:bg-overlay",
             month_grid: "w-full border-collapse",
             weekday: "w-11 pb-1 text-xs font-semibold text-fg-muted",
             day: "p-0.5 text-center",
-            day_button: "size-10 rounded-md hover:bg-surface-2 pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent",
-            range_middle: "bg-accent-soft",
-            range_start: "bg-accent-soft",
-            range_end: "bg-accent-soft",
-            selected: "font-semibold text-fg",
+            day_button: "size-10 rounded-sharp hover:bg-overlay pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-accent",
+            range_middle: "bg-accent-muted",
+            range_start: "bg-accent-muted",
+            range_end: "bg-accent-muted",
+            selected: "font-semibold text-fg-primary",
             today: "underline underline-offset-4",
             outside: "text-fg-muted opacity-60",
             disabled: "opacity-40",

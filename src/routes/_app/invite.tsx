@@ -41,7 +41,7 @@ function Accept() {
       {rawError ? <FormError message={plainServerError(rawError, "invite")} raw={rawError} /> : null}
 
       {done ? (
-        <div role="status" className="space-y-3 rounded-lg border border-success/50 bg-success-soft p-4 text-sm text-success">
+        <div role="status" className="space-y-3 rounded-sharp border border-success/50 bg-raised p-4 text-sm text-success">
           <p>{done}</p>
           <Button asChild variant="secondary" size="md">
             <Link to="/">Go to the workspace</Link>

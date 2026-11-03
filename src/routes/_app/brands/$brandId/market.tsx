@@ -47,8 +47,8 @@ function MarketSection({ id, title, hint, children }: { id: string; title: strin
     return () => window.removeEventListener("hashchange", openIfTargeted);
   }, [id]);
   return (
-    <details id={id} open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)} className="scroll-mt-24 rounded-xl border border-border bg-surface p-4">
-      <summary className="cursor-pointer text-base font-semibold text-fg">{title}<span className="ml-2 text-sm font-normal text-fg-muted">{hint}</span></summary>
+    <details id={id} open={open} onToggle={(event) => setOpen((event.currentTarget as HTMLDetailsElement).open)} className="scroll-mt-24 rounded-sharp border border-hairline bg-raised p-4">
+      <summary className="cursor-pointer text-base font-semibold text-fg-primary">{title}<span className="ml-2 text-sm font-normal text-fg-muted">{hint}</span></summary>
       <div className="mt-4 space-y-6">{children}</div>
     </details>
   );
@@ -234,37 +234,37 @@ function MarketPage({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Market</p>
         <h1 className="page-title">Research public examples</h1>
-        <p className="text-muted">
+        <p className="text-fg-muted">
           Start with one page URL. Meridian tells you what it read, what is new, and what a site would not allow. More research tools are optional.
         </p>
       </div>
-      <details className="rounded-xl border border-border bg-surface p-4">
-        <summary className="cursor-pointer text-sm font-semibold text-fg">How Meridian collects examples ({market.adapters.length} ways)</summary>
+      <details className="rounded-sharp border border-hairline bg-raised p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-fg-primary">How Meridian collects examples ({market.adapters.length} ways)</summary>
         <p className="mt-2 text-xs text-fg-muted">Reading a public page and adding an example by hand need no setup. The others are optional, use your own developer key, and are never needed to read a page URL.</p>
       <ul className="mt-3 grid gap-3 md:grid-cols-3">
         {market.adapters.map((adapter) => (
-          <li key={adapter.id} className="rounded-lg border border-line bg-panel p-4">
+          <li key={adapter.id} className="rounded-sharp border border-hairline bg-raised p-4">
             <p className="eyebrow">{adapter.status}</p>
             <h2 className="mt-2 text-xl">{adapter.label}</h2>
-            <p className="mt-2 text-sm text-muted">{adapter.note}</p>
-            {adapter.connectionError ? <p className="mt-2 text-xs text-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
+            <p className="mt-2 text-sm text-fg-muted">{adapter.note}</p>
+            {adapter.connectionError ? <p className="mt-2 text-xs text-fg-muted [overflow-wrap:anywhere]">{adapter.connectionError}</p> : null}
           </li>
         ))}
       </ul>
       </details>
       {note ? <ErrorNotice>{note}</ErrorNotice> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
-      <details className="rounded-xl border border-border bg-surface px-4 py-3">
-        <summary className="cursor-pointer text-sm font-semibold text-fg">More market tools</summary>
+      <details className="rounded-sharp border border-hairline bg-raised px-4 py-3">
+        <summary className="cursor-pointer text-sm font-semibold text-fg-primary">More market tools</summary>
         <nav aria-label="More market tools" className="mt-3 flex flex-wrap gap-2 text-sm">
-          {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-md border border-border bg-surface px-3 py-2 font-semibold text-fg hover:bg-surface-2">{section.label}</a>)}
+          {MARKET_SECTIONS.map((section) => <a key={section.id} href={`#${section.id}`} className="min-h-11 rounded-sharp border border-hairline bg-raised px-3 py-2 font-semibold text-fg-primary hover:bg-overlay">{section.label}</a>)}
         </nav>
       </details>
       <Card id="market-discovery">
         <div className="max-w-3xl">
           <p className="eyebrow">Discovery</p>
           <h2 className="mt-2 text-2xl">Find public pages and posts</h2>
-          <p className="mt-2 text-sm text-muted">Start with one public page URL. Meridian reads it and stores the text as evidence you can review.</p>
+          <p className="mt-2 text-sm text-fg-muted">Start with one public page URL. Meridian reads it and stores the text as evidence you can review.</p>
         </div>
         <div className="mt-4">
           <DiscoveryStart
@@ -280,15 +280,15 @@ function MarketPage({ brandId }: { brandId: string }) {
         </div>
         <div className="mt-6">
           <h3 className="text-xl">Stored pages and posts</h3>
-          <p className="mt-1 text-sm text-muted">Each one is evidence you can read. Ranking reads a page only after a member stores it as a competitor observation, so the angle and hook stay a person's decision.</p>
+          <p className="mt-1 text-sm text-fg-muted">Each one is evidence you can read. Ranking reads a page only after a member stores it as a competitor observation, so the angle and hook stay a person's decision.</p>
           <div className="mt-3"><StoredPages brandId={brandId} query={storedPages} canEdit={canEdit} onUse={prefillObservationFromPage} /></div>
         </div>
       </Card>
       <MarketSection id="market-collect" title="Collect video-ad evidence (Meta Ad Library)" hint="Needs your own Meta developer token. Optional.">
       <Card>
         <div className="max-w-3xl">
-          <p className="text-sm font-semibold text-fg">Search the Meta Ad Library for video ads.</p>
-          <p className="mt-2 text-sm text-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
+          <p className="text-sm font-semibold text-fg-primary">Search the Meta Ad Library for video ads.</p>
+          <p className="mt-2 text-sm text-fg-muted">Meta Ad Library collection is capped at 100 ads and 100 MB of stored source video per run. Each video is capped at 24 MB. Media, transcript and analysis each retain their own status. Ads without a public downloadable video are not analyzed.</p>
         </div>
         {canEdit ? (
           <form className="mt-4 grid gap-3 md:grid-cols-4" onSubmit={researchForm.handleSubmit(collectResearch)} onKeyDown={(event) => submitOnShortcut(event)}>
@@ -311,14 +311,14 @@ function MarketPage({ brandId }: { brandId: string }) {
         </div>
         <div className="mt-6">
           <h3 className="text-xl">Recurring patterns</h3>
-          <p className="mt-1 text-sm text-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
-          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="border-t border-line py-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-muted">No repeated, confidence-rated ad patterns are stored.</p>}
+          <p className="mt-1 text-sm text-fg-muted">Counts describe the collected corpus, not ad effectiveness or causation.</p>
+          {market.researchPatterns.length ? <ul className="mt-3 grid gap-2 md:grid-cols-2">{market.researchPatterns.filter((pattern) => pattern.dimension === "creative_pattern").map((pattern) => <li key={`${pattern.scope}:${pattern.dimension}:${pattern.value}`} className="border-t border-hairline py-3"><p className="eyebrow">{pattern.scope === "organization" ? "Organization summary" : "Brand"} · {pattern.state} · {pattern.sampleCount}/{pattern.corpusSize} ads · confidence {pattern.confidence.toFixed(2)}</p><p className="mt-2 break-words text-sm">{pattern.value}</p><p className="mt-1 text-xs text-fg-muted">{pattern.summary}</p>{pattern.scope !== "organization" ? <p className="mt-1 break-all text-xs text-fg-muted">Source creative ids: {pattern.exampleCreativeIds.join(", ") || "none"} · Analysis ids: {pattern.analysisIds.join(", ") || "none"}</p> : null}</li>)}</ul> : <p className="mt-2 text-sm text-fg-muted">No repeated, confidence-rated ad patterns are stored.</p>}
         </div>
       </Card>
       </MarketSection>
       <MarketSection id="market-analyzed" title="Analyzed ads" hint="What was collected, with its analysis state">
       <Card>
-        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant="secondary" aria-pressed={researchView === "gallery"} className={researchView === "gallery" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant="secondary" aria-pressed={researchView === "table"} className={researchView === "table" ? "border-fg bg-surface-2" : undefined} onClick={() => setResearchView("table")}>Table</Button></div></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-2xl">Analyzed ads</h2><p className="text-sm text-fg-muted">Showing saved source, media, transcript, and analysis states.</p></div><div role="group" className="flex gap-2" aria-label="Research display mode"><Button type="button" variant="secondary" aria-pressed={researchView === "gallery"} className={researchView === "gallery" ? "border-fg-primary bg-overlay" : undefined} onClick={() => setResearchView("gallery")}>Gallery</Button><Button type="button" variant="secondary" aria-pressed={researchView === "table"} className={researchView === "table" ? "border-fg-primary bg-overlay" : undefined} onClick={() => setResearchView("table")}>Table</Button></div></div>
         <div className="mt-4">
           <ResearchFilterBar
             filters={researchFilters.filters}
@@ -330,7 +330,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             totalCount={market.researchAds.length}
           />
         </div>
-        {researchFilters.visible.length ? <div className="mt-4"><ResearchList view={researchView} ads={researchFilters.visible} onView={setSelectedAdId} /></div> : <p className="mt-4 text-sm text-muted">No ads match these filters.</p>}
+        {researchFilters.visible.length ? <div className="mt-4"><ResearchList view={researchView} ads={researchFilters.visible} onView={setSelectedAdId} /></div> : <p className="mt-4 text-sm text-fg-muted">No ads match these filters.</p>}
         <ResearchDetailSheet ad={selectedAd} onOpenChange={(open) => { if (!open) setSelectedAdId(null); }} />
       </Card>
       </MarketSection>
@@ -338,14 +338,14 @@ function MarketPage({ brandId }: { brandId: string }) {
       <Card>
         <h2 className="text-2xl">Competitors</h2>
         {market.competitors.filter((item) => item.status === "confirmed").length === 0 ? (
-          <p className="mt-3 text-muted">No competitors yet. Add one you actually compete with.</p>
+          <p className="mt-3 text-fg-muted">No competitors yet. Add one you actually compete with.</p>
         ) : (
           <ul className="mt-4 space-y-2">
             {market.competitors.filter((item) => item.status === "confirmed").map((item) => (
               <li key={item.id}>
                 <span className="font-semibold">{item.name}</span>
-                <span className="text-muted"> · {item.kind}</span>
-                {item.website ? <span className="text-muted"> · {item.website}</span> : null}
+                <span className="text-fg-muted"> · {item.kind}</span>
+                {item.website ? <span className="text-fg-muted"> · {item.website}</span> : null}
               </li>
             ))}
           </ul>
@@ -360,7 +360,7 @@ function MarketPage({ brandId }: { brandId: string }) {
             />
           </div>
         ) : (
-          <p className="mt-3 text-sm text-muted">No unconfirmed candidates. Discovery never marks a competitor confirmed on its own.</p>
+          <p className="mt-3 text-sm text-fg-muted">No unconfirmed candidates. Discovery never marks a competitor confirmed on its own.</p>
         )}
         {canEdit ? (
           <div className="mt-3">
@@ -397,14 +397,14 @@ function MarketPage({ brandId }: { brandId: string }) {
       <MarketSection id="market-observed" title="Observed creatives" hint="The only competitor evidence the ranker uses">
       <Card>
         <h2 className="text-2xl">Observed creatives</h2>
-        <p className="mt-2 text-sm text-muted">These rows are the only competitor evidence the ranker will use.</p>
-        {market.observations.length === 0 ? <p className="mt-3 text-muted">No observations stored.</p> : (
+        <p className="mt-2 text-sm text-fg-muted">These rows are the only competitor evidence the ranker will use.</p>
+        {market.observations.length === 0 ? <p className="mt-3 text-fg-muted">No observations stored.</p> : (
           <ul className="mt-4 space-y-3">
             {market.observations.map((item) => (
-              <li key={item.id} className="border-t border-line pt-3">
+              <li key={item.id} className="border-t border-hairline pt-3">
                 <p className="eyebrow">{item.angle}</p>
                 <p className="font-semibold">{item.hook}</p>
-                <p className="text-sm text-muted">{item.message}</p>
+                <p className="text-sm text-fg-muted">{item.message}</p>
               </li>
             ))}
           </ul>
@@ -460,8 +460,8 @@ function MarketPage({ brandId }: { brandId: string }) {
       </MarketSection>
       <MarketSection id="market-public-page" title="Another way to read a public page" hint="The older page form, with its stored pages">
       <Card>
-        <p className="text-sm font-semibold text-fg">Paste one page URL to read it.</p>
-        <p className="mt-2 text-sm text-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
+        <p className="text-sm font-semibold text-fg-primary">Paste one page URL to read it.</p>
+        <p className="mt-2 text-sm text-fg-muted">The text is stored as untrusted data. It does not change the brand brain unless you accept a suggestion.</p>
         {canEdit ? (
           <form
             className="mt-4 flex flex-wrap gap-3"
@@ -476,11 +476,11 @@ function MarketPage({ brandId }: { brandId: string }) {
           </form>
         ) : null}
         <ul className="mt-4 space-y-3">
-          {market.documents.length === 0 ? <li className="text-muted">No pages stored.</li> : market.documents.map((doc) => (
-            <li key={doc.id} className="border-t border-line pt-3">
+          {market.documents.length === 0 ? <li className="text-fg-muted">No pages stored.</li> : market.documents.map((doc) => (
+            <li key={doc.id} className="border-t border-hairline pt-3">
               <p className="eyebrow">{doc.status}</p>
               <p className="break-all text-sm">{doc.url}</p>
-              {doc.error ? <p className="text-sm text-danger">{doc.error}</p> : <p className="text-sm text-muted">{doc.excerpt}</p>}
+              {doc.error ? <p className="text-sm text-danger">{doc.error}</p> : <p className="text-sm text-fg-muted">{doc.excerpt}</p>}
               {canEdit && doc.status === "stored" ? (
                 <Button
                   className="mt-2"
@@ -500,7 +500,7 @@ function MarketPage({ brandId }: { brandId: string }) {
           <div className="mt-6 space-y-3">
             <h3 className="text-xl">Suggestions waiting</h3>
             {market.suggestions.map((item) => (
-              <div key={item.id} className="border-t border-line py-3">
+              <div key={item.id} className="border-t border-hairline py-3">
                 <p className="eyebrow">{item.field}</p>
                 <p className="mt-1">{item.value}</p>
                 {canEdit ? (

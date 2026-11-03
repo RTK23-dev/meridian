@@ -3,7 +3,7 @@ import { COMMITMENTS, FACTORY_STAGES, SHARED_CORE, SIGNAL_LABEL, TWO_WAYS, type 
 /** The colour of a stage's signal. Each one also has its words, so colour is never the only cue. */
 const SIGNAL_TONE: Record<StageSignal, string> = {
   review: "text-accent-text",
-  decision: "text-fg",
+  decision: "text-fg-primary",
   paused: "text-warning",
 };
 
@@ -13,11 +13,11 @@ const SIGNAL_TONE: Record<StageSignal, string> = {
  */
 export function FactoryRail() {
   return (
-    <ol aria-label="The Factory stages, in order" className="grid gap-px border border-border bg-border sm:grid-cols-2 lg:grid-cols-5">
+    <ol aria-label="The Factory stages, in order" className="grid gap-px border border-hairline bg-hairline sm:grid-cols-2 lg:grid-cols-5">
       {FACTORY_STAGES.map((stage, index) => (
-        <li key={stage.id} className="flex min-h-48 flex-col gap-3 bg-bg p-5">
+        <li key={stage.id} className="flex min-h-48 flex-col gap-3 bg-ground p-5">
           <span className="font-mono text-xs text-fg-muted">{String(index + 1).padStart(2, "0")}</span>
-          <h3 className="font-display text-xl font-semibold tracking-tight text-fg">{stage.name}</h3>
+          <h3 className="font-display text-xl font-semibold tracking-tight text-fg-primary">{stage.name}</h3>
           <p className="text-sm leading-relaxed text-fg-muted">{stage.what}</p>
           {stage.signal ? (
             <p className={`mt-auto pt-2 font-mono text-[0.7rem] uppercase leading-snug tracking-[0.12em] ${SIGNAL_TONE[stage.signal]}`}>
@@ -37,18 +37,18 @@ export function FactoryRail() {
 export function TwoLanes() {
   return (
     <div className="space-y-0">
-      <div className="grid gap-px border border-border bg-border md:grid-cols-2">
+      <div className="grid gap-px border border-hairline bg-hairline md:grid-cols-2">
         {TWO_WAYS.map((way, index) => (
-          <article key={way.id} className="flex flex-col gap-4 bg-bg p-6 sm:p-8">
+          <article key={way.id} className="flex flex-col gap-4 bg-ground p-6 sm:p-8">
             <p className="font-mono text-xs uppercase tracking-[0.14em] text-fg-muted">Lane {index + 1}</p>
-            <h3 className="font-display text-2xl font-semibold tracking-tight text-fg">{way.label}</h3>
+            <h3 className="font-display text-2xl font-semibold tracking-tight text-fg-primary">{way.label}</h3>
             <p className="text-fg-muted">{way.start}</p>
-            <p className="mt-auto border-t border-border pt-4 text-sm leading-relaxed text-fg">{way.path}</p>
+            <p className="mt-auto border-t border-hairline pt-4 text-sm leading-relaxed text-fg-primary">{way.path}</p>
           </article>
         ))}
       </div>
-      <div aria-hidden="true" className="mx-auto h-12 w-px bg-border" />
-      <div className="bg-fg p-6 text-bg sm:p-10">
+      <div aria-hidden="true" className="mx-auto h-12 w-px bg-hairline" />
+      <div className="bg-fg-primary p-6 text-on-accent sm:p-10">
         <p className="font-mono text-xs uppercase tracking-[0.14em]">Shared core</p>
         <ul className="mt-5 flex flex-wrap gap-2">
           {SHARED_CORE.map((item) => (
@@ -68,11 +68,11 @@ export function TwoLanes() {
 /** The commitments as numbered statements, one per row, each read on its own. */
 export function Commitments() {
   return (
-    <ol className="divide-y divide-border border-y border-border">
+    <ol className="divide-y divide-border border-y border-hairline">
       {COMMITMENTS.map((line, index) => (
         <li key={line} className="grid gap-2 py-6 md:grid-cols-[5rem_minmax(0,1fr)] md:gap-6">
           <span aria-hidden="true" className="font-mono text-sm text-fg-muted">{String(index + 1).padStart(2, "0")}</span>
-          <p className="max-w-prose text-lg leading-relaxed text-fg">{line}</p>
+          <p className="max-w-prose text-lg leading-relaxed text-fg-primary">{line}</p>
         </li>
       ))}
     </ol>

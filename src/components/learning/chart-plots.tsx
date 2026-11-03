@@ -7,7 +7,7 @@ import { NOT_ENOUGH_RESULTS } from "./metrics";
  * React.lazy (see charts.tsx), so the library loads when the first plot is shown.
  */
 
-const tooltipStyle = { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, color: "var(--color-fg)", fontSize: 12 };
+const tooltipStyle = { background: "var(--bg-raised)", border: "1px solid var(--border-hairline)", borderRadius: 8, color: "var(--fg-primary)", fontSize: 12 };
 
 export type ChartDatum = { label: string; value: number | null };
 export type ChartPlotProps = { data: ChartDatum[]; name: string; format: (value: number) => string };

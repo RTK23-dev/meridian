@@ -27,7 +27,7 @@ export function JobDetailSheet({ organizationId, jobId, canAdmin, retrying, canc
 
   return (
     <Sheet open={!!jobId} onOpenChange={(open) => { if (!open) onClose(); }}>
-      <SheetContent className="max-h-[88vh] sm:mx-auto sm:max-w-2xl sm:rounded-xl sm:border">
+      <SheetContent className="max-h-[88vh] sm:mx-auto sm:max-w-2xl sm:rounded-sharp sm:border">
         <SheetTitle className="text-2xl">{job ? `${job.jobType || "Job"} · ${statusLabel(job.status)}` : "Job details"}</SheetTitle>
         <SheetDescription className="mt-1 text-sm text-fg-muted">
           Payload values are never shown. Only field names and value types appear here.
@@ -71,7 +71,7 @@ export function JobDetailSheet({ organizationId, jobId, canAdmin, retrying, canc
 
             <section aria-labelledby="job-result-heading" className="space-y-2">
               <h3 id="job-result-heading" className="text-sm font-semibold">Result</h3>
-              <pre className="whitespace-pre-wrap break-words rounded-md bg-surface-2 p-3 text-xs">{job.result || "No result is stored."}</pre>
+              <pre className="whitespace-pre-wrap break-words rounded-sharp bg-overlay p-3 text-xs">{job.result || "No result is stored."}</pre>
             </section>
 
             {notice?.error ? <RefusalNotice error={notice.error} /> : null}

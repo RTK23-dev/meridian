@@ -65,10 +65,10 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
             <ComparePane label="A" variant={a} position={variants.indexOf(a) + 1} paneRef={firstPane} />
             <ComparePane label="B" variant={b} position={variants.indexOf(b) + 1} paneRef={secondPane} />
           </div>
-          <div className="hidden overflow-x-auto rounded-md border border-border md:block">
+          <div className="hidden overflow-x-auto rounded-sharp border border-hairline md:block">
             <table className="w-full min-w-[32rem] text-left text-sm">
               <caption className="sr-only">Metadata compared for the two variants. Each row says whether the values match.</caption>
-              <thead className="bg-surface-2 text-xs text-fg-muted">
+              <thead className="bg-overlay text-xs text-fg-muted">
                 <tr>
                   <th scope="col" className="px-3 py-2 font-semibold">Field</th>
                   <th scope="col" className="px-3 py-2 font-semibold">A</th>
@@ -90,7 +90,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
           </div>
           <ul className="grid gap-3 md:hidden">
             {variantMetadataDiff(a, b).map((row) => (
-              <li key={row.field} className="space-y-2 rounded-md border border-border p-3 text-sm">
+              <li key={row.field} className="space-y-2 rounded-sharp border border-hairline p-3 text-sm">
                 <p className="font-semibold">{row.field}</p>
                 <dl className="grid gap-2">
                   <div><dt className="text-xs font-semibold text-fg-muted">A</dt><dd className="break-words">{row.a}</dd></div>
@@ -121,7 +121,7 @@ function ComparePane({ label, variant, position, paneRef }: { label: string; var
             <LazyMediaPlayer kind="image" assetId={variant.assetId} alt={`${label}: ${title}`} width={variant.width ?? 16} height={variant.height ?? 9} />
           )
         ) : (
-          <p role="status" className="rounded-md border border-dashed border-border p-4 text-sm text-fg-muted">
+          <p role="status" className="rounded-sharp border border-dashed border-hairline p-4 text-sm text-fg-muted">
             {phase === "failed" ? "This generation failed. There is no media to compare." : showsMedia(phase) ? "The file is not stored yet, so there is nothing to compare." : "This media is still being generated. It is not stored yet."}
           </p>
         )}

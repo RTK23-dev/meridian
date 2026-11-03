@@ -27,7 +27,7 @@ export function ResearchList({ view, ads, onView }: ListProps) {
 
 function ResearchCard({ ad, onView }: { ad: ResearchAdRow; onView: (id: string) => void }) {
   const copy = ad.copy || ad.headline;
-  return <li className="flex min-w-0 flex-col gap-3 border-t border-border pt-4">
+  return <li className="flex min-w-0 flex-col gap-3 border-t border-hairline pt-4">
     <SnapshotPlaceholder ad={ad} />
     <div className="min-w-0 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -49,17 +49,17 @@ function ResearchTable({ ads, onView }: { ads: readonly ResearchAdRow[]; onView:
   const headers = ["Advertiser", "State", "First seen", "Last seen", "Media", "Transcript", "Duration", "Confidence"];
   // The table needs about 46rem, so below md the same ads show as the gallery cards.
   return <>
-  <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
+  <div className="hidden overflow-x-auto rounded-sharp border border-hairline md:block">
     <table className="w-full min-w-[46rem] border-collapse text-left text-sm">
       <caption className="sr-only">Analysed ads with saved source, media, transcript and analysis states. Use Details to open one ad.</caption>
-      <thead className="bg-surface-2">
+      <thead className="bg-overlay">
         <tr>
-          {headers.map((header) => <th key={header} scope="col" className="border-b border-border px-3 py-2 font-semibold whitespace-nowrap">{header}</th>)}
-          <th scope="col" className="border-b border-border px-3 py-2"><span className="sr-only">Actions</span></th>
+          {headers.map((header) => <th key={header} scope="col" className="border-b border-hairline px-3 py-2 font-semibold whitespace-nowrap">{header}</th>)}
+          <th scope="col" className="border-b border-hairline px-3 py-2"><span className="sr-only">Actions</span></th>
         </tr>
       </thead>
       <tbody>
-        {ads.map((ad) => <tr key={ad.id} className="align-top hover:bg-surface-2">
+        {ads.map((ad) => <tr key={ad.id} className="align-top hover:bg-overlay">
           <td className="px-3 py-3"><AdvertiserName ad={ad} url={safeHttpUrl(ad.url)} /><p className="mt-1 text-xs text-fg-muted">{ad.mediaType || "Media type unknown"}</p></td>
           <td className="px-3 py-3"><AnalysisStateBadge state={researchAdState(ad)} /></td>
           <td className="px-3 py-3 whitespace-nowrap">{formatDate(firstSeen(ad))}</td>

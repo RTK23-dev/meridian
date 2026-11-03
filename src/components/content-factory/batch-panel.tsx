@@ -267,13 +267,13 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
         </CardDescription>
       </CardHeader>
 
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-md border border-dashed border-border p-3 text-sm">
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-sharp border border-dashed border-hairline p-3 text-sm">
         <Button type="button" variant="secondary" disabled={busy} onClick={() => void tryDemo()}>Try a demo batch</Button>
         <p className="min-w-0 flex-1 text-fg-muted">Opens a batch of fixture videos so you can try review and export with no key and no cost. Every part is marked DEMO. No video is made.</p>
       </div>
 
       <form
-        className="mt-4 space-y-3 border-b border-border pb-4"
+        className="mt-4 space-y-3 border-b border-hairline pb-4"
         aria-label="Create video variations"
         onSubmit={(event) => {
           event.preventDefault();
@@ -290,7 +290,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
               <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research, a theme page and a plain instruction."}</p>
               {notReady.length > 0 ? (
                 <ul className="list-disc pl-5">
-                  {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg">{item.title}</span>: {item.problem}</li>)}
+                  {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg-primary">{item.title}</span>: {item.problem}</li>)}
                 </ul>
               ) : null}
             </div>
@@ -301,7 +301,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                   {sources.map((item) => <option key={item.id} value={item.id}>{item.title}</option>)}
                 </SelectInput>
               </Field>
-              <div className="space-y-1 rounded-md border border-border p-3 text-sm" aria-label="What your research shows">
+              <div className="space-y-1 rounded-sharp border border-hairline p-3 text-sm" aria-label="What your research shows">
                 <p className="font-semibold">What your research shows</p>
                 {format.isPending ? <p className="text-fg-muted">Reading your analyzed research...</p> : format.data?.ok ? (
                   <>
@@ -351,7 +351,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
               {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure, poolPresets)}</p> : null}
               {style === STYLE_ORCHESTRATOR ? <p className="text-sm text-fg-muted">When you create the videos, your active decision engine is asked once to rank the styles for this brand, the source instruction and your research, and the videos take the styles in that order. This makes one paid model call. If the engine is not connected, or does not answer, nothing is created and you are told why.</p> : null}
               {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style that a cookbook carries, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(poolPresets.length, Math.max(1, variationCount || 1))} {Math.min(poolPresets.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
-              <details className="rounded-md border border-border p-3 text-sm">
+              <details className="rounded-sharp border border-hairline p-3 text-sm">
                 <summary className="cursor-pointer font-semibold">Browse the style library</summary>
                 <ul className="mt-2 space-y-2">
                   {poolPresets.map((preset) => (
@@ -360,7 +360,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                 </ul>
               </details>
               {chosenSource !== "" ? (
-                <div className="space-y-2 rounded-md border border-border p-3 text-sm" aria-label="Sample of the first video">
+                <div className="space-y-2 rounded-sharp border border-hairline p-3 text-sm" aria-label="Sample of the first video">
                   <p className="font-semibold">Sample of the first video</p>
                   <p className="text-fg-muted">This is what the first draft would be. Nothing is made yet, and the other videos differ only in their angle.</p>
                   <dl className="grid gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
@@ -444,7 +444,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
       {detail.data ? (
         <section aria-labelledby="batch-detail-title" className="mt-5 space-y-3">
           <h3 id="batch-detail-title" className="text-sm font-semibold">{detail.data.title}</h3>
-          {detail.data.demo ? <p role="note" className="rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm font-semibold">DEMO: fixture data. No video was rendered and no provider was called. Nothing here is a real result.</p> : null}
+          {detail.data.demo ? <p role="note" className="rounded-sharp border border-warning bg-raised px-3 py-2 text-sm font-semibold">DEMO: fixture data. No video was rendered and no provider was called. Nothing here is a real result.</p> : null}
           <p className="text-sm text-fg-muted">
             Budget {money.format(detail.data.budgetUsd)} · committed {money.format(detail.data.committedUsd)} by the videos the engine has taken.
           </p>

@@ -14,10 +14,10 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
           <>
             <SheetTitle className="text-section font-semibold">Evidence for {variant.title || variant.kind}</SheetTitle>
             <SheetDescription className="mt-2 text-sm">{summarizeEvidence(questions)}</SheetDescription>
-            <div className="mt-4 hidden overflow-x-auto rounded-md border border-border md:block">
+            <div className="mt-4 hidden overflow-x-auto rounded-sharp border border-hairline md:block">
               <table className="w-full min-w-[44rem] text-left text-sm">
                 <caption className="sr-only">Decision questions stored for this variant</caption>
-                <thead className="bg-surface-2 text-xs text-fg-muted">
+                <thead className="bg-overlay text-xs text-fg-muted">
                   <tr>
                     <th scope="col" className="px-3 py-2 font-semibold">ID</th>
                     <th scope="col" className="px-3 py-2 font-semibold">Question</th>
@@ -52,9 +52,9 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
             </div>
             <ul className="mt-4 grid gap-3 md:hidden">
               {questions.length === 0 ? (
-                <li className="rounded-md border border-border p-3 text-sm text-fg-muted">No decision record is stored for this variant.</li>
+                <li className="rounded-sharp border border-hairline p-3 text-sm text-fg-muted">No decision record is stored for this variant.</li>
               ) : questions.map((question) => (
-                <li key={question.id} className="space-y-2 rounded-md border border-border p-3 text-sm">
+                <li key={question.id} className="space-y-2 rounded-sharp border border-hairline p-3 text-sm">
                   <p className="font-mono text-xs text-fg-muted">{question.id}</p>
                   <p>{describeQuestion(question.id)}</p>
                   <dl className="grid gap-2">

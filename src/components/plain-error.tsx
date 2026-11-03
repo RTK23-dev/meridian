@@ -26,9 +26,9 @@ export function PlainErrorMessage({ message, raw }: { message: string; raw: stri
         <span>{message}</span>
       </p>
       {raw ? (
-        <details className="text-fg">
+        <details className="text-fg-primary">
           <summary className="inline-flex min-h-11 cursor-pointer items-center text-fg-muted underline-offset-4 hover:underline">Details</summary>
-          <pre className="mt-1 overflow-auto whitespace-pre-wrap break-words rounded bg-surface p-2 text-xs text-fg">{raw}</pre>
+          <pre className="mt-1 overflow-auto whitespace-pre-wrap break-words rounded-sharp bg-raised p-2 text-xs text-fg-primary">{raw}</pre>
         </details>
       ) : null}
     </div>
@@ -40,7 +40,7 @@ export function TechnicalDetails({ children }: { children: ReactNode }) {
   return (
     <details className="text-xs text-fg-muted">
       <summary className="inline-flex min-h-11 cursor-pointer items-center underline-offset-4 hover:underline">Details</summary>
-      <div className="mt-1 break-all font-mono text-fg">{children}</div>
+      <div className="mt-1 break-all font-mono text-fg-primary">{children}</div>
     </details>
   );
 }

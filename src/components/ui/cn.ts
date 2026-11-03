@@ -3,7 +3,7 @@ import { extendTailwindMerge } from "tailwind-merge";
 
 /**
  * The class merge for the design system. It knows the type scale, so a size such as text-small is kept next to a
- * colour such as text-fg instead of being read as a second colour and dropped.
+ * colour such as text-fg-primary instead of being read as a second colour and dropped.
  */
 const merge = extendTailwindMerge({
   extend: {

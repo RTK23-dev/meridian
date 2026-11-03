@@ -55,7 +55,7 @@ export function SuggestionList({ brandId, canEdit, saved, formDirty }: {
     {state.kind === "ready" ? (
       <>
         <p className="text-sm text-fg-muted">Accepting replaces the saved text of that field with the suggestion. Rejecting leaves the field as it is.</p>
-        {canEdit && blockReason ? <p role="note" className="rounded-md border border-warning bg-warning-soft p-3 text-sm">{blockReason}</p> : null}
+        {canEdit && blockReason ? <p role="note" className="rounded-sharp border border-warning bg-raised p-3 text-sm">{blockReason}</p> : null}
         <ul className="divide-y divide-border">
           {suggestions.map((item) => {
             const label = fieldLabel(item.field) ?? "Unknown field";

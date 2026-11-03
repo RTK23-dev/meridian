@@ -94,8 +94,8 @@ export function EngineChoice({
             <div
               key={engine.id}
               // The chosen engine takes the full row and shows its details. The others stay one short row each, so the step stays short.
-              className={`rounded-lg border p-4 ${
-                selected === engine.id ? "space-y-3 border-fg bg-surface-2 md:col-span-2" : "space-y-1 border-border bg-surface"
+              className={`rounded-sharp border p-4 ${
+                selected === engine.id ? "space-y-3 border-fg-primary bg-overlay md:col-span-2" : "space-y-1 border-hairline bg-raised"
               }`}
             >
               <div className="flex items-start justify-between gap-3">
@@ -108,20 +108,20 @@ export function EngineChoice({
                     checked={selected === engine.id}
                     disabled={!canAdmin || save.isPending}
                     onChange={() => { setMessage(null); setPicked(engine.id); }}
-                    className="mt-1.5 size-4 shrink-0 accent-[var(--color-accent)]"
+                    className="mt-1.5 size-4 shrink-0 accent-[var(--accent)]"
                   />
                   <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canAdmin ? "cursor-pointer" : ""}`}>
-                    <span className="block text-lg font-semibold text-fg">{copy?.title ?? engine.label}</span>
+                    <span className="block text-lg font-semibold text-fg-primary">{copy?.title ?? engine.label}</span>
                     {copy && selected === engine.id ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>
-                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-success-soft text-success" : "bg-warning-soft text-fg ring-1 ring-warning/50"}`}>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${ready ? "bg-raised text-success" : "bg-raised text-fg-primary ring-1 ring-warning/50"}`}>
                   {isActive ? (ready ? (isDefault ? "In use (default)" : "In use") : "Chosen, not ready") : ready ? "Ready" : key && key.fingerprint === null ? "Needs a key" : "Needs setup"}
                 </span>
               </div>
               {selected === engine.id ? (
                 <div className="space-y-3">
-              {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg">Needs: </span>{copy.needs}</p> : null}
+              {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg-primary">Needs: </span>{copy.needs}</p> : null}
               {!ready && engine.health.message ? <EngineReason message={engine.health.message} /> : null}
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
@@ -154,7 +154,7 @@ export function EngineChoice({
 /** Key saved, test passed and engine active, as three separate steps with the one next action. */
 function EngineSteps({ label, progress }: { label: string; progress: EngineProgress }) {
   return (
-    <div className="space-y-2 rounded-md bg-surface-2 p-3" aria-label={`${label} setup progress`}>
+    <div className="space-y-2 rounded-sharp bg-overlay p-3" aria-label={`${label} setup progress`}>
       <ol className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
         {progress.steps.map((step) => (
           <li key={step.id} className={step.done ? "font-semibold text-success" : "text-fg-muted"}>
@@ -164,7 +164,7 @@ function EngineSteps({ label, progress }: { label: string; progress: EngineProgr
           </li>
         ))}
       </ol>
-      <p className="text-sm text-fg">{progress.next}</p>
+      <p className="text-sm text-fg-primary">{progress.next}</p>
     </div>
   );
 }
@@ -174,7 +174,7 @@ function EngineReason({ message }: { message: string }) {
   const reason = splitOperatorHint(message);
   return (
     <div className="space-y-1">
-      <p className="text-sm text-fg [overflow-wrap:anywhere]">{reason.plain}</p>
+      <p className="text-sm text-fg-primary [overflow-wrap:anywhere]">{reason.plain}</p>
       {reason.operator ? (
         <details className="text-xs text-fg-muted">
           <summary className="cursor-pointer">For whoever runs the server</summary>

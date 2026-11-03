@@ -12,16 +12,16 @@ export function EngineReviewItems({ items }: { items: readonly EngineInboxItem[]
     <section aria-labelledby="engine-review-heading" className="max-w-3xl space-y-3">
       <div className="space-y-1">
         <h2 id="engine-review-heading" className="text-base font-semibold">From the video engine</h2>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           {items.length === 1 ? "1 open item" : `${items.length} open items`}. The engine decides these. Decisions on them are not available here yet.
         </p>
       </div>
       <ul className="space-y-2">
         {items.map((item) => (
-          <li key={item.id} className="rounded-lg border border-border bg-surface p-3">
+          <li key={item.id} className="rounded-sharp border border-hairline bg-raised p-3">
             <p className="font-semibold">{item.label}</p>
             <p className="text-sm">{item.reason}</p>
-            <p className="text-xs text-muted">
+            <p className="text-xs text-fg-muted">
               Request {item.requestId} · opened {formatOpened(item.createdAt)}
               {item.shotId ? ` · shot ${item.shotId}` : ""}
             </p>

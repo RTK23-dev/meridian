@@ -74,7 +74,7 @@ export function MediaPlayer(props: MediaPlayerProps) {
       <div className={className}>
         <div className="relative w-full max-w-full" style={{ aspectRatio: `${props.width} / ${props.height}` }}>
           {state === "error" ? (
-            <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{IMAGE_ERROR}</p>
+            <p role="status" className="absolute inset-0 grid place-items-center rounded-sharp border border-hairline p-4 text-center text-sm text-fg-muted">{IMAGE_ERROR}</p>
           ) : (
             <img
               ref={imageRef}
@@ -88,7 +88,7 @@ export function MediaPlayer(props: MediaPlayerProps) {
             />
           )}
           {state === "loading" ? (
-            <p role="status" className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-muted">Loading image...</p>
+            <p role="status" className="pointer-events-none absolute inset-0 grid place-items-center text-sm text-fg-muted">Loading image...</p>
           ) : null}
         </div>
       </div>
@@ -102,11 +102,11 @@ export function MediaPlayer(props: MediaPlayerProps) {
     <div className={className}>
       <div className="relative w-full max-w-full" style={{ aspectRatio: ratio }}>
         {state === "error" ? (
-          <p role="status" className="absolute inset-0 grid place-items-center rounded-md border border-line p-4 text-center text-sm text-muted">{VIDEO_ERROR}</p>
+          <p role="status" className="absolute inset-0 grid place-items-center rounded-sharp border border-hairline p-4 text-center text-sm text-fg-muted">{VIDEO_ERROR}</p>
         ) : (
           <video
             ref={videoRef}
-            className="absolute inset-0 h-full w-full rounded-md bg-black object-contain"
+            className="absolute inset-0 h-full w-full rounded-sharp bg-black object-contain"
             src={src}
             poster={poster}
             controls
@@ -119,7 +119,7 @@ export function MediaPlayer(props: MediaPlayerProps) {
         ) : null}
       </div>
       {state === "ready" ? (
-        <div className="mt-1 flex flex-wrap items-center gap-x-4 text-xs text-muted">
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 text-xs text-fg-muted">
           <span>Stored video · {seconds}</span>
           {props.assetId !== undefined ? (
             <a className="underline underline-offset-4" href={`${src}?download=1`}>Download video</a>

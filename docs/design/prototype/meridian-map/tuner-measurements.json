@@ -1,0 +1,300 @@
+{
+  "url": "served from docs/design/prototype/meridian-map",
+  "results": {
+    "parity.map-matches-the-published-site-at-defaults": {
+      "ok": true,
+      "detail": {
+        "site": 267051553,
+        "tuner": 267051553
+      }
+    },
+    "parity.bill-matches-the-published-site-at-defaults": {
+      "ok": true,
+      "detail": {
+        "site": 865,
+        "tuner": 865
+      }
+    },
+    "parity.blocks-mixed-from-the-ground-and-ink-at-defaults": {
+      "ok": true,
+      "detail": {
+        "off": 0,
+        "colours": 39
+      }
+    },
+    "site.no-console-errors": {
+      "ok": true,
+      "detail": {
+        "tuner": [],
+        "site": []
+      }
+    },
+    "readout.starts-at-the-first-stop": {
+      "ok": true,
+      "detail": {
+        "stop": "1 · Start"
+      }
+    },
+    "readout.shows-the-ink-and-the-blocks": {
+      "ok": true,
+      "detail": {
+        "coverage": "39.0% of the window",
+        "blocks": 16183
+      }
+    },
+    "spacing.finer-contours-change-the-pattern": {
+      "ok": true,
+      "detail": {
+        "before": 267051553,
+        "finer": 1625224632
+      }
+    },
+    "grid.wider-spacing-draws-fewer-blocks": {
+      "ok": true,
+      "detail": {
+        "atDefault": 16007,
+        "atTwelve": 6938
+      }
+    },
+    "ground.light-ground-draws-light-map-and-dark-text": {
+      "ok": true,
+      "detail": {
+        "colours": [
+          "#aeaeae",
+          "#8e8e8f",
+          "#949494",
+          "#656567",
+          "#878787",
+          "#525253",
+          "#e2e2e1",
+          "#bebebc",
+          "#e3e3e2",
+          "#f4f4f2",
+          "#c4c4c3",
+          "#e4e4e3",
+          "#1c1c1f",
+          "#e8e8e6",
+          "#d1d1d0",
+          "#e9e9e7",
+          "#a2a2a2",
+          "#7a7a7b",
+          "#37373a",
+          "#454547",
+          "#48484b",
+          "#e6e6e4",
+          "#cbcbc9",
+          "#e7e7e5",
+          "#525254",
+          "#5f5f60",
+          "#626262",
+          "#2c2c2e",
+          "#2f2f32",
+          "#989897",
+          "#6d6d6e",
+          "#747475",
+          "#626263",
+          "#afafaf",
+          "#b2b2b2",
+          "#8f8f8f",
+          "#b8b8b7",
+          "#bbbbba",
+          "#7e7e7e",
+          "#c9c9c8",
+          "#e5e5e4",
+          "#eaeae8",
+          "#e4e4e2",
+          "#47474a",
+          "#c0c0c0",
+          "#c2c2c2",
+          "#616162",
+          "#2e2e31",
+          "#757576",
+          "#8d8d8d",
+          "#8f8f90",
+          "#9c9c9c",
+          "#9d9d9d",
+          "#ededeb",
+          "#eeeeec",
+          "#b9b9b8",
+          "#a2a2a3",
+          "#babab9",
+          "#404042",
+          "#6e6e6f",
+          "#565659",
+          "#bdbdbd",
+          "#ebebe9",
+          "#ececea",
+          "#7f7f7f",
+          "#808081",
+          "#cdcdcc",
+          "#b6b6b5",
+          "#d8d8d7",
+          "#efefed",
+          "#c5c5c4",
+          "#ececeb",
+          "#6b6b6c",
+          "#818182",
+          "#dcdcdb",
+          "#dddddc",
+          "#a6a6a6",
+          "#888889",
+          "#adadad",
+          "#848485",
+          "#9f9f9f",
+          "#bcbcbb",
+          "#929293",
+          "#d2d2d1",
+          "#d4d4d3",
+          "#58585a",
+          "#5a5a5c",
+          "#cececd",
+          "#d0d0d0",
+          "#e1e1df",
+          "#e1e1e0",
+          "#d7d7d6",
+          "#d9d9d7",
+          "#939393",
+          "#868686",
+          "#a1a1a1",
+          "#999998",
+          "#ccccca",
+          "#848484",
+          "#b3b3b3",
+          "#c3c3c2",
+          "#ababaa",
+          "#ababab",
+          "#858585",
+          "#cacac8",
+          "#bdbdbc",
+          "#d3d3d2",
+          "#d8d8d6",
+          "#c1c1c1",
+          "#727273",
+          "#737374",
+          "#6c6c6d",
+          "#565658",
+          "#808080",
+          "#acacac",
+          "#b6b6b4",
+          "#3f3f41",
+          "#606061",
+          "#59595b",
+          "#cfcfce",
+          "#b0b0b0",
+          "#979797",
+          "#9e9e9e",
+          "#b1b1b1",
+          "#2d2d2f",
+          "#2d2d30",
+          "#464648",
+          "#474749"
+        ],
+        "ink": "rgb(10, 10, 10)"
+      }
+    },
+    "zoom.changes-the-pattern": {
+      "ok": true,
+      "detail": {
+        "paper": 3196990275,
+        "zoomed": 3388687219
+      }
+    },
+    "presets.bold-sets-its-spacing-and-grid": {
+      "ok": true,
+      "detail": {
+        "step": "9",
+        "pitch": "10"
+      }
+    },
+    "presets.reset-restores-the-published-site": {
+      "ok": true,
+      "detail": {
+        "step": "11",
+        "pitch": "8",
+        "bg": "#0b0b0c"
+      }
+    },
+    "io.export-holds-every-value": {
+      "ok": true,
+      "detail": {
+        "keys": [
+          "bg",
+          "line",
+          "money",
+          "meridian",
+          "meridianOn",
+          "meridianOpacity",
+          "pitch",
+          "block",
+          "sharp",
+          "step",
+          "jitter",
+          "zoom",
+          "glide",
+          "grainOn",
+          "grain",
+          "billBand",
+          "billCurve",
+          "billPrint",
+          "route",
+          "snap",
+          "speed"
+        ]
+      }
+    },
+    "io.paste-restores-the-values": {
+      "ok": true,
+      "detail": {
+        "step": "11"
+      }
+    },
+    "io.text-that-is-not-settings-is-refused": {
+      "ok": true,
+      "detail": {
+        "message": "That text is not settings. Paste the JSON from Copy JSON, or the object from Copy as code."
+      }
+    },
+    "playback.autoplay-moves-down-the-route": {
+      "ok": true,
+      "detail": {
+        "scrollY": 596
+      }
+    },
+    "playback.scrub-moves-to-the-chosen-stop": {
+      "ok": true,
+      "detail": {
+        "position": 2
+      }
+    },
+    "motion.reduced-holds-the-map-still": {
+      "ok": true,
+      "detail": {
+        "early": 8818243,
+        "late": 8818243
+      }
+    },
+    "layout.no-sideways-scroll.phone": {
+      "ok": true,
+      "detail": {
+        "sideways": 0
+      }
+    },
+    "layout.phone-no-console-errors": {
+      "ok": true,
+      "detail": []
+    },
+    "owner-settings.round-trip-through-the-simulator": {
+      "ok": true,
+      "detail": {
+        "differs": []
+      }
+    },
+    "owner-settings.draw-the-published-site": {
+      "ok": true,
+      "detail": {
+        "site": 267051553,
+        "pasted": 267051553
+      }
+    }
+  }
+}

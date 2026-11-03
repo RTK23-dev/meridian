@@ -61,6 +61,29 @@ const mapDigest = (page) => page.evaluate(() => {
   return { colours: [...colours].map((c) => `#${c.toString(16).padStart(6, "0")}`), hash };
 });
 
+// Every pixel of the map is a mix of the ground and the block colour, since the blocks are drawn at varied opacity. A pixel more than two
+// steps off the line between the two colours would be a third colour. Returns how many pixels are off the line, and how many colours there are.
+const mixOf = (page, ground, ink) => page.evaluate(([bgHex, lineHex]) => {
+  const parse = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
+  const [ar, ag, ab] = parse(bgHex);
+  const [br, bg, bb] = parse(lineHex);
+  const [dr, dg, db] = [br - ar, bg - ag, bb - ab];
+  const len = dr * dr + dg * dg + db * db;
+  const canvas = document.querySelector("#map");
+  const data = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+  const colours = new Set();
+  let off = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    colours.add((r << 16) | (g << 8) | b);
+    const t = Math.min(1, Math.max(0, ((r - ar) * dr + (g - ag) * dg + (b - ab) * db) / len));
+    if (Math.abs(r - (ar + t * dr)) > 2 || Math.abs(g - (ag + t * dg)) > 2 || Math.abs(b - (ab + t * db)) > 2) off += 1;
+  }
+  return { off, distinct: colours.size };
+}, [ground, ink]);
+
 // The yellow dots on a bill: how many are printed. A bill printed in full has more than one printed dot than a bill still blank.
 const billPrinted = (page, index) => page.evaluate((i) => {
   const canvas = document.querySelectorAll("canvas.bill")[i];
@@ -70,12 +93,12 @@ const billPrinted = (page, index) => page.evaluate((i) => {
   return n;
 }, index);
 
-// ---- 1. The stops render with no errors: the map is drawn, and the page carries its five stops and the loop screen. ----
+// ---- 1. The stops render with no errors: the map is drawn as blocks of ground and ink, and the page carries its five stops and the loop screen. ----
 {
   const { context, page, errors } = await open(1440, 900);
-  const digest = await mapDigest(page);
+  const mix = await mixOf(page, "#0B0B0C", "#1C1C1F");
   const stops = await page.$$eval("main > section", (els) => els.map((el) => el.id));
-  check("map.drawn-in-two-colours", digest.colours.length === 2, { colours: digest.colours });
+  check("map.drawn-as-blocks-mixed-from-ground-and-ink", mix.off === 0 && mix.distinct > 2, { off: mix.off, colours: mix.distinct });
   check("site.stops-and-loop-screen-present", stops.join(",") === "cover,create,library,insights,settings,cover-loop", stops);
   check("site.no-console-errors", errors.length === 0, errors);
   await context.close();
@@ -109,19 +132,17 @@ const billPrinted = (page, index) => page.evaluate((i) => {
   await context.close();
 }
 
-// ---- 4. The loop: a reader who reaches the loop screen lands back on the first stop, and the map is the same part of the world. ----
+// ---- 4. The loop: a reader who reaches the loop screen lands back on the first stop, and the jump changes no pixel, because a half turn of the map is the same picture. ----
 {
   const { context, page } = await open(1440, 900);
-  await page.evaluate(() => window.scrollTo({ top: window.innerHeight * 4, behavior: "instant" }));
   await page.waitForTimeout(900);
-  const before = await mapDigest(page);
+  const first = await mapDigest(page);
   await page.evaluate(() => window.scrollTo({ top: window.innerHeight * 5, behavior: "instant" }));
   await page.waitForTimeout(900);
   const after = await page.evaluate(() => window.scrollY);
   check("loop.returns-to-the-first-stop", after < 2, { scrollY: after });
-  await page.waitForTimeout(900);
   const back = await mapDigest(page);
-  check("loop.map-is-the-first-stops-part-of-the-world", back.colours.length === 2 && before.hash !== back.hash, { before: before.hash, back: back.hash });
+  check("loop.jump-changes-no-pixel", back.hash === first.hash, { first: first.hash, back: back.hash });
   await context.close();
 }
 

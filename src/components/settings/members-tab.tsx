@@ -44,7 +44,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
       header: "Member",
       cell: ({ row }) => (
         <div className="min-w-0">
-          <p className="font-semibold text-fg">{row.original.name}</p>
+          <p className="font-semibold text-fg-primary">{row.original.name}</p>
           <p className="truncate text-sm text-fg-muted">{row.original.email}</p>
         </div>
       ),
@@ -86,7 +86,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
         {canAdmin ? <Button type="button" onClick={() => setInviteOpen(true)}>Invite member</Button> : null}
       </div>
 
-      {note ? <p role="status" className="text-sm text-fg">{note}</p> : null}
+      {note ? <p role="status" className="text-sm text-fg-primary">{note}</p> : null}
       {roleError ? <FormError message={plainServerError(roleError, "settings")} raw={roleError} /> : null}
 
       <DataTable
@@ -99,11 +99,11 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
 
       {invites.length > 0 ? (
         <section aria-labelledby="invites-title" className="space-y-2">
-          <h3 id="invites-title" className="text-sm font-semibold text-fg">Pending invitations</h3>
-          <ul className="divide-y divide-border rounded-lg border border-border bg-surface">
+          <h3 id="invites-title" className="text-sm font-semibold text-fg-primary">Pending invitations</h3>
+          <ul className="divide-y divide-border rounded-sharp border border-hairline bg-raised">
             {invites.map((invite) => (
               <li key={invite.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
-                <span className="min-w-0 break-all text-fg">{invite.email}</span>
+                <span className="min-w-0 break-all text-fg-primary">{invite.email}</span>
                 <span className="flex flex-wrap gap-2 text-fg-muted">
                   <span>{invite.role}</span>
                   <Badge variant="info">{invite.status}</Badge>
@@ -183,7 +183,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
     <Dialog open={open} onOpenChange={dismiss.requestOpenChange}>
       <UnsavedChangesGuard dirty={form.formState.isDirty && open} />
       <DialogContent>
-        <DialogTitle className="text-section font-semibold text-fg">Invite a member</DialogTitle>
+        <DialogTitle className="text-section font-semibold text-fg-primary">Invite a member</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-fg-muted">
           If the person already has an account, they are added now. Otherwise an invitation is recorded for them.
         </DialogDescription>

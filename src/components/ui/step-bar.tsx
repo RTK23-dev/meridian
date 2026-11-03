@@ -20,7 +20,7 @@ function StepItem({ step, number }: { step: StepBarStep; number: number }) {
     <span>{step.label}</span>
   </>;
   if (step.state === "done") {
-    const done = "inline-flex items-center gap-1.5 font-semibold text-fg";
+    const done = "inline-flex items-center gap-1.5 font-semibold text-fg-primary";
     return step.to
       ? <Link to={step.to} className={cn(done, "rounded-sharp underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent")}>{content}</Link>
       : <span className={done}>{content}</span>;

@@ -5,24 +5,27 @@ import {
   ACCENT,
   BUDGET,
   COMPOSER_LIMITS,
-  EXAMPLE_GOALS,
-  KIND_STYLE,
-  NODE_KIND_ORDER,
-  STALE_STYLE,
-  STATE_STYLE,
-  ZOOM_MAX,
-  ZOOM_MIN,
   costText,
+  DEFAULT_ZOOM,
   describePlanOutcome,
   edgeAccent,
+  EXAMPLE_GOALS,
   fitScale,
+  KIND_STYLE,
   listWords,
   missingFields,
   nextZoom,
+  NODE_KIND_ORDER,
   parseBudget,
+  PHONE_LIST_BELOW_PX,
+  readingOrder,
   replayStatus,
+  STALE_STYLE,
+  STATE_STYLE,
   stepName,
   undrawnReason,
+  ZOOM_MAX,
+  ZOOM_MIN,
 } from "./orchestrator-presentation.ts";
 
 test("every step kind has a label, a colour role, an icon and a summary, in the order a reader meets them", () => {
@@ -195,4 +198,24 @@ test("no orchestrator UI file names a model id or uses raw HTML injection", () =
       });
   }
   assert.deepEqual(hits, []);
+});
+
+test("step kinds carry no colour: the state of a step carries the colour, so every kind is drawn in the muted role", () => {
+  for (const kind of NODE_KIND_ORDER) assert.equal(KIND_STYLE[kind].accent, "muted", `${kind} has no colour of its own`);
+});
+
+test("a plan opens at 75 percent, and a plan on a phone is its list of steps, not a canvas", () => {
+  assert.equal(DEFAULT_ZOOM, 0.75);
+  assert.equal(PHONE_LIST_BELOW_PX, 640, "below a phone's width the plan is a list");
+});
+
+test("the steps read column by column, top to bottom, the same way on the canvas and in the phone list", () => {
+  const placed = [
+    { id: "c", column: 1, y: 0 },
+    { id: "a", column: 0, y: 200 },
+    { id: "b", column: 0, y: 40 },
+    { id: "d", column: 1, y: 120 },
+  ];
+  assert.deepEqual(readingOrder(placed).map((step) => step.id), ["b", "a", "c", "d"]);
+  assert.deepEqual(placed.map((step) => step.id), ["c", "a", "b", "d"], "the order is read without changing the input");
 });

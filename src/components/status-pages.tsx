@@ -15,13 +15,13 @@ export function ForbiddenPage() {
 
 /** Outside the shell, for example when the router has no matching route at all. */
 export function RootNotFound() {
-  return <main id="main" tabIndex={-1} className="mx-auto min-h-screen max-w-3xl px-4 py-10 text-fg"><NotFoundPage /></main>;
+  return <main id="main" tabIndex={-1} className="mx-auto min-h-screen max-w-3xl px-4 py-10 text-fg-primary"><NotFoundPage /></main>;
 }
 
 function StatusCard({ icon, title, reason }: { icon: ReactNode; title: string; reason: string }) {
   return (
     <Card className="mx-auto flex max-w-xl flex-col items-center gap-3 py-10 text-center">
-      <div className="grid size-11 place-items-center rounded-full bg-surface-2 text-fg-muted">{icon}</div>
+      <div className="grid size-11 place-items-center rounded-full bg-overlay text-fg-muted">{icon}</div>
       <h1 tabIndex={-1} className="text-section font-semibold">{title}</h1>
       <p className="max-w-lg text-sm text-fg-muted">{reason}</p>
       <Button asChild variant="secondary" size="md"><Link to="/">Go to workspace overview</Link></Button>

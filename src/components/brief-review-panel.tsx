@@ -56,7 +56,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
     <Card className="space-y-4" aria-labelledby={`brief-review-${briefId}`}>
       <div>
         <h2 id={`brief-review-${briefId}`} className="text-section font-semibold">Held for review: {title}</h2>
-        <p className="mt-1 text-sm text-muted">
+        <p className="mt-1 text-sm text-fg-muted">
           The decision engine could not judge this brief. Planning and production are blocked until a person reviews it.
         </p>
       </div>
@@ -65,10 +65,10 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
       {data ? (
         <>
           <dl className="grid gap-2 text-sm md:grid-cols-2">
-            <div><dt className="text-muted">Decision</dt><dd>{data.decision}</dd></div>
-            <div><dt className="text-muted">Engine</dt><dd>{data.engineId ?? "None was called"}</dd></div>
-            <div><dt className="text-muted">Failure</dt><dd>{data.failureKind ?? "No provider failure. Questions were unresolved."}</dd></div>
-            <div><dt className="text-muted">Policy</dt><dd>{data.policyVersion ?? "Not recorded"}</dd></div>
+            <div><dt className="text-fg-muted">Decision</dt><dd>{data.decision}</dd></div>
+            <div><dt className="text-fg-muted">Engine</dt><dd>{data.engineId ?? "None was called"}</dd></div>
+            <div><dt className="text-fg-muted">Failure</dt><dd>{data.failureKind ?? "No provider failure. Questions were unresolved."}</dd></div>
+            <div><dt className="text-fg-muted">Policy</dt><dd>{data.policyVersion ?? "Not recorded"}</dd></div>
           </dl>
           {data.reasons.length > 0 ? (
             <div>
@@ -88,7 +88,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
           ) : null}
           <div>
             <h3 className="text-sm font-medium">Evidence that was provided</h3>
-            {data.evidence.length === 0 ? <p className="mt-1 text-sm text-muted">No evidence was recorded.</p> : (
+            {data.evidence.length === 0 ? <p className="mt-1 text-sm text-fg-muted">No evidence was recorded.</p> : (
               <ul className="mt-1 space-y-1 text-sm">
                 {data.evidence.map((item) => (
                   <li key={`${item.name}-${item.timestampMs ?? ""}`}>
@@ -109,7 +109,7 @@ export function BriefReviewPanel({ brandId, briefId, title, role }: { brandId: s
             </div>
           ) : null}
           {data.reviewable && canReview ? (
-            <div className="space-y-3 border-t border-border pt-4">
+            <div className="space-y-3 border-t border-hairline pt-4">
               <UnsavedChangesGuard dirty={isDirty} />
               <div className="space-y-2">
                 <label className="flex items-start gap-2 text-sm">

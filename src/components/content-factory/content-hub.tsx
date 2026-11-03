@@ -98,7 +98,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
 
   const brandPicker = pickBrand ? (
     <div className="w-56 min-w-0 space-y-1.5">
-      <label htmlFor="cc-brand" className="block text-xs font-semibold uppercase tracking-wide text-muted">Brand</label>
+      <label htmlFor="cc-brand" className="block text-xs font-semibold uppercase tracking-wide text-fg-muted">Brand</label>
       <SelectInput id="cc-brand" value={activeBrandId ?? ""} onChange={(event) => setPickedBrandId(event.target.value)}>
         {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
       </SelectInput>
@@ -128,13 +128,13 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
               role="radio"
               aria-checked={selected}
               onClick={() => onSearchChange({ section: "create", preset: item.id }, true)}
-              className={`group relative flex min-h-32 flex-col rounded-xl border p-4 text-left transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${selected ? "border-accent bg-surface shadow-sm ring-1 ring-accent" : "border-border bg-surface-2 hover:border-accent"}`}
+              className={`group relative flex min-h-32 flex-col rounded-sharp border p-4 text-left transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${selected ? "border-accent bg-raised ring-1 ring-accent" : "border-hairline bg-overlay hover:border-accent"}`}
             >
               <span className="mb-3 flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold">{item.label}</span>
-                {selected ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-1 text-xs font-semibold text-accent-fg"><Check aria-hidden="true" className="size-3.5" /> Selected</span> : null}
+                {selected ? <span className="inline-flex items-center gap-1 rounded-full bg-accent px-2 py-1 text-xs font-semibold text-on-accent"><Check aria-hidden="true" className="size-3.5" /> Selected</span> : null}
               </span>
-              <span className="text-sm leading-relaxed text-muted">{item.description}</span>
+              <span className="text-sm leading-relaxed text-fg-muted">{item.description}</span>
             </button>
           );
         })}
@@ -154,9 +154,9 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
 
   const description = `Start from a reference video and Market research, make video drafts, and group them into a budget-limited batch. Research-led production is available as an advanced option.${pickBrand ? " Each section works on the brand you pick." : ""}`;
   const headerContext = pickBrand ? brandPicker : (
-    <div className="flex min-w-0 items-center gap-2 rounded-lg border border-border bg-surface-2 px-3 py-2">
-      <span className="text-xs font-semibold uppercase tracking-wide text-muted">Brand</span>
-      <span className="max-w-48 truncate text-sm font-semibold text-fg">{activeBrand?.name ?? "Workspace"}</span>
+    <div className="flex min-w-0 items-center gap-2 rounded-sharp border border-hairline bg-overlay px-3 py-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">Brand</span>
+      <span className="max-w-48 truncate text-sm font-semibold text-fg-primary">{activeBrand?.name ?? "Workspace"}</span>
     </div>
   );
 
@@ -164,7 +164,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
     <div className="space-y-6">
       <PageHeader title="Content" description={description} actions={headerContext} />
       <Tabs value={current} onValueChange={(value) => onSearchChange(searchForSection(search, sectionOf(value)), false)} className="space-y-5">
-        <div className="rounded-xl border border-border bg-surface-2 p-1.5">
+        <div className="rounded-sharp border border-hairline bg-overlay p-1.5">
           <TabsList aria-label="Content workflow sections" className="w-full items-center justify-start gap-1 border-0 bg-transparent p-0">
             {sections.map((item) => {
               const Icon = SECTION_ICONS[item];
@@ -172,7 +172,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
                 <TabsTrigger
                   key={item}
                   value={item}
-                  className="min-h-11 rounded-lg px-3 text-sm data-[state=active]:bg-surface data-[state=active]:shadow-sm after:hidden focus-visible:ring-2 focus-visible:ring-accent"
+                  className="min-h-11 rounded-sharp px-3 text-sm data-[state=active]:bg-raised after:hidden focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Icon aria-hidden="true" className="size-4 shrink-0" />

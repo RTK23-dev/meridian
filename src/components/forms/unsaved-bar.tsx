@@ -19,7 +19,7 @@ export function UnsavedChangesBar({ dirty, subject, confirming, onConfirmingChan
   return (
     <div
       role="status"
-      className={cn("flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning bg-warning-soft p-3 text-sm", className)}
+      className={cn("flex flex-wrap items-center justify-between gap-3 rounded-sharp border border-warning bg-raised p-3 text-sm", className)}
     >
       <span className="font-semibold">{confirming ? `Discard your unsaved ${subject} changes?` : "Unsaved changes"}</span>
       {confirming ? (

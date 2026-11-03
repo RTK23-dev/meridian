@@ -4,7 +4,7 @@ import { Card } from "@/components/ui";
 import { useMediaQuery } from "@/lib/use-media-query";
 
 /** Chart colours come from the theme tokens. Fills use currentColor, set on the wrapper, and axis text uses fg-muted. */
-const tooltipStyle = { background: "var(--color-surface)", border: "1px solid var(--color-border)", borderRadius: 8, color: "var(--color-fg)", fontSize: 12 };
+const tooltipStyle = { background: "var(--bg-raised)", border: "1px solid var(--border-hairline)", borderRadius: 8, color: "var(--fg-primary)", fontSize: 12 };
 
 type Bin = { range: string; count: number };
 
@@ -81,7 +81,7 @@ function ChartPanel({ title, description, label, bins, unit, children }: {
   return (
     <Card className="space-y-3">
       <div>
-        <h2 className="text-base font-semibold text-fg">{title}</h2>
+        <h2 className="text-base font-semibold text-fg-primary">{title}</h2>
         <p className="text-sm text-fg-muted">{description}</p>
       </div>
       <div role="img" aria-label={`${label}. ${summary} ${unit}.`} className="h-52 text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-border">
@@ -89,9 +89,9 @@ function ChartPanel({ title, description, label, bins, unit, children }: {
       </div>
       <dl className="grid grid-cols-3 gap-2 text-xs">
         {bins.map((bin) => (
-          <div key={bin.range} className="rounded-md bg-surface-2 px-2 py-1.5">
+          <div key={bin.range} className="rounded-sharp bg-overlay px-2 py-1.5">
             <dt className="text-fg-muted">{bin.range}</dt>
-            <dd className="font-semibold text-fg">{bin.count}</dd>
+            <dd className="font-semibold text-fg-primary">{bin.count}</dd>
           </div>
         ))}
       </dl>

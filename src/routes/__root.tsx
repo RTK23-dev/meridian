@@ -3,6 +3,7 @@ import { AuthProvider } from "@/lib/auth/provider";
 import { ThemeProvider, themeBootstrap } from "@/components/ui";
 import { AppQueryProvider } from "@/lib/query/client";
 import { RootNotFound } from "@/components/status-pages";
+import { RouteBackground } from "@/components/background/route-background";
 import appCss from "../styles.css?url";
 
 export const Route = createRootRoute({
@@ -13,7 +14,7 @@ export const Route = createRootRoute({
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { name: "color-scheme", content: "light dark" },
       { title: "Meridian" },
-      { name: "theme-color", content: "#08070B" },
+      { name: "theme-color", content: "#000000" },
     ],
     links: [
       { rel: "icon", type: "image/svg+xml", href: "/favicon.svg" },
@@ -30,6 +31,7 @@ export const Route = createRootRoute({
         <script dangerouslySetInnerHTML={{ __html: themeBootstrap }} />
         <a className="skip-link" href="#main">Skip to main content</a>
         <ThemeProvider>
+          <RouteBackground />
           <AppQueryProvider>
             <AuthProvider>
               <Outlet />

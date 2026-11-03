@@ -11,16 +11,16 @@ export function PausedExplainer() {
     { icon: Power, title: "You switch it on", text: "Check the creative, the audience and the budget in that platform, then turn it on there. Meridian has no switch for this." },
   ];
   return (
-    <section aria-labelledby="paused-explainer" className="mt-4 border-t border-border pt-4">
-      <h3 id="paused-explainer" className="text-sm font-semibold text-fg">What &ldquo;paused&rdquo; means here</h3>
+    <section aria-labelledby="paused-explainer" className="mt-4 border-t border-hairline pt-4">
+      <h3 id="paused-explainer" className="text-sm font-semibold text-fg-primary">What &ldquo;paused&rdquo; means here</h3>
       <ol className="mt-3 grid gap-3 md:grid-cols-3">
         {steps.map((step, index) => (
           <li key={step.title} className="flex gap-3">
-            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-surface-2 text-fg" aria-hidden="true">
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-overlay text-fg-primary" aria-hidden="true">
               <step.icon className="size-4" />
             </span>
             <span className="min-w-0 space-y-1">
-              <span className="block text-sm font-semibold text-fg"><span className="text-fg-muted">{index + 1}. </span>{step.title}</span>
+              <span className="block text-sm font-semibold text-fg-primary"><span className="text-fg-muted">{index + 1}. </span>{step.title}</span>
               <span className="block text-sm text-fg-muted">{step.text}</span>
             </span>
           </li>

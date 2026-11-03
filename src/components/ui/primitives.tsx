@@ -13,9 +13,9 @@ import { Drawer as Vaul } from "vaul";
 import type { ComponentProps } from "react";
 import { cn } from "./cn";
 
-/** Floating layers are the overlay surface with a strong edge. No shadow. */
+/** Floating layers are the overlay surface with a strong edge, never a shadow. */
 const Overlay = "fixed inset-0 z-50 bg-scrim data-[state=open]:animate-in data-[state=closed]:animate-out";
-const Surface = "surface-overlay fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-xl border border-border-strong bg-overlay p-6 text-fg focus:outline-none";
+const Surface = "fixed left-1/2 top-1/2 z-50 max-h-[85vh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 overflow-auto rounded-sharp border border-border-strong bg-overlay p-6 text-fg-primary focus:outline-none";
 
 export const Dialog = DialogPrimitive.Root;
 export const DialogTrigger = DialogPrimitive.Trigger;
@@ -42,29 +42,29 @@ export function SheetContent({ className, side = "bottom", ...props }: Component
   const placement = side === "right"
     ? "inset-y-0 right-0 w-full overflow-auto border-l border-border-strong bg-overlay p-6 sm:w-[480px]"
     : "inset-x-0 bottom-0 max-h-[90vh] overflow-auto rounded-t-sharp border border-border-strong bg-overlay p-6 pb-[max(env(safe-area-inset-bottom),1.5rem)]";
-  return <Vaul.Portal><Vaul.Overlay className={Overlay} /><Vaul.Content {...props} className={cn("fixed z-50 text-fg", placement, className)} /></Vaul.Portal>;
+  return <Vaul.Portal><Vaul.Overlay className={Overlay} /><Vaul.Content {...props} className={cn("fixed z-50 text-fg-primary", placement, className)} /></Vaul.Portal>;
 }
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverTrigger = PopoverPrimitive.Trigger;
 export const PopoverClose = PopoverPrimitive.Close;
-export function PopoverContent({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Content>) { return <PopoverPrimitive.Portal><PopoverPrimitive.Content {...props} className={cn("z-50 surface-overlay rounded-md border border-border-strong bg-overlay p-4 text-fg", className)} /></PopoverPrimitive.Portal>; }
+export function PopoverContent({ className, ...props }: ComponentProps<typeof PopoverPrimitive.Content>) { return <PopoverPrimitive.Portal><PopoverPrimitive.Content {...props} className={cn("z-50 rounded-sharp border border-border-strong bg-overlay p-4 text-fg-primary", className)} /></PopoverPrimitive.Portal>; }
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
 export const DropdownMenuTrigger = DropdownMenuPrimitive.Trigger;
 /** Menu rows are at least 40px on desktop and 44px on touch. The focused row keeps the global focus outline. */
-export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Item>) { return <DropdownMenuPrimitive.Item {...props} className={cn("relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-sharp px-3 py-1.5 text-small text-fg data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-raised pointer-coarse:min-h-11", className)} />; }
-export function DropdownMenuContent({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) { return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.Content {...props} className={cn("z-50 min-w-36 surface-overlay rounded-md border border-border-strong bg-overlay p-1 text-fg", className)} /></DropdownMenuPrimitive.Portal>; }
+export function DropdownMenuItem({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Item>) { return <DropdownMenuPrimitive.Item {...props} className={cn("relative flex min-h-10 cursor-default select-none items-center gap-2 rounded-sharp px-3 py-1.5 text-small text-fg-primary data-[disabled]:pointer-events-none data-[disabled]:opacity-50 data-[highlighted]:bg-raised pointer-coarse:min-h-11", className)} />; }
+export function DropdownMenuContent({ className, ...props }: ComponentProps<typeof DropdownMenuPrimitive.Content>) { return <DropdownMenuPrimitive.Portal><DropdownMenuPrimitive.Content {...props} className={cn("z-50 min-w-36 rounded-sharp border border-border-strong bg-overlay p-1 text-fg-primary", className)} /></DropdownMenuPrimitive.Portal>; }
 
 export const TooltipProvider = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;
 export const TooltipTrigger = TooltipPrimitive.Trigger;
-export function TooltipContent({ className, ...props }: ComponentProps<typeof TooltipPrimitive.Content>) { return <TooltipPrimitive.Portal><TooltipPrimitive.Content {...props} className={cn("z-50 rounded-sharp border border-border-strong bg-overlay px-2 py-1 text-caption text-fg", className)} /></TooltipPrimitive.Portal>; }
+export function TooltipContent({ className, ...props }: ComponentProps<typeof TooltipPrimitive.Content>) { return <TooltipPrimitive.Portal><TooltipPrimitive.Content {...props} className={cn("z-50 rounded-sharp border border-border-strong bg-overlay px-2 py-1 text-caption text-fg-primary", className)} /></TooltipPrimitive.Portal>; }
 
 export const Tabs = TabsPrimitive.Root;
 export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex max-w-full flex-wrap gap-1 border-b border-hairline", className)} />; }
 /** The active tab has a 2px red underline that sits on the list's hairline. */
-export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("relative min-h-10 px-3 text-button font-semibold text-fg-secondary hover:text-fg pointer-coarse:min-h-11 data-[state=active]:text-fg after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-accent after:content-[''] after:hidden data-[state=active]:after:block", className)} />; }
+export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("relative min-h-10 px-3 text-button font-semibold text-fg-secondary hover:text-fg-primary pointer-coarse:min-h-11 data-[state=active]:text-fg-primary after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:bg-accent after:content-[''] after:hidden data-[state=active]:after:block", className)} />; }
 export const TabsContent = TabsPrimitive.Content;
 
 export const Accordion = AccordionPrimitive.Root;

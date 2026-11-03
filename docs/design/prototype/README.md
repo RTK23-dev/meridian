@@ -30,7 +30,7 @@ The model tests check the canvas geometry against `src/engine/orchestrator/layou
 
     node docs/design/prototype/capture.mjs
 
-The walkthrough has its own checks: `capture-presentation.mjs` runs nine claims over every position in the index, read from the page itself (the cover and 48 screens and states). Each renders and is indexed, at most one red action, every disabled control says why, no sideways scroll at 1440 and 390, the phone layout, the keys, and a step chosen on the plan opens its details. It writes one PNG per screen into `presentation-screens/`, and `presentation-measurements.json`. It exits non-zero if a claim fails.
+The walkthrough has its own checks: `capture-presentation.mjs` runs its claims over every position in the index, read from the page itself (the cover and 48 screens and states). Each renders and is indexed, at most one red action, every disabled control says why, no sideways scroll at 1440 and 390, the phone layout, the keys, a step chosen on the plan opens its details, and the site background behind it: its two colours, its move to each group's stop, and the holds. It writes one PNG per screen into `presentation-screens/`, and `presentation-measurements.json`. It exits non-zero if a claim fails.
 
     node docs/design/prototype/capture-presentation.mjs
 
@@ -42,7 +42,7 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 
     node docs/design/prototype/build-artifact.mjs <output.html> [index|presentation]
 
-`index` (the default) bundles `model.mjs`, `mount.mjs` and `app.mjs`, in that order, and keeps the page content as it is in `index.html`. `presentation` bundles `model.mjs`, `mount.mjs`, `screens.mjs`, `screens-start.mjs`, `screens-workspace.mjs`, `screens-settings.mjs`, `screens-brand.mjs`, `screens-all.mjs` and `presentation.mjs`, with `prototype.css` and `presentation.css`. The modules come in that order because the page shares one scope. The build stops if a top-level name is declared twice, since the modules share one scope in the page. The publish skeleton supplies the document wrapper.
+`index` (the default) bundles `model.mjs`, `mount.mjs` and `app.mjs`, in that order, and keeps the page content as it is in `index.html`. `presentation` bundles `model.mjs`, `mount.mjs`, `accent.mjs`, `screens.mjs`, `screens-start.mjs`, `screens-workspace.mjs`, `screens-settings.mjs`, `screens-brand.mjs`, `screens-all.mjs`, the three map modules from `meridian-map/` (`world-field.mjs`, `map-model.mjs`, `halftone.mjs`), `background.mjs` and `presentation.mjs`, with `prototype.css` and `presentation.css`. The modules come in that order because the page shares one scope. The build stops if a top-level name is declared twice, since the modules share one scope in the page. The publish skeleton supplies the document wrapper.
 
 ## Files
 
@@ -61,5 +61,6 @@ The published Artifact is the same page with the stylesheet and both scripts inl
 - `screens-settings.mjs`: the six tabs of Settings (General, Members, Scoring weights, Alerts, Learning, Danger zone) and the pages it links to: billing, usage, integrations, setup, jobs, engine operations, audit, webhooks and notifications.
 - `screens-brand.mjs`: the brand pages: the brand overview, content, cookbooks, the orchestrator, the brain, products, pages, market, intelligence and calibration.
 - `screens-all.mjs`: the order of the screens, and the index groups (Start, Home, Create, Library, Insights, Settings, States, Overlay). Each screen's red action is counted by the capture.
-- `capture-presentation.mjs`: the walkthrough's nine claims and its screenshots.
+- `background.mjs`: the site background behind the walkthrough. It draws the map from `meridian-map/` with the site's settings, and moves it to the stop of the group on show: Start and Home at 47° N, Create at 23° N, Library at the equator, Insights at 23° S and Settings at 41° S. States and Overlay hold the place the walkthrough was at. It is tested in `scripts/meridian-background.test.mjs`.
+- `capture-presentation.mjs`: the walkthrough's claims and its screenshots.
 - `presentation-screens/`: one PNG per screen, four phone frames, and `presentation-measurements.json`.

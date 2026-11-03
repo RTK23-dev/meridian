@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meridian site background simulator</title>
+  <meta name="description" content="The Meridian site background, live, with every value open to change.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,600..700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="site.css">
+  <link rel="stylesheet" href="tuner.css">
+</head>
+<body>
+  <canvas id="map" aria-hidden="true"></canvas>
+  <div class="meridian" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <nav class="route" aria-label="Route along the meridian">
+    <a href="#cover" data-stop="cover">Start <span>47° N</span></a>
+    <a href="#create" data-stop="create">Create <span>23° N</span></a>
+    <a href="#library" data-stop="library">Library <span>0°</span></a>
+    <a href="#insights" data-stop="insights">Insights <span>23° S</span></a>
+    <a href="#settings" data-stop="settings">Settings <span>41° S</span></a>
+  </nav>
+
+  <main>
+    <section class="stop" id="cover" aria-labelledby="cover-title">
+      <div class="stop-copy">
+        <p class="label">01 · Start · 47° N, Switzerland</p>
+        <h1 id="cover-title" class="display">Along one meridian.</h1>
+        <p class="lede">Meridian moves down the line of longitude at 0 degrees, one screen at a time. The map under the page is the place each screen is drawn from, and it follows your scroll.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Meridian · one route</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="create" aria-labelledby="create-title">
+      <div class="stop-copy">
+        <p class="label">02 · Create · 23° N, Tropic of Cancer</p>
+        <h2 id="create-title" class="display">Plan a run.</h2>
+        <p class="lede">Describe the video. The plan is drawn when you plan it, and nothing is paid for until you approve it.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Brief · 30 seconds</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="library" aria-labelledby="library-title">
+      <div class="stop-copy">
+        <p class="label">03 · Library · 0°, Equator</p>
+        <h2 id="library-title" class="display">Everything made or kept.</h2>
+        <p class="lede">Drafts, reviews and published work sit in one list. Each item says what it is, and what is still missing.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Library · 12 items</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="insights" aria-labelledby="insights-title">
+      <div class="stop-copy">
+        <p class="label">04 · Insights · 23° S, Tropic of Capricorn</p>
+        <h2 id="insights-title" class="display">What the market says.</h2>
+        <p class="lede">Counts describe stored posts. They say what was collected, and they are not a claim about effect.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Market · 8 weeks</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="settings" aria-labelledby="settings-title">
+      <div class="stop-copy">
+        <p class="label">05 · Settings · 41° S, Patagonia</p>
+        <h2 id="settings-title" class="display">Settings, in one place.</h2>
+        <p class="lede">Limits, members and connections. Each limit says what it blocks, and nothing is set until someone sets it.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Limit · not set</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="cover-loop" aria-hidden="true">
+      <div class="stop-copy">
+        <p class="label">01 · Start · 47° N, Switzerland</p>
+        <h2 class="display">Along one meridian.</h2>
+        <p class="lede">The loop: the first screen again, a half turn of the map on.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Meridian · one route</figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <aside id="drawer" class="drawer" data-open="true">
+    <button id="drawer-toggle" class="toggle" type="button" aria-expanded="true" aria-controls="drawer-body">Simulator</button>
+    <div id="drawer-body" class="drawer-body">
+      <section class="panel">
+        <h2>Live readout</h2>
+        <dl class="readout">
+          <div><dt>Stop</dt><dd id="r-stop">·</dd></div>
+          <div><dt>Latitude</dt><dd id="r-lat">·</dd></div>
+          <div><dt>Position</dt><dd id="r-position">·</dd></div>
+          <div><dt>Centre bill</dt><dd id="r-bill">·</dd></div>
+          <div><dt>Ink</dt><dd id="r-coverage">·</dd></div>
+          <div><dt>Blocks</dt><dd id="r-blocks">·</dd></div>
+          <div><dt>Frame rate</dt><dd id="r-fps">·</dd></div>
+        </dl>
+        <div class="playback">
+          <button id="play" class="btn" type="button" aria-pressed="false">Play the route</button>
+          <label class="scrub-label"><span>Move through the route</span><input id="scrub" type="range" min="0" max="5" step="0.01" value="0"></label>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Presets</h2>
+        <div id="presets" class="chips"></div>
+        <button id="reset" class="btn" type="button">Back to the published site</button>
+      </section>
+
+      <div id="controls"></div>
+
+      <section class="panel">
+        <h2>Keep these values</h2>
+        <p class="help">Your changes are kept on this device. Copy them out to keep them elsewhere, or paste text here to restore them.</p>
+        <label class="stacked"><span>Settings as text</span><textarea id="io" rows="9" spellcheck="false"></textarea></label>
+        <div class="btns">
+          <button id="copy-json" class="btn" type="button">Copy JSON</button>
+          <button id="copy-code" class="btn" type="button">Copy as code</button>
+          <button id="apply-json" class="btn" type="button">Apply pasted text</button>
+        </div>
+        <p id="io-message" class="help" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </aside>
+
+  <script type="module" src="tuner.mjs"></script>
+</body>
+</html>

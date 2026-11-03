@@ -94,10 +94,10 @@ function Intelligence({ brandId }: { brandId: string }) {
           <h1 className="page-title">
             Account & Creative Intelligence
           </h1>
-          <p className="mt-1 text-sm text-muted">
+          <p className="mt-1 text-sm text-fg-muted">
             Macro-portfolio rollups, 6-beat creative DNA decomposition, and competitor whitespace discovery.
           </p>
-          <p className="mt-1 text-xs text-muted">Counts describe stored posts and creatives, not ad effectiveness or causation.</p>
+          <p className="mt-1 text-xs text-fg-muted">Counts describe stored posts and creatives, not ad effectiveness or causation.</p>
         </div>
       </div>
 
@@ -120,7 +120,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         {/* TAB 1: ACCOUNT DNA & MULTIMODAL */}
         <TabsContent value="account" className="space-y-6">
           {/* Platform Selector Bar */}
-          <div className="flex flex-wrap items-center gap-2 border-b border-line pb-4">
+          <div className="flex flex-wrap items-center gap-2 border-b border-hairline pb-4">
             <span className="eyebrow">Platform:</span>
             {["instagram", "tiktok", "youtube"].map((p) => (
               <Button
@@ -129,7 +129,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                 variant="secondary"
                 aria-pressed={platform === p}
                 onClick={() => setPlatform(p)}
-                className={platform === p ? "capitalize border-fg bg-surface-2" : "capitalize"}
+                className={platform === p ? "capitalize border-fg-primary bg-overlay" : "capitalize"}
               >
                 {p === "youtube" ? "YouTube Shorts" : p}
               </Button>
@@ -161,17 +161,17 @@ function Intelligence({ brandId }: { brandId: string }) {
                 />
                 <Card className="flex flex-col justify-between p-4">
                   <div>
-                    <span className="text-xs font-semibold text-muted">
+                    <span className="text-xs font-semibold text-fg-muted">
                       Brand Archetype
                     </span>
                     <div className="mt-2 flex items-center gap-2">
                       <Sparkles className="h-5 w-5 text-fg-muted" />
-                      <span className="text-xl font-semibold capitalize text-fg">
+                      <span className="text-xl font-semibold capitalize text-fg-primary">
                         {profile.brandArchetype.replace(/_/g, " ") || "UGC Authentic"}
                       </span>
                     </div>
                   </div>
-                  <p className="mt-2 text-xs text-muted">Classified from dominant visual & hook patterns</p>
+                  <p className="mt-2 text-xs text-fg-muted">Classified from dominant visual & hook patterns</p>
                 </Card>
               </div>
 
@@ -190,7 +190,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </CardHeader>
                   <CardContent className="space-y-6">
                     {Object.keys(profile.topDecileTraits).length === 0 && Object.keys(profile.bottomDecileTraits).length === 0 ? (
-                      <p className="text-sm text-muted">More post volume needed for decile statistical separation.</p>
+                      <p className="text-sm text-fg-muted">More post volume needed for decile statistical separation.</p>
                     ) : (
                       <>
                         <TraitChart
@@ -223,12 +223,12 @@ function Intelligence({ brandId }: { brandId: string }) {
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div>
-                      <p className="text-xs font-medium text-muted">
+                      <p className="text-xs font-medium text-fg-muted">
                         High Frequency Hooks
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {profile.topHooks.length === 0 ? (
-                          <span className="text-sm text-muted">No hook patterns recorded.</span>
+                          <span className="text-sm text-fg-muted">No hook patterns recorded.</span>
                         ) : (
                           profile.topHooks.map((hook) => (
                             <Badge key={hook} variant="neutral" className="capitalize">
@@ -238,13 +238,13 @@ function Intelligence({ brandId }: { brandId: string }) {
                         )}
                       </div>
                     </div>
-                    <div className="pt-2 border-t border-line">
+                    <div className="pt-2 border-t border-hairline">
                       <p className="text-xs font-medium text-warning flex items-center gap-1">
                         <AlertTriangle className="h-3 w-3" aria-hidden="true" /> Saturated Angles (&ge; 30% of content)
                       </p>
                       <div className="mt-2 flex flex-wrap gap-2">
                         {profile.saturatedAngles.length === 0 ? (
-                          <span className="text-sm text-muted">No angle has reached saturation limits.</span>
+                          <span className="text-sm text-fg-muted">No angle has reached saturation limits.</span>
                         ) : (
                           profile.saturatedAngles.map((angle) => (
                             <Badge key={angle} variant="warning" className="capitalize">
@@ -261,10 +261,10 @@ function Intelligence({ brandId }: { brandId: string }) {
               {/* Multimodal Decomposition Feed */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-lg font-semibold text-fg">
+                  <h3 className="text-lg font-semibold text-fg-primary">
                     Multimodal Creative DNA Stream
                   </h3>
-                  <span className="text-xs text-muted">
+                  <span className="text-xs text-fg-muted">
                     {analyses.length} content analyses recorded
                   </span>
                 </div>
@@ -279,7 +279,7 @@ function Intelligence({ brandId }: { brandId: string }) {
                     {analyses.map((item) => (
                       <Card key={item.id ?? item.postId} className="space-y-3 p-4">
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-muted truncate max-w-[150px]">
+                          <span className="font-mono text-xs text-fg-muted truncate max-w-[150px]">
                             {item.postId}
                           </span>
                           <Badge variant="neutral" className="capitalize text-xs">
@@ -288,21 +288,21 @@ function Intelligence({ brandId }: { brandId: string }) {
                         </div>
 
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                          <div className="border-l border-border pl-3">
-                            <span className="text-muted block">3s Retention</span>
+                          <div className="border-l border-hairline pl-3">
+                            <span className="text-fg-muted block">3s Retention</span>
                             <span className="font-semibold text-success">
                               {((item.threeSecondRetention ?? 0) * 100).toFixed(1)}%
                             </span>
                           </div>
-                          <div className="border-l border-border pl-3">
-                            <span className="text-muted block">Hook Visual</span>
-                            <span className="font-semibold text-fg">
+                          <div className="border-l border-hairline pl-3">
+                            <span className="text-fg-muted block">Hook Visual</span>
+                            <span className="font-semibold text-fg-primary">
                               {((item.hookVisualScore ?? 0) * 100).toFixed(0)} / 100
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs text-muted">
+                        <div className="flex items-center gap-3 text-xs text-fg-muted">
                           <span className="flex items-center gap-1">
                             <Volume2 className="h-3 w-3" aria-hidden="true" />
                             {(item.speechWpm ?? 0) > 0 ? `${item.speechWpm} WPM` : "Music"}
@@ -314,8 +314,8 @@ function Intelligence({ brandId }: { brandId: string }) {
                         </div>
 
                         {item.detectedObjections && item.detectedObjections.length > 0 && (
-                          <div className="border-t border-line pt-2">
-                            <span className="text-[10px] font-medium text-muted">
+                          <div className="border-t border-hairline pt-2">
+                            <span className="text-[11px] font-medium text-fg-muted">
                               Mined Objections:
                             </span>
                             <p className="mt-1 text-xs text-warning truncate">
@@ -350,7 +350,7 @@ function Intelligence({ brandId }: { brandId: string }) {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-section font-semibold">Competitor Whitespace Radar</h2>
-              <p className="text-sm text-muted">
+              <p className="text-sm text-fg-muted">
                 Unsaturated angles ranked by expected win probability from market observation and creative gap analysis.
               </p>
             </div>
@@ -377,7 +377,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <TabsContent value="semantic" className="space-y-6">
           <div className="max-w-2xl space-y-2">
             <h2 className="text-section font-semibold">Stored Semantic Memory</h2>
-            <p className="text-muted text-sm">
+            <p className="text-fg-muted text-sm">
               {baseData.semanticNote} Structured angle counts below are fingerprints. They are not a substitute for local:semantic vectors.
             </p>
           </div>
@@ -406,13 +406,13 @@ function Intelligence({ brandId }: { brandId: string }) {
           <Card>
             <h3 className="text-lg font-semibold">System Notices</h3>
             {baseData.notifications.length === 0 ? (
-              <p className="mt-2 text-muted text-sm">No notices yet.</p>
+              <p className="mt-2 text-fg-muted text-sm">No notices yet.</p>
             ) : (
               <ul className="mt-3 space-y-2 text-sm">
                 {baseData.notifications.map((item) => (
                   <li key={`${item.createdAt}-${item.title}`}>
                     <span className="font-semibold">{item.title}</span>
-                    <span className="block text-muted">{item.body}</span>
+                    <span className="block text-fg-muted">{item.body}</span>
                   </li>
                 ))}
               </ul>

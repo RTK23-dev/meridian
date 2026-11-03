@@ -9,10 +9,10 @@ const badgeVariants = cva("inline-flex h-5 items-center gap-1.5 whitespace-nowra
   variants: {
     variant: {
       neutral: "text-fg-secondary before:bg-fg-muted",
-      success: "text-fg before:bg-success",
-      warning: "text-fg before:bg-warning",
+      success: "text-fg-primary before:bg-success",
+      warning: "text-fg-primary before:bg-warning",
       danger: "text-danger before:bg-danger",
-      info: "text-fg before:bg-info",
+      info: "text-fg-primary before:bg-info",
     },
   },
   defaultVariants: { variant: "neutral" },

@@ -1,13 +1,11 @@
 {
   "url": "served from docs/design/prototype/meridian-map",
   "results": {
-    "map.drawn-in-two-colours": {
+    "map.drawn-as-blocks-mixed-from-ground-and-ink": {
       "ok": true,
       "detail": {
-        "colours": [
-          "#0b0b0c",
-          "#1c1c1f"
-        ]
+        "off": 0,
+        "colours": 39
       }
     },
     "site.stops-and-loop-screen-present": {
@@ -28,8 +26,8 @@
     "map.changes-with-the-scroll": {
       "ok": true,
       "detail": {
-        "at0": 15705276,
-        "at2": 3376567446
+        "at0": 1129776182,
+        "at2": 728775075
       }
     },
     "bills.print-more-in-the-middle": {
@@ -52,11 +50,11 @@
         "scrollY": 0
       }
     },
-    "loop.map-is-the-first-stops-part-of-the-world": {
+    "loop.jump-changes-no-pixel": {
       "ok": true,
       "detail": {
-        "before": 1350648658,
-        "back": 15705276
+        "first": 1129776182,
+        "back": 1129776182
       }
     },
     "layout.no-sideways-scroll.desktop": {
@@ -74,8 +72,8 @@
     "motion.reduced-holds-the-map-still": {
       "ok": true,
       "detail": {
-        "early": 3376567446,
-        "late": 3376567446
+        "early": 8818243,
+        "late": 8818243
       }
     }
   }

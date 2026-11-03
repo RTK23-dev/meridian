@@ -24,7 +24,7 @@ function percentText(value: number | null): string {
 function Meter({ value }: { value: number | null }) {
   if (value === null) return null;
   const width = Math.round(Math.min(1, Math.max(0, value)) * 100);
-  return <span aria-hidden="true" className="mt-2 block h-1.5 w-full overflow-hidden rounded-full bg-surface-2"><span className="block h-full rounded-full bg-fg-muted" style={{ width: `${width}%` }} /></span>;
+  return <span aria-hidden="true" className="mt-2 block h-1.5 w-full overflow-hidden rounded-full bg-overlay"><span className="block h-full rounded-full bg-fg-muted" style={{ width: `${width}%` }} /></span>;
 }
 
 /** Whitespace as an ordered list. Accept and reject are member actions. Each row's pending state covers only that row. */
@@ -59,12 +59,12 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
         </div>
 
         <dl className="mt-4 grid gap-3 sm:grid-cols-2">
-          <div className="border-l border-border pl-3">
+          <div className="border-l border-hairline pl-3">
             <dt className="text-xs text-fg-muted">Expected win probability</dt>
             <dd className="mt-1 font-semibold tabular-nums">{percentText(probability)}<Meter value={probability} /></dd>
             <dd className="mt-1 text-[11px] text-fg-muted">Bayesian prior model</dd>
           </div>
-          <div className="border-l border-border pl-3">
+          <div className="border-l border-hairline pl-3">
             <dt className="text-xs text-fg-muted">Competitor saturation</dt>
             <dd className="mt-1 font-semibold tabular-nums">{percentText(saturation)}<Meter value={saturation} /></dd>
             <dd className="mt-1 text-[11px] text-fg-muted">Low saturation is favorable</dd>
@@ -78,7 +78,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
           </ul>
         </div> : null}
 
-        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border pt-3">
+        <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-hairline pt-3">
           {canEdit ? <>
             {opportunity.status !== "accepted" ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => onStatus(opportunity.id, "accepted")}><CheckCircle2 aria-hidden="true" className="size-3.5" />Accept</Button> : null}
             {opportunity.status !== "rejected" ? <Button size="sm" variant="secondary" disabled={busy} onClick={() => onStatus(opportunity.id, "rejected")}><XCircle aria-hidden="true" className="size-3.5" />Reject</Button> : null}

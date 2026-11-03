@@ -39,7 +39,7 @@ export function ScreenSkeleton({ label, shape = "cards", className }: { label: s
 export function EmptyState({ icon, title, reason, action, className }: { icon?: ReactNode; title: string; reason: string; action?: ReactNode; className?: string }) {
   return <Card className={cn("flex flex-col items-start gap-3 p-6", className)}>
     {icon ? <span className="text-fg-muted">{icon}</span> : null}
-    <h2 className="font-display text-section font-semibold text-fg">{title}</h2>
+    <h2 className="font-display text-section font-semibold text-fg-primary">{title}</h2>
     <p className="max-w-lg text-small text-fg-muted">{reason}</p>
     {action}
   </Card>;

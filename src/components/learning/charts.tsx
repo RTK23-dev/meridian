@@ -25,7 +25,7 @@ export function ChartFigure({ id, title, description, summary, table, children }
 }) {
   return <section aria-labelledby={`${id}-title`} className="space-y-3 panel">
     <div className="space-y-1">
-      <h3 id={`${id}-title`} className="text-base font-semibold text-fg">{title}</h3>
+      <h3 id={`${id}-title`} className="text-base font-semibold text-fg-primary">{title}</h3>
       <p className="text-sm text-fg-muted">{description}</p>
     </div>
     <div role="img" aria-label={summary} className={plotClass}>{children}</div>
@@ -37,14 +37,14 @@ export function ChartFigure({ id, title, description, summary, table, children }
 export function ValueTable({ caption, headers, rows }: { caption: string; headers: string[]; rows: string[][] }) {
   return <table className="w-full min-w-64 border-collapse text-left text-sm">
     <caption className="sr-only">{caption}</caption>
-    <thead className="bg-surface-2 text-fg-muted">
-      <tr>{headers.map((header, index) => <th key={`${header}-${index}`} scope="col" className={cn("border-b border-border px-3 py-2 font-semibold", index > 0 && "text-right")}>{header}</th>)}</tr>
+    <thead className="bg-overlay text-fg-muted">
+      <tr>{headers.map((header, index) => <th key={`${header}-${index}`} scope="col" className={cn("border-b border-hairline px-3 py-2 font-semibold", index > 0 && "text-right")}>{header}</th>)}</tr>
     </thead>
     <tbody>
       {rows.map((cells, rowIndex) => <tr key={rowIndex}>
         {cells.map((cell, cellIndex) => cellIndex === 0
-          ? <th key={cellIndex} scope="row" className="border-b border-border px-3 py-2 text-left font-normal">{cell}</th>
-          : <td key={cellIndex} className="border-b border-border px-3 py-2 text-right tabular-nums">{cell}</td>)}
+          ? <th key={cellIndex} scope="row" className="border-b border-hairline px-3 py-2 text-left font-normal">{cell}</th>
+          : <td key={cellIndex} className="border-b border-hairline px-3 py-2 text-right tabular-nums">{cell}</td>)}
       </tr>)}
     </tbody>
   </table>;

@@ -29,7 +29,7 @@ export function ConfidenceChip({ value }: { value: number | null }) {
 export function SnapshotPlaceholder({ ad }: { ad: Pick<ResearchAdRow, "mediaStatus"> }) {
   const stored = ad.mediaStatus === "stored";
   const Icon = stored ? Film : ImageOff;
-  return <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-md border border-dashed border-border-strong bg-surface-2 p-4 text-center text-sm text-fg-muted">
+  return <div className="flex aspect-video w-full flex-col items-center justify-center gap-2 rounded-sharp border border-dashed border-border-strong bg-overlay p-4 text-center text-sm text-fg-muted">
     <Icon aria-hidden="true" className="size-6" />
     <p>{stored ? "Source video is stored. A preview is not available in this view yet." : "No source video is stored for this ad."}</p>
   </div>;

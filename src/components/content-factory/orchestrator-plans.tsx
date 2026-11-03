@@ -235,7 +235,7 @@ export function OrchestratorPlans() {
         onChanged={draftSaved}
       />
 
-      <section aria-labelledby="plans-heading" className="flex flex-col gap-4 rounded-xl border border-border bg-surface p-4 sm:p-6">
+      <section aria-labelledby="plans-heading" className="flex flex-col gap-4 rounded-sharp border border-hairline bg-raised p-4 sm:p-6">
         <h2 id="plans-heading" className="text-lg font-semibold">
           Your plans
         </h2>
@@ -264,7 +264,7 @@ export function OrchestratorPlans() {
                   <li key={summary.id}>
                     <button
                       type="button"
-                      className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-accent bg-accent-soft" : "border-border hover:bg-surface-2"}`}
+                      className={`w-full rounded-sharp border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-accent bg-accent-muted" : "border-hairline hover:bg-overlay"}`}
                       onClick={() => act(() => open(summary.id))}
                       aria-current={selectedId === summary.id ? "true" : undefined}
                     >
@@ -280,7 +280,7 @@ export function OrchestratorPlans() {
             </div>
 
             {detail ? (
-              <div className="flex min-w-0 flex-col gap-3 rounded-lg border border-border p-4">
+              <div className="flex min-w-0 flex-col gap-3 rounded-sharp border border-hairline p-4">
                 <p className="text-sm font-medium">{detail.plan.title}</p>
                 <p className="text-xs text-fg-muted">
                   {STATUS_WORDS[detail.plan.status] ?? detail.plan.status} · orchestrated by <span className="font-mono">{detail.plan.orchestratorModel}</span>
@@ -396,7 +396,7 @@ function BudgetPause(props: {
   // A month pause has no approval: the month is set in settings, so no approval of the plan's budget clears it.
   if (line === "month") {
     return (
-      <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-lg border border-warning p-3 text-sm">
+      <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-sharp border border-warning p-3 text-sm">
         <h3 id={`pause-${planId}`} className="font-semibold">
           {budgetPauseHeading(line)}
         </h3>
@@ -406,7 +406,7 @@ function BudgetPause(props: {
     );
   }
   return (
-    <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-lg border border-warning p-3 text-sm">
+    <section role="alert" aria-labelledby={`pause-${planId}`} className="flex flex-col gap-2 rounded-sharp border border-warning p-3 text-sm">
       <h3 id={`pause-${planId}`} className="font-semibold">
         {budgetPauseHeading(line)}
       </h3>
@@ -603,12 +603,12 @@ function StepEdit(props: {
       {editable ? (
         <label className="flex flex-col gap-1 text-xs">
           {editable.label}
-          <input className="w-24 rounded-md border border-border-strong bg-surface px-2 py-1.5" type="number" min={1} value={value} onChange={(event) => setValue(event.target.value)} />
+          <input className="w-24 rounded-sharp border border-border-strong bg-raised px-2 py-1.5" type="number" min={1} value={value} onChange={(event) => setValue(event.target.value)} />
         </label>
       ) : null}
       <label className="flex flex-col gap-1 text-xs">
         Model
-        <input className="w-64 rounded-md border border-border-strong bg-surface px-2 py-1.5 font-mono" value={model} onChange={(event) => setModel(event.target.value)} />
+        <input className="w-64 rounded-sharp border border-border-strong bg-raised px-2 py-1.5 font-mono" value={model} onChange={(event) => setModel(event.target.value)} />
       </label>
       <Button size="sm" variant="secondary" onClick={() => void save()} disabled={saving || !canAdmin} aria-describedby={canAdmin ? undefined : "plans-role"}>
         Save step

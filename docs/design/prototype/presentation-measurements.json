@@ -899,6 +899,38 @@
       "detail": {
         "kept": "true"
       }
+    },
+    "background.drawn-as-blocks-mixed-from-ground-and-line": {
+      "ok": true,
+      "detail": {
+        "off": 0,
+        "colours": 39
+      }
+    },
+    "background.home-sits-with-start": {
+      "ok": true,
+      "detail": {
+        "start": 1129776182,
+        "home": 1129776182
+      }
+    },
+    "background.create-moves-to-its-stop": {
+      "ok": true,
+      "detail": {
+        "start": 1129776182,
+        "create": 267051553
+      }
+    },
+    "background.states-hold-the-place-of-settings": {
+      "ok": true,
+      "detail": {
+        "settings": 3379097597,
+        "states": 3379097597
+      }
+    },
+    "background.no-console-errors": {
+      "ok": true,
+      "detail": []
     }
   }
 }

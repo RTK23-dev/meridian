@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   ALERT_LIST_LIMIT, APP_NAME, AREA_GUIDE, bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, isForbiddenError,
-  nextStep, paletteScreens, resolveLastBrand, SETTINGS_SCREEN_LINKS, sidebarGroups, switcherMode, unreadAlertLabel,
+  nextStep, paletteScreens, placeOf, resolveLastBrand, SETTINGS_SCREEN_LINKS, sidebarGroups, switcherMode, unreadAlertLabel,
 } from "./model.ts";
 
 test("the brand overview's area guide links only to screens the sidebar lists, so it cannot point at a missing screen", () => {
@@ -24,33 +24,46 @@ test("brandIdFromPath reads the brand from brand paths and never from /brands/ne
   assert.equal(brandIdFromPath("/"), undefined);
 });
 
-test("workspace pages list the workspace overview and the Settings group, and no brand groups", () => {
+test("workspace pages list the five places, with the workspace screens under them and no brand screens", () => {
   const groups = sidebarGroups({ reviewCount: 4 });
-  assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
-  assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/content-factory"], "Content is a workspace screen");
-  assert.deepEqual(groups[1]?.items.map((item) => item.id), ["setup", "integrations", "jobs", "engine-ops", "settings"]);
+  assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
+  assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/alerts"]);
+  assert.deepEqual(groups[1]?.items.map((item) => item.to), ["/content-factory", "/orchestrator"], "Content and the orchestrator are workspace screens");
+  assert.deepEqual(groups[2]?.items.map((item) => item.to), ["/exports"]);
+  assert.deepEqual(groups[3]?.items, [], "Insights needs a brand, so it has no screens here");
+  assert.deepEqual(groups[4]?.items.map((item) => item.id), ["settings", "setup", "integrations", "jobs", "engine-ops"]);
   for (const group of groups) {
     for (const item of group.items) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} must not be a brand link off brand pages`);
   }
 });
 
-test("brand pages list the brand groups in the order Brand, Research, Content, Results, then Settings", () => {
+test("brand pages list the five places, with the brand screens under Home, Create and Insights", () => {
   const groups = sidebarGroups({ brandId: "brand-1", reviewCount: null });
-  assert.deepEqual(groups.map((group) => group.id), ["brand", "research", "content", "results", "settings"]);
+  assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
+  // Four screens are the workspace's own, and the rest are this brand's.
+  const workspaceLevel = new Set(["/", "/alerts", "/exports", "/orchestrator"]);
   const brandItems = groups.slice(0, -1).flatMap((group) => group.items);
-  for (const item of brandItems) assert.equal(item.to === "/brands/brand-1" || item.to.startsWith("/brands/brand-1/"), true, item.to);
+  for (const item of brandItems) assert.equal(workspaceLevel.has(item.to) || item.to === "/brands/brand-1" || item.to.startsWith("/brands/brand-1/"), true, item.to);
   const settingsItems = groups[groups.length - 1]?.items ?? [];
   for (const item of settingsItems) assert.equal(item.to.startsWith("/brands/"), false, `${item.id} is workspace-level and shows on every page`);
 });
 
-test("the sidebar shows the core loop and no longer lists the six screens that moved under Settings", () => {
-  const moved = ["usage", "alerts", "audit", "webhooks", "exports", "notifications"];
+test("the rail lists the five places: Alerts and Exports have places, and the rest of the moved screens stay under Settings", () => {
+  const notInRail = ["usage", "audit", "webhooks", "notifications"];
   for (const brandId of [undefined, "brand-1"]) {
     const ids = sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-    for (const id of moved) assert.equal(ids.includes(id), false, `${id} must not be in the sidebar`);
+    for (const id of notInRail) assert.equal(ids.includes(id), false, `${id} must not be in the rail`);
+    assert.ok(ids.includes("alerts") && ids.includes("exports"), "Alerts is under Home and Exports under Library");
   }
   const brandIds = sidebarGroups({ brandId: "brand-1", reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-  assert.equal(brandIds.length, 13, "8 brand screens and 5 settings screens");
+  assert.equal(brandIds.length, 18, "Home 3, Create 6, Library 1, Insights 3 and Settings 5");
+});
+
+test("every screen in the rail is in exactly one place", () => {
+  for (const brandId of [undefined, "brand-1"]) {
+    const tos = sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items.map((item) => item.to));
+    assert.equal(new Set(tos).size, tos.length, "no screen is filed under two places");
+  }
 });
 
 test("the Settings screen lists every screen that moved out of the sidebar, with its route", () => {
@@ -58,13 +71,13 @@ test("the Settings screen lists every screen that moved out of the sidebar, with
   assert.deepEqual(SETTINGS_SCREEN_LINKS.map((link) => link.label), ["Billing and limits", "Usage & cost", "Alerts center", "Audit log", "Webhook events", "Exports", "Notification preferences"], "labels are accessible names, so they must not change");
 });
 
-test("every brand screen except the overview names a next step that is also in the sidebar", () => {
+test("every screen of the core loop names a next step that is also in the sidebar", () => {
   const brandId = "brand-1";
   const groups = sidebarGroups({ brandId, reviewCount: null });
-  const brandItems = groups.slice(0, -1).flatMap((group) => group.items);
+  const loop = new Set(["brain", "products", "market", "intelligence", "content", "cookbooks", "calibration"]);
+  const brandItems = groups.slice(0, -1).flatMap((group) => group.items).filter((item) => loop.has(item.id));
   const sidebarTargets = new Set(groups.flatMap((group) => group.items.map((item) => item.to)));
   for (const item of brandItems) {
-    if (item.id === "brand-overview") continue;
     const next = nextStep({ pathname: item.to, brandId });
     assert.ok(next, `${item.id} needs a next step`);
     assert.ok(sidebarTargets.has(next.to), `${item.id} links to ${next.to}, which is not in the sidebar`);
@@ -116,9 +129,21 @@ test("the review count is absent on workspace pages", () => {
   assert.equal(items.some((item) => item.badge !== undefined), false);
 });
 
-test("bottom tabs are the workspace four off brand pages and the brand four on them", () => {
-  assert.deepEqual(bottomTabs().map((tab) => tab.to), ["/", "/setup", "/alerts", "/settings"]);
-  assert.deepEqual(bottomTabs("brand-1").map((tab) => tab.to), ["/brands/brand-1", "/brands/brand-1/content", "/brands/brand-1/market", "/brands/brand-1/calibration"]);
+test("the phone bar is the five places, each opening its first screen, and Insights has no target off brand pages", () => {
+  assert.deepEqual(bottomTabs().map((tab) => tab.place), ["home", "create", "library", "insights", "settings"]);
+  assert.deepEqual(bottomTabs().map((tab) => tab.to), ["/", "/content-factory", "/exports", "", "/settings"]);
+  assert.deepEqual(bottomTabs("brand-1").map((tab) => tab.to), ["/brands/brand-1", "/brands/brand-1/content", "/exports", "/brands/brand-1/market", "/settings"]);
+});
+
+test("a path belongs to the place whose screens list it, and the pages outside the places have none", () => {
+  assert.equal(placeOf("/"), "home");
+  assert.equal(placeOf("/alerts"), "home");
+  assert.equal(placeOf("/content-factory"), "create");
+  assert.equal(placeOf("/exports"), "library");
+  assert.equal(placeOf("/brands/b1/market", "b1"), "insights");
+  assert.equal(placeOf("/billing"), "settings", "a screen under Settings belongs to Settings");
+  assert.equal(placeOf("/product"), null, "the product page is not in a place");
+  assert.equal(placeOf("/login"), null);
 });
 
 test("a trailing slash is the same page, and other paths are not", () => {
@@ -174,12 +199,12 @@ function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): str
   return groups.find((group) => group.id === groupId)?.items.map((item) => item.id) ?? [];
 }
 
-test("the brand sidebar opens the Content page from one item, and keeps Calibration under Results", () => {
+test("the brand rail opens the Content page from the Create place, and keeps Calibration under Insights", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
-  assert.deepEqual(itemIds(groups, "content"), ["content", "cookbooks"], "ideas, create, review, library, publish, results and ads are sections of the content page; cookbooks is its own screen");
+  assert.deepEqual(itemIds(groups, "create"), ["content", "cookbooks", "brain", "products", "pages", "orchestrator"], "ideas, create, review, library, publish, results and ads are sections of the content page; cookbooks is its own screen");
   const content = groups.flatMap((group) => group.items).find((item) => item.id === "content");
-  assert.equal(content?.to, "/brands/b1/content", "the sidebar item opens the brand's content page");
-  assert.deepEqual(itemIds(groups, "results"), ["calibration"]);
+  assert.equal(content?.to, "/brands/b1/content", "the rail item opens the brand's content page");
+  assert.deepEqual(itemIds(groups, "insights"), ["market", "intelligence", "calibration"]);
   const calibration = groups.flatMap((group) => group.items).find((item) => item.id === "calibration");
   assert.equal(calibration?.to, "/brands/b1/calibration");
 });
@@ -191,9 +216,9 @@ test("connected accounts are a section of the content page, and notification pre
   assert.ok(SETTINGS_SCREEN_LINKS.some((link) => link.to === "/notifications"), "notification preferences stay reachable from Settings");
 });
 
-test("workspace pages show the workspace overview and the Settings group, with no brand groups", () => {
+test("workspace pages show the five places, and Settings holds the settings screens", () => {
   const groups = sidebarGroups({ reviewCount: null });
-  assert.deepEqual(groups.map((group) => group.id), ["overview", "settings"]);
+  assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
   assert.ok(itemIds(groups, "settings").includes("integrations"));
 });
 

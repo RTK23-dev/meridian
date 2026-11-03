@@ -21,10 +21,10 @@ import {
 } from "./setup-model";
 
 const STATUS_PRESENTATION: Record<SetupStatus, { label: string; className: string }> = {
-  usable: { label: "Saved, not checked live", className: "bg-success-soft text-success" },
-  deployment_shared_default: { label: "Deployment shared default", className: "bg-info-soft text-info" },
-  unusable: { label: "Unusable", className: "bg-danger-soft text-danger" },
-  not_configured: { label: "Not configured", className: "bg-surface-2 text-fg-muted" },
+  usable: { label: "Saved, not checked live", className: "bg-raised text-success" },
+  deployment_shared_default: { label: "Deployment shared default", className: "bg-raised text-info" },
+  unusable: { label: "Unusable", className: "bg-raised text-danger" },
+  not_configured: { label: "Not configured", className: "bg-overlay text-fg-muted" },
 };
 
 interface SetupPanelProps {
@@ -64,7 +64,7 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
     <section aria-labelledby="setup-title" className="space-y-6 panel">
       <div className="space-y-2">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 id="setup-title" className="text-section font-semibold text-fg">Setup</h2>
+          <h2 id="setup-title" className="text-section font-semibold text-fg-primary">Setup</h2>
           <Button asChild variant="secondary"><Link to="/setup">Open the guided setup</Link></Button>
         </div>
         <p className="text-sm text-fg-muted">
@@ -72,7 +72,7 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
           shown again. Saving a key needs TOKEN_ENCRYPTION_KEY on the server; <code className="font-mono text-xs">npm run setup</code>{" "}
           generates it for a local install.
         </p>
-        <p className="text-sm font-semibold text-fg">{setupHeadline(rows)}</p>
+        <p className="text-sm font-semibold text-fg-primary">{setupHeadline(rows)}</p>
         {!canAdmin ? <p className="text-sm text-fg-muted">Only a workspace admin can save or remove a key. Everyone can read these states.</p> : null}
       </div>
 
@@ -80,8 +80,8 @@ export function SetupPanel({ organizationId, canAdmin }: SetupPanelProps) {
         <GroupBlock key={group.id} group={group.id} label={group.label} hint={group.hint} rows={rowsIn(rows, group.id)} organizationId={organizationId} canAdmin={canAdmin} />
       ))}
 
-      <details className="border-t border-border pt-4">
-        <summary className="cursor-pointer text-sm font-semibold text-fg">
+      <details className="border-t border-hairline pt-4">
+        <summary className="cursor-pointer text-sm font-semibold text-fg-primary">
           Other source connectors ({rowsIn(rows, "other_sources").length})
         </summary>
         <div className="mt-4 space-y-4">
@@ -179,10 +179,10 @@ function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organi
   const presentation = STATUS_PRESENTATION[row.status];
   const reason = splitOperatorHint(row.reason);
   return (
-    <li className="space-y-3 border-t border-border py-4 first:border-t-0 first:pt-0" data-row={row.id}>
+    <li className="space-y-3 border-t border-hairline py-4 first:border-t-0 first:pt-0" data-row={row.id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="font-semibold text-fg">{row.label}</p>
+          <p className="font-semibold text-fg-primary">{row.label}</p>
           <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{reason.plain}</p>
           {reason.operator ? (
             <details className="text-xs text-fg-muted">
@@ -196,7 +196,7 @@ function SetupRowItem({ row, organizationId, canAdmin }: { row: SetupRow; organi
           ) : null}
           {row.note ? <p className="text-sm text-fg-muted [overflow-wrap:anywhere]">{row.note}</p> : null}
         </div>
-        <span className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${presentation.className}`} aria-label={`${row.label}: ${presentation.label}`}>
+        <span className={`shrink-0 rounded-sharp px-2 py-0.5 text-xs font-semibold ${presentation.className}`} aria-label={`${row.label}: ${presentation.label}`}>
           {presentation.label}
         </span>
       </div>
@@ -211,7 +211,7 @@ function RowAction({ row, organizationId, canAdmin }: { row: SetupRow; organizat
   if (row.save.kind === "engine") {
     return (
       <p className="text-sm text-fg-muted">
-        This row cannot change the engine. Choose it in <strong className="text-fg">Decision engine</strong>, on the TypeSafe JEV tab of
+        This row cannot change the engine. Choose it in <strong className="text-fg-primary">Decision engine</strong>, on the TypeSafe JEV tab of
         the provider settings below.
       </p>
     );

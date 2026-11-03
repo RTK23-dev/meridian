@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useMatches, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowLeftRight, ArrowRight, BarChart3, Bell, BellRing, Brain, Cable, Clapperboard, ChevronDown, ClipboardCheck, Download, FileClock, Factory, FlaskConical, Gauge, GraduationCap, House, Layers3, Library, ListChecks, Menu, MoreHorizontal, Moon, Package, Plug, Search, Settings, Sparkles, Sun, Webhook, WandSparkles, X, type LucideIcon } from "lucide-react";
+import { Activity, ArrowLeftRight, ArrowRight, Bell, ChevronDown, House, Library, Menu, Moon, Plus, Search, Settings, Sparkles, Sun, X, type LucideIcon } from "lucide-react";
 import { UserButton } from "@/lib/auth/gates";
 import { setActiveOrganization } from "@/lib/meridian/api";
 import { hasRole } from "@/lib/meridian/access";
@@ -9,46 +9,20 @@ import { useWorkspace } from "@/components/workspace";
 import { useAlertsQuery, useMachineQuery } from "@/lib/query/hooks";
 import { prefetchScreen } from "@/lib/query/prefetch";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
-import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
+import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, Kbd, Mark, Sheet, SheetContent, SheetTitle, useTheme } from "@/components/ui";
 import { CommandPalette } from "@/components/command-palette";
 import { PageCommandProvider } from "@/components/page-commands";
 import { usePageCommandRegistry } from "@/components/page-commands-context";
-import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, nextStep, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type NavGroup } from "@/lib/navigation/model";
+import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, nextStep, placeOf, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type PlaceId } from "@/lib/navigation/model";
 import { chordPath, INITIAL_SHORTCUT_STATE, isTypingTarget, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
 import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
 import { routePageTitle } from "@/lib/navigation/route-data";
 
 const COLLAPSED_KEY = "meridian-nav-collapsed";
-const SWITCHER_CLASS = "min-h-11 w-full rounded-md border border-border-strong bg-surface px-2 text-sm text-fg";
+const SWITCHER_CLASS = "min-h-11 w-full rounded-sharp border border-border-strong bg-raised px-2 text-sm text-fg-primary";
 
-/** One icon per sidebar and tab item. Items without an entry fall back to the overview icon. */
-const NAV_ICONS: Record<string, LucideIcon> = {
-  overview: House,
-  setup: ListChecks,
-  "brand-overview": House,
-  market: FlaskConical,
-  intelligence: Sparkles,
-  opportunities: Layers3,
-  reviews: ClipboardCheck,
-  studio: WandSparkles,
-  factory: Factory,
-  "content-factory": Clapperboard,
-  library: Library,
-  learning: GraduationCap,
-  calibration: Gauge,
-  brain: Brain,
-  products: Package,
-  accounts: Cable,
-  jobs: Activity,
-  usage: BarChart3,
-  alerts: Bell,
-  integrations: Plug,
-  settings: Settings,
-  audit: FileClock,
-  exports: Download,
-  webhooks: Webhook,
-  notifications: BellRing,
-};
+/** One icon per place. The rail and the phone bar both show these five. */
+const PLACE_ICONS: Record<PlaceId, LucideIcon> = { home: House, create: Plus, library: Library, insights: Activity, settings: Settings };
 
 /** The shell owns the page-command registry, so screens inside it can register actions. */
 export function Shell({ children }: { children: ReactNode }) {
@@ -139,6 +113,13 @@ function ShellChrome({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [path]);
 
+  // The rail's state is kept on the root, so the meridian line can sit at the rail's edge on desktop.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.rail = collapsed ? "collapsed" : "expanded";
+    return () => { delete root.dataset.rail; };
+  }, [collapsed]);
+
   const overlayOpen = paletteOpen || shortcutsOpen || mobileNavOpen;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -176,89 +157,111 @@ function ShellChrome({ children }: { children: ReactNode }) {
     </select>
   ) : null;
 
+  // The five places are the rail, and the screens under the place the page is in show beneath it. Collapsed, the rail keeps the place icons.
+  const currentPlace = placeOf(path, brandId);
   const sidebar = (mobile = false) => {
     const iconOnly = collapsed && !mobile;
-    return <div className="flex h-full flex-col bg-surface">
-      <div className="flex h-16 items-center justify-between border-b border-border px-4">
-        <Link to="/" onClick={() => setMobileNavOpen(false)} className="flex min-w-0 items-center gap-2.5 font-wordmark text-lg font-semibold tracking-tight text-fg"><span aria-hidden="true" className="grid size-7 shrink-0 place-items-center rounded-md bg-accent font-sans text-sm font-semibold text-accent-fg">M</span><span className={iconOnly ? "sr-only" : "truncate"}>Meridian</span></Link>
-        {mobile ? <button className="grid size-11 place-items-center rounded-md text-fg-muted hover:bg-surface-2" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
+    return <div className="flex h-full flex-col">
+      <div className="flex h-16 items-center justify-between px-4">
+        <div className="min-w-0" onClick={() => setMobileNavOpen(false)}><Mark wordmark={!iconOnly} size={24} /></div>
+        {mobile ? <button className="grid size-11 place-items-center rounded-sharp text-fg-muted hover:bg-raised" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
       {/* Workspace first, brand directly below it on brand-scoped pages. The collapsed rail keeps one switcher button, which opens the command palette, so a workspace or brand can still be changed there. */}
-      {data && switcherMode({ collapsed, mobile }) === "selects" ? <div className="space-y-3 border-b border-border p-4">
+      {data && switcherMode({ collapsed, mobile }) === "selects" ? <div className="space-y-3 border-y border-hairline p-4">
         {workspaceSwitcher(SWITCHER_CLASS)}
         {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
       </div> : null}
-      {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="border-b border-border p-2">
-        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-md text-fg-muted hover:bg-surface-2 hover:text-fg">
+      {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="border-y border-hairline p-2">
+        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-sharp text-fg-muted hover:bg-raised hover:text-fg-primary">
           <ArrowLeftRight aria-hidden="true" className="size-4" />
         </button>
       </div> : null}
-      <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-        {groups.map((group: NavGroup) => <section key={group.id} className="mb-5">
-          <h2 className={`eyebrow mb-1 px-2 ${iconOnly ? "sr-only" : ""}`}>{group.label}</h2>
-          {group.items.map((item) => {
-            const Icon = NAV_ICONS[item.id] ?? House;
-            const current = isCurrentPath(path, item.to);
-            return <Link key={item.id} to={item.to as never} aria-current={current ? "page" : undefined} title={iconOnly ? item.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`relative mb-1 flex min-h-11 items-center gap-3 rounded-md px-3 text-sm transition-colors duration-150 ${current ? "bg-accent-soft font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:rounded-full before:bg-accent" : "text-fg-muted hover:bg-surface-2 hover:text-fg"}`}>
-              <Icon aria-hidden="true" className={`size-4 shrink-0 ${current ? "text-accent" : ""}`} />
-              <span className={iconOnly ? "sr-only" : "flex-1"}>{item.label}</span>
-              {item.badge ? <span className="rounded-full bg-fg px-2 py-0.5 text-[10px] font-bold text-bg">{item.badge}<span className="sr-only"> open</span></span> : null}
-            </Link>;
+      <nav id={mobile ? undefined : "primary-navigation"} aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+        <ol className="space-y-1">
+          {groups.map((group) => {
+            const place = group.id as PlaceId;
+            const Icon = PLACE_ICONS[place];
+            const here = currentPlace === place;
+            const first = group.items[0]?.to;
+            return <li key={group.id}>
+              {first ? <Link to={first as never} aria-current={here && group.items.some((item) => isCurrentPath(path, item.to)) ? "page" : undefined} title={iconOnly ? group.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(first)} onFocus={() => prefetch(first)} data-place={place} data-current={here || undefined} className={`relative flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm transition-colors duration-150 ${here ? "font-semibold text-fg-primary before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:bg-accent" : "text-fg-secondary hover:bg-raised hover:text-fg-primary"}`}>
+                <Icon aria-hidden="true" className={`size-4 shrink-0 ${here ? "text-accent" : ""}`} />
+                <span className={iconOnly ? "sr-only" : "flex-1"}>{group.label}</span>
+              </Link> : <div aria-disabled="true" data-place={place} className="flex min-h-11 items-start gap-3 px-3 py-2 text-sm text-fg-muted">
+                <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span className={iconOnly ? "sr-only" : "min-w-0"}>{group.label}<span className="block text-caption">Open a brand to see its screens.</span></span>
+              </div>}
+              {here && !iconOnly && group.items.length > 0 ? <ul className="mb-3 ml-[1.35rem] mt-1 space-y-0.5 border-l border-hairline pl-3" aria-label={`${group.label} screens`}>
+                {group.items.map((item) => {
+                  const current = isCurrentPath(path, item.to);
+                  return <li key={item.id}>
+                    <Link to={item.to as never} aria-current={current ? "page" : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`flex min-h-10 items-center justify-between gap-2 rounded-sharp px-2 text-sm ${current ? "font-semibold text-fg-primary" : "text-fg-muted hover:text-fg-primary"}`}>
+                      <span className="min-w-0 truncate">{item.label}</span>
+                      {item.badge ? <span className="shrink-0 rounded-sharp bg-fg-primary px-1.5 text-[11px] font-semibold leading-5 text-on-accent">{item.badge}<span className="sr-only"> open</span></span> : null}
+                    </Link>
+                  </li>;
+                })}
+              </ul> : null}
+            </li>;
           })}
-        </section>)}
-        {!brandId && canAddBrand ? <Link to="/brands/new" className="flex min-h-11 items-center gap-3 rounded-md px-3 text-sm text-fg-muted hover:bg-surface-2 hover:text-fg"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
+        </ol>
+        {!brandId && canAddBrand ? <Link to="/brands/new" className="mt-4 flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm text-fg-muted hover:bg-raised hover:text-fg-primary"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
       </nav>
-      <div className="border-t border-border p-3">
-        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-md px-3 text-left text-sm text-fg-muted hover:bg-surface-2 lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+      <div className="border-t border-hairline p-3">
+        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-sharp px-3 text-left text-sm text-fg-muted hover:bg-raised lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} aria-controls="primary-navigation">
           <ChevronDown aria-hidden="true" className={`size-4 transition ${collapsed ? "-rotate-90" : "rotate-90"}`} />{collapsed ? null : "Collapse navigation"}
         </button>
       </div>
     </div>;
   };
 
-  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[5rem_1fr]" : "lg:grid lg:grid-cols-[15rem_1fr]"}`}>
-    <aside className="hidden border-r border-border lg:block">{sidebar()}</aside>
-    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[64px_1fr]" : "lg:grid lg:grid-cols-[232px_1fr]"}`}>
+    <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 nav-glass p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     <div className="flex min-h-screen min-w-0 flex-col">
-      <header className="sticky top-0 z-20 border-b border-border bg-surface/95 backdrop-blur">
-        {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. */}
+      {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
+          map's own ground, so text scrolls under it without the map showing through. */}
+      <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
-          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-md text-fg-muted hover:bg-surface-2 lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
           <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
-            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg">Workspace</Link>
+            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
-            {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg">{pageTitle}</span></> : null}
+            {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg-primary">{pageTitle}</span></> : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            {active ? <span className="hidden text-xs text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-md border border-border-strong px-3 text-sm text-fg-muted hover:bg-surface-2 pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</kbd></button>
-            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">
+            {active ? <span className="hidden text-caption text-fg-muted xl:inline">{active.role}</span> : null}
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-sharp border border-border-strong px-3 text-sm text-fg-muted hover:bg-raised pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
+            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
-              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-fg px-1 text-center text-[10px] font-bold leading-4 text-bg">{bellLabel}</span> : null}
+              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg-primary px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
             </Link>
-            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-md text-fg-muted hover:bg-surface-2 pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
+            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
           </div>
         </div>
       </header>
-      <div className="border-b border-border bg-surface px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
+      <div className="nav-glass border-b border-hairline px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
+      <main id="main" tabIndex={-1} className="@container page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
-          {next ? <section aria-label="Next step" className="mt-12 border-t border-border pt-6">
+          {next ? <section aria-label="Next step" className="mt-12 border-t border-hairline pt-6">
             <p className="eyebrow mb-3">Next step</p>
             <Button asChild variant="secondary"><Link to={next.to as never} onMouseEnter={() => prefetch(next.to)} onFocus={() => prefetch(next.to)}>Continue to {next.label}<ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
           </section> : null}
         </div>
       </main>
-      <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-border bg-surface/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+      {/* The five places, as on the walkthrough's phone frame. A place with no screen on this page is shown as unavailable. */}
+      <nav aria-label="Quick navigation" className="nav-glass fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-hairline pb-[env(safe-area-inset-bottom)] lg:hidden">
         {tabs.map((tab) => {
-          const Icon = NAV_ICONS[tab.id] ?? House;
-          const current = isCurrentPath(path, tab.to);
-          return <Link key={tab.id} to={tab.to as never} aria-current={current ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] ${current ? "font-semibold text-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
+          const Icon = PLACE_ICONS[tab.place];
+          const here = currentPlace === tab.place;
+          if (!tab.to) {
+            return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
+          }
+          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
         })}
-        <button type="button" onClick={() => setMobileNavOpen(true)} aria-haspopup="dialog" aria-expanded={mobileNavOpen} className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[10px] text-fg-muted"><MoreHorizontal aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">More</span></button>
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>
     </div>

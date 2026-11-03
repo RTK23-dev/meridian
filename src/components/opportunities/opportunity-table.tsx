@@ -30,10 +30,10 @@ export function OpportunityTable(props: TableProps) {
   const allSelected = selectableIds.length > 0 && selectedVisible.length === selectableIds.length;
 
   return <>
-    <div className="hidden overflow-x-auto rounded-lg border border-border md:block">
+    <div className="hidden overflow-x-auto rounded-sharp border border-hairline md:block">
       <table className="w-full border-collapse text-left text-sm">
         <caption className="sr-only">Opportunities for this brand. Use the column buttons to sort. A missing JEV probability is marked Unknown.</caption>
-        <thead className="bg-surface-2">
+        <thead className="bg-overlay">
           <tr>
             {canEdit ? <th scope="col" className="w-12 px-3 py-2"><SelectAllBox checked={allSelected} indeterminate={selectedVisible.length > 0 && !allSelected} label="Select all dismissable opportunities" onChange={(selected) => onSelectAll(selectableIds, selected)} /></th> : null}
             <th scope="col" className="px-3 py-2 font-semibold">#</th>
@@ -49,7 +49,7 @@ export function OpportunityTable(props: TableProps) {
         <tbody>
           {rows.map((item) => {
             const eligible = canEdit && isBulkSelectable(item.status);
-            return <tr key={item.id} className="align-top hover:bg-surface-2">
+            return <tr key={item.id} className="align-top hover:bg-overlay">
               {canEdit ? <td className="px-3 py-3">{eligible ? <input type="checkbox" className="size-6 pointer-coarse:size-11" aria-label={`Select ${item.label} for bulk dismiss`} checked={selectedIds.includes(item.id)} onChange={(event) => onSelectedChange(item.id, event.currentTarget.checked)} /> : null}</td> : null}
               <td className="px-3 py-3 tabular-nums">{positions.get(item.id) ?? "-"}</td>
               <td className="min-w-56 px-3 py-3">
@@ -111,7 +111,7 @@ function SortHeader({ label, sortKey, active, direction, onSort }: {
   const Icon = !active ? ArrowUpDown : direction === "asc" ? ArrowUp : ArrowDown;
   const ariaSort = !active ? "none" : direction === "asc" ? "ascending" : "descending";
   return <th scope="col" aria-sort={ariaSort} className="px-3 py-2 font-semibold whitespace-nowrap">
-    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex min-h-10 items-center gap-1.5 rounded pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-accent">
+    <button type="button" onClick={() => onSort(sortKey)} className="inline-flex min-h-10 items-center gap-1.5 rounded-sharp pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-accent">
       {label}<Icon aria-hidden="true" className="size-3.5 opacity-70" />
     </button>
   </th>;

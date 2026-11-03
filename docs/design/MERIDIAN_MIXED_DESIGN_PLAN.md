@@ -351,7 +351,7 @@ Confirmed, not corrected: Katana section b's thirty contrast pairs, and the rati
 
 ## 12. Migration
 
-This plan adds steps to Katana's M0 to M6 (section m). It does not replace them. Each step is one branch and one PR, with before and after screenshots (`AGENTS.md` rule 10). Nothing starts until the owner decides section 13, item 1.
+This plan adds steps to Katana's M0 to M6 (section m). It does not replace them. Each step is one branch and one PR, with before and after screenshots (`AGENTS.md` rule 10). The owner decided section 13, item 1 on 2026-11-03 and approved the app migration. The steps are applied on the branch `claude/nice-tesla-zrf6un`, in commits that each keep the gates green.
 
 - **MX1. Tokens.** Add `katana-tokens.json` to the app's token path, next to the AttentionOS file. Extend `src/styles.contrast.test.ts` to read it (Katana M1 and M2). No visual change.
 - **MX2. Title tiers.** `.page-title` by container (`@container`). The screen body becomes the container in `src/components/shell.tsx` and `src/components/workspace.tsx`. Test: the title tier at two widths, with and without a pushed column.
@@ -367,7 +367,7 @@ Each phase keeps the existing gates: `npm test`, `npm run typecheck`, `npm run l
 
 ## 13. Decisions for the owner
 
-1. **The canonical system. Decided by the owner:** Katana is the only design system, and it replaces the AttentionOS look. The prototype no longer offers AttentionOS. The app still runs AttentionOS violet. Migrating the app (MX1 onwards) has not started, and it changes `src/`, so it needs its own approval.
+1. **The canonical system. Decided by the owner:** Katana is the only design system, and it replaces the AttentionOS look. The prototype no longer offers AttentionOS. The app still runs AttentionOS violet. Migrating the app (MX1 onwards) was approved by the owner on 2026-11-03 and is applied on `claude/nice-tesla-zrf6un`. The package list is unchanged: the fontsource packages are no longer imported, and removing them from `package.json` waits for the lead's approval.
 2. **Phones.** The canvas is replaced by the list, not scrolled. (Overrides Katana section i.)
 3. **Canvas zoom.** Default 75%, not fit-to-width. (Overrides Katana section i.)
 4. **Push and overlay.** Overlay for spatial screens (the details panel), push for reading screens (the assistant). Confirm.

@@ -68,7 +68,7 @@ export function DriveConnectionPanel({ organizationId, canAdmin }: { organizatio
 
             {data.missing.length > 0 ? (
               <div className="space-y-1 text-sm">
-                <p className="font-medium text-fg">Still missing in the deployment environment</p>
+                <p className="font-medium text-fg-primary">Still missing in the deployment environment</p>
                 <ul className="list-disc space-y-1 pl-5 text-fg-muted">
                   {data.missing.map((item) => (
                     <li key={item}>{item}</li>

@@ -149,7 +149,7 @@ export function Opportunities({ brandId }: { brandId: string }) {
         <div className="max-w-2xl space-y-3">
           <p className="eyebrow">Opportunities</p>
           <h1 className="page-title">What to make next</h1>
-          <p className="text-muted">
+          <p className="text-fg-muted">
             {copy.opportunities.intro}{" "}
             Make image and video variants in <Link className="font-semibold" to="/brands/$brandId/content" params={{ brandId }} search={{ section: "create", preset: "studio" }}>Studio</Link>, not from a script form.
           </p>
@@ -165,7 +165,7 @@ export function Opportunities({ brandId }: { brandId: string }) {
           </Button>
         ) : null}
       </div>
-      {note ? <p className="text-sm text-muted">{note}</p> : null}
+      {note ? <p className="text-sm text-fg-muted">{note}</p> : null}
       {refresh.error ? <PlainErrorNotice error={refresh.error} /> : null}
       {dismiss.error ? <PlainErrorNotice error={dismiss.error} /> : null}
       {triage.error ? <PlainErrorNotice error={triage.error} /> : null}
@@ -192,7 +192,7 @@ export function Opportunities({ brandId }: { brandId: string }) {
             {canEdit && selectedEligible.length && !bulkOpen ? <Button variant="secondary" onClick={() => setBulkOpen(true)}>Decline selected ({selectedEligible.length})</Button> : null}
             {canEdit && selectedEligible.length && bulkOpen ? (
               <form
-                className="basis-full space-y-3 rounded-md border border-border p-3"
+                className="basis-full space-y-3 rounded-sharp border border-hairline p-3"
                 onSubmit={(event) => {
                   event.preventDefault();
                   if (directionReasonProblem(bulkReason) === null) declineSelected();
@@ -214,11 +214,11 @@ export function Opportunities({ brandId }: { brandId: string }) {
                 </div>
               </form>
             ) : null}
-            <p className="text-sm text-muted" aria-live="polite">{visibleRows.length} of {rows.length} opportunities</p>
+            <p className="text-sm text-fg-muted" aria-live="polite">{visibleRows.length} of {rows.length} opportunities</p>
           </div>
           {visibleRows.length === 0 ? (
             <Card className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-sm text-muted">No opportunities match these filters.</p>
+              <p className="text-sm text-fg-muted">No opportunities match these filters.</p>
               <Button type="button" variant="secondary" onClick={() => { changeCategory("all"); changeStatusFilter("all"); }}>Clear filters</Button>
             </Card>
           ) : (

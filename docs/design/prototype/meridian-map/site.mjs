@@ -1,61 +1,45 @@
-// The site: a depth map behind every screen, drawn one 4 px cell at a time, and the yellow bills printed by dither. The map follows the
-// scroll position down the meridian; the bills print more as they reach the middle of the screen. Pure rules are in map-model.mjs.
-import { WORLD_LINES } from "./world-lines.mjs";
-import { ROUTE, CELL_DEG, CELL_PX, loopLatitudes, latitudeAt, sampleIndex, decodeBits, lineAt, BAYER4, billWeight, printed, printFraction } from "./map-model.mjs";
+// The site: the background as a square halftone of the depth map, drawn at full resolution, with the yellow bills printed by dither. The map
+// follows the scroll position down the meridian. The drawing is shared with the simulator through halftone.mjs.
+import { WORLD_FIELD } from "./world-field.mjs";
+import { ROUTE, GLIDE, loopLatitudes, latitudeAt, decodeField, BAYER4, billWeight, printed, printFraction } from "./map-model.mjs";
+import { HALFTONE_DEFAULTS, drawHalftone } from "./halftone.mjs";
 
 function start() {
   const root = document.documentElement;
   const canvas = document.querySelector("#map");
   const ctx = canvas.getContext("2d");
   const reduce = matchMedia("(prefers-reduced-motion: reduce)");
-  const bits = decodeBits(WORLD_LINES.bits);
+  const field = decodeField(WORLD_FIELD.bits);
   const lats = loopLatitudes();
-  const loopTop = ROUTE.length; // the screen index of the loop screen, which is the last one
+  const loopTop = ROUTE.length;
   const navLinks = [...document.querySelectorAll(".route a[data-stop]")];
+  const style = HALFTONE_DEFAULTS;
 
-  // ---- Colours: read from the page's tokens, so the map follows the theme and the page's own colours. ----
-  const hex = (value) => {
+  // ---- Colours: read from the page's tokens, so the background follows the theme. ----
+  const rgb = (value) => {
     const n = parseInt(value.trim().slice(1), 16);
     return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
   };
   let palette = null;
   function readPalette() {
-    const style = getComputedStyle(root);
-    const bg = hex(style.getPropertyValue("--map-bg"));
-    const line = hex(style.getPropertyValue("--map-line"));
-    const money = hex(style.getPropertyValue("--money"));
-    palette = { bg, line, money, key: [...bg, ...line, ...money].join(",") };
+    const computed = getComputedStyle(root);
+    const bg = computed.getPropertyValue("--map-bg").trim();
+    const line = computed.getPropertyValue("--map-line").trim();
+    const money = computed.getPropertyValue("--money").trim();
+    palette = { bg, line, money, moneyRgb: rgb(money), key: `${bg}|${line}|${money}` };
     for (const b of bills) b.last = -1;
   }
 
-  // ---- The map canvas: one canvas pixel per screen cell, scaled up with no smoothing, so every cell is a crisp square. ----
-  let cols = 0;
-  let rows = 0;
-  let image = null;
+  // ---- The canvas: sized to the window at the screen's pixel density, so every block is drawn sharp. ----
   let lastKey = "";
-  function sizeMap() {
-    cols = Math.ceil(innerWidth / CELL_PX);
-    rows = Math.ceil(innerHeight / CELL_PX);
-    canvas.width = cols;
-    canvas.height = rows;
-    canvas.style.width = `${cols * CELL_PX}px`;
-    canvas.style.height = `${rows * CELL_PX}px`;
-    image = ctx.createImageData(cols, rows);
+  function sizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.round(innerWidth * dpr);
+    canvas.height = Math.round(innerHeight * dpr);
+    canvas.style.width = `${innerWidth}px`;
+    canvas.style.height = `${innerHeight}px`;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     lastKey = "";
-  }
-  function drawMap(latC) {
-    const d = image.data;
-    for (let r = 0; r < rows; r += 1) {
-      for (let c = 0; c < cols; c += 1) {
-        const rgb = lineAt(bits, sampleIndex(c, r, latC, cols, rows)) ? palette.line : palette.bg;
-        const k = (r * cols + c) * 4;
-        d[k] = rgb[0];
-        d[k + 1] = rgb[1];
-        d[k + 2] = rgb[2];
-        d[k + 3] = 255;
-      }
-    }
-    ctx.putImageData(image, 0, 0);
   }
 
   // ---- The bills: each has a weight for every dot, and is printed by an ordered dither at the amount set by its place on screen. ----
@@ -74,9 +58,9 @@ function start() {
         const i = y * b.w + x;
         const k = i * 4;
         if (printed(BAYER4[(y & 3) * 4 + (x & 3)], amount, b.weights[i])) {
-          d[k] = palette.money[0];
-          d[k + 1] = palette.money[1];
-          d[k + 2] = palette.money[2];
+          d[k] = palette.moneyRgb[0];
+          d[k + 1] = palette.moneyRgb[1];
+          d[k + 2] = palette.moneyRgb[2];
           d[k + 3] = 255;
         } else {
           d[k + 3] = 0;
@@ -86,7 +70,7 @@ function start() {
     b.ctx.putImageData(b.image, 0, 0);
   }
 
-  // ---- The grain: a static speckle tile, laid over the page at low opacity. It does not move, so it never competes with the content. ----
+  // ---- The grain: a static speckle tile, laid over the page at low opacity. It does not move. ----
   function grain() {
     const tile = document.createElement("canvas");
     tile.width = 160;
@@ -110,9 +94,7 @@ function start() {
   //      first screen changes nothing on the map, because a half turn of the map is the same picture. ----
   let current = lats[0];
   let target = lats[0];
-  function progress() {
-    return window.scrollY / Math.max(1, innerHeight);
-  }
+  const progress = () => window.scrollY / Math.max(1, innerHeight);
   window.addEventListener("scroll", () => {
     if (window.scrollY >= loopTop * innerHeight - 1) {
       window.scrollTo({ top: window.scrollY - loopTop * innerHeight, behavior: "instant" });
@@ -120,17 +102,16 @@ function start() {
     }
   }, { passive: true });
 
-  // ---- The frame: glide the map toward the scroll's latitude (at once for reduced motion), redraw the map and the bills when they change,
-  //      and mark the stop the page is on. ----
+  // ---- The frame: glide the map toward the scroll's latitude (at once for reduced motion), redraw the background and the bills when they
+  //      change, and mark the stop the page is on. ----
   function frame() {
     const p = progress();
     target = latitudeAt(p, lats);
-    current = reduce.matches ? target : current + (target - current) * 0.14;
+    current = reduce.matches ? target : current + (target - current) * GLIDE;
     if (Math.abs(target - current) < 1e-4) current = target;
-    const latQ = Math.round(current / CELL_DEG) * CELL_DEG;
-    const key = `${latQ}|${cols}|${rows}|${palette.key}`;
+    const key = `${current.toFixed(3)}|${palette.key}|${innerWidth}x${innerHeight}`;
     if (key !== lastKey) {
-      drawMap(latQ);
+      drawHalftone(ctx, field, { width: innerWidth, height: innerHeight, centreLat: current, zoom: style.zoom }, style, palette);
       lastKey = key;
     }
     for (const b of bills) {
@@ -146,11 +127,11 @@ function start() {
     requestAnimationFrame(frame);
   }
 
-  // ---- Start: size the map, read the palette, lay the grain, and follow the theme and the window's size. ----
+  // ---- Start: size the canvas, read the palette, lay the grain, and follow the theme and the window's size. ----
   readPalette();
-  sizeMap();
+  sizeCanvas();
   grain();
-  window.addEventListener("resize", () => { sizeMap(); });
+  window.addEventListener("resize", () => { sizeCanvas(); });
   matchMedia("(prefers-color-scheme: light)").addEventListener("change", readPalette);
   new MutationObserver(readPalette).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
   requestAnimationFrame(frame);

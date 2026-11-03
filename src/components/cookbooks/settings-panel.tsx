@@ -39,7 +39,7 @@ export function SettingsPanel({ rows, onChange }: { rows: readonly SettingRow[];
                 id={`cb-${row.id}`}
                 value={row.value}
                 onChange={(event) => onChange(row.id, event.target.value)}
-                className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg"
+                className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg-primary"
               >
                 {row.options.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -59,7 +59,7 @@ export function SettingsPanel({ rows, onChange }: { rows: readonly SettingRow[];
                 value={row.value}
                 maxLength={row.maxLength}
                 onChange={(event) => onChange(row.id, event.target.value)}
-                className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg"
+                className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg-primary"
               />
             </div>
           );
@@ -71,7 +71,7 @@ export function SettingsPanel({ rows, onChange }: { rows: readonly SettingRow[];
               id={`cb-${row.id}`}
               value={row.value}
               onChange={(event) => onChange(row.id, event.target.value)}
-              className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg"
+              className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-2 text-body text-fg-primary"
             >
               {row.roles.map((role) => (
                 <option key={role} value={role}>{role}</option>

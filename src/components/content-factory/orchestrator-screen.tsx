@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { loadCatalog, type CatalogEntry } from "@/engine/orchestrator/catalog";
 import { orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "@/engine/orchestrator/contracts";
@@ -46,6 +46,9 @@ export function OrchestratorScreen() {
   const [stepId, setStepId] = useState(paidSteps[0]?.id ?? basePlan.nodes[0]?.id ?? "");
   const [params, setParams] = useState<Record<string, number>>({});
   const [modelId, setModelId] = useState<string | null>(null);
+  // The details of one step open as an overlay on the right of the plan, which stays in place underneath.
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const detailsHeading = useRef<HTMLHeadingElement>(null);
 
   const node = basePlan.nodes.find((candidate) => candidate.id === stepId);
   const kind = node ? KIND_CATALOG[node.kind] : undefined;
@@ -85,6 +88,15 @@ export function OrchestratorScreen() {
     setModelId(null);
   };
 
+  // Choosing a step on the plan opens its details. The heading takes focus, so a keyboard reader lands in the overlay.
+  const selectStep = (id: string) => {
+    chooseStep(id);
+    setDetailsOpen(true);
+  };
+  useEffect(() => {
+    if (detailsOpen) detailsHeading.current?.focus();
+  }, [detailsOpen]);
+
   const numberParam = (name: string, value: string, max: number) => {
     const parsed = Number(value);
     if (value === "" || !Number.isFinite(parsed)) return;
@@ -121,15 +133,41 @@ export function OrchestratorScreen() {
         </span>
       </div>
 
-      <OrchestratorCanvas plan={checked.ok ? checked.plan : edited} events={events} shown={shown} stale={dirty ? stale : undefined} showAll={dirty} />
+      <div className="relative flex flex-col gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm text-fg-muted">Choose a step on the plan to see its details. The plan keeps its place.</p>
+          <Button size="md" variant="secondary" onClick={() => setDetailsOpen(true)} aria-expanded={detailsOpen}>
+            Change a step
+          </Button>
+        </div>
 
-      <section aria-labelledby="edit-heading" className="flex flex-col gap-3 rounded-xl border border-border bg-surface p-4 sm:p-6">
-        <h2 id="edit-heading" className="text-lg font-semibold">
-          Change one step
-        </h2>
+        <OrchestratorCanvas
+          plan={checked.ok ? checked.plan : edited}
+          events={events}
+          shown={shown}
+          stale={dirty ? stale : undefined}
+          showAll={dirty}
+          selectedId={detailsOpen ? stepId : null}
+          onSelect={selectStep}
+        />
+
+        {detailsOpen ? (
+        <aside
+          aria-labelledby="edit-heading"
+          onKeyDown={(event) => { if (event.key === "Escape") setDetailsOpen(false); }}
+          className="absolute inset-y-0 right-0 z-20 flex w-full max-w-[30rem] flex-col gap-3 overflow-y-auto border-l border-border-strong bg-overlay p-4 sm:p-6"
+        >
+        <div className="flex items-center justify-between gap-3">
+          <h2 id="edit-heading" ref={detailsHeading} tabIndex={-1} className="text-lg font-semibold focus:outline-none">
+            Change one step
+          </h2>
+          <Button size="sm" variant="secondary" onClick={() => setDetailsOpen(false)}>
+            Close
+          </Button>
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <Field id="step-select" label="Step">
-            <select id="step-select" className="rounded border border-border bg-surface px-2 py-1" value={stepId} onChange={(event) => chooseStep(event.target.value)}>
+            <select id="step-select" className="rounded-sharp border border-hairline bg-raised px-2 py-1" value={stepId} onChange={(event) => chooseStep(event.target.value)}>
               {paidSteps.map((candidate) => (
                 <option key={candidate.id} value={candidate.id}>
                   {candidate.title}
@@ -144,7 +182,7 @@ export function OrchestratorScreen() {
                 type="number"
                 min={1}
                 max={PRICING_LIMITS.maxSeconds}
-                className="w-24 rounded border border-border bg-surface px-2 py-1"
+                className="w-24 rounded-sharp border border-hairline bg-raised px-2 py-1"
                 value={currentNumber("seconds")}
                 onChange={(event) => numberParam("seconds", event.target.value, PRICING_LIMITS.maxSeconds)}
               /></Field>
@@ -156,7 +194,7 @@ export function OrchestratorScreen() {
                 type="number"
                 min={1}
                 max={PRICING_LIMITS.maxCharacters}
-                className="w-28 rounded border border-border bg-surface px-2 py-1"
+                className="w-28 rounded-sharp border border-hairline bg-raised px-2 py-1"
                 value={currentNumber("characters")}
                 onChange={(event) => numberParam("characters", event.target.value, PRICING_LIMITS.maxCharacters)}
               /></Field>
@@ -168,7 +206,7 @@ export function OrchestratorScreen() {
                 type="number"
                 min={1}
                 max={PRICING_LIMITS.maxOutputTokens}
-                className="w-28 rounded border border-border bg-surface px-2 py-1"
+                className="w-28 rounded-sharp border border-hairline bg-raised px-2 py-1"
                 value={currentNumber("max_tokens")}
                 onChange={(event) => numberParam("max_tokens", event.target.value, PRICING_LIMITS.maxOutputTokens)}
               /></Field>
@@ -178,7 +216,7 @@ export function OrchestratorScreen() {
             <Field id="model-select" label={`Model (${kind}, from the catalog)`}>
               <select
                 id="model-select"
-                className="max-w-xs rounded border border-border bg-surface px-2 py-1"
+                className="max-w-xs rounded-sharp border border-hairline bg-raised px-2 py-1"
                 value={modelId ?? node?.model?.id ?? ""}
                 onChange={(event) => setModelId(event.target.value)}
               >
@@ -222,7 +260,9 @@ export function OrchestratorScreen() {
         ) : (
           <p className="text-sm text-fg-muted">Change a step to see its new cost and which steps would run again.</p>
         )}
-      </section>
+        </aside>
+        ) : null}
+      </div>
     </div>
   );
 }

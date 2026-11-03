@@ -4,6 +4,7 @@ import { authEnabled, signOut } from "./client";
 import { resolveSignInGateState } from "./sign-in-gate";
 import { useCurrentUser, useCurrentUserState } from "./use-current-user";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, useTheme } from "@/components/ui";
+import { ACCENT_PRESETS } from "@/components/ui/accent";
 
 /**
  * Auth state components — plain wrappers around `useCurrentUserState()`.
@@ -46,7 +47,7 @@ export function SignInGate({
 
 export function SignInButtons() {
   return (
-    <Link to="/login" className="rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+    <Link to="/login" className="rounded-sharp border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
       Sign in with email
     </Link>
   );
@@ -58,7 +59,7 @@ export function SignInButtons() {
  */
 export function UserButton() {
   const user = useCurrentUser();
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, accent, setAccent } = useTheme();
   // Sign-out can take a moment (and can fail when deployed), so the menu item
   // shows it is working and cannot be fired twice.
   const [signingOut, setSigningOut] = useState(false);
@@ -67,11 +68,11 @@ export function UserButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-sharp px-1 text-sm text-fg-primary hover:bg-overlay pointer-coarse:min-h-11 pointer-coarse:min-w-11">
           {user.profileImageUrl ? (
             <img src={user.profileImageUrl} alt="" width={32} height={32} loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
           ) : (
-            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-fg">
+            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent text-sm font-semibold text-on-accent">
               {label.charAt(0).toUpperCase()}
             </span>
           )}
@@ -80,14 +81,16 @@ export function UserButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" aria-label="Account">
         <div className="px-2 py-1.5">
-          <p className="truncate text-sm font-semibold text-fg">{label}</p>
+          <p className="truncate text-sm font-semibold text-fg-primary">{label}</p>
           {user.primaryEmail && user.primaryEmail !== label ? <p className="truncate text-xs text-fg-muted">{user.primaryEmail}</p> : null}
         </div>
         <DropdownMenuItem asChild>
           <Link to="/notifications">Notification preferences</Link>
         </DropdownMenuItem>
-        <p className="px-2 pb-1 pt-2 text-xs font-medium uppercase tracking-wide text-fg-muted">Appearance</p>
+        <p className="eyebrow px-2 pb-1 pt-2">Appearance</p>
         {(["system", "light", "dark"] as const).map((choice) => <DropdownMenuItem key={choice} role="menuitemradio" aria-checked={theme === choice} onSelect={() => setTheme(choice)}>{choice[0].toUpperCase() + choice.slice(1)}{theme === choice ? " (current)" : ""}</DropdownMenuItem>)}
+        <p className="eyebrow px-2 pb-1 pt-2">Accent</p>
+        {ACCENT_PRESETS.map((preset) => <DropdownMenuItem key={preset.id} role="menuitemradio" aria-checked={accent === preset.id} onSelect={() => setAccent(preset.id)}><span aria-hidden="true" className="size-3 shrink-0 rounded-full border border-border-strong" style={{ background: preset.dark.accent }} />{preset.label}{accent === preset.id ? " (current)" : ""}</DropdownMenuItem>)}
         {authEnabled ? <DropdownMenuItem disabled={signingOut} onSelect={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }}>{signingOut ? "Signing out…" : "Sign out"}</DropdownMenuItem> : null}
       </DropdownMenuContent>
     </DropdownMenu>

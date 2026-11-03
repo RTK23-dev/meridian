@@ -54,7 +54,7 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-workspace" className="space-y-6">
       <div className="space-y-1">
         <h2 id="billing-workspace" className="text-section font-semibold">Workspace</h2>
-        <p className="text-muted">These limits apply to the whole workspace, across every brand.</p>
+        <p className="text-fg-muted">These limits apply to the whole workspace, across every brand.</p>
         <p className="text-sm text-fg-muted">
           The monthly budget is a limit Meridian enforces, not your OpenRouter account balance. It applies to each calendar month (UTC) across paid text and video.
           Blank means no budget is set, so paid generation is blocked until one is saved. There is no default.
@@ -76,7 +76,7 @@ function BrandsSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-brands" className="space-y-6">
       <div className="space-y-1">
         <h2 id="billing-brands" className="text-section font-semibold">Brands</h2>
-        <p className="text-muted">Each brand has its own budget and its own factory caps. The factory does not spend a brand's money until both its daily and its total cap are set.</p>
+        <p className="text-fg-muted">Each brand has its own budget and its own factory caps. The factory does not spend a brand's money until both its daily and its total cap are set.</p>
       </div>
       {brands.length === 0 ? <p className="text-fg-muted">No brands yet. A brand's limits appear here once it exists.</p> : null}
       {brands.map((brand) => (
@@ -88,7 +88,7 @@ function BrandsSection({ page }: { page: BillingPage }) {
 
 function BrandLimits({ organizationId, brand, canEdit }: { organizationId: string; brand: BillingBrand; canEdit: boolean }) {
   return (
-    <div className="space-y-5 rounded-lg border border-hairline p-5" aria-label={`Limits for ${brand.name}`}>
+    <div className="space-y-5 rounded-sharp border border-hairline p-5" aria-label={`Limits for ${brand.name}`}>
       <h3 className="text-body font-semibold">{brand.name}</h3>
       <LimitForm organizationId={organizationId} kind="brand_budget" brandId={brand.brandId} value={brand.brandBudgetUsd} canEdit={canEdit} committedUsd={brand.committedUsd} />
       <LimitForm organizationId={organizationId} kind="factory_daily_cap" brandId={brand.brandId} value={brand.factoryDailyCapUsd} canEdit={canEdit} />
@@ -102,7 +102,7 @@ function EstimatesSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-estimates" className="space-y-3">
       <div className="space-y-1">
         <h2 id="billing-estimates" className="text-section font-semibold">Estimates</h2>
-        <p className="text-muted">These are not limits. The engine uses them to estimate a master's cost before it starts. They are read-only here.</p>
+        <p className="text-fg-muted">These are not limits. The engine uses them to estimate a master's cost before it starts. They are read-only here.</p>
       </div>
       <p className="text-sm">The fixed cost of one master is about ${page.fixedCostPerMasterUsd.toFixed(2)} before its shots.</p>
     </section>

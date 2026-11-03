@@ -59,15 +59,15 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
             {plan.note || "Review the planned deliverables and estimated cost before billable generation starts."}
           </DialogDescription>
           <div className="mt-4 space-y-4 text-sm">
-            <div className="flex justify-between gap-3 border-b border-border py-2">
+            <div className="flex justify-between gap-3 border-b border-hairline py-2">
               <span className="text-fg-muted">Plan ID</span>
               <span className="break-all font-mono text-xs">{plan.planId}</span>
             </div>
-            <div className="flex justify-between gap-3 border-b border-border py-2">
+            <div className="flex justify-between gap-3 border-b border-hairline py-2">
               <span className="text-fg-muted">Scope and autonomy</span>
               <span className="font-medium">{plan.plan?.scope || "auto_choose"} · {plan.plan?.autonomy || "semi_automatic"}</span>
             </div>
-            <div className="flex justify-between gap-3 border-b border-border py-2">
+            <div className="flex justify-between gap-3 border-b border-hairline py-2">
               <span className="text-fg-muted">Estimated cost</span>
               <span className="text-right font-semibold">{planCostText(plan)}</span>
             </div>
@@ -75,7 +75,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
               <h3 className="mb-2 font-semibold">Planned deliverables ({plan.plan?.deliverables?.length ?? 0})</h3>
               <ul className="max-h-48 space-y-2 overflow-y-auto">
                 {plan.plan?.deliverables?.map((deliverable, index) => (
-                  <li key={deliverable.id || index} className="flex flex-wrap items-center justify-between gap-2 rounded border border-border p-2 text-xs">
+                  <li key={deliverable.id || index} className="flex flex-wrap items-center justify-between gap-2 rounded-sharp border border-hairline p-2 text-xs">
                     <div>
                       <span className="mr-2 font-semibold text-fg-muted">{deliverable.kind}</span>
                       <span>{deliverable.title || `Deliverable ${index + 1}`}</span>
@@ -95,7 +95,7 @@ export function PlanDialog({ plan, approving, rejecting, onApprove, onReject, on
               onConfirmingChange={dismiss.setConfirming}
               onDiscard={dismiss.discard}
             />
-            <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
+            <div className="flex flex-wrap justify-end gap-3 border-t border-hairline pt-4">
               <Button type="button" variant="quiet" disabled={busy} onClick={() => void rejectPlan()}>
                 {rejecting ? "Rejecting…" : "Reject plan"}
               </Button>

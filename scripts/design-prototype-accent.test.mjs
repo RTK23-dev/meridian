@@ -86,3 +86,16 @@ test("a saved choice is read back from storage", () => {
   writeAccentChoice(memory, "teal");
   assert.equal(readAccentChoice(memory), "teal");
 });
+
+// The app keeps its own copy of the presets (src/components/ui/accent.ts), because the app cannot import the prototype. This test reads that
+// file as text and checks that its preset ids and colours, in order, are the prototype's, so the two cannot drift apart.
+test("the app's accent presets are the prototype's, id for id and colour for colour", async () => {
+  const { readFileSync } = await import("node:fs");
+  const app = readFileSync(new URL("../src/components/ui/accent.ts", import.meta.url), "utf8");
+  const appIds = [...app.matchAll(/id: "([a-z]+)"/g)].map((m) => m[1]);
+  const appHex = [...app.matchAll(/#[0-9A-Fa-f]{6}/g)].map((m) => m[0].toUpperCase());
+  const protoIds = ACCENT_PRESETS.map((preset) => preset.id);
+  const protoHex = JSON.stringify(ACCENT_PRESETS).match(/#[0-9A-Fa-f]{6}/g).map((hex) => hex.toUpperCase());
+  assert.deepEqual(appIds, protoIds);
+  assert.deepEqual(appHex, protoHex);
+});

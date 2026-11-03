@@ -28,7 +28,7 @@ type Readiness = NonNullable<ProviderConfigSummary["credentialState"]>;
 const READINESS_BADGE: Record<Readiness, { label: string; className: string }> = {
   usable: { label: "CONFIGURED", className: "bg-success/20 text-success border border-success/30" },
   unusable: { label: "UNUSABLE", className: "bg-danger/10 text-danger border border-danger/30" },
-  not_configured: { label: "NOT CONFIGURED", className: "bg-muted/20 text-muted border border-line" },
+  not_configured: { label: "NOT CONFIGURED", className: "bg-fg-muted/20 text-fg-muted border border-hairline" },
 };
 
 function readinessOf(summary: ProviderConfigSummary): Readiness {
@@ -202,7 +202,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
     return <ErrorState message="Provider settings could not be loaded." onRetry={() => void settings.refetch()} />;
   }
   if (loading && !summaries) {
-    return <p className="text-muted text-sm">Loading AI and Provider configuration...</p>;
+    return <p className="text-fg-muted text-sm">Loading AI and Provider configuration...</p>;
   }
 
   const activeSummary = summaries ? summaries[activeTab] : null;
@@ -210,11 +210,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
   return (
     <Card className="space-y-6">
       <UnsavedChangesGuard dirty={providerDirty} />
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-4">
         <div>
           <p className="eyebrow">Architecture & Intelligence</p>
           <h2 className="text-2xl">AI, Research & Provider Configuration</h2>
-          <p className="text-muted text-sm mt-1">
+          <p className="text-fg-muted text-sm mt-1">
             Configure JEV decision routers, perception models, crawl budgets, production engines, and Cyclone Scout.
           </p>
         </div>
@@ -232,10 +232,10 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                   setMessage(null);
                   setDiscardRequested(false);
                 }}
-                className={`max-sm:min-h-11 pointer-coarse:min-h-11 rounded px-3 py-1.5 text-xs font-semibold transition ${
+                className={`max-sm:min-h-11 pointer-coarse:min-h-11 rounded-sharp px-3 py-1.5 text-xs font-semibold transition ${
                   activeTab === tab
-                    ? "bg-paper text-fg shadow-sm"
-                    : "text-muted hover:text-fg hover:bg-panel"
+                    ? "bg-ground text-fg-primary"
+                    : "text-fg-muted hover:text-fg-primary hover:bg-raised"
                 }`}
               >
                 {tab} {isReady ? "✓" : "○"}
@@ -250,29 +250,29 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
       {activeSummary ? (
         <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line pb-4">
+          <div className="flex flex-wrap items-center justify-between gap-4 border-b border-hairline pb-4">
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-lg capitalize">{activeTab} Provider Status</h3>
-                <span className={`rounded px-2 py-0.5 text-xs font-semibold ${READINESS_BADGE[readinessOf(activeSummary)].className}`}>
+                <span className={`rounded-sharp px-2 py-0.5 text-xs font-semibold ${READINESS_BADGE[readinessOf(activeSummary)].className}`}>
                   {READINESS_BADGE[readinessOf(activeSummary)].label}
                 </span>
-                <span className="text-xs text-muted">
+                <span className="text-xs text-fg-muted">
                   Source: <strong>{sourceLabelOf(activeSummary)}</strong>
                 </span>
               </div>
               {activeSummary.keyFingerprint ? (
-                <p className="text-xs text-muted mt-1 font-mono">
+                <p className="text-xs text-fg-muted mt-1 font-mono">
                   Stored Key Fingerprint: <strong>{activeSummary.keyFingerprint}</strong>
                 </p>
               ) : null}
               {activeSummary.credentialReason ? (
-                <p className={`text-xs mt-1 ${readinessOf(activeSummary) === "unusable" ? "text-danger" : "text-muted"}`}>
+                <p className={`text-xs mt-1 ${readinessOf(activeSummary) === "unusable" ? "text-danger" : "text-fg-muted"}`}>
                   {activeSummary.credentialReason}
                 </p>
               ) : null}
               {activeSummary.category === "perception" && activeSummary.credentialState === "usable" && activeSummary.source === "deployment" ? (
-                <p className="text-xs mt-1 text-muted">
+                <p className="text-xs mt-1 text-fg-muted">
                   The deployment&apos;s Gemini key is in use because PERCEPTION_SHARED_DEFAULT=gemini is set. This workspace has no key of its own.
                 </p>
               ) : null}
@@ -302,7 +302,7 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {testResult ? (
             <div
-              className={`rounded p-3 text-sm border ${
+              className={`rounded-sharp p-3 text-sm border ${
                 testResult.status === "READY" || testResult.status === "CONFIGURED"
                   ? "bg-success/10 border-success/30 text-success"
                   : "bg-danger/10 border-danger/30 text-danger"
@@ -319,11 +319,11 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
               <DecisionEngineSelector organizationId={organizationId} canAdmin={canAdmin} />
               <p className="eyebrow">TypeSafe JEV transport</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              <p className="sm:col-span-2 text-xs text-muted">
+              <p className="sm:col-span-2 text-xs text-fg-muted">
                 TypeSafe is the decision transport. Its key is saved per workspace, and a deployment key is used only when
                 JEV_SHARED_DEFAULT=deployment is set. A decision never calls a second provider.
               </p>
-              <p className="sm:col-span-2 text-xs text-muted">The TypeSafe key is entered in the Setup section above. It is saved there, and this panel keeps the transport settings only.</p>
+              <p className="sm:col-span-2 text-xs text-fg-muted">The TypeSafe key is entered in the Setup section above. It is saved there, and this panel keeps the transport settings only.</p>
             </div>
             </div>
           ) : null}
@@ -342,12 +342,12 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 </SelectInput>
               </Field>
 
-              <p className="sm:col-span-2 text-xs text-muted">The Gemini production key is entered in the Setup section above. This panel keeps the production settings only.</p>
+              <p className="sm:col-span-2 text-xs text-fg-muted">The Gemini production key is entered in the Setup section above. This panel keeps the production settings only.</p>
             </div>
           ) : null}
 
           {activeTab === "production" ? (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-fg-muted">
               Production calls use the key saved for this workspace in the Setup section. A deployment key is used only when
               PRODUCTION_SHARED_DEFAULT=deployment is set.
             </p>
@@ -360,12 +360,12 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
                 CYCLONE_API_KEY. Settings here cannot change them.
               </p>
               <dl className="grid gap-1 text-sm sm:grid-cols-[max-content_1fr] sm:gap-x-4">
-                <dt className="text-muted">Gateway</dt>
+                <dt className="text-fg-muted">Gateway</dt>
                 <dd className="break-all">{summaries?.cyclone?.settings.gatewayUrl ? String(summaries.cyclone.settings.gatewayUrl) : "Not set"}</dd>
-                <dt className="text-muted">Device</dt>
+                <dt className="text-fg-muted">Device</dt>
                 <dd>{summaries?.cyclone?.settings.deviceId ? String(summaries.cyclone.settings.deviceId) : "Not set"}</dd>
               </dl>
-              <div className="border-t border-line pt-3 text-xs text-muted">
+              <div className="border-t border-hairline pt-3 text-xs text-fg-muted">
                 <strong>Read-only observation</strong>: Cyclone observations are read-only. Meridian
                 never automates likes, follows, comments, DMs, or competitor interactions.
               </div>
@@ -386,8 +386,8 @@ export function ProviderSettingsPanel({ organizationId, canAdmin }: ProviderSett
 
           {activeTab === "perception" ? (
             <div className="grid gap-4 sm:grid-cols-2">
-              <p className="sm:col-span-2 text-xs text-muted">The Gemini perception key is entered in the Setup section above. This panel keeps the perception settings only.</p>
-              <p className="sm:col-span-2 text-xs text-muted">
+              <p className="sm:col-span-2 text-xs text-fg-muted">The Gemini perception key is entered in the Setup section above. This panel keeps the perception settings only.</p>
+              <p className="sm:col-span-2 text-xs text-fg-muted">
                 Used for still-image and video-frame perception. Its key is saved in the Setup section above.
               </p>
             </div>

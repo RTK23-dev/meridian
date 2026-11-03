@@ -7,7 +7,7 @@ export function Drawer({ open, onOpenChange, title, description, children, class
 }) {
   return <Sheet open={open} onOpenChange={onOpenChange} direction="right">
     <SheetContent side="right" className={className}>
-      <SheetTitle className="font-display text-section font-semibold text-fg">{title}</SheetTitle>
+      <SheetTitle className="font-display text-section font-semibold text-fg-primary">{title}</SheetTitle>
       {description ? <SheetDescription className="mt-1 text-small text-fg-muted">{description}</SheetDescription> : null}
       <div className="mt-6 space-y-4">{children}</div>
     </SheetContent>

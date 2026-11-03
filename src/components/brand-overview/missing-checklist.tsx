@@ -7,7 +7,7 @@ import type { MissingItem } from "./pipeline";
 export function MissingChecklist({ brandId, items }: { brandId: string; items: MissingItem[] }) {
   return (
     <Card aria-labelledby="missing-title" className="space-y-3">
-      <h2 id="missing-title" className="text-base font-semibold text-fg">What is missing</h2>
+      <h2 id="missing-title" className="text-base font-semibold text-fg-primary">What is missing</h2>
       {items.length ? (
         <ul className="grid gap-1">
           {items.map((item) => (
@@ -15,7 +15,7 @@ export function MissingChecklist({ brandId, items }: { brandId: string; items: M
               <Link
                 to={item.to}
                 params={{ brandId }}
-                className="flex min-h-11 items-center justify-between gap-3 rounded-md px-2 -mx-2 text-sm font-medium text-fg transition-colors hover:bg-surface-2"
+                className="flex min-h-11 items-center justify-between gap-3 rounded-sharp px-2 -mx-2 text-sm font-medium text-fg-primary transition-colors hover:bg-overlay"
               >
                 <span className="flex items-center gap-2">
                   <Circle aria-hidden="true" className="size-3.5 shrink-0 text-fg-muted" />

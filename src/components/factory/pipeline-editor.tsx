@@ -188,7 +188,7 @@ export function PipelineEditor({
       <UnsavedChangesGuard dirty={dirty} />
       <header className="space-y-1">
         <p className="eyebrow">Factory line</p>
-        <h2 id="factory-pipeline-settings" className="text-section text-fg font-semibold">Pipeline settings</h2>
+        <h2 id="factory-pipeline-settings" className="text-section text-fg-primary font-semibold">Pipeline settings</h2>
         <p className="max-w-3xl text-sm text-fg-muted">
           Settings save to this brand. A saved line is read by Pick, the plan, Produce, the review step, and the claim check. The autopilot level and spend caps stay on the Live tests tab. Perception and grading prompts are saved and not sent.
         </p>
@@ -199,7 +199,7 @@ export function PipelineEditor({
       <FeedbackLine feedback={feedback} onDismiss={() => setFeedback(null)} />
 
       <div className="flex flex-wrap items-center justify-between gap-3 panel">
-        <p aria-live="polite" className="text-sm text-fg">{statusText}</p>
+        <p aria-live="polite" className="text-sm text-fg-primary">{statusText}</p>
         <div className="flex flex-wrap items-center gap-2">
           {canEdit && dirty ? (
             <Button type="button" variant="quiet" size="sm" onClick={discard} disabled={busy !== null}>

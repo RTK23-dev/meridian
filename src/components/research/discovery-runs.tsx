@@ -59,7 +59,7 @@ export function DiscoveryRunList({ runs }: { runs: readonly DiscoveryRunSummary[
         const summary = summarizeRun(run);
         const badge = OUTCOME_BADGE[summary.outcome];
         return (
-          <li key={run.id} className="border-t border-border py-4 first:border-t-0 first:pt-0">
+          <li key={run.id} className="border-t border-hairline py-4 first:border-t-0 first:pt-0">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant={badge.variant}>{badge.label}</Badge>
               <span className="text-sm font-semibold">{SCOPE_LABEL[run.scope] ?? run.scope}</span>
@@ -78,7 +78,7 @@ export function DiscoveryRunList({ runs }: { runs: readonly DiscoveryRunSummary[
                   {run.sources.map((source) => {
                     const state = STATE_BADGE[source.status];
                     return (
-                      <li key={`${source.adapterId}:${source.seed}`} className="border-t border-border py-2 first:border-t-0">
+                      <li key={`${source.adapterId}:${source.seed}`} className="border-t border-hairline py-2 first:border-t-0">
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="font-semibold">{source.adapterId}</span>
                           <Badge variant={state.variant}>{state.label}</Badge>

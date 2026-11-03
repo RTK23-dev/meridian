@@ -15,15 +15,15 @@ export function ProviderCard({ card, actions = [], link, note, extra }: {
   extra?: ReactNode;
 }) {
   return (
-    <li className="flex min-w-0 flex-col gap-3 panel transition duration-200 hover:shadow-md">
+    <li className="flex min-w-0 flex-col gap-3 panel transition duration-200">
       <div className="flex min-w-0 flex-wrap items-start justify-between gap-2">
-        <h3 className="min-w-0 text-base font-semibold text-fg">{card.label}</h3>
+        <h3 className="min-w-0 text-base font-semibold text-fg-primary">{card.label}</h3>
         <StatusBadge status={card.status} label={card.label} />
       </div>
       <p className="break-words text-sm text-fg-muted [overflow-wrap:anywhere]">{card.summary}</p>
-      {card.facts.map((fact) => <p key={fact} className="break-words text-sm text-fg [overflow-wrap:anywhere]">{fact}</p>)}
+      {card.facts.map((fact) => <p key={fact} className="break-words text-sm text-fg-primary [overflow-wrap:anywhere]">{fact}</p>)}
       {card.missing ? (
-        <p className="flex min-w-0 items-start gap-2 border-t border-border pt-3 text-sm text-fg-muted">
+        <p className="flex min-w-0 items-start gap-2 border-t border-hairline pt-3 text-sm text-fg-muted">
           <Circle aria-hidden="true" className="mt-1 size-3 shrink-0" />
           <span className="min-w-0 break-words [overflow-wrap:anywhere]">{card.missing}</span>
         </p>

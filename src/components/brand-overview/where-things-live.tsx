@@ -7,7 +7,7 @@ import { AREA_GUIDE } from "@/lib/navigation/model";
  */
 export function WhereThingsLive({ brandId }: { brandId: string }) {
   return (
-    <section aria-labelledby="where-things-live" className="surface-rise rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
+    <section aria-labelledby="where-things-live" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
       <h2 id="where-things-live" className="text-section font-semibold">Where things live</h2>
       <ul className="mt-3 divide-y divide-border">
         {AREA_GUIDE.map((area) => (

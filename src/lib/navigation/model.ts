@@ -33,67 +33,68 @@ export const SETTINGS_SCREEN_LINKS: NavItem[] = [
  * results and the research-led Batch workflow, so the sidebar has one item for it. A badge appears only for a real count above zero: a null count (not
  * loaded yet, or failed) and a zero count both show no badge.
  */
+/** The five places of the rail, in order. Each app screen is filed under one of them, as the screen table in the design plan (section 17)
+ *  says. The places are the same on every page; the screens under them depend on whether a brand is open. */
+export const PLACE_IDS = ["home", "create", "library", "insights", "settings"] as const;
+export type PlaceId = (typeof PLACE_IDS)[number];
+
 export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; reviewCount: number | null }): NavGroup[] {
-  const settings: NavGroup = {
-    id: "settings",
-    label: "Settings",
-    items: [
-      { id: "setup", label: "Setup guide", to: "/setup" },
-      { id: "integrations", label: "Integrations", to: "/integrations" },
-      { id: "jobs", label: "Jobs & health", to: "/jobs" },
-      { id: "engine-ops", label: "Engine operations", to: "/engine-ops" },
-      { id: "settings", label: "Settings", to: "/settings" },
-    ],
-  };
+  // The Settings place opens the Settings page, so its first screen is that page.
+  const settingsItems: NavItem[] = [
+    { id: "settings", label: "Settings", to: "/settings" },
+    { id: "setup", label: "Setup guide", to: "/setup" },
+    { id: "integrations", label: "Integrations", to: "/integrations" },
+    { id: "jobs", label: "Jobs & health", to: "/jobs" },
+    { id: "engine-ops", label: "Engine operations", to: "/engine-ops" },
+  ];
   if (!brandId) {
     return [
-      {
-        id: "overview",
-        label: "Overview",
-        items: [
-          { id: "overview", label: "Workspace overview", to: "/" },
-          { id: "content-factory", label: "Content", to: "/content-factory" },
-        ],
-      },
-      settings,
+      { id: "home", label: "Home", items: [{ id: "overview", label: "Workspace overview", to: "/" }, { id: "alerts", label: "Alerts", to: "/alerts" }] },
+      { id: "create", label: "Create", items: [{ id: "content-factory", label: "Content", to: "/content-factory" }, { id: "orchestrator", label: "Orchestrator", to: "/orchestrator" }] },
+      { id: "library", label: "Library", items: [{ id: "exports", label: "Exports", to: "/exports" }] },
+      // Insights is about a brand's market, so it has no screens until a brand is open.
+      { id: "insights", label: "Insights", items: [] },
+      { id: "settings", label: "Settings", items: settingsItems },
     ];
   }
   const base = `/brands/${brandId}`;
+  // The badge counts the reviews waiting for a person. They are in this page's Review section.
   const openReviews = reviewCount !== null && reviewCount > 0 ? reviewCount : undefined;
   return [
+    { id: "home", label: "Home", items: [{ id: "brand-overview", label: "Brand overview", to: base }, { id: "overview", label: "Workspace overview", to: "/" }, { id: "alerts", label: "Alerts", to: "/alerts" }] },
     {
-      id: "brand",
-      label: "Brand",
-      items: [
-        { id: "brand-overview", label: "Overview", to: base },
-        { id: "brain", label: "Brand brain", to: `${base}/brain` },
-        { id: "products", label: "Products", to: `${base}/products` },
-      ],
-    },
-    {
-      id: "research",
-      label: "Research",
-      items: [
-        { id: "market", label: "Market", to: `${base}/market` },
-        { id: "intelligence", label: "Intelligence", to: `${base}/intelligence` },
-      ],
-    },
-    {
-      id: "content",
+      id: "create",
       label: "Create",
-      // The badge counts the reviews waiting for a person. They are in this page's Review section.
       items: [
         { id: "content", label: "Content", to: `${base}/content`, badge: openReviews },
         { id: "cookbooks", label: "Cookbooks", to: `${base}/cookbooks` },
+        { id: "brain", label: "Brand brain", to: `${base}/brain` },
+        { id: "products", label: "Products", to: `${base}/products` },
+        { id: "pages", label: "Pages", to: `${base}/pages` },
+        { id: "orchestrator", label: "Orchestrator", to: "/orchestrator" },
       ],
     },
+    { id: "library", label: "Library", items: [{ id: "exports", label: "Exports", to: "/exports" }] },
     {
-      id: "results",
-      label: "Results",
-      items: [{ id: "calibration", label: "Calibration", to: `${base}/calibration` }],
+      id: "insights",
+      label: "Insights",
+      items: [
+        { id: "market", label: "Market", to: `${base}/market` },
+        { id: "intelligence", label: "Intelligence", to: `${base}/intelligence` },
+        { id: "calibration", label: "Calibration", to: `${base}/calibration` },
+      ],
     },
-    settings,
+    { id: "settings", label: "Settings", items: settingsItems },
   ];
+}
+
+/** The place a path belongs to, or null for a page outside the five places (the sign-in, the product page, the docs). */
+export function placeOf(pathname: string, brandId?: string): PlaceId | null {
+  for (const group of sidebarGroups({ brandId, reviewCount: null })) {
+    if (group.items.some((item) => isCurrentPath(pathname, item.to))) return group.id as PlaceId;
+  }
+  if (SETTINGS_SCREEN_LINKS.some((item) => isCurrentPath(pathname, item.to))) return "settings";
+  return null;
 }
 
 /**
@@ -133,28 +134,26 @@ export function nextStep({ pathname, brandId }: { pathname: string; brandId?: st
   return (nextId ? items.find((item) => item.id === nextId) : undefined) ?? null;
 }
 
-/** Every screen the command palette can open: the sidebar screens for this page, then the screens listed under Settings. */
+/** Every screen the command palette can open: the sidebar screens for this page, then the screens listed under Settings. A screen that is
+ *  listed twice is offered once. */
 export function paletteScreens(brandId?: string): NavItem[] {
-  return [...sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items), ...SETTINGS_SCREEN_LINKS];
+  const seen = new Set<string>();
+  return [...sidebarGroups({ brandId, reviewCount: null }).flatMap((group) => group.items), ...SETTINGS_SCREEN_LINKS].filter((item) => {
+    if (seen.has(item.to)) return false;
+    seen.add(item.to);
+    return true;
+  });
 }
 
-/** The four bottom-bar tabs. The More tab is added by the shell and opens the full navigation sheet. */
-export function bottomTabs(brandId?: string): NavItem[] {
-  if (!brandId) {
-    return [
-      { id: "overview", label: "Overview", to: "/" },
-      { id: "setup", label: "Setup", to: "/setup" },
-      { id: "alerts", label: "Alerts", to: "/alerts" },
-      { id: "settings", label: "Settings", to: "/settings" },
-    ];
-  }
-  const base = `/brands/${brandId}`;
-  return [
-    { id: "overview", label: "Overview", to: base },
-    { id: "content", label: "Content", to: `${base}/content` },
-    { id: "market", label: "Market", to: `${base}/market` },
-    { id: "calibration", label: "Calibration", to: `${base}/calibration` },
-  ];
+/** The five places as the bottom bar on a phone, in the rail's order. Each opens the place's first screen. A place with no screen on this page
+ *  has an empty target, and the bar shows it as unavailable rather than linking it to some other page. */
+export function bottomTabs(brandId?: string): Array<NavItem & { place: PlaceId }> {
+  return sidebarGroups({ brandId, reviewCount: null }).map((group) => ({
+    id: group.id,
+    place: group.id as PlaceId,
+    label: group.label,
+    to: group.items[0]?.to ?? "",
+  }));
 }
 
 /**

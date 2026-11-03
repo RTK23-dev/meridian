@@ -13,7 +13,7 @@ export function BrainMiniNav({ items, onSelect }: { items: MiniNavItem[]; onSele
         <a
           href={`#${sectionAnchor(item.id)}`}
           onClick={() => onSelect?.(item.id)}
-          className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 rounded-md border border-border bg-surface px-3 text-sm text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          className="flex min-h-11 flex-wrap items-center justify-between gap-x-3 rounded-sharp border border-hairline bg-raised px-3 text-sm text-fg-primary hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <span className="min-w-0 break-words font-semibold">{item.label}</span>
           <span className="tabular-nums text-fg-muted">{item.filled} of {item.total}</span>

@@ -75,19 +75,19 @@ export function TraceDrawer(props: TraceDrawerProps) {
       <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-6">
         <div className="space-y-1 pr-8">
           <SheetTitle className="text-2xl">{title}</SheetTitle>
-          <SheetDescription className="text-sm text-muted">{summary}</SheetDescription>
+          <SheetDescription className="text-sm text-fg-muted">{summary}</SheetDescription>
         </div>
         {error ? <ErrorState message={error.message} detail={error.raw} onRetry={onRetry} /> : null}
-        {stages === null ? (error || !loading ? null : <p role="status" className="text-sm text-muted">Loading trace</p>) : (
+        {stages === null ? (error || !loading ? null : <p role="status" className="text-sm text-fg-muted">Loading trace</p>) : (
           <>
             <section aria-labelledby="trace-timeline-title" className="space-y-3">
               <h3 id="trace-timeline-title" className="font-semibold">Timeline</h3>
-              <ol className="space-y-5 border-l border-border pl-5">
+              <ol className="space-y-5 border-l border-hairline pl-5">
                 {stages.map((stage) => (
                   <li key={stage.id} className="relative space-y-2">
                     <span
                       aria-hidden="true"
-                      className={`absolute -left-[1.8rem] top-0.5 grid size-4 place-items-center rounded-full border ${stage.recorded ? "border-success bg-success-soft text-success" : "border-border-strong bg-surface text-muted"}`}
+                      className={`absolute -left-[1.8rem] top-0.5 grid size-4 place-items-center rounded-full border ${stage.recorded ? "border-success bg-raised text-success" : "border-border-strong bg-raised text-fg-muted"}`}
                     >
                       {stage.recorded ? <Check className="size-3" /> : <Minus className="size-3" />}
                     </span>
@@ -100,13 +100,13 @@ export function TraceDrawer(props: TraceDrawerProps) {
                         {stage.entries.map((entry) => (
                           <li key={entry.key}>
                             <span className="font-medium">{entry.title}</span>
-                            <span className="block text-muted">{entry.detail}</span>
-                            {entry.at ? <time dateTime={entry.at} className="block text-xs text-muted">{formatWhen(entry.at)}</time> : null}
+                            <span className="block text-fg-muted">{entry.detail}</span>
+                            {entry.at ? <time dateTime={entry.at} className="block text-xs text-fg-muted">{formatWhen(entry.at)}</time> : null}
                           </li>
                         ))}
                       </ul>
                     ) : (
-                      <p className="text-sm text-muted">{stage.note}</p>
+                      <p className="text-sm text-fg-muted">{stage.note}</p>
                     )}
                   </li>
                 ))}
@@ -136,11 +136,11 @@ export function TraceDrawer(props: TraceDrawerProps) {
 
             <section aria-labelledby="trace-learned-title" className="space-y-2">
               <h3 id="trace-learned-title" className="font-semibold">Learned patterns</h3>
-              <p className="text-sm text-muted">{learnedSummary}</p>
+              <p className="text-sm text-fg-muted">{learnedSummary}</p>
             </section>
 
             {canEdit ? (
-              <section aria-labelledby="trace-record-title" className="space-y-4 border-t border-border pt-6">
+              <section aria-labelledby="trace-record-title" className="space-y-4 border-t border-hairline pt-6">
                 <h3 id="trace-record-title" className="font-semibold">Add performance for this creative</h3>
                 <form className="grid gap-3 sm:grid-cols-2" onSubmit={performanceForm.handleSubmit(onRecordPerformance)} onKeyDown={(event) => submitOnShortcut(event)}>
                   <Field label="Date" error={formState.errors.observedOn?.message}><Input {...register("observedOn")} type="date" required /></Field>

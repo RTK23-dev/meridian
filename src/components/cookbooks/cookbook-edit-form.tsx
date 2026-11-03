@@ -81,7 +81,7 @@ export function CookbookEditForm({
       }}
     >
       <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold text-fg">Settings</legend>
+        <legend className="text-sm font-semibold text-fg-primary">Settings</legend>
         {cookbook.controls.map((control) => (
           <div key={control.id} className="space-y-1">
             <ControlField
@@ -94,13 +94,13 @@ export function CookbookEditForm({
         ))}
       </fieldset>
       <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold text-fg">Instructions</legend>
+        <legend className="text-sm font-semibold text-fg-primary">Instructions</legend>
         {cookbook.instructions.map((instruction, index) => (
           <div key={index} className="space-y-1">
             <label className="flex flex-col gap-1 text-sm">
               <span className="text-fg-secondary">Instruction for {instruction.role}</span>
               <textarea
-                className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+                className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
                 rows={3}
                 maxLength={4000}
                 value={texts[index] ?? ""}
@@ -112,16 +112,16 @@ export function CookbookEditForm({
         ))}
       </fieldset>
       <fieldset className="space-y-3">
-        <legend className="text-sm font-semibold text-fg">Steps</legend>
+        <legend className="text-sm font-semibold text-fg-primary">Steps</legend>
         {cookbook.steps.map((step, index) => (
-          <div key={step.id} className="space-y-3 rounded-md border border-border p-3">
+          <div key={step.id} className="space-y-3 rounded-sharp border border-hairline p-3">
             <div className="space-y-1">
               <label className="flex flex-col gap-1 text-sm">
                 <span className="text-fg-secondary">Step name</span>
                 <input
                   type="text"
                   maxLength={80}
-                  className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+                  className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
                   value={steps[index]?.label ?? step.label}
                   onChange={(event) => setSteps((current) => current.map((item, position) => (position === index ? { ...item, label: event.target.value } : item)))}
                 />
@@ -171,7 +171,7 @@ function StepSettingField({ name, value, onChange }: { name: string; value: Scal
   const label = name.replace(/_/g, " ");
   if (typeof value === "boolean") {
     return (
-      <label className="flex items-center gap-2 text-sm text-fg">
+      <label className="flex items-center gap-2 text-sm text-fg-primary">
         <input type="checkbox" checked={value} onChange={(event) => onChange(event.target.checked)} />
         {label}
       </label>
@@ -181,14 +181,14 @@ function StepSettingField({ name, value, onChange }: { name: string; value: Scal
     return (
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-fg-secondary">{label}</span>
-        <input type="number" step="any" className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-fg" value={value} onChange={(event) => onChange(Number(event.target.value))} />
+        <input type="number" step="any" className="w-32 rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary" value={value} onChange={(event) => onChange(Number(event.target.value))} />
       </label>
     );
   }
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-fg-secondary">{label}</span>
-      <input type="text" maxLength={2000} className="rounded-md border border-border bg-surface px-3 py-2 text-fg" value={value} onChange={(event) => onChange(event.target.value)} />
+      <input type="text" maxLength={2000} className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary" value={value} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }
@@ -196,7 +196,7 @@ function StepSettingField({ name, value, onChange }: { name: string; value: Scal
 function ControlField({ control, value, onChange }: { control: Control; value: ControlValue; onChange: (value: ControlValue) => void }) {
   if (control.kind === "toggle") {
     return (
-      <label className="flex items-center gap-2 text-sm text-fg">
+      <label className="flex items-center gap-2 text-sm text-fg-primary">
         <input type="checkbox" checked={value === true} onChange={(event) => onChange(event.target.checked)} />
         {control.label}
       </label>
@@ -211,7 +211,7 @@ function ControlField({ control, value, onChange }: { control: Control; value: C
           min={control.min}
           max={control.max}
           step={control.step}
-          className="w-32 rounded-md border border-border bg-surface px-3 py-2 text-fg"
+          className="w-32 rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
           value={typeof value === "number" ? value : control.default}
           onChange={(event) => onChange(Number(event.target.value))}
         />
@@ -222,7 +222,7 @@ function ControlField({ control, value, onChange }: { control: Control; value: C
     return (
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-fg-secondary">{control.label}</span>
-        <select className="w-48 rounded-md border border-border bg-surface px-3 py-2 text-fg" value={String(value)} onChange={(event) => onChange(event.target.value)}>
+        <select className="w-48 rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary" value={String(value)} onChange={(event) => onChange(event.target.value)}>
           {control.options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
@@ -235,7 +235,7 @@ function ControlField({ control, value, onChange }: { control: Control; value: C
   return (
     <label className="flex flex-col gap-1 text-sm">
       <span className="text-fg-secondary">{control.label}</span>
-      <input type="text" className="rounded-md border border-border bg-surface px-3 py-2 text-fg" value={String(value)} onChange={(event) => onChange(event.target.value)} />
+      <input type="text" className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary" value={String(value)} onChange={(event) => onChange(event.target.value)} />
     </label>
   );
 }

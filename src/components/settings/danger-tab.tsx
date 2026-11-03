@@ -8,8 +8,8 @@ import type { BrandSummary } from "@/lib/meridian/workspace/actions";
 export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDelete: boolean }) {
   return (
     <div className="space-y-6">
-      <section aria-labelledby="danger-brands-title" className="space-y-3 rounded-lg border border-danger/40 bg-surface p-5">
-        <h2 id="danger-brands-title" className="text-section font-semibold text-fg">Delete a brand</h2>
+      <section aria-labelledby="danger-brands-title" className="space-y-3 rounded-sharp border border-danger/40 bg-raised p-5">
+        <h2 id="danger-brands-title" className="text-section font-semibold text-fg-primary">Delete a brand</h2>
         <p className="text-sm text-fg-muted">
           Open the brand and use Delete brand in its danger zone. You type the brand name to confirm. The audit trail keeps a record.
         </p>
@@ -19,8 +19,8 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
           <ul className="divide-y divide-border">
             {brands.map((brand) => (
               <li key={brand.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
-                <span className="font-semibold text-fg">{brand.name}</span>
-                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-fg underline underline-offset-4 hover:no-underline">
+                <span className="font-semibold text-fg-primary">{brand.name}</span>
+                <Link to="/brands/$brandId" params={{ brandId: brand.id }} className="inline-flex min-h-11 items-center font-semibold text-fg-primary underline underline-offset-4 hover:no-underline">
                   Open {brand.name} to delete it<span className="sr-only"> from its overview</span>
                 </Link>
               </li>
@@ -30,7 +30,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
       </section>
 
       <section aria-labelledby="danger-workspace-title" className="space-y-2 panel">
-        <h2 id="danger-workspace-title" className="text-section font-semibold text-fg">Delete this workspace</h2>
+        <h2 id="danger-workspace-title" className="text-section font-semibold text-fg-primary">Delete this workspace</h2>
         <p className="text-sm text-fg-muted">
           This build does not delete a workspace, so no control is offered here. Brands can be deleted one at a time, as above.
         </p>

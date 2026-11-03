@@ -128,17 +128,17 @@ export function WeightsTab({ organizationId, saved, canAdmin }: { organizationId
 
         <aside aria-labelledby="weights-preview-title" className="h-fit space-y-4 panel">
           <div>
-            <h3 id="weights-preview-title" className="text-base font-semibold text-fg">Live preview</h3>
+            <h3 id="weights-preview-title" className="text-base font-semibold text-fg-primary">Live preview</h3>
             <p className="mt-1 text-xs text-fg-muted">Each factor’s share of the total weight. Penalties are drawn dashed.</p>
           </div>
           <ul className="space-y-3">
             {shares.map((row) => (
               <li key={row.key} className="space-y-1">
                 <div className="flex items-baseline justify-between gap-2 text-sm">
-                  <span className="text-fg">{row.label}</span>
-                  <span className="font-semibold text-fg">{Math.round(row.share * 100)}%</span>
+                  <span className="text-fg-primary">{row.label}</span>
+                  <span className="font-semibold text-fg-primary">{Math.round(row.share * 100)}%</span>
                 </div>
-                <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-overlay">
                   <div
                     aria-hidden="true"
                     className={row.penalty ? "h-full rounded-full border border-dashed border-border-strong bg-transparent" : "h-full rounded-full bg-fg-muted"}

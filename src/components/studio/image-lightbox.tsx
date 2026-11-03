@@ -39,7 +39,7 @@ export function ImageLightbox({ target, onClose }: { target: LightboxTarget | nu
             <Button type="button" size="sm" variant="secondary" aria-label="Zoom in" disabled={zoomIndex === ZOOM_STEPS.length - 1} aria-describedby={zoomIndex === ZOOM_STEPS.length - 1 ? "lightbox-zoom-level" : undefined} onClick={() => setZoomIndex((index) => Math.min(index + 1, ZOOM_STEPS.length - 1))}>+</Button>
             <Button type="button" size="sm" variant="quiet" disabled={zoomIndex === 0} aria-describedby={zoomIndex === 0 ? "lightbox-zoom-level" : undefined} onClick={() => setZoomIndex(0)}>Reset zoom</Button>
           </div>
-          <div className="mt-3 max-h-[70vh] overflow-auto rounded-md border border-border bg-surface-2">
+          <div className="mt-3 max-h-[70vh] overflow-auto rounded-sharp border border-hairline bg-overlay">
             {failed ? (
               <p role="status" className="p-6 text-sm text-fg-muted">This image could not be loaded. It may have been removed, or you may not have access to this workspace.</p>
             ) : (

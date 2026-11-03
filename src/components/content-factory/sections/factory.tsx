@@ -213,13 +213,13 @@ export function FactoryPage({ brandId }: { brandId: string }) {
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Factory</p>
           <h1 className="page-title">Make a research-led batch</h1>
-          <p className="text-muted">Choose a topic, output format and number of variations. Meridian gathers evidence and plans original creatives. Video production stops until a provider and cost cap are configured.</p>
-          <p className="text-sm text-muted">{board.levelDetail} Automation is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (maximum {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}). Advanced controls stay in Factory Line.</p>
+          <p className="text-fg-muted">Choose a topic, output format and number of variations. Meridian gathers evidence and plans original creatives. Video production stops until a provider and cost cap are configured.</p>
+          <p className="text-sm text-fg-muted">{board.levelDetail} Automation is {FACTORY_LEVEL_LABELS[board.level as FactoryLevel]} (maximum {FACTORY_LEVEL_LABELS[board.ceiling as FactoryLevel]}). Advanced controls stay in Factory Line.</p>
         </div>
-        {killOn ? <p className="rounded-md border border-danger bg-danger-soft px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}
+        {killOn ? <p className="rounded-sharp border border-danger bg-raised px-3 py-2 text-sm font-semibold" role="status">Kill switch is on. Live ads stay paused.</p> : null}
       </header>
-      {board.note ? <p className="text-sm text-muted">{board.note}</p> : null}
-      {note ? <p className="text-sm text-muted" role="status">{note}</p> : null}
+      {board.note ? <p className="text-sm text-fg-muted">{board.note}</p> : null}
+      {note ? <p className="text-sm text-fg-muted" role="status">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
 
       <Tabs defaultValue="discover" className="space-y-6">
@@ -256,19 +256,19 @@ export function FactoryPage({ brandId }: { brandId: string }) {
             <h2 className="text-section font-semibold">Sources</h2>
             <ul className="grid gap-3 md:grid-cols-2">
               {board.sources.map((source) => (
-                <li key={source.id} className="rounded-md border border-line p-3">
+                <li key={source.id} className="rounded-sharp border border-hairline p-3">
                   <p className="font-semibold">{source.label}</p>
-                  <p className="text-sm text-muted">{source.connected ? "CONFIGURED" : "NOT_CONNECTED"} · {source.note}</p>
+                  <p className="text-sm text-fg-muted">{source.connected ? "CONFIGURED" : "NOT_CONNECTED"} · {source.note}</p>
                 </li>
               ))}
             </ul>
-            <p className="text-sm text-muted">Ad Library snapshot video is {board.snapshotMediaEnabled ? "on" : "off"}. Metadata-only is the default after the rights review.</p>
-            <p className="text-sm text-muted">Video engine: {board.video.status} ({board.video.provider}). {board.video.detail}</p>
+            <p className="text-sm text-fg-muted">Ad Library snapshot video is {board.snapshotMediaEnabled ? "on" : "off"}. Metadata-only is the default after the rights review.</p>
+            <p className="text-sm text-fg-muted">Video engine: {board.video.status} ({board.video.provider}). {board.video.detail}</p>
           </section>
 
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Start a run</h2>
-            <p className="text-muted">A run starts from the brand's defaults. Every choice you change here is stored with the run, so a later change to the defaults does not change it.</p>
+            <p className="text-fg-muted">A run starts from the brand's defaults. Every choice you change here is stored with the run, so a later change to the defaults does not change it.</p>
             <RunBuilder
               key={builderKey}
               defaults={board.runDefaults}
@@ -311,17 +311,17 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Likely winners</h2>
-            {board.winners.length === 0 ? <p className="text-muted">No tracked ads yet. Nothing is invented to fill this list.</p> : (
+            {board.winners.length === 0 ? <p className="text-fg-muted">No tracked ads yet. Nothing is invented to fill this list.</p> : (
               <ul className="space-y-3">
                 {board.winners.map((item) => (
-                  <li key={item.id} className="rounded-md border border-line p-4">
+                  <li key={item.id} className="rounded-sharp border border-hairline p-4">
                     <p className="eyebrow">{item.advertiser}</p>
                     {item.score == null || item.low == null || item.high == null ? (
-                      <p className="text-xl text-muted">Not graded yet</p>
+                      <p className="text-xl text-fg-muted">Not graded yet</p>
                     ) : (
-                      <p className="text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
+                      <p className="text-xl tabular-nums">Score {item.score.toFixed(2)} <span className="text-sm font-normal text-fg-muted">range {item.low.toFixed(2)}–{item.high.toFixed(2)}</span></p>
                     )}
-                    <p className="text-sm text-muted">{item.evidence.join(" · ")}</p>
+                    <p className="text-sm text-fg-muted">{item.evidence.join(" · ")}</p>
                     {item.copy ? <p className="mt-2 text-sm">{item.copy}</p> : null}
                   </li>
                 ))}
@@ -331,12 +331,12 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Trends</h2>
-            {board.trends.length === 0 ? <p className="text-muted">No stored ads to cluster. Rising concepts stay unnamed until ads exist.</p> : (
+            {board.trends.length === 0 ? <p className="text-fg-muted">No stored ads to cluster. Rising concepts stay unnamed until ads exist.</p> : (
               <ul className="space-y-3">
                 {board.trends.map((trend) => (
-                  <li key={trend.concept} className="rounded-md border border-line p-4">
+                  <li key={trend.concept} className="rounded-sharp border border-hairline p-4">
                     <p className="font-semibold">{trend.concept} · {trend.momentum}{trend.whitespace ? " · whitespace" : ""}</p>
-                    <p className="text-sm text-muted">{trend.evidence.join(" · ")}</p>
+                    <p className="text-sm text-fg-muted">{trend.evidence.join(" · ")}</p>
                   </li>
                 ))}
               </ul>
@@ -345,7 +345,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Ad Library yield</h2>
-            {board.yieldRows.length === 0 ? <p className="text-muted">No collection runs are stored, so yield is unknown.</p> : (
+            {board.yieldRows.length === 0 ? <p className="text-fg-muted">No collection runs are stored, so yield is unknown.</p> : (
               <ul className="space-y-2 text-sm">
                 {board.yieldRows.map((row, index) => (
                   <li key={`${row.niche}-${index}`}>
@@ -360,11 +360,11 @@ export function FactoryPage({ brandId }: { brandId: string }) {
         <TabsContent value="templates" className="space-y-4">
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Storyboard templates</h2>
-            <p className="text-muted">A winner becomes timed beats, shot types, and overlay roles. Footage, slogans, and look are dropped.</p>
-            {board.templates.length === 0 ? <p className="text-muted">No templates are stored.</p> : (
+            <p className="text-fg-muted">A winner becomes timed beats, shot types, and overlay roles. Footage, slogans, and look are dropped.</p>
+            {board.templates.length === 0 ? <p className="text-fg-muted">No templates are stored.</p> : (
               <ul className="space-y-2">
                 {board.templates.map((item) => (
-                  <li key={item.id} className="rounded-md border border-line p-3 text-sm">
+                  <li key={item.id} className="rounded-sharp border border-hairline p-3 text-sm">
                     Template from {item.sourceAdId || "unspecified source"} · {item.createdAt}
                   </li>
                 ))}
@@ -376,22 +376,22 @@ export function FactoryPage({ brandId }: { brandId: string }) {
         <TabsContent value="production" className="space-y-4">
           <section aria-labelledby="production-queue" className="space-y-3">
             <h2 id="production-queue" className="text-section font-semibold">Production queue</h2>
-            <p className="text-sm text-muted">The jobs this brand has, read from the job records. The stages below are the order a run goes through.</p>
+            <p className="text-sm text-fg-muted">The jobs this brand has, read from the job records. The stages below are the order a run goes through.</p>
             <ProductionQueue query={queue} organizationId={board.organizationId} canAdmin={canAdmin} />
           </section>
           <section aria-labelledby="production-stages" className="space-y-3">
             <h2 id="production-stages" className="text-section font-semibold">Production stages</h2>
             <ol className="grid gap-2 md:grid-cols-2">
               {board.stages.map((stage) => (
-                <li key={stage.type} className="rounded-md border border-line p-3 text-sm">
+                <li key={stage.type} className="rounded-sharp border border-hairline p-3 text-sm">
                   <span className="font-semibold">{stage.label}</span>
-                  <span className="block text-muted">{stage.type} · {stage.pool} pool</span>
+                  <span className="block text-fg-muted">{stage.type} · {stage.pool} pool</span>
                 </li>
               ))}
             </ol>
             <div className="space-y-1 text-sm">
               <p className="font-semibold">Stage totals, read only</p>
-              <p className="text-muted">
+              <p className="text-fg-muted">
                 From the last {board.stageCosts.rows} cost rows. {board.stageCosts.unpricedRows} row(s) have no price and are not in the totals.
                 {board.stageCosts.variants > 0 && board.stageCosts.costPerVariantCents !== null ? ` About $${(board.stageCosts.costPerVariantCents / 100).toFixed(2)} per variant.` : " No cost per variant: no variant is counted."}
               </p>
@@ -401,7 +401,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                 ))}
               </ul>
             </div>
-            {board.costs.length === 0 ? <p className="text-muted">No production costs are recorded yet.</p> : (
+            {board.costs.length === 0 ? <p className="text-fg-muted">No production costs are recorded yet.</p> : (
               <ul className="text-sm">
                 {board.costs.map((row, index) => (
                   <li key={`${row.stage}-${index}`}>{costLine(row)}</li>
@@ -414,11 +414,11 @@ export function FactoryPage({ brandId }: { brandId: string }) {
         <TabsContent value="review" className="space-y-4">
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Gate results</h2>
-            <p className="text-muted">Originality, claims, policy, and rights can block. Brand gaps go to a person. Missing evidence is review, not a pass.</p>
-            {board.variants.length === 0 ? <p className="text-muted">No variants are waiting.</p> : (
+            <p className="text-fg-muted">Originality, claims, policy, and rights can block. Brand gaps go to a person. Missing evidence is review, not a pass.</p>
+            {board.variants.length === 0 ? <p className="text-fg-muted">No variants are waiting.</p> : (
               <ul className="space-y-2">
                 {board.variants.map((item) => (
-                  <li key={item.id} className="rounded-md border border-line p-3 text-sm">
+                  <li key={item.id} className="rounded-sharp border border-hairline p-3 text-sm">
                     <span className="font-semibold">{item.gateResult}</span> · hook {item.hook || "unset"} · CTA {item.cta || "unset"} · {item.presenter || "no presenter"} · {item.lengthMs} ms
                   </li>
                 ))}
@@ -427,18 +427,18 @@ export function FactoryPage({ brandId }: { brandId: string }) {
           </section>
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Publishing and measurement</h2>
-            <p className="text-muted">Each receipt is what a channel or the paid publisher returned. A channel with no connection is listed as not connected. A metric the source did not report reads not reported.</p>
-            {board.publishing.length === 0 ? <p className="text-muted">No Factory creative has a receipt yet.</p> : (
+            <p className="text-fg-muted">Each receipt is what a channel or the paid publisher returned. A channel with no connection is listed as not connected. A metric the source did not report reads not reported.</p>
+            {board.publishing.length === 0 ? <p className="text-fg-muted">No Factory creative has a receipt yet.</p> : (
               <ul className="space-y-2">
                 {board.publishing.map((item) => (
-                  <li key={item.creativeId} className="rounded-md border border-line p-3 text-sm">
+                  <li key={item.creativeId} className="rounded-sharp border border-hairline p-3 text-sm">
                     <span className="font-semibold">{item.format} creative</span> · run {item.runId}
                     <ul className="mt-1">
                       {item.receipts.map((receipt, index) => (
                         <li key={`${receipt.surface}-${receipt.platform}-${index}`}>{receiptLine(receipt)}</li>
                       ))}
                     </ul>
-                    {item.measurements.length === 0 ? <p className="mt-1 text-muted">Not measured yet.</p> : (
+                    {item.measurements.length === 0 ? <p className="mt-1 text-fg-muted">Not measured yet.</p> : (
                       <ul className="mt-1">
                         {item.measurements.map((row, index) => (
                           <li key={`${row.surface}-${row.recordedAt}-${index}`}>{row.surface} {row.platform}: {metricLine(row.surface, row.metrics)}</li>
@@ -455,7 +455,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
         <TabsContent value="tests" className="space-y-4">
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Levels and kill switch</h2>
-            <p className="text-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. The factory does not spend until both caps are set, and the caps are set on the <Link to="/billing" className="font-semibold underline underline-offset-2">billing page</Link>. Automation never invents a live campaign.</p>
+            <p className="text-fg-muted">Daily cap {dollars(board.cap.dailyCents)} · total cap {dollars(board.cap.totalCents)}. The factory does not spend until both caps are set, and the caps are set on the <Link to="/billing" className="font-semibold underline underline-offset-2">billing page</Link>. Automation never invents a live campaign.</p>
             {canOwnControls ? (
               <form
                 className="grid gap-3 md:grid-cols-2"
@@ -477,7 +477,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                 <FormDiscardBar dirty={controlsForm.formState.isDirty} subject="factory controls" onDiscard={() => controlsForm.reset()} className="md:col-span-2" />
                 <Button type="submit" disabled={saveControls.isPending || controlsForm.formState.isSubmitting}>{saveControls.isPending || controlsForm.formState.isSubmitting ? "Saving…" : "Save levels"}</Button>
               </form>
-            ) : <p className="text-sm text-muted">Only workspace owners set factory levels.</p>}
+            ) : <p className="text-sm text-fg-muted">Only workspace owners set factory levels.</p>}
             {canAdmin ? (
               <Button
                 type="button"
@@ -492,11 +492,11 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Held budget</h2>
-            <p className="text-muted">
+            <p className="text-fg-muted">
               A provider call whose outcome is unknown keeps its reserved budget held. Nothing releases it automatically, not even when its submission expires. An admin releases it here.
             </p>
             {canAdmin ? <HeldReservationsPanel brandId={brandId} /> : (
-              <p className="text-sm text-muted">
+              <p className="text-sm text-fg-muted">
                 Only a workspace admin or owner can see and release held budget. Releasing it returns the reserved budget to the ledger, so the control is limited to them. Your role is {board.role}.
               </p>
             )}
@@ -504,38 +504,38 @@ export function FactoryPage({ brandId }: { brandId: string }) {
 
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Multi-Channel Distribution & Organic Telemetry</h2>
-            <p className="text-muted">
+            <p className="text-fg-muted">
               Creatives are selectively dispatched to paid ad networks and organic social accounts. JEV learns from paid conversions and organic engagement without requiring every account to be connected.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {(channelsQuery.data ?? []).map((channel) => (
-                <div key={channel.id} className="rounded-md border border-line p-3 text-sm">
+                <div key={channel.id} className="rounded-sharp border border-hairline p-3 text-sm">
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">{channel.name}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded ${channel.connected ? "bg-success-soft font-medium text-success" : "bg-surface-2 text-muted"}`}>
+                    <span className={`text-xs px-1.5 py-0.5 rounded-sharp ${channel.connected ? "bg-raised font-medium text-success" : "bg-overlay text-fg-muted"}`}>
                       {channel.connected ? "Connected" : "Optional"}
                     </span>
                   </div>
-                  <p className="text-xs text-muted mt-1">{channel.description}</p>
+                  <p className="text-xs text-fg-muted mt-1">{channel.description}</p>
                 </div>
               ))}
             </div>
 
-            <div className="mt-4 pt-3 border-t border-line">
+            <div className="mt-4 pt-3 border-t border-hairline">
               <h3 className="font-semibold text-base">Organic Post Queue & Performance</h3>
               {organicQuery.data && organicQuery.data.length > 0 ? (
                 <ul className="mt-3 space-y-2">
                   {organicQuery.data.map((post) => (
-                    <li key={post.id} className="rounded-md border border-line p-3 text-sm flex flex-wrap items-center justify-between gap-3">
+                    <li key={post.id} className="rounded-sharp border border-hairline p-3 text-sm flex flex-wrap items-center justify-between gap-3">
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="eyebrow">{post.platform}</span>
-                          <span className="text-xs text-muted">· {post.status}</span>
+                          <span className="text-xs text-fg-muted">· {post.status}</span>
                         </div>
                         <p className="font-medium mt-0.5">{post.title || (post.caption ? post.caption.slice(0, 50) : "Creative post")}</p>
-                        {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-fg underline mt-0.5 inline-block">External post link</a> : null}
+                        {post.postUrl ? <a href={post.postUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-fg-primary underline mt-0.5 inline-block">External post link</a> : null}
                       </div>
-                      <div className="text-xs text-muted text-right">
+                      <div className="text-xs text-fg-muted text-right">
                         <div className="font-mono">{organicMetricsLine(post)}</div>
                         <div className="font-mono mt-0.5">{post.likes == null ? "likes not reported" : `${post.likes} likes`}</div>
                       </div>
@@ -543,7 +543,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted mt-2">No organic posts published yet. Select organic channels in Studio Review to publish.</p>
+                <p className="text-sm text-fg-muted mt-2">No organic posts published yet. Select organic channels in Studio Review to publish.</p>
               )}
             </div>
           </section>
@@ -554,18 +554,18 @@ export function FactoryPage({ brandId }: { brandId: string }) {
           <SleepModePanel brandId={brandId} canAdmin={canAdmin} />
           <section className="space-y-3">
             <h2 className="text-section font-semibold">Weekly strategist report</h2>
-            <p className="text-muted">{board.report.note}</p>
+            <p className="text-fg-muted">{board.report.note}</p>
             <section>
               <h3 className="font-semibold">Won</h3>
-              {board.report.won.length === 0 ? <p className="text-sm text-muted">No stored winners this week.</p> : board.report.won.map((item) => <p key={item.label} className="text-sm">{item.label}: {item.why}</p>)}
+              {board.report.won.length === 0 ? <p className="text-sm text-fg-muted">No stored winners this week.</p> : board.report.won.map((item) => <p key={item.label} className="text-sm">{item.label}: {item.why}</p>)}
             </section>
             <section>
               <h3 className="font-semibold">Ride</h3>
-              {board.report.ride.length === 0 ? <p className="text-sm text-muted">No rising concepts with evidence.</p> : board.report.ride.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
+              {board.report.ride.length === 0 ? <p className="text-sm text-fg-muted">No rising concepts with evidence.</p> : board.report.ride.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
             </section>
             <section>
               <h3 className="font-semibold">Drop</h3>
-              {board.report.drop.length === 0 ? <p className="text-sm text-muted">No fading concepts with evidence.</p> : board.report.drop.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
+              {board.report.drop.length === 0 ? <p className="text-sm text-fg-muted">No fading concepts with evidence.</p> : board.report.drop.map((item) => <p key={item.concept} className="text-sm">{item.concept}: {item.evidence.join("; ")}</p>)}
             </section>
           </section>
         </TabsContent>

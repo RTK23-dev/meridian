@@ -59,7 +59,7 @@ export function SchedulePanel({ brandId, organizationId, canAdmin }: { brandId: 
     </div>
     <form className="grid gap-6" onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)}>
       <fieldset className="grid gap-4 md:grid-cols-3">
-        <legend className="mb-2 text-sm font-semibold text-fg">Ad to sync</legend>
+        <legend className="mb-2 text-sm font-semibold text-fg-primary">Ad to sync</legend>
         <Field label="Provider" error={errors.provider?.message}>
           <SelectInput {...form.register("provider")}>
             <option value="meta">Meta</option>
@@ -76,7 +76,7 @@ export function SchedulePanel({ brandId, organizationId, canAdmin }: { brandId: 
       </fieldset>
 
       <fieldset className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <legend className="mb-2 text-sm font-semibold text-fg">Dates and cadence</legend>
+        <legend className="mb-2 text-sm font-semibold text-fg-primary">Dates and cadence</legend>
         <Field label="Start date" error={errors.startDate?.message} required>
           <Input {...form.register("startDate")} type="date" required />
         </Field>

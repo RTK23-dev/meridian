@@ -8,17 +8,18 @@ import { BUDGET_CATEGORIES, type BudgetCategory } from "../../engine/orchestrato
 // The engine's reason for an unreadable policy row. The policy read and the saves refuse with it, so the screen matches the same text.
 import { UNREADABLE_POLICY_REASON } from "../../engine/orchestrator/policy-store.ts";
 
-/** A colour role. Each one is a theme token from styles.css, so the light and dark themes both read. */
+/** A colour role. Each one is a theme token from styles.css, so the light and dark themes both read. Status is a dot and a word, so a role
+ *  has no tinted fill. */
 export type Accent = "muted" | "info" | "success" | "warning" | "danger" | "accent";
 
 /** The classes of each colour role. Every class is written out in full so the Tailwind scanner finds it. */
-export const ACCENT: Record<Accent, { text: string; soft: string; dot: string; stroke: string }> = {
-  muted: { text: "text-fg-muted", soft: "bg-surface-2", dot: "bg-border-strong", stroke: "stroke-border-strong" },
-  info: { text: "text-info", soft: "bg-info-soft", dot: "bg-info", stroke: "stroke-info" },
-  success: { text: "text-success", soft: "bg-success-soft", dot: "bg-success", stroke: "stroke-success" },
-  warning: { text: "text-warning", soft: "bg-warning-soft", dot: "bg-warning", stroke: "stroke-warning" },
-  danger: { text: "text-danger", soft: "bg-danger-soft", dot: "bg-danger", stroke: "stroke-danger" },
-  accent: { text: "text-accent", soft: "bg-accent-soft", dot: "bg-accent", stroke: "stroke-accent" },
+export const ACCENT: Record<Accent, { text: string; dot: string; stroke: string }> = {
+  muted: { text: "text-fg-muted", dot: "bg-border-strong", stroke: "stroke-border-strong" },
+  info: { text: "text-info", dot: "bg-info", stroke: "stroke-info" },
+  success: { text: "text-success", dot: "bg-success", stroke: "stroke-success" },
+  warning: { text: "text-warning", dot: "bg-warning", stroke: "stroke-warning" },
+  danger: { text: "text-danger", dot: "bg-danger", stroke: "stroke-danger" },
+  accent: { text: "text-accent", dot: "bg-accent", stroke: "stroke-accent" },
 };
 
 /** The name of an icon for a step kind. The canvas parts file maps each name to its icon component. */
@@ -26,18 +27,19 @@ export type KindIconName = "source" | "scan" | "text" | "image" | "video" | "aud
 
 export type KindStyle = { label: string; accent: Accent; icon: KindIconName; summary: string };
 
-/** One line per step kind: its label, colour, icon and what it does. Change a colour or an icon here and every screen follows. */
+/** One line per step kind: its label, icon and what it does. Kinds carry no colour (the design plan, MX3): the state of a step carries the colour,
+ *  so every kind is drawn in the muted role. */
 export const KIND_STYLE: Record<NodeKind, KindStyle> = {
   reference: { label: "Reference", accent: "muted", icon: "source", summary: "Material you supply. No model call." },
-  analysis: { label: "Analysis", accent: "info", icon: "scan", summary: "A text model reads material and returns its structure." },
-  script: { label: "Script", accent: "info", icon: "text", summary: "A text model writes the lines or the shot list." },
-  visual: { label: "Still", accent: "success", icon: "image", summary: "An image model makes or edits a still." },
-  video: { label: "Shot", accent: "accent", icon: "video", summary: "A video model makes a moving shot." },
-  voice: { label: "Voice", accent: "warning", icon: "audio", summary: "A speech model reads the script." },
-  avatar: { label: "Presenter", accent: "accent", icon: "person", summary: "A video model makes a presenter shot." },
+  analysis: { label: "Analysis", accent: "muted", icon: "scan", summary: "A text model reads material and returns its structure." },
+  script: { label: "Script", accent: "muted", icon: "text", summary: "A text model writes the lines or the shot list." },
+  visual: { label: "Still", accent: "muted", icon: "image", summary: "An image model makes or edits a still." },
+  video: { label: "Shot", accent: "muted", icon: "video", summary: "A video model makes a moving shot." },
+  voice: { label: "Voice", accent: "muted", icon: "audio", summary: "A speech model reads the script." },
+  avatar: { label: "Presenter", accent: "muted", icon: "person", summary: "A video model makes a presenter shot." },
   edit: { label: "Edit", accent: "muted", icon: "cut", summary: "Deterministic cut, timing and grade. No model call." },
   compose: { label: "Compose", accent: "muted", icon: "layout", summary: "Deterministic layout of stills, shots and captions. No model call." },
-  render: { label: "Render", accent: "success", icon: "film", summary: "The final encode. No model call." },
+  render: { label: "Render", accent: "muted", icon: "film", summary: "The final encode. No model call." },
 };
 
 /** The step kinds in the order a reader meets them. */
@@ -91,6 +93,11 @@ export function replayStatus(shown: number, total: number, showAll: boolean): st
   return `${Math.min(shown, total)} of ${total} events drawn`;
 }
 
+/** The scale a plan opens at: three quarters of its full size, so the words on a step stay readable. Fit to width is one control away. */
+export const DEFAULT_ZOOM = 0.75;
+/** Below this width (a phone) a plan is its list of steps, in reading order, and not a canvas. */
+export const PHONE_LIST_BELOW_PX = 640;
+
 const ZOOM_STEPS = [0.5, 0.75, 1, 1.25, 1.5] as const;
 export const ZOOM_MIN = 0.5;
 export const ZOOM_MAX = 1.5;
@@ -107,6 +114,11 @@ export function nextZoom(current: number, direction: "in" | "out"): number {
   if (direction === "in") return ZOOM_STEPS.find((step) => step > current + EPSILON) ?? ZOOM_MAX;
   const below = ZOOM_STEPS.filter((step) => step < current - EPSILON);
   return below.length > 0 ? below[below.length - 1] : ZOOM_MIN;
+}
+
+/** The order a reader meets the steps in: column by column, and top to bottom within a column. The phone list uses the same order. */
+export function readingOrder<T extends { column: number; y: number }>(placed: readonly T[]): T[] {
+  return [...placed].sort((a, b) => a.column - b.column || a.y - b.y);
 }
 
 export const BUDGET = { min: 0.01, max: 1000 } as const;

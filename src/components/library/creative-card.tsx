@@ -17,7 +17,7 @@ function MediaPlaceholder({ load, variants }: { load: MediaLoad; variants: reado
         ? "No video or image is stored for this creative yet. Generate one in Studio step 3. A video is stored only after its engine returns the file."
         : `Media ${variants[0]?.mediaStatus || "not recorded"}. No stored file to preview yet.`;
   return (
-    <div className="grid aspect-video place-items-center rounded-md border border-dashed border-border-strong bg-surface-2 p-4 text-center text-sm text-fg-muted">
+    <div className="grid aspect-video place-items-center rounded-sharp border border-dashed border-border-strong bg-overlay p-4 text-center text-sm text-fg-muted">
       {text}
     </div>
   );
@@ -50,7 +50,7 @@ export function CreativeCard({
         <h3 className="text-xl">{label}</h3>
         <span className="eyebrow">{item.status}</span>
       </div>
-      <p className="text-sm text-muted">{item.angle} · {item.origin} · {formatDay(item.createdAt)}</p>
+      <p className="text-sm text-fg-muted">{item.angle} · {item.origin} · {formatDay(item.createdAt)}</p>
       <p className="line-clamp-3 text-sm">{item.hook}</p>
       <div className="mt-auto flex flex-wrap gap-2">
         <Button variant="quiet" size="md" aria-label={`Trace ${label}`} onClick={onTrace}>Trace</Button>

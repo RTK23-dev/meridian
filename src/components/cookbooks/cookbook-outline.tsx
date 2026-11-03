@@ -58,7 +58,7 @@ export function CookbookOutline({ brandId, cookbookId, canEdit = false }: { bran
 
   return (
     <section aria-label={`Steps of ${outline.label}`} className="space-y-3">
-      <ol className="list-decimal space-y-1 pl-5 text-sm text-fg">
+      <ol className="list-decimal space-y-1 pl-5 text-sm text-fg-primary">
         {outline.steps.map((step) => (
           <li key={step.id}>
             {step.label}

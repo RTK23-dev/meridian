@@ -149,7 +149,7 @@ export function BrandAccounts({ brandId }: { brandId: string }) {
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Account Vault</p>
           <h1 className="page-title">Connected accounts</h1>
-          <p className="text-muted">
+          <p className="text-fg-muted">
             This names the page or ad account this brand uses. Meta, Google, and TikTok ads use the workspace login from Integrations, then the ad account ID here. Instagram, Facebook, YouTube, and a TikTok creator profile still need their own token on this form.
           </p>
         </div>
@@ -191,7 +191,7 @@ export function BrandAccounts({ brandId }: { brandId: string }) {
             } : null}
             workspaceLogin={usesWorkspaceLogin(platform)}
           />
-        ) : <p className="text-sm text-muted">No accounts yet. A workspace admin can connect one.</p>
+        ) : <p className="text-sm text-fg-muted">No accounts yet. A workspace admin can connect one.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {accounts.map((account) => {
@@ -209,18 +209,18 @@ export function BrandAccounts({ brandId }: { brandId: string }) {
                   </div>
                   <h3 className="text-xl">{account.name}</h3>
                   {account.handle ? (
-                    <p className="text-sm text-muted">{account.handle}</p>
+                    <p className="text-sm text-fg-muted">{account.handle}</p>
                   ) : null}
-                  <p className="text-xs text-muted font-mono">
+                  <p className="text-xs text-fg-muted font-mono">
                     ID: {account.externalAccountId}
                   </p>
-                  <p className="text-xs text-muted">
+                  <p className="text-xs text-fg-muted">
                     Token: {account.credentialId ? "Encrypted in the vault" : "None stored. This account cannot publish."}
                   </p>
                 </div>
 
-                <div className="flex items-center justify-between border-t border-line pt-3">
-                  <span className="text-xs text-muted">
+                <div className="flex items-center justify-between border-t border-hairline pt-3">
+                  <span className="text-xs text-fg-muted">
                     {account.accountType.replace("_", " ")}
                   </span>
                   {canAdmin && isConnected ? (
@@ -342,7 +342,7 @@ function ConnectForm({
         ? "Enter the account ID to connect."
         : "";
   return (
-    <form className="space-y-4 rounded-xl border border-border bg-surface p-4" noValidate onSubmit={onSubmit}>
+    <form className="space-y-4 rounded-sharp border border-hairline bg-raised p-4" noValidate onSubmit={onSubmit}>
       <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Platform">
         {PLATFORMS.map((item) => (
           <button
@@ -351,7 +351,7 @@ function ConnectForm({
             role="radio"
             aria-checked={platform === item.id}
             onClick={() => onPlatform(item.id)}
-            className={`min-h-11 rounded-full border px-3 text-sm font-semibold ${platform === item.id ? "border-fg bg-fg text-bg" : "border-border bg-surface text-fg hover:bg-surface-2"}`}
+            className={`min-h-11 rounded-full border px-3 text-sm font-semibold ${platform === item.id ? "border-fg-primary bg-fg-primary text-on-accent" : "border-hairline bg-raised text-fg-primary hover:bg-overlay"}`}
           >
             {item.name}
           </button>
@@ -359,7 +359,7 @@ function ConnectForm({
       </div>
       {errorMessage ? <ErrorNotice>{errorMessage}</ErrorNotice> : null}
       {signIn ? (
-        <div className="space-y-2 rounded-md border border-border p-3">
+        <div className="space-y-2 rounded-sharp border border-hairline p-3">
           <p className="text-sm font-semibold">Sign in with {signInName(signIn.provider)}</p>
           <p className="text-sm text-fg-muted">Sign-in stores the workspace login and brings you back to this page. Then enter the ad account ID. It does not connect a page or a creator profile.</p>
           <Button type="button" disabled={!signIn.enabled} aria-describedby={signIn.enabled || !signIn.reason ? undefined : "accounts-signin-reason"} onClick={signIn.onStart}>

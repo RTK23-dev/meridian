@@ -16,7 +16,7 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
   return (
     <section aria-labelledby="pipeline-title" className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 id="pipeline-title" className="text-section font-semibold text-fg">From research to results</h2>
+        <h2 id="pipeline-title" className="text-section font-semibold text-fg-primary">From research to results</h2>
         <p className="text-sm text-fg-muted">{done} of {stages.length} stages done</p>
       </div>
       {/* One thin track above the stages, so progress reads at a glance. The width eases in when a stage changes state. */}
@@ -27,9 +27,9 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
         aria-valuemax={stages.length}
         aria-valuenow={done}
         aria-valuetext={`${done} of ${stages.length} stages done`}
-        className="h-1.5 overflow-hidden rounded-full bg-border"
+        className="h-1.5 overflow-hidden rounded-full bg-hairline"
       >
-        <div className="h-full rounded-full bg-fg transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
+        <div className="h-full rounded-full bg-fg-primary transition-[width] duration-500 ease-out" style={{ width: `${percent}%` }} />
       </div>
       <ol className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {stages.map((stage, index) => {
@@ -42,13 +42,13 @@ export function PipelineStepper({ brandId, stages }: { brandId: string; stages: 
               <Link
                 to={stage.to}
                 params={{ brandId }}
-                className="flex h-full min-h-11 flex-col gap-2 rounded-lg border border-border bg-surface p-3 transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-full min-h-11 flex-col gap-2 rounded-sharp border border-hairline bg-raised p-3 transition-colors hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="text-xs text-fg-muted">{index + 1}</span>
                   <Icon aria-hidden="true" className={`size-4 shrink-0 ${presentation.tone}`} />
                 </span>
-                <span className="font-semibold text-fg">{stage.label}</span>
+                <span className="font-semibold text-fg-primary">{stage.label}</span>
                 <span className="text-xs text-fg-muted">
                   {stage.count !== null ? `${stage.count}${stage.unit ? ` ${stage.unit}` : ""}` : "Status only"}
                 </span>

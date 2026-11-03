@@ -39,9 +39,9 @@ export function UncertainHoldsPanel({ organizationId }: { organizationId: string
   const releaseError = release.error ? plainError(release.error) : null;
 
   return (
-    <section className="space-y-3 border-t border-border pt-4" aria-labelledby="uncertain-holds-title" data-row="uncertain_holds">
+    <section className="space-y-3 border-t border-hairline pt-4" aria-labelledby="uncertain-holds-title" data-row="uncertain_holds">
       <div className="space-y-1">
-        <h3 id="uncertain-holds-title" className="font-semibold text-fg">
+        <h3 id="uncertain-holds-title" className="font-semibold text-fg-primary">
           Uncertain holds
         </h3>
         <p className="text-sm text-fg-muted">
@@ -53,7 +53,7 @@ export function UncertainHoldsPanel({ organizationId }: { organizationId: string
       {holds.isError ? <p className="text-sm text-warning" role="status">The uncertain holds could not be read.</p> : null}
       {holds.isSuccess && list.length === 0 ? <p className="text-sm text-fg-muted">No hold is uncertain.</p> : null}
       {notice ? (
-        <p className="text-sm text-fg" role="status">
+        <p className="text-sm text-fg-primary" role="status">
           {notice}
         </p>
       ) : null}
@@ -62,8 +62,8 @@ export function UncertainHoldsPanel({ organizationId }: { organizationId: string
         const reason = reasons[hold.id] ?? "";
         const tooShort = reason.trim().length < MIN_REASON;
         return (
-          <div key={hold.id} className="space-y-2 rounded-md border border-border p-3">
-            <p className="text-sm text-fg">
+          <div key={hold.id} className="space-y-2 rounded-sharp border border-hairline p-3">
+            <p className="text-sm text-fg-primary">
               <span className="font-medium">{hold.operation}</span> with <span className="font-mono">{hold.model}</span>, held at up to $
               {hold.estimateUsd.toFixed(6)}, on {new Date(hold.createdAt).toLocaleString()}.
             </p>

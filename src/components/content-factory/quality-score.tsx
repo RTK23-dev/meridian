@@ -56,7 +56,7 @@ export function QualityScore({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <section aria-labelledby="cf-score" className="mb-4 space-y-3 rounded-md border border-border p-3">
+    <section aria-labelledby="cf-score" className="mb-4 space-y-3 rounded-sharp border border-hairline p-3">
       <h3 id="cf-score" className="text-sm font-semibold">Quality score</h3>
       {view.latest ? (
         <p className="text-sm">

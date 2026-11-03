@@ -74,8 +74,8 @@ export function ReviewDialog({ target, allowedCodes, pending, onClose, onSubmit 
                   <label
                     key={option}
                     className={cn(
-                      "flex min-h-11 cursor-pointer items-center gap-2 rounded-md border p-3 text-sm",
-                      action === option ? "border-fg bg-surface-2 font-semibold" : "border-border bg-surface",
+                      "flex min-h-11 cursor-pointer items-center gap-2 rounded-sharp border p-3 text-sm",
+                      action === option ? "border-fg-primary bg-overlay font-semibold" : "border-hairline bg-raised",
                     )}
                   >
                     <input

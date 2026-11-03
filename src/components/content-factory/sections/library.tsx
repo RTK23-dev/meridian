@@ -182,9 +182,9 @@ export function Library({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Library</p>
         <h1 className="page-title">Creatives this brand owns</h1>
-        <p className="text-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
+        <p className="text-fg-muted">Competitor observations stay on Market. You can enter performance here. A worker sync runs only after a healthy connection and a schedule. Publishing creates paused Meta objects when you submit the form below. Nothing runs until you switch it on in Meta Ads Manager.</p>
       </div>
-      {note ? <p className="text-sm text-muted">{note}</p> : null}
+      {note ? <p className="text-sm text-fg-muted">{note}</p> : null}
       {failures.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Button type="button" variant="quiet" disabled={!visibleCreatives.length} aria-describedby={visibleCreatives.length ? undefined : "library-export-reason"} onClick={() => downloadCsv("meridian-library.csv", [
@@ -201,7 +201,7 @@ export function Library({ brandId }: { brandId: string }) {
       </div>
       <Card>
         <h2 className="text-2xl">Paid ads, created paused</h2>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-fg-muted">
           Optional. Choose Meta, TikTok or Google Ads. Meridian creates the campaign, ad set and ad with the status paused, and stores a platform id only when the platform returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
         <PausedExplainer />
@@ -291,17 +291,17 @@ export function Library({ brandId }: { brandId: string }) {
             </div>
           </form>
         ) : (
-          <p className="mt-2 text-sm text-muted">An admin can send a paused publish.</p>
+          <p className="mt-2 text-sm text-fg-muted">An admin can send a paused publish.</p>
         )}
         {stages.length > 0 ? (
           <ul className="mt-4 space-y-2">
             {stages.map((stage) => (
               <li key={stage.objectType} className="space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-fg">{stage.objectType}</span>
+                  <span className="text-xs font-semibold text-fg-primary">{stage.objectType}</span>
                   <StatusBadge status={stage.status} />
                 </div>
-                <p className="text-sm text-muted">{stage.externalId ? `Confirmed id ${stage.externalId}.` : stage.detail || "No id was stored."}</p>
+                <p className="text-sm text-fg-muted">{stage.externalId ? `Confirmed id ${stage.externalId}.` : stage.detail || "No id was stored."}</p>
               </li>
             ))}
           </ul>
@@ -309,7 +309,7 @@ export function Library({ brandId }: { brandId: string }) {
       </Card>
       {data.creatives.length === 0 ? <EmptyState title="No creatives stored yet" reason="Rank an opportunity, brief it, and save a script. Or record one you already ran below." /> : (
         <section aria-labelledby="library-creatives-title" className="space-y-4">
-          <div><h2 id="library-creatives-title" className="text-2xl">Creative library</h2><p className="text-sm text-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
+          <div><h2 id="library-creatives-title" className="text-2xl">Creative library</h2><p className="text-sm text-fg-muted">Search and filter the 50 most recent stored creatives. Media preview appears when its stored asset can be served.</p></div>
           {studio.isError ? <PlainErrorMessage message="Media details could not be loaded. Thumbnails still come from the library list. Open Details for the exact message." raw={plainError(studio.error).raw} /> : null}
           <LibraryFilterBar
             filters={filters}
@@ -318,7 +318,7 @@ export function Library({ brandId }: { brandId: string }) {
             origins={distinctValues(data.creatives, (item) => item.origin)}
             angles={distinctValues(data.creatives, (item) => item.angle)}
           />
-          <p className="text-sm text-muted" aria-live="polite">Showing {visibleCreatives.length} of {data.creatives.length} creatives.</p>
+          <p className="text-sm text-fg-muted" aria-live="polite">Showing {visibleCreatives.length} of {data.creatives.length} creatives.</p>
           {visibleCreatives.length ? (
             <ul className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
               {visibleCreatives.map((item) => (
@@ -372,7 +372,7 @@ export function Library({ brandId }: { brandId: string }) {
       {canEdit ? (
         <Card>
           <h2 className="text-2xl">Record a creative we already ran</h2>
-          <p className="mt-2 text-sm text-muted">Use this for history the system did not generate. It can receive performance and feed learning.</p>
+          <p className="mt-2 text-sm text-fg-muted">Use this for history the system did not generate. It can receive performance and feed learning.</p>
           <form
             className="mt-4 grid gap-3"
             onSubmit={observationForm.handleSubmit(saveOwnCreative)}

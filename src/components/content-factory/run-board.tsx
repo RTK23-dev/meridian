@@ -29,8 +29,8 @@ const SHOT_CHANGE_QUERY_MAX = 200;
 /** The colour of a step's node. Running steps pulse (motion-safe, so reduced motion stops it). */
 const NODE_DOT: Record<CardStatus, string> = {
   not_started: "bg-border-strong",
-  waiting: "bg-info-soft ring-2 ring-info",
-  running: "bg-info motion-safe:animate-pulse",
+  waiting: "bg-raised ring-2 ring-info",
+  running: "bg-info",
   done: "bg-success",
   failed: "bg-danger",
   needs_review: "bg-warning",
@@ -38,8 +38,8 @@ const NODE_DOT: Record<CardStatus, string> = {
 };
 
 const SHOT_DOT: Record<BoardShot["status"], string> = {
-  pending: "bg-info motion-safe:animate-pulse",
-  replanning: "bg-info motion-safe:animate-pulse",
+  pending: "bg-info",
+  replanning: "bg-info",
   accepted: "bg-success",
   escalated: "bg-warning",
 };
@@ -66,7 +66,7 @@ export function FlowBoard({ sessionId, feed, onChanged }: { sessionId: string; f
               <div className="flex w-5 shrink-0 flex-col items-center pt-4">
                 <span className={`size-3 rounded-full ${NODE_DOT[card.status]}`} aria-hidden="true" />
               </div>
-              <div className="min-w-0 flex-1 rounded-xl border border-border bg-surface p-3">
+              <div className="min-w-0 flex-1 rounded-sharp border border-hairline bg-raised p-3">
                 <StepHeader card={card} index={index + 1} />
                 {card.id === "visuals" ? <Shots shots={feed.board.shots} selected={selected} onSelect={setSelected} /> : null}
               </div>
@@ -82,7 +82,7 @@ export function FlowBoard({ sessionId, feed, onChanged }: { sessionId: string; f
 /** The line into a node. It moves while the node it leads into is running or queued. */
 function connectorClass(next: CardStatus): string {
   const moving = next === "running" || next === "waiting";
-  return `ml-[0.55rem] w-0.5 rounded-full ${moving ? "cf-flow" : "bg-border"}`;
+  return `ml-[0.55rem] w-0.5 rounded-full ${moving ? "cf-flow" : "bg-hairline"}`;
 }
 
 function StepHeader({ card, index }: { card: FeedCard; index: number }) {
@@ -113,7 +113,7 @@ function Shots({ shots, selected, onSelect }: { shots: BoardShot[]; selected: st
               type="button"
               aria-pressed={active}
               onClick={() => onSelect(active ? null : shot.shotId)}
-              className={`w-full rounded-lg border p-3 text-left transition-colors hover:bg-surface-2 ${active ? "border-accent bg-accent-soft" : "border-border"}`}
+              className={`w-full rounded-sharp border p-3 text-left transition-colors hover:bg-overlay ${active ? "border-accent bg-accent-muted" : "border-hairline"}`}
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="font-medium">{shot.label}</span>
@@ -243,7 +243,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
     }
   };
   return (
-    <section aria-labelledby="cf-shot-title" className="mt-4 rounded-xl border border-border bg-surface-2 p-4">
+    <section aria-labelledby="cf-shot-title" className="mt-4 rounded-sharp border border-hairline bg-overlay p-4">
       <h3 id="cf-shot-title" className="font-semibold">
         {shot.label}
         {shot.visualLabel ? ` · ${shot.visualLabel}` : ""}
@@ -270,7 +270,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
               playsInline
               aria-label={`The take of ${shot.label}`}
               onError={() => void take.refetch()}
-              className="mt-2 max-h-80 w-full rounded-md bg-black"
+              className="mt-2 max-h-80 w-full rounded-sharp bg-black"
             />
           ) : take.data ? (
             <p className="mt-1 text-sm text-fg-muted">{take.data.reason}</p>
@@ -306,7 +306,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
               value={changeText}
               disabled={blocked || busy}
               onChange={(event) => setChangeText(event.target.value)}
-              className="w-full rounded-md border border-border bg-surface p-2 text-sm disabled:opacity-60"
+              className="w-full rounded-sharp border border-hairline bg-raised p-2 text-sm disabled:opacity-60"
             />
           </div>
         ) : null}
@@ -325,7 +325,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
               onChange={(event) => setDirection(event.target.value)}
               aria-describedby="cf-direction-help"
               placeholder="For example: the product in her hand, close to the lens"
-              className="w-full rounded-md border border-border bg-surface p-2 text-sm disabled:opacity-60"
+              className="w-full rounded-sharp border border-hairline bg-raised p-2 text-sm disabled:opacity-60"
             />
             <p id="cf-direction-help" className="text-xs text-fg-muted">
               Say what to change. The rest of the video is kept: its voice, its captions, its other shots and its plan. {direction.length} of {REMAKE_DIRECTION_MAX_CHARS} characters.
@@ -347,7 +347,7 @@ function ShotPanel({ sessionId, shot, onChanged }: { sessionId: string; shot: Bo
         ) : null}
       </div>
       {!blocked && !change.ok ? <p className="mt-3 text-sm text-fg-muted">{change.reason}</p> : null}
-      <div className="mt-4 space-y-2 border-t border-border pt-4">
+      <div className="mt-4 space-y-2 border-t border-hairline pt-4">
         <label htmlFor="cf-shot-clip" className="block text-sm font-semibold">Use your own clip for this shot</label>
         <input
           id="cf-shot-clip"
