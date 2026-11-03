@@ -10,7 +10,6 @@ import type { Sql } from "../learning/store.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import type { Transport } from "../providers/http.ts";
 import { observeProviderUse, recordProviderUse } from "../providers/usage.ts";
-import { openSecret, refreshOauthToken, sealSecret } from "./flow.server.ts";
 
 /** Renew a token this long before its stated expiry, so a request never starts with a token about to lapse. */
 export const RENEW_AHEAD_MS = 5 * 60 * 1000;
@@ -51,6 +50,9 @@ export async function renewStoredToken(
   `;
   if (connection[0]?.disconnected_at) return "not_due";
   if (!row.sealed_refresh.trim()) return "no_refresh_token";
+  // The server-only flow module is loaded here, on use, and not at the top: this file is reached from a module a screen imports, and a
+  // top-level import of a *.server file would be sent to the browser build (the same way oauth/refresh.ts loads it).
+  const { openSecret, refreshOauthToken, sealSecret } = await import("./flow.server.ts");
   const refreshToken = openSecret(row.sealed_refresh, input.encryptionKey);
   if (typeof refreshToken !== "string") return "failed";
 
