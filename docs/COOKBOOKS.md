@@ -53,3 +53,7 @@ which settings give which results from those records. A measure that could not b
 - The first live call of the cookbook selector, once its model role is approved (decision Q34).
 - A paid render in engine mode.
 - A look check of the agent-mode scenes in a browser, where the GSAP script can load.
+
+## Known limits
+
+- **Ids are shared across a workspace's brands.** A cookbook id is unique in the whole workspace, so a member who tries to save an id that another brand already uses is told the id is taken ("a cookbook keeps its brand"). That reveals that the id exists, and nothing else: not the cookbook's name, its steps or its owner. Closing it means making the key per brand, which changes how a cookbook is looked up by id everywhere. It is a design decision for the owner, not a bug fix, and it has not been made.
