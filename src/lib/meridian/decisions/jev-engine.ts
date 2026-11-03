@@ -152,7 +152,9 @@ export class JevDecisionEngine implements DecisionEngine {
 
   private async decideWithTypeSafe(request: DecisionRequest): Promise<DecisionResult> {
     const config = resolveJevConfig();
-    const requestedModel = request.model ?? config.typesafe.model;
+    // The model: the one the request names, else the one this workspace chose, else the deployment's.
+    const workspaceModel = request.organizationId && this.backends.readModel ? await this.backends.readModel(request.organizationId) : null;
+    const requestedModel = request.model ?? workspaceModel ?? config.typesafe.model;
     const imageCount = request.images?.length ?? 0;
     if (imageCount > 0 && request.imagePolicy === "required") {
       const reason = "JEV takes text evidence only; this decision requires images.";
@@ -179,7 +181,8 @@ export class JevDecisionEngine implements DecisionEngine {
     const { images: _images, imagePolicy: _policy, ...jevRequest } = request;
     void _images;
     void _policy;
-    const response = await this.router.decide(jevRequest);
+    // The model that is recorded is the model that is sent: the router would otherwise use its own default.
+    const response = await this.router.decide({ ...jevRequest, model: requestedModel });
     // Give every answered value the same semantics and calibration fields the other engine returns.
     for (const answer of Object.values(response.answers)) {
       if (answer.status !== "answered") continue;

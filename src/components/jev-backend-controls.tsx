@@ -2,9 +2,9 @@ import { useState } from "react";
 import { Button, DisabledReason, Field, SelectInput } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
-import { saveJevBackend } from "@/lib/meridian/settings/server-actions";
+import { saveJevBackend, saveJevTypesafeModel } from "@/lib/meridian/settings/server-actions";
 import { qk } from "@/lib/query/keys";
-import { useScopedMutation } from "@/lib/query/hooks";
+import { useJevTypesafeModelQuery, useScopedMutation } from "@/lib/query/hooks";
 
 export type JevBackendId = "typesafe_direct" | "openrouter";
 
@@ -100,6 +100,8 @@ export function JevBackendControls({
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
 
+      {(stored ?? "typesafe_direct") === "typesafe_direct" ? <TypesafeModelPicker organizationId={organizationId} canAdmin={canAdmin} /> : null}
+
       {canAdmin ? (
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-full sm:w-72">
@@ -142,4 +144,50 @@ export function JevBackendControls({
 
 function labelOf(backend: JevBackendId): string {
   return backend === "openrouter" ? "OpenRouter Decisions" : "TypeSafe System One";
+}
+
+/**
+ * Which TypeSafe model answers JEV decisions when TypeSafe is called directly. Blank uses the deployment's model. Only models Meridian has
+ * a verified profile for can be chosen. The choice is used by the next decision; nothing is sent when it is saved.
+ */
+function TypesafeModelPicker({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+  const query = useJevTypesafeModelQuery(organizationId);
+  const [draft, setDraft] = useState<string | null>(null);
+  const save = useScopedMutation({
+    mutationKey: ["mutation", "decision-engine.jev-typesafe-model", organizationId],
+    mutationFn: async (model: string) => {
+      const result = (await saveJevTypesafeModel({ data: { organizationId, model } })) as { ok: true; model: string | null } | { ok: false; reason: string };
+      if (!result.ok) throw new Error(result.reason);
+      return result;
+    },
+    invalidate: () => [qk.jevTypesafeModel(organizationId)],
+    onSuccess: () => setDraft(null),
+  });
+  if (!query.data) return null;
+  const { stored, deploymentDefault, choices } = query.data;
+  const value = draft ?? stored ?? "";
+  const changed = value !== (stored ?? "");
+  const error = save.error ? plainError(save.error) : null;
+  return (
+    <div className="space-y-2">
+      <Field label="TypeSafe model">
+        <SelectInput value={value} onChange={(event) => setDraft(event.target.value)} disabled={!canAdmin || save.isPending}>
+          <option value="">Use the deployment default ({deploymentDefault})</option>
+          {choices.map((model) => (
+            <option key={model} value={model}>{model}{model === "typesafe/jev-1.14" ? " (reads text and images)" : " (text only)"}</option>
+          ))}
+        </SelectInput>
+      </Field>
+      <p className="text-xs text-fg-muted">
+        {stored ? `This workspace uses ${stored}.` : `This workspace uses the deployment default, ${deploymentDefault}.`} Images reach JEV only through
+        OpenRouter, so a direct TypeSafe decision is always text.
+      </p>
+      {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
+      {canAdmin ? (
+        <Button type="button" variant="secondary" disabled={!changed || save.isPending} onClick={() => void save.mutateAsync(value).catch(() => undefined)}>
+          {save.isPending ? "Saving..." : "Save TypeSafe model"}
+        </Button>
+      ) : null}
+    </div>
+  );
 }

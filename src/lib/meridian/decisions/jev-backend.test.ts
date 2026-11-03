@@ -295,3 +295,26 @@ test("the TypeSafe path keeps its documented shape: text only, and a required im
   assert.equal(typesafeCalls.length, 0, "JEV over TypeSafe does not take images");
   assert.equal(result.failure?.kind, "unsupported_input");
 });
+
+test("the TypeSafe model the workspace chose is the model that is sent, and a request's own model wins", async () => {
+  const calls: unknown[] = [];
+  const engine = new JevDecisionEngine(typesafeRouter(calls), {
+    openrouter: openrouter(async () => openrouterAnswer()),
+    backends: { read: async () => ({ ok: true, backend: null }), readModel: async () => "typesafe/jev-1.14" },
+  });
+  const result = await engine.decide(request());
+  assert.equal(result.requestedModel, "typesafe/jev-1.14");
+  assert.equal((calls[0] as { model?: string }).model, "typesafe/jev-1.14", "the router is given the workspace's model");
+  await engine.decide({ ...request(), model: "typesafe/jev-1.13" });
+  assert.equal((calls[1] as { model?: string }).model, "typesafe/jev-1.13", "a model named on the request is used over the workspace's");
+});
+
+test("with no workspace model, the deployment's model is sent, so what is recorded is what is called", async () => {
+  const calls: unknown[] = [];
+  const engine = new JevDecisionEngine(typesafeRouter(calls), {
+    openrouter: openrouter(async () => openrouterAnswer()),
+    backends: { read: async () => ({ ok: true, backend: null }), readModel: async () => null },
+  });
+  const result = await engine.decide(request());
+  assert.equal((calls[0] as { model?: string }).model, result.requestedModel);
+});

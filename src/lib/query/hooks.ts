@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getJevTypesafeModel, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
@@ -406,6 +406,16 @@ export const useAlertsQuery = (organizationId: string, enabled = true) => {
 export const useProviderSettingsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...providerSettingsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** The workspace's TypeSafe model for direct TypeSafe decisions, the deployment's default, and the models it can choose. */
+export const useJevTypesafeModelQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    queryKey: userScopedQueryKey(userId, qk.jevTypesafeModel(organizationId)),
+    queryFn: () => getJevTypesafeModel({ data: { organizationId } }),
+    enabled: ready && enabled && !!organizationId,
+  });
 };
 
 export const useDecisionEnginesQuery = (organizationId: string, enabled = true) => {

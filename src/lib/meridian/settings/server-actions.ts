@@ -19,7 +19,8 @@ import { decisionModelCeilingUsd, eligibleDecisionModels } from "../decisions/de
 import { openRouterSeam } from "../decisions/test-seam.ts";
 import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openrouter-settings.ts";
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
-import { isJevBackend, writeJevBackend } from "../decisions/jev-backend.ts";
+import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeModel, writeJevBackend, writeJevTypesafeModel, type JevTypesafeModel } from "../decisions/jev-backend.ts";
+import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
@@ -284,6 +285,40 @@ export const saveJevBackend = createServerFn({ method: "POST" })
     if (target.status !== "READY") return { ok: false as const, reason: `${target.message} The JEV backend is unchanged.` };
     await writeJevBackend(sql, { organizationId: data.organizationId, actorId: context.userId, backend: data.backend });
     return { ok: true as const, backend: data.backend };
+  });
+
+/** The workspace's TypeSafe model for direct TypeSafe decisions, and the models it can choose. Any member may read it. */
+export const getJevTypesafeModel = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const organizationId = asText(objectInput(input).organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    const stored = await readJevTypesafeModel(sql, data.organizationId);
+    return { stored, deploymentDefault: resolveJevConfig().typesafe.model, choices: [...JEV_TYPESAFE_MODELS] };
+  });
+
+/** Saves the TypeSafe model for this workspace, or clears it (an empty value) so the deployment's model applies. Admin only. */
+export const saveJevTypesafeModel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId, model: asText(obj.model) };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    if (data.model !== "" && !isJevTypesafeModel(data.model)) {
+      return { ok: false as const, reason: `'${data.model}' is not a TypeSafe model Meridian has verified. Choose ${JEV_TYPESAFE_MODELS.join(" or ")}.` };
+    }
+    await writeJevTypesafeModel(sql, { organizationId: data.organizationId, actorId: context.userId, model: data.model === "" ? null : (data.model as JevTypesafeModel) });
+    return { ok: true as const, model: data.model === "" ? null : data.model };
   });
 
 /**
