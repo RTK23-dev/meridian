@@ -120,16 +120,11 @@ export function SetupGuide() {
     }
   };
 
-  return (
-    <SetupTests.Provider value={{ tests: testAnswers, record: recordTest }}>
-      <div className="space-y-10">
-        <PageHeader
-          title="Set up Meridian"
-          description="Two steps get you started: create a brand, then choose the service that judges your ideas (the decision engine). Everything else is optional or only needed for one job."
-          breadcrumbs={[{ label: "Overview", to: "/" }]}
-        />
-
-        <details open={summary.requiredDone === 0} aria-labelledby="setup-plain" className="rounded-sharp border border-hairline bg-raised px-5 py-4">
+  // Until the two required steps are done, the page shows only them. Everything optional waits behind one closed heading, so a person sees
+  // two things to do, not a control panel.
+  const quick = summary.requiredDone < summary.requiredTotal;
+  const plainBlock = (
+    <details open={summary.requiredDone === 0} aria-labelledby="setup-plain" className="rounded-sharp border border-hairline bg-raised px-5 py-4">
           <summary className="flex min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><h2 id="setup-plain" className="text-lg font-semibold text-fg-primary">What to fill in, and what to skip</h2></summary>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-primary">
             <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one key for the service that judges your ideas.</li>
@@ -138,6 +133,31 @@ export function SetupGuide() {
             <li><strong>Skip for now:</strong> search keys, publishing, and everything under Optional connections. Pasting a public page URL on Market needs no key.</li>
           </ul>
         </details>
+  );
+  const laterBlock = (
+    <section aria-labelledby="setup-later" className="space-y-3">
+          <div>
+            <h2 id="setup-later" className="text-xl font-semibold text-fg-primary">Later, only when you need it</h2>
+            <p className="text-sm text-fg-muted">None of these is needed to start. Open one when you reach the job it is for. More provider settings are in <Link to="/settings" className="font-semibold underline underline-offset-4">Settings</Link>.</p>
+          </div>
+          <ul className="space-y-2">
+            {steps.filter((step) => !step.required).map((step) => (
+              <OptionalStep key={step.id} step={step} body={body(step)} />
+            ))}
+          </ul>
+        </section>
+  );
+
+  return (
+    <SetupTests.Provider value={{ tests: testAnswers, record: recordTest }}>
+      <div className="space-y-10">
+        <PageHeader
+          title="Set up Meridian"
+          description="Two quick things to do, about five minutes: tell Meridian what you sell, then add one key. Everything else is optional and can wait."
+          breadcrumbs={[{ label: "Overview", to: "/" }]}
+        />
+
+        {quick ? null : plainBlock}
 
         <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -170,17 +190,18 @@ export function SetupGuide() {
           ))}
         </ol>
 
-        <section aria-labelledby="setup-later" className="space-y-3">
-          <div>
-            <h2 id="setup-later" className="text-xl font-semibold text-fg-primary">Later, only when you need it</h2>
-            <p className="text-sm text-fg-muted">None of these is needed to start. Open one when you reach the job it is for. More provider settings are in <Link to="/settings" className="font-semibold underline underline-offset-4">Settings</Link>.</p>
-          </div>
-          <ul className="space-y-2">
-            {steps.filter((step) => !step.required).map((step) => (
-              <OptionalStep key={step.id} step={step} body={body(step)} />
-            ))}
-          </ul>
-        </section>
+        {quick ? (
+          <details className="rounded-sharp border border-hairline bg-raised px-5 py-4">
+            <summary className="flex min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+              <span className="text-lg font-semibold text-fg-primary">More setup</span>
+              <span className="ml-3 text-sm text-fg-muted">Optional. You can skip all of it for now.</span>
+            </summary>
+            <div className="mt-4 space-y-8">
+              {plainBlock}
+              {laterBlock}
+            </div>
+          </details>
+        ) : laterBlock}
       </div>
     </SetupTests.Provider>
   );

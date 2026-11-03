@@ -3,7 +3,8 @@
  *
  * Eligibility for the Decisions endpoint is the catalogue's own filter: an entry whose `architecture.output_modalities` contains
  * `decisions`. The catalogue does not say which question primitives a model answers, so Meridian records a profile for each model
- * it has verified against the documentation. A model with no profile is listed with its reason and is not offered. Aliases (IDs
+ * it has verified against the documentation. A model with no recorded profile is still offered, marked as not verified and read as text
+ * only. Aliases (IDs
  * that start with `~`) are never offered, because they move to new builds. A model whose catalogue entry gives no usable input price
  * or no context length is not offered either, because a call's cost could not be bounded before it is sent.
  *
@@ -158,8 +159,14 @@ export function parseDecisionCatalog(body: unknown, meta: { endpoint: string; re
   return { ok: true, entries, excluded, ...meta };
 }
 
-/** A decision model that is in the catalogue and has a verified profile. Only these are offered or called. */
-export type EligibleDecisionModel = DecisionCatalogEntry & { profile: DecisionModelProfile };
+/**
+ * A decision model that is in the catalogue and can be chosen. `verified` is true when Meridian has recorded what the vendor documents
+ * for it. A model that is not verified is still offered, because the person chooses their model: it is described by the catalogue's
+ * own listing, it is treated as text only, and it cannot become the active engine until its connection test passes.
+ */
+export type EligibleDecisionModel = DecisionCatalogEntry & { profile: DecisionModelProfile; verified: boolean };
+
+const CATALOGUE_PROFILE_SOURCE = "The OpenRouter catalogue's own listing. Meridian has not verified this model's documentation, and no live call has been recorded.";
 
 /** Splits a read catalogue into the models Meridian offers and the ones it lists with the reason they are not offered. */
 export function eligibleDecisionModels(read: Extract<DecisionCatalogRead, { ok: true }>): {
@@ -169,12 +176,15 @@ export function eligibleDecisionModels(read: Extract<DecisionCatalogRead, { ok: 
   const eligible: EligibleDecisionModel[] = [];
   const notOffered: DecisionCatalogExclusion[] = [...read.excluded];
   for (const entry of read.entries) {
-    const profile = decisionModelProfile(entry.id);
-    if (!profile) {
-      notOffered.push({ id: entry.id, reason: "Meridian has not verified which questions this model answers, so it is not offered." });
-      continue;
-    }
-    eligible.push({ ...entry, profile });
+    const verified = decisionModelProfile(entry.id);
+    // The Decisions endpoint takes the same question kinds whichever model answers, and an answer that does not fit its question is refused,
+    // so a model without a recorded profile is described by the catalogue and read as text only (an image is never sent to it).
+    const profile: DecisionModelProfile = verified ?? {
+      questionKinds: ["predicate", "choice", "score"],
+      inputModalities: ["text"],
+      source: CATALOGUE_PROFILE_SOURCE,
+    };
+    eligible.push({ ...entry, profile, verified: verified !== null });
   }
   return { eligible, notOffered };
 }

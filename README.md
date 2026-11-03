@@ -130,6 +130,7 @@ CI runs the tests in six shards, typecheck, lint and build, the sourcing sidecar
 
 | Document | Read it for |
 | --- | --- |
+| [docs/YOUR_FIRST_REAL_VIDEO.md](docs/YOUR_FIRST_REAL_VIDEO.md) | The short, plain-words way to find out whether Meridian makes a video you would post |
 | [docs/SETUP.md](docs/SETUP.md) | Install, environment, Drive, deploy |
 | [docs/PRODUCT.md](docs/PRODUCT.md) | The product workflow |
 | [docs/FACTORY.md](docs/FACTORY.md) | The factory pipeline and the Content page |

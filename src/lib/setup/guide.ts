@@ -61,7 +61,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
     id: "engine",
     title: "Choose a decision engine",
     when: "Do this second. You need one key.",
-    what: "This is the service that judges your ideas and examples. Pick one (TypeSafe JEV, OpenAI Decisions or OpenRouter), paste that service's key, and it is ready. You never need more than one.",
+    what: "Meridian asks an AI service to judge your ideas and examples, for instance which video format is worth copying. You need one such service and its key, and no more. If you have a TypeSafe key, pick TypeSafe JEV. If you have an OpenAI or OpenRouter key instead, pick that one. Nothing is sent until you paste a key.",
     why: "No idea is graded until an engine is chosen and ready.",
     required: true,
   },

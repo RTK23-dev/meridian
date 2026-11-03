@@ -148,6 +148,7 @@ export const getOpenRouterDecisionModels = createServerFn({ method: "GET" })
         id: model.id,
         name: model.name,
         canonicalSlug: model.canonicalSlug,
+        verified: model.verified,
         takes: model.profile.inputModalities,
         catalogueInputModalities: model.inputModalities,
         questionKinds: model.profile.questionKinds,

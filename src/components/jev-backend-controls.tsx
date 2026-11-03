@@ -150,7 +150,7 @@ function labelOf(backend: JevBackendId): string {
  * Which TypeSafe model answers JEV decisions when TypeSafe is called directly. Blank uses the deployment's model. Only models Meridian has
  * a verified profile for can be chosen. The choice is used by the next decision; nothing is sent when it is saved.
  */
-function TypesafeModelPicker({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+export function TypesafeModelPicker({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
   const query = useJevTypesafeModelQuery(organizationId);
   const [draft, setDraft] = useState<string | null>(null);
   const save = useScopedMutation({
@@ -174,7 +174,7 @@ function TypesafeModelPicker({ organizationId, canAdmin }: { organizationId: str
         <SelectInput value={value} onChange={(event) => setDraft(event.target.value)} disabled={!canAdmin || save.isPending}>
           <option value="">Use the deployment default ({deploymentDefault})</option>
           {choices.map((model) => (
-            <option key={model} value={model}>{model}{model === "typesafe/jev-1.14" ? " (reads text and images)" : " (text only)"}</option>
+            <option key={model} value={model}>{model}</option>
           ))}
         </SelectInput>
       </Field>

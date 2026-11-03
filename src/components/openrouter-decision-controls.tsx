@@ -16,6 +16,7 @@ export type OpenRouterModelStatus = {
 
 type EligibleModel = {
   id: string;
+  verified: boolean;
   name: string;
   canonicalSlug: string | null;
   takes: string[];
@@ -97,7 +98,7 @@ export function OpenRouterDecisionControls({
       <div>
         <p className="font-semibold">OpenRouter decision model</p>
         <p className="text-sm text-fg-muted">
-          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
+          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Choose any decision model OpenRouter lists, including TypeSafe JEV and OpenAI decision models. A model Meridian has not verified is read as text only, and it works only after the connection test below passes.
         </p>
         {model.reason ? (
           <>
@@ -128,7 +129,7 @@ export function OpenRouterDecisionControls({
                 {!chosen && draft.trim() !== "" ? <option value={draft}>{draft} (not in the live catalogue)</option> : null}
                 {eligible.map((entry) => (
                   <option key={entry.id} value={entry.id}>
-                    {entry.id}
+                    {entry.id}{entry.verified ? "" : " (not verified by Meridian)"}
                   </option>
                 ))}
               </SelectInput>
@@ -145,7 +146,7 @@ export function OpenRouterDecisionControls({
           </Button>
           {canAdmin && !save.isPending && unchanged ? <DisabledReason id="openrouter-model-unsaved">This model is already saved.</DisabledReason> : null}
           {canAdmin && !save.isPending && !unchanged && !chosen ? (
-            <DisabledReason id="openrouter-model-unsaved">Choose a model from the list. It must be in the live catalogue with a verified profile.</DisabledReason>
+            <DisabledReason id="openrouter-model-unsaved">Choose a model from the list. It must be in the live OpenRouter catalogue.</DisabledReason>
           ) : null}
         </div>
       ) : null}
@@ -155,6 +156,10 @@ export function OpenRouterDecisionControls({
           <div>
             <dt className="text-fg-muted">Name</dt>
             <dd>{chosen.name}</dd>
+          </div>
+          <div>
+            <dt className="text-fg-muted">Verified by Meridian</dt>
+            <dd>{chosen.verified ? "Yes" : "No. It is read as text only, and the connection test decides whether it can be used."}</dd>
           </div>
           <div>
             <dt className="text-fg-muted">Takes</dt>

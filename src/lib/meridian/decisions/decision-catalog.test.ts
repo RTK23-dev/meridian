@@ -45,12 +45,25 @@ test("an entry keeps the fields the decision needs: pinned id, canonical slug, i
   assert.equal(jev.promptUsdPerToken, 0.000000042);
 });
 
-test("only models with a verified profile are offered; the rest are listed with the reason they are not", () => {
+test("every decision model in the catalogue is offered, and only the ones with a recorded profile are marked verified", () => {
   const { eligible, notOffered } = eligibleDecisionModels(recordedRead());
-  assert.deepEqual(eligible.map((entry) => entry.id).sort(), ["typesafe/jev-1.13", "typesafe/jev-1.14"]);
-  const unverified = notOffered.find((item) => item.id === "nace-ai/drex-max");
-  assert.ok(unverified, "a catalogued decision model without a profile is listed");
-  assert.match(unverified.reason, /has not verified which questions this model answers/);
+  const ids = eligible.map((entry) => entry.id);
+  assert.ok(ids.includes("typesafe/jev-1.14") && ids.includes("typesafe/jev-1.13"), "the TypeSafe models are offered");
+  assert.ok(ids.includes("openai/gpt-6-luna-decisions"), "an OpenAI decision model is offered");
+  assert.ok(ids.includes("nace-ai/drex-max"), "a model with no recorded profile is offered too");
+  const verified = eligible.filter((entry) => entry.verified).map((entry) => entry.id).sort();
+  assert.deepEqual(verified, ["typesafe/jev-1.13", "typesafe/jev-1.14"], "only the models with a recorded profile are verified");
+  // An alias is still never offered, and it says why.
+  assert.ok(notOffered.some((item) => item.id === "~typesafe/jev-latest" && /alias/i.test(item.reason)));
+});
+
+test("a model without a recorded profile is read as text only, whatever its catalogue listing says about images", () => {
+  const { eligible } = eligibleDecisionModels(recordedRead());
+  const luna = eligible.find((entry) => entry.id === "openai/gpt-6-luna-decisions");
+  assert.ok(luna);
+  assert.ok(luna.inputModalities.includes("image"), "the catalogue lists images for it");
+  assert.deepEqual(luna.profile.inputModalities, ["text"], "Meridian reads it as text only until it is verified");
+  assert.equal(luna.verified, false);
 });
 
 test("a profile is a claim about the vendor's documentation, and jev-1.13 stays text-only although the catalogue lists image input", () => {
