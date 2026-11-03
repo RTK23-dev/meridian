@@ -1,0 +1,904 @@
+{
+  "url": "served from docs/design/prototype",
+  "results": {
+    "screens.all-render-and-are-indexed": {
+      "ok": true,
+      "detail": [
+        [
+          "cover",
+          "1 of 49",
+          true,
+          true
+        ],
+        [
+          "login",
+          "2 of 49",
+          true,
+          true
+        ],
+        [
+          "setup",
+          "3 of 49",
+          true,
+          true
+        ],
+        [
+          "invite",
+          "4 of 49",
+          true,
+          true
+        ],
+        [
+          "product",
+          "5 of 49",
+          true,
+          true
+        ],
+        [
+          "docs",
+          "6 of 49",
+          true,
+          true
+        ],
+        [
+          "quickstart",
+          "7 of 49",
+          true,
+          true
+        ],
+        [
+          "home",
+          "8 of 49",
+          true,
+          true
+        ],
+        [
+          "home-empty",
+          "9 of 49",
+          true,
+          true
+        ],
+        [
+          "overview",
+          "10 of 49",
+          true,
+          true
+        ],
+        [
+          "alerts",
+          "11 of 49",
+          true,
+          true
+        ],
+        [
+          "brand-overview",
+          "12 of 49",
+          true,
+          true
+        ],
+        [
+          "brief",
+          "13 of 49",
+          true,
+          true
+        ],
+        [
+          "plan",
+          "14 of 49",
+          true,
+          true
+        ],
+        [
+          "plan-error",
+          "15 of 49",
+          true,
+          true
+        ],
+        [
+          "review",
+          "16 of 49",
+          true,
+          true
+        ],
+        [
+          "new-brand",
+          "17 of 49",
+          true,
+          true
+        ],
+        [
+          "content",
+          "18 of 49",
+          true,
+          true
+        ],
+        [
+          "cookbooks",
+          "19 of 49",
+          true,
+          true
+        ],
+        [
+          "orchestrator",
+          "20 of 49",
+          true,
+          true
+        ],
+        [
+          "brain",
+          "21 of 49",
+          true,
+          true
+        ],
+        [
+          "products",
+          "22 of 49",
+          true,
+          true
+        ],
+        [
+          "pages",
+          "23 of 49",
+          true,
+          true
+        ],
+        [
+          "library",
+          "24 of 49",
+          true,
+          true
+        ],
+        [
+          "exports",
+          "25 of 49",
+          true,
+          true
+        ],
+        [
+          "insights",
+          "26 of 49",
+          true,
+          true
+        ],
+        [
+          "market",
+          "27 of 49",
+          true,
+          true
+        ],
+        [
+          "intelligence",
+          "28 of 49",
+          true,
+          true
+        ],
+        [
+          "calibration",
+          "29 of 49",
+          true,
+          true
+        ],
+        [
+          "connect",
+          "30 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-general",
+          "31 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-members",
+          "32 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-weights",
+          "33 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-learning",
+          "34 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-danger",
+          "35 of 49",
+          true,
+          true
+        ],
+        [
+          "settings-alerts",
+          "36 of 49",
+          true,
+          true
+        ],
+        [
+          "billing",
+          "37 of 49",
+          true,
+          true
+        ],
+        [
+          "usage",
+          "38 of 49",
+          true,
+          true
+        ],
+        [
+          "integrations",
+          "39 of 49",
+          true,
+          true
+        ],
+        [
+          "setup-guide",
+          "40 of 49",
+          true,
+          true
+        ],
+        [
+          "jobs",
+          "41 of 49",
+          true,
+          true
+        ],
+        [
+          "engine-ops",
+          "42 of 49",
+          true,
+          true
+        ],
+        [
+          "audit",
+          "43 of 49",
+          true,
+          true
+        ],
+        [
+          "webhooks",
+          "44 of 49",
+          true,
+          true
+        ],
+        [
+          "notifications",
+          "45 of 49",
+          true,
+          true
+        ],
+        [
+          "not-found",
+          "46 of 49",
+          true,
+          true
+        ],
+        [
+          "forbidden",
+          "47 of 49",
+          true,
+          true
+        ],
+        [
+          "admin-only",
+          "48 of 49",
+          true,
+          true
+        ],
+        [
+          "palette",
+          "49 of 49",
+          true,
+          true
+        ]
+      ]
+    },
+    "screens.no-console-errors": {
+      "ok": true,
+      "detail": []
+    },
+    "screens.one-red-action-at-most": {
+      "ok": true,
+      "detail": {
+        "login": 1,
+        "setup": 1,
+        "invite": 1,
+        "product": 1,
+        "docs": 0,
+        "quickstart": 1,
+        "home": 1,
+        "home-empty": 1,
+        "overview": 1,
+        "alerts": 1,
+        "brand-overview": 1,
+        "brief": 1,
+        "plan": 0,
+        "plan-error": 0,
+        "review": 0,
+        "new-brand": 1,
+        "content": 1,
+        "cookbooks": 1,
+        "orchestrator": 0,
+        "brain": 0,
+        "products": 1,
+        "pages": 1,
+        "library": 1,
+        "exports": 1,
+        "insights": 0,
+        "market": 1,
+        "intelligence": 0,
+        "calibration": 1,
+        "connect": 1,
+        "settings-general": 0,
+        "settings-members": 1,
+        "settings-weights": 0,
+        "settings-learning": 0,
+        "settings-danger": 0,
+        "settings-alerts": 0,
+        "billing": 1,
+        "usage": 0,
+        "integrations": 0,
+        "setup-guide": 1,
+        "jobs": 0,
+        "engine-ops": 0,
+        "audit": 1,
+        "webhooks": 0,
+        "notifications": 0,
+        "not-found": 0,
+        "forbidden": 0,
+        "admin-only": 0,
+        "palette": 1
+      }
+    },
+    "screens.disabled-controls-say-why": {
+      "ok": true,
+      "detail": [
+        {
+          "id": "alerts",
+          "label": "Save target",
+          "reason": true
+        },
+        {
+          "id": "brand-overview",
+          "label": "Delete brand",
+          "reason": true
+        },
+        {
+          "id": "plan",
+          "label": "Resume the run",
+          "reason": true
+        },
+        {
+          "id": "review",
+          "label": "Approve",
+          "reason": true
+        },
+        {
+          "id": "content",
+          "label": "Make this",
+          "reason": true
+        },
+        {
+          "id": "orchestrator",
+          "label": "Apply change",
+          "reason": true
+        },
+        {
+          "id": "brain",
+          "label": "Save brain",
+          "reason": true
+        },
+        {
+          "id": "exports",
+          "label": "Export package",
+          "reason": true
+        },
+        {
+          "id": "settings-weights",
+          "label": "Save diagnostic weights",
+          "reason": true
+        },
+        {
+          "id": "billing",
+          "label": "Save",
+          "reason": true
+        },
+        {
+          "id": "billing",
+          "label": "Save",
+          "reason": true
+        },
+        {
+          "id": "billing",
+          "label": "Save",
+          "reason": true
+        },
+        {
+          "id": "billing",
+          "label": "Save",
+          "reason": true
+        },
+        {
+          "id": "billing",
+          "label": "Save",
+          "reason": true
+        },
+        {
+          "id": "engine-ops",
+          "label": "Replay job",
+          "reason": true
+        },
+        {
+          "id": "audit",
+          "label": "Clear",
+          "reason": true
+        },
+        {
+          "id": "audit",
+          "label": "Previous page",
+          "reason": true
+        },
+        {
+          "id": "webhooks",
+          "label": "Previous page",
+          "reason": true
+        }
+      ]
+    },
+    "screens.no-sideways-scroll.desktop": {
+      "ok": true,
+      "detail": {
+        "cover": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "login": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "setup": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "invite": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "product": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "docs": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "quickstart": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "home": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "home-empty": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "overview": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "alerts": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "brand-overview": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "brief": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "plan": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "plan-error": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "review": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "new-brand": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "content": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "cookbooks": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "orchestrator": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "brain": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "products": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "pages": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "library": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "exports": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "insights": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "market": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "intelligence": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "calibration": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "connect": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-general": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-members": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-weights": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-learning": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-danger": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "settings-alerts": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "billing": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "usage": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "integrations": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "setup-guide": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "jobs": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "engine-ops": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "audit": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "webhooks": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "notifications": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "not-found": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "forbidden": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "admin-only": {
+          "scroll": 1440,
+          "client": 1440
+        },
+        "palette": {
+          "scroll": 1440,
+          "client": 1440
+        }
+      }
+    },
+    "screens.no-sideways-scroll.phone": {
+      "ok": true,
+      "detail": {
+        "cover": {
+          "scroll": 390,
+          "client": 390
+        },
+        "login": {
+          "scroll": 390,
+          "client": 390
+        },
+        "setup": {
+          "scroll": 390,
+          "client": 390
+        },
+        "invite": {
+          "scroll": 390,
+          "client": 390
+        },
+        "product": {
+          "scroll": 390,
+          "client": 390
+        },
+        "docs": {
+          "scroll": 390,
+          "client": 390
+        },
+        "quickstart": {
+          "scroll": 390,
+          "client": 390
+        },
+        "home": {
+          "scroll": 390,
+          "client": 390
+        },
+        "home-empty": {
+          "scroll": 390,
+          "client": 390
+        },
+        "overview": {
+          "scroll": 390,
+          "client": 390
+        },
+        "alerts": {
+          "scroll": 390,
+          "client": 390
+        },
+        "brand-overview": {
+          "scroll": 390,
+          "client": 390
+        },
+        "brief": {
+          "scroll": 390,
+          "client": 390
+        },
+        "plan": {
+          "scroll": 390,
+          "client": 390
+        },
+        "plan-error": {
+          "scroll": 390,
+          "client": 390
+        },
+        "review": {
+          "scroll": 390,
+          "client": 390
+        },
+        "new-brand": {
+          "scroll": 390,
+          "client": 390
+        },
+        "content": {
+          "scroll": 390,
+          "client": 390
+        },
+        "cookbooks": {
+          "scroll": 390,
+          "client": 390
+        },
+        "orchestrator": {
+          "scroll": 390,
+          "client": 390
+        },
+        "brain": {
+          "scroll": 390,
+          "client": 390
+        },
+        "products": {
+          "scroll": 390,
+          "client": 390
+        },
+        "pages": {
+          "scroll": 390,
+          "client": 390
+        },
+        "library": {
+          "scroll": 390,
+          "client": 390
+        },
+        "exports": {
+          "scroll": 390,
+          "client": 390
+        },
+        "insights": {
+          "scroll": 390,
+          "client": 390
+        },
+        "market": {
+          "scroll": 390,
+          "client": 390
+        },
+        "intelligence": {
+          "scroll": 390,
+          "client": 390
+        },
+        "calibration": {
+          "scroll": 390,
+          "client": 390
+        },
+        "connect": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-general": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-members": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-weights": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-learning": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-danger": {
+          "scroll": 390,
+          "client": 390
+        },
+        "settings-alerts": {
+          "scroll": 390,
+          "client": 390
+        },
+        "billing": {
+          "scroll": 390,
+          "client": 390
+        },
+        "usage": {
+          "scroll": 390,
+          "client": 390
+        },
+        "integrations": {
+          "scroll": 390,
+          "client": 390
+        },
+        "setup-guide": {
+          "scroll": 390,
+          "client": 390
+        },
+        "jobs": {
+          "scroll": 390,
+          "client": 390
+        },
+        "engine-ops": {
+          "scroll": 390,
+          "client": 390
+        },
+        "audit": {
+          "scroll": 390,
+          "client": 390
+        },
+        "webhooks": {
+          "scroll": 390,
+          "client": 390
+        },
+        "notifications": {
+          "scroll": 390,
+          "client": 390
+        },
+        "not-found": {
+          "scroll": 390,
+          "client": 390
+        },
+        "forbidden": {
+          "scroll": 390,
+          "client": 390
+        },
+        "admin-only": {
+          "scroll": 390,
+          "client": 390
+        },
+        "palette": {
+          "scroll": 390,
+          "client": 390
+        }
+      }
+    },
+    "phone.frame-takes-the-phone-layout": {
+      "ok": true,
+      "detail": {
+        "frameWidth": 390,
+        "railBelowMain": true,
+        "railHeight": 59
+      }
+    },
+    "navigation.arrows-and-ends": {
+      "ok": true,
+      "detail": {
+        "afterTwo": "3 of 49",
+        "afterBack": "2 of 49",
+        "atEnd": true,
+        "total": 49
+      }
+    },
+    "plan.selection-opens-details": {
+      "ok": true,
+      "detail": {
+        "selected": "s2",
+        "drawerOpen": true
+      }
+    },
+    "accent.changes-every-accent-use": {
+      "ok": true,
+      "detail": {
+        "before": {
+          "accent": "rgb(255, 46, 56)",
+          "filled": 1,
+          "danger": "#FF4D6A"
+        },
+        "after": {
+          "accent": "rgb(77, 157, 255)",
+          "danger": "#FF4D6A",
+          "globe": "rgb(77, 157, 255)",
+          "filled": 1
+        }
+      }
+    },
+    "accent.is-kept-when-the-page-opens-again": {
+      "ok": true,
+      "detail": {
+        "kept": "true"
+      }
+    }
+  }
+}

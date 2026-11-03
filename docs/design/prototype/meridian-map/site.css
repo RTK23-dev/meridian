@@ -1,0 +1,93 @@
+/* The site background is a depth map drawn in two colours that sit close to the page: the map ground and its line. The page moves down
+   the meridian line, one screen per stop, and each screen snaps into place. Yellow is the money colour, used only on the bills. */
+:root {
+  color-scheme: dark;
+  --map-bg: #0B0B0C;
+  --map-line: #1C1C1F;
+  --fg: #F2F2F2;
+  --muted: #A3A3A3;
+  --rule: #2A2A2D;
+  --accent: #FF2E38;
+  --money: #F5C518;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --text: "Instrument Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --map-bg: #F4F4F2;
+    --map-line: #DCDCD7;
+    --fg: #0A0A0A;
+    --muted: #4A4A4A;
+    --rule: #CFCFCA;
+    --money: #D9A400;
+  }
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+  --map-bg: #F4F4F2;
+  --map-line: #DCDCD7;
+  --fg: #0A0A0A;
+  --muted: #4A4A4A;
+  --rule: #CFCFCA;
+  --money: #D9A400;
+}
+
+* { box-sizing: border-box; }
+html { scroll-snap-type: y mandatory; scroll-behavior: smooth; }
+body {
+  margin: 0; background: var(--map-bg); color: var(--fg); font: 400 16px/26px var(--text); overflow-x: hidden;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+
+#map {
+  position: fixed; top: 0; left: 0; z-index: 0; pointer-events: none;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+}
+.meridian {
+  position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; z-index: 1; pointer-events: none;
+  background: var(--accent); opacity: 0.7;
+}
+.grain {
+  position: fixed; inset: 0; z-index: 2; pointer-events: none; opacity: 0.07;
+}
+
+.route {
+  position: fixed; top: 22px; left: max(20px, env(safe-area-inset-left, 0px)); z-index: 4;
+  display: flex; gap: 6px 22px; flex-wrap: wrap; font: 500 13px/18px var(--text);
+}
+.route a { color: var(--muted); text-decoration: none; padding-block: 4px; border-bottom: 1px solid transparent; }
+.route a span { font-family: var(--mono); font-size: 12px; opacity: 0.8; }
+.route a:hover, .route a[aria-current="true"] { color: var(--fg); border-bottom-color: var(--accent); }
+.route a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+main { position: relative; z-index: 3; }
+.stop {
+  position: relative; min-height: 100vh; min-height: 100svh;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: center; gap: 4vw;
+  padding-block: 96px 72px; padding-inline: clamp(0px, 4vw, 56px);
+  scroll-snap-align: start;
+}
+.stop-copy { display: grid; gap: 18px; max-width: 32rem; background: none; }
+.stop-copy .display { font: 600 clamp(44px, 6.2vw, 92px)/0.98 var(--display); letter-spacing: -0.03em; font-stretch: 92%; margin: 0; text-wrap: balance; }
+.label { font: 500 12px/16px var(--text); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.lede { margin: 0; font-size: 18px; line-height: 28px; color: var(--fg); max-width: 44ch; }
+
+.bill-figure { margin: 0; justify-self: center; display: grid; gap: 12px; }
+canvas.bill { display: block; width: 300px; height: 120px; image-rendering: pixelated; image-rendering: crisp-edges; }
+.bill-figure figcaption { font: 500 12px/16px var(--mono); color: var(--muted); letter-spacing: 0.02em; }
+.mono { font-family: var(--mono); }
+
+@media (max-width: 760px) {
+  .stop { grid-template-columns: minmax(0, 1fr); align-content: center; gap: 28px; padding-block: 104px 64px; padding-inline: 0; }
+  .stop-copy .display { font-size: 44px; line-height: 46px; }
+  .lede { font-size: 17px; line-height: 26px; }
+  canvas.bill { width: min(300px, 100%); height: auto; aspect-ratio: 5 / 2; }
+  .meridian { left: 14px; }
+  .route { gap: 4px 14px; top: 14px; }
+  .route a span { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}

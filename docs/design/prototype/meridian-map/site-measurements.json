@@ -1,0 +1,82 @@
+{
+  "url": "served from docs/design/prototype/meridian-map",
+  "results": {
+    "map.drawn-in-two-colours": {
+      "ok": true,
+      "detail": {
+        "colours": [
+          "#0b0b0c",
+          "#1c1c1f"
+        ]
+      }
+    },
+    "site.stops-and-loop-screen-present": {
+      "ok": true,
+      "detail": [
+        "cover",
+        "create",
+        "library",
+        "insights",
+        "settings",
+        "cover-loop"
+      ]
+    },
+    "site.no-console-errors": {
+      "ok": true,
+      "detail": []
+    },
+    "map.changes-with-the-scroll": {
+      "ok": true,
+      "detail": {
+        "at0": 15705276,
+        "at2": 3376567446
+      }
+    },
+    "bills.print-more-in-the-middle": {
+      "ok": true,
+      "detail": {
+        "centred": 865,
+        "below": 0
+      }
+    },
+    "bills.reveal-changes-as-the-page-moves": {
+      "ok": true,
+      "detail": {
+        "centred": 865,
+        "moved": 0
+      }
+    },
+    "loop.returns-to-the-first-stop": {
+      "ok": true,
+      "detail": {
+        "scrollY": 0
+      }
+    },
+    "loop.map-is-the-first-stops-part-of-the-world": {
+      "ok": true,
+      "detail": {
+        "before": 1350648658,
+        "back": 15705276
+      }
+    },
+    "layout.no-sideways-scroll.desktop": {
+      "ok": true,
+      "detail": {
+        "sideways": 0
+      }
+    },
+    "layout.no-sideways-scroll.phone": {
+      "ok": true,
+      "detail": {
+        "sideways": 0
+      }
+    },
+    "motion.reduced-holds-the-map-still": {
+      "ok": true,
+      "detail": {
+        "early": 3376567446,
+        "late": 3376567446
+      }
+    }
+  }
+}

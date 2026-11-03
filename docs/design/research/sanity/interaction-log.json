@@ -1,0 +1,17 @@
+[
+ {
+  "id": "D02",
+  "action": "click /^PRODUCTS$/i",
+  "result": "ok"
+ },
+ {
+  "id": "D03",
+  "action": "click /^SOLUTIONS$/i",
+  "result": "ok"
+ },
+ {
+  "id": "D04",
+  "action": "click /^RESOURCES$/i",
+  "result": "ok"
+ }
+]

@@ -1,0 +1,240 @@
+{
+  "url": "served from docs/design/prototype",
+  "results": {
+    "theme.follows-system-and-explicit-choice": {
+      "ok": true,
+      "detail": {
+        "system-light": "rgb(255, 255, 255)",
+        "explicit-dark-on-light": "rgb(0, 0, 0)",
+        "system-dark": "rgb(0, 0, 0)",
+        "explicit-dark-on-dark": "rgb(0, 0, 0)"
+      }
+    },
+    "fonts.proposed.resolve": {
+      "ok": true,
+      "detail": [
+        [
+          "600 36px Archivo",
+          true
+        ],
+        [
+          "400 15px \"Instrument Sans\"",
+          true
+        ],
+        [
+          "400 13px \"JetBrains Mono\"",
+          true
+        ]
+      ]
+    },
+    "trim.supported": {
+      "ok": true,
+      "detail": {
+        "supported": true,
+        "btn": "cap alphabetic"
+      }
+    },
+    "tier.column.steps": {
+      "ok": true,
+      "detail": {
+        "wide": "36px",
+        "narrow": "28px"
+      }
+    },
+    "tier.masthead.steps": {
+      "ok": true,
+      "detail": {
+        "masthead": "104px"
+      }
+    },
+    "tier.masthead.phone": {
+      "ok": true,
+      "detail": {
+        "phoneMasthead": "44px"
+      }
+    },
+    "assistant.narrows-the-brief-column": {
+      "ok": true,
+      "detail": {
+        "before": 516.65625,
+        "after": 216.65625,
+        "planBefore": 1352,
+        "planAfter": 1352
+      }
+    },
+    "overlay.canvas-still": {
+      "ok": true,
+      "detail": {
+        "layoutBefore": [
+          1352,
+          40,
+          232,
+          132
+        ],
+        "layoutAfter": [
+          1352,
+          40,
+          232,
+          132
+        ],
+        "drawerVisible": true
+      }
+    },
+    "overlay.selected-step-not-covered": {
+      "ok": true,
+      "detail": {
+        "right": 814,
+        "drawerLeft": 830
+      }
+    },
+    "drawer.title-takes-focus": {
+      "ok": true,
+      "detail": {
+        "titleFocused": true
+      }
+    },
+    "drawer.escape.returns-focus": {
+      "ok": true,
+      "detail": {
+        "closed": true,
+        "focused": "s6"
+      }
+    },
+    "thread.selection-shared": {
+      "ok": true,
+      "detail": {
+        "main": "s2",
+        "strip": "s2",
+        "filter": "s2",
+        "overview": "s2"
+      }
+    },
+    "overview.is-a-map-above-the-canvas": {
+      "ok": true,
+      "detail": {
+        "isOverview": true,
+        "mapHeight": 64.96875,
+        "mapTop": 2940.984375,
+        "frameTop": 3121.953125
+      }
+    },
+    "overview.click-pans-the-canvas": {
+      "ok": true,
+      "detail": {
+        "before": 0,
+        "after": 1324
+      }
+    },
+    "keyboard.skip-link-first": {
+      "ok": true,
+      "detail": {
+        "first": "skip-link"
+      }
+    },
+    "keyboard.reading-order": {
+      "ok": true,
+      "detail": [
+        "s1",
+        "s2",
+        "s3",
+        "s4",
+        "s5",
+        "s6",
+        "s7",
+        "s8",
+        "DIV"
+      ]
+    },
+    "keyboard.arrows-scroll-plan": {
+      "ok": true,
+      "detail": {
+        "left": 644,
+        "right": 724
+      }
+    },
+    "restriction.count-in-words": {
+      "ok": true,
+      "detail": "Showing 2 of 8 steps: needs you. Show all steps"
+    },
+    "restriction.hidden-selection-never-silent": {
+      "ok": true,
+      "detail": {
+        "filter": "true",
+        "notice": "That step was hidden by the filter \"Needs you\". Showing all steps."
+      }
+    },
+    "loading.cls-zero": {
+      "ok": true,
+      "detail": {
+        "cls": 0
+      }
+    },
+    "one-red-action.brief": {
+      "ok": true,
+      "detail": [
+        "Plan the run"
+      ]
+    },
+    "reduced-motion.no-loops": {
+      "ok": true,
+      "detail": {
+        "loops": 0
+      }
+    },
+    "phone.no-horizontal-scroll": {
+      "ok": true,
+      "detail": {
+        "scrollWidth": 390,
+        "clientWidth": 390
+      }
+    },
+    "phone.canvas-recomposed-as-list": {
+      "ok": true,
+      "detail": {
+        "view": "list",
+        "order": [
+          "s1",
+          "s2",
+          "s3",
+          "s4",
+          "s5",
+          "s6",
+          "s7",
+          "s8"
+        ]
+      }
+    },
+    "phone.details-sheet": {
+      "ok": true,
+      "detail": {
+        "bottomGap": 0,
+        "width": 270,
+        "rootWidth": 270
+      }
+    },
+    "states.ten-distinct-complete": {
+      "ok": true,
+      "detail": {
+        "states": 10,
+        "distinct": 10,
+        "complete": true,
+        "costs": 4
+      }
+    },
+    "money.four-tiles": {
+      "ok": true,
+      "detail": {
+        "costs": 4
+      }
+    },
+    "greyscale.applies": {
+      "ok": true,
+      "detail": {
+        "filter": "grayscale(1)"
+      }
+    },
+    "claims": {
+      "detail": 28
+    }
+  }
+}

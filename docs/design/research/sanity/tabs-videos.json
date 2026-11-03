@@ -1,0 +1,115 @@
+{
+ "tabs": [
+  {
+   "label": "Ask agent",
+   "selected": "true",
+   "controls": "assistant-panel-chat",
+   "rect": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "label": "History",
+   "selected": "false",
+   "controls": "assistant-panel-history",
+   "rect": [
+    0,
+    0,
+    0,
+    0
+   ]
+  },
+  {
+   "label": "Links",
+   "selected": "false",
+   "controls": "assistant-panel-links",
+   "rect": [
+    0,
+    0,
+    0,
+    0
+   ]
+  }
+ ],
+ "videos": [
+  {
+   "currentSrc": "https://cdn.sanity.io/files/3do82whm/next/bdd4149e4a4ac0e5d4c52086ba1530cd7236c0de.webm",
+   "sources": [
+    "https://cdn.sanity.io/files/3do82whm/next/fed85666a0d8e9f157e31bc392700089732f3e7b.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/9e04388801f440ee9c5d7832d8d3f12e6278d7c5.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/bdd4149e4a4ac0e5d4c52086ba1530cd7236c0de.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/d6c7093efba62774174acbb327fe5b340dc33781.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/177c9f900f40caaef1ca3a11a1ac234d14257809.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/0e593dcaf9a76d16011724741f0ec4b3482b9996.webm",
+    "https://cdn.sanity.io/files/3do82whm/next/0e593dcaf9a76d16011724741f0ec4b3482b9996.webm"
+   ],
+   "dataAttrs": [
+    "lazyVideo",
+    "loaded"
+   ],
+   "autoplay": false,
+   "loop": true,
+   "muted": true,
+   "playsinline": true,
+   "readyState": 4,
+   "duration": 24.758,
+   "w": 1440,
+   "h": 892
+  },
+  {
+   "currentSrc": "",
+   "sources": [],
+   "dataAttrs": [],
+   "autoplay": false,
+   "loop": true,
+   "muted": true,
+   "playsinline": true,
+   "readyState": 0,
+   "duration": null,
+   "w": 0,
+   "h": 0
+  },
+  {
+   "currentSrc": "",
+   "sources": [],
+   "dataAttrs": [],
+   "autoplay": false,
+   "loop": true,
+   "muted": true,
+   "playsinline": true,
+   "readyState": 0,
+   "duration": null,
+   "w": 0,
+   "h": 0
+  },
+  {
+   "currentSrc": "",
+   "sources": [],
+   "dataAttrs": [],
+   "autoplay": false,
+   "loop": true,
+   "muted": true,
+   "playsinline": true,
+   "readyState": 0,
+   "duration": null,
+   "w": 0,
+   "h": 0
+  },
+  {
+   "currentSrc": "",
+   "sources": [],
+   "dataAttrs": [],
+   "autoplay": true,
+   "loop": true,
+   "muted": true,
+   "playsinline": true,
+   "readyState": 0,
+   "duration": null,
+   "w": 575,
+   "h": 140
+  }
+ ]
+}

@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meridian mixed design prototype</title>
+  <meta name="description" content="The Meridian mixed design plan as a set of small plates: what each part does, what it means, and what was measured.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,600..700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Sora:wght@500;600&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="prototype.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to the plates</a>
+
+  <header class="masthead">
+    <div class="masthead-grid">
+      <div class="masthead-copy">
+        <p class="kicker">Meridian · Create flow · Mixed design prototype</p>
+        <h1 class="display">One plan, read at any distance.</h1>
+        <p class="lede">The plan is one object. You can look at it as a whole, as a sequence, as a list, or one step at a time. Each plate below shows one part of it: what the part does, and what it means for the work.</p>
+        <div class="switches">
+          <div class="seg accent-picker" data-accent-picker role="radiogroup" aria-label="Accent colour"></div>
+          <div class="seg" role="radiogroup" aria-label="Theme">
+            <button type="button" role="radio" aria-checked="false" data-set-theme="dark">Dark</button>
+            <button type="button" role="radio" aria-checked="false" data-set-theme="light">Light</button>
+          </div>
+          <label class="check"><input type="checkbox" id="greyscale"> Colour off</label>
+        </div>
+        <p class="note">Sample plan and costs. No provider was called and nothing ran. The theme follows your system until you choose one.</p>
+      </div>
+      <figure class="mark-plate" aria-hidden="true">
+        <svg class="globe" viewBox="0 0 320 320" focusable="false">
+          <circle class="globe-outline" cx="160" cy="160" r="150"></circle>
+          <ellipse class="globe-line" cx="160" cy="160" rx="150" ry="26"></ellipse>
+          <ellipse class="globe-line" cx="160" cy="160" rx="118" ry="134"></ellipse>
+          <ellipse class="globe-line globe-faint" cx="160" cy="160" rx="72" ry="150"></ellipse>
+          <ellipse class="globe-line globe-faint" cx="160" cy="88" rx="134" ry="18"></ellipse>
+          <ellipse class="globe-line globe-faint" cx="160" cy="232" rx="134" ry="18"></ellipse>
+          <g class="globe-meridian"><ellipse class="globe-red" cx="160" cy="160" rx="22" ry="150"></ellipse></g>
+        </svg>
+        <figcaption class="mark-caption">The globe mark, drawn from the logo spec. The red meridian is the place you are.</figcaption>
+      </figure>
+    </div>
+  </header>
+
+  <div class="page">
+    <nav class="contents" aria-label="Contents">
+      <p class="label">Contents</p>
+      <ol>
+        <li><a href="#reading">Reading the plan</a></li>
+        <li><a href="#states">Words before colour</a></li>
+        <li><a href="#brief">The brief and the title</a></li>
+        <li><a href="#motion">Motion, touch and notices</a></li>
+        <li><a href="#components">Components</a></li>
+        <li><a href="#proof">Proof and limits</a></li>
+      </ol>
+    </nav>
+
+    <main id="main" class="chapters">
+
+      <!-- ============================ I. READING THE PLAN ============================ -->
+      <section class="chapter" id="reading" aria-labelledby="reading-title">
+        <header class="chapter-head">
+          <p class="chapter-no">I</p>
+          <h2 id="reading-title">Reading the plan</h2>
+          <p class="lede">Five plates on how a plan is read. Start with the plan itself, then see how the same selection travels through every view.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-12" aria-labelledby="p-plan">
+            <header class="plate-head"><span class="plate-no">01</span><span class="label">The plan</span></header>
+            <h3 class="plate-title" id="p-plan">Every step, and what each one reads</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Draws the plan as steps in columns. A step sits one column to the right of every step it reads.</dd></div>
+              <div><dt>Means</dt><dd>Read from left to right to follow the work. Steps stacked in one column can run side by side.</dd></div>
+            </dl>
+            <div class="specimen specimen-plan">
+              <div class="plan-host" id="plan-main"></div>
+            </div>
+            <p class="plate-foot">Select a step to open its details. The plan stays where it is.</p>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-thread">
+            <header class="plate-head"><span class="plate-no">02</span><span class="label">The thread</span></header>
+            <h3 class="plate-title" id="p-thread">The selected step is the same step everywhere</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Marks the selected step with a red edge, in every view.</dd></div>
+              <div><dt>Means</dt><dd>The selection belongs to the plan, not to one view. Choose a step in any plate on this page and every other plate selects it too.</dd></div>
+            </dl>
+            <div class="specimen">
+              <div class="plan-host" id="plan-strip"></div>
+            </div>
+            <p class="plate-foot">The strip is the plan in reading order. Its mark follows the step above.</p>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-distances">
+            <header class="plate-head"><span class="plate-no">03</span><span class="label">Four distances</span></header>
+            <h3 class="plate-title" id="p-distances">Four ways to look at the same plan</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Shows the plan as a shape, as a sequence, as a list, or one step at a time.</dd></div>
+              <div><dt>Means</dt><dd>Choose the distance that answers your question. The selection comes with you when you change it.</dd></div>
+            </dl>
+            <div class="specimen specimen-distances">
+              <div class="distance"><p class="distance-name">Canvas</p><p>The shape of the work, and what depends on what.</p></div>
+              <div class="distance"><p class="distance-name">Strip</p><p>The order of the work, one step after another.</p></div>
+              <div class="distance"><p class="distance-name">List</p><p>Every step as a row, for scanning and filtering.</p></div>
+              <div class="distance"><p class="distance-name">Details</p><p>One step, with what it reads and what reads it.</p></div>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-overview">
+            <header class="plate-head"><span class="plate-no">04</span><span class="label">Overview</span></header>
+            <h3 class="plate-title" id="p-overview">A map of the whole plan</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Shows the whole canvas in a small box. The red frame is the part you can see now.</dd></div>
+              <div><dt>Means</dt><dd>Use it to find your place in a long plan without losing it.</dd></div>
+            </dl>
+            <div class="specimen">
+              <div class="plan-host plan-host-small" id="plan-overview"></div>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-axes">
+            <header class="plate-head"><span class="plate-no">05</span><span class="label">Across and down</span></header>
+            <h3 class="plate-title" id="p-axes">Two directions, two meanings</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Across shows what a step reads, and what reads it. Down shows steps that can run alongside, in plan order.</dd></div>
+              <div><dt>Means</dt><dd>A step waits for the steps it reads. Steps in one column do not wait for each other.</dd></div>
+            </dl>
+            <div class="specimen specimen-axes">
+              <svg class="axes" viewBox="0 0 600 260" role="img" aria-label="Three steps read across into two steps stacked down, which then join into one">
+                <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="axes-arrow-head"></path></marker></defs>
+                <g class="axes-boxes">
+                  <rect x="10" y="100" width="120" height="56" rx="2"></rect><text x="22" y="124">Brand photos</text>
+                  <rect x="170" y="100" width="120" height="56" rx="2"></rect><text x="182" y="124">Analysis</text>
+                  <rect x="330" y="30" width="120" height="56" rx="2"></rect><text x="342" y="54">Still</text>
+                  <rect x="330" y="170" width="120" height="56" rx="2"></rect><text x="342" y="194">Voice</text>
+                </g>
+                <g class="axes-links" marker-end="url(#arrow)">
+                  <path d="M130 128 L170 128"></path>
+                  <path d="M290 128 C310 128, 310 58, 330 58"></path>
+                  <path d="M290 128 C310 128, 310 198, 330 198"></path>
+                </g>
+                <text class="axes-label" x="150" y="92">reads</text>
+                <text class="axes-label" x="330" y="22">runs alongside</text>
+                <path class="axes-down" d="M496 58 L496 198"></path>
+                <text class="axes-label" x="510" y="124">down</text>
+                <text class="axes-label" x="510" y="140">same column</text>
+              </svg>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-restriction">
+            <header class="plate-head"><span class="plate-no">06</span><span class="label">Restriction</span></header>
+            <h3 class="plate-title" id="p-restriction">A filter says what it hides</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Names the filter, the count it shows, and what it hides. One control clears it.</dd></div>
+              <div><dt>Means</dt><dd>A step you ask for is never hidden without a reason. Choosing a hidden step clears the filter and says so.</dd></div>
+            </dl>
+            <div class="specimen">
+              <div class="plan-host" id="plan-filter"></div>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============================ II. WORDS BEFORE COLOUR ============================ -->
+      <section class="chapter" id="states" aria-labelledby="states-title">
+        <header class="chapter-head">
+          <p class="chapter-no">II</p>
+          <h2 id="states-title">Words before colour</h2>
+          <p class="lede">A state is a word, a dot and a tone, in that order of importance. Each state says what it means and what to do next.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-12" aria-labelledby="p-states">
+            <header class="plate-head"><span class="plate-no">07</span><span class="label">The ten states</span></header>
+            <h3 class="plate-title" id="p-states">Each state says what it means, and what you do next</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Shows the state of every step. The word comes first, the dot second, and the colour third.</dd></div>
+              <div><dt>Means</dt><dd>A plan read in greyscale says the same things. Nothing depends on colour alone.</dd></div>
+            </dl>
+            <div class="state-grid" id="state-grid"></div>
+          </article>
+
+          <article class="plate span-5" aria-labelledby="p-money">
+            <header class="plate-head"><span class="plate-no">08</span><span class="label">Money</span></header>
+            <h3 class="plate-title" id="p-money">Every number says what it is</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Says whether a figure was recorded, estimated, not known, or not a model cost.</dd></div>
+              <div><dt>Means</dt><dd>An estimate is never shown as a bill. A figure that is not known is never shown as zero.</dd></div>
+            </dl>
+            <div class="cost-grid" id="cost-grid"></div>
+          </article>
+
+          <article class="plate span-7" aria-labelledby="p-colour">
+            <header class="plate-head"><span class="plate-no">09</span><span class="label">Colour</span></header>
+            <h3 class="plate-title" id="p-colour">Colour is the third signal</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>The word and the dot carry the state. The colour adds a tone, and nothing depends on it alone.</dd></div>
+              <div><dt>Means</dt><dd>Turn on Colour off at the top of the page. Every state still reads.</dd></div>
+            </dl>
+            <div class="specimen specimen-states">
+              <div class="state-row">
+                <p class="state-word" data-tone="muted"><span class="dot dot-hollow" aria-hidden="true"></span>Planned</p>
+                <p class="state-word" data-tone="danger"><span class="dot dot-cross" aria-hidden="true"></span>Failed</p>
+                <p class="state-word" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</p>
+                <p class="state-word" data-tone="accent"><span class="dot dot-filled" aria-hidden="true"></span>Running</p>
+              </div>
+              <div class="state-row is-greyscale" aria-hidden="true">
+                <p class="state-word" data-tone="muted"><span class="dot dot-hollow" aria-hidden="true"></span>Planned</p>
+                <p class="state-word" data-tone="danger"><span class="dot dot-cross" aria-hidden="true"></span>Failed</p>
+                <p class="state-word" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</p>
+                <p class="state-word" data-tone="accent"><span class="dot dot-filled" aria-hidden="true"></span>Running</p>
+              </div>
+            </div>
+            <p class="plate-foot">The second row is the same row in greyscale. Measured: the ten state words are distinct.</p>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============================ III. THE BRIEF AND THE TITLE ============================ -->
+      <section class="chapter" id="brief" aria-labelledby="brief-title">
+        <header class="chapter-head">
+          <p class="chapter-no">III</p>
+          <h2 id="brief-title">The brief and the title</h2>
+          <p class="lede">A run starts with one brief. It is kept as you write it, and it says plainly what it still needs.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-7" id="brief-plate" data-assistant="closed" aria-labelledby="p-brief">
+            <header class="plate-head"><span class="plate-no">10</span><span class="label">Create · Brief</span></header>
+            <h3 class="plate-title" id="p-brief">One goal, then the facts the plan needs</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Asks for the goal, offers examples, and lists the facts the plan needs: brand, format, budget and model.</dd></div>
+              <div><dt>Means</dt><dd>The primary button is the only red action on the screen. Anything that cannot work yet says why, in words.</dd></div>
+            </dl>
+            <div class="brief-body">
+              <div class="brief-column">
+                <label class="field-label" for="goal">What should the video do?</label>
+                <textarea id="goal" class="field field-area" rows="4" placeholder="For example: a 30-second video that shows the product in use, with captions."></textarea>
+                <p class="label group-label">Start from an example</p>
+                <ul class="chips" id="examples" aria-label="Example goals"></ul>
+                <dl class="facts">
+                  <div><dt>Brand</dt><dd>Stored for this workspace</dd></div>
+                  <div><dt>Format</dt><dd class="mono">9:16, 30 seconds</dd></div>
+                  <div><dt>Budget</dt><dd class="mono">$0.50</dd></div>
+                  <div><dt>Model</dt><dd>Stored for this workspace. Change it in Settings.</dd></div>
+                </dl>
+                <div class="row-nc">
+                  <div>
+                    <p class="row-title">Reference files</p>
+                    <p class="row-reason"><span class="state-inline" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</span> Connect file storage in Settings to attach files.</p>
+                  </div>
+                </div>
+                <div class="actions">
+                  <button type="button" class="btn btn-primary" id="plan-the-run">Plan the run</button>
+                  <button type="button" class="btn btn-secondary" id="assistant-toggle" aria-expanded="false" aria-controls="assistant">Ask the assistant</button>
+                </div>
+              </div>
+              <aside class="assistant" id="assistant" aria-label="Assistant" hidden>
+                <div class="assistant-head">
+                  <h4 class="section-title">Assistant</h4>
+                  <button type="button" class="btn btn-quiet" id="assistant-close">Close</button>
+                </div>
+                <p class="row-reason">Ask about this brief. Nothing runs from here.</p>
+                <label class="field-label" for="ask">Your question</label>
+                <input id="ask" class="field" type="text" disabled aria-describedby="ask-reason">
+                <p class="row-reason" id="ask-reason"><span class="state-inline" data-tone="warning"><span class="dot dot-plug" aria-hidden="true"></span>NOT CONNECTED</span> The assistant is not connected in this sample.</p>
+              </aside>
+            </div>
+            <p class="plate-foot">Opening the assistant narrows this column. Nothing else on the page moves.</p>
+          </article>
+
+          <article class="plate span-5" aria-labelledby="p-brief-plan">
+            <header class="plate-head"><span class="plate-no">11</span><span class="label">Plan</span></header>
+            <h3 class="plate-title" id="p-brief-plan">The plan this brief makes</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Turns the brief into steps. The plan opens below the brief, and the brief stays as you left it.</dd></div>
+              <div><dt>Means</dt><dd>Nothing runs until you run it. Planning only draws the steps and their estimates.</dd></div>
+            </dl>
+            <ol class="brief-steps">
+              <li><span class="mono">01</span>Brand photos are read</li>
+              <li><span class="mono">02</span>The structure is written</li>
+              <li><span class="mono">03</span>Stills, voice and a shot are drawn</li>
+              <li><span class="mono">04</span>The edit and the render follow</li>
+            </ol>
+          </article>
+
+          <article class="plate span-12" aria-labelledby="p-title">
+            <header class="plate-head"><span class="plate-no">12</span><span class="label">Title</span></header>
+            <h3 class="plate-title" id="p-title">The title is sized by the space it sits in</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Sizes the title by the width of the column it sits in, not by the window.</dd></div>
+              <div><dt>Means</dt><dd>When a column narrows, its title steps down. A title in a narrow space still reads as the same title.</dd></div>
+            </dl>
+            <div class="tier-demo">
+              <div class="tier-box tier-wide"><p class="label">Full width</p><p class="tier-title">Plan a run</p></div>
+              <div class="tier-box tier-narrow"><p class="label">Sixty percent width</p><p class="tier-title">Plan a run</p></div>
+            </div>
+            <p class="plate-foot">Measured: 36 px in the wide column, 28 px in the narrow one.</p>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============================ IV. MOTION, TOUCH AND NOTICES ============================ -->
+      <section class="chapter" id="motion" aria-labelledby="motion-title">
+        <header class="chapter-head">
+          <p class="chapter-no">IV</p>
+          <h2 id="motion-title">Motion, touch and notices</h2>
+          <p class="lede">Motion explains a change. A phone gets the same plan in a shape that fits, and a notice says what it needs from you.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-6" aria-labelledby="p-motion">
+            <header class="plate-head"><span class="plate-no">13</span><span class="label">Motion</span></header>
+            <h3 class="plate-title" id="p-motion">Only what explains a change moves</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Moves to show a change. The line into a running step moves. Nothing else on the page does.</dd></div>
+              <div><dt>Means</dt><dd>With reduced motion on, the line stops and colours still change at once.</dd></div>
+            </dl>
+            <div class="specimen specimen-motion">
+              <div class="motion-line"><span class="dot dot-filled" aria-hidden="true"></span><span class="motion-track"></span><span class="state-word" data-tone="accent">Running</span></div>
+            </div>
+            <p class="plate-foot">Measured under reduced motion: no animation loops.</p>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-redraw">
+            <header class="plate-head"><span class="plate-no">14</span><span class="label">Redraw</span></header>
+            <h3 class="plate-title" id="p-redraw">A redraw keeps every place</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Turns each step into a block in the same place, then fills the blocks again.</dd></div>
+              <div><dt>Means</dt><dd>Nothing jumps while the plan reloads, so you can keep your place in it.</dd></div>
+            </dl>
+            <div class="specimen">
+              <div class="plan-host plan-host-small" id="plan-redraw"></div>
+            </div>
+            <p class="plate-foot">Measured: layout shift on redraw is 0.</p>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-notices">
+            <header class="plate-head"><span class="plate-no">15</span><span class="label">Notices</span></header>
+            <h3 class="plate-title" id="p-notices">A passing note leaves; a failure stays</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>A saved note leaves by itself after four seconds. A failure stays until you close it.</dd></div>
+              <div><dt>Means</dt><dd>Nothing important leaves on a timer. Read a failure before it goes.</dd></div>
+            </dl>
+            <div class="actions">
+              <button type="button" class="btn btn-secondary" id="toast-success">Show a saved note</button>
+              <button type="button" class="btn btn-danger" id="toast-danger">Show a failure</button>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-phone">
+            <header class="plate-head"><span class="plate-no">16</span><span class="label">Phones</span></header>
+            <h3 class="plate-title" id="p-phone">Under 360 pixels, the canvas becomes the list</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Draws the same steps, in the same order, as a list when the space is narrow.</dd></div>
+              <div><dt>Means</dt><dd>Nothing is shrunk to fit. Each step keeps its words and its cost.</dd></div>
+            </dl>
+            <div class="specimen specimen-phone">
+              <div class="phone-frame"><div class="plan-host" id="plan-phone"></div></div>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-keys">
+            <header class="plate-head"><span class="plate-no">17</span><span class="label">Keyboard</span></header>
+            <h3 class="plate-title" id="p-keys">The plan works without a mouse</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Tab walks the steps in reading order, column by column. Enter opens the details. Escape closes them and returns focus to the step.</dd></div>
+              <div><dt>Means</dt><dd>Someone who cannot use a pointer reads the plan in the same order as everyone else.</dd></div>
+            </dl>
+            <ul class="keys">
+              <li><kbd>Tab</kbd> steps in reading order</li>
+              <li><kbd>Enter</kbd> opens a step's details</li>
+              <li><kbd>Esc</kbd> closes them and returns to the step</li>
+              <li><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd> zoom, then reset, with the canvas focused</li>
+              <li><kbd>Arrow</kbd> keys scroll the canvas when it has focus</li>
+            </ul>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-places">
+            <header class="plate-head"><span class="plate-no">18</span><span class="label">Places</span></header>
+            <h3 class="plate-title" id="p-places">Five places, one question each</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Groups the app into five places: Home, Create, Library, Insights and Settings.</dd></div>
+              <div><dt>Means</dt><dd>Each place answers one question. The current place has the red mark.</dd></div>
+            </dl>
+            <nav class="rail-mock" aria-label="Places, sample">
+              <p class="rail-mock-item"><span class="mono">⌂</span>Home</p>
+              <p class="rail-mock-item is-current"><span class="mono">+</span>Create</p>
+              <p class="rail-mock-item"><span class="mono">▤</span>Library</p>
+              <p class="rail-mock-item"><span class="mono">∿</span>Insights</p>
+              <p class="rail-mock-item"><span class="mono">⚙</span>Settings</p>
+            </nav>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============================ V. COMPONENTS ============================ -->
+      <section class="chapter" id="components" aria-labelledby="components-title">
+        <header class="chapter-head">
+          <p class="chapter-no">V</p>
+          <h2 id="components-title">Components</h2>
+          <p class="lede">The parts a screen is made from. Each one has a few states, and each state has a reason you can read.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-12" aria-labelledby="p-buttons">
+            <header class="plate-head"><span class="plate-no">19</span><span class="label">Buttons</span></header>
+            <h3 class="plate-title" id="p-buttons">Four kinds, and one red action per screen</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Primary, secondary, quiet and danger. Each has default, hover, focus, pressed and disabled states.</dd></div>
+              <div><dt>Means</dt><dd>One red primary action per screen. A disabled button says why, beside it, in words.</dd></div>
+            </dl>
+            <div class="specimens">
+              <div><p class="label">Primary</p><button type="button" class="btn btn-primary">Plan the run</button></div>
+              <div><p class="label">Primary, focus</p><button type="button" class="btn btn-primary is-focus">Plan the run</button></div>
+              <div><p class="label">Primary, disabled</p><button type="button" class="btn btn-primary" disabled>Resume the run</button><p class="row-reason">Two steps need you first.</p></div>
+              <div><p class="label">Secondary</p><button type="button" class="btn btn-secondary">Ask the assistant</button></div>
+              <div><p class="label">Secondary, hover</p><button type="button" class="btn btn-secondary is-hover">Ask the assistant</button></div>
+              <div><p class="label">Quiet, current</p><button type="button" class="btn btn-quiet is-current" aria-pressed="true">Canvas</button></div>
+              <div><p class="label">Danger</p><button type="button" class="btn btn-danger">Remove the run</button></div>
+            </div>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-colour-palette">
+            <header class="plate-head"><span class="plate-no">20</span><span class="label">Colour</span></header>
+            <h3 class="plate-title" id="p-colour-palette">Red marks what is happening now</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Shows the palette of the dark room, with the contrast of each text colour on black.</dd></div>
+              <div><dt>Means</dt><dd>Nothing else in the interface is red. Every text colour clears 4.5 to 1.</dd></div>
+            </dl>
+            <ul class="swatches">
+              <li><span class="swatch" style="background:#FFFFFF"></span><span>Primary text</span><span class="mono">#FFFFFF · 21.00:1</span></li>
+              <li><span class="swatch" style="background:#C4C4C4"></span><span>Secondary text</span><span class="mono">#C4C4C4 · 12.04:1</span></li>
+              <li><span class="swatch" style="background:#949494"></span><span>Muted text</span><span class="mono">#949494 · 6.92:1</span></li>
+              <li><span class="swatch" style="background:#FF2E38"></span><span>Now (red)</span><span class="mono">#FF2E38 · 5.70:1</span></li>
+              <li><span class="swatch" style="background:#3DDC84"></span><span>Done</span><span class="mono">#3DDC84 · 11.77:1</span></li>
+              <li><span class="swatch" style="background:#FFB020"></span><span>Waiting on you</span><span class="mono">#FFB020 · 11.48:1</span></li>
+              <li><span class="swatch" style="background:#FF4D6A"></span><span>Failed</span><span class="mono">#FF4D6A · 6.52:1</span></li>
+              <li><span class="swatch" style="background:#5AA9FF"></span><span>Queued</span><span class="mono">#5AA9FF · 8.55:1</span></li>
+            </ul>
+            <p class="plate-foot">Ratios are the WCAG contrast of each colour on the black room, from the Katana plan's table, checked by a test.</p>
+          </article>
+
+          <article class="plate span-6" aria-labelledby="p-type">
+            <header class="plate-head"><span class="plate-no">21</span><span class="label">Type</span></header>
+            <h3 class="plate-title" id="p-type">Three faces, each with one job</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Archivo sets the titles, Instrument Sans sets the text, and JetBrains Mono sets numbers and labels.</dd></div>
+              <div><dt>Means</dt><dd>Every figure is in the mono face, so digits line up. Titles are sized by the space they sit in.</dd></div>
+            </dl>
+            <div class="type-samples">
+              <p class="type-display">Plan a run</p>
+              <p class="type-text">Each step says what it is, what it reads and what it costs.</p>
+              <p class="label">Label, uppercase, for a group</p>
+              <p class="type-mono mono">est. $0.0900 · 4 steps · 9:16</p>
+            </div>
+          </article>
+
+        </div>
+      </section>
+
+      <!-- ============================ VI. PROOF AND LIMITS ============================ -->
+      <section class="chapter" id="proof" aria-labelledby="proof-title">
+        <header class="chapter-head">
+          <p class="chapter-no">VI</p>
+          <h2 id="proof-title">Proof and limits</h2>
+          <p class="lede">What was checked, how, and what was not. Read the limits before you rely on the design.</p>
+        </header>
+        <div class="plates">
+
+          <article class="plate span-7" aria-labelledby="p-measured">
+            <header class="plate-head"><span class="plate-no">22</span><span class="label">Measured</span></header>
+            <h3 class="plate-title" id="p-measured">What the browser capture measured</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Runs each claim on this page in headless Chromium and records the number.</dd></div>
+              <div><dt>Means</dt><dd>A claim that fails stops the capture with a non-zero exit. Nothing on this page is a claim the capture does not check.</dd></div>
+            </dl>
+            <dl class="measured">
+              <div><dt>Theme</dt><dd>Follows the system, and an explicit choice overrides it</dd></div>
+              <div><dt>Fonts</dt><dd>Archivo, Instrument Sans and JetBrains Mono resolve</dd></div>
+              <div><dt>Titles</dt><dd>36 px in the wide column, 28 px in the narrow one; the masthead steps with its width</dd></div>
+              <div><dt>Brief</dt><dd>Opening the assistant narrows the brief's column, and the plan does not move</dd></div>
+              <div><dt>Details</dt><dd>A step does not move when the panel opens, stays clear of it, and takes focus</dd></div>
+              <div><dt>Thread</dt><dd>A step chosen in one plate is selected in every plate</dd></div>
+              <div><dt>Overview</dt><dd>The map sits above the canvas, and a click on it moves the canvas</dd></div>
+              <div><dt>Keyboard</dt><dd>The skip link is first; Tab walks eight steps in reading order; arrow keys scroll the plan</dd></div>
+              <div><dt>Restriction</dt><dd>Shows the count in words, and a hidden step clears the filter</dd></div>
+              <div><dt>Redraw</dt><dd>Layout shift 0</dd></div>
+              <div><dt>Motion</dt><dd>No looping animation under reduced motion</dd></div>
+              <div><dt>Phone</dt><dd>No sideways scroll at 390 pixels; the plan is drawn as its list</dd></div>
+              <div><dt>States</dt><dd>Ten distinct state words, each with a meaning and a next step</dd></div>
+            </dl>
+            <p class="plate-foot">Results are written to screens/measurements.json by capture.mjs.</p>
+          </article>
+
+          <article class="plate span-5" aria-labelledby="p-limits">
+            <header class="plate-head"><span class="plate-no">23</span><span class="label">Limits</span></header>
+            <h3 class="plate-title" id="p-limits">What was not checked</h3>
+            <dl class="plate-copy">
+              <div><dt>Does</dt><dd>Lists the boundary of this evidence.</dd></div>
+              <div><dt>Means</dt><dd>Read these before trusting the design in a real product.</dd></div>
+            </dl>
+            <ul class="limits">
+              <li>Chromium only. Safari and Firefox were not run.</li>
+              <li>No screen reader was run, and no real phone was used.</li>
+              <li>All data is sample data. No provider was called.</li>
+              <li>Home, Library, Insights and Settings are described in the plan, not built.</li>
+              <li>The full test suite and the full build were not run for this page.</li>
+            </ul>
+          </article>
+
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <div class="toasts" id="toasts" aria-live="polite"></div>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>

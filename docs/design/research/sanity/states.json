@@ -1,0 +1,849 @@
+[
+ {
+  "id": "D01",
+  "note": "desktop 1440 default, scroll 0",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "Privacy Policy",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D02",
+  "note": "PRODUCTS menu after click",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 25,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "PRODUCTS",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D02b",
+  "note": "after Escape (menu closed?)",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "PRODUCTS",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D03",
+  "note": "SOLUTIONS menu",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 21,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "SOLUTIONS",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D04",
+  "note": "RESOURCES menu",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 28,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "RESOURCES",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D05",
+  "note": "Ask agent panel open (page pushed?)",
+  "theme": "light",
+  "chatPushed": true,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1008,
+   "h": 67
+  },
+  "h1": {
+   "size": "96px",
+   "lh": "96px",
+   "tracking": "-3.84px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 12,
+  "scrollY": 0,
+  "docH": 1000,
+  "activeEl": "Ask the Sanity assistant a question",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D06",
+  "note": "scroll 60px: header transparency threshold",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "36px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 60,
+  "docH": 12694,
+  "activeEl": "This website utilizes technologies such ",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D07",
+  "note": "scroll ~960px: features area",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "36px",
+  "headerScrolled": "true",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 960,
+  "docH": 12694,
+  "activeEl": "This website utilizes technologies such ",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D08",
+  "note": "section: Everything your team needs (scrollIntoView)",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "36px",
+  "headerScrolled": "true",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 4473,
+  "docH": 12694,
+  "activeEl": "This website utilizes technologies such ",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "D09",
+  "note": "footer, scroll bottom",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "36px",
+  "headerScrolled": "true",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 0,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 11694,
+  "docH": 12694,
+  "activeEl": "This website utilizes technologies such ",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "K01-focus-path",
+  "note": "keyboard Tab path, first 12 stops",
+  "focusPath": [
+   {
+    "n": 1,
+    "tag": "BUTTON",
+    "text": "PREFERENCES",
+    "outline": "solid 1px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     65,
+     908,
+     550,
+     27
+    ]
+   },
+   {
+    "n": 2,
+    "tag": "BUTTON",
+    "text": "Close this consent banner",
+    "outline": "solid 1px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     612,
+     772,
+     23,
+     23
+    ]
+   },
+   {
+    "n": 3,
+    "tag": "A",
+    "text": "Everything *[NYC] 2026: see what we anno",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "-2px",
+    "box": [
+     0,
+     0,
+     1440,
+     36
+    ]
+   },
+   {
+    "n": 4,
+    "tag": "A",
+    "text": "SKIP TO CONTENT",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     12,
+     12,
+     143,
+     35
+    ]
+   },
+   {
+    "n": 5,
+    "tag": "A",
+    "text": "Home",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     24,
+     54,
+     32,
+     32
+    ]
+   },
+   {
+    "n": 6,
+    "tag": "BUTTON",
+    "text": "PRODUCTS",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     68,
+     52,
+     86,
+     35
+    ]
+   },
+   {
+    "n": 7,
+    "tag": "BUTTON",
+    "text": "SOLUTIONS",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     154,
+     52,
+     94,
+     35
+    ]
+   },
+   {
+    "n": 8,
+    "tag": "BUTTON",
+    "text": "RESOURCES",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     249,
+     52,
+     94,
+     35
+    ]
+   },
+   {
+    "n": 9,
+    "tag": "A",
+    "text": "DOCS",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     343,
+     52,
+     55,
+     35
+    ]
+   },
+   {
+    "n": 10,
+    "tag": "A",
+    "text": "ENTERPRISE",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     398,
+     52,
+     102,
+     35
+    ]
+   },
+   {
+    "n": 11,
+    "tag": "A",
+    "text": "PRICING",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     500,
+     52,
+     79,
+     35
+    ]
+   },
+   {
+    "n": 12,
+    "tag": "A",
+    "text": "LOG IN",
+    "outline": "dotted 2px rgb(11, 11, 11)",
+    "outlineOffset": "2px",
+    "box": [
+     1004,
+     52,
+     71,
+     35
+    ]
+   }
+  ]
+ },
+ {
+  "id": "T01",
+  "note": "after Shift+L (theme shortcut)",
+  "theme": "dark",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "LOG IN",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "T01-storage",
+  "note": "localStorage theme after Shift+L",
+  "storedTheme": "dark"
+ },
+ {
+  "id": "T02",
+  "note": "after reload: theme persisted?",
+  "theme": "dark",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 0,
+  "docH": 12695,
+  "activeEl": "Everything *[NYC] 2026: see what we anno",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "R01",
+  "note": "reduced-motion emulated: animating elements",
+  "animating": [
+   "delay-overflow/0.4s",
+   "marquee-scroll/82.75s",
+   "homepage-customers-countdown/9.7s"
+  ]
+ },
+ {
+  "id": "R01",
+  "note": "reduced motion context",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "scrollY": 0,
+  "docH": 12694,
+  "activeEl": "Privacy Policy",
+  "viewport": {
+   "width": 1440,
+   "height": 1000
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "L01",
+  "note": "loading: fonts at DOMContentLoaded+0.3s, then settled",
+  "early": {
+   "fonts": [
+    "Waldenburg-75357948a2b6a39b 400 loaded",
+    "Waldenburg-75357948a2b6a39b 400 unloaded",
+    "Waldenburg-75357948a2b6a39b 600 unloaded",
+    "Waldenburg-75357948a2b6a39b 400 unloaded",
+    "Waldenburg-75357948a2b6a39b 400 unloaded",
+    "Waldenburg-75357948a2b6a39b 600 unloaded",
+    "IBM 400 loaded",
+    "IBM 400 unloaded",
+    "IBM 700 unloaded",
+    "IBM 700 unloaded",
+    "IBM 400 error",
+    "IBM 400 unloaded",
+    "IBM 700 unloaded",
+    "IBM 700 unloaded"
+   ]
+  },
+  "late": {
+   "cls": 0,
+   "fonts": [
+    "Waldenburg-75357948a2b6a39b 400",
+    "IBM 400"
+   ]
+  }
+ },
+ {
+  "id": "M01",
+  "note": "mobile 390 default",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 41,
+   "w": 390,
+   "h": 67
+  },
+  "h1": {
+   "size": "60px",
+   "lh": "60px",
+   "tracking": "-2.4px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "scrollY": 0,
+  "docH": 13879,
+  "activeEl": "Privacy Policy",
+  "viewport": {
+   "width": 390,
+   "height": 844
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "M02",
+  "note": "mobile menu open (Open menu control)",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 41,
+   "w": 390,
+   "h": 67
+  },
+  "h1": {
+   "size": "60px",
+   "lh": "60px",
+   "tracking": "-2.4px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "scrollY": 0,
+  "docH": 13879,
+  "activeEl": "Privacy Policy",
+  "viewport": {
+   "width": 390,
+   "height": 844
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "M03",
+  "note": "mobile menu: PRODUCTS expanded",
+  "theme": "light",
+  "chatPushed": false,
+  "announcementOffset": "0px",
+  "headerScrolled": "false",
+  "headerTransparent": "true",
+  "headerRect": {
+   "x": 0,
+   "y": 41,
+   "w": 390,
+   "h": 67
+  },
+  "h1": {
+   "size": "60px",
+   "lh": "60px",
+   "tracking": "-2.4px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "scrollY": 0,
+  "docH": 13879,
+  "activeEl": "Privacy Policy",
+  "viewport": {
+   "width": 390,
+   "height": 844
+  },
+  "url": "https://www.sanity.io/"
+ },
+ {
+  "id": "W1440",
+  "note": "width probe 1440",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1440,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "theme": "light"
+ },
+ {
+  "id": "W1280",
+  "note": "width probe 1280",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1280,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 13,
+  "theme": "light"
+ },
+ {
+  "id": "W1024",
+  "note": "width probe 1024",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 1024,
+   "h": 67
+  },
+  "h1": {
+   "size": "112px",
+   "lh": "112px",
+   "tracking": "-4.48px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 12,
+  "theme": "light"
+ },
+ {
+  "id": "W800",
+  "note": "width probe 800",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 800,
+   "h": 67
+  },
+  "h1": {
+   "size": "96px",
+   "lh": "96px",
+   "tracking": "-3.84px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 8,
+  "theme": "light"
+ },
+ {
+  "id": "W767",
+  "note": "width probe 767",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 767,
+   "h": 67
+  },
+  "h1": {
+   "size": "72px",
+   "lh": "72px",
+   "tracking": "-2.88px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 8,
+  "theme": "light"
+ },
+ {
+  "id": "W768",
+  "note": "width probe 768",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 768,
+   "h": 67
+  },
+  "h1": {
+   "size": "96px",
+   "lh": "96px",
+   "tracking": "-3.84px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 8,
+  "theme": "light"
+ },
+ {
+  "id": "W600",
+  "note": "width probe 600",
+  "headerRect": {
+   "x": 0,
+   "y": 36,
+   "w": 600,
+   "h": 67
+  },
+  "h1": {
+   "size": "72px",
+   "lh": "72px",
+   "tracking": "-2.88px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "theme": "light"
+ },
+ {
+  "id": "W390",
+  "note": "width probe 390",
+  "headerRect": {
+   "x": 0,
+   "y": 41,
+   "w": 390,
+   "h": 67
+  },
+  "h1": {
+   "size": "60px",
+   "lh": "60px",
+   "tracking": "-2.4px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "theme": "light"
+ },
+ {
+  "id": "W375",
+  "note": "width probe 375",
+  "headerRect": {
+   "x": 0,
+   "y": 41,
+   "w": 375,
+   "h": 67
+  },
+  "h1": {
+   "size": "60px",
+   "lh": "60px",
+   "tracking": "-2.4px",
+   "weight": "400"
+  },
+  "visibleHeaderControls": 5,
+  "theme": "light"
+ }
+]
