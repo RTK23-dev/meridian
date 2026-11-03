@@ -1,6 +1,7 @@
 // The Content Factory session functions: list, create, brief, read, message, settings, uploads and sources. Moved out of
 // content-factory/service.ts unchanged (coding loop, T6). service.ts re-exports the public names.
 
+import { plainErrorText } from "./error-text.ts";
 import { briefTextOf, evidenceSummariesOf } from "./opportunity-brief.ts";
 import { canMakeBrief } from "../opportunity/triage-states.ts";
 import { randomUUID } from "node:crypto";
@@ -299,7 +300,7 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   try {
     ({ storageObjectId } = await store.put({ organizationId: row.organization_id, brandId: row.brand_id, key, mimeType: file.mediaType, bytes: decoded.bytes }));
   } catch (error) {
-    return { status: "refused", reason: `The file was not stored: ${error instanceof Error ? error.message : "the store refused it."}` };
+    return { status: "refused", reason: `The file was not stored: ${plainErrorText(error, "the store refused it.")}` };
   }
   const id = randomUUID();
   // The draft check and the reference check run again here, under the session's lock, in the same transaction that records the file. A
