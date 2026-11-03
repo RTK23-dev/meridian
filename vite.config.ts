@@ -10,6 +10,7 @@ import { nitro } from "nitro/vite";
 import { appEnvPlugin } from "./scripts/app-env-plugin.mjs";
 import { createLocalJobRunner, localJobsEnabled } from "./scripts/local-jobs.mjs";
 import { isMigrationFile } from "./scripts/migration-plan.mjs";
+import { previewAllowedHosts } from "./scripts/preview-hosts.mjs";
 
 /** The files `src/lib/db.ts` globs — same directory, same non-recursive scope. */
 function hasGlobbedMigrations(root: string): boolean {
@@ -119,6 +120,8 @@ export default defineConfig(({ command, isPreview }) => ({
     host: "127.0.0.1",
     port: 8081,
     strictPort: true,
+    // The public host names of this deployment, so the Host header of its own domain is served. Other names get 403.
+    allowedHosts: previewAllowedHosts(process.env),
   },
   resolve: { tsconfigPaths: true },
   // Pre-bundled at startup. A client module discovered after the first load makes Vite re-optimize and reload the page. A
