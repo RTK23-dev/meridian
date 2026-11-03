@@ -35,9 +35,9 @@ export function SalesByReelPanel({ brandId, canAdmin }: { brandId: string; canAd
   });
 
   return (
-    <section aria-labelledby="sales-by-reel-heading" className="space-y-4 rounded-lg border border-border p-4">
+    <section aria-labelledby="sales-by-reel-heading" className="space-y-4 rounded-sharp border border-hairline p-4">
       <h2 id="sales-by-reel-heading" className="text-base font-semibold">Sales by reel</h2>
-      {sales.isPending ? <p className="text-sm text-muted">Loading sales...</p> : null}
+      {sales.isPending ? <p className="text-sm text-fg-muted">Loading sales...</p> : null}
       {sales.error ? <p role="alert" className="text-sm text-danger">{errorText(sales.error)}</p> : null}
       {sales.data ? (
         <SalesBody
@@ -84,7 +84,7 @@ function SalesBody(props: {
             Shopify deliveries are refused until the app secret is saved in Settings, under Shopify. {view.secret.reason ?? ""}
           </p>
         )}
-        <p className="text-muted">
+        <p className="text-fg-muted">
           Webhook address: {origin}{view.webhookPath}. Topic: orders/create. Format: JSON.
         </p>
       </div>
@@ -106,7 +106,7 @@ function SalesBody(props: {
       ) : null}
 
       {view.sales.reels.length === 0 ? (
-        <p className="text-sm text-muted">No reel has a link yet. A reel gets its link and DM keyword when it is published.</p>
+        <p className="text-sm text-fg-muted">No reel has a link yet. A reel gets its link and DM keyword when it is published.</p>
       ) : (
         <ul className="space-y-3">
           {view.sales.reels.map((reel) => (
@@ -114,7 +114,7 @@ function SalesBody(props: {
           ))}
         </ul>
       )}
-      <p className="text-sm text-muted">
+      <p className="text-sm text-fg-muted">
         {view.sales.unmatched} order(s) are not matched to a reel. They are kept without one. Orders carry no customer details.
       </p>
     </div>
@@ -123,9 +123,9 @@ function SalesBody(props: {
 
 function ReelLine({ reel }: { reel: ReelSales }) {
   return (
-    <li className="space-y-1 rounded-md border border-border p-3 text-sm">
+    <li className="space-y-1 rounded-sharp border border-hairline p-3 text-sm">
       <p className="font-medium">{reel.title || "Untitled reel"}</p>
-      <p className="text-muted">DM keyword: {reel.dmKeyword}</p>
+      <p className="text-fg-muted">DM keyword: {reel.dmKeyword}</p>
       <p>
         {reel.linkUrl ? (
           <a href={reel.linkUrl} target="_blank" rel="noopener noreferrer" className="underline">
@@ -140,7 +140,7 @@ function ReelLine({ reel }: { reel: ReelSales }) {
         {reel.unknownTotal > 0 ? ` ${reel.unknownTotal} with no stored total.` : ""}
       </p>
       {reel.byCurrency.map((line) => (
-        <p key={`${line.currency ?? "none"}`} className="text-muted">
+        <p key={`${line.currency ?? "none"}`} className="text-fg-muted">
           {line.currency ?? "Currency not stored"}: {line.total} across {line.orders} order(s)
         </p>
       ))}

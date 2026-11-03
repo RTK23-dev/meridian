@@ -45,7 +45,7 @@ function SettingsPage() {
         </div>
       </nav>
       <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)} className="space-y-6">
-        <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-border">
+        <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-hairline">
           {TABS.map((item) => (
             <TabsTrigger key={item.id} value={item.id} className="shrink-0 max-sm:min-h-11">{item.label}</TabsTrigger>
           ))}

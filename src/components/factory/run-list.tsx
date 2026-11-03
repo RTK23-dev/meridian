@@ -71,7 +71,7 @@ export type RunListActions = {
  */
 function AiLabelControls({ aiLabel, actions }: { aiLabel: RunPickLine["variants"][number]["aiLabel"]; actions: RunListActions }) {
   const label = "AI label";
-  if (!aiLabel.canConfirm) return <p className="text-muted">{label}: no creative for this variant yet, so there is nothing to label.</p>;
+  if (!aiLabel.canConfirm) return <p className="text-fg-muted">{label}: no creative for this variant yet, so there is nothing to label.</p>;
   if (aiLabel.confirmed) {
     const reasonId = `ai-label-revoke-reason-${aiLabel.variantId}`;
     return (
@@ -93,7 +93,7 @@ function AiLabelControls({ aiLabel, actions }: { aiLabel: RunPickLine["variants"
   const reasonId = `ai-label-confirm-reason-${aiLabel.variantId}`;
   return (
     <div className="space-y-0.5">
-      <p>{label} not confirmed. Confirming it says: <span className="text-muted">{ATTESTATION_WORDING.ai_label}</span></p>
+      <p>{label} not confirmed. Confirming it says: <span className="text-fg-muted">{ATTESTATION_WORDING.ai_label}</span></p>
       {actions.canEdit ? (
         <Button size="sm" disabled={actions.busy.confirmAiLabel} loading={actions.busy.confirmAiLabel} onClick={() => actions.onConfirmAiLabel(aiLabel.variantId)}>
           Confirm AI label
@@ -138,7 +138,7 @@ function LicenceControls({ licence, actions }: { licence: RunCreativeLicence; ac
         }
         return (
           <div key={kind} className="space-y-0.5">
-            <p>{label} licence not attested. Attesting it says: <span className="text-muted">{ATTESTATION_WORDING[kind]}</span></p>
+            <p>{label} licence not attested. Attesting it says: <span className="text-fg-muted">{ATTESTATION_WORDING[kind]}</span></p>
             {actions.canEdit ? (
               <Button size="sm" disabled={actions.busy.attest} loading={actions.busy.attest} onClick={() => actions.onAttest(licence.creativeId, kind)}>
                 Attest {label.toLowerCase()} licence
@@ -198,11 +198,11 @@ function sourceLine(source: RunListItem["runSources"][number]): string {
 
 /** The Instagram candidates of one run: the counts by tier, then the newest, each with its tier or the reason it is not rated. */
 function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
-  if (summary.total === 0) return <p className="text-muted">No Instagram candidates are stored for this run.</p>;
+  if (summary.total === 0) return <p className="text-fg-muted">No Instagram candidates are stored for this run.</p>;
   const hidden = summary.total - summary.shown.length;
   return (
     <>
-      <p className="text-xs text-muted">
+      <p className="text-xs text-fg-muted">
         {summary.total} candidates: S {summary.tiers.S}, A {summary.tiers.A}, B {summary.tiers.B}, C {summary.tiers.C}, not rated{" "}
         {summary.tiers.notRated}. A tier needs the creator&apos;s median and observed counts, so a candidate can be not rated for a stated reason.
       </p>
@@ -218,7 +218,7 @@ function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
               <span>@{candidate.creatorHandle}</span>
             )}{" "}
             <span className="font-medium">{candidate.tier ? `Tier ${candidate.tier}` : "Not rated"}</span>{" "}
-            <span className="text-muted">
+            <span className="text-fg-muted">
               {candidate.tier
                 ? `${candidate.views === null ? "views not reported" : `${candidate.views.toLocaleString()} views`}, creator median ${
                     candidate.creatorMedianViews === null ? "unknown" : candidate.creatorMedianViews.toLocaleString()
@@ -228,7 +228,7 @@ function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
           </li>
         ))}
       </ul>
-      {hidden > 0 ? <p className="text-xs text-muted">{hidden} more are counted above and not listed.</p> : null}
+      {hidden > 0 ? <p className="text-xs text-fg-muted">{hidden} more are counted above and not listed.</p> : null}
     </>
   );
 }
@@ -239,25 +239,25 @@ function CandidateSection({ summary }: { summary: RunCandidateSummary }) {
  * said in words, and where the kill switch stops a restart, the disabled button says so.
  */
 export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunListActions }) {
-  if (runs.length === 0) return <p className="text-sm text-muted">No factory runs are stored.</p>;
+  if (runs.length === 0) return <p className="text-sm text-fg-muted">No factory runs are stored.</p>;
   return (
     <ul className="space-y-3">
       {runs.map((run) => {
         const waiting = pendingApproval(run);
         return (
-          <li key={run.id} className="space-y-3 rounded-md border border-line p-3 text-sm">
+          <li key={run.id} className="space-y-3 rounded-sharp border border-hairline p-3 text-sm">
             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
               <span className="font-semibold">{run.niche || "unspecified niche"}</span>
-              <span className={waiting ? "font-semibold text-fg" : "text-muted"}>
+              <span className={waiting ? "font-semibold text-fg-primary" : "text-fg-muted"}>
                 {runStatusLabel(run.status)} · {stageLabelOf(run.stage)}
               </span>
             </div>
-            <p className="text-muted">{settingsLine(run.settings)}</p>
-            <p className="text-xs text-muted">Intent: {INTENT_WORDS[run.settings.intent]}. {INTENT_DESCRIPTIONS[run.settings.intent]}</p>
-            <ul className="space-y-1 text-xs text-muted" aria-label="Spend of this run">
+            <p className="text-fg-muted">{settingsLine(run.settings)}</p>
+            <p className="text-xs text-fg-muted">Intent: {INTENT_WORDS[run.settings.intent]}. {INTENT_DESCRIPTIONS[run.settings.intent]}</p>
+            <ul className="space-y-1 text-xs text-fg-muted" aria-label="Spend of this run">
               {spendLinesOf(run.spend).map((line) => <li key={line}>{line}</li>)}
             </ul>
-            {run.error ? <p className="text-muted">{run.error}</p> : null}
+            {run.error ? <p className="text-fg-muted">{run.error}</p> : null}
 
             <details>
               <summary className="cursor-pointer font-medium">Run details</summary>
@@ -268,14 +268,14 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                     {stageStates(run).map((item) => (
                       <li key={item.label} className="flex justify-between gap-3">
                         <span>{item.label}</span>
-                        <span className="text-muted">{item.state}</span>
+                        <span className="text-fg-muted">{item.state}</span>
                       </li>
                     ))}
                   </ol>
                 </section>
                 <section className="space-y-1">
                   <h3 className="font-semibold">Sources</h3>
-                  {run.runSources.length === 0 ? <p className="text-muted">This run has not gathered yet, so no source state is stored.</p> : (
+                  {run.runSources.length === 0 ? <p className="text-fg-muted">This run has not gathered yet, so no source state is stored.</p> : (
                     <ul className="space-y-0.5">{run.runSources.map((source) => <li key={source.source}>{sourceLine(source)}</li>)}</ul>
                   )}
                 </section>
@@ -285,34 +285,34 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                 </section>
                 <section className="space-y-2">
                   <h3 className="font-semibold">Grades and variants</h3>
-                  <p className="text-xs text-muted">
+                  <p className="text-xs text-fg-muted">
                     Each pick shows the grade it was made under as a prediction. Its measured rows come from the creatives its variants produced.
                   </p>
-                  {run.picks.length === 0 ? <p className="text-muted">This run has no picked concept yet.</p> : (
+                  {run.picks.length === 0 ? <p className="text-fg-muted">This run has no picked concept yet.</p> : (
                     <ul className="space-y-3">
                       {run.picks.map((pick, pickIndex) => (
-                        <li key={pickIndex} className="space-y-1 rounded-md border border-line p-2">
+                        <li key={pickIndex} className="space-y-1 rounded-sharp border border-hairline p-2">
                           <p className="font-medium">{pick.concept}{pick.surface ? ` · ${pick.surface}` : ""}</p>
                           <p>{pick.prediction}</p>
-                          <p className="text-muted">{pick.predictionNote}</p>
-                          <p className="text-muted">{pick.plan}</p>
+                          <p className="text-fg-muted">{pick.predictionNote}</p>
+                          <p className="text-fg-muted">{pick.plan}</p>
                           <div className="space-y-0.5">
                             <p className="font-medium">Measured</p>
-                            {pick.measuredLines.length === 0 ? <p className="text-muted">Not measured yet, or not reported.</p> : (
+                            {pick.measuredLines.length === 0 ? <p className="text-fg-muted">Not measured yet, or not reported.</p> : (
                               <ul className="space-y-0.5">{pick.measuredLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                             )}
                           </div>
-                          {pick.variants.length === 0 ? <p className="text-muted">No variant has been made for this pick.</p> : (
+                          {pick.variants.length === 0 ? <p className="text-fg-muted">No variant has been made for this pick.</p> : (
                             <ul className="space-y-2">
                               {pick.variants.map((variant, variantIndex) => (
-                                <li key={variantIndex} className="space-y-0.5 border-l border-line pl-2">
-                                  <p>{variant.heading} <span className="text-muted">· {variant.gate}</span></p>
-                                  {variant.rightsLine ? <p className="text-muted">Rights: {variant.rightsLine}</p> : null}
+                                <li key={variantIndex} className="space-y-0.5 border-l border-hairline pl-2">
+                                  <p>{variant.heading} <span className="text-fg-muted">· {variant.gate}</span></p>
+                                  {variant.rightsLine ? <p className="text-fg-muted">Rights: {variant.rightsLine}</p> : null}
                                   <AiLabelControls aiLabel={variant.aiLabel} actions={actions} />
-                                  {variant.creatives.length === 0 ? <p className="text-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
+                                  {variant.creatives.length === 0 ? <p className="text-fg-muted">Not produced yet.</p> : variant.creatives.map((creative, creativeIndex) => (
                                     <div key={creativeIndex} className="space-y-0.5">
-                                      <p className="text-muted">{creative.label}</p>
-                                      {creative.receiptLines.length === 0 ? <p className="text-muted">No receipt yet.</p> : (
+                                      <p className="text-fg-muted">{creative.label}</p>
+                                      {creative.receiptLines.length === 0 ? <p className="text-fg-muted">No receipt yet.</p> : (
                                         <ul className="space-y-0.5">{creative.receiptLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                                       )}
                                       {creative.measurementLines.length === 0 ? null : (
@@ -332,10 +332,10 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                 </section>
                 <section className="space-y-1">
                   <h3 className="font-semibold">Receipts and metrics</h3>
-                  {run.receiptLines.length === 0 ? <p className="text-muted">No creative of this run has a receipt yet.</p> : (
+                  {run.receiptLines.length === 0 ? <p className="text-fg-muted">No creative of this run has a receipt yet.</p> : (
                     <ul className="space-y-0.5">{run.receiptLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                   )}
-                  {run.measurementLines.length === 0 ? <p className="text-muted">Not measured yet.</p> : (
+                  {run.measurementLines.length === 0 ? <p className="text-fg-muted">Not measured yet.</p> : (
                     <ul className="space-y-0.5">{run.measurementLines.map((line, index) => <li key={index}>{line}</li>)}</ul>
                   )}
                 </section>
@@ -348,11 +348,11 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                   <Button size="sm" variant="secondary" disabled={actions.busy.approve} loading={actions.busy.approve} onClick={() => actions.onApprove(run.id, waiting)}>
                     {APPROVAL_LABELS[waiting]}
                   </Button>
-                ) : <p className="text-muted">Only a member can approve this step.</p>
+                ) : <p className="text-fg-muted">Only a member can approve this step.</p>
               ) : null}
 
               {run.status === "paused" ? (
-                !actions.canEdit ? <p className="text-muted">Only a member can start a paused run again.</p>
+                !actions.canEdit ? <p className="text-fg-muted">Only a member can start a paused run again.</p>
                 : actions.killSwitchOn ? (
                   <>
                     <Button size="sm" variant="secondary" disabled aria-describedby={`start-again-reason-${run.id}`}>Start again</Button>
@@ -370,10 +370,10 @@ export function RunList({ runs, actions }: { runs: RunListItem[]; actions: RunLi
                   <Button size="sm" variant="secondary" disabled={actions.busy.checkLearning} loading={actions.busy.checkLearning} onClick={() => actions.onCheckLearning(run.id)}>
                     Check learning again
                   </Button>
-                ) : <p className="text-muted">Only a member can check learning again.</p>
+                ) : <p className="text-fg-muted">Only a member can check learning again.</p>
               ) : null}
             </div>
-            {run.error === LEARN_WAITING ? <p className="text-xs text-muted">Learning reads the measurement pull, which runs every six hours after a launch.</p> : null}
+            {run.error === LEARN_WAITING ? <p className="text-xs text-fg-muted">Learning reads the measurement pull, which runs every six hours after a launch.</p> : null}
           </li>
         );
       })}

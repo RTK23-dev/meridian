@@ -61,10 +61,10 @@ export function JevBackendControls({
   const same = draft !== "" && draft === stored;
 
   return (
-    <div className="space-y-3 border-t border-line pt-4">
+    <div className="space-y-3 border-t border-hairline pt-4">
       <div>
         <p className="font-semibold">JEV backend</p>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           JEV&apos;s questions, evidence rules and answer checks stay the same. This setting chooses which service answers them. Meridian
           calls only that service and never falls back to the other one. OpenRouter uses the OpenRouter decision model and connection
           test below.
@@ -79,20 +79,20 @@ export function JevBackendControls({
 
       <ul className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
         {options.map((option) => (
-          <li key={option.backend} className="border-t border-line pt-2 text-sm space-y-1">
+          <li key={option.backend} className="border-t border-hairline pt-2 text-sm space-y-1">
             <div className="flex items-center justify-between gap-2">
               <strong>{option.label}</strong>
               <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                className={`rounded-sharp px-2 py-0.5 text-xs font-semibold ${
                   option.health.status === "READY"
                     ? "bg-success/20 text-success border border-success/30"
-                    : "bg-muted/20 text-muted border border-line"
+                    : "bg-fg-muted/20 text-fg-muted border border-hairline"
                 }`}
               >
                 {option.health.status}
               </span>
             </div>
-            <p className="text-xs text-muted">{option.health.message}</p>
+            <p className="text-xs text-fg-muted">{option.health.message}</p>
           </li>
         ))}
       </ul>
@@ -134,7 +134,7 @@ export function JevBackendControls({
           ) : null}
         </div>
       ) : (
-        <p className="text-xs text-muted">Only a workspace admin can change the JEV backend.</p>
+        <p className="text-xs text-fg-muted">Only a workspace admin can change the JEV backend.</p>
       )}
     </div>
   );

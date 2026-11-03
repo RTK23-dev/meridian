@@ -76,8 +76,8 @@ export function ReviewDetail({
       </p>
       <TechnicalDetails>Question {item.question}. Decision code {item.decision || "none"}.</TechnicalDetails>
       <h2 id="review-detail-title" className="text-2xl">{item.label || "Untitled"}</h2>
-      <p className="text-sm text-muted">Opened {formatOpened(item.createdAt)}. {priority.because}</p>
-      <ul className="list-disc space-y-1 pl-5 text-sm text-muted">
+      <p className="text-sm text-fg-muted">Opened {formatOpened(item.createdAt)}. {priority.because}</p>
+      <ul className="list-disc space-y-1 pl-5 text-sm text-fg-muted">
         {item.reasons.map((reasonLine, index) => <li key={`${index}-${reasonLine}`}>{reasonLine}</li>)}
       </ul>
       {canEdit ? (
@@ -101,12 +101,12 @@ export function ReviewDetail({
             <Button disabled={pending} onClick={onApprove}>Approve</Button>
             <Button variant="danger" disabled={pending} onClick={onReject}>Reject</Button>
           </div>
-          <p className="text-xs text-muted">
+          <p className="text-xs text-fg-muted">
             Keys: <Kbd>a</Kbd> approves, <Kbd>r</Kbd> rejects, <Kbd>j</Kbd> and <Kbd>k</Kbd> move. Keys do not act while you type in a field.
           </p>
         </div>
       ) : (
-        <p className="text-sm text-muted">Viewers can read reviews. A member can approve or reject.</p>
+        <p className="text-sm text-fg-muted">Viewers can read reviews. A member can approve or reject.</p>
       )}
     </Card>
   );

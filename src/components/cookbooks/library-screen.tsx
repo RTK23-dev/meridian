@@ -54,7 +54,7 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
   return (
     <div className="space-y-8">
       <header className="space-y-2">
-        <h1 className="text-title font-semibold text-fg">Cookbooks</h1>
+        <h1 className="text-title font-semibold text-fg-primary">Cookbooks</h1>
         <p className="max-w-2xl text-small text-fg-secondary">
           A cookbook is a recipe for a video: its steps, the instructions for each part, and the settings you can change. Free cookbooks run in agent mode with no provider call.
         </p>
@@ -65,7 +65,7 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
         <label className="flex flex-col gap-1 text-small">
           <span className="text-fg-secondary">Family</span>
           <select
-            className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+            className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
             value={filter.family}
             onChange={(event) => setFilter({ ...filter, family: event.target.value as LibraryFilter["family"] })}
           >
@@ -77,7 +77,7 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
             ))}
           </select>
         </label>
-        <label className="flex items-center gap-2 text-small text-fg">
+        <label className="flex items-center gap-2 text-small text-fg-primary">
           <input type="checkbox" checked={filter.freeOnly} onChange={(event) => setFilter({ ...filter, freeOnly: event.target.checked })} />
           Free in agent mode only
         </label>
@@ -114,14 +114,14 @@ function CookbookCardButton({ card, selected, onOpen }: { card: CookbookCard; se
       type="button"
       aria-pressed={selected}
       onClick={onOpen}
-      className="flex h-full w-full flex-col gap-3 rounded-lg border border-border bg-surface p-4 text-left transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="flex h-full w-full flex-col gap-3 rounded-sharp border border-hairline bg-raised p-4 text-left transition-colors hover:bg-overlay focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       <span className="flex items-center justify-between gap-2">
-        <span className="text-section font-semibold text-fg">{card.label}</span>
-        <span className="rounded-full border border-border px-2 py-0.5 text-caption text-fg-secondary">{card.family}</span>
+        <span className="text-section font-semibold text-fg-primary">{card.label}</span>
+        <span className="rounded-full border border-hairline px-2 py-0.5 text-caption text-fg-secondary">{card.family}</span>
       </span>
       <span className="text-small text-fg-secondary">{card.summary}</span>
-      <span className="text-small font-medium text-fg">{card.badge}</span>
+      <span className="text-small font-medium text-fg-primary">{card.badge}</span>
       <span className="text-small text-fg-muted">{card.estimate}</span>
       {card.unresolved !== null ? <span className="text-small text-danger">{card.unresolved}</span> : null}
       <span className="text-caption text-fg-muted">{card.source === "builtin" ? "Built in" : "Made in this workspace"}</span>
@@ -200,9 +200,9 @@ function CookbookDetail({
   };
 
   return (
-    <section aria-labelledby="cookbook-detail-title" className="space-y-6 rounded-lg border border-border bg-surface p-6">
+    <section aria-labelledby="cookbook-detail-title" className="space-y-6 rounded-sharp border border-hairline bg-raised p-6">
       <header className="space-y-2">
-        <h2 id="cookbook-detail-title" className="text-section font-semibold text-fg">{cookbook.label}</h2>
+        <h2 id="cookbook-detail-title" className="text-section font-semibold text-fg-primary">{cookbook.label}</h2>
         <p className="text-small text-fg-secondary">{cookbook.summary}</p>
         <p className="text-caption text-fg-muted">
           Version {cookbook.version} · {state.source === "builtin" ? "Built in" : "Made in this workspace"}
@@ -217,27 +217,27 @@ function CookbookDetail({
       </div>
 
       <div className="space-y-3">
-        <h3 className="text-small font-semibold text-fg">Settings</h3>
+        <h3 className="text-small font-semibold text-fg-primary">Settings</h3>
         {rows.length === 0 ? <p className="text-small text-fg-muted">This cookbook has no settings.</p> : <SettingsPanel rows={rows} onChange={(id, value) => setValues((current) => ({ ...current, [id]: value }))} />}
       </div>
 
       <VersionHistory brandId={brandId} cookbookId={cookbookId} source={state.source} current={cookbook.version} />
 
       {canCopy ? (
-        <div className="space-y-3 border-t border-border pt-4">
-          <h3 className="text-small font-semibold text-fg">Save as my cookbook</h3>
+        <div className="space-y-3 border-t border-hairline pt-4">
+          <h3 className="text-small font-semibold text-fg-primary">Save as my cookbook</h3>
           <p className="text-small text-fg-muted">A copy is yours to edit. It keeps a link to this cookbook.</p>
           <div className="flex flex-wrap items-end gap-3">
             <label className="flex flex-col gap-1 text-small">
               <span className="text-fg-secondary">Name</span>
               <input
-                className="rounded-md border border-border bg-surface px-3 py-2 text-fg"
+                className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
                 value={copyName}
                 onChange={(event) => setCopyName(event.target.value)}
                 maxLength={80}
               />
             </label>
-            <label className="flex items-center gap-2 text-small text-fg">
+            <label className="flex items-center gap-2 text-small text-fg-primary">
               <input type="checkbox" checked={share} onChange={(event) => setShare(event.target.checked)} />
               Share with the whole workspace
             </label>
@@ -275,7 +275,7 @@ function VersionHistory({ brandId, cookbookId, source, current }: { brandId: str
 
   return (
     <div className="space-y-2">
-      <h3 className="text-small font-semibold text-fg">Versions</h3>
+      <h3 className="text-small font-semibold text-fg-primary">Versions</h3>
       {source === "builtin" ? (
         <p className="text-small text-fg-muted">A built-in cookbook is versioned with the app. This is version {current}.</p>
       ) : state.state === "loading" ? (
@@ -283,7 +283,7 @@ function VersionHistory({ brandId, cookbookId, source, current }: { brandId: str
       ) : state.state === "error" ? (
         <p role="alert" className="text-small text-danger">{state.reason}</p>
       ) : (
-        <ol className="list-decimal space-y-1 pl-5 text-small text-fg">
+        <ol className="list-decimal space-y-1 pl-5 text-small text-fg-primary">
           {state.versions.map((row) => (
             <li key={row.version}>
               Version {row.version}, written {new Date(row.createdAt).toLocaleDateString()}

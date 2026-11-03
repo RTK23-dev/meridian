@@ -26,7 +26,7 @@ const TERMS = {
 
 export type TermId = keyof typeof TERMS;
 
-const FOCUS = "inline-flex min-h-6 items-center rounded-sm pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const FOCUS = "inline-flex min-h-6 items-center rounded-sharp pointer-coarse:min-h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 /**
  * A term with a short definition in a popover. The trigger is a button, so it opens with Enter or Space, and Escape closes
@@ -38,7 +38,7 @@ export function Term({ id, children }: { id: TermId; children?: ReactNode }) {
     <Popover>
       <PopoverTrigger className={`cursor-help underline decoration-dotted underline-offset-4 ${FOCUS}`}>{children ?? term.label}</PopoverTrigger>
       <PopoverContent side="top" className="max-w-xs text-sm">
-        <h3 className="font-semibold text-fg">{term.label}</h3>
+        <h3 className="font-semibold text-fg-primary">{term.label}</h3>
         <p className="mt-1 text-fg-muted">{term.description}</p>
         <PopoverClose asChild>
           <Button type="button" variant="quiet" size="sm" className="mt-2">Close</Button>
@@ -55,7 +55,7 @@ export function IdeaToTestBadge() {
       <Tooltip>
         {/* A span, not a button: the badge does nothing on click, so it must not look like a control. It still opens its tooltip on hover and focus. */}
         <TooltipTrigger asChild>
-          <span tabIndex={0} className={`inline-flex rounded-md ${FOCUS}`}>
+          <span tabIndex={0} className={`inline-flex rounded-sharp ${FOCUS}`}>
             <Badge variant="warning">{IDEA_TO_TEST.badge}</Badge>
           </span>
         </TooltipTrigger>

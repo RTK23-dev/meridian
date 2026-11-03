@@ -7,7 +7,7 @@ export type PaletteWorkspace = { id: string; name: string };
 
 // Menus inside Command.Group: the heading gets the eyebrow treatment, the items stay in normal case.
 const GROUP_CLASS = "px-1 py-2 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.08em] [&_[cmdk-group-heading]]:text-fg-muted";
-const ITEM_CLASS = "cursor-pointer rounded-md px-3 py-2 text-sm text-fg pointer-coarse:min-h-11 aria-selected:bg-surface-2";
+const ITEM_CLASS = "cursor-pointer rounded-sharp px-3 py-2 text-sm text-fg-primary pointer-coarse:min-h-11 aria-selected:bg-overlay";
 
 export function CommandPalette({
   open,
@@ -44,8 +44,8 @@ export function CommandPalette({
   const otherWorkspaces = workspaces.filter((workspace) => workspace.id !== activeWorkspaceId);
   return (
     <>
-      <Command.Dialog open={open} onOpenChange={onOpenChange} label="Command palette" overlayClassName="fixed inset-0 z-40 cursor-default bg-black/40" className="fixed left-1/2 top-[18vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
-        <Command.Input autoFocus placeholder="Search brands, screens and actions" className="h-14 w-full border-b border-border bg-transparent px-4 text-fg placeholder:text-fg-muted focus-visible:outline-offset-[-2px]" />
+      <Command.Dialog open={open} onOpenChange={onOpenChange} label="Command palette" overlayClassName="fixed inset-0 z-40 cursor-default bg-black/40" className="fixed left-1/2 top-[18vh] z-50 w-[min(38rem,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-sharp border border-hairline bg-raised">
+        <Command.Input autoFocus placeholder="Search brands, screens and actions" className="h-14 w-full border-b border-hairline bg-transparent px-4 text-fg-primary placeholder:text-fg-muted focus-visible:outline-offset-[-2px]" />
         <Command.List className="max-h-[60vh] overflow-auto p-2">
           <Command.Empty className="p-4 text-sm text-fg-muted">No matching command.</Command.Empty>
           {pageCommands.length ? (

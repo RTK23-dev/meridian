@@ -8,7 +8,7 @@ function DimensionTooltip({ active, payload }: { active?: boolean; payload?: Arr
   const datum = payload?.[0]?.payload;
   if (!active || !datum) return null;
   const effect = datum.effect === "adds" ? "Adds to the rank" : "Subtracts from the rank";
-  return <div className="max-w-64 rounded bg-fg px-3 py-2 text-xs text-bg shadow-sm">
+  return <div className="max-w-64 rounded-sharp bg-fg-primary px-3 py-2 text-xs text-on-accent">
     <p className="font-semibold">{datum.name}: {datum.value === null ? "Unknown" : datum.value.toFixed(2)}</p>
     <p className="mt-1">{datum.explanation}</p>
     <p className="mt-1 opacity-80">{effect}.</p>

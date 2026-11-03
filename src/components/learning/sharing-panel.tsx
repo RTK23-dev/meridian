@@ -28,7 +28,7 @@ function OptInSwitch({ checked, disabled, labelledBy, describedBy, onCheckedChan
     className="group inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-not-allowed disabled:opacity-50"
   >
     <span aria-hidden="true" className="relative block h-6 w-11 rounded-full bg-border-strong transition-colors group-data-[state=checked]:bg-accent">
-      <SwitchPrimitive.Thumb className="absolute left-0.5 top-0.5 block size-5 rounded-full bg-surface shadow transition-transform data-[state=checked]:translate-x-5" />
+      <SwitchPrimitive.Thumb className="absolute left-0.5 top-0.5 block size-5 rounded-full bg-raised transition-transform data-[state=checked]:translate-x-5" />
     </span>
   </SwitchPrimitive.Root>;
 }

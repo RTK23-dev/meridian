@@ -19,7 +19,7 @@ import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
 import { routePageTitle } from "@/lib/navigation/route-data";
 
 const COLLAPSED_KEY = "meridian-nav-collapsed";
-const SWITCHER_CLASS = "min-h-11 w-full rounded-sharp border border-border-strong bg-raised px-2 text-sm text-fg";
+const SWITCHER_CLASS = "min-h-11 w-full rounded-sharp border border-border-strong bg-raised px-2 text-sm text-fg-primary";
 
 /** One icon per place. The rail and the phone bar both show these five. */
 const PLACE_ICONS: Record<PlaceId, LucideIcon> = { home: House, create: Plus, library: Library, insights: Activity, settings: Settings };
@@ -165,11 +165,11 @@ function ShellChrome({ children }: { children: ReactNode }) {
         {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
       </div> : null}
       {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="border-y border-hairline p-2">
-        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-sharp text-fg-muted hover:bg-raised hover:text-fg">
+        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-sharp text-fg-muted hover:bg-raised hover:text-fg-primary">
           <ArrowLeftRight aria-hidden="true" className="size-4" />
         </button>
       </div> : null}
-      <nav aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
+      <nav id={mobile ? undefined : "primary-navigation"} aria-label="Primary" className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
         <ol className="space-y-1">
           {groups.map((group) => {
             const place = group.id as PlaceId;
@@ -177,7 +177,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
             const here = currentPlace === place;
             const first = group.items[0]?.to;
             return <li key={group.id}>
-              {first ? <Link to={first as never} aria-current={here && group.items.some((item) => isCurrentPath(path, item.to)) ? "page" : undefined} title={iconOnly ? group.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(first)} onFocus={() => prefetch(first)} data-place={place} data-current={here || undefined} className={`relative flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm transition-colors duration-150 ${here ? "font-semibold text-fg before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:bg-accent" : "text-fg-secondary hover:bg-raised hover:text-fg"}`}>
+              {first ? <Link to={first as never} aria-current={here && group.items.some((item) => isCurrentPath(path, item.to)) ? "page" : undefined} title={iconOnly ? group.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(first)} onFocus={() => prefetch(first)} data-place={place} data-current={here || undefined} className={`relative flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm transition-colors duration-150 ${here ? "font-semibold text-fg-primary before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:bg-accent" : "text-fg-secondary hover:bg-raised hover:text-fg-primary"}`}>
                 <Icon aria-hidden="true" className={`size-4 shrink-0 ${here ? "text-accent" : ""}`} />
                 <span className={iconOnly ? "sr-only" : "flex-1"}>{group.label}</span>
               </Link> : <div aria-disabled="true" data-place={place} className="flex min-h-11 items-start gap-3 px-3 py-2 text-sm text-fg-muted">
@@ -188,9 +188,9 @@ function ShellChrome({ children }: { children: ReactNode }) {
                 {group.items.map((item) => {
                   const current = isCurrentPath(path, item.to);
                   return <li key={item.id}>
-                    <Link to={item.to as never} aria-current={current ? "page" : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`flex min-h-10 items-center justify-between gap-2 rounded-sharp px-2 text-sm ${current ? "font-semibold text-fg" : "text-fg-muted hover:text-fg"}`}>
+                    <Link to={item.to as never} aria-current={current ? "page" : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`flex min-h-10 items-center justify-between gap-2 rounded-sharp px-2 text-sm ${current ? "font-semibold text-fg-primary" : "text-fg-muted hover:text-fg-primary"}`}>
                       <span className="min-w-0 truncate">{item.label}</span>
-                      {item.badge ? <span className="shrink-0 rounded-sharp bg-fg px-1.5 text-[11px] font-semibold leading-5 text-bg">{item.badge}<span className="sr-only"> open</span></span> : null}
+                      {item.badge ? <span className="shrink-0 rounded-sharp bg-fg-primary px-1.5 text-[11px] font-semibold leading-5 text-on-accent">{item.badge}<span className="sr-only"> open</span></span> : null}
                     </Link>
                   </li>;
                 })}
@@ -198,10 +198,10 @@ function ShellChrome({ children }: { children: ReactNode }) {
             </li>;
           })}
         </ol>
-        {!brandId && canAddBrand ? <Link to="/brands/new" className="mt-4 flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm text-fg-muted hover:bg-raised hover:text-fg"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
+        {!brandId && canAddBrand ? <Link to="/brands/new" className="mt-4 flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm text-fg-muted hover:bg-raised hover:text-fg-primary"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
       </nav>
       <div className="border-t border-hairline p-3">
-        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-sharp px-3 text-left text-sm text-fg-muted hover:bg-raised lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"}>
+        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-sharp px-3 text-left text-sm text-fg-muted hover:bg-raised lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} aria-controls="primary-navigation">
           <ChevronDown aria-hidden="true" className={`size-4 transition ${collapsed ? "-rotate-90" : "rotate-90"}`} />{collapsed ? null : "Collapse navigation"}
         </button>
       </div>
@@ -216,18 +216,18 @@ function ShellChrome({ children }: { children: ReactNode }) {
           map's own ground, so text scrolls under it without the map showing through. */}
       <header className="sticky top-0 z-20 border-b border-hairline bg-[var(--map-bg)]">
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
-          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
           <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
-            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg">Workspace</Link>
+            <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
-            {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg">{pageTitle}</span></> : null}
+            {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg-primary">{pageTitle}</span></> : null}
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-caption text-fg-muted xl:inline">{active.role}</span> : null}
             <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-sharp border border-border-strong px-3 text-sm text-fg-muted hover:bg-raised pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
             <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
-              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg px-1 text-center text-[11px] font-semibold leading-4 text-bg">{bellLabel}</span> : null}
+              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg-primary px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
             </Link>
             <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
@@ -235,7 +235,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </header>
       <div className="border-b border-hairline bg-[var(--map-bg)] px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
+      <main id="main" tabIndex={-1} className="@container page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
@@ -253,7 +253,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           if (!tab.to) {
             return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
           }
-          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] ${here ? "font-semibold text-fg before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
+          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
         })}
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>

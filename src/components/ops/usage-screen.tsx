@@ -114,7 +114,7 @@ function TokenCell({ tokens, missingTokens, max }: { tokens: number; missingToke
     <div className="flex min-w-32 items-center gap-3">
       <span className="tabular-nums">{tokensLabel(tokens, missingTokens)}</span>
       {percent !== null ? (
-        <span aria-hidden="true" className="block h-2 flex-1 rounded-full bg-surface-2">
+        <span aria-hidden="true" className="block h-2 flex-1 rounded-full bg-overlay">
           <span className="block h-full rounded-full bg-fg-muted" style={{ width: `${percent}%` }} />
         </span>
       ) : null}

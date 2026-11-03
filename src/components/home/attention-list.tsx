@@ -53,7 +53,7 @@ function iconFor(item: AttentionItem) {
   return <PlugZap aria-hidden="true" className="size-5" />;
 }
 
-const ICON_TONE: Record<AttentionItem["tone"], string> = { accent: "text-fg", danger: "text-danger", neutral: "text-fg-muted" };
+const ICON_TONE: Record<AttentionItem["tone"], string> = { accent: "text-fg-primary", danger: "text-danger", neutral: "text-fg-muted" };
 
 function AttentionLink({ item }: { item: AttentionItem }) {
   return (
@@ -65,9 +65,9 @@ function AttentionLink({ item }: { item: AttentionItem }) {
       >
         <span className={`mt-0.5 shrink-0 ${ICON_TONE[item.tone]}`}>{iconFor(item)}</span>
         <span className="min-w-0 flex-1">
-          <strong className="block text-sm font-semibold text-fg">{item.title}</strong>
+          <strong className="block text-sm font-semibold text-fg-primary">{item.title}</strong>
           <span className="mt-1 block text-sm text-fg-muted">{item.detail}</span>
-          <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-fg">
+          <span className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-fg-primary">
             {TARGET_LABEL[item.to]} <ArrowRight aria-hidden="true" className="size-4" />
           </span>
         </span>

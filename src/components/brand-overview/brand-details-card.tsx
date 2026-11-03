@@ -53,12 +53,12 @@ export function BrandDetailsCard({ brandId, detail, canEdit }: { brandId: string
   }
 
   return (
-    <section aria-labelledby="brand-details-title" className="rounded-lg border border-border bg-surface">
+    <section aria-labelledby="brand-details-title" className="rounded-sharp border border-hairline bg-raised">
       <UnsavedChangesGuard dirty={isDirty} />
       <Collapsible open={open} onOpenChange={setOpen}>
         <div className="flex flex-wrap items-center justify-between gap-3 p-5">
           <div className="min-w-0 space-y-1">
-            <h2 id="brand-details-title" className="text-base font-semibold text-fg">Brand details</h2>
+            <h2 id="brand-details-title" className="text-base font-semibold text-fg-primary">Brand details</h2>
             <p className="text-sm text-fg-muted">Name, website, market, and what you sell. Changes save to this brand record.</p>
             {isDirty ? <Badge variant="warning">Unsaved changes</Badge> : null}
           </div>
@@ -67,7 +67,7 @@ export function BrandDetailsCard({ brandId, detail, canEdit }: { brandId: string
           </CollapsibleTrigger>
         </div>
         <CollapsibleContent forceMount>
-          <form onSubmit={handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="grid gap-4 border-t border-border p-5 md:grid-cols-2">
+          <form onSubmit={handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} className="grid gap-4 border-t border-hairline p-5 md:grid-cols-2">
             <Field label="Name" error={errors.name?.message} required><Input {...register("name")} maxLength={120} required disabled={!canEdit} /></Field>
             <Field label="Website" error={errors.website?.message}><Input {...register("website")} maxLength={500} disabled={!canEdit} /></Field>
             <Field label="Industry" error={errors.industry?.message}><Input {...register("industry")} maxLength={120} disabled={!canEdit} /></Field>

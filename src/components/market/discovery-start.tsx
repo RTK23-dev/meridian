@@ -66,7 +66,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
         </Button>
       </form>
       {social ? (
-        <p className="text-sm text-fg" role="status">
+        <p className="text-sm text-fg-primary" role="status">
           {social.label} has no connector in this release, and no key is needed or used. Meridian will try this as an ordinary public page, and {social.label} may refuse automated reads. If it does, the run says so, and you can upload the post or paste its text instead.
         </p>
       ) : null}
@@ -82,7 +82,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
         </p>
         <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
           {groups.search.map((source) => (
-            <li key={source.adapterId} className="border-t border-border py-3">
+            <li key={source.adapterId} className="border-t border-hairline py-3">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold">{source.label}</span>
                 <StatusBadge status={source.connected ? "connected" : source.status === "failed" ? "failed" : "not_connected"} />
@@ -98,7 +98,7 @@ export function DiscoveryStart({ canEdit, sources, pending, onStart }: Props) {
           <p className="mt-2 text-xs text-fg-muted">No key is needed for these, and saving one changes nothing. Here is what to do instead.</p>
           <ul className="mt-2 grid gap-x-6 md:grid-cols-2">
             {groups.unavailable.map((source) => (
-              <li key={source.adapterId} className="border-t border-border py-3">
+              <li key={source.adapterId} className="border-t border-hairline py-3">
                 <span className="font-semibold">{source.label}</span>
                 <p className="mt-1 text-xs text-fg-muted">{SOURCE_CAPABILITIES[source.adapterId]?.instead ?? SOURCE_CAPABILITIES[source.adapterId]?.summary}</p>
               </li>

@@ -109,31 +109,16 @@
   --font-wordmark: var(--font-display);
   --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
-  --color-bg: var(--bg-base);
-  --color-surface: var(--bg-raised);
-  --color-surface-2: var(--bg-overlay);
-  --color-border: var(--border-hairline);
   --color-border-strong: var(--border-strong);
-  --color-fg: var(--fg-primary);
   --color-fg-muted: var(--fg-muted);
   --color-accent: var(--accent);
-  --color-accent-fg: var(--on-accent);
-  --color-accent-soft: var(--accent-muted);
-  --color-brass-text: var(--accent-text);
   --color-success: var(--success);
-  --color-success-soft: var(--bg-raised);
   --color-warning: var(--warning);
-  --color-warning-soft: var(--bg-raised);
   --color-danger: var(--danger);
-  --color-danger-soft: var(--bg-raised);
   --color-info: var(--info);
-  --color-info-soft: var(--bg-raised);
-  --color-paper: var(--color-bg);
-  --color-panel: var(--color-surface);
-  --color-line: var(--color-border);
-  --color-muted: var(--color-fg-muted);
-  --color-brass: var(--color-brass-text);
 
+  --color-fg-primary: var(--fg-primary);
+  --color-ground: var(--bg-base);
   --color-raised: var(--bg-raised);
   --color-fg-secondary: var(--fg-secondary);
   --color-overlay: var(--bg-overlay);
@@ -236,7 +221,8 @@
     letter-spacing: -0.02em;
     color: var(--color-fg);
   }
-  @media (min-width: 48rem) {
+  /* The title steps up by the width of its screen column, not the window, so a pushed column keeps the smaller title. */
+  @container (min-width: 48rem) {
     .page-title { font-size: 2.25rem; line-height: 2.5rem; }
   }
 
@@ -283,13 +269,7 @@
 }
 .surface-rise { animation: rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .stagger-in { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.page-enter { animation: fade 280ms ease-out both; }
-.surface-glow {
-  background-image:
-    radial-gradient(110% 130% at 0% 0%, var(--accent-muted), transparent 62%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .05 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-}
-details > summary { transition: color 160ms ease; }
+.page-enter { animation: fade 280ms ease-out both; }details > summary { transition: color 160ms ease; }
 details > summary:hover { color: var(--color-fg); }
 
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map, the meridian line and
@@ -313,28 +293,14 @@ details > summary:hover { color: var(--color-fg); }
   animation: cf-flow 0.8s linear infinite;
 }
 
-/* The orchestrator canvas. A step pops in as the orchestrator draws it, and the line that leads into it draws itself. The global
-   reduced-motion rule below cuts both to their final state. */
-@keyframes orch-pop {
-  from { opacity: 0; transform: scale(0.94) translateY(6px); }
-  to { opacity: 1; transform: none; }
-}
+
+/* The orchestrator canvas. A line that leads into a step draws itself; the step itself appears at once. */
 @keyframes orch-draw {
   from { stroke-dashoffset: 1; }
   to { stroke-dashoffset: 0; }
 }
-.orch-node { animation: orch-pop 360ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
 
-/* The attention signal (DESIGN.md section 1): a 2 px violet edge marks where something needs the person, and a working agent's ring
-   pulses. Only these two move. The reduced-motion rule below stops the pulse, so the signal stays a steady line. */
-@keyframes signal-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-.attention-signal { box-shadow: inset 2px 0 0 var(--accent); }
-.signal-ring { box-shadow: 0 0 0 2px var(--accent); }
-.signal-working { animation: signal-pulse 2400ms ease-in-out infinite; }
 
 /* The globe mark. Its meridians turn about the vertical axis (scaleX follows the cosine of the angle), and the red meridian
    carries a short comet. The still globe sets the same angles inline, so it rests where the loading mark would be. */
@@ -359,9 +325,6 @@ details > summary:hover { color: var(--color-fg); }
   to { stroke-dashoffset: -138.23; }
 }
 
-/* Overlays (DESIGN.md 5). Dark mode shows depth through the surface lightness, so no shadow. Light mode lifts a dialog, menu or popover with a
-   soft shadow, because a white surface on a near-white page needs one. */
-:root[data-theme="light"] .surface-overlay { box-shadow: 0 12px 32px rgb(17 16 22 / 0.12); }
 
 /* Toasts sit on the overlay surface with a hairline and a 2px status bar on the left. The sonner defaults for colour and
    shadow are replaced, so no toast casts a shadow and none is filled with a status colour. */
@@ -388,7 +351,7 @@ details > summary:hover { color: var(--color-fg); }
     transition-duration: 120ms !important;
     transition-property: color, background-color, border-color, outline-color, opacity, fill, stroke !important;
   }
-  .globe-turn, .globe-comet, .signal-working { animation: none !important; }
+  .globe-turn, .globe-comet { animation: none !important; }
 }
 
 /* More contrast: stronger dividers, text, accent and focus colour. Each theme gets its own block, and both still meet the

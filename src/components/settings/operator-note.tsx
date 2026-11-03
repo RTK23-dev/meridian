@@ -25,7 +25,7 @@ export function OperatorVariables({ names, lead }: { names: readonly string[]; l
         <summary className="cursor-pointer">For whoever runs the server</summary>
         <p className="mt-1 [overflow-wrap:anywhere]">
           Set {names.map((name, index) => (
-            <span key={name}>{index > 0 ? ", " : ""}<code className="font-mono text-fg">{name}</code></span>
+            <span key={name}>{index > 0 ? ", " : ""}<code className="font-mono text-fg-primary">{name}</code></span>
           ))} in the server&apos;s environment. No key is shown on this page.
         </p>
       </details>

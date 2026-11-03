@@ -36,25 +36,25 @@ export function BrainSetupPanel({ steps, requiredFilled, requiredTotal, filled, 
       </div>
     </div>
 
-    <ol className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+    <ol className="grid gap-px overflow-hidden rounded-sharp border border-hairline bg-hairline sm:grid-cols-2">
       {steps.map((step, index) => <li key={step.key}>
         <a
           href={`#${step.anchor}`}
           aria-current={step.state === "current" ? "step" : undefined}
           className={cn(
-            "flex h-full min-h-11 items-center gap-3 px-3 py-3 text-sm text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
-            step.state === "current" ? "bg-surface-2" : "bg-surface",
+            "flex h-full min-h-11 items-center gap-3 px-3 py-3 text-sm text-fg-primary hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
+            step.state === "current" ? "bg-overlay" : "bg-raised",
           )}
         >
           <span aria-hidden="true" className={cn(
             "grid size-7 shrink-0 place-items-center rounded-full border text-xs font-semibold",
-            step.state === "done" ? "border-success bg-success-soft text-success" : "border-border-strong text-fg-muted",
+            step.state === "done" ? "border-success bg-raised text-success" : "border-border-strong text-fg-muted",
           )}>{step.state === "done" ? "✓" : index + 1}</span>
           <span className="min-w-0 flex-1">
             <span className="block break-words font-semibold">{step.label}</span>
             <span className="block text-xs text-fg-muted">{BRAIN_SECTION_LABELS[step.section]}</span>
           </span>
-          <span className={cn("shrink-0 text-xs font-semibold", step.state === "current" ? "text-fg" : "text-fg-muted")}>{STATE_LABEL[step.state]}</span>
+          <span className={cn("shrink-0 text-xs font-semibold", step.state === "current" ? "text-fg-primary" : "text-fg-muted")}>{STATE_LABEL[step.state]}</span>
         </a>
       </li>)}
     </ol>

@@ -172,9 +172,9 @@ function AlertItem({ alert, busy, onAcknowledge }: { alert: AlertRow; busy: bool
       </div>
       <p className="text-sm">{alert.detail || "No detail is recorded for this alert."}</p>
       <dl className="grid gap-2 text-xs text-fg-muted sm:grid-cols-3">
-        <div><dt className="font-semibold text-fg">First seen</dt><dd>{readableTime(alert.firstSeen)}</dd></div>
-        <div><dt className="font-semibold text-fg">Last seen</dt><dd>{readableTime(alert.lastSeen)}</dd></div>
-        <div><dt className="font-semibold text-fg">Delivery</dt><dd>{deliveryCopy(alert.deliveryStatus)}</dd></div>
+        <div><dt className="font-semibold text-fg-primary">First seen</dt><dd>{readableTime(alert.firstSeen)}</dd></div>
+        <div><dt className="font-semibold text-fg-primary">Last seen</dt><dd>{readableTime(alert.lastSeen)}</dd></div>
+        <div><dt className="font-semibold text-fg-primary">Delivery</dt><dd>{deliveryCopy(alert.deliveryStatus)}</dd></div>
       </dl>
       {alert.acknowledged ? null : (
         <Button type="button" variant="secondary" size="md" loading={busy} aria-label={`Acknowledge ${alert.code} alert`} onClick={onAcknowledge}>

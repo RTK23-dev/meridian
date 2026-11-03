@@ -31,10 +31,10 @@ export function ReviewInbox({
                 type="button"
                 aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(index)}
-                className={`flex min-h-11 w-full flex-col gap-2 rounded-lg border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${selected ? "border-accent bg-surface-2" : "border-border bg-surface"}`}
+                className={`flex min-h-11 w-full flex-col gap-2 rounded-sharp border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${selected ? "border-accent bg-overlay" : "border-hairline bg-raised"}`}
               >
                 <span className="block truncate font-semibold">{item.label || "Untitled review"}</span>
-                <span className="block text-xs text-muted">{formatOpened(item.createdAt)} · {item.decision} · {item.question}</span>
+                <span className="block text-xs text-fg-muted">{formatOpened(item.createdAt)} · {item.decision} · {item.question}</span>
                 <span className="flex flex-wrap gap-1.5">
                   <Badge variant={age.tone}>{age.label}</Badge>
                   <Badge variant={priority.high ? "warning" : "neutral"}>{priority.label}</Badge>

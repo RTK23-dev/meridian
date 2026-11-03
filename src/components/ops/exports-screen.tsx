@@ -95,7 +95,7 @@ export function ExportsScreen() {
             id="audit-export"
             title="Audit log"
             description="The newest audit entries for this workspace, up to the export cap of 5,000 rows. Filter the audit log first to export a narrower set."
-            action={<div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="md" loading={auditExport.isPending} onClick={() => auditExport.mutate()}>Export audit log</Button><Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg underline underline-offset-4 hover:no-underline">Filter the audit log first</Link></div>}
+            action={<div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" size="md" loading={auditExport.isPending} onClick={() => auditExport.mutate()}>Export audit log</Button><Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg-primary underline underline-offset-4 hover:no-underline">Filter the audit log first</Link></div>}
             result={auditExport.data ? auditExportNote(auditExport.data) : null}
             error={auditExport.error}
           />

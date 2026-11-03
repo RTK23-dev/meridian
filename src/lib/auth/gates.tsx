@@ -47,7 +47,7 @@ export function SignInGate({
 
 export function SignInButtons() {
   return (
-    <Link to="/login" className="rounded-md border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
+    <Link to="/login" className="rounded-sharp border border-neutral-300 px-4 py-2 hover:bg-neutral-100 dark:border-neutral-700 dark:hover:bg-neutral-900">
       Sign in with email
     </Link>
   );
@@ -68,11 +68,11 @@ export function UserButton() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-md px-1 text-sm text-fg hover:bg-surface-2 pointer-coarse:min-h-11 pointer-coarse:min-w-11">
+        <button type="button" aria-label="Account and appearance settings" title={label} className="flex min-h-10 min-w-10 items-center gap-2 rounded-sharp px-1 text-sm text-fg-primary hover:bg-overlay pointer-coarse:min-h-11 pointer-coarse:min-w-11">
           {user.profileImageUrl ? (
             <img src={user.profileImageUrl} alt="" width={32} height={32} loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
           ) : (
-            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-soft text-sm font-semibold text-fg">
+            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-muted text-sm font-semibold text-fg-primary">
               {label.charAt(0).toUpperCase()}
             </span>
           )}
@@ -81,7 +81,7 @@ export function UserButton() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" aria-label="Account">
         <div className="px-2 py-1.5">
-          <p className="truncate text-sm font-semibold text-fg">{label}</p>
+          <p className="truncate text-sm font-semibold text-fg-primary">{label}</p>
           {user.primaryEmail && user.primaryEmail !== label ? <p className="truncate text-xs text-fg-muted">{user.primaryEmail}</p> : null}
         </div>
         <DropdownMenuItem asChild>

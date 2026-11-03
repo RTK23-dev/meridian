@@ -93,10 +93,10 @@ export function OpenRouterDecisionControls({
   const savable = chosen !== null && !unchanged;
 
   return (
-    <div className="space-y-3 border-t border-line pt-4">
+    <div className="space-y-3 border-t border-hairline pt-4">
       <div>
         <p className="font-semibold">OpenRouter decision model</p>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Only decision models in the live OpenRouter catalogue, with a verified profile, can be chosen.
         </p>
         {model.reason ? (
@@ -105,7 +105,7 @@ export function OpenRouterDecisionControls({
               {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? "No decision model is chosen for this workspace yet. Choose one below, then test the connection." : model.reason}
             </p>
             {/OPENROUTER_DECISIONS_MODEL/.test(model.reason) ? (
-              <details className="text-xs text-muted"><summary className="cursor-pointer">For whoever runs the server</summary><p className="mt-1 font-mono [overflow-wrap:anywhere]">{model.reason}</p></details>
+              <details className="text-xs text-fg-muted"><summary className="cursor-pointer">For whoever runs the server</summary><p className="mt-1 font-mono [overflow-wrap:anywhere]">{model.reason}</p></details>
             ) : null}
           </>
         ) : null}
@@ -113,7 +113,7 @@ export function OpenRouterDecisionControls({
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
 
-      {catalog.isPending ? <p className="text-sm text-muted">Reading the OpenRouter model catalogue...</p> : null}
+      {catalog.isPending ? <p className="text-sm text-fg-muted">Reading the OpenRouter model catalogue...</p> : null}
       {listing && !listing.ok ? (
         <p className="text-sm text-warning" role="status">
           {listing.reason} No decision model can be chosen until the catalogue can be read.
@@ -153,27 +153,27 @@ export function OpenRouterDecisionControls({
       {chosen ? (
         <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-muted">Name</dt>
+            <dt className="text-fg-muted">Name</dt>
             <dd>{chosen.name}</dd>
           </div>
           <div>
-            <dt className="text-muted">Takes</dt>
+            <dt className="text-fg-muted">Takes</dt>
             <dd>{chosen.takes.map((modality) => (modality === "image" ? "images (PNG, JPEG)" : modality)).join(", ")}</dd>
           </div>
           <div>
-            <dt className="text-muted">Answers</dt>
+            <dt className="text-fg-muted">Answers</dt>
             <dd>{chosen.questionKinds.join(", ")}</dd>
           </div>
           <div>
-            <dt className="text-muted">Context</dt>
+            <dt className="text-fg-muted">Context</dt>
             <dd>{chosen.contextLength.toLocaleString("en-GB")} tokens</dd>
           </div>
           <div>
-            <dt className="text-muted">Input price</dt>
+            <dt className="text-fg-muted">Input price</dt>
             <dd>${chosen.promptUsdPerMillionTokens.toFixed(3)} per million tokens</dd>
           </div>
           <div className="sm:col-span-2">
-            <dt className="text-muted">Most one call can cost</dt>
+            <dt className="text-fg-muted">Most one call can cost</dt>
             <dd>${chosen.callCeilingUsd.toFixed(6)} for a call that fills the whole context, at the input price plus the largest output. A smaller request costs less, and a call whose own bound is above the deployment limit is refused before it is sent.</dd>
           </div>
         </dl>
@@ -181,7 +181,7 @@ export function OpenRouterDecisionControls({
 
       {listing?.ok && listing.notOffered.length > 0 ? (
         <details className="text-sm">
-          <summary className="cursor-pointer text-muted">Not offered ({listing.notOffered.length})</summary>
+          <summary className="cursor-pointer text-fg-muted">Not offered ({listing.notOffered.length})</summary>
           <ul className="mt-2 space-y-1">
             {listing.notOffered.map((item) => (
               <li key={item.id}>
@@ -193,7 +193,7 @@ export function OpenRouterDecisionControls({
       ) : null}
 
       <div className="space-y-2">
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           Testing the connection sends one real request to OpenRouter and may incur model usage. It changes no product data and no active engine.
         </p>
         {testError ? <PlainErrorMessage message={testError.message} raw={testError.raw} /> : null}
@@ -218,7 +218,7 @@ export function OpenRouterDecisionControls({
         <Button type="button" variant="secondary" onClick={() => { setTest(null); void runTest.mutateAsync().catch(() => undefined); }} disabled={!canAdmin || runTest.isPending}>
           {runTest.isPending ? "Testing..." : "Test the connection"}
         </Button>
-        {!canAdmin ? <p className="text-xs text-muted">Only a workspace admin can save the model or test the connection.</p> : null}
+        {!canAdmin ? <p className="text-xs text-fg-muted">Only a workspace admin can save the model or test the connection.</p> : null}
       </div>
     </div>
   );

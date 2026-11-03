@@ -2,7 +2,7 @@ import * as AvatarPrimitive from "@radix-ui/react-avatar";
 import { cn } from "./cn";
 
 export function Avatar({ src, alt = "", fallback, className }: { src?: string | null; alt?: string; fallback: string; className?: string }) {
-  return <AvatarPrimitive.Root className={cn("relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-raised text-small font-semibold text-fg", className)}>
+  return <AvatarPrimitive.Root className={cn("relative grid size-10 shrink-0 place-items-center overflow-hidden rounded-full bg-raised text-small font-semibold text-fg-primary", className)}>
     {src ? <AvatarPrimitive.Image src={src} alt={alt} width={40} height={40} loading="lazy" decoding="async" className="size-full object-cover" /> : null}
     <AvatarPrimitive.Fallback aria-hidden="true" className="grid size-full place-items-center">{fallback.slice(0, 2).toUpperCase()}</AvatarPrimitive.Fallback>
   </AvatarPrimitive.Root>;

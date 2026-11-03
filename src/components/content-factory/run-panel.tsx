@@ -99,7 +99,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted, guided = false }:
       ) : null}
       {view.inputs.length > 0 ? <div className="mb-4"><Lines title="Inputs" lines={view.inputs} /></div> : null}
       {view.notConnected.length > 0 ? (
-        <section aria-labelledby="cf-not-connected" className="mb-4 space-y-2 rounded-md border border-border bg-surface-2 p-3">
+        <section aria-labelledby="cf-not-connected" className="mb-4 space-y-2 rounded-sharp border border-hairline bg-overlay p-3">
           <h3 id="cf-not-connected" className="flex items-center gap-2 text-sm font-semibold"><PlugZap aria-hidden="true" className="size-4" />The video engine is not connected</h3>
           <ul className="list-disc space-y-1 pl-5 text-sm">{view.notConnected.map((reason) => <li key={reason}>{reason}</li>)}</ul>
         </section>
@@ -152,7 +152,7 @@ function ReviseControl({ sessionId, onStarted }: { sessionId: string; onStarted:
           disabled={busy}
           onChange={(event) => setDirection(event.target.value)}
           placeholder="For example: make the hook punchier and shorter"
-          className="w-full rounded-md border border-border bg-surface p-2 text-sm disabled:opacity-60"
+          className="w-full rounded-sharp border border-hairline bg-raised p-2 text-sm disabled:opacity-60"
         />
       </div>
       <div className="flex flex-wrap items-center gap-3">
@@ -178,7 +178,7 @@ function Lines({ title, lines }: { title: string; lines: string[] }) {
 function StepCard({ card, index }: { card: FeedCard; index: number }) {
   const status = STATUS_LABELS[card.status];
   return (
-    <li className="rounded-lg border border-border p-3">
+    <li className="rounded-sharp border border-hairline p-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="font-semibold">{index}. {card.title}</h3>
         <Badge variant={status.variant}>{status.label}</Badge>
@@ -280,7 +280,7 @@ function DeliveryApproval({ sessionId }: { sessionId: string }) {
   if (view === null) return <p className="mb-4 text-sm text-fg-muted">Reading the approval of this video.</p>;
   const { state, history, publish, delivered } = view;
   return (
-    <section aria-labelledby="cf-approval" className="mb-4 space-y-3 rounded-md border border-border p-3">
+    <section aria-labelledby="cf-approval" className="mb-4 space-y-3 rounded-sharp border border-hairline p-3">
       <h3 id="cf-approval" className="text-sm font-semibold">Approval of this video</h3>
       <p className="text-sm">{stateSentence(state)}</p>
       {delivered ? null : <p className="text-sm text-fg-muted">The engine has not delivered the current video, so it cannot be decided yet.</p>}
@@ -355,7 +355,7 @@ function DeliveredDownload({ sessionId }: { sessionId: string }) {
     }
   }
   return (
-    <section aria-labelledby="cf-download" className="mb-4 space-y-2 rounded-md border border-border bg-surface-2 p-3">
+    <section aria-labelledby="cf-download" className="mb-4 space-y-2 rounded-sharp border border-hairline bg-overlay p-3">
       <h3 id="cf-download" className="text-sm font-semibold">The engine delivered this video</h3>
       <p className="text-sm text-fg-muted">The file is the engine's delivered master, read back and checked against its manifest before a link is made.</p>
       {link?.status === "ready" ? (

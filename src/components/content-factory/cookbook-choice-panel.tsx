@@ -95,7 +95,7 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
       ? { ...pickedView, badge: live.summary.badge, needs: live.summary.requirements, estimate: estimateTextOf(live.summary.estimate) }
       : pickedView;
   return (
-    <section aria-labelledby="cf-cookbook" className="mb-4 space-y-3 rounded-md border border-border p-3">
+    <section aria-labelledby="cf-cookbook" className="mb-4 space-y-3 rounded-sharp border border-hairline p-3">
       <h2 id="cf-cookbook" className="text-sm font-semibold">Cookbook</h2>
       {chosen !== null ? <p className="text-sm">Chosen: {chosen}. You can change it below until the video starts.</p> : null}
       {error !== null ? <p role="alert" className="text-sm text-danger">{error}</p> : null}

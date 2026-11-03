@@ -64,8 +64,8 @@ export function ProviderCardGroup<Value extends string>({
               key={card.value}
               htmlFor={inputId}
               className={cn(
-                "flex min-h-11 gap-3 rounded-md border p-3 text-sm",
-                checked ? "border-fg bg-surface-2" : "border-border bg-surface",
+                "flex min-h-11 gap-3 rounded-sharp border p-3 text-sm",
+                checked ? "border-fg-primary bg-overlay" : "border-hairline bg-raised",
                 card.disabled ? "cursor-not-allowed opacity-75" : "cursor-pointer",
               )}
             >

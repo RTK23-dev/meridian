@@ -130,7 +130,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <label className="space-y-1 text-sm">
                 <span className="font-semibold">Intensity</span>
                 <select
-                  className="block min-h-11 w-full rounded-md border border-border bg-surface px-3"
+                  className="block min-h-11 w-full rounded-sharp border border-hairline bg-raised px-3"
                   value={choice.intensity}
                   aria-describedby="cf-repurpose-intensity-help"
                   onChange={(event) => change({ ...choice, intensity: Number(event.target.value) })}
@@ -139,12 +139,12 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                     <option key={level} value={level}>{`${level} · ${INTENSITY_NAMES[level]}`}</option>
                   ))}
                 </select>
-                <span id="cf-repurpose-intensity-help" className="block text-xs text-muted">Level 3 (Moderate) is the default. Each treatment is scaled to this level.</span>
+                <span id="cf-repurpose-intensity-help" className="block text-xs text-fg-muted">Level 3 (Moderate) is the default. Each treatment is scaled to this level.</span>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-semibold">Variations</span>
                 <select
-                  className="block min-h-11 w-full rounded-md border border-border bg-surface px-3"
+                  className="block min-h-11 w-full rounded-sharp border border-hairline bg-raised px-3"
                   value={choice.variantCount}
                   aria-describedby="cf-repurpose-count-help"
                   onChange={(event) => change({ ...choice, variantCount: Number(event.target.value) })}
@@ -153,7 +153,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                     <option key={count} value={count}>{count}</option>
                   ))}
                 </select>
-                <span id="cf-repurpose-count-help" className="block text-xs text-muted">At most {MAX_REPURPOSE_VARIANTS}. Each variation takes one option from each category that is on.</span>
+                <span id="cf-repurpose-count-help" className="block text-xs text-fg-muted">At most {MAX_REPURPOSE_VARIANTS}. Each variation takes one option from each category that is on.</span>
               </label>
             </div>
 
@@ -165,15 +165,15 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                 const chosen = choice.categories[category];
                 const unavailableReason = applicable.length === 0 ? options.map((option) => (option.availability.available ? "" : option.availability.reason)).join(" ").trim() : null;
                 return (
-                  <details key={category} className="rounded-md border border-border p-3" open={category === "warp_rotation"}>
+                  <details key={category} className="rounded-sharp border border-hairline p-3" open={category === "warp_rotation"}>
                     <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-2 text-sm font-semibold">
                       <span>{CATEGORY_LABELS[category]}</span>
-                      <span className="text-xs font-normal text-muted">
+                      <span className="text-xs font-normal text-fg-muted">
                         {unavailableReason !== null ? "Unavailable" : chosen.enabled ? `${chosen.options.length} selected` : "Off"}
                       </span>
                     </summary>
                     {unavailableReason !== null ? (
-                      <p className="mt-2 text-sm text-muted">{unavailableReason}</p>
+                      <p className="mt-2 text-sm text-fg-muted">{unavailableReason}</p>
                     ) : (
                       <div className="mt-2 space-y-2">
                         <label className="flex min-h-11 items-center gap-2 text-sm">
@@ -185,7 +185,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
                           Use {CATEGORY_LABELS[category]} in each variation
                         </label>
                         <fieldset className="space-y-1" disabled={!chosen.enabled}>
-                          <legend className="text-xs text-muted">Options in the pool</legend>
+                          <legend className="text-xs text-fg-muted">Options in the pool</legend>
                           {applicable.map((option) => (
                             <label key={option.id} className="flex min-h-11 items-center gap-2 text-sm">
                               <input
@@ -215,8 +215,8 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <h3 className="font-semibold">Not offered in this release</h3>
               <ul className="space-y-1">
                 {UNAVAILABLE_CAPABILITIES.map((capability) => (
-                  <li key={capability.id} className="text-muted">
-                    <span className="font-semibold text-fg">{capability.label}:</span> {capability.reason}
+                  <li key={capability.id} className="text-fg-muted">
+                    <span className="font-semibold text-fg-primary">{capability.label}:</span> {capability.reason}
                   </li>
                 ))}
               </ul>
@@ -237,7 +237,7 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
               <div className="space-y-2">
                 <h3 className="text-sm font-semibold">Variations to plan</h3>
                 {preview.reasons.map((reason) => (
-                  <p key={reason} className="text-sm text-muted">{reason}</p>
+                  <p key={reason} className="text-sm text-fg-muted">{reason}</p>
                 ))}
                 <ol className="list-decimal space-y-1 pl-5 text-sm">
                   {preview.variations.map((variation) => (
@@ -250,28 +250,28 @@ export function RepurposePanel({ sessionId }: { sessionId: string }) {
             {run !== null ? (
               <div className="space-y-2" aria-live="polite">
                 <h3 className="text-sm font-semibold">Variations</h3>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-fg-muted">
                   {decisionCheckLine(run.decision.state, "plan")}
                 </p>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-fg-muted">
                   Each variation is a child cut of this video&rsquo;s master cut. The master is not changed. A rendered variation is stored as its own video. A reviewer can approve or
                   reject a rendered variation. Variations are not ranked: the brand-fit check reads only the treatment names, so it cannot
                   tell rendered variations apart.
                 </p>
-                <p className="text-sm text-muted">
+                <p className="text-sm text-fg-muted">
                   Publishing, measurement and learning for a repurposed variation are not built. A variation is not a library creative yet,
                   so it cannot reach the publishing queue, and no publishing account can receive it until it is.
                 </p>
                 <ol className="space-y-2 text-sm">
                   {run.variations.map((variation) => (
-                    <li key={variation.key} className="rounded-md border border-border p-3">
+                    <li key={variation.key} className="rounded-sharp border border-hairline p-3">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="font-semibold">Variation {variation.ordinal + 1}</span>
                         <Badge>{STATUS_LABELS[variation.status]}</Badge>
                       </div>
-                      <p className="text-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
-                      {variation.reason !== "" ? <p className="text-xs text-muted">{variation.reason}</p> : null}
-                      {variation.status === "rendered" ? <p className="text-xs text-muted">{decisionCheckLine(variation.decision.state, "variation")}</p> : null}
+                      <p className="text-fg-muted">{variation.treatments.map((treatment) => treatment.label).join(" · ")}</p>
+                      {variation.reason !== "" ? <p className="text-xs text-fg-muted">{variation.reason}</p> : null}
+                      {variation.status === "rendered" ? <p className="text-xs text-fg-muted">{decisionCheckLine(variation.decision.state, "variation")}</p> : null}
                       {variation.status === "rendered" ? <OpenOutput sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <UploadToMeta sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
                       {variation.status === "rendered" ? <PausedAd sessionId={sessionId} runId={run.runId} variantKey={variation.key} /> : null}
@@ -353,7 +353,7 @@ function UploadToMeta({ sessionId, runId, variantKey }: { sessionId: string; run
       <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void upload()}>
         Upload to the Meta ad account
       </Button>
-      {message !== null ? <p role="status" className="text-sm text-muted">{message}</p> : null}
+      {message !== null ? <p role="status" className="text-sm text-fg-muted">{message}</p> : null}
     </div>
   );
 }
@@ -425,33 +425,33 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
     }
   }
   return (
-    <div className="space-y-2 rounded-md border border-border p-3">
-      <p className="text-sm text-muted">
+    <div className="space-y-2 rounded-sharp border border-hairline p-3">
+      <p className="text-sm text-fg-muted">
         Create a paused Meta ad from this video. The ad is paused and nothing is switched on. Choose the ad set, then choose it again to confirm.
       </p>
       <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void load()}>
         Load ad sets and Pages
       </Button>
-      {choices?.status === "blocked" || choices?.status === "failed" ? <p role="status" className="text-sm text-muted">{choices.status === "blocked" ? choices.reason : choices.error}</p> : null}
+      {choices?.status === "blocked" || choices?.status === "failed" ? <p role="status" className="text-sm text-fg-muted">{choices.status === "blocked" ? choices.reason : choices.error}</p> : null}
       {choices?.status === "listed" ? (
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="space-y-1 text-sm">
             Ad set
-            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={adSetId} onChange={(event) => setAdSetId(event.target.value)}>
+            <select className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" value={adSetId} onChange={(event) => setAdSetId(event.target.value)}>
               <option value="">Choose an ad set</option>
               {choices.adSets.map((set) => <option key={set.id} value={set.id}>{set.name} ({set.status})</option>)}
             </select>
           </label>
           <label className="space-y-1 text-sm">
             Confirm the ad set
-            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={confirmAdSetId} onChange={(event) => setConfirmAdSetId(event.target.value)}>
+            <select className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" value={confirmAdSetId} onChange={(event) => setConfirmAdSetId(event.target.value)}>
               <option value="">Choose the same ad set again</option>
               {choices.adSets.map((set) => <option key={set.id} value={set.id}>{set.name}</option>)}
             </select>
           </label>
           <label className="space-y-1 text-sm">
             Facebook Page
-            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
+            <select className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
               <option value="">Choose a Page</option>
               {choices.pages.map((page) => <option key={page.id} value={page.id}>{page.name}</option>)}
             </select>
@@ -462,7 +462,7 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
           </label>
           <label className="space-y-1 text-sm sm:col-span-2">
             Ad text
-            <textarea className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" rows={3} value={message} onChange={(event) => setMessage(event.target.value)} />
+            <textarea className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" rows={3} value={message} onChange={(event) => setMessage(event.target.value)} />
           </label>
           <div className="flex flex-wrap gap-2 sm:col-span-2">
             <Button type="button" loading={busy} disabled={busy || !ready} onClick={() => void create(false)}>
@@ -476,7 +476,7 @@ function PausedAd({ sessionId, runId, variantKey }: { sessionId: string; runId: 
           </div>
         </div>
       ) : null}
-      {note !== null ? <p role="status" className="text-sm text-muted">{note}</p> : null}
+      {note !== null ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
     </div>
   );
 }
@@ -505,7 +505,7 @@ function OpenOutput({ sessionId, runId, variantKey }: { sessionId: string; runId
           <a className="underline" href={result.url} target="_blank" rel="noopener noreferrer">Open the video in a new tab</a>. The link lasts 15 minutes.
         </p>
       ) : null}
-      {result !== null && result.status !== "ok" ? <p role="status" className="text-sm text-muted">{result.reason}</p> : null}
+      {result !== null && result.status !== "ok" ? <p role="status" className="text-sm text-fg-muted">{result.reason}</p> : null}
     </div>
   );
 }
@@ -544,7 +544,7 @@ function ReviewVariation({
   }
   const current = state.status === "not_decided" ? "Not decided" : state.status === "approved" ? "Approved" : "Rejected";
   return (
-    <div className="space-y-2 border-t border-border pt-2">
+    <div className="space-y-2 border-t border-hairline pt-2">
       <p className="text-sm">
         <span className="font-semibold">Review:</span> {current}
         {state.status !== "not_decided" && state.reason ? ` · ${state.reason}` : ""}
@@ -558,7 +558,7 @@ function ReviewVariation({
           Reject variation
         </Button>
       </div>
-      {!rejectReady ? <p className="text-xs text-muted">A rejection needs a reason of at least 10 characters.</p> : null}
+      {!rejectReady ? <p className="text-xs text-fg-muted">A rejection needs a reason of at least 10 characters.</p> : null}
       {problem !== null ? <p role="alert" className="text-sm text-danger">{problem}</p> : null}
     </div>
   );
@@ -584,7 +584,7 @@ function CheckRenderer({ sessionId, runId, variantKey }: { sessionId: string; ru
       <Button type="button" variant="quiet" loading={busy} disabled={busy} onClick={() => void check()}>
         Check with the renderer
       </Button>
-      {report !== null ? <p role="status" className="text-sm text-muted">{report}</p> : null}
+      {report !== null ? <p role="status" className="text-sm text-fg-muted">{report}</p> : null}
     </div>
   );
 }
@@ -657,8 +657,8 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
   }
   const ready = pageId !== "" && (!offerRetry || confirmRetry);
   return (
-    <div className="space-y-2 rounded-md border border-border p-3">
-      <p className="text-sm text-muted">
+    <div className="space-y-2 rounded-sharp border border-hairline p-3">
+      <p className="text-sm text-fg-muted">
         Publish this video to a Facebook Page as an organic post. Approval, upload and the paused ad never publish it: only this action does.
       </p>
       <div className="flex flex-wrap gap-2">
@@ -669,13 +669,13 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
           Read this run&apos;s Facebook metrics
         </Button>
       </div>
-      {pages?.connectedReason ? <p role="status" className="text-sm text-muted">{pages.connectedReason}</p> : null}
-      {pages && pages.pages.length === 0 ? <p role="status" className="text-sm text-muted">No Facebook Page is saved for this brand. Save one on Connected accounts first.</p> : null}
+      {pages?.connectedReason ? <p role="status" className="text-sm text-fg-muted">{pages.connectedReason}</p> : null}
+      {pages && pages.pages.length === 0 ? <p role="status" className="text-sm text-fg-muted">No Facebook Page is saved for this brand. Save one on Connected accounts first.</p> : null}
       {pages && pages.pages.length > 0 ? (
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="space-y-1 text-sm">
             Facebook Page
-            <select className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
+            <select className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" value={pageId} onChange={(event) => setPageId(event.target.value)}>
               <option value="">Choose a Page</option>
               {pages.pages.map((page) => (
                 <option key={page.id} value={page.id}>{page.name}{page.id === pages.connectedPageId ? " (connected)" : ""}</option>
@@ -688,7 +688,7 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
           </label>
           <label className="space-y-1 text-sm sm:col-span-2">
             Caption
-            <textarea className="block w-full rounded-md border border-border bg-bg px-3 py-2 text-sm" rows={3} maxLength={2200} value={caption} onChange={(event) => setCaption(event.target.value)} />
+            <textarea className="block w-full rounded-sharp border border-hairline bg-ground px-3 py-2 text-sm" rows={3} maxLength={2200} value={caption} onChange={(event) => setCaption(event.target.value)} />
           </label>
           {offerRetry ? (
             <label className="flex items-center gap-2 text-sm sm:col-span-2">
@@ -703,7 +703,7 @@ function OrganicPost({ sessionId, runId, variantKey }: { sessionId: string; runI
           </div>
         </div>
       ) : null}
-      {note !== null ? <p role="status" className="text-sm text-muted">{note}</p> : null}
+      {note !== null ? <p role="status" className="text-sm text-fg-muted">{note}</p> : null}
     </div>
   );
 }

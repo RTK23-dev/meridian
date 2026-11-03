@@ -268,13 +268,13 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
   return <form id="telemetry-form" onSubmit={form.handleSubmit(submit)} onKeyDown={(event) => submitOnShortcut(event)} noValidate aria-labelledby="telemetry-form-title" className="space-y-6 panel">
     <UnsavedChangesGuard dirty={dirty} />
     <div className="space-y-1">
-      <h3 id="telemetry-form-title" className="text-base font-semibold text-fg">Add a telemetry row</h3>
+      <h3 id="telemetry-form-title" className="text-base font-semibold text-fg-primary">Add a telemetry row</h3>
       <p className="text-sm text-fg-muted">Enter numbers you measured. Leave an optional field blank if you do not have it; it is stored as unknown, not as 0.</p>
     </div>
     {formError ? <PlainErrorMessage message={formError.message} raw={formError.raw} /> : null}
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
-      <legend className="mb-2 text-sm font-semibold text-fg">Where it ran</legend>
+      <legend className="mb-2 text-sm font-semibold text-fg-primary">Where it ran</legend>
       <Field label="Platform" required error={formState.errors.platform?.message}>
         <SelectInput {...register("platform")} required>
           <option value="">Choose a platform</option>
@@ -298,7 +298,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
     </fieldset>
 
     <fieldset className="grid gap-4 sm:grid-cols-3">
-      <legend className="mb-2 text-sm font-semibold text-fg">Measured results</legend>
+      <legend className="mb-2 text-sm font-semibold text-fg-primary">Measured results</legend>
       <Field label="Views" required error={formState.errors.views?.message}>
         <Input {...register("views")} type="number" inputMode="numeric" required />
       </Field>
@@ -317,7 +317,7 @@ function ManualTelemetryForm({ brandId, onSaved, onCancel }: { brandId: string; 
     </fieldset>
 
     <fieldset className="grid gap-4 sm:grid-cols-2">
-      <legend className="mb-2 text-sm font-semibold text-fg">Creative attributes</legend>
+      <legend className="mb-2 text-sm font-semibold text-fg-primary">Creative attributes</legend>
       <Field label="Hook type">
         <SelectInput {...register("hookType")}>
           <option value="">Not recorded</option>

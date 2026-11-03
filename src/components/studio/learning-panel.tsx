@@ -71,7 +71,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
         </ul>
       ) : <p className="mt-3 text-sm text-fg-muted">{copy.learning.noTestPublication}</p>}
       {organicPosts.length > 0 ? (
-        <div className="mt-4 border-t border-border pt-3">
+        <div className="mt-4 border-t border-hairline pt-3">
           <h3 className="eyebrow">Organic social publications</h3>
           <ul className="mt-2 divide-y divide-border text-sm">
             {organicPosts.map((post) => (

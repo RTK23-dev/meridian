@@ -9,7 +9,7 @@ function PatternTooltip({ active, payload }: { active?: boolean; payload?: Toolt
   const row = payload?.[0]?.payload;
   if (!active || !row) return null;
   return (
-    <div className="rounded-md border border-border bg-surface p-2 text-xs text-fg shadow-md">
+    <div className="rounded-sharp border border-hairline bg-raised p-2 text-xs text-fg-primary">
       <p className="font-semibold">{row.label}</p>
       <p>Lift {row.lift.toFixed(2)} · {row.direction.toLowerCase()} · {row.state.toLowerCase()}</p>
       <p>Sample size {row.sampleSize} · {row.impressions} impressions</p>
@@ -18,7 +18,7 @@ function PatternTooltip({ active, payload }: { active?: boolean; payload?: Toolt
 }
 
 /**
- * Learned patterns as bars, ordered by lift. Positive lift is drawn in the accent colour and negative lift in the danger
+ * Learned patterns as bars, ordered by lift. Positive lift is drawn in the primary text colour and negative lift in the danger
  * colour. The direction is also written in the tooltip and the text list, so colour is not the only signal.
  */
 export default function LearningBars({ rows }: { rows: LearningRow[] }) {
@@ -34,7 +34,7 @@ export default function LearningBars({ rows }: { rows: LearningRow[] }) {
           <Tooltip content={PatternTooltip} />
           <Bar dataKey="lift" name="Lift" isAnimationActive={!reduceMotion}>
             {rows.map((row) => (
-              <Cell key={row.key} fill={row.lift >= 0 ? "var(--color-accent)" : "var(--color-danger)"} />
+              <Cell key={row.key} fill={row.lift >= 0 ? "var(--fg-primary)" : "var(--danger)"} />
             ))}
           </Bar>
         </BarChart>

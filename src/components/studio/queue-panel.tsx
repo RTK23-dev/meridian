@@ -125,12 +125,12 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           {errors.targetAccountIds?.message ? <p role="alert" className="mb-2 text-sm text-danger">{errors.targetAccountIds.message}</p> : null}
           {(accountsQuery.data ?? []).length === 0 ? (
             <p className="text-xs text-fg-muted">
-              No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-fg">Accounts</a> to connect Instagram, TikTok, or YouTube.
+              No social accounts connected yet. Go to <a href={`/brands/${brandId}/accounts`} className="underline text-fg-primary">Accounts</a> to connect Instagram, TikTok, or YouTube.
             </p>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-3">
               {(accountsQuery.data ?? []).map((acct) => (
-                <label key={acct.id} className="flex min-h-11 items-center gap-2.5 rounded-md border border-border bg-surface p-2 text-sm cursor-pointer">
+                <label key={acct.id} className="flex min-h-11 items-center gap-2.5 rounded-sharp border border-hairline bg-raised p-2 text-sm cursor-pointer">
                   <input
                     type="checkbox"
                     value={acct.id}
@@ -154,7 +154,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             <input
               type="datetime-local"
               {...register("scheduledTime")}
-              className="w-full rounded-md border border-border-strong bg-surface px-3 py-3 text-base text-fg"
+              className="w-full rounded-sharp border border-border-strong bg-raised px-3 py-3 text-base text-fg-primary"
             />
           </Field>
         </div>
@@ -193,7 +193,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           <div className="hidden overflow-x-auto md:block">
             <table className="w-full text-left text-xs">
               <caption className="sr-only">Publishing jobs for this brand</caption>
-              <thead className="border-b border-border text-fg-muted">
+              <thead className="border-b border-hairline text-fg-muted">
                 <tr>
                   <th scope="col" className="py-2 pr-3">Target Platform</th>
                   <th scope="col" className="py-2 pr-3">Creative ID</th>
@@ -207,7 +207,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
               <tbody className="divide-y divide-border">
                 {queueItems.map((item) => {
                   return (
-                    <tr key={item.id} className="hover:bg-surface-2">
+                    <tr key={item.id} className="hover:bg-overlay">
                       <td className="py-3 pr-3 font-semibold capitalize">{item.platform}</td>
                       <td className="py-3 pr-3 font-mono text-fg-muted">{item.creativeId}</td>
                       <td className="py-3 pr-3 capitalize text-fg-muted">{item.targetType.replace(/_/g, " ")}</td>
@@ -227,7 +227,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
           </div>
           <ul className="grid gap-3 md:hidden">
             {queueItems.map((item) => (
-              <li key={item.id} className="space-y-3 rounded-lg border border-border bg-surface p-3 text-sm">
+              <li key={item.id} className="space-y-3 rounded-sharp border border-hairline bg-raised p-3 text-sm">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-semibold capitalize">{item.platform}</span>
                   <Badge variant={queueTone(item.status)} className="capitalize">{item.status}</Badge>
@@ -263,7 +263,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                   <span className="text-fg-muted block text-[11px]">Published: {new Date(rec.publishedAt).toLocaleString()}</span>
                 </div>
                 {rec.externalUrl ? (
-                  <a href={rec.externalUrl} target="_blank" rel="noopener noreferrer" className="underline text-fg font-semibold">
+                  <a href={rec.externalUrl} target="_blank" rel="noopener noreferrer" className="underline text-fg-primary font-semibold">
                     View External Post &rarr;<span className="sr-only"> (opens in a new tab)</span>
                   </a>
                 ) : (

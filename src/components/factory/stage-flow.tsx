@@ -62,13 +62,13 @@ export function StageFlow({
                   setOpenId(stage.id);
                   setIsOpen(true);
                 }}
-                className="flex h-full min-h-11 w-full flex-col gap-3 panel text-left transition-colors hover:border-border-strong hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                className="flex h-full min-h-11 w-full flex-col gap-3 panel text-left transition-colors hover:border-border-strong hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 <span className="flex items-center justify-between gap-2">
                   <span className="eyebrow">Stage {index + 1}</span>
                   <span className="text-xs text-fg-muted">{CATEGORY_LABEL[stage.category]}</span>
                 </span>
-                <span className="font-semibold text-fg">{stage.label}</span>
+                <span className="font-semibold text-fg-primary">{stage.label}</span>
                 <span className="text-sm text-fg-muted">
                   {job ? (
                     <>
@@ -103,7 +103,7 @@ export function StageFlow({
       </ol>
 
       <section aria-labelledby="factory-jobs-without-card" className="space-y-3 panel">
-        <h3 id="factory-jobs-without-card" className="font-semibold text-fg">Factory jobs with no stage card</h3>
+        <h3 id="factory-jobs-without-card" className="font-semibold text-fg-primary">Factory jobs with no stage card</h3>
         <p className="text-sm text-fg-muted">These jobs run in the factory but are not part of the stage line above.</p>
         <ul className="space-y-2 text-sm">
           {unmapped.map((job) => (
@@ -152,7 +152,7 @@ function StageDrawerBody({
   return (
     <div className="space-y-5">
       <div className="space-y-1">
-        <SheetTitle className="text-section text-fg font-semibold">{stage.label}</SheetTitle>
+        <SheetTitle className="text-section text-fg-primary font-semibold">{stage.label}</SheetTitle>
         <SheetDescription className="text-sm text-fg-muted">
           {job ? `Factory job: ${job.label}.` : "No factory job runs this stage yet."}
         </SheetDescription>
@@ -160,11 +160,11 @@ function StageDrawerBody({
 
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div>
-          <dt className="font-semibold text-fg">Category</dt>
+          <dt className="font-semibold text-fg-primary">Category</dt>
           <dd className="text-fg-muted">{CATEGORY_LABEL[stage.category]}</dd>
         </div>
         <div>
-          <dt className="font-semibold text-fg">Run status</dt>
+          <dt className="font-semibold text-fg-primary">Run status</dt>
           <dd className="text-fg-muted">
             {run.kind === "queued"
               ? `Queued at the current ${levelText(level)}.`
@@ -176,19 +176,19 @@ function StageDrawerBody({
         {job ? (
           <>
             <div>
-              <dt className="font-semibold text-fg">Job type</dt>
+              <dt className="font-semibold text-fg-primary">Job type</dt>
               <dd><code className="font-mono text-xs">{job.type}</code></dd>
             </div>
             <div>
-              <dt className="font-semibold text-fg">Worker pool</dt>
+              <dt className="font-semibold text-fg-primary">Worker pool</dt>
               <dd className="text-fg-muted">{job.pool === "media" ? "Media pool" : "Light pool"}</dd>
             </div>
             <div>
-              <dt className="font-semibold text-fg">Attempts</dt>
+              <dt className="font-semibold text-fg-primary">Attempts</dt>
               <dd className="text-fg-muted">Up to {job.maxAttempts}</dd>
             </div>
             <div>
-              <dt className="font-semibold text-fg">Runs after</dt>
+              <dt className="font-semibold text-fg-primary">Runs after</dt>
               <dd className="text-fg-muted">
                 {job.dependsOn ? <code className="font-mono text-xs">{job.dependsOn}</code> : "Nothing. It is the first job."}
               </dd>
@@ -198,7 +198,7 @@ function StageDrawerBody({
       </dl>
 
       <section aria-labelledby="stage-saved-settings" className="space-y-2">
-        <h3 id="stage-saved-settings" className="font-semibold text-fg">Saved settings for this stage</h3>
+        <h3 id="stage-saved-settings" className="font-semibold text-fg-primary">Saved settings for this stage</h3>
         {settings.length === 0 ? (
           <p className="text-sm text-fg-muted">No saved setting feeds this stage.</p>
         ) : (

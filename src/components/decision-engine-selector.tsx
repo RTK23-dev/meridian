@@ -82,7 +82,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
     return <ErrorState message="The decision engine status could not be loaded." onRetry={() => void engines.refetch()} />;
   }
   if (!status) {
-    return <p className="text-muted text-sm">Loading decision engine status...</p>;
+    return <p className="text-fg-muted text-sm">Loading decision engine status...</p>;
   }
 
   async function handleSave() {
@@ -107,7 +107,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
       <div>
         <p className="eyebrow">Decision engine</p>
         <h3 className="font-semibold text-lg">Active: {activeLabel}</h3>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           Only the active engine receives decisions. Meridian never calls the other engine for the same decision, and never
           switches silently when the active engine fails. The active engine is {sourceText}.
         </p>
@@ -123,21 +123,21 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
 
       <div className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
         {status.engines.map((engine) => (
-          <div key={engine.id} className="border-t border-line pt-3 text-sm space-y-1">
+          <div key={engine.id} className="border-t border-hairline pt-3 text-sm space-y-1">
             <div className="flex items-center justify-between gap-2">
               <strong>{engine.label}</strong>
               <span
-                className={`rounded px-2 py-0.5 text-xs font-semibold ${
+                className={`rounded-sharp px-2 py-0.5 text-xs font-semibold ${
                   engine.health.status === "READY"
                     ? "bg-success/20 text-success border border-success/30"
-                    : "bg-muted/20 text-muted border border-line"
+                    : "bg-fg-muted/20 text-fg-muted border border-hairline"
                 }`}
               >
                 {engine.health.status}
               </span>
             </div>
             {engine.isActive && status.active.source !== "default" ? <p className="text-xs font-semibold text-success">In use</p> : null}
-            <p className="text-xs text-muted">{engine.health.message}</p>
+            <p className="text-xs text-fg-muted">{engine.health.message}</p>
           </div>
         ))}
       </div>
@@ -173,7 +173,7 @@ export function DecisionEngineSelector({ organizationId, canAdmin }: DecisionEng
           {!same && !choiceReady && !saving ? <DisabledReason id="engine-save-reason">This engine needs its key before it can be saved. Add the key on Setup, then come back.</DisabledReason> : null}
         </div>
       ) : (
-        <p className="text-xs text-muted">Only workspace admins can change the decision engine.</p>
+        <p className="text-xs text-fg-muted">Only workspace admins can change the decision engine.</p>
       )}
     </div>
   );

@@ -61,7 +61,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
     <div className="space-y-10">
       <UnsavedChangesGuard dirty={renameForm.formState.isDirty || createForm.formState.isDirty} />
       <section aria-labelledby="workspace-name-title" className="space-y-4 panel">
-        <h2 id="workspace-name-title" className="text-section font-semibold text-fg">Workspace name</h2>
+        <h2 id="workspace-name-title" className="text-section font-semibold text-fg-primary">Workspace name</h2>
         {!canAdmin ? <p className="text-sm text-fg-muted">Only an admin can rename this workspace.</p> : null}
         <form className="flex flex-wrap items-end gap-3" onSubmit={renameForm.handleSubmit(rename)} onKeyDown={(event) => submitOnShortcut(event)}>
           <Field label="Name" error={renameForm.formState.errors.name?.message} required>
@@ -80,7 +80,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
       </section>
 
       <section aria-labelledby="billing-limits-title" className="panel">
-        <h2 id="billing-limits-title" className="text-section font-semibold text-fg">Billing and limits</h2>
+        <h2 id="billing-limits-title" className="text-section font-semibold text-fg-primary">Billing and limits</h2>
         <p className="mt-1 text-sm text-fg-muted">
           The monthly budget, the brand budgets, the factory caps, the measure ceiling and the decision cap are set in one place.
           Nothing is set by default: a limit that is not set refuses the paid step it guards.
@@ -88,12 +88,12 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         <p className="mt-3"><Link to="/billing" className="font-semibold underline underline-offset-2">Open billing and limits</Link></p>
       </section>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">Create another workspace<span className="ml-2 text-sm font-normal text-fg-muted">A second one keeps its own brands, members and keys</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Create another workspace<span className="ml-2 text-sm font-normal text-fg-muted">A second one keeps its own brands, members and keys</span></summary>
         <div className="mt-4">
       <section aria-labelledby="another-workspace-title" className="space-y-4 panel">
         <div>
-          <h2 id="another-workspace-title" className="text-section font-semibold text-fg">Create another workspace</h2>
+          <h2 id="another-workspace-title" className="text-section font-semibold text-fg-primary">Create another workspace</h2>
           <p className="mt-1 text-sm text-fg-muted">A second workspace keeps its own brands, members, and keys. You become its owner.</p>
         </div>
         <form className="flex flex-wrap items-end gap-3" onSubmit={createForm.handleSubmit(createWorkspace)} onKeyDown={(event) => submitOnShortcut(event)}>
@@ -114,19 +114,19 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
       </details>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">Keys and connections<span className="ml-2 text-sm font-normal text-fg-muted">Every provider, its state and its key</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Keys and connections<span className="ml-2 text-sm font-normal text-fg-muted">Every provider, its state and its key</span></summary>
         <div className="mt-4">
       <SetupPanel organizationId={organizationId} canAdmin={canAdmin} />
         </div>
       </details>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">Engine and provider settings<span className="ml-2 text-sm font-normal text-fg-muted">Decision engine, models and connection tests</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Engine and provider settings<span className="ml-2 text-sm font-normal text-fg-muted">Decision engine, models and connection tests</span></summary>
         <div className="mt-4">
       <section aria-labelledby="provider-settings-title" className="space-y-3">
         <div>
-          <h2 id="provider-settings-title" className="text-section font-semibold text-fg">Engine, sources and provider settings</h2>
+          <h2 id="provider-settings-title" className="text-section font-semibold text-fg-primary">Engine, sources and provider settings</h2>
           <p className="mt-1 text-sm text-fg-muted">Each provider's settings and connection test. Keys are entered once, in Setup above.</p>
         </div>
         <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
@@ -134,12 +134,12 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
       </details>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">Text and image models<span className="ml-2 text-sm font-normal text-fg-muted">Which model each task uses</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Text and image models<span className="ml-2 text-sm font-normal text-fg-muted">Which model each task uses</span></summary>
         <div className="mt-4">
       <section aria-labelledby="generation-models-title" className="space-y-3">
         <div>
-          <h2 id="generation-models-title" className="text-section font-semibold text-fg">Text and image models</h2>
+          <h2 id="generation-models-title" className="text-section font-semibold text-fg-primary">Text and image models</h2>
           <p className="mt-1 text-sm text-fg-muted">
             The model each task uses: copy and scripts, research analysis, brand brain suggestions and Factory image labels. Each choice is checked
             against the live OpenRouter catalogue before any paid call.
@@ -150,18 +150,18 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
       </details>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">Google Drive<span className="ml-2 text-sm font-normal text-fg-muted">Where files are kept</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Google Drive<span className="ml-2 text-sm font-normal text-fg-muted">Where files are kept</span></summary>
         <div className="mt-4">
       <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />
         </div>
       </details>
 
-      <details className="group rounded-xl border border-border bg-surface p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg">What is and is not connected<span className="ml-2 text-sm font-normal text-fg-muted">For whoever runs the server</span></summary>
+      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+        <summary className="cursor-pointer text-base font-semibold text-fg-primary">What is and is not connected<span className="ml-2 text-sm font-normal text-fg-muted">For whoever runs the server</span></summary>
         <div className="mt-4">
       <section aria-labelledby="connected-title" className="space-y-3 panel">
-        <h2 id="connected-title" className="text-section font-semibold text-fg">What is and is not connected</h2>
+        <h2 id="connected-title" className="text-section font-semibold text-fg-primary">What is and is not connected</h2>
         <ul className="space-y-2 text-sm text-fg-muted">
           <li>A public page you name can be fetched and stored as untrusted text. It does not change the brand brain until you accept a suggestion, and only if a text model is configured.</li>
           <li>Plain text, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails closed.</li>

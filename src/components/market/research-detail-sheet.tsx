@@ -75,13 +75,13 @@ function ResearchDetail({ ad }: { ad: ResearchAdRow }) {
           {ANALYSIS_FIELD_LABELS.map(({ key, label }) => {
             const field = analysis[key];
             const evidence = field?.evidence ?? [];
-            return <div key={key} className="rounded-md border border-border p-3">
+            return <div key={key} className="rounded-sharp border border-hairline p-3">
               <dt className="text-xs font-semibold text-fg-muted">{label}</dt>
               <dd className="mt-1 text-sm">{field?.value?.trim() || <MissingValue>Unclear</MissingValue>}</dd>
               <dd className="mt-2 flex flex-wrap items-center gap-2"><ConfidenceChip value={knownNumber(field?.confidence)} /></dd>
               <dd className="mt-2 text-xs text-fg-muted">
                 Evidence references{evidence.length ? ":" : ": none"}
-                {evidence.length ? <span className="mt-1 flex flex-wrap gap-1">{evidence.map((reference) => <code key={reference} className="break-all rounded border border-border px-1.5 py-0.5">{reference}</code>)}</span> : null}
+                {evidence.length ? <span className="mt-1 flex flex-wrap gap-1">{evidence.map((reference) => <code key={reference} className="break-all rounded-sharp border border-hairline px-1.5 py-0.5">{reference}</code>)}</span> : null}
               </dd>
             </div>;
           })}

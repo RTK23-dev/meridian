@@ -63,13 +63,13 @@ export function ChatPanel({ session, brands, files, onChanged }: { session: Sess
         </CardDescription>
       </CardHeader>
       {session.messages.length === 0 ? (
-        <p className="rounded-md border border-dashed border-border p-4 text-sm text-fg-muted">No messages yet. Start with what the video is for and attach the reference video you want it to feel like.</p>
+        <p className="rounded-sharp border border-dashed border-hairline p-4 text-sm text-fg-muted">No messages yet. Start with what the video is for and attach the reference video you want it to feel like.</p>
       ) : (
         <ol aria-label="Messages" className="space-y-3">
           {session.messages.map((message) => (
-            <li key={message.id} className="rounded-lg border border-border bg-surface-2 p-3">
+            <li key={message.id} className="rounded-sharp border border-hairline bg-overlay p-3">
               <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-fg-muted">
-                <span className="font-semibold text-fg">{message.authorName ?? "A former member"}</span>
+                <span className="font-semibold text-fg-primary">{message.authorName ?? "A former member"}</span>
                 <span>{timeLabel(message.createdAt)}</span>
                 {message.beatRole ? <Badge variant="info">Script: {ROLE_LABELS[message.beatRole]}</Badge> : <Badge>Instruction</Badge>}
               </div>
@@ -192,7 +192,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
   const disabledReason = nothingToSend ? "Type a message or add an attachment." : scriptWithoutText ? "A script line needs text." : referenceCount > 1 ? "A session uses one reference video. Mark the others as material." : null;
 
   return (
-    <form className="mt-5 space-y-3 border-t border-border pt-5" onSubmit={(event) => { event.preventDefault(); if (!disabledReason) void send(); }}>
+    <form className="mt-5 space-y-3 border-t border-hairline pt-5" onSubmit={(event) => { event.preventDefault(); if (!disabledReason) void send(); }}>
       <Textarea label="Message" value={text} maxLength={MAX_MESSAGE_CHARS} onChange={(event) => setText(event.target.value)} placeholder="Make a 30 second reel for our blender with the pacing of the attached video." />
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
@@ -209,7 +209,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
         onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
-        className={`rounded-lg border border-dashed p-4 text-sm ${dragging ? "border-accent bg-accent-soft" : "border-border-strong"}`}
+        className={`rounded-sharp border border-dashed p-4 text-sm ${dragging ? "border-accent bg-accent-muted" : "border-border-strong"}`}
       >
         <div className="flex flex-wrap items-center gap-3">
           <Button type="button" variant="secondary" size="md" leftIcon={<Paperclip aria-hidden="true" className="size-4" />} onClick={() => inputRef.current?.click()}>Attach files</Button>
@@ -224,7 +224,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
       {pendingFiles.length > 0 ? (
         <ul aria-label="Files to send" className="space-y-2">
           {pendingFiles.map((item) => (
-            <li key={item.key} className="flex flex-wrap items-center gap-2 rounded-md border border-border p-2 text-sm">
+            <li key={item.key} className="flex flex-wrap items-center gap-2 rounded-sharp border border-hairline p-2 text-sm">
               <span className="min-w-0 flex-1 break-words font-medium">{item.file.name} · {bytesLabel(item.file.size)}</span>
               <label className="sr-only" htmlFor={`purpose-${item.key}`}>Use of {item.file.name}</label>
               <SelectInput id={`purpose-${item.key}`} className="w-auto py-2 text-sm" value={item.purpose} onChange={(event) => setPendingFiles((current) => current.map((entry) => entry.key === item.key ? { ...entry, purpose: event.target.value as FilePurpose } : entry))}>
@@ -239,7 +239,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
       {pendingSources.length > 0 ? (
         <ul aria-label="Records to attach" className="space-y-2">
           {pendingSources.map((source) => (
-            <li key={`${source.page}-${source.recordId}`} className="flex items-start gap-2 rounded-md border border-border p-2 text-sm">
+            <li key={`${source.page}-${source.recordId}`} className="flex items-start gap-2 rounded-sharp border border-hairline p-2 text-sm">
               <Link2 aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-muted" />
               <span className="min-w-0 flex-1 break-words"><span className="font-semibold">{SOURCE_PAGE_LABELS[source.page]}: {source.title}</span> · {source.snapshot}</span>
               <Button type="button" variant="quiet" size="sm" aria-label={`Remove ${source.title}`} onClick={() => setPendingSources((current) => current.filter((item) => !(item.page === source.page && item.recordId === source.recordId)))}><X aria-hidden="true" className="size-4" /></Button>
@@ -311,7 +311,7 @@ function SourcePicker({ sessionId, brands, defaultBrandId, onPick }: { sessionId
             {results && results.length > 0 ? (
               <ul className="max-h-72 space-y-2 overflow-y-auto">
                 {results.map((result) => (
-                  <li key={result.recordId} className="flex items-start gap-2 rounded-md border border-border p-2 text-sm">
+                  <li key={result.recordId} className="flex items-start gap-2 rounded-sharp border border-hairline p-2 text-sm">
                     <span className="min-w-0 flex-1 break-words"><span className="font-semibold">{result.title}</span><span className="block text-xs text-fg-muted">{result.snapshot}</span></span>
                     <DialogClose asChild><Button type="button" size="sm" variant="secondary" onClick={() => onPick(result)}>Add</Button></DialogClose>
                   </li>

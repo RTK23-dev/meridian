@@ -42,7 +42,7 @@ export function GenerationModelSettings({ organizationId, canAdmin }: { organiza
   const state = (choices.data as TaskChoices | undefined) ?? null;
   const listing = (catalogue.data as CatalogueListing | undefined) ?? null;
 
-  if (choices.isPending) return <p className="text-sm text-muted">Reading this workspace's model choices...</p>;
+  if (choices.isPending) return <p className="text-sm text-fg-muted">Reading this workspace's model choices...</p>;
   if (!state) return <p className="text-sm text-warning" role="status">The model choices could not be read. Reload the page to try again.</p>;
 
   return (
@@ -53,13 +53,13 @@ export function GenerationModelSettings({ organizationId, canAdmin }: { organiza
             ? "OpenRouter is connected for this workspace."
             : `OpenRouter is not connected for this workspace. ${state.connectionReason ?? ""} Nothing is sent for these tasks until it is.`}
         </p>
-        <p className="text-muted">
+        <p className="text-fg-muted">
           The model is read live from OpenRouter's public catalogue. Only text models whose prices OpenRouter states are offered. The cost of a
           call is shown from OpenRouter's own report after the call runs; it is not estimated here.
         </p>
-        {!canAdmin ? <p className="text-muted">Only a workspace admin can choose or clear a model.</p> : null}
+        {!canAdmin ? <p className="text-fg-muted">Only a workspace admin can choose or clear a model.</p> : null}
       </div>
-      {catalogue.isPending && state.connected ? <p className="text-sm text-muted">Reading the OpenRouter model catalogue...</p> : null}
+      {catalogue.isPending && state.connected ? <p className="text-sm text-fg-muted">Reading the OpenRouter model catalogue...</p> : null}
       {listing && !listing.ok && state.connected ? (
         <p className="text-sm text-warning" role="status">
           {listing.reason} No model can be chosen until the catalogue can be read.
@@ -144,10 +144,10 @@ function GenerationTaskRow({
         : "Choose a model from the list. It must be a text model in the live catalogue that suits this task.";
 
   return (
-    <section aria-labelledby={`generation-task-${task.task}`} className="space-y-3 border-t border-line pt-4">
+    <section aria-labelledby={`generation-task-${task.task}`} className="space-y-3 border-t border-hairline pt-4">
       <div>
         <h3 id={`generation-task-${task.task}`} className="font-semibold">{task.label}</h3>
-        <p className="text-sm text-muted">{task.description}</p>
+        <p className="text-sm text-fg-muted">{task.description}</p>
         <p className="mt-1 text-sm">{describeCurrent(task)}</p>
       </div>
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
@@ -216,19 +216,19 @@ function GenerationTaskRow({
       {chosen ? (
         <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
           <div>
-            <dt className="text-muted">Name</dt>
+            <dt className="text-fg-muted">Name</dt>
             <dd>{chosen.name}</dd>
           </div>
           <div>
-            <dt className="text-muted">Takes</dt>
+            <dt className="text-fg-muted">Takes</dt>
             <dd>{chosen.takes.map((modality) => (modality === "image" ? "images (PNG, JPEG)" : modality)).join(", ")}</dd>
           </div>
           <div>
-            <dt className="text-muted">Input price</dt>
+            <dt className="text-fg-muted">Input price</dt>
             <dd>${chosen.promptUsdPerMillionTokens.toFixed(3)} per million tokens</dd>
           </div>
           <div>
-            <dt className="text-muted">Output price</dt>
+            <dt className="text-fg-muted">Output price</dt>
             <dd>${chosen.completionUsdPerMillionTokens.toFixed(3)} per million tokens</dd>
           </div>
         </dl>

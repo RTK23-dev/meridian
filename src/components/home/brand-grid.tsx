@@ -67,20 +67,20 @@ function BrandCard({ brand, lookup }: { brand: BrandSummary; lookup: BrandLookup
           <BrandMark name={brand.name} logoAssetId={brand.logoAssetId} />
           <div className="min-w-0 flex-1">
             <div className="flex items-start justify-between gap-2">
-              <h3 className="truncate text-section font-semibold text-fg">{brand.name}</h3>
+              <h3 className="truncate text-section font-semibold text-fg-primary">{brand.name}</h3>
               <CompletenessRing value={brand.completeness} />
             </div>
             <p className="mt-1 line-clamp-2 min-h-10 text-sm text-fg-muted">{brand.sells || brand.industry || "No description yet."}</p>
           </div>
         </div>
-        <div className="mt-4 space-y-2 border-t border-border pt-3">
+        <div className="mt-4 space-y-2 border-t border-hairline pt-3">
           <PipelineProgress machine={machine} />
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-fg-muted">
             <ReviewBadge machine={machine} />
             <span>{brand.updatedAt ? `Updated ${relativeTime(brand.updatedAt)}` : "No recorded update time"}</span>
           </div>
         </div>
-        <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-fg">
+        <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-fg-primary">
           Open brand <ArrowRight aria-hidden="true" className="size-4" />
         </span>
       </Link>
@@ -95,10 +95,10 @@ export function CompletenessRing({ value }: { value: number }) {
     <span
       role="img"
       aria-label={`${percent}% complete`}
-      className="grid size-11 shrink-0 place-items-center rounded-full text-[10px] font-semibold text-fg"
-      style={{ background: `conic-gradient(var(--color-fg) ${percent}%, var(--color-border) 0)` }}
+      className="grid size-11 shrink-0 place-items-center rounded-full text-[11px] font-semibold text-fg-primary"
+      style={{ background: `conic-gradient(var(--fg-primary) ${percent}%, var(--border-hairline) 0)` }}
     >
-      <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-surface">{percent}%</span>
+      <span aria-hidden="true" className="grid size-8 place-items-center rounded-full bg-raised">{percent}%</span>
     </span>
   );
 }
@@ -132,10 +132,10 @@ function summary(stages: PipelineStage[]): string {
 }
 
 function segmentClass(stage: PipelineStage): string {
-  if (stage.state === "done") return "bg-fg";
-  if (stage.state === "in_progress") return "bg-fg/40";
+  if (stage.state === "done") return "bg-fg-primary";
+  if (stage.state === "in_progress") return "bg-fg-primary/40";
   if (stage.state === "blocked") return "border border-dashed border-border-strong bg-transparent";
-  return "bg-surface-2";
+  return "bg-overlay";
 }
 
 function ReviewBadge({ machine }: { machine: MachineState }) {

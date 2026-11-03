@@ -24,7 +24,7 @@ export function TraitBarChart({ title, description, rows, tone }: {
           <CartesianGrid horizontal={false} strokeOpacity={0.2} />
           <XAxis type="number" allowDecimals={false} tick={{ fill: "currentColor", fontSize: 12 }} />
           <YAxis type="category" dataKey="trait" width={140} tick={{ fill: "currentColor", fontSize: 12 }} />
-          <Tooltip contentStyle={{ background: "var(--color-surface)", border: "1px solid var(--color-border)", color: "var(--color-fg)", borderRadius: 6, fontSize: 12 }} labelStyle={{ color: "var(--color-fg)" }} itemStyle={{ color: "var(--color-fg)" }} />
+          <Tooltip contentStyle={{ background: "var(--bg-raised)", border: "1px solid var(--border-hairline)", color: "var(--fg-primary)", borderRadius: 6, fontSize: 12 }} labelStyle={{ color: "var(--fg-primary)" }} itemStyle={{ color: "var(--fg-primary)" }} />
           <Bar dataKey="count" name="Count" fill="currentColor" radius={[0, 4, 4, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>

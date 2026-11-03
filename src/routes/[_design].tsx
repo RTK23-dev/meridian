@@ -44,7 +44,7 @@ function DesignSystemPage() {
   const { theme, setTheme } = useTheme();
   return <TooltipProvider>
     <Toaster />
-    <main className="mx-auto max-w-6xl space-y-12 px-4 py-8 text-fg sm:px-8">
+    <main className="mx-auto max-w-6xl space-y-12 px-4 py-8 text-fg-primary sm:px-8">
       <PageHeader title="Design system" description="Component specimens only. Values below are not Meridian account or campaign data." breadcrumbs={[{ label: "Developer tools" }, { label: "Design system" }]} actions={<Button leftIcon={<Plus aria-hidden="true" />}>Primary action</Button>} secondaryActions={<Button variant="secondary">Secondary</Button>} />
 
       <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Preview theme">
@@ -96,7 +96,7 @@ function DesignSystemPage() {
           <Field label="Text field with an error" error="Enter a value of at least three characters."><Input defaultValue="ab" /></Field>
           <Field label="Disabled field" hint="Disabled because the workspace is read only."><Input disabled defaultValue="Read only" /></Field>
           <Field label="Text area"><Textarea defaultValue="Example text" /></Field>
-          <Field label="Native select"><select aria-label="Native select example" className="w-full min-h-10 rounded-sharp border border-border-strong bg-bg px-3 py-2 text-body"><option>Compatibility option</option></select></Field>
+          <Field label="Native select"><select aria-label="Native select example" className="w-full min-h-10 rounded-sharp border border-border-strong bg-ground px-3 py-2 text-body"><option>Compatibility option</option></select></Field>
           <Select label="Styled select" defaultValue="one"><SelectItem value="one">One</SelectItem><SelectItem value="two">Two</SelectItem></Select>
           <div className="space-y-4">
             <Checkbox checked={checked} onCheckedChange={(value) => setChecked(value === true)} label="Checkbox example" hint="This is a specimen control." />

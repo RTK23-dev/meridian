@@ -57,10 +57,10 @@ export function ProductionQueue({
   const cancelling = usePendingVariables<string>(jobActionKey("cancel", organizationId));
 
   if (query.isError && !query.data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
-  if (!query.data) return <p role="status" className="text-sm text-muted">Loading the production queue…</p>;
+  if (!query.data) return <p role="status" className="text-sm text-fg-muted">Loading the production queue…</p>;
 
   const { counts, total, recent } = query.data;
-  if (total === 0) return <p className="text-sm text-muted">No production jobs for this brand yet. A queued run adds its jobs here.</p>;
+  if (total === 0) return <p className="text-sm text-fg-muted">No production jobs for this brand yet. A queued run adds its jobs here.</p>;
 
   function runAction(action: JobAction, jobId: string) {
     setMessage(null);
@@ -76,14 +76,14 @@ export function ProductionQueue({
     <div className="space-y-3">
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {STATUS_ORDER.map((status) => (
-          <div key={status.key} className="rounded-md border border-line p-3">
-            <dt className="text-sm text-muted">{status.label}</dt>
+          <div key={status.key} className="rounded-sharp border border-hairline p-3">
+            <dt className="text-sm text-fg-muted">{status.label}</dt>
             <dd className="text-xl font-semibold tabular-nums">{counts[status.key]}</dd>
           </div>
         ))}
       </dl>
-      <p className="text-sm text-muted">Showing the {recent.length} most recent of {total} jobs.</p>
-      <ol aria-label="Recent production jobs" className="divide-y divide-line rounded-md border border-line text-sm">
+      <p className="text-sm text-fg-muted">Showing the {recent.length} most recent of {total} jobs.</p>
+      <ol aria-label="Recent production jobs" className="divide-y divide-line rounded-sharp border border-hairline text-sm">
         {recent.map((job: JobView) => {
           const stage = stageLabel(job.jobType);
           return (
@@ -99,12 +99,12 @@ export function ProductionQueue({
                   ) : null}
                 </span>
               </div>
-              <p className="text-muted">
+              <p className="text-fg-muted">
                 Attempt {job.attempts} of {job.maxAttempts} · created {when(job.createdAt)}
                 {job.cancelRequested ? " · cancellation requested" : ""}
               </p>
               {job.error ? <p className="text-danger [overflow-wrap:anywhere]">{job.error}</p> : null}
-              {message?.jobId === job.id && message.text ? <p role="status" className="text-sm text-muted">{message.text}</p> : null}
+              {message?.jobId === job.id && message.text ? <p role="status" className="text-sm text-fg-muted">{message.text}</p> : null}
             </li>
           );
         })}

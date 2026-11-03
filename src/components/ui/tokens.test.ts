@@ -63,17 +63,16 @@ test("the accent is a variable the reader's choice sets, and it starts as the re
   assert.equal(declarations(ruleBody(':root[data-theme="light"]'))["--accent-red"], "#C8102E");
 });
 
-test("legacy names stay defined as aliases of the Katana roles, so screens not yet moved keep their meaning", () => {
-  assert.equal(aliases["--color-bg"], "var(--bg-base)");
-  assert.equal(aliases["--color-surface"], "var(--bg-raised)");
-  assert.equal(aliases["--color-surface-2"], "var(--bg-overlay)");
-  assert.equal(aliases["--color-border"], "var(--border-hairline)");
-  assert.equal(aliases["--color-fg"], "var(--fg-primary)");
-  assert.equal(aliases["--color-accent"], "var(--accent)");
-  assert.equal(aliases["--color-accent-fg"], "var(--on-accent)");
-  assert.equal(aliases["--color-accent-soft"], "var(--accent-muted)");
-  assert.equal(aliases["--color-brass-text"], "var(--accent-text)");
-  assert.equal(aliases["--color-danger-soft"], "var(--bg-raised)");
+test("the AttentionOS names are retired: the screens use the Katana role names, and no legacy alias remains", () => {
+  for (const legacy of ["--color-bg", "--color-surface", "--color-surface-2", "--color-border", "--color-fg", "--color-accent-fg", "--color-accent-soft", "--color-brass-text", "--color-success-soft", "--color-paper", "--color-panel", "--color-line", "--color-muted", "--color-brass"]) {
+    assert.equal(legacy in aliases, false, `${legacy} is retired`);
+  }
+  assert.equal(aliases["--color-fg-primary"], "var(--fg-primary)");
+  assert.equal(aliases["--color-ground"], "var(--bg-base)");
+  assert.equal(aliases["--color-raised"], "var(--bg-raised)");
+  assert.equal(aliases["--color-overlay"], "var(--bg-overlay)");
+  assert.equal(aliases["--color-on-accent"], "var(--on-accent)");
+  assert.equal(aliases["--color-accent-muted"], "var(--accent-muted)");
 });
 
 test("every var(--color-*) written in the app is defined in styles.css", () => {

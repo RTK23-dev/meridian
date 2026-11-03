@@ -37,16 +37,16 @@ export function SleepModePanel({ brandId, canAdmin }: { brandId: string; canAdmi
   });
 
   return (
-    <section aria-labelledby="sleep-mode-heading" className="space-y-4 rounded-lg border border-border p-4">
+    <section aria-labelledby="sleep-mode-heading" className="space-y-4 rounded-sharp border border-hairline p-4">
       <div className="space-y-1">
         <h2 id="sleep-mode-heading" className="text-base font-semibold">Sleep mode</h2>
-        <p className="text-sm text-muted">
+        <p className="text-sm text-fg-muted">
           Each night Meridian gathers, grades and plans for the niche below, and stops before production. A person approves produce
           in the run. Ten per cent of planned items are held out and recorded for the learning step.
         </p>
       </div>
 
-      {sleep.isPending ? <p className="text-sm text-muted">Loading sleep mode...</p> : null}
+      {sleep.isPending ? <p className="text-sm text-fg-muted">Loading sleep mode...</p> : null}
       {sleep.error ? <p role="alert" className="text-sm text-danger">{errorText(sleep.error)}</p> : null}
 
       {sleep.data ? (
@@ -83,13 +83,13 @@ export function SleepModePanel({ brandId, canAdmin }: { brandId: string; canAdmi
               {save.error ? <p role="alert" className="text-sm text-danger sm:col-span-2">{errorText(save.error)}</p> : null}
             </form>
           ) : (
-            <p className="text-muted">Only an admin can change sleep mode. You can read its mornings below.</p>
+            <p className="text-fg-muted">Only an admin can change sleep mode. You can read its mornings below.</p>
           )}
         </div>
       ) : null}
 
       {sleep.data && sleep.data.nights.length === 0 ? (
-        <p className="text-sm text-muted">No night has run yet. The first morning summary appears here.</p>
+        <p className="text-sm text-fg-muted">No night has run yet. The first morning summary appears here.</p>
       ) : null}
       {sleep.data && sleep.data.nights.length > 0 ? (
         <ul className="space-y-3">
@@ -105,13 +105,13 @@ export function SleepModePanel({ brandId, canAdmin }: { brandId: string; canAdmi
 function NightLine({ night }: { night: SleepNightView }) {
   const counts = night.counts;
   return (
-    <li className="space-y-1 rounded-md border border-border p-3 text-sm">
+    <li className="space-y-1 rounded-sharp border border-hairline p-3 text-sm">
       <p className="font-medium">
         {night.nightKey}: {statusWords(night.status)}
       </p>
       {night.summary ? <p>{night.summary}</p> : null}
-      {night.reason && night.reason !== night.summary ? <p className="text-muted">{night.reason}</p> : null}
-      <p className="text-muted">
+      {night.reason && night.reason !== night.summary ? <p className="text-fg-muted">{night.reason}</p> : null}
+      <p className="text-fg-muted">
         Picked {counts.picks ?? "not recorded"}, planned {counts.planned ?? "not recorded"}, held out {counts.holdout ?? "not recorded"}.
       </p>
       {night.failures.length > 0 ? (
@@ -122,7 +122,7 @@ function NightLine({ night }: { night: SleepNightView }) {
         </ul>
       ) : null}
       {night.holdoutItemIds.length > 0 ? (
-        <p className="break-all text-muted">Holdout items: {night.holdoutItemIds.join(", ")}</p>
+        <p className="break-all text-fg-muted">Holdout items: {night.holdoutItemIds.join(", ")}</p>
       ) : null}
     </li>
   );

@@ -45,7 +45,7 @@ export function BatchReview({ items, busy, onOpen, onDecided }: { items: ReviewI
       <p className="text-sm text-fg-muted">{decided} of {delivered.length} decided. Approve a video you would use, or reject it with a reason.</p>
       <ul className="grid gap-3 sm:grid-cols-2">
         {delivered.map((item) => (
-          <li key={item.sessionId} className="space-y-2 rounded-lg border border-border p-3 text-sm">
+          <li key={item.sessionId} className="space-y-2 rounded-sharp border border-hairline p-3 text-sm">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <p className="min-w-0 font-semibold">{item.title}</p>
               <Badge variant={APPROVAL_VARIANT[item.approval ?? "not_decided"]}>{APPROVAL_LABEL[item.approval ?? "not_decided"]}</Badge>
@@ -58,7 +58,7 @@ export function BatchReview({ items, busy, onOpen, onDecided }: { items: ReviewI
             {rejecting === item.sessionId ? (
               <div className="space-y-2">
                 <label className="block text-sm font-semibold" htmlFor={`reject-${item.sessionId}`}>Why is it rejected?</label>
-                <textarea id={`reject-${item.sessionId}`} className="w-full rounded-md border border-border-strong bg-overlay p-2" rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />
+                <textarea id={`reject-${item.sessionId}`} className="w-full rounded-sharp border border-border-strong bg-overlay p-2" rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />
                 <p className="text-fg-muted">At least {REJECT_REASON_MIN} characters. The reason stays on record.</p>
                 <div className="flex gap-2">
                   <Button type="button" size="sm" disabled={working || reason.trim().length < REJECT_REASON_MIN} onClick={() => void decide(item.sessionId, "rejected")}>Reject with this reason</Button>

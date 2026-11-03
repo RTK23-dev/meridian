@@ -179,7 +179,7 @@ function Integrations() {
         </p>
       </div>
 
-      {note ? <p className="text-sm text-fg" role="status">{note}</p> : null}
+      {note ? <p className="text-sm text-fg-primary" role="status">{note}</p> : null}
       {failures.map((error, index) => {
         const raw = errorText(error);
         return <FormError key={index} message={plainServerError(raw, "settings")} raw={raw} />;
@@ -191,7 +191,7 @@ function Integrations() {
         return (
           <section key={group.id} aria-labelledby={`group-${group.id}`} className="space-y-3">
             <div>
-              <h2 id={`group-${group.id}`} className="text-section font-semibold text-fg">{group.label}</h2>
+              <h2 id={`group-${group.id}`} className="text-section font-semibold text-fg-primary">{group.label}</h2>
               <p className="text-sm text-fg-muted">{group.hint}</p>
             </div>
             <ul className="grid min-w-0 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -206,18 +206,18 @@ function Integrations() {
               ))}
             </ul>
             {group.id === "ads" ? (
-              <p className="rounded-md border border-border bg-surface p-3 text-sm text-fg-muted">
-                <span className="font-semibold text-fg">Publishing: </span>{publishingLine(status)}
+              <p className="rounded-sharp border border-hairline bg-raised p-3 text-sm text-fg-muted">
+                <span className="font-semibold text-fg-primary">Publishing: </span>{publishingLine(status)}
               </p>
             ) : null}
             {group.id === "infrastructure" ? (
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-fg">Background processes</h3>
+                <h3 className="text-sm font-semibold text-fg-primary">Background processes</h3>
                 <ul className="grid gap-2 md:grid-cols-3">
                   {processRows(status).map((row) => (
                     <li key={row.id} className="flex flex-col gap-2 panel">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-fg">{row.label}</span>
+                        <span className="font-semibold text-fg-primary">{row.label}</span>
                         <StatusBadge status={row.status} label={row.label} />
                       </div>
                       <p className="text-sm text-fg-muted">{row.summary}</p>

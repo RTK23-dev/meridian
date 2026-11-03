@@ -112,13 +112,13 @@ export function RunBuilder({
           <SelectInput value={draft.automation} onChange={(event) => update("automation", event.target.value as AutomationMode)} disabled={!canEdit}>
             {AUTOMATION_MODES.map((mode) => <option key={mode} value={mode}>{AUTOMATION_LABELS[mode]}</option>)}
           </SelectInput>
-          <p className="text-sm text-muted">{AUTOMATION_DESCRIPTIONS[draft.automation]}</p>
+          <p className="text-sm text-fg-muted">{AUTOMATION_DESCRIPTIONS[draft.automation]}</p>
         </Field>
         <Field label="Intent">
           <SelectInput value={draft.intent} onChange={(event) => update("intent", event.target.value as Intent)} disabled={!canEdit}>
             {INTENTS.map((intent) => <option key={intent} value={intent}>{INTENT_LABELS[intent]}</option>)}
           </SelectInput>
-          <p className="text-sm text-muted">{INTENT_DESCRIPTIONS[draft.intent]}</p>
+          <p className="text-sm text-fg-muted">{INTENT_DESCRIPTIONS[draft.intent]}</p>
         </Field>
         <Field label="Decision engine">
           <SelectInput value={draft.decisionEngine} onChange={(event) => update("decisionEngine", event.target.value as DecisionEngineChoice)} disabled={!canEdit}>
@@ -141,7 +141,7 @@ export function RunBuilder({
           ))}
         </div>
         {draft.formats.includes("video") || draft.formats.includes("carousel") ? (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-fg-muted">
             Video and carousel are made through the provider you choose below. A video that is still rendering keeps the run running and waiting, and the run says why. A provider that is not ready stops the run before any spend.
           </p>
         ) : null}
@@ -149,9 +149,9 @@ export function RunBuilder({
 
       <fieldset className="space-y-3">
         <legend className="text-sm font-semibold">Platforms</legend>
-        {channelsState === "loading" ? <p className="text-sm text-muted">Checking which channels are connected.</p> : null}
-        {channelsState === "error" ? <p className="text-sm text-muted">The channel list could not be loaded, so no platform can be chosen here.</p> : null}
-        {channelsState === "ready" && platformChoices.length === 0 ? <p className="text-sm text-muted">No channels are listed for this brand. A run with no platform lists every organic platform.</p> : null}
+        {channelsState === "loading" ? <p className="text-sm text-fg-muted">Checking which channels are connected.</p> : null}
+        {channelsState === "error" ? <p className="text-sm text-fg-muted">The channel list could not be loaded, so no platform can be chosen here.</p> : null}
+        {channelsState === "ready" && platformChoices.length === 0 ? <p className="text-sm text-fg-muted">No channels are listed for this brand. A run with no platform lists every organic platform.</p> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           {platformChoices.map((channel) => (
             <Checkbox
@@ -163,7 +163,7 @@ export function RunBuilder({
             />
           ))}
         </div>
-        <p className="text-sm text-muted">A platform that is not connected stays in the run and is reported as not connected. It is never sent.</p>
+        <p className="text-sm text-fg-muted">A platform that is not connected stays in the run and is reported as not connected. It is never sent.</p>
       </fieldset>
 
       {draft.formats.length > 0 ? (
@@ -182,7 +182,7 @@ export function RunBuilder({
                   ))}
                 </SelectInput>
                 {draft.providers.video === ENGINE_VIDEO_PROVIDER_ID ? (
-                  <p className="text-sm text-muted">The Meridian video engine makes the video from the plan. A run that names it stops with the engine's reason when it cannot run, such as no connected key, no cost per master, or a field the plan does not carry.</p>
+                  <p className="text-sm text-fg-muted">The Meridian video engine makes the video from the plan. A run that names it stops with the engine's reason when it cannot run, such as no connected key, no cost per master, or a field the plan does not carry.</p>
                 ) : null}
               </Field>
             ) : (
@@ -196,7 +196,7 @@ export function RunBuilder({
               </Field>
             ),
           )}
-          <p className="text-sm text-muted md:col-span-3">Choose auto to let the capability matrix choose, or name a provider. A named provider that is not ready stops the run with its reason.</p>
+          <p className="text-sm text-fg-muted md:col-span-3">Choose auto to let the capability matrix choose, or name a provider. A named provider that is not ready stops the run with its reason.</p>
         </fieldset>
       ) : null}
 
@@ -209,7 +209,7 @@ export function RunBuilder({
         >
           <Input value={draft.countries} onChange={(event) => update("countries", event.target.value)} placeholder="US, GB" disabled={!canEdit} />
         </Field>
-        {countryNote ? <p className="text-sm text-muted">{countryNote}</p> : null}
+        {countryNote ? <p className="text-sm text-fg-muted">{countryNote}</p> : null}
         <Field label="Facebook Page id" hint="The numeric id of the Page a paid ad is created for. Leave it blank for an organic run.">
           <Input value={draft.facebookPageId} onChange={(event) => update("facebookPageId", event.target.value)} placeholder="1234567890" disabled={!canEdit} inputMode="numeric" />
         </Field>

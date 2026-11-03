@@ -50,8 +50,8 @@ export function VariantCard({ variant, position, selected, canEdit, reviewBusy, 
       aria-labelledby={headingId}
       onFocus={onSelect}
       className={cn(
-        "rounded-lg border bg-surface p-4 focus:outline-none",
-        selected ? "border-fg ring-1 ring-fg" : "border-border",
+        "rounded-sharp border bg-raised p-4 focus:outline-none",
+        selected ? "border-fg-primary ring-1 ring-fg-primary" : "border-hairline",
       )}
     >
       <p className="eyebrow">
@@ -114,10 +114,10 @@ export function VariantCard({ variant, position, selected, canEdit, reviewBusy, 
 function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: StudioVariant; phase: MediaPhase; frame: FrameShape; title: string; onOpenImage: () => void }) {
   if (phase === "in_flight") {
     return (
-      <div role="status" className="rounded-md border border-dashed border-border p-4 text-sm">
+      <div role="status" className="rounded-sharp border border-dashed border-hairline p-4 text-sm">
         <p className="font-semibold">Generating · {statusLabel(variant.mediaStatus)}</p>
-        <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded-full bg-surface-2">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-fg motion-reduce:animate-none" />
+        <div aria-hidden="true" className="mt-2 h-2 w-full overflow-hidden rounded-full bg-overlay">
+          <div className="h-full w-1/3 rounded-full bg-fg-primary" />
         </div>
         <p className="mt-2 text-fg-muted">The provider has not reported a percentage. This card refreshes while the job runs.</p>
       </div>
@@ -125,7 +125,7 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
   }
   if (phase === "failed") {
     return (
-      <div className="rounded-md border border-danger/50 p-4 text-sm">
+      <div className="rounded-sharp border border-danger/50 p-4 text-sm">
         <p className="font-semibold text-danger">Generation failed</p>
         <p className="mt-1">{variant.error ? (serverCodeMessage(variant.error) ?? copy.studio.generationFailed) : copy.studio.noProviderReason}</p>
         {variant.error ? <TechnicalDetails>{variant.error}</TechnicalDetails> : null}
@@ -134,7 +134,7 @@ function VariantMedia({ variant, phase, frame, title, onOpenImage }: { variant: 
   }
   if (!showsMedia(phase)) return null;
   if (!hasStoredFile(variant)) {
-    return <p role="status" className="rounded-md border border-dashed border-border p-4 text-sm">The file is not stored yet, so there is nothing to preview.</p>;
+    return <p role="status" className="rounded-sharp border border-dashed border-hairline p-4 text-sm">The file is not stored yet, so there is nothing to preview.</p>;
   }
 
   const frameClass = frameWidthClass(frame.orientation);

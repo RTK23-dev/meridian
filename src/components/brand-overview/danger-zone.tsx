@@ -34,8 +34,8 @@ export function DangerZone({ brandId, brandName }: { brandId: string; brandName:
   const rawError = removeBrand.error ? errorText(removeBrand.error) : null;
 
   return (
-    <section aria-labelledby="danger-zone-title" className="space-y-3 rounded-lg border border-danger/40 bg-surface p-5">
-      <h2 id="danger-zone-title" className="text-base font-semibold text-fg">Danger zone</h2>
+    <section aria-labelledby="danger-zone-title" className="space-y-3 rounded-sharp border border-danger/40 bg-raised p-5">
+      <h2 id="danger-zone-title" className="text-base font-semibold text-fg-primary">Danger zone</h2>
       <p className="text-sm text-fg-muted">Deleting this brand removes it from your workspace and leaves an audit record.</p>
       <AlertDialog
         open={open}

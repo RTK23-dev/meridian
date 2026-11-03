@@ -19,7 +19,7 @@ export function UnknownValue() {
 export function ScoreValue({ value }: { value: number | null }) {
   if (value === null) return <UnknownValue />;
   const percent = barPercent(value) ?? 0;
-  return <span className="inline-flex items-center gap-2 tabular-nums"><span aria-hidden="true" className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-surface-2"><span className="block h-full rounded-full bg-accent" style={{ width: `${percent}%` }} /></span><span>{value.toFixed(2)}</span></span>;
+  return <span className="inline-flex items-center gap-2 tabular-nums"><span aria-hidden="true" className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-overlay"><span className="block h-full rounded-full bg-accent" style={{ width: `${percent}%` }} /></span><span>{value.toFixed(2)}</span></span>;
 }
 
 const CATEGORY_CHIP: Record<OpportunityCategory, { variant: "info" | "success" | "neutral"; icon: LucideIcon }> = {
@@ -60,7 +60,7 @@ export function HoldBadge() {
 export function HoldBanner({ brandId }: { brandId: string }) {
   return <section aria-labelledby="opportunity-hold-title" className="space-y-1 border-l-2 border-warning pl-4">
     <h2 id="opportunity-hold-title" className="font-semibold">On hold: clear under Reviews</h2>
-    <p className="mt-1 text-sm text-muted">A human review decision is blocking these opportunities from moving to a brief.</p>
+    <p className="mt-1 text-sm text-fg-muted">A human review decision is blocking these opportunities from moving to a brief.</p>
     <Link className="mt-2 inline-flex min-h-11 items-center font-semibold underline underline-offset-4" to="/brands/$brandId/content" params={{ brandId }} search={{ section: "review" }}>Open the review queue</Link>
   </section>;
 }
@@ -74,7 +74,7 @@ export function CategoryLegend() {
     <PopoverContent align="start" className="max-w-sm space-y-3">
       <h2 className="font-semibold">Categories</h2>
       <dl className="space-y-3 text-sm">
-        {CATEGORY_LEGEND.map((item) => <div key={item.key}><dt className="font-semibold">{item.label}</dt><dd className="text-muted">{item.description}</dd></div>)}
+        {CATEGORY_LEGEND.map((item) => <div key={item.key}><dt className="font-semibold">{item.label}</dt><dd className="text-fg-muted">{item.description}</dd></div>)}
       </dl>
     </PopoverContent>
   </Popover>;
@@ -83,7 +83,7 @@ export function CategoryLegend() {
 export function CategoryFilter({ value, onChange }: { value: OpportunityCategory | "all"; onChange: (value: OpportunityCategory | "all") => void }) {
   const options: Array<{ key: OpportunityCategory | "all"; label: string }> = [{ key: "all", label: "All" }, ...CATEGORY_LEGEND.map((item) => ({ key: item.key, label: item.label }))];
   return <div role="group" aria-label="Filter by category" className="flex flex-wrap gap-2">
-    {options.map((option) => <Button key={option.key} type="button" size="sm" variant="secondary" className={value === option.key ? "border-fg bg-surface-2" : undefined} aria-pressed={value === option.key} onClick={() => onChange(option.key)}>{option.label}</Button>)}
+    {options.map((option) => <Button key={option.key} type="button" size="sm" variant="secondary" className={value === option.key ? "border-fg-primary bg-overlay" : undefined} aria-pressed={value === option.key} onClick={() => onChange(option.key)}>{option.label}</Button>)}
   </div>;
 }
 
@@ -104,7 +104,7 @@ export function OpportunityActions({ brandId, item, canEdit, triaging, onTriage 
   onTriage: (id: string, action: TriageAction, reason: string) => Promise<unknown>;
 }) {
   const { data: workspace } = useWorkspace();
-  if (!canEdit) return <span className="text-sm text-muted">Read-only for viewers.</span>;
+  if (!canEdit) return <span className="text-sm text-fg-muted">Read-only for viewers.</span>;
   const actions = triageActionsFor(item.status);
   // A brief is a Content Factory session, which only the workspace's admins can make. It carries this idea's own brief, so the person
   // reviews the idea they picked, not a direction chosen elsewhere.

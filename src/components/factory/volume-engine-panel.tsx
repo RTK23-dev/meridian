@@ -74,7 +74,7 @@ export function VolumeEnginePanel({
           {ASPECT_OPTIONS.map((option) => (
             <label
               key={option.value}
-              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-dashed border-border-strong px-3 text-sm text-fg-muted opacity-70 sm:min-h-9"
+              className="inline-flex min-h-11 items-center gap-2 rounded-sharp border border-dashed border-border-strong px-3 text-sm text-fg-muted opacity-70 sm:min-h-9"
             >
               <input type="checkbox" disabled className="size-4" />
               {option.value}
@@ -112,7 +112,7 @@ export function VolumeEnginePanel({
       />
 
       <fieldset disabled={!canEdit} className="min-w-0 space-y-3" aria-describedby={engineHintId}>
-        <legend className="text-sm font-semibold text-fg">Render engine</legend>
+        <legend className="text-sm font-semibold text-fg-primary">Render engine</legend>
         <p id={engineHintId} className="text-sm text-fg-muted">
           Only an engine the server reports as configured can be chosen. No engine cost is shown, because the server returns none on this screen.
         </p>
@@ -121,12 +121,12 @@ export function VolumeEnginePanel({
             const id = `${engineName}-${row.id}`;
             const detailId = `${id}-detail`;
             return (
-              <div key={row.id} className="rounded-lg border border-border bg-surface p-3">
+              <div key={row.id} className="rounded-sharp border border-hairline bg-raised p-3">
                 <div className="flex min-h-11 flex-wrap items-center justify-between gap-2">
                   <label
                     htmlFor={id}
                     className={cn(
-                      "flex min-h-11 flex-1 items-center gap-3 text-sm font-semibold text-fg",
+                      "flex min-h-11 flex-1 items-center gap-3 text-sm font-semibold text-fg-primary",
                       row.selectable ? "cursor-pointer" : "cursor-not-allowed text-fg-muted",
                     )}
                   >
@@ -154,7 +154,7 @@ export function VolumeEnginePanel({
         </div>
         {selectedEngine && !selectedEngine.selectable ? (
           <p className="text-sm text-fg-muted">
-            <span className="font-semibold text-fg">{selectedEngine.label}</span> is the draft choice, but its state is &quot;{selectedEngine.stateLabel}&quot;. Choose a configured engine to change it.
+            <span className="font-semibold text-fg-primary">{selectedEngine.label}</span> is the draft choice, but its state is &quot;{selectedEngine.stateLabel}&quot;. Choose a configured engine to change it.
           </p>
         ) : null}
         <p className="text-sm text-fg-muted">{NOT_READ_REASON.provider}</p>

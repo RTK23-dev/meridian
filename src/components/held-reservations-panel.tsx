@@ -94,7 +94,7 @@ export function HeldReservationsPanel({ brandId }: { brandId: string }) {
   return (
     <Card>
       <h3 className="text-base font-semibold">Held budget reservations</h3>
-      <p className="mt-1 text-sm text-muted">
+      <p className="mt-1 text-sm text-fg-muted">
         Held budget is released only when the provider's own lookup confirms it holds no job for the submission. Until that happens,
         an admin resolves each held reservation below, and the last check is shown with it.
       </p>
@@ -147,13 +147,13 @@ function HeldReservationRow({ row, busy, onResolve }: {
   }
 
   return (
-    <li className="space-y-3 rounded-md border border-border p-4">
+    <li className="space-y-3 rounded-sharp border border-hairline p-4">
       <UnsavedChangesGuard dirty={isDirty} />
       <p className="text-sm">
         <strong>${row.amountUsd.toFixed(2)}</strong> reserved for {row.provider}. Job status: {row.jobStatus}
         {row.errorCode ? ` (${row.errorCode})` : ""}. Held since {new Date(row.heldSince).toLocaleString()}.
       </p>
-      <p className="text-sm text-muted">{checkText(row.lastCheck)}</p>
+      <p className="text-sm text-fg-muted">{checkText(row.lastCheck)}</p>
       <Field label="Why this outcome was resolved" hint="Required. At least 10 characters." required error={errors.note?.message}>
         <Textarea {...register("note")} />
       </Field>

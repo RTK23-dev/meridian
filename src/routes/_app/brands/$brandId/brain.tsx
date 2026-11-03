@@ -298,7 +298,7 @@ function BrainEditor({ brandId }: { brandId: string }) {
         </div>
 
         {/* A compact bar at the foot of the screen. On phones it sits above the quick navigation (3.5rem tall). It keeps the save control in reach while the form scrolls. */}
-        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 space-y-3 lg:bottom-0 border-t border-border bg-surface/95 px-4 py-3 shadow-md backdrop-blur sm:mx-0 sm:rounded-xl sm:border">
+        <div className="sticky bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-10 -mx-4 space-y-3 lg:bottom-0 border-t border-hairline bg-raised/95 px-4 py-3 sm:mx-0 sm:rounded-sharp sm:border">
           {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
           <UnsavedChangesBar
             dirty={dirty}
@@ -358,7 +358,7 @@ function FieldList({ keys, shared }: { keys: readonly BrainKey[]; shared: FormSh
   return <div className="grid gap-4">
     {required.map((key) => <BrainTextField key={key} fieldKey={key} shared={shared} />)}
     {optional.length > 0 ? (
-      <details className="brain-optional rounded-lg border border-border px-4 py-3">
+      <details className="brain-optional rounded-sharp border border-hairline px-4 py-3">
         <summary className="cursor-pointer text-sm font-semibold">
           {required.length > 0 ? "Optional fields" : "Fields"} ({filledOptional} of {optional.length} filled)
         </summary>

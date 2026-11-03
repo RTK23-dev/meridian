@@ -113,7 +113,7 @@ export function Reviews({ brandId }: { brandId: string }) {
       <div className="max-w-2xl space-y-3">
         <p className="eyebrow">Reviews</p>
         <h1 className="page-title">Holds a person has to clear</h1>
-        <p className="text-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
+        <p className="text-fg-muted">Auto-approve, human review, and reject come from thresholds on structured evidence. A model does not cast this vote. Use <kbd>j</kbd>/<kbd>k</kbd> to move, <kbd>a</kbd> to approve, and <kbd>r</kbd> to reject. A reject needs a reason.</p>
       </div>
       <EngineReviewItems items={data.engineItems} />
       {resolve.error ? <PlainErrorNotice error={resolve.error} /> : null}
@@ -134,7 +134,7 @@ export function Reviews({ brandId }: { brandId: string }) {
         />
       ) : (
         <div className="space-y-3">
-          <p className="text-sm text-muted" aria-live="polite">{countLine}</p>
+          <p className="text-sm text-fg-muted" aria-live="polite">{countLine}</p>
           {wide ? (
             <Group orientation="horizontal" className="min-h-[32rem] items-stretch gap-2">
               <ResizablePanel defaultSize="36%" minSize="24%" className="min-w-0">
@@ -142,7 +142,7 @@ export function Reviews({ brandId }: { brandId: string }) {
                   <ReviewInbox items={open} selectedIndex={index} now={now} onSelect={setSelectedIndex} />
                 </div>
               </ResizablePanel>
-              <Separator aria-label="Resize the review list" className="relative w-2 shrink-0 rounded-full bg-border hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent before:absolute before:inset-y-0 before:-inset-x-2 before:content-[''] pointer-coarse:before:-inset-x-[18px]" />
+              <Separator aria-label="Resize the review list" className="relative w-2 shrink-0 rounded-full bg-hairline hover:bg-border-strong focus-visible:outline-2 focus-visible:outline-accent before:absolute before:inset-y-0 before:-inset-x-2 before:content-[''] pointer-coarse:before:-inset-x-[18px]" />
               <ResizablePanel defaultSize="64%" minSize="40%" className="min-w-0">
                 <div className="max-h-[75vh] overflow-y-auto pl-1">{detail}</div>
               </ResizablePanel>

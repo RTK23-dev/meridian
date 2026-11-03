@@ -268,7 +268,7 @@ export function EngineOpsScreen() {
           >
             <input
               id="engine-request-id"
-              className="min-w-0 flex-1 rounded-md border border-hairline bg-surface px-3 py-2"
+              className="min-w-0 flex-1 rounded-sharp border border-hairline bg-raised px-3 py-2"
               value={requestChoice}
               onChange={(event) => setRequestChoice(event.target.value)}
               autoComplete="off"

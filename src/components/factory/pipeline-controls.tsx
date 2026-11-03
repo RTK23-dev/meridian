@@ -33,7 +33,7 @@ export function ChoiceGroup<T extends string | number>({
   const hintId = `${name}-hint`;
   return (
     <fieldset disabled={disabled} className="min-w-0 space-y-2" aria-describedby={hint ? hintId : undefined}>
-      <legend className="text-sm font-semibold text-fg">{legend}</legend>
+      <legend className="text-sm font-semibold text-fg-primary">{legend}</legend>
       {hint ? <p id={hintId} className="text-sm text-fg-muted">{hint}</p> : null}
       <div className="flex flex-wrap gap-2">
         {options.map((option, index) => {
@@ -53,9 +53,9 @@ export function ChoiceGroup<T extends string | number>({
               />
               <label
                 htmlFor={id}
-                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-md border border-border-strong bg-surface px-3 text-sm font-medium text-fg hover:bg-surface-2 peer-checked:border-accent peer-checked:bg-accent-soft peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sharp border border-border-strong bg-raised px-3 text-sm font-medium text-fg-primary hover:bg-overlay peer-checked:border-accent peer-checked:bg-accent-muted peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
               >
-                {checked ? <Check aria-hidden="true" className="size-4 text-fg" /> : null}
+                {checked ? <Check aria-hidden="true" className="size-4 text-fg-primary" /> : null}
                 {option.label}
               </label>
             </Fragment>
@@ -144,7 +144,7 @@ export function SettingSwitch({
     <div className="space-y-3 panel">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <span id={labelId} className="block text-sm font-semibold text-fg">{label}</span>
+          <span id={labelId} className="block text-sm font-semibold text-fg-primary">{label}</span>
           <p id={hintId} className="text-sm text-fg-muted">{hint}</p>
         </div>
         <label className="flex min-h-11 min-w-11 shrink-0 cursor-pointer items-center justify-center">
@@ -157,11 +157,11 @@ export function SettingSwitch({
             aria-describedby={hintId}
             className="touch-hit-44 h-6 w-11 rounded-full bg-border-strong transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent data-[state=checked]:bg-accent disabled:cursor-not-allowed disabled:opacity-55"
           >
-            <SwitchPrimitive.Thumb className="block size-5 translate-x-0.5 rounded-full bg-surface shadow transition-transform data-[state=checked]:translate-x-[22px]" />
+            <SwitchPrimitive.Thumb className="block size-5 translate-x-0.5 rounded-full bg-raised transition-transform data-[state=checked]:translate-x-[22px]" />
           </SwitchPrimitive.Root>
         </label>
       </div>
-      <p className="text-sm font-medium text-fg">{checked ? onText : offText}</p>
+      <p className="text-sm font-medium text-fg-primary">{checked ? onText : offText}</p>
       {note}
     </div>
   );
@@ -173,17 +173,17 @@ export function NotAppliedNote({ reason, preview = false }: { reason: string; pr
     <p className="flex items-start gap-2 text-sm text-fg-muted">
       <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
       <span>
-        <span className="font-semibold text-fg">{preview ? "Preview only, not saved." : "Not applied."}</span> {reason}
+        <span className="font-semibold text-fg-primary">{preview ? "Preview only, not saved." : "Not applied."}</span> {reason}
       </span>
     </p>
   );
 }
 
 const ENGINE_TONE: Record<EngineState, string> = {
-  configured: "border-success/40 bg-success-soft text-success",
-  not_connected: "border-danger/40 bg-danger-soft text-danger",
-  not_verified: "border-warning/40 bg-warning-soft text-warning",
-  checking: "border-border bg-surface-2 text-fg-muted",
+  configured: "border-success/40 bg-raised text-success",
+  not_connected: "border-danger/40 bg-raised text-danger",
+  not_verified: "border-warning/40 bg-raised text-warning",
+  checking: "border-hairline bg-overlay text-fg-muted",
 };
 
 const ENGINE_ICON: Record<EngineState, typeof Info> = {
@@ -207,9 +207,9 @@ export function EngineStateBadge({ state, label }: { state: EngineState; label: 
 export type Feedback = { tone: "success" | "info" | "error"; message: string; detail?: string };
 
 const FEEDBACK_TONE: Record<Feedback["tone"], string> = {
-  success: "border-success/40 bg-success-soft text-success",
-  info: "border-border-strong bg-surface-2 text-fg",
-  error: "border-danger/40 bg-danger-soft text-danger",
+  success: "border-success/40 bg-raised text-success",
+  info: "border-border-strong bg-overlay text-fg-primary",
+  error: "border-danger/40 bg-raised text-danger",
 };
 
 export function FeedbackLine({ feedback, onDismiss }: { feedback: Feedback | null; onDismiss: () => void }) {
@@ -218,7 +218,7 @@ export function FeedbackLine({ feedback, onDismiss }: { feedback: Feedback | nul
   return (
     <div
       role={feedback.tone === "error" ? "alert" : "status"}
-      className={cn("flex items-start justify-between gap-3 rounded-md border p-3 text-sm", FEEDBACK_TONE[feedback.tone])}
+      className={cn("flex items-start justify-between gap-3 rounded-sharp border p-3 text-sm", FEEDBACK_TONE[feedback.tone])}
     >
       <span className="flex items-start gap-2">
         <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
@@ -228,7 +228,7 @@ export function FeedbackLine({ feedback, onDismiss }: { feedback: Feedback | nul
         type="button"
         onClick={onDismiss}
         aria-label="Dismiss message"
-        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+        className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-sharp focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
       >
         <X aria-hidden="true" className="size-4" />
       </button>

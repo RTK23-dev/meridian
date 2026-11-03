@@ -5,19 +5,19 @@ import { cn } from "./cn";
 import { LoadingMark } from "./loading-mark";
 
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2";
-const quiet = `border-transparent bg-transparent text-fg-secondary hover:bg-raised hover:text-fg active:bg-overlay focus-visible:outline-accent disabled:text-fg-muted ${focus}`;
+const quiet = `border-transparent bg-transparent text-fg-secondary hover:bg-raised hover:text-fg-primary active:bg-overlay focus-visible:outline-accent disabled:text-fg-muted ${focus}`;
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-md border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sharp border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
   {
     variants: {
       variant: {
-        primary: `border-accent bg-accent text-accent-fg hover:border-accent-hover hover:bg-accent-hover active:bg-accent-hover focus-visible:outline-fg-primary disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
-        secondary: `border-border-strong bg-transparent text-fg hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
+        primary: `border-accent bg-accent text-on-accent hover:border-accent-hover hover:bg-accent-hover active:bg-accent-hover focus-visible:outline-fg-primary disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
+        secondary: `border-border-strong bg-transparent text-fg-primary hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
         quiet,
         danger: `border-danger bg-transparent text-danger hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
         ghost: quiet,
-        link: `border-transparent bg-transparent text-fg underline underline-offset-4 hover:no-underline focus-visible:outline-accent ${focus}`,
+        link: `border-transparent bg-transparent text-fg-primary underline underline-offset-4 hover:no-underline focus-visible:outline-accent ${focus}`,
       },
       size: {
         sm: "min-h-10 px-3",

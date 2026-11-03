@@ -220,7 +220,7 @@ function BrandPages({ brandId }: { brandId: string }) {
         <div className="max-w-2xl space-y-2">
           <p className="eyebrow">Theme pages</p>
           <h1 className="page-title">Pages this brand publishes from</h1>
-          <p className="text-muted">
+          <p className="text-fg-muted">
             A page holds the persona, voice and style kits its content uses, the account it posts to, its posting schedule, and whether its
             Instagram posts start as a trial reel. A run that names a page uses these. Nothing is guessed for a field left empty.
           </p>
@@ -250,30 +250,30 @@ function BrandPages({ brandId }: { brandId: string }) {
                   <Badge variant={page.status === "active" ? "success" : "neutral"}>{page.status}</Badge>
                 </div>
                 <h3 className="text-xl">{page.name}</h3>
-                {page.niche ? <p className="text-sm text-muted">{page.niche}</p> : null}
+                {page.niche ? <p className="text-sm text-fg-muted">{page.niche}</p> : null}
                 <dl className="space-y-1 text-sm">
                   <div>
-                    <dt className="text-muted">Account</dt>
+                    <dt className="text-fg-muted">Account</dt>
                     <dd>{page.platformAccount ? `${page.platformAccount.name} (${page.platformAccount.status || "status unknown"})` : "Not linked"}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted">Kits</dt>
+                    <dt className="text-fg-muted">Kits</dt>
                     <dd>
                       Persona {page.personaKitId ?? "not set"} · Voice {page.voiceKitId ?? "not set"} · Style {page.styleKitId ?? "not set"}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-muted">Schedule</dt>
+                    <dt className="text-fg-muted">Schedule</dt>
                     <dd>{scheduleText(page)}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted">Instagram trial</dt>
+                    <dt className="text-fg-muted">Instagram trial</dt>
                     <dd>{trialText(page)}</dd>
                   </div>
                 </dl>
               </div>
               {canEdit ? (
-                <div className="flex items-center justify-end gap-2 border-t border-line pt-3">
+                <div className="flex items-center justify-end gap-2 border-t border-hairline pt-3">
                   {canAdmin ? (
                     <Button type="button" variant="quiet" disabled={archivePage.isPending} onClick={() => void handleArchive(page)}>
                       Archive
@@ -338,7 +338,7 @@ function BrandPages({ brandId }: { brandId: string }) {
             </Field>
             <fieldset className="space-y-2">
               <legend className="text-sm font-semibold">Posting times</legend>
-              <p className="text-sm text-muted">Local times as HH:MM, separated by commas. Leave a day empty for no posts that day.</p>
+              <p className="text-sm text-fg-muted">Local times as HH:MM, separated by commas. Leave a day empty for no posts that day.</p>
               {WEEKDAYS.map((day) => (
                 <Field key={day} label={WEEKDAY_LABELS[day]}>
                   <Input value={draft.times[day]} maxLength={200} placeholder="09:00, 18:30" onChange={(event) => setTime(day, event.target.value)} />
@@ -346,7 +346,7 @@ function BrandPages({ brandId }: { brandId: string }) {
               ))}
             </fieldset>
 
-            <fieldset className="space-y-2 rounded-md border border-line p-3">
+            <fieldset className="space-y-2 rounded-sharp border border-hairline p-3">
               <legend className="text-sm font-semibold">Instagram trial</legend>
               <label className="flex min-h-11 items-start gap-3 text-sm">
                 <input

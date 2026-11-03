@@ -8,7 +8,7 @@ export function NextActionCard({ brandId, action }: { brandId: string; action: N
   return (
     <Card aria-labelledby="next-action-title" className="flex h-full flex-col gap-3">
       <p className="eyebrow">Next best action</p>
-      <h2 id="next-action-title" className="text-section font-semibold text-fg">{action.title}</h2>
+      <h2 id="next-action-title" className="text-section font-semibold text-fg-primary">{action.title}</h2>
       <p className="text-sm text-fg-muted">{action.body}</p>
       <div className="mt-auto pt-2">
         <Button asChild>

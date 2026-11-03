@@ -33,7 +33,7 @@ export function PresetBar({
   return (
     <section aria-labelledby="factory-presets" className="space-y-4">
       <div className="space-y-1">
-        <h3 id="factory-presets" className="font-semibold text-fg">Presets</h3>
+        <h3 id="factory-presets" className="font-semibold text-fg-primary">Presets</h3>
         <p className="max-w-3xl text-sm text-fg-muted">
           &quot;Fill draft&quot; only changes the editor. &quot;Save preset&quot; stores the preset for this brand and replaces the saved copy and any unsaved edits. Neither one changes a run.
         </p>
@@ -47,7 +47,7 @@ export function PresetBar({
             aria-labelledby={`factory-preset-${key}`}
             className="flex flex-col gap-3 panel"
           >
-            <h4 id={`factory-preset-${key}`} className="font-semibold text-fg">{PRESET_LABEL[key]}</h4>
+            <h4 id={`factory-preset-${key}`} className="font-semibold text-fg-primary">{PRESET_LABEL[key]}</h4>
             {matchKey === key ? (
               <p className="text-xs font-semibold text-fg-muted">The draft has this preset&apos;s values.</p>
             ) : null}
@@ -85,7 +85,7 @@ export function PresetBar({
       {cookbooks.length > 0 && brandId !== undefined ? (
         <section aria-labelledby="factory-cookbooks" className="space-y-3">
           <div className="space-y-1">
-            <h4 id="factory-cookbooks" className="font-semibold text-fg">Other cookbooks in this brand</h4>
+            <h4 id="factory-cookbooks" className="font-semibold text-fg-primary">Other cookbooks in this brand</h4>
             <p className="max-w-3xl text-sm text-fg-muted">
               These are read-only here. Open the cookbook library to change one or make a copy.{" "}
               <Link to="/brands/$brandId/cookbooks" params={{ brandId }} className="underline underline-offset-4">Open the cookbook library</Link>
@@ -94,7 +94,7 @@ export function PresetBar({
           <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {cookbooks.map((card) => (
               <li key={`${card.source}:${card.cookbookId}`} className="flex flex-col gap-2 panel">
-                <span className="font-semibold text-fg">{card.label}</span>
+                <span className="font-semibold text-fg-primary">{card.label}</span>
                 <span className="text-sm text-fg-muted">{card.summary}</span>
                 <span className="text-xs font-semibold text-fg-muted">{card.badge}</span>
                 <Button

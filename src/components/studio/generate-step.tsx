@@ -53,13 +53,13 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
       )}
 
       {retryNotice ? (
-        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md border border-border-strong bg-surface-2 p-3 text-sm">
+        <div role="status" className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-sharp border border-border-strong bg-overlay p-3 text-sm">
           <span>{retryNotice}</span>
           <Button type="button" variant="quiet" size="sm" onClick={onDismissRetry}>Dismiss</Button>
         </div>
       ) : null}
 
-      <details className="mt-4 border-t border-border pt-4">
+      <details className="mt-4 border-t border-hairline pt-4">
         <summary className="cursor-pointer text-sm font-semibold">Generation limits for this workspace</summary>
         <div className="mt-3 space-y-3">
           <UsageMeter label="Runs in the last day" used={usage?.runsToday ?? null} limit={DAILY_GENERATION_LIMIT} unit="runs" />

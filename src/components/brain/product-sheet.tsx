@@ -132,7 +132,7 @@ export function ProductSheet({ brandId, open, product, onOpenChange }: {
             className="md:col-span-2"
           />
         </div>
-        <div className="flex shrink-0 flex-wrap gap-2 border-t border-border pt-4">
+        <div className="flex shrink-0 flex-wrap gap-2 border-t border-hairline pt-4">
           <Button type="submit" disabled={pending || isSubmitting}>
             {pending || isSubmitting ? "Saving…" : product ? "Update product" : "Add product"}
           </Button>

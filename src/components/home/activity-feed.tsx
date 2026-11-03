@@ -13,7 +13,7 @@ export function ActivityFeed({ entries, brandNameById }: { entries: AuditEntry[]
           <h2 id="activity-title" className="text-section font-semibold">Recent activity</h2>
           <p className="mt-1 text-sm text-fg-muted">Recorded actions from this workspace audit trail.</p>
         </div>
-        <Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg underline underline-offset-4">View all</Link>
+        <Link to="/audit" className="inline-flex min-h-11 items-center text-sm font-semibold text-fg-primary underline underline-offset-4">View all</Link>
       </div>
       {entries.length === 0 ? (
         <p className="text-sm text-fg-muted">No actions recorded yet.</p>
@@ -24,8 +24,8 @@ export function ActivityFeed({ entries, brandNameById }: { entries: AuditEntry[]
             return (
               <li key={entry.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 py-3 text-sm">
                 <p className="min-w-0">
-                  <strong className="font-semibold text-fg">{line.actor}</strong>{" "}
-                  <span className="text-fg">{line.sentence}</span>
+                  <strong className="font-semibold text-fg-primary">{line.actor}</strong>{" "}
+                  <span className="text-fg-primary">{line.sentence}</span>
                   {line.brandName ? <span className="text-fg-muted"> · {line.brandName}</span> : null}
                 </p>
                 <time dateTime={entry.createdAt} className="shrink-0 text-xs text-fg-muted">{relativeTime(entry.createdAt)}</time>

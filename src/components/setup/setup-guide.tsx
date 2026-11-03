@@ -25,10 +25,10 @@ const MEDIA_IDS = ["perception", "production", "hypit", "openrouter", "heygen", 
 const ACTION = "max-w-full shrink whitespace-normal text-left";
 
 const STATUS_LABEL: Record<SetupStatus, { text: string; className: string }> = {
-  usable: { text: "Configured", className: "bg-success-soft text-success" },
-  deployment_shared_default: { text: "Shared by the server", className: "bg-info-soft text-info" },
-  unusable: { text: "Key cannot be used", className: "bg-danger-soft text-danger" },
-  not_configured: { text: "Not set up", className: "bg-surface-2 text-fg-muted" },
+  usable: { text: "Configured", className: "bg-raised text-success" },
+  deployment_shared_default: { text: "Shared by the server", className: "bg-raised text-info" },
+  unusable: { text: "Key cannot be used", className: "bg-raised text-danger" },
+  not_configured: { text: "Not set up", className: "bg-overlay text-fg-muted" },
 };
 
 /** This session's Check key answers, by row, and the way to record one. Every row list on the page reads the same answers. */
@@ -44,11 +44,11 @@ const STATE_VALUE: Record<"yes" | "no" | "not_checked", { text: string; classNam
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {
-  done: { icon: CircleCheck, className: "bg-success text-accent-fg", label: "Done" },
-  current: { icon: Circle, className: "bg-fg text-bg ring-4 ring-surface-2", label: "Do this now" },
-  todo: { icon: Circle, className: "bg-surface-2 text-fg-muted ring-1 ring-border", label: "To do" },
-  optional: { icon: CircleDashed, className: "bg-surface-2 text-fg-muted ring-1 ring-border", label: "Optional" },
-  unknown: { icon: CircleDashed, className: "bg-warning-soft text-warning", label: "Could not check" },
+  done: { icon: CircleCheck, className: "bg-success text-on-accent", label: "Done" },
+  current: { icon: Circle, className: "bg-fg-primary text-on-accent ring-4 ring-overlay", label: "Do this now" },
+  todo: { icon: Circle, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "To do" },
+  optional: { icon: CircleDashed, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "Optional" },
+  unknown: { icon: CircleDashed, className: "bg-raised text-warning", label: "Could not check" },
 };
 
 /**
@@ -109,7 +109,7 @@ export function SetupGuide() {
           <div className="space-y-3">
             <RowList ids={["meta_graph"]} rowById={rowById} loaded={summaries !== null} canAdmin={canAdmin} organizationId={organizationId} />
             <p className="text-sm text-fg-muted">
-              Meridian creates Meta campaigns and ads with status <strong className="text-fg">paused</strong>. A paused ad does not show or spend until
+              Meridian creates Meta campaigns and ads with status <strong className="text-fg-primary">paused</strong>. A paused ad does not show or spend until
               someone switches it on in Meta Ads Manager. Meridian has no button that switches it on.
               {firstBrand ? <> Connected Facebook Pages and YouTube accounts are set on <Link to={`/brands/${firstBrand.id}/accounts` as never} className="font-semibold text-accent-text underline-offset-4 hover:underline">Connected accounts</Link>.</> : null}
             </p>
@@ -129,9 +129,9 @@ export function SetupGuide() {
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
-        <section aria-labelledby="setup-plain" className="rounded-xl border border-border bg-surface p-5">
-          <h2 id="setup-plain" className="text-lg font-semibold text-fg">What to fill in, and what to skip</h2>
-          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg">
+        <section aria-labelledby="setup-plain" className="rounded-sharp border border-hairline bg-raised p-5">
+          <h2 id="setup-plain" className="text-lg font-semibold text-fg-primary">What to fill in, and what to skip</h2>
+          <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-primary">
             <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one key for the service that judges your ideas.</li>
             <li><strong>Fill in when you need it:</strong> a video maker key to render videos, and Google Drive to upload a reference video.</li>
             <li><strong>Set before any paid step:</strong> your spending limits on <Link to="/billing" className="font-semibold underline underline-offset-4">Billing</Link>. Nothing is set for you, and Meridian refuses to spend until you set the monthly budget.</li>
@@ -139,14 +139,14 @@ export function SetupGuide() {
           </ul>
         </section>
 
-        <section aria-labelledby="setup-progress" className="surface-rise surface-glow rounded-xl border border-border bg-surface p-5 shadow-sm md:p-6">
+        <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
-              <h2 id="setup-progress" className="text-xl font-semibold text-fg">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
+              <h2 id="setup-progress" className="text-xl font-semibold text-fg-primary">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
               <p className="text-sm text-fg-muted">{summary.headline}</p>
             </div>
             {next ? (
-              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-md bg-accent px-4 text-center text-sm font-semibold text-accent-fg transition hover:brightness-110">
+              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-sharp bg-accent px-4 text-center text-sm font-semibold text-on-accent transition hover:brightness-110">
                 Go to: {next.title}
               </a>
             ) : null}
@@ -157,9 +157,9 @@ export function SetupGuide() {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={percent}
-            className="mt-5 h-2 overflow-hidden rounded-full bg-surface-2"
+            className="mt-5 h-2 overflow-hidden rounded-full bg-overlay"
           >
-            <div className="h-full rounded-full bg-fg transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
+            <div className="h-full rounded-full bg-fg-primary transition-[width] duration-700 ease-out" style={{ width: `${percent}%` }} />
           </div>
           {!canAdmin ? <p className="mt-4 text-sm text-fg-muted">Only a workspace admin can save keys or choose the engine. Everyone can read these states.</p> : null}
         </section>
@@ -172,7 +172,7 @@ export function SetupGuide() {
 
         <section aria-labelledby="setup-later" className="space-y-3">
           <div>
-            <h2 id="setup-later" className="text-xl font-semibold text-fg">Later, only when you need it</h2>
+            <h2 id="setup-later" className="text-xl font-semibold text-fg-primary">Later, only when you need it</h2>
             <p className="text-sm text-fg-muted">None of these is needed to start. Open one when you reach the job it is for. More provider settings are in <Link to="/settings" className="font-semibold underline underline-offset-4">Settings</Link>.</p>
           </div>
           <ul className="space-y-2">
@@ -192,15 +192,15 @@ function OptionalStep({ step, body }: { step: GuideStep; body: ReactNode }) {
   const Icon = mark.icon;
   return (
     <li id={`step-${step.id}`} className="scroll-mt-24">
-      <details className="rounded-xl border border-border bg-surface px-4 py-3">
+      <details className="rounded-sharp border border-hairline bg-raised px-4 py-3">
         <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <Icon aria-hidden="true" className={`size-4 shrink-0 ${step.status === "done" ? "text-success" : "text-fg-muted"}`} />
-          <span className="font-semibold text-fg">{step.title}</span>
-          <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">{step.status === "done" ? "Done" : mark.label}</span>
+          <span className="font-semibold text-fg-primary">{step.title}</span>
+          <span className="rounded-full bg-overlay px-2.5 py-0.5 text-xs font-semibold text-fg-muted">{step.status === "done" ? "Done" : mark.label}</span>
           <span className="w-full text-sm text-fg-muted sm:w-auto">{step.when}</span>
         </summary>
-        <div className="mt-3 space-y-3 border-t border-border pt-3">
-          <p className="text-sm text-fg">{step.what}</p>
+        <div className="mt-3 space-y-3 border-t border-hairline pt-3">
+          <p className="text-sm text-fg-primary">{step.what}</p>
           <StepDetail text={step.detail} />
           {body}
         </div>
@@ -220,7 +220,7 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
     <li id={`step-${step.id}`} className="scroll-mt-24">
       <article
         aria-labelledby={`step-title-${step.id}`}
-        className={`stagger-in rounded-xl border bg-surface p-5 shadow-sm transition duration-300 hover:shadow-md md:p-6 ${isCurrent ? "border-fg" : "border-border"}`}
+        className={`stagger-in rounded-sharp border bg-raised p-5 transition duration-300 md:p-6 ${isCurrent ? "border-fg-primary" : "border-hairline"}`}
         style={{ animationDelay: `${Math.min(index, 2) * 40}ms` }}
       >
         <div className="flex items-start gap-4">
@@ -229,30 +229,30 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
           </span>
           <div className="min-w-0 flex-1 space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h3 id={`step-title-${step.id}`} className="text-xl font-semibold text-fg">
+              <h3 id={`step-title-${step.id}`} className="text-xl font-semibold text-fg-primary">
                 <span className="mr-2 text-fg-muted">{index + 1}.</span>{step.title}
               </h3>
-              <span className="rounded-full bg-surface-2 px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
+              <span className="rounded-full bg-overlay px-2.5 py-0.5 text-xs font-semibold text-fg-muted">
                 {step.required ? "Required" : "Optional"} · {mark.label}
               </span>
             </div>
             {compact ? <p className="text-sm text-fg-muted">{step.when}</p> : null}
             {compact ? (
               <details className="group pt-1">
-                <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-md border border-border px-4 text-sm font-semibold text-fg hover:bg-surface-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+                <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sharp border border-hairline px-4 text-sm font-semibold text-fg-primary hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
                   {step.status === "done" ? "Review or change this step" : "Open this step"}
                 </summary>
                 <div className="mt-3 space-y-3">
-                  <p className="text-sm font-semibold text-fg">{step.when}</p>
-                  <p className="text-sm text-fg">{step.what}</p>
+                  <p className="text-sm font-semibold text-fg-primary">{step.when}</p>
+                  <p className="text-sm text-fg-primary">{step.what}</p>
                   <StepDetail text={step.detail} />
                   {body}
                 </div>
               </details>
             ) : (
               <>
-                <p className="text-sm font-semibold text-fg">{step.when}</p>
-                <p className="text-sm text-fg">{step.what}</p>
+                <p className="text-sm font-semibold text-fg-primary">{step.when}</p>
+                <p className="text-sm text-fg-primary">{step.what}</p>
                 <StepDetail text={step.detail} />
                 <div className="pt-1">{body}</div>
               </>
@@ -285,19 +285,19 @@ function SourcesAction({ rowById, loaded, canAdmin, organizationId, brandId }: {
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
-          <p className="font-semibold text-fg">Read one public page</p>
+        <div className="space-y-2 rounded-sharp border border-hairline bg-overlay p-4">
+          <p className="font-semibold text-fg-primary">Read one public page</p>
           <p className="text-sm text-fg-muted">No key. You paste one page URL, and Meridian reads that exact page and stores its text as evidence. This is not a search. It reads the site&apos;s robots.txt first, and it reports a bot check instead of getting past it.</p>
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/market` as never}>Read a public page on Market</Link></Button> : null}
         </div>
-        <div className="space-y-2 rounded-lg border border-border bg-surface-2 p-4">
-          <p className="font-semibold text-fg">Your own files and links</p>
+        <div className="space-y-2 rounded-sharp border border-hairline bg-overlay p-4">
+          <p className="font-semibold text-fg-primary">Your own files and links</p>
           <p className="text-sm text-fg-muted">No key. Add the files and links you have the right to use: brand source material in the brand brain, and your own creatives in the Library.</p>
           {brandId ? <Button asChild variant="quiet" className={ACTION}><Link to={`/brands/${brandId}/library` as never}>Open Library</Link></Button> : null}
         </div>
       </div>
-      <details className="rounded-lg border border-border p-4">
-        <summary className="cursor-pointer font-semibold text-fg">Optional: search by phrase</summary>
+      <details className="rounded-sharp border border-hairline p-4">
+        <summary className="cursor-pointer font-semibold text-fg-primary">Optional: search by phrase</summary>
         <p className="mt-2 text-sm text-fg-muted">
           Open this only if you want Meridian to search for examples matching a phrase. To read one public page URL or use your own files, leave these connections alone.
           These are your developer keys for the search services, not logins for the brands you study.
@@ -337,10 +337,10 @@ function RowList({
         if (!row) return null;
         const status = STATUS_LABEL[row.status];
         return (
-          <div key={id} className="space-y-3 rounded-lg border border-border p-4" data-row={id}>
+          <div key={id} className="space-y-3 rounded-sharp border border-hairline p-4" data-row={id}>
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0 space-y-1">
-                <p className="font-semibold text-fg">{row.label}</p>
+                <p className="font-semibold text-fg-primary">{row.label}</p>
                 {descriptions?.[id] ? <p className="text-sm text-fg-muted">{descriptions[id]}</p> : null}
                 <OperatorReason text={row.reason} />
                 {row.fingerprint ? <p className="font-mono text-xs text-fg-muted">Stored key ends {row.fingerprint}</p> : null}
@@ -350,8 +350,8 @@ function RowList({
             </div>
             <ul className="grid gap-2 sm:grid-cols-3" aria-label={`${row.label}: setup states`}>
               {setupStates(row, tests[id] ?? null).map((reading) => (
-                <li key={reading.name} className="rounded-md border border-border p-2.5">
-                  <p className="text-sm font-semibold text-fg">
+                <li key={reading.name} className="rounded-sharp border border-hairline p-2.5">
+                  <p className="text-sm font-semibold text-fg-primary">
                     {reading.label}: <span className={STATE_VALUE[reading.value].className}>{STATE_VALUE[reading.value].text}</span>
                   </p>
                   <p className="mt-0.5 text-xs text-fg-muted [overflow-wrap:anywhere]">{reading.detail}</p>
@@ -362,8 +362,8 @@ function RowList({
               <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
             ) : null}
             {row.save.kind === "form" && row.fingerprint ? (
-              <details className="group rounded-md border border-border p-3">
-                <summary className="cursor-pointer text-sm font-semibold text-fg underline decoration-accent underline-offset-4">Replace or remove the key</summary>
+              <details className="group rounded-sharp border border-hairline p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-fg-primary underline decoration-accent underline-offset-4">Replace or remove the key</summary>
                 <div className="mt-3">
                   <KeyForm row={row} organizationId={organizationId} canAdmin={canAdmin} category={row.save.category} />
                 </div>
@@ -381,7 +381,7 @@ function RowList({
 function StorageAction({ row, loaded }: { row: SetupRow | undefined; loaded: boolean }) {
   if (!loaded || !row) return <p className="text-sm text-fg-muted">Loading the storage state...</p>;
   return (
-    <div className="space-y-2 rounded-lg border border-border p-4">
+    <div className="space-y-2 rounded-sharp border border-hairline p-4">
       <OperatorReason text={row.reason} />
       {row.save.kind === "deployment" ? (
         <OperatorVariables names={row.save.variables} lead="This is set on the server, not here." />

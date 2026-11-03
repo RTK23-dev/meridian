@@ -282,7 +282,7 @@ function ReliabilityTable({ bins }: { bins: ReliabilityBins }) {
         </thead>
         <tbody>
           {bins.map((bin) => (
-            <tr key={bin.from} className="border-t border-border">
+            <tr key={bin.from} className="border-t border-hairline">
               <td className="py-1 pr-3 tabular-nums">{bin.from.toFixed(1)} to {bin.to.toFixed(1)}</td>
               <td className="py-1 pr-3 tabular-nums">{bin.count}</td>
               <td className="py-1 pr-3 tabular-nums">{bin.successRate === null ? "none" : `${Math.round(bin.successRate * 100)}%`}</td>
@@ -326,7 +326,7 @@ function ProposalCard({ proposal, canAdmin, busy, deciding, onApprove, onReject 
           <h3 className="text-sm font-semibold">Change against the active baseline</h3>
           <div className="grid gap-2">
             {proposal.changes.map((change) => (
-              <div key={change.field} className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border pt-3 text-sm sm:grid-cols-4">
+              <div key={change.field} className="grid grid-cols-2 gap-x-3 gap-y-1 border-t border-hairline pt-3 text-sm sm:grid-cols-4">
                 <p className="col-span-2 font-semibold sm:col-span-1">{FIELD_LABELS[change.field]}</p>
                 <p><span className="text-xs text-fg-muted">Active</span> <span className="tabular-nums">{change.baseline.toFixed(3)}</span></p>
                 <p><span className="text-xs text-fg-muted">Proposed</span> <span className="tabular-nums">{change.proposed.toFixed(3)}</span></p>

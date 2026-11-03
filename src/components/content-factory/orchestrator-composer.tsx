@@ -109,7 +109,7 @@ export function OrchestratorComposer({
       aria-labelledby="composer-heading"
       noValidate
       onSubmit={(event) => void planTheRun(event)}
-      className="surface-glow flex flex-col gap-6 rounded-xl border border-border bg-surface p-4 sm:p-6"
+      className=" flex flex-col gap-6 rounded-sharp border border-hairline bg-raised p-4 sm:p-6"
     >
       <header className="flex flex-col gap-2">
         <p className="eyebrow">Orchestrator</p>
@@ -167,7 +167,7 @@ export function OrchestratorComposer({
                   <button
                     type="button"
                     onClick={() => setGoal(example)}
-                    className="inline-flex min-h-11 items-center rounded-full border border-border bg-surface px-3 text-left text-xs text-fg hover:bg-surface-2 sm:min-h-8"
+                    className="inline-flex min-h-11 items-center rounded-full border border-hairline bg-raised px-3 text-left text-xs text-fg-primary hover:bg-overlay sm:min-h-8"
                   >
                     {example}
                   </button>
@@ -252,7 +252,7 @@ export function OrchestratorComposer({
             onChange={(event) => setBudget(event.target.value)}
           />
 
-          <section aria-labelledby="composer-model-heading" className="flex flex-col gap-2 rounded-lg border border-border bg-surface-2 p-4">
+          <section aria-labelledby="composer-model-heading" className="flex flex-col gap-2 rounded-sharp border border-hairline bg-overlay p-4">
             <h3 id="composer-model-heading" className="text-sm font-semibold">
               Orchestrating model
             </h3>
@@ -265,14 +265,14 @@ export function OrchestratorComposer({
             ) : (
               <p className="flex flex-col gap-1 text-sm">
                 <span className="text-fg-muted">Stored for this workspace:</span>
-                <code className="min-w-0 break-all font-mono text-xs text-fg" title={storedModel}>
+                <code className="min-w-0 break-all font-mono text-xs text-fg-primary" title={storedModel}>
                   {storedModel}
                 </code>
               </p>
             )}
             <p className="text-xs text-fg-muted">
               {storedModel === null ? "Choose one in the " : "Change it in the "}
-              <Link to="/content-factory" className="font-medium text-fg underline underline-offset-4 hover:no-underline">
+              <Link to="/content-factory" className="font-medium text-fg-primary underline underline-offset-4 hover:no-underline">
                 Content Factory panel
               </Link>
               . It is checked against the live catalog when the plan is written.
@@ -300,7 +300,7 @@ export function OrchestratorComposer({
           <h3 id="composer-later-heading" className="text-sm font-semibold">
             Not connected yet
           </h3>
-          <ul className="divide-y divide-border rounded-lg border border-border text-sm">
+          <ul className="divide-y divide-border rounded-sharp border border-hairline text-sm">
             <li className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
               <span className="font-medium">Reference files</span>
               <span className="text-fg-muted">Not connected yet. The plan cannot read files you attach here.</span>
@@ -313,7 +313,7 @@ export function OrchestratorComposer({
         </section>
       </div>
 
-      <div className="flex flex-col gap-4 border-t border-border pt-5 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-4 border-t border-hairline pt-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0 text-sm">
           {notice ? (
             <p role={notice.tone === "danger" ? "alert" : "status"} className={cn("mb-2", noticeTone(notice.tone))}>
@@ -405,8 +405,8 @@ function KindPreview() {
       {NODE_KIND_ORDER.map((kind) => {
         const style = KIND_STYLE[kind];
         return (
-          <li key={kind} className="flex items-start gap-2.5 rounded-lg border border-border p-2.5">
-            <span className={cn("grid size-7 shrink-0 place-items-center rounded-md", ACCENT[style.accent].soft, ACCENT[style.accent].text)}>
+          <li key={kind} className="flex items-start gap-2.5 rounded-sharp border border-hairline p-2.5">
+            <span className={cn("grid size-7 shrink-0 place-items-center rounded-sharp border border-hairline", ACCENT[style.accent].text)}>
               <KindIcon kind={kind} className="size-3.5" />
             </span>
             <span className="flex min-w-0 flex-col">

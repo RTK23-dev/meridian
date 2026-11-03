@@ -79,7 +79,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
         <div className="space-y-2">
           <h2 className="text-section font-semibold">Make and review video batches</h2>
           <p className="max-w-3xl text-sm text-fg-muted">Research a topic, then make many original videos from what you find. No video is marked complete unless the engine records the output.</p>
-          <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg">
+          <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg-primary">
             <li>Fill in your brand details{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/brain` as never} className="font-semibold underline underline-offset-4">Brand brain</Link></> : null}. Four fields are required.</li>
             <li>Collect research{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/market` as never} className="font-semibold underline underline-offset-4">Market</Link></> : null}: paste public page URLs of examples that work.</li>
             <li>Make one draft below. Upload your reference as a video file, attach the research and a theme page (its style, persona and voice are what the videos are made with), and write what the videos should be about. Uploading needs Google Drive to be connected for this workspace; if it is not, the draft says so next to the upload button.</li>
@@ -149,12 +149,12 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
           <SessionView key={selected.id} session={selected} brands={brands} userId={user?.id ?? null} guided={guided} />
         </>
       ) : null}
-      {!guided ? <details className="group rounded-xl border border-border bg-surface">
-        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-semibold text-fg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+      {!guided ? <details className="group rounded-sharp border border-hairline bg-raised">
+        <summary className="flex min-h-11 cursor-pointer items-center justify-between gap-3 rounded-sharp px-4 py-3 text-sm font-semibold text-fg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
           <span>Plan a run in detail (advanced)</span>
           <span className="text-xs font-normal text-fg-muted">Draw the steps and see the price before anything runs</span>
         </summary>
-        <div className="flex flex-col gap-6 border-t border-border p-4 sm:p-6">
+        <div className="flex flex-col gap-6 border-t border-hairline p-4 sm:p-6">
           <OrchestratorPlans />
           <OrchestratorModelPanel organizationId={organizationId} />
         </div>
@@ -284,7 +284,7 @@ function HookHistoryBody({ history }: { history: HookHistory }) {
       ) : (
         <ol className="space-y-3" aria-label="Repeated hooks">
           {history.repeats.map((group) => (
-            <li key={group.records.map((record) => record.sessionId).join(":")} className="space-y-2 rounded-md border border-border bg-surface-2 p-3">
+            <li key={group.records.map((record) => record.sessionId).join(":")} className="space-y-2 rounded-sharp border border-hairline bg-overlay p-3">
               <p className="text-sm font-semibold">{group.kind === "same" ? "Same wording" : "Similar wording (shared words)"}</p>
               <p className="text-sm">&ldquo;{group.hook}&rdquo;</p>
               <ul className="space-y-1 text-xs text-fg-muted">

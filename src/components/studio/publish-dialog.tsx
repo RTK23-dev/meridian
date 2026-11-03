@@ -134,8 +134,8 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
                       <label
                         key={channel.id}
                         className={cn(
-                          "flex min-h-11 items-start gap-3 rounded-md border p-3 text-sm",
-                          checked ? "border-fg bg-surface-2" : "border-border bg-surface",
+                          "flex min-h-11 items-start gap-3 rounded-sharp border p-3 text-sm",
+                          checked ? "border-fg-primary bg-overlay" : "border-hairline bg-raised",
                           !channel.connected && "opacity-80",
                         )}
                       >
@@ -165,14 +165,14 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             {errors.channelIds?.message ? <p role="alert" className="text-sm text-danger">{errors.channelIds.message}</p> : null}
           </div>
 
-          <dl className="mt-4 grid gap-2 rounded-md border border-border bg-surface-2 p-3 text-sm sm:grid-cols-2">
+          <dl className="mt-4 grid gap-2 rounded-sharp border border-hairline bg-overlay p-3 text-sm sm:grid-cols-2">
             <div><dt className="text-fg-muted">Creative</dt><dd className="font-semibold">{target.title || target.kind}</dd></div>
             <div><dt className="text-fg-muted">Format</dt><dd>{target.kind} · {frame.label}{target.durationMs ? ` · ${(target.durationMs / 1000).toFixed(1)} s` : ""}</dd></div>
             <div className="sm:col-span-2"><dt className="text-fg-muted">Destinations</dt><dd>{selectedNames.length > 0 ? selectedNames.join(", ") : "None selected"}</dd></div>
           </dl>
 
           {selected.includes("instagram-reels") ? (
-            <fieldset className="mt-4 space-y-2 rounded-md border border-border p-3 text-sm">
+            <fieldset className="mt-4 space-y-2 rounded-sharp border border-hairline p-3 text-sm">
               <legend className="text-sm font-semibold">Instagram trial</legend>
               <label className="flex min-h-11 items-start gap-3">
                 <input type="checkbox" className="mt-1 size-4 shrink-0" {...register("trialFirst")} disabled={pending} />
@@ -208,7 +208,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           </div>
 
           {handOnly ? (
-            <div className="mt-4 space-y-2 rounded-md border border-border bg-surface-2 p-3 text-sm">
+            <div className="mt-4 space-y-2 rounded-sharp border border-hairline bg-overlay p-3 text-sm">
               <p className="font-semibold">Deliver by hand</p>
               <p className="text-fg-muted">
                 {onExportPackage
@@ -223,7 +223,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           ) : null}
 
           {results ? (
-            <div role="status" aria-live="polite" className="mt-4 space-y-2 rounded-md border border-border p-3 text-sm">
+            <div role="status" aria-live="polite" className="mt-4 space-y-2 rounded-sharp border border-hairline p-3 text-sm">
               <p className="font-semibold">Publish receipts</p>
               <ul className="space-y-3">
                 {results.map((receipt, index) => (
@@ -245,7 +245,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             </div>
           ) : null}
 
-          <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
+          <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-4">
             {blockReason && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">{blockReason}</DisabledReason> : null}
             <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
             <Button type="submit" disabled={pending || blockReason !== null} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>

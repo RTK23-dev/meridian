@@ -13,7 +13,7 @@ export function CreativeThumb({ variant, alt }: { variant: LibraryMediaVariant; 
   const state = failedSrc === src ? "error" : loadedSrc === src ? "ready" : "loading";
 
   return (
-    <div className="relative w-full max-w-full overflow-hidden rounded-md border border-border bg-surface-2" style={{ aspectRatio: `${box.width} / ${box.height}` }}>
+    <div className="relative w-full max-w-full overflow-hidden rounded-sharp border border-hairline bg-overlay" style={{ aspectRatio: `${box.width} / ${box.height}` }}>
       {state === "error" ? null : (
         <img
           className="absolute inset-0 h-full w-full object-contain"
