@@ -100,15 +100,22 @@ export async function saveCookbookVersion(
   if (cookbook.scope !== "workspace") return { ok: false, reason: "invalid", issues: ["scope: a saved cookbook is a workspace cookbook"] };
   if (isReserved(cookbook.cookbookId)) return { ok: false, reason: "reserved", issues: [`${cookbook.cookbookId} is a built-in id`] };
 
-  const existing = await sql<{ brand_id: string | null; version: number | string; parent_cookbook_id: string | null; parent_version: number | string | null }>`
-    select brand_id, version, parent_cookbook_id, parent_version from cookbooks
-    where organization_id = ${input.organizationId} and cookbook_id = ${cookbook.cookbookId}
+  // Only what the saver can see is looked at: an id another brand uses is not consulted, so a brand never learns that another brand's
+  // cookbook exists. A cookbook id is unique per brand (and for the workspace-shared ones), not across the whole workspace.
+  if (input.brandId !== null) {
+    const shared = await sql<{ id: string }>`
+      select id from cookbooks where organization_id = ${input.organizationId} and cookbook_id = ${cookbook.cookbookId} and brand_id is null limit 1
+    `;
+    if (shared[0] !== undefined) {
+      return { ok: false, reason: "brand_mismatch", issues: ["a cookbook keeps its brand: fork it to share it elsewhere"] };
+    }
+  }
+  const existing = await sql<{ version: number | string; parent_cookbook_id: string | null; parent_version: number | string | null }>`
+    select version, parent_cookbook_id, parent_version from cookbooks
+    where organization_id = ${input.organizationId} and cookbook_id = ${cookbook.cookbookId} and brand_id is not distinct from ${input.brandId}
     order by version desc limit 1
   `;
   const latest = existing[0];
-  if (latest !== undefined && (latest.brand_id ?? null) !== input.brandId) {
-    return { ok: false, reason: "brand_mismatch", issues: ["a cookbook keeps its brand: fork it to share it elsewhere"] };
-  }
   const version = latest === undefined ? 1 : Number(latest.version) + 1;
   // A later version keeps the parent its earlier version recorded (a copy of a built-in stays a copy of it), unless the caller names one.
   const carried = latest?.parent_cookbook_id ? { cookbookId: latest.parent_cookbook_id, version: Number(latest.parent_version) } : null;
@@ -137,18 +144,18 @@ export async function getCookbookVersion(
   sql: Sql,
   input: { organizationId: string; brandId: string | null; cookbookId: string; version?: number; context?: ValidationContext },
 ): Promise<StoreResult<StoredCookbook>> {
+  const scope = await scopeOf(sql, input.organizationId, input.brandId, input.cookbookId);
   const rows =
     input.version === undefined
       ? await sql<Row>`
           select * from cookbooks
-          where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId}
-            and (brand_id is null or brand_id = ${input.brandId})
+          where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId} and brand_id is not distinct from ${scope}
           order by version desc limit 1
         `
       : await sql<Row>`
           select * from cookbooks
           where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId} and version = ${input.version}
-            and (brand_id is null or brand_id = ${input.brandId})
+            and brand_id is not distinct from ${scope}
           limit 1
         `;
   const row = rows[0];
@@ -164,7 +171,7 @@ export async function listCookbooks(
   const rows = await sql<Row>`
     select distinct on (cookbook_id) * from cookbooks
     where organization_id = ${input.organizationId} and (brand_id is null or brand_id = ${input.brandId})
-    order by cookbook_id, version desc
+    order by cookbook_id, (brand_id is null), version desc
   `;
   return rows
     .map((row) => fromRow(row, input.context))
@@ -177,10 +184,10 @@ export type VersionSummary = { version: number; createdAt: string; archived: boo
 
 /** The versions of a workspace cookbook that a brand can see, newest first. A version written for another brand is not listed. */
 export async function listCookbookVersions(sql: Sql, input: { organizationId: string; brandId: string | null; cookbookId: string }): Promise<VersionSummary[]> {
+  const scope = await scopeOf(sql, input.organizationId, input.brandId, input.cookbookId);
   const rows = await sql<{ version: number; created_at: unknown; archived_at: unknown }>`
     select version, created_at, archived_at from cookbooks
-    where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId}
-      and (brand_id is null or brand_id = ${input.brandId})
+    where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId} and brand_id is not distinct from ${scope}
     order by version desc
   `;
   return rows.map((row) => ({
@@ -231,14 +238,27 @@ export async function archiveCookbook(
   sql: Sql,
   input: { organizationId: string; brandId: string | null; cookbookId: string },
 ): Promise<StoreResult<{ archivedVersions: number }>> {
+  const scope = await scopeOf(sql, input.organizationId, input.brandId, input.cookbookId);
   const archived = await sql<{ id: string }>`
     update cookbooks set archived_at = now()
     where organization_id = ${input.organizationId} and cookbook_id = ${input.cookbookId} and archived_at is null
-      and (brand_id is null or brand_id = ${input.brandId})
+      and brand_id is not distinct from ${scope}
     returning id
   `;
   if (archived.length === 0) return { ok: false, reason: "not_found" };
   return { ok: true, value: { archivedVersions: archived.length } };
+}
+
+/**
+ * Which copy of a cookbook id a brand means: its own when it has one, otherwise the workspace-shared one (null). A brand's own cookbook
+ * shadows a shared one with the same id, and only that one copy is read, listed or archived.
+ */
+async function scopeOf(sql: Sql, organizationId: string, brandId: string | null, cookbookId: string): Promise<string | null> {
+  if (brandId === null) return null;
+  const own = await sql<{ id: string }>`
+    select id from cookbooks where organization_id = ${organizationId} and cookbook_id = ${cookbookId} and brand_id = ${brandId} limit 1
+  `;
+  return own[0] !== undefined ? brandId : null;
 }
 
 function isUniqueViolation(error: unknown): boolean {
