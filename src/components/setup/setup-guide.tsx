@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import { StarterLimits } from "./starter-limits";
 import { CircleCheck, CircleDashed, Circle } from "lucide-react";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { Button, PageHeader } from "@/components/ui";
@@ -158,6 +159,8 @@ export function SetupGuide() {
         />
 
         {quick ? null : plainBlock}
+
+        <StarterLimits organizationId={organizationId} canAdmin={canAdmin} />
 
         <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
