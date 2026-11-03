@@ -5,6 +5,7 @@
 //
 // The instruction and the research text are data for the question, never instructions to the engine; they are cut short and the question says so.
 
+import { plainErrorText } from "./error-text.ts";
 import { decideWithActiveEngine, type DecisionEngineRegistry, type DispatchedDecision } from "../decisions/dispatcher.ts";
 import type { DecisionRequest } from "../decisions/types.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
@@ -90,7 +91,7 @@ export function chooserFor(engines?: DecisionEngineRegistry): StyleChooser {
     try {
       return rankingFromDecision(await decideWithActiveEngine({ sql, request, ...(engines ? { engines } : {}) }), pool);
     } catch (error) {
-      return { ok: false, reason: `The decision engine could not be reached: ${error instanceof Error ? error.message : "no reason was given."}` };
+      return { ok: false, reason: `The decision engine could not be reached: ${plainErrorText(error, "no reason was given.")}` };
     }
   };
 }

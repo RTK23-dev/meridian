@@ -301,3 +301,20 @@ test("Creative DNA v2: generates multimodal embedding and stores in pgvector col
   assert.equal(searchResults[0]?.id, id);
   assert.ok(searchResults[0]?.dist !== undefined && searchResults[0].dist < 0.0001);
 });
+
+test("scene detection says when the duration was assumed, and measured when it was given", async () => {
+  const unknown = new Uint8Array(40).fill(7);
+  const assumed = await detectScenes(unknown, {});
+  assert.equal(assumed.durationMeasured, false);
+  const given = await detectScenes(unknown, { durationMs: 5000 });
+  assert.equal(given.durationMeasured, true);
+  assert.equal(given.totalDurationMs, 5000);
+});
+
+test("a decode with an assumed duration is marked unmeasured and carries no pacing", async () => {
+  const unknown = new Uint8Array(40).fill(7);
+  const dna = await decodeVideoDna({ adId: "ad_assumed", videoBytes: unknown, segments: [], visionLabeller: async () => null });
+  assert.equal(dna.timingMeasured, false);
+  assert.equal(dna.cutsPerSecond, 0);
+  assert.deepEqual(dna.structure?.pacing, {});
+});

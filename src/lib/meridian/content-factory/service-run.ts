@@ -1,6 +1,7 @@
 // The Content Factory run functions: start a run, revise it, and read it. Moved out of content-factory/service.ts unchanged
 // (coding loop, T6). service.ts re-exports the public names.
 
+import { plainErrorText } from "./error-text.ts";
 import { engineReadiness, engineRequestFeed, engineRequestStatus, productionReadinessPorts, startEngineRequest, type EngineReadiness } from "../../../engine/api/index.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
@@ -77,7 +78,7 @@ export async function startRun(sql: Sql, userId: string, input: { sessionId: str
     const code = typeof error === "object" && error !== null && "code" in error ? String((error as { code: unknown }).code) : "";
     if (code === "23505") return refuse(["This session is already starting a video. Refresh to see it; nothing was started twice."], []);
     if (code !== "") return refuse(["The request could not be stored right now. Nothing was started. Try again."], []);
-    return refuse([`The engine refused the request: ${error instanceof Error ? error.message : "no reason was given."}`], []);
+    return refuse([`The engine refused the request: ${plainErrorText(error, "no reason was given.")}`], []);
   }
   // The video has started. A failure to write its audit line is not a failed start: the outcome says the line is missing (review item 11).
   const auditRecorded = await audit(sql, { organizationId: row.organization_id, brandId: row.brand_id, actorId: userId, action: "content_factory.run_started", objectId: row.id, metadata: { requestId: request.requestId } }).then(

@@ -129,15 +129,15 @@ export function SetupGuide() {
           breadcrumbs={[{ label: "Overview", to: "/" }]}
         />
 
-        <section aria-labelledby="setup-plain" className="rounded-sharp border border-hairline bg-raised p-5">
-          <h2 id="setup-plain" className="text-lg font-semibold text-fg-primary">What to fill in, and what to skip</h2>
+        <details open={summary.requiredDone === 0} aria-labelledby="setup-plain" className="rounded-sharp border border-hairline bg-raised px-5 py-4">
+          <summary className="flex min-h-11 cursor-pointer items-center focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"><h2 id="setup-plain" className="text-lg font-semibold text-fg-primary">What to fill in, and what to skip</h2></summary>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-fg-primary">
             <li><strong>Fill in now:</strong> a brand (its name and what it sells), then one key for the service that judges your ideas.</li>
             <li><strong>Fill in when you need it:</strong> a video maker key to render videos, and Google Drive to upload a reference video.</li>
             <li><strong>Set before any paid step:</strong> your spending limits on <Link to="/billing" className="font-semibold underline underline-offset-4">Billing</Link>. Nothing is set for you, and Meridian refuses to spend until you set the monthly budget.</li>
             <li><strong>Skip for now:</strong> search keys, publishing, and everything under Optional connections. Pasting a public page URL on Market needs no key.</li>
           </ul>
-        </section>
+        </details>
 
         <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
@@ -215,7 +215,29 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
   const isCurrent = step.status === "current";
   // Only the step to do now, and a required step still waiting, shows its text and controls. A finished or optional step stays one line.
   // Decided once, when the step first shows. A step the person just finished stays open, so the confirmation of their action stays visible.
-  const [compact] = useState(step.status === "done" || (!step.required && !isCurrent));
+  const [compact] = useState(!step.required && !isCurrent);
+  // Decided once, like the rest: a step finished during this visit stays open, so the confirmation of the person's own action stays visible.
+  const [slim] = useState(step.status === "done");
+  // A finished step is one slim row. Its text and controls open on request, so a person who has done it is not asked to scroll past it.
+  if (slim) {
+    return (
+      <li id={`step-${step.id}`} className="scroll-mt-24">
+        <details className="rounded-sharp border border-hairline bg-raised px-4 py-3">
+          <summary className="flex min-h-11 cursor-pointer flex-wrap items-center gap-x-3 gap-y-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <Icon aria-hidden="true" className="size-4 shrink-0 text-success" />
+            <span className="font-semibold text-fg-primary"><span className="mr-2 text-fg-muted">{index + 1}.</span>{step.title}</span>
+            <span className="rounded-full bg-overlay px-2.5 py-0.5 text-xs font-semibold text-fg-muted">Required · Done</span>
+            <span className="text-sm text-fg-muted">Review or change this step</span>
+          </summary>
+          <div className="mt-3 space-y-3 border-t border-hairline pt-3">
+            <p className="text-sm text-fg-primary">{step.what}</p>
+            <StepDetail text={step.detail} />
+            {body}
+          </div>
+        </details>
+      </li>
+    );
+  }
   return (
     <li id={`step-${step.id}`} className="scroll-mt-24">
       <article
@@ -240,7 +262,7 @@ function SetupStep({ step, index, body }: { step: GuideStep; index: number; body
             {compact ? (
               <details className="group pt-1">
                 <summary className="inline-flex min-h-11 cursor-pointer items-center rounded-sharp border border-hairline px-4 text-sm font-semibold text-fg-primary hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
-                  {step.status === "done" ? "Review or change this step" : "Open this step"}
+                  Open this step
                 </summary>
                 <div className="mt-3 space-y-3">
                   <p className="text-sm font-semibold text-fg-primary">{step.when}</p>

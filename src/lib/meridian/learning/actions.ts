@@ -79,7 +79,7 @@ export async function persistLearnedPatterns(sql: Sql, organizationId: string, b
 export const recordPerformance = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
     const body = objectInput(input);
-    const metrics = manualPerformanceSchema.parse({ ...body, reach: body.reach ?? 0, platform: body.platform ?? "" });
+    const metrics = manualPerformanceSchema.parse({ ...body, reach: body.reach ?? null, platform: body.platform ?? "" });
     return {
       brandId: clip(body.brandId, 80, "Brand", true),
       creativeId: clip(body.creativeId, 80, "Creative", true),

@@ -1,6 +1,7 @@
 // The Content Factory delivery functions: the hook history, the economics, the delivered link and the delivery approval.
 // Moved out of content-factory/service.ts unchanged (coding loop, T6). service.ts re-exports the public names.
 
+import { plainErrorText } from "./error-text.ts";
 import { hookHistoryOf, type HookHistory } from "./hook-history.ts";
 import { readStartedHooks } from "./hook-history-store.ts";
 import { economicsOf, type BrandEconomics } from "./economics.ts";
@@ -59,7 +60,7 @@ export async function deliveredMasterLink(sql: Sql, userId: string, input: { ses
     master = await engineDeliveredMaster(sql, row.organization_id, row.engine_request_id);
   } catch (error) {
     // The engine names the state of the request ("is running, not delivered"). A person needs the consequence, not the state.
-    const message = error instanceof Error ? error.message : "";
+    const message = plainErrorText(error, "");
     if (/not delivered/.test(message)) return { status: "not_ready", reason: "The engine has not delivered this video yet, so there is no file to download." };
     return { status: "not_ready", reason: message || "The video is not delivered yet, so there is no file to download." };
   }

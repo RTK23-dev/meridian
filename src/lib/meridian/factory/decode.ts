@@ -82,9 +82,12 @@ export async function detectScenes(
     ffmpegPath?: string;
     ffprobePath?: string;
   } = {},
-): Promise<{ scenes: DetectedScene[]; cutsPerSecond: number; totalDurationMs: number }> {
+): Promise<{ scenes: DetectedScene[]; cutsPerSecond: number; totalDurationMs: number; durationMeasured: boolean }> {
   const ffmpegPath = options.ffmpegPath || ffmpegPathSetting() || "ffmpeg";
   const inspected = inspectVideo(videoBytes);
+  // A duration the caller or the container gave is a measurement. Anything else is an assumption (three seconds a frame, or three seconds
+  // in all) that lets the scenes be laid out, and the result says so, so no pacing is computed from it.
+  const durationMeasured = (options.durationMs ?? inspected.durationMs) != null;
   const detectedDuration =
     options.durationMs ?? inspected.durationMs ?? (inspected.frames.length > 0 ? inspected.frames.length * 3000 : 3000);
   const durationMs = Math.max(1000, detectedDuration);
@@ -173,7 +176,7 @@ export async function detectScenes(
 
         if (scenes.length > 0) {
           const cutsPerSec = Math.round((scenes.length / (durationMs / 1000)) * 1000) / 1000;
-          return { scenes, cutsPerSecond: cutsPerSec, totalDurationMs: durationMs };
+          return { scenes, cutsPerSecond: cutsPerSec, totalDurationMs: durationMs, durationMeasured };
         }
       } finally {
         await rm(folder, { recursive: true, force: true });
@@ -194,7 +197,7 @@ export async function detectScenes(
       keyframeBytes: frame,
     }));
     const cutsPerSec = Math.round((scenes.length / (durationMs / 1000)) * 1000) / 1000;
-    return { scenes, cutsPerSecond: cutsPerSec, totalDurationMs: durationMs };
+    return { scenes, cutsPerSecond: cutsPerSec, totalDurationMs: durationMs, durationMeasured };
   }
 
   // Fallback when no frames exist: single scene representing the video duration
@@ -207,6 +210,7 @@ export async function detectScenes(
     scenes: [singleScene],
     cutsPerSecond: Math.round((1 / (durationMs / 1000)) * 1000) / 1000,
     totalDurationMs: durationMs,
+    durationMeasured,
   };
 }
 
@@ -409,7 +413,7 @@ export { buildCanonicalCreativeStructure } from "./creative-dna.ts";
  * and multimodal embedding generation.
  */
 export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeDna> {
-  const { scenes: detectedScenes, cutsPerSecond, totalDurationMs } = await detectScenes(input.videoBytes, {
+  const { scenes: detectedScenes, cutsPerSecond, totalDurationMs, durationMeasured } = await detectScenes(input.videoBytes, {
     durationMs: input.durationMs,
     ffmpegPath: input.ffmpegPath,
     ffprobePath: input.ffprobePath,
@@ -417,7 +421,9 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
 
   const durationMs = totalDurationMs;
   const dna = emptyCreativeDna(input.adId, durationMs, CREATIVE_DNA_V2);
-  dna.cutsPerSecond = cutsPerSecond;
+  // Without a known duration the cut rate is not a measurement: it stays at the empty value and the DNA says its timing was assumed.
+  dna.timingMeasured = durationMeasured;
+  dna.cutsPerSecond = durationMeasured ? cutsPerSecond : 0;
 
   const segments = input.segments ?? [];
   const alignedSegmentsMap = alignSegmentsToScenes(detectedScenes, segments);
@@ -561,6 +567,7 @@ export async function decodeVideoDna(input: DecodeVideoInput): Promise<CreativeD
     onScreenText: onScreenTextList,
     durationMs,
     cutsPerSecond,
+    timingMeasured: durationMeasured,
     transcript: allTranscript,
   });
 

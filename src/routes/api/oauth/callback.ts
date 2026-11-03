@@ -6,7 +6,7 @@ import { claimOauthState } from "@/lib/meridian/oauth/state";
 import { liveTransport } from "@/lib/meridian/providers/http";
 import { signedInUserId } from "@/lib/meridian/storage/drive-route-auth.server";
 import { oauthReturnPath } from "@/lib/meridian/oauth/return-path";
-import { hasRole, isRole } from "@/lib/meridian/access";
+import { isWorkspaceAdmin } from "@/lib/meridian/oauth/admin-check";
 
 export const Route = createFileRoute("/api/oauth/callback")({
   server: {
@@ -30,11 +30,7 @@ export const Route = createFileRoute("/api/oauth/callback")({
           return new Response("The OAuth state is missing, used, expired, came from another origin, or belongs to another person.", { status: 400 });
         }
         // The person who started the connection must still be an admin of the workspace: a person demoted or removed since then cannot finish it.
-        const membership = await sql<{ role: string }>`
-          select role from memberships where user_id = ${userId} and organization_id = ${match.organizationId} limit 1
-        `;
-        const role = membership[0]?.role;
-        if (!role || !isRole(role) || !hasRole(role, "admin")) {
+        if (!(await isWorkspaceAdmin(sql, userId, match.organizationId))) {
           return new Response("Only an admin of the workspace can finish this connection. Start it again as an admin.", { status: 403 });
         }
         // The exchange must send the redirect URI the authorization was started with, so it comes from the stored state.

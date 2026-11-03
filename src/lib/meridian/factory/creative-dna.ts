@@ -155,6 +155,8 @@ export type CreativeDna = {
   adId: string;
   durationMs: number;
   legacyAdFallback?: boolean;
+  /** False when the video's duration was not known and was assumed, so its scene times and pacing are not measurements. Absent means measured. */
+  timingMeasured?: boolean;
   scenes: SceneDna[];
   cutsPerSecond: number;
   hook: {
@@ -332,6 +334,8 @@ export function buildCanonicalCreativeStructure(input: {
   durationMs: number;
   cutsPerSecond: number;
   transcript?: string;
+  /** False when the duration was assumed: the pacing is then left out, not computed from an invented length. */
+  timingMeasured?: boolean;
 }): CreativeStructure {
   const allText = (input.transcript || input.segments.map((s) => s.text).join(" ")).toLowerCase();
 
@@ -412,11 +416,13 @@ export function buildCanonicalCreativeStructure(input: {
     heuristicScore: 0.8,
     durationMs: input.durationMs,
     segments: structureSegments,
-    pacing: {
-      cutsPerMinute: Math.round(input.cutsPerSecond * 60),
-      openingShotMs,
-      medianShotMs,
-    },
+    pacing: input.timingMeasured === false
+      ? {}
+      : {
+          cutsPerMinute: Math.round(input.cutsPerSecond * 60),
+          openingShotMs,
+          medianShotMs,
+        },
     structureType: kind === "organic_short" ? "organic_short" : "dynamic",
   };
 }
