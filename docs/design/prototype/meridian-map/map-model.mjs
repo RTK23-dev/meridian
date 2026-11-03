@@ -32,9 +32,9 @@ export function latitudeAt(p, lats) {
 
 // The map cell a screen cell shows. The centre column is the meridian at longitude 0, and the centre row is the latitude `latC`. Columns
 // wrap around the world, and rows wrap over the poles, so the loop never runs out of map.
-export function sampleIndex(column, row, latC, cols, rows, width = 720, height = 360) {
-  const lon = (column - Math.floor(cols / 2)) * CELL_DEG;
-  const lat = latC + (Math.floor(rows / 2) - row) * CELL_DEG;
+export function sampleIndex(column, row, latC, cols, rows, width = 720, height = 360, degPerCell = CELL_DEG) {
+  const lon = (column - Math.floor(cols / 2)) * degPerCell;
+  const lat = latC + (Math.floor(rows / 2) - row) * degPerCell;
   const lonWrapped = ((((lon + 180) % 360) + 360) % 360);
   const latWrapped = ((((lat + 90) % 180) + 180) % 180) - 90;
   const mapColumn = Math.min(width - 1, Math.floor(lonWrapped / CELL_DEG));
@@ -73,7 +73,43 @@ export function printed(threshold, amount, weight) {
 // How far a bill is printed, from 0 to 1, by where its centre sits in the viewport: fully printed at the middle, and fading as it
 // leaves the middle third of the screen. It changes with every scroll position, so moving up or down changes the reveal.
 export function printFraction(centreY, viewportHeight) {
-  const offset = Math.abs(centreY - viewportHeight / 2) / (viewportHeight * 0.6);
-  const clamped = Math.min(1, Math.max(0, 1 - offset));
-  return clamped * clamped * (3 - 2 * clamped);
+  return printFractionFor(centreY, viewportHeight, 0.6, "smoothstep");
+}
+
+// The same rule with its two settings open: how far from the middle the print starts to fade (a fraction of the viewport's height, where
+// 0.6 is the published site), and the curve the fade follows.
+export const PRINT_CURVES = Object.freeze(["linear", "smoothstep", "easeIn", "easeOut"]);
+export function printFractionFor(centreY, viewportHeight, band = 0.6, curve = "smoothstep") {
+  const offset = Math.abs(centreY - viewportHeight / 2) / (viewportHeight * band);
+  const c = Math.min(1, Math.max(0, 1 - offset));
+  if (curve === "linear") return c;
+  if (curve === "easeIn") return c * c;
+  if (curve === "easeOut") return 1 - (1 - c) * (1 - c);
+  return c * c * (3 - 2 * c);
+}
+
+// The signed distance field (one signed byte per cell), from world-field.mjs.
+export function decodeField(base64) {
+  const bytes = decodeBits(base64);
+  return new Int8Array(bytes.buffer, bytes.byteOffset, bytes.length);
+}
+
+// The depth lines for any spacing, by the same rule the published bits were built with: a cell is on a line where a neighbour is in a
+// different band, looking up and down inside the map and across the longitude edges, which wrap.
+export function linesFromField(field, width = 720, height = 360, step = 12) {
+  const band = new Int32Array(width * height);
+  for (let i = 0; i < width * height; i += 1) band[i] = Math.floor(field[i] / step);
+  const lines = new Uint8Array(width * height);
+  for (let r = 0; r < height; r += 1) {
+    for (let c = 0; c < width; c += 1) {
+      const i = r * width + c;
+      const b = band[i];
+      const up = r > 0 && band[i - width] !== b;
+      const down = r < height - 1 && band[i + width] !== b;
+      const left = band[r * width + ((c + width - 1) % width)] !== b;
+      const right = band[r * width + ((c + 1) % width)] !== b;
+      lines[i] = up || down || left || right ? 1 : 0;
+    }
+  }
+  return lines;
 }

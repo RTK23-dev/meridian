@@ -12,6 +12,10 @@ This is a prototype in the design folder. It changes nothing under `src/`.
 - `site.mjs`: draws the map, the bills, the grain, the loop and the route. `site.css` and `index.html` are the page.
 - `build-site.mjs`: writes the single-file page for publishing.
 - `capture-site.mjs`: checks the page in headless Chromium and saves a screenshot of each stop.
+- `tuner.html`, `tuner.mjs`, `tuner.css`: the simulator. It runs the same background, with every value open to change in a drawer: colours, spacing, pixel size, zoom, glide, grain, meridian, bill printing and the route. At its defaults it draws the same pixels as the published site. Values are kept on the device, and can be copied out as JSON or as a settings object, and pasted back in.
+- `world-field.mjs`: the signed distance from the coast for every cell, one signed byte each. It is generated with `world-lines.mjs`, and lets the simulator change the spacing.
+- `build-tuner.mjs`: writes the simulator as one file for publishing.
+- `capture-tuner.mjs`: checks the simulator in headless Chromium: parity with the published site, the readout, each value, presets, copy and paste, autoplay, reduced motion, and the phone layout.
 
 ## Run it
 

@@ -1,0 +1,155 @@
+{
+  "url": "served from docs/design/prototype/meridian-map",
+  "results": {
+    "parity.map-matches-the-published-site-at-defaults": {
+      "ok": true,
+      "detail": {
+        "site": 3381322702,
+        "tuner": 3381322702,
+        "colours": [
+          "#1c1c1f",
+          "#0b0b0c"
+        ]
+      }
+    },
+    "parity.bill-matches-the-published-site-at-defaults": {
+      "ok": true,
+      "detail": {
+        "site": 865,
+        "tuner": 865
+      }
+    },
+    "parity.two-colours-at-defaults": {
+      "ok": true,
+      "detail": {
+        "colours": [
+          "#1c1c1f",
+          "#0b0b0c"
+        ]
+      }
+    },
+    "site.no-console-errors": {
+      "ok": true,
+      "detail": {
+        "tuner": [],
+        "site": []
+      }
+    },
+    "readout.starts-at-the-first-stop": {
+      "ok": true,
+      "detail": {
+        "stop": "1 · Start"
+      }
+    },
+    "readout.depth-lines-at-the-published-spacing": {
+      "ok": true,
+      "detail": {
+        "lines": "18.5% of cells"
+      }
+    },
+    "spacing.six-cells-gives-the-measured-density": {
+      "ok": true,
+      "detail": {
+        "lines": "33.6% of cells"
+      }
+    },
+    "ground.light-ground-draws-light-map-and-dark-text": {
+      "ok": true,
+      "detail": {
+        "colours": [
+          "#1c1c1f",
+          "#f4f4f2"
+        ],
+        "ink": "rgb(10, 10, 10)"
+      }
+    },
+    "zoom.coarser-cells-when-pixel-and-zoom-grow-together": {
+      "ok": true,
+      "detail": {
+        "cols": 180,
+        "rows": 113
+      }
+    },
+    "presets.bold-sets-its-spacing-and-pixels": {
+      "ok": true,
+      "detail": {
+        "step": "9",
+        "pixel": "6"
+      }
+    },
+    "presets.reset-restores-the-published-site": {
+      "ok": true,
+      "detail": {
+        "step": "12",
+        "pixel": "4",
+        "bg": "#0b0b0c"
+      }
+    },
+    "io.export-holds-every-value": {
+      "ok": true,
+      "detail": {
+        "keys": [
+          "bg",
+          "line",
+          "money",
+          "meridian",
+          "meridianOn",
+          "meridianOpacity",
+          "step",
+          "pixel",
+          "zoom",
+          "glide",
+          "grainOn",
+          "grain",
+          "billBand",
+          "billCurve",
+          "billPrint",
+          "route",
+          "snap",
+          "speed"
+        ]
+      }
+    },
+    "io.paste-restores-the-values": {
+      "ok": true,
+      "detail": {
+        "step": "12"
+      }
+    },
+    "io.text-that-is-not-settings-is-refused": {
+      "ok": true,
+      "detail": {
+        "message": "That text is not settings. Paste the JSON from Copy JSON, or the object from Copy as code."
+      }
+    },
+    "playback.autoplay-moves-down-the-route": {
+      "ok": true,
+      "detail": {
+        "scrollY": 551
+      }
+    },
+    "playback.scrub-moves-to-the-chosen-stop": {
+      "ok": true,
+      "detail": {
+        "position": 2
+      }
+    },
+    "motion.reduced-holds-the-map-still": {
+      "ok": true,
+      "detail": {
+        "early": 3376567446,
+        "late": 3376567446
+      }
+    },
+    "layout.no-sideways-scroll.phone": {
+      "ok": true,
+      "detail": {
+        "sideways": 0
+      }
+    },
+    "layout.phone-no-console-errors": {
+      "ok": true,
+      "detail": []
+    }
+  }
+}

@@ -1,0 +1,68 @@
+/* The simulator's drawer. It has its own colours, so it reads the same whatever ground the map is given. */
+.drawer {
+  --panel: #111113;
+  --panel-line: #2E2E33;
+  --panel-text: #F2F2F2;
+  --panel-muted: #A9A9B0;
+  --panel-accent: #FF2E38;
+  position: fixed; top: 16px; right: 16px; z-index: 10; width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px); display: grid; grid-template-rows: auto minmax(0, 1fr);
+  color: var(--panel-text); font: 400 14px/20px var(--text);
+}
+.toggle {
+  justify-self: end; appearance: none; border: 1px solid var(--panel-line); background: var(--panel); color: var(--panel-text);
+  font: 600 13px/18px var(--text); padding: 8px 14px; border-radius: 2px; cursor: pointer; margin-bottom: 8px;
+}
+.toggle:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--panel-accent); outline-offset: 2px;
+}
+.drawer[data-open="false"] .drawer-body { display: none; }
+.drawer-body {
+  overflow-y: auto; display: grid; gap: 12px; padding-right: 2px; min-height: 0;
+  scrollbar-color: var(--panel-line) transparent;
+}
+.panel, .group {
+  background: var(--panel); border: 1px solid var(--panel-line); border-radius: 2px; padding: 14px; margin: 0; min-width: 0;
+}
+.panel h2, .group legend {
+  font: 600 12px/16px var(--text); letter-spacing: 0.12em; text-transform: uppercase; color: var(--panel-muted); padding: 0; margin: 0 0 10px;
+}
+.group legend { float: left; width: 100%; }
+.group > * { clear: left; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 0; min-height: 32px; }
+.row > span { min-width: 0; }
+.row output { font: 500 12px/16px var(--mono); color: var(--panel-muted); margin-left: 6px; }
+.row input[type="range"] { width: 150px; accent-color: var(--panel-accent); }
+.row input[type="color"] { width: 44px; height: 28px; border: 1px solid var(--panel-line); background: none; padding: 0; border-radius: 2px; cursor: pointer; }
+.row input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--panel-accent); }
+.row input[type="number"], .row select, .stacked textarea, .stacked input {
+  background: #0A0A0B; color: var(--panel-text); border: 1px solid var(--panel-line); border-radius: 2px; font: 500 13px/18px var(--mono);
+}
+.row input[type="number"] { width: 84px; padding: 4px 6px; }
+.row select { padding: 4px 6px; }
+.help { color: var(--panel-muted); font-size: 12px; line-height: 17px; margin: 2px 0 8px; }
+.readout { display: grid; gap: 6px; margin: 0 0 12px; }
+.readout div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid var(--panel-line); padding-bottom: 5px; }
+.readout dt { color: var(--panel-muted); }
+.readout dd { margin: 0; font: 500 13px/18px var(--mono); text-align: right; }
+.playback { display: grid; gap: 10px; }
+.scrub-label { display: grid; gap: 6px; }
+.scrub-label input, .stacked { width: 100%; }
+.scrub-label input { accent-color: var(--panel-accent); }
+.btn, .chip {
+  appearance: none; border: 1px solid var(--panel-line); background: #18181B; color: var(--panel-text);
+  font: 600 13px/18px var(--text); padding: 8px 12px; border-radius: 2px; cursor: pointer;
+}
+.btn[aria-pressed="true"] { border-color: var(--panel-accent); }
+.btn:hover, .chip:hover { border-color: var(--panel-muted); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.stacked { display: grid; gap: 6px; }
+.stacked > span { font: 600 12px/16px var(--text); color: var(--panel-muted); letter-spacing: 0.04em; }
+.stacked textarea { width: 100%; padding: 8px; resize: vertical; }
+#io-message { min-height: 18px; color: var(--panel-muted); }
+@media (max-width: 760px) {
+  .drawer { top: auto; bottom: 12px; right: 12px; left: 12px; width: auto; max-height: 62vh; }
+  .drawer-body { max-height: calc(62vh - 44px); }
+  .row input[type="range"] { width: 120px; }
+}
