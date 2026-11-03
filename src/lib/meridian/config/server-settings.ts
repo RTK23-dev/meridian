@@ -99,3 +99,8 @@ export function cycloneDeviceIdSetting(env: NodeJS.ProcessEnv = process.env): st
 export function driveFolderIdSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
   return env.MERIDIAN_DRIVE_FOLDER_ID;
 }
+
+/** The https origins that may show Meridian in a frame, as set. The rule that reads it is in lib/security/frame-ancestors.server.ts. */
+export function frameAncestorsSetting(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  return env.MERIDIAN_FRAME_ANCESTORS;
+}

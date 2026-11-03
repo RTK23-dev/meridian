@@ -14,6 +14,7 @@ import {
   externalSemanticUrlSetting,
   ffmpegPathSetting,
   ffprobePathSetting,
+  frameAncestorsSetting,
   hfHomeSetting,
   higgsfieldModelSetting,
   hypitBaseUrlSetting,
@@ -67,6 +68,7 @@ describe("the deployment setting accessors return the raw value", () => {
     ["artifactHostAllowlistSetting", artifactHostAllowlistSetting, "MERIDIAN_ARTIFACT_HOST_ALLOWLIST"],
     ["cycloneDeviceIdSetting", cycloneDeviceIdSetting, "CYCLONE_DEVICE_ID"],
     ["driveFolderIdSetting", driveFolderIdSetting, "MERIDIAN_DRIVE_FOLDER_ID"],
+    ["frameAncestorsSetting", frameAncestorsSetting, "MERIDIAN_FRAME_ANCESTORS"],
   ] as const;
 
   for (const [name, accessor, variable] of SETTINGS) {
