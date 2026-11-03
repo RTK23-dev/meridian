@@ -327,6 +327,9 @@ try {
 
   await check("G9", "setup: reading a page needs no key, and unavailable search sources do not become useful when a key is saved", async () => {
     await page.goto(`${base}/setup`, { waitUntil: "networkidle" });
+    // Until the required steps are done, the optional ones sit behind a closed "More setup" heading. Open it first, as a person does.
+    const moreSetup = page.locator("summary").filter({ hasText: "More setup" });
+    if (await moreSetup.count()) await moreSetup.first().click();
     // An optional step is one closed row, and its phrase-search keys are behind a second disclosure. Open both as a person does.
     await page.locator("summary").filter({ hasText: "Where examples come from" }).click();
     assert.match(await page.locator("main").innerText(), /Read one public page/);

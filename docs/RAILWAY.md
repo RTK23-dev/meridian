@@ -16,6 +16,10 @@ Checked in this repository, locally:
 - `/api/health` answers without a database.
 - Every response carries `Content-Security-Policy: frame-ancestors`, set from `MERIDIAN_FRAME_ANCESTORS` when the server starts. A
   Chromium page on another origin was refused.
+- The preview server answers the public host names only: the hosts of `APP_URL`, `PUBLIC_APP_URL` and `BETTER_AUTH_URL`, with
+  `localhost` and IP addresses always allowed. Any other Host header gets a 403 from Vite, before the app runs. A 403 from that check
+  carries no frame header, and that is expected. So `meridian.victor.ceo` is served, and the Railway default domain is refused, unless
+  it is one of those three names.
 
 Not checked here: the Docker image build, a Railway deployment, the production database, sign-in on the real domain, and a victor.ceo
 page actually showing Meridian. Those need the real services.
@@ -31,7 +35,8 @@ page actually showing Meridian. Those need the real services.
 
 1. Add a service from the GitHub repository `rtk23-dev/meridian`, branch `main`. Railway should build from the `Dockerfile`. If it
    uses another builder, set it to Dockerfile in the service settings.
-2. Leave the start command empty. The `Dockerfile` command runs the migrations and then the web app.
+2. Leave the start command empty. The `Dockerfile` command runs the migrations and then the web app. Meridian has no `npm start`
+   script, so a start command such as `npm start` fails. If a start command was set earlier, clear it.
 3. Set the variables in section 5.
 4. Optional: set the healthcheck path to `/api/health`.
 5. Deploy. The logs should show the migrations finishing and the server listening on the Railway port.
