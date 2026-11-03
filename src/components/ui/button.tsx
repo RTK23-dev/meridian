@@ -12,7 +12,7 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: `border-accent bg-accent text-accent-fg hover:border-accent-hover hover:bg-accent-hover active:bg-accent-hover focus-visible:outline-white-accent disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
+        primary: `border-accent bg-accent text-accent-fg hover:border-accent-hover hover:bg-accent-hover active:bg-accent-hover focus-visible:outline-fg-primary disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
         secondary: `border-border-strong bg-transparent text-fg hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
         quiet,
         danger: `border-danger bg-transparent text-danger hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,

@@ -1,80 +1,108 @@
-@import "@fontsource-variable/inter";
-@import "@fontsource-variable/sora";
-@import "@fontsource/geist-mono/400.css";
-@import "@fontsource/geist-mono/500.css";
 @import "tailwindcss";
 @import "tw-animate-css";
+
+/* The faces are self-hosted from public/fonts, with their OFL licence files beside them. Each is the latin variable file: Archivo for
+   titles and the wordmark, Instrument Sans for text, JetBrains Mono for figures, ids and logs. Other scripts use the system fallbacks. */
+@font-face {
+  font-family: "Archivo";
+  font-style: normal;
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-display: swap;
+  src: url("/fonts/archivo-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Instrument Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-stretch: 75% 100%;
+  font-display: swap;
+  src: url("/fonts/instrument-sans-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("/fonts/jetbrains-mono-latin.woff2") format("woff2");
+}
 
 /* Dark is the default and lives on :root. The light theme is its exact inversion, set by data-theme="light" on <html>.
    The dark variant follows the same rule, so dark: classes apply whenever the page is not light. */
 @custom-variant dark (&:where(:root:not([data-theme="light"]), :root:not([data-theme="light"]) *));
 
-/* AttentionOS tokens (design/DESIGN.md, sections 2, 5 and 6). Source: docs/design/tokens/attentionos-tokens.json; the contrast test reads
-   the same values. Dark is the default. The accent is a fill (buttons, the attention signal); accent-text is the same violet for text. */
+/* Katana tokens (docs/design/tokens/katana-tokens.json, the one design system). The colour names below are the JSON's keys, and
+   styles.contrast.test.ts checks every value against that file in both themes. Dark is the first palette; the light palette applies
+   under data-theme="light", which the theme provider sets from the reader's choice or the system setting. Status is a dot and a word,
+   never a tinted fill, so there are no -soft tokens. */
 :root {
   color-scheme: dark;
-  --bg-base: #08070B;
-  --bg-raised: #111016;
-  --bg-overlay: #19161F;
-  --border-hairline: #2C2637;
-  --border-strong: #6B6280;
-  --fg-primary: #F6F3FC;
-  --fg-secondary: #B9B3C7;
-  --fg-muted: #9A94A9;
-  --accent: #7838E8;
-  --accent-hover: #8847EF;
-  --accent-text: #AD78FF;
-  --accent-muted: #241734;
-  --on-accent: #FFFFFF;
+  --bg-base: #000000;
+  --bg-raised: #0E0E0E;
+  --bg-overlay: #161616;
+  --border-hairline: #262626;
+  --border-strong: #6B6B6B;
+  --fg-primary: #FFFFFF;
+  --fg-secondary: #C4C4C4;
+  --fg-muted: #949494;
+  --accent-red: #FF2E38;
+  --accent-red-hover: #FF5A63;
+  --accent-red-muted: #2A0B0F;
+  --on-accent: #000000;
   --white-accent: #FFFFFF;
-  --success: #58D6A0;
-  --warning: #F2C46D;
-  --danger: #FF8A9B;
-  --info: #83B9FF;
+  --success: #3DDC84;
+  --warning: #FFB020;
+  --danger: #FF4D6A;
+  --info: #5AA9FF;
   --scrim: rgb(0 0 0 / 0.6);
+  /* The accent is the reader's choice (ui/accent.ts). Red is the default, so these read the red roles until a preset is chosen. */
+  --accent: var(--accent-red);
+  --accent-hover: var(--accent-red-hover);
+  --accent-text: var(--accent-red);
+  --accent-muted: var(--accent-red-muted);
+  --ring-on-accent: #FFFFFF;
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
   --dur-flip: 900ms;
-  --ease-standard: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
   --ease-exit: cubic-bezier(0.4, 0, 1, 1);
-  --ease-signal: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-emphasis: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-linear: linear;
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg-base: #FAF9FC;
-  --bg-raised: #F3F0F8;
+  --bg-base: #FFFFFF;
+  --bg-raised: #F4F4F4;
   --bg-overlay: #FFFFFF;
-  --border-hairline: #E5E0EC;
-  --border-strong: #7A7086;
-  --fg-primary: #111016;
-  --fg-secondary: #635C70;
-  --fg-muted: #5E5769;
-  --accent: #6A2BDB;
-  --accent-hover: #5A1FC2;
-  --accent-text: #5A1FC2;
-  --accent-muted: #EFE8FD;
+  --border-hairline: #E2E2E2;
+  --border-strong: #767676;
+  --fg-primary: #0A0A0A;
+  --fg-secondary: #3D3D3D;
+  --fg-muted: #5E5E5E;
+  --accent-red: #C8102E;
+  --accent-red-hover: #A50D25;
+  --accent-red-muted: #FBE3E6;
   --on-accent: #FFFFFF;
-  --white-accent: #111016;
-  --success: #1F7A5A;
+  --white-accent: #0A0A0A;
+  --success: #14703A;
   --warning: #8A5A00;
-  --danger: #C2362B;
+  --danger: #B3133A;
   --info: #0B5FB8;
-  --scrim: rgb(17 16 22 / 0.4);
+  --scrim: rgb(10 10 10 / 0.4);
+  --ring-on-accent: #0A0A0A;
 }
 
 /* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
    (bg, surface, fg, accent and the rest) stay as aliases of the AttentionOS roles, so screens not yet migrated keep working. */
 @theme static {
-  /* AttentionOS faces: Sora for page titles and the wordmark, Inter for everything else, Geist Mono for logs, ids and costs. */
-  /* The first name in each stack is the family the fontsource package declares; the rest are the fallbacks. */
-  --font-text: "Inter Variable", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Katana faces: Archivo for page titles and the wordmark, Instrument Sans for text, JetBrains Mono for figures, ids and logs. */
+  --font-text: "Instrument Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --font-sans: var(--font-text);
-  --font-display: "Sora Variable", "Sora", "Inter Variable", "Inter", system-ui, sans-serif;
-  --font-wordmark: "Sora Variable", "Sora", "Inter Variable", "Inter", system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-wordmark: var(--font-display);
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
 
   --color-bg: var(--bg-base);
   --color-surface: var(--bg-raised);
@@ -112,12 +140,12 @@
   --color-white-accent: var(--white-accent);
   --color-scrim: var(--scrim);
 
-  /* The AttentionOS radius scale: 6 for inputs and badges, 10 for buttons and rows, 16 for cards and panels, 24 for dialogs. */
-  --radius-sharp: 6px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 16px;
-  --radius-xl: 24px;
+  /* Katana: one sharp corner, 2 px, on every control, card, panel and dialog. Dots, avatars and switch thumbs keep rounded-full. */
+  --radius-sharp: 2px;
+  --radius-sm: 2px;
+  --radius-md: 2px;
+  --radius-lg: 2px;
+  --radius-xl: 2px;
 
   /* No shadows anywhere. Layers use a hairline or a strong edge. The names stay so older classes keep resolving. */
   --shadow-sm: 0 0 #0000;
@@ -125,7 +153,7 @@
   --shadow-lg: 0 0 #0000;
 
   /* The type scale, in px for the size and line height. The smallest label is 12 px. */
-  --text-eyebrow: 0.75rem;
+  --text-eyebrow: 0.6875rem;
   --text-eyebrow--line-height: 1rem;
   --text-section: 1.375rem;
   --text-section--line-height: 1.75rem;
@@ -167,7 +195,8 @@
   .skip-link:focus { transform: none; }
   img, svg, video { max-width: 100%; height: auto; }
   /* Headings use the display face (Sora). The .font-display opt-in maps to the same face. Size and weight come from the classes. */
-  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
+  h1, .font-display { font-family: var(--font-display); letter-spacing: -0.02em; font-stretch: 92%; }
+  h1, h2, h3, h4 { font-weight: 600; }
   /* Headings break onto balanced lines, so a two-line title does not leave one word on its own. */
   h1 { text-wrap: balance; }
   h2, h3 { text-wrap: balance; }
@@ -178,19 +207,24 @@
 }
 
 @layer components {
-  /* Label style: group headings, column headers and state words. Sentence case, never all caps (DESIGN.md 3.2). */
+  /* Label style: group headings, column headers and small captions. Katana sets labels in capitals, 11 px, with wide tracking. The state
+     words of a step or a run are not labels: they stay in sentence case (see the state map). */
   .eyebrow {
     font-size: var(--text-eyebrow);
     line-height: var(--text-eyebrow--line-height);
-    font-weight: 500;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
     color: var(--color-fg-muted);
   }
 
-  /* The one page title. Every screen's h1 uses this class (PageHeader does too): 28px on phones, 36px from 768px. */
+  /* The one page title. Every screen's h1 uses this class (PageHeader does too): 28px on phones, 36px from 768px. Archivo at a
+     92% width, weight 600, as in the walkthrough. */
   .page-title {
     font-size: var(--text-title);
     line-height: var(--text-title--line-height);
-    font-weight: 500;
+    font-weight: 600;
+    font-stretch: 92%;
     letter-spacing: -0.02em;
     color: var(--color-fg);
   }
@@ -344,18 +378,17 @@ details > summary:hover { color: var(--color-fg); }
    targets in styles.contrast.test.ts for the base values. */
 @media (prefers-contrast: more) {
   :root:not([data-theme="light"]) {
-    --border-hairline: #6B6280;
-    --border-strong: #B9B3C7;
-    --fg-primary: #FDFDFD;
-    --fg-muted: #D6D0E2;
-    --accent-text: #C9A8FF;
+    --border-hairline: #6B6B6B;
+    --border-strong: #C4C4C4;
+    --fg-primary: #FFFFFF;
+    --fg-muted: #D6D6D6;
+    --accent-text: #FF5A63;
   }
   :root[data-theme="light"] {
-    --border-hairline: #7A7086;
-    --border-strong: #4B4357;
-    --fg-primary: #050505;
-    --fg-muted: #474747;
-    --accent: #5A1FC2;
-    --accent-text: #4A1699;
+    --border-hairline: #767676;
+    --border-strong: #3D3D3D;
+    --fg-primary: #000000;
+    --fg-muted: #3D3D3D;
+    --accent-text: #A50D25;
   }
 }

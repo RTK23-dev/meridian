@@ -11,7 +11,7 @@ import { FieldMessages, useFieldIds } from "./field";
 type DescribedControl = { label?: string; hint?: string; error?: string; id?: string };
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClass = "block text-small font-semibold text-fg-secondary";
-const controlClass = `w-full min-h-10 rounded-sm border border-border-strong bg-overlay px-3 py-2 text-body text-fg placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-accent focus-visible:ring-[3px] focus-visible:ring-accent-muted disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
+const controlClass = `w-full min-h-10 rounded-sharp border border-border-strong bg-overlay px-3 py-2 text-body text-fg placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-accent disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement>, DescribedControl {}
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ label, hint, error, id, className, type, step, onWheel, ...props }, ref) {
@@ -48,7 +48,7 @@ export function Select({ label, hint, error, id, children, ...props }: Described
       <SelectPrimitive.Trigger id={ids.controlId} aria-labelledby={label ? `${ids.controlId}-label` : undefined} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn(controlClass, "flex items-center justify-between gap-2 text-left")}>
         <SelectPrimitive.Value /> <SelectPrimitive.Icon><ChevronDown aria-hidden="true" className="size-4" /></SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
-      <SelectPrimitive.Portal><SelectPrimitive.Content className="surface-overlay z-50 max-h-72 overflow-hidden rounded-md border border-border-strong bg-overlay text-fg" position="popper"><SelectPrimitive.ScrollUpButton className="flex justify-center"><ChevronUp className="size-4" /></SelectPrimitive.ScrollUpButton><SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport><SelectPrimitive.ScrollDownButton className="flex justify-center"><ChevronDown className="size-4" /></SelectPrimitive.ScrollDownButton></SelectPrimitive.Content></SelectPrimitive.Portal>
+      <SelectPrimitive.Portal><SelectPrimitive.Content className="z-50 max-h-72 overflow-hidden rounded-sharp border border-border-strong bg-overlay text-fg" position="popper"><SelectPrimitive.ScrollUpButton className="flex justify-center"><ChevronUp className="size-4" /></SelectPrimitive.ScrollUpButton><SelectPrimitive.Viewport className="p-1">{children}</SelectPrimitive.Viewport><SelectPrimitive.ScrollDownButton className="flex justify-center"><ChevronDown className="size-4" /></SelectPrimitive.ScrollDownButton></SelectPrimitive.Content></SelectPrimitive.Portal>
     </SelectPrimitive.Root>
     <FieldMessages hint={hint} error={error} hintId={ids.hintId} errorId={ids.errorId} />
   </div>;
@@ -66,7 +66,7 @@ export function Checkbox({ label, hint, error, id, className, ...props }: Descri
 
 export function Switch({ label, hint, error, id, className, ...props }: DescribedControl & ComponentPropsWithoutRef<typeof SwitchPrimitive.Root>) {
   const ids = useFieldIds(id, hint, error);
-  return <div className="space-y-1.5"><div className="flex items-center gap-3"><SwitchPrimitive.Root {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn(`touch-hit-44 relative h-5 w-10 rounded-sharp border border-border-strong bg-raised hover:border-fg-secondary aria-[invalid=true]:border-danger data-[state=checked]:border-white-accent data-[state=checked]:bg-white-accent disabled:border-hairline ${focusRing}`, className)}><SwitchPrimitive.Thumb className="block size-3.5 translate-x-[3px] rounded-full bg-fg-secondary transition-transform data-[state=checked]:translate-x-[23px] data-[state=checked]:bg-bg" /></SwitchPrimitive.Root>{label ? <label htmlFor={ids.controlId} className="text-small text-fg-secondary">{label}</label> : null}</div><FieldMessages hint={hint} error={error} hintId={ids.hintId} errorId={ids.errorId} /></div>;
+  return <div className="space-y-1.5"><div className="flex items-center gap-3"><SwitchPrimitive.Root {...props} id={ids.controlId} aria-describedby={ids.describedBy} aria-invalid={ids.invalid || undefined} className={cn(`touch-hit-44 relative h-5 w-10 rounded-full border border-border-strong bg-raised hover:border-fg-secondary aria-[invalid=true]:border-danger data-[state=checked]:border-accent data-[state=checked]:bg-accent disabled:border-hairline ${focusRing}`, className)}><SwitchPrimitive.Thumb className="block size-3.5 translate-x-[3px] rounded-full bg-fg-secondary transition-transform data-[state=checked]:translate-x-[23px] data-[state=checked]:bg-on-accent" /></SwitchPrimitive.Root>{label ? <label htmlFor={ids.controlId} className="text-small text-fg-secondary">{label}</label> : null}</div><FieldMessages hint={hint} error={error} hintId={ids.hintId} errorId={ids.errorId} /></div>;
 }
 
 export function RadioGroup({ label, hint, error, id, className, ...props }: DescribedControl & ComponentPropsWithoutRef<typeof RadioGroupPrimitive.Root>) {

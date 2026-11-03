@@ -1,6 +1,6 @@
 {
   "name": "Katana (mixed)",
-  "status": "proposed: not applied to the app. src/styles.css still reads attentionos-tokens.json. Owner decision 1 in docs/design/MERIDIAN_MIXED_DESIGN_PLAN.md decides when it applies.",
+  "status": "applied: src/styles.css declares these values, and styles.contrast.test.ts checks them in both themes. The owner decided Katana replaces the AttentionOS look.",
   "source": "docs/design/KATANA_DESIGN_PLAN.md sections b, c, d, e and l, with the owner decisions in docs/design/KATANA_REDESIGN_PLAN.md section 14.7 (red is the primary action), and the mixed-plan additions marked in the note on each pair.",
   "note": "Keys match the CSS custom properties without the leading --. Dark is the default; light applies under [data-theme=\"light\"]. accent-red is one role with two values, tuned so each passes contrast on its theme's page. on-accent is the label colour on a red fill (bg-base in each theme). Status is a dot and a word, never a tinted fill, so there are no -soft tokens.",
   "themes": {
