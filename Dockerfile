@@ -21,5 +21,6 @@ RUN npm run build
 ENV NODE_ENV=production
 EXPOSE 8080
 
-# The web app. The worker and the scheduler override this command in docker-compose.yml.
-CMD ["sh", "-c", "node scripts/migrate.mjs && npm run preview -- --host 0.0.0.0 --port 8080"]
+# The web app. The worker and the scheduler override this command in docker-compose.yml. Hosts such as Railway set PORT and route
+# traffic to it; 8080 is the default for a plain docker run.
+CMD ["sh", "-c", "node scripts/migrate.mjs && npm run preview -- --host 0.0.0.0 --port ${PORT:-8080}"]

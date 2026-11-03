@@ -12,6 +12,7 @@ Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first
 | [FIRST_TEST_RUN.md](FIRST_TEST_RUN.md) | The first test run, step by step: what is ready, what needs the owner's keys, what to record |
 | [SETUP.md](SETUP.md) | Installing, the first run, saving keys, connecting Drive, deploying |
 | [OPERATIONS.md](OPERATIONS.md) | Processes, health, backups, exports and troubleshooting |
+| [RAILWAY.md](RAILWAY.md) | Running Meridian on Railway: the four services, the variables, the domain and the first checks |
 | [PROVIDERS.md](PROVIDERS.md) | Every provider, where its key is saved, and the deployment opt-ins |
 | [TESTING.md](TESTING.md) | Test commands, the CI jobs and the browser checks |
 | [RELEASE_ACCEPTANCE.md](RELEASE_ACCEPTANCE.md) | The browser acceptance of the Settings screens: the checks, how to run it, and what it does not cover |

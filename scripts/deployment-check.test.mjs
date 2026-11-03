@@ -34,3 +34,13 @@ test("Drive configured removes the Drive warning, and the report never prints a 
   for (const value of [SECRET, "secret-value-do-not-print", "db.example", "pw"]) assert.ok(!report.includes(value), `the report must not contain ${value}`);
   assert.match(renderDeploymentCheck(checkDeployment({ NODE_ENV: "production" })), /NOT READY/);
 });
+
+test("the frame setting warns when it is unset or malformed, and is ok when it lists https origins", () => {
+  const frame = (env) => checkDeployment(env).find((finding) => finding.name === "MERIDIAN_FRAME_ANCESTORS");
+  assert.equal(frame(GOOD).level, "warn", "unset means only this app may frame it, which is worth a warning");
+  assert.equal(frame({ ...GOOD, MERIDIAN_FRAME_ANCESTORS: "https://victor.ceo,https://www.victor.ceo" }).level, "ok");
+  const malformed = frame({ ...GOOD, MERIDIAN_FRAME_ANCESTORS: "http://victor.ceo" });
+  assert.equal(malformed.level, "warn");
+  assert.match(malformed.message, /not a plain https origin/);
+  assert.deepEqual(levels({ ...GOOD, MERIDIAN_FRAME_ANCESTORS: "http://victor.ceo" }), [], "a bad frame setting is a warning, not a blocked start");
+});

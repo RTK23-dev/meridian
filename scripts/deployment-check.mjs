@@ -1,6 +1,8 @@
 // Checks the environment a deployment is about to start with, before it starts. It prints setting NAMES and a verdict, never a value, and it
 // calls nothing: no database, no provider. Usage: npm run check:deployment   (exit 1 when a required setting is missing or unsafe).
 
+import { frameAncestorsPolicy } from "./frame-policy.mjs";
+
 /** @typedef {{ level: "error" | "warn" | "ok", name: string, message: string }} Finding */
 
 const isSet = (env, name) => typeof env[name] === "string" && env[name].trim() !== "";
@@ -38,6 +40,13 @@ export function checkDeployment(env) {
   if (env.VITE_AUTH_ENABLED === "false") add(production ? "error" : "warn", "VITE_AUTH_ENABLED", "Is false, which turns sign-in off. For local use only.");
   if (env.ALLOW_SYNTHETIC_TELEMETRY === "true") add(production ? "error" : "warn", "ALLOW_SYNTHETIC_TELEMETRY", "Is true. Synthetic telemetry is for tests only.");
   if (env.MERIDIAN_TRUST_PROXY_HEADERS === "true") add("warn", "MERIDIAN_TRUST_PROXY_HEADERS", "Is true. Only correct when every request comes through a trusted reverse proxy that overwrites these headers.");
+
+  if (!isSet(env, "MERIDIAN_FRAME_ANCESTORS")) add("warn", "MERIDIAN_FRAME_ANCESTORS", "Not set. Only Meridian's own pages can frame it. Set it to the https origin of a site that shows Meridian, such as https://victor.ceo.");
+  else {
+    const { problems } = frameAncestorsPolicy(env.MERIDIAN_FRAME_ANCESTORS);
+    if (problems.length > 0) add("warn", "MERIDIAN_FRAME_ANCESTORS", `Has a value that is not a plain https origin (${problems.join("; ")}). Only Meridian's own pages can frame it until it is fixed.`);
+    else add("ok", "MERIDIAN_FRAME_ANCESTORS", "set");
+  }
 
   if (!isSet(env, "WEBHOOK_SECRET")) add("warn", "WEBHOOK_SECRET", "Not set. Webhooks are refused until it is.");
   const driveSet = isSet(env, "GOOGLE_SERVICE_ACCOUNT_KEY") || (isSet(env, "GOOGLE_CLIENT_ID") && isSet(env, "GOOGLE_CLIENT_SECRET"));
