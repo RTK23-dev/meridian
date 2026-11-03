@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Cookbook ids are per brand.** A member of one brand can no longer learn that another brand has a cookbook with a given id: the unique key now includes the brand (migration 0151). A brand's own cookbook shadows a workspace-shared one with the same id. No data changes.
+
+## Unreleased
+
 - **Stored OAuth tokens are renewed on use.** A sync, a paused publish or a factory paid publish renews a token within five minutes of its stated expiry, with its refresh token. A refused renewal marks the connection FAILED. Before this, a token expired after an hour (Google) or a day (TikTok) until someone pressed Refresh. See `docs/RELEASE_ACCEPTANCE.md`, "Renewing stored tokens".
 - **A refused provider's scheduled sync stops.** A refusal turns that provider's performance schedule off, as a disconnect does; an accepted request turns it back on.
 - **A rubric name is checked against its limit.** Creating a rubric refused no name length before; now a name over 80 characters is refused.
