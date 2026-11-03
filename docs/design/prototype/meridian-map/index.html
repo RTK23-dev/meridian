@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meridian site background</title>
+  <meta name="description" content="The Meridian site background: a depth map of the world that the page moves along, screen by screen, down one line of longitude.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,600..700&family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="site.css">
+</head>
+<body>
+  <canvas id="map" aria-hidden="true"></canvas>
+  <div class="meridian" aria-hidden="true"></div>
+  <div class="grain" aria-hidden="true"></div>
+
+  <nav class="route" aria-label="Route along the meridian">
+    <a href="#cover" data-stop="cover">Start <span>47° N</span></a>
+    <a href="#create" data-stop="create">Create <span>23° N</span></a>
+    <a href="#library" data-stop="library">Library <span>0°</span></a>
+    <a href="#insights" data-stop="insights">Insights <span>23° S</span></a>
+    <a href="#settings" data-stop="settings">Settings <span>41° S</span></a>
+  </nav>
+
+  <main>
+    <section class="stop" id="cover" aria-labelledby="cover-title" data-lat="47">
+      <div class="stop-copy">
+        <p class="label">01 · Start · 47° N, Switzerland</p>
+        <h1 id="cover-title" class="display">Along one meridian.</h1>
+        <p class="lede">Meridian moves down the line of longitude at 0 degrees, one screen at a time. The map under the page is the place each screen is drawn from, and it follows your scroll.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Meridian · one route</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="create" aria-labelledby="create-title" data-lat="23">
+      <div class="stop-copy">
+        <p class="label">02 · Create · 23° N, Tropic of Cancer</p>
+        <h2 id="create-title" class="display">Plan a run.</h2>
+        <p class="lede">Describe the video. The plan is drawn when you plan it, and nothing is paid for until you approve it.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Brief · 30 seconds</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="library" aria-labelledby="library-title" data-lat="0">
+      <div class="stop-copy">
+        <p class="label">03 · Library · 0°, Equator</p>
+        <h2 id="library-title" class="display">Everything made or kept.</h2>
+        <p class="lede">Drafts, reviews and published work sit in one list. Each item says what it is, and what is still missing.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Library · 12 items</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="insights" aria-labelledby="insights-title" data-lat="-23">
+      <div class="stop-copy">
+        <p class="label">04 · Insights · 23° S, Tropic of Capricorn</p>
+        <h2 id="insights-title" class="display">What the market says.</h2>
+        <p class="lede">Counts describe stored posts. They say what was collected, and they are not a claim about effect.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Market · 8 weeks</figcaption>
+      </figure>
+    </section>
+
+    <section class="stop" id="settings" aria-labelledby="settings-title" data-lat="-41">
+      <div class="stop-copy">
+        <p class="label">05 · Settings · 41° S, Patagonia</p>
+        <h2 id="settings-title" class="display">Settings, in one place.</h2>
+        <p class="lede">Limits, members and connections. Each limit says what it blocks, and nothing is set until someone sets it.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Limit · not set</figcaption>
+      </figure>
+    </section>
+
+    <!-- The loop: the first stop again, a half turn of the map on. It is hidden from assistive tech, and the page jumps back to the first stop when a reader reaches it. -->
+    <section class="stop" id="cover-loop" aria-hidden="true" data-lat="-133">
+      <div class="stop-copy">
+        <p class="label">01 · Start · 47° N, Switzerland</p>
+        <h2 class="display">Along one meridian.</h2>
+        <p class="lede">Meridian moves down the line of longitude at 0 degrees, one screen at a time.</p>
+      </div>
+      <figure class="bill-figure">
+        <canvas class="bill" width="75" height="30" aria-hidden="true"></canvas>
+        <figcaption class="mono">Meridian · one route</figcaption>
+      </figure>
+    </section>
+  </main>
+
+  <script type="module" src="site.mjs"></script>
+</body>
+</html>
