@@ -30,8 +30,21 @@ test("no shadow is drawn on any surface: a layer is a hairline edge", () => {
   assert.deepEqual(offenders(/(?<![\w-])(?:hover:|focus-visible:)?shadow(?:-sm|-md|-lg|-xl|-2xl)?(?![\w-])/), []);
 });
 
-test("nothing is blurred: the header and the phone bar take the map's ground instead", () => {
-  assert.deepEqual(offenders(/backdrop-blur/), []);
+test("the only blur is the navigation glass: no blur utility, and one frosted rule for the rail, the top bar and the phone bar", () => {
+  assert.deepEqual(offenders(/backdrop-blur/), [], "the glass is the nav-glass class, not a utility");
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const glass = css.match(/\.nav-glass \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(glass, /backdrop-filter: blur\(/);
+  assert.equal((css.match(/backdrop-filter:/g) ?? []).length, 2, "the frosted rule, with its -webkit- twin, is the only one");
+});
+
+test("the meridian is the rail's edge on desktop, and no line is drawn in the middle of a page", () => {
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  const meridian = css.match(/\.site-meridian \{([\s\S]*?)\}/)?.[1] ?? "";
+  assert.match(meridian, /display: none;/, "hidden unless a rail is on the page");
+  assert.doesNotMatch(meridian, /left: 50%/, "never at the middle of the window");
+  assert.match(css, /html\[data-rail="expanded"\] \{ --rail-edge: 232px; \}/);
+  assert.match(css, /html\[data-rail="collapsed"\] \{ --rail-edge: 64px; \}/);
 });
 
 test("nothing pulses: a running state is a colour and a word, not a beat", () => {

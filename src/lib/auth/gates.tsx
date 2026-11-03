@@ -72,7 +72,7 @@ export function UserButton() {
           {user.profileImageUrl ? (
             <img src={user.profileImageUrl} alt="" width={32} height={32} loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
           ) : (
-            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent-muted text-sm font-semibold text-fg-primary">
+            <span aria-hidden="true" className="grid h-8 w-8 place-items-center rounded-full bg-accent text-sm font-semibold text-on-accent">
               {label.charAt(0).toUpperCase()}
             </span>
           )}

@@ -272,12 +272,34 @@
 .page-enter { animation: fade 280ms ease-out both; }details > summary { transition: color 160ms ease; }
 details > summary:hover { color: var(--color-fg); }
 
+/* The navigation glass: the rail, the top bar and the phone bar sit on a dark frosted blur of the map, so the map shows through softened and the
+   navigation reads as one layer over it. The tokens inside are the dark ones, so the text on the glass is light in both themes. */
+.nav-glass {
+  --fg-primary: #FFFFFF; --fg-secondary: #DADADA; --fg-muted: #BDBDBD;
+  --border-hairline: #2A2A2A; --border-strong: #6B6B6B; --bg-raised: #161616; --bg-overlay: #1C1C1C;
+  --color-fg-primary: #FFFFFF; --color-fg-secondary: #DADADA; --color-fg-muted: #BDBDBD;
+  --color-hairline: #2A2A2A; --color-border-strong: #6B6B6B; --color-raised: #161616; --color-overlay: #1C1C1C;
+  color: var(--color-fg-primary);
+  background-color: rgb(0 0 0 / 0.7);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  backdrop-filter: blur(18px) saturate(140%);
+}
+
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map, the meridian line and
    the grain are fixed and sit under the page content (a negative z-index), in that order, so every page is drawn on the map. */
 .site-map { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
+/* The meridian is the line between the menu and the work area, on desktop, where the rail is. Elsewhere (the phone, and the pages with no rail)
+   it is not drawn: a line in the middle of a page would mean nothing. The shell sets the rail's state on the root, and the rail's width
+   comes from it. */
 .site-meridian {
-  position: fixed; top: 0; bottom: 0; left: 50%; width: 1px; z-index: -1; pointer-events: none;
+  display: none;
+  position: fixed; top: 0; bottom: 0; left: calc(var(--rail-edge, 0px) - 1px); width: 1px; z-index: -1; pointer-events: none;
   background: var(--accent); opacity: 0.7;
+}
+@media (min-width: 64rem) {
+  html[data-rail="expanded"] { --rail-edge: 232px; }
+  html[data-rail="collapsed"] { --rail-edge: 64px; }
+  html[data-rail] .site-meridian { display: block; }
 }
 .site-grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.07; }
 

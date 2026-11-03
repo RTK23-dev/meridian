@@ -113,6 +113,13 @@ function ShellChrome({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [path]);
 
+  // The rail's state is kept on the root, so the meridian line can sit at the rail's edge on desktop.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.rail = collapsed ? "collapsed" : "expanded";
+    return () => { delete root.dataset.rail; };
+  }, [collapsed]);
+
   const overlayOpen = paletteOpen || shortcutsOpen || mobileNavOpen;
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -209,12 +216,12 @@ function ShellChrome({ children }: { children: ReactNode }) {
   };
 
   return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[64px_1fr]" : "lg:grid lg:grid-cols-[232px_1fr]"}`}>
-    <aside className="hidden border-r border-hairline lg:block">{sidebar()}</aside>
-    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 bg-[var(--map-bg)] p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+    <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 nav-glass p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     <div className="flex min-h-screen min-w-0 flex-col">
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
-      <header className="sticky top-0 z-20 border-b border-hairline bg-[var(--map-bg)]">
+      <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
           <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
           <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
@@ -234,7 +241,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="border-b border-hairline bg-[var(--map-bg)] px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
+      <div className="nav-glass border-b border-hairline px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
       <main id="main" tabIndex={-1} className="@container page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
@@ -246,7 +253,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         </div>
       </main>
       {/* The five places, as on the walkthrough's phone frame. A place with no screen on this page is shown as unavailable. */}
-      <nav aria-label="Quick navigation" className="fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-hairline bg-[var(--map-bg)] pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav aria-label="Quick navigation" className="nav-glass fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-hairline pb-[env(safe-area-inset-bottom)] lg:hidden">
         {tabs.map((tab) => {
           const Icon = PLACE_ICONS[tab.place];
           const here = currentPlace === tab.place;
