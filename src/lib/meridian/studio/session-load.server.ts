@@ -1,6 +1,7 @@
 // The session loading block of studio/session.server.ts: the stored session of a brand, its run policy and its usage.
 // Moved out unchanged (coding loop, T4). studio/session.server.ts re-exports every public name it had.
 
+import { storedNumberOrNull } from "../decisions/stored-number.ts";
 import { getSql } from "../../db.ts";
 import { assertRole, isRole, type Role } from "../access.ts";
 import { parseFrame } from "../brief/frame.ts";
@@ -249,8 +250,8 @@ export async function loadSession(sql: Sql, organizationId: string, brandId: str
         .map((item) => ({
           id: asText(item.question_id),
           decision: asText(item.decision),
-          probability: asNumber(item.probability),
-          confidence: asNumber(item.confidence),
+          probability: storedNumberOrNull(item.probability),
+          confidence: storedNumberOrNull(item.confidence),
           reasons: asJson<string[]>(item.reasons, []),
           evidence: asJson<{ summary: string }[]>(item.evidence, []).map((entry) => entry.summary),
           answer: answerValue(item.answer),
