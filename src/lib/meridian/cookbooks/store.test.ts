@@ -63,10 +63,37 @@ test("a brand's cookbook is invisible to another brand, and a workspace cookbook
   assert.equal(inB.ok, true, "every brand reads a workspace cookbook");
 });
 
-test("a cookbook keeps its brand: saving a new version under another brand is refused", async () => {
-  const result = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbook: custom("ck_store_only_a"), createdBy: USER });
+test("a cookbook id is per brand: another brand can use the same id and is never told the first one exists", async () => {
+  const fromB = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbook: custom("ck_store_only_a", "Brand B's own"), createdBy: USER });
+  assert.equal(fromB.ok, true, "the id is free for brand B");
+  if (fromB.ok) assert.equal(fromB.value.version, 1, "brand B's copy starts at version 1");
+  const readA = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_only_a" });
+  assert.equal(readA.ok && readA.value.cookbook.label, "My explainer", "brand A still reads its own");
+  const readB = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_only_a" });
+  assert.equal(readB.ok && readB.value.cookbook.label, "Brand B's own", "brand B reads its own");
+});
+
+test("a brand cannot save over a workspace-shared cookbook's id: it keeps its scope, fork it", async () => {
+  await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: null, cookbook: custom("ck_store_shared_id"), createdBy: USER });
+  const result = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbook: custom("ck_store_shared_id"), createdBy: USER });
   assert.equal(result.ok, false);
   if (!result.ok) assert.equal(result.reason, "brand_mismatch");
+});
+
+test("a workspace-shared cookbook and a brand's own can use one id: each is read, listed and archived on its own", async () => {
+  await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbook: custom("ck_store_twin", "A only"), createdBy: USER });
+  const shared = await saveCookbookVersion(db.sql, { organizationId: ORG, brandId: null, cookbook: custom("ck_store_twin", "Shared"), createdBy: USER });
+  assert.equal(shared.ok, true, "sharing an id a brand uses privately is allowed");
+  const a = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_twin" });
+  assert.equal(a.ok && a.value.cookbook.label, "A only", "brand A reads its own over the shared one");
+  const b = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_twin" });
+  assert.equal(b.ok && b.value.cookbook.label, "Shared", "brand B reads the shared one");
+  const listA = (await listCookbooks(db.sql, { organizationId: ORG, brandId: BRAND_A })).filter((item) => item.cookbookId === "ck_store_twin");
+  assert.equal(listA.length, 1, "one entry per id");
+  assert.equal(listA[0]?.cookbook.label, "A only");
+  await archiveCookbook(db.sql, { organizationId: ORG, brandId: BRAND_A, cookbookId: "ck_store_twin" });
+  const bAfter = await getCookbookVersion(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_twin" });
+  assert.equal(bAfter.ok && bAfter.value.archivedAt, null, "archiving brand A's copy leaves the shared one alone");
 });
 
 test("a fork keeps its parent, and a brand fork is not shared", async () => {
@@ -112,7 +139,7 @@ test("a built-in id cannot be saved over, and a cookbook in another workspace is
 });
 
 test("archiving a cookbook outside the brand's view finds nothing", async () => {
-  const result = await archiveCookbook(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_only_a" });
+  const result = await archiveCookbook(db.sql, { organizationId: ORG, brandId: BRAND_B, cookbookId: "ck_store_fork" });
   assert.equal(result.ok, false);
 });
 

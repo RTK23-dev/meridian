@@ -54,6 +54,6 @@ which settings give which results from those records. A measure that could not b
 - A paid render in engine mode.
 - A look check of the agent-mode scenes in a browser, where the GSAP script can load.
 
-## Known limits
+## Cookbook ids
 
-- **Ids are shared across a workspace's brands.** A cookbook id is unique in the whole workspace, so a member who tries to save an id that another brand already uses is told the id is taken ("a cookbook keeps its brand"). That reveals that the id exists, and nothing else: not the cookbook's name, its steps or its owner. Closing it means making the key per brand, which changes how a cookbook is looked up by id everywhere. It is a design decision for the owner, not a bug fix, and it has not been made.
+A cookbook id is unique per brand, and for the workspace-shared cookbooks, not across the whole workspace (migration 0151). Two brands can each have a cookbook with the same id, and neither learns that the other exists. A brand's own cookbook is the one that brand reads when a workspace-shared one has the same id. A brand cannot save over a workspace-shared cookbook's id: it forks the cookbook instead.
