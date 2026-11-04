@@ -114,7 +114,7 @@ test("the glide closes a fixed share of the gap each frame, and the stops are th
 test("a page is drawn at its place's stop, and a page outside the places at the first stop", () => {
   assert.equal(stopForPath("/"), "cover", "the workspace overview is Home");
   assert.equal(stopForPath("/alerts"), "cover", "Alerts is under Home");
-  assert.equal(stopForPath("/content-factory"), "create");
+  assert.equal(stopForPath("/create"), "create", "Create is the one page for making");
   assert.equal(stopForPath("/exports"), "library");
   assert.equal(stopForPath("/brands/b1/market"), "insights");
   assert.equal(stopForPath("/billing"), "settings");

@@ -21,6 +21,7 @@ import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBillingRouteImport } from './routes/_app/billing'
 import { Route as AppContentFactoryRouteImport } from './routes/_app/content-factory'
+import { Route as AppCreateRouteImport } from './routes/_app/create'
 import { Route as AppEngineOpsRouteImport } from './routes/_app/engine-ops'
 import { Route as AppExportsRouteImport } from './routes/_app/exports'
 import { Route as AppIntegrationsRouteImport } from './routes/_app/integrations'
@@ -117,6 +118,11 @@ const AppBillingRoute = AppBillingRouteImport.update({
 const AppContentFactoryRoute = AppContentFactoryRouteImport.update({
   id: '/content-factory',
   path: '/content-factory',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCreateRoute = AppCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
   getParentRoute: () => AppRoute,
 } as any)
 const AppEngineOpsRoute = AppEngineOpsRouteImport.update({
@@ -329,6 +335,7 @@ export interface FileRoutesByFullPath {
   '/audit': typeof AppAuditRoute
   '/billing': typeof AppBillingRoute
   '/content-factory': typeof AppContentFactoryRoute
+  '/create': typeof AppCreateRoute
   '/engine-ops': typeof AppEngineOpsRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
@@ -379,6 +386,7 @@ export interface FileRoutesByTo {
   '/audit': typeof AppAuditRoute
   '/billing': typeof AppBillingRoute
   '/content-factory': typeof AppContentFactoryRoute
+  '/create': typeof AppCreateRoute
   '/engine-ops': typeof AppEngineOpsRoute
   '/exports': typeof AppExportsRoute
   '/integrations': typeof AppIntegrationsRoute
@@ -432,6 +440,7 @@ export interface FileRoutesById {
   '/_app/audit': typeof AppAuditRoute
   '/_app/billing': typeof AppBillingRoute
   '/_app/content-factory': typeof AppContentFactoryRoute
+  '/_app/create': typeof AppCreateRoute
   '/_app/engine-ops': typeof AppEngineOpsRoute
   '/_app/exports': typeof AppExportsRoute
   '/_app/integrations': typeof AppIntegrationsRoute
@@ -486,6 +495,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/content-factory'
+    | '/create'
     | '/engine-ops'
     | '/exports'
     | '/integrations'
@@ -536,6 +546,7 @@ export interface FileRouteTypes {
     | '/audit'
     | '/billing'
     | '/content-factory'
+    | '/create'
     | '/engine-ops'
     | '/exports'
     | '/integrations'
@@ -588,6 +599,7 @@ export interface FileRouteTypes {
     | '/_app/audit'
     | '/_app/billing'
     | '/_app/content-factory'
+    | '/_app/create'
     | '/_app/engine-ops'
     | '/_app/exports'
     | '/_app/integrations'
@@ -732,6 +744,13 @@ declare module '@tanstack/react-router' {
       path: '/content-factory'
       fullPath: '/content-factory'
       preLoaderRoute: typeof AppContentFactoryRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/create': {
+      id: '/_app/create'
+      path: '/create'
+      fullPath: '/create'
+      preLoaderRoute: typeof AppCreateRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/engine-ops': {
@@ -1009,6 +1028,7 @@ interface AppRouteChildren {
   AppAuditRoute: typeof AppAuditRoute
   AppBillingRoute: typeof AppBillingRoute
   AppContentFactoryRoute: typeof AppContentFactoryRoute
+  AppCreateRoute: typeof AppCreateRoute
   AppEngineOpsRoute: typeof AppEngineOpsRoute
   AppExportsRoute: typeof AppExportsRoute
   AppIntegrationsRoute: typeof AppIntegrationsRoute
@@ -1046,6 +1066,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAuditRoute: AppAuditRoute,
   AppBillingRoute: AppBillingRoute,
   AppContentFactoryRoute: AppContentFactoryRoute,
+  AppCreateRoute: AppCreateRoute,
   AppEngineOpsRoute: AppEngineOpsRoute,
   AppExportsRoute: AppExportsRoute,
   AppIntegrationsRoute: AppIntegrationsRoute,
