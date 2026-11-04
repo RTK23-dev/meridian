@@ -288,7 +288,7 @@ details > summary:hover { color: var(--color-fg); }
 /* A menu panel is the same frosted blur, over a tint of the page's own ground, so it reads as part of the page rather than a separate
    sheet. It sets only the tint: the blur stays the one rule above. */
 :root .nav-glass.nav-glass-panel {
-  background-color: color-mix(in srgb, var(--bg-base) 93%, transparent);
+  background-color: color-mix(in srgb, var(--bg-base) 84%, transparent);
 }
 
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map and the grain are fixed
@@ -311,7 +311,7 @@ details > summary:hover { color: var(--color-fg); }
 /* On a phone and a tablet the map is faint, so the page's own content leads, and it moves a little as the page scrolls (site-background.tsx).
    The grain is not drawn there. The desktop keeps the full site background. */
 @media (max-width: 63.99rem) {
-  .site-map { opacity: 0.1; will-change: transform; }
+  .site-map { opacity: 0.5; will-change: transform; }
   .site-grain { display: none; }
 }
 
