@@ -133,7 +133,7 @@ export function CreatePage() {
             <select
               value={brandId}
               onChange={(event) => chooseBrand(event.target.value)}
-              className="min-h-9 min-w-40 rounded-full border border-border-strong bg-transparent px-3 text-sm font-normal normal-case tracking-normal text-fg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="min-h-9 min-w-40 rounded-sharp border border-border-strong bg-transparent px-3 text-sm font-normal normal-case tracking-normal text-fg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <option value="">No brand</option>
               {brands.map((brand) => (

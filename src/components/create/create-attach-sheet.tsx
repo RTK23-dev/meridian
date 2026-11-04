@@ -20,10 +20,10 @@ export function CreateAttachSheet({ open, onOpenChange, onFiles }: { open: boole
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="rounded-t-[28px] border-t border-x-0 border-b-0 px-5 pb-8 pt-3">
-        <div aria-hidden="true" className="mx-auto mb-5 h-1 w-10 rounded-full bg-border-strong" />
+      <SheetContent className="rounded-t-sharp border-t border-x-0 border-b-0 px-5 pb-8 pt-3">
+        <div aria-hidden="true" className="mx-auto mb-5 h-1 w-10 rounded-sharp bg-border-strong" />
         <div className="grid grid-cols-[44px_1fr_44px] items-center">
-          <SheetClose aria-label="Close" className="grid size-11 place-items-center rounded-full text-fg-primary transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+          <SheetClose aria-label="Close" className="grid size-11 place-items-center rounded-sharp text-fg-primary transition-colors hover:bg-raised focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
             <X aria-hidden="true" className="size-5" />
           </SheetClose>
           <SheetTitle className="text-center text-base font-semibold text-fg-primary">Add to your message</SheetTitle>
@@ -50,7 +50,7 @@ function Tile({ icon, label, onActivate }: { icon: ReactNode; label: string; onA
     <button
       type="button"
       onClick={onActivate}
-      className="flex aspect-[4/3] flex-col items-center justify-center gap-2.5 rounded-[20px] bg-raised px-2 text-center text-sm font-medium text-fg-primary transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="flex aspect-[4/3] flex-col items-center justify-center gap-2.5 rounded-sharp bg-raised px-2 text-center text-sm font-medium text-fg-primary transition-colors hover:bg-overlay focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
     >
       {icon}
       <span>{label}</span>

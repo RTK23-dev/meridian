@@ -9,15 +9,14 @@ export type ComposerFile = { id: string; name: string; kind: "video" | "image" |
 
 /*
  * Design rules for this composer, kept in one place so every part follows them:
- * - One radius family. The shell is 28px. Its inner controls sit 8px in, so their radius is the shell's minus that inset, and
- *   round controls are circles: the send and plus buttons are 40px circles, the pills are full-height capsules.
- * - One spacing grid of 4px. Text, attachments and the hint share one left edge, 20px in from the shell, so the column reads straight.
+ * - Square corners, as on every other control in the app (the 2px sharp radius). Controls take a strong hairline border, not a fill.
+ * - One spacing grid of 4px. Text, attachments and the hint share one left edge, so the column reads straight.
  * - Icons are 20px in controls and 16px beside a label. Every target is at least 40px, and 44px on a touch screen.
  * - One accent. Only Send takes the accent, and only when it can send; everything else is hairline, ground or raised surface.
  * - Hairlines separate, shadows never do.
  */
-const SHELL = "rounded-[28px]";
-const PILL = "inline-flex h-9 items-center gap-1.5 rounded-full border border-border-strong px-3.5 text-sm font-medium text-fg-primary transition-colors hover:bg-raised pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
+const SHELL = "rounded-sharp";
+const PILL = "inline-flex h-9 items-center gap-1.5 rounded-sharp border border-border-strong px-3.5 text-sm font-medium text-fg-primary transition-colors hover:bg-raised pointer-coarse:h-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 
 function KindIcon({ kind }: { kind: ComposerFile["kind"] }) {
   const Icon = kind === "video" ? Film : kind === "image" ? ImageIcon : FileText;
@@ -89,18 +88,18 @@ export function CreateComposer({
           {files.length > 0 ? (
             <ul aria-label="Attached files" className="mb-2 flex flex-wrap gap-2">
               {files.map((file) => (
-                <li key={file.id} className="flex h-9 max-w-full items-center gap-2 rounded-full bg-raised py-0.5 pl-3 pr-0.5 text-caption text-fg-primary">
+                <li key={file.id} className="flex h-9 max-w-full items-center gap-2 rounded-sharp bg-raised py-0.5 pl-3 pr-0.5 text-caption text-fg-primary">
                   <KindIcon kind={file.kind} />
                   <span className="min-w-0 max-w-40 truncate">{file.name}</span>
                   <button
                     type="button"
                     onClick={() => onTogglePurpose(file.id)}
                     aria-label={`${file.name}: ${file.purpose === "reference_video" ? "a reference video" : "material"}. Change`}
-                    className="h-7 rounded-full border border-border-strong px-2.5 text-caption text-fg-secondary hover:text-fg-primary"
+                    className="h-7 rounded-sharp border border-border-strong px-2.5 text-caption text-fg-secondary hover:text-fg-primary"
                   >
                     {file.purpose === "reference_video" ? "Reference" : "Material"}
                   </button>
-                  <button type="button" onClick={() => onRemoveFile(file.id)} aria-label={`Remove ${file.name}`} className="grid size-7 place-items-center rounded-full text-fg-muted hover:bg-overlay hover:text-fg-primary">
+                  <button type="button" onClick={() => onRemoveFile(file.id)} aria-label={`Remove ${file.name}`} className="grid size-7 place-items-center rounded-sharp text-fg-muted hover:bg-overlay hover:text-fg-primary">
                     <X aria-hidden="true" className="size-3.5" />
                   </button>
                 </li>
@@ -135,7 +134,7 @@ export function CreateComposer({
               type="button"
               onClick={onAttach}
               aria-label="Add photos, a video or a file"
-              className="grid size-10 shrink-0 place-items-center rounded-full text-fg-primary transition-colors hover:bg-raised pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+              className="grid size-10 shrink-0 place-items-center rounded-sharp text-fg-primary transition-colors hover:bg-raised pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <Plus aria-hidden="true" className="size-5" />
             </button>
@@ -153,7 +152,7 @@ export function CreateComposer({
                   const Icon = id === "studio" ? SlidersHorizontal : Sparkles;
                   const selected = mode === id;
                   return (
-                    <DropdownMenuItem key={id} onSelect={() => onMode(id)} className="items-start gap-3 rounded-[20px] p-3">
+                    <DropdownMenuItem key={id} onSelect={() => onMode(id)} className="items-start gap-3 rounded-sharp p-3">
                       <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0 text-fg-secondary" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-fg-primary">{CREATE_MODE_COPY[id].label}</span>
@@ -175,7 +174,7 @@ export function CreateComposer({
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-64 p-1.5">
                 {models.map((option) => (
-                  <DropdownMenuItem key={option.value} onSelect={() => onModel(option.value)} className="items-center gap-3 rounded-[20px] p-3">
+                  <DropdownMenuItem key={option.value} onSelect={() => onModel(option.value)} className="items-center gap-3 rounded-sharp p-3">
                     <span className="min-w-0 flex-1 text-sm text-fg-primary">{option.label}</span>
                     {model === option.value ? <Check aria-hidden="true" className="size-4 shrink-0 text-fg-primary" /> : null}
                   </DropdownMenuItem>
@@ -189,7 +188,7 @@ export function CreateComposer({
             aria-label={busy ? "Sending" : "Send"}
             aria-busy={busy || undefined}
             disabled={!canSend || busy}
-            className={`grid size-10 shrink-0 place-items-center rounded-full transition-colors pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-primary disabled:cursor-not-allowed ${canSend ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-raised text-fg-muted"}`}
+            className={`grid size-10 shrink-0 place-items-center rounded-sharp transition-colors pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-primary disabled:cursor-not-allowed ${canSend ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-raised text-fg-muted"}`}
           >
             <ArrowUp aria-hidden="true" className="size-5" />
           </button>
