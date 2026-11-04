@@ -214,8 +214,9 @@
   /* The one page title. Every screen's h1 uses this class (PageHeader does too): 28px on phones, 36px from 768px. Archivo at a
      92% width, weight 600, as in the walkthrough. */
   .page-title {
-    font-size: var(--text-title);
-    line-height: var(--text-title--line-height);
+    /* 26px and a 32px line on a phone, so the title and the body read as one page; the 36px title comes back from 48rem wide. */
+    font-size: 1.625rem;
+    line-height: 2rem;
     font-weight: 600;
     font-stretch: 92%;
     letter-spacing: -0.02em;
@@ -284,6 +285,11 @@ details > summary:hover { color: var(--color-fg); }
 :root[data-theme="light"] .nav-glass {
   background-color: rgb(0 0 0 / 0.04);
 }
+/* A menu panel is the same frosted blur, over a tint of the page's own ground, so it reads as part of the page rather than a separate
+   sheet. It sets only the tint: the blur stays the one rule above. */
+:root .nav-glass.nav-glass-panel {
+  background-color: color-mix(in srgb, var(--bg-base) 84%, transparent);
+}
 
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map and the grain are fixed
    and sit under the page content (a negative z-index), so every page is drawn on the map. The meridian is drawn above the navigation glass. */
@@ -302,6 +308,12 @@ details > summary:hover { color: var(--color-fg); }
   html[data-rail] .site-meridian { display: block; }
 }
 .site-grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.07; }
+/* On a phone and a tablet the map is faint, so the page's own content leads, and it moves a little as the page scrolls (site-background.tsx).
+   The grain is not drawn there. The desktop keeps the full site background. */
+@media (max-width: 63.99rem) {
+  .site-map { opacity: 0.5; will-change: transform; }
+  .site-grain { display: none; }
+}
 
 /* The line into a running step of the Content Factory board. Its dashes move down the line while the step works. The reduced-motion rule
    below cuts the movement, so the line is then a steady dashed line. */

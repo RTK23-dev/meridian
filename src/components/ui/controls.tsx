@@ -11,7 +11,8 @@ import { FieldMessages, useFieldIds } from "./field";
 type DescribedControl = { label?: string; hint?: string; error?: string; id?: string };
 const focusRing = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent";
 const labelClass = "block text-small font-semibold text-fg-secondary";
-const controlClass = `w-full min-h-10 rounded-sharp border border-border-strong bg-overlay px-3 py-2 text-body text-fg-primary placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-accent disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
+// 16px on a phone: iOS Safari zooms into any field set smaller, and the zoom leaves the page shifted. Desktop keeps the body size.
+const controlClass = `w-full min-h-10 rounded-sharp border border-border-strong bg-overlay px-3 py-2 text-base sm:text-body text-fg-primary placeholder:text-fg-muted hover:border-fg-secondary focus-visible:border-accent disabled:cursor-not-allowed disabled:border-hairline disabled:text-fg-muted aria-[invalid=true]:border-danger ${focusRing}`;
 
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement>, DescribedControl {}
 export const Input = forwardRef<HTMLInputElement, InputProps>(function Input({ label, hint, error, id, className, type, step, onWheel, ...props }, ref) {

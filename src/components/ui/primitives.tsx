@@ -38,10 +38,13 @@ export const SheetTrigger = Vaul.Trigger;
 export const SheetClose = Vaul.Close;
 export const SheetTitle = Vaul.Title;
 export const SheetDescription = Vaul.Description;
-export function SheetContent({ className, side = "bottom", ...props }: ComponentProps<typeof Vaul.Content> & { side?: "bottom" | "right" }) {
+export function SheetContent({ className, side = "bottom", ...props }: ComponentProps<typeof Vaul.Content> & { side?: "bottom" | "right" | "left" }) {
   const placement = side === "right"
     ? "inset-y-0 right-0 w-full overflow-auto border-l border-border-strong bg-overlay p-6 sm:w-[480px]"
-    : "inset-x-0 bottom-0 max-h-[90vh] overflow-auto rounded-t-sharp border border-border-strong bg-overlay p-6 pb-[max(env(safe-area-inset-bottom),1.5rem)]";
+    : side === "left"
+      // A drawer from the left edge: it is as wide as the phone allows, and it never starts off the screen.
+      ? "inset-y-0 left-0 w-[min(20rem,88vw)] overflow-y-auto border-r border-border-strong p-0"
+      : "inset-x-0 bottom-0 max-h-[90vh] overflow-auto rounded-t-sharp border border-border-strong bg-overlay p-6 pb-[max(env(safe-area-inset-bottom),1.5rem)]";
   return <Vaul.Portal><Vaul.Overlay className={Overlay} /><Vaul.Content {...props} className={cn("fixed z-50 text-fg-primary", placement, className)} /></Vaul.Portal>;
 }
 

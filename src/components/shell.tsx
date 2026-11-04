@@ -32,6 +32,11 @@ export function Shell({ children }: { children: ReactNode }) {
 function ShellChrome({ children }: { children: ReactNode }) {
   const { data, reload } = useWorkspace();
   const path = useRouterState({ select: (state) => state.location.pathname.replace(/\/$/, "") || "/" });
+  // On a phone the page scrolls inside <main>, so a new page starts at its top. On desktop the window scrolls, and the router resets it.
+  const mainRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [path]);
   const matches = useMatches();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -215,15 +220,19 @@ function ShellChrome({ children }: { children: ReactNode }) {
     </div>;
   };
 
-  return <div className={`min-h-screen ${collapsed ? "lg:grid lg:grid-cols-[64px_1fr]" : "lg:grid lg:grid-cols-[232px_1fr]"}`}>
+  return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[64px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[232px_1fr]"}`}>
     <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
-    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent className="inset-y-0 left-0 right-auto h-full max-h-none w-[min(20rem,88vw)] rounded-none border-r border-t-0 nav-glass p-0"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
-    <div className="flex min-h-screen min-w-0 flex-col">
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="nav-glass nav-glass-panel flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+    {/* On a phone the page fills the visible height (dvh, so Safari's address and bottom bars are not counted) and only the page scrolls, so the
+        five places stay on screen. On desktop the page grows and the window scrolls, as before. */}
+    <div className="flex h-dvh min-w-0 flex-col lg:h-auto lg:min-h-screen">
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
       <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
           <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          {/* On a phone the page title sits in the header, beside the menu, instead of in a second row under it. */}
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-primary md:hidden">{pageTitle ?? ""}</p>
           <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
             <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
@@ -231,7 +240,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-caption text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-sharp border border-border-strong px-3 text-sm text-fg-muted hover:bg-raised pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex size-10 items-center justify-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11 sm:h-10 sm:w-auto sm:justify-start sm:gap-2 sm:border sm:border-border-strong sm:px-3 sm:text-sm" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
             <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
               {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg-primary px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
@@ -241,26 +250,26 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="nav-glass border-b border-hairline px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main id="main" tabIndex={-1} className="@container page-enter min-w-0 flex-1 px-4 py-6 pb-28 sm:px-6 lg:px-12 lg:py-10 lg:pb-12">
+      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 pb-6 sm:px-6 lg:overflow-visible lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
-          {next ? <section aria-label="Next step" className="mt-12 border-t border-hairline pt-6">
+          {next ? <section aria-label="Next step" className="mt-10 border-t border-hairline pt-6 sm:mt-12">
             <p className="eyebrow mb-3">Next step</p>
             <Button asChild variant="secondary"><Link to={next.to as never} onMouseEnter={() => prefetch(next.to)} onFocus={() => prefetch(next.to)}>Continue to {next.label}<ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
           </section> : null}
         </div>
       </main>
       {/* The five places, as on the walkthrough's phone frame. A place with no screen on this page is shown as unavailable. */}
-      <nav aria-label="Quick navigation" className="nav-glass fixed inset-x-0 bottom-0 z-20 grid grid-cols-5 border-t border-hairline pb-[env(safe-area-inset-bottom)] lg:hidden">
+      <nav aria-label="Quick navigation" className="shrink-0 grid grid-cols-5 border-t border-hairline bg-ground pb-[env(safe-area-inset-bottom)] lg:hidden">
         {tabs.map((tab) => {
           const Icon = PLACE_ICONS[tab.place];
           const here = currentPlace === tab.place;
           if (!tab.to) {
-            return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
+            return <span key={tab.place} aria-disabled="true" className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
           }
-          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
+          // The place you are in is marked three ways: its label is bold, its icon takes the accent, and a bar sits on the top edge.
+          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-4 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-secondary"}`}><Icon aria-hidden="true" className={`size-5 shrink-0 ${here ? "text-accent" : ""}`} /><span className="max-w-full truncate">{tab.label}</span></Link>;
         })}
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>
