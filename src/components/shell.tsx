@@ -222,7 +222,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
 
   return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[64px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[232px_1fr]"}`}>
     <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
-    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
+    <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="nav-glass nav-glass-panel flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     {/* On a phone the page fills the visible height (dvh, so Safari's address and bottom bars are not counted) and only the page scrolls, so the
         five places stay on screen. On desktop the page grows and the window scrolls, as before. */}
     <div className="flex h-dvh min-w-0 flex-col lg:h-auto lg:min-h-screen">
@@ -238,7 +238,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </nav>
           <div className="ml-auto flex shrink-0 items-center gap-2">
             {active ? <span className="hidden text-caption text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex h-10 items-center gap-2 rounded-sharp border border-border-strong px-3 text-sm text-fg-muted hover:bg-raised pointer-coarse:h-11" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex size-10 items-center justify-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11 sm:h-10 sm:w-auto sm:justify-start sm:gap-2 sm:border sm:border-border-strong sm:px-3 sm:text-sm" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
             <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
               {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg-primary px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
