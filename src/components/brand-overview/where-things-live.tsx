@@ -12,7 +12,7 @@ export function WhereThingsLive({ brandId }: { brandId: string }) {
       <ul className="mt-3 divide-y divide-border">
         {AREA_GUIDE.map((area) => (
           <li key={area.id} className="py-3">
-            <Link to={`/brands/${brandId}/${area.path}` as never} className="font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
+            <Link to={(area.path.startsWith("/") ? area.path : `/brands/${brandId}/${area.path}`) as never} className="font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">
               {area.label}
             </Link>
             <p className="mt-1 text-sm text-fg-muted">{area.what}</p>

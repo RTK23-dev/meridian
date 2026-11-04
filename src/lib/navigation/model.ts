@@ -50,7 +50,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
   if (!brandId) {
     return [
       { id: "home", label: "Home", items: [{ id: "overview", label: "Workspace overview", to: "/" }, { id: "alerts", label: "Alerts", to: "/alerts" }] },
-      { id: "create", label: "Create", items: [{ id: "content-factory", label: "Content", to: "/content-factory" }, { id: "orchestrator", label: "Orchestrator", to: "/orchestrator" }] },
+      { id: "create", label: "Create", items: [{ id: "create", label: "Create", to: "/create" }] },
       { id: "library", label: "Library", items: [{ id: "exports", label: "Exports", to: "/exports" }] },
       // Insights is about a brand's market, so it has no screens until a brand is open.
       { id: "insights", label: "Insights", items: [] },
@@ -66,12 +66,11 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       id: "create",
       label: "Create",
       items: [
-        { id: "content", label: "Content", to: `${base}/content`, badge: openReviews },
+        { id: "create", label: "Create", to: "/create", badge: openReviews },
         { id: "cookbooks", label: "Cookbooks", to: `${base}/cookbooks` },
         { id: "brain", label: "Brand brain", to: `${base}/brain` },
         { id: "products", label: "Products", to: `${base}/products` },
         { id: "pages", label: "Pages", to: `${base}/pages` },
-        { id: "orchestrator", label: "Orchestrator", to: "/orchestrator" },
       ],
     },
     { id: "library", label: "Library", items: [{ id: "exports", label: "Exports", to: "/exports" }] },
@@ -105,22 +104,22 @@ export function placeOf(pathname: string, brandId?: string): PlaceId | null {
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
   { id: "cookbooks", label: "Cookbooks", path: "cookbooks", what: "The cookbooks a video can be made from: their steps, their cost and what each needs, and copies you can make and edit." },
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
-  { id: "content", label: "Content", path: "content", what: "Ideas ranks what to make next. Create makes images and videos, Review holds them for a person, Library keeps them, Publish sends them out, Results shows what worked, and Batch (admins only) starts research-led production runs." },
+  { id: "create", label: "Create", path: "/create", what: "Create is the one page for making. Say what to make, or set the controls yourself in Studio. Ideas ranks what to make next, Review holds drafts for a person, Library keeps them, Publish sends them out, and Results shows what worked. Batch (admins only) starts research-led production runs." },
 ];
 
 /**
- * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Intelligence, Content, Calibration,
- * then back to Content. The brand overview is not listed: its own next-action card names the next step from stored data,
+ * The screen a person goes to next, keyed by the current sidebar item id. The loop runs Intelligence, Create, Calibration,
+ * then back to Create. The brand overview is not listed: its own next-action card names the next step from stored data,
  * so a second link would contradict it.
  */
 const BRAND_NEXT: Record<string, string> = {
   brain: "products",
   products: "market",
   market: "intelligence",
-  intelligence: "content",
-  content: "calibration",
-  cookbooks: "content",
-  calibration: "content",
+  intelligence: "create",
+  create: "calibration",
+  cookbooks: "create",
+  calibration: "create",
 };
 
 const WORKSPACE_NEXT: Record<string, string> = { setup: "overview" };
