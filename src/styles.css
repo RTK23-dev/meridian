@@ -214,8 +214,9 @@
   /* The one page title. Every screen's h1 uses this class (PageHeader does too): 28px on phones, 36px from 768px. Archivo at a
      92% width, weight 600, as in the walkthrough. */
   .page-title {
-    font-size: var(--text-title);
-    line-height: var(--text-title--line-height);
+    /* 26px and a 32px line on a phone, so the title and the body read as one page; the 36px title comes back from 48rem wide. */
+    font-size: 1.625rem;
+    line-height: 2rem;
     font-weight: 600;
     font-stretch: 92%;
     letter-spacing: -0.02em;

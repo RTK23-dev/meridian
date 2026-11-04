@@ -231,6 +231,8 @@ function ShellChrome({ children }: { children: ReactNode }) {
       <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
         <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
           <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+          {/* On a phone the page title sits in the header, beside the menu, instead of in a second row under it. */}
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-primary md:hidden">{pageTitle ?? ""}</p>
           <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
             <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
@@ -248,12 +250,11 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </div>
         </div>
       </header>
-      <div className="nav-glass border-b border-hairline px-4 py-2 text-sm text-fg-muted md:hidden" aria-hidden="true">{brand ? `${brand.name} / ` : ""}{pageTitle ?? ""}</div>
-      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-6 pb-6 sm:px-6 lg:overflow-visible lg:px-12 lg:py-10 lg:pb-12">
+      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 pb-6 sm:px-6 lg:overflow-visible lg:px-12 lg:py-10 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
-          {next ? <section aria-label="Next step" className="mt-12 border-t border-hairline pt-6">
+          {next ? <section aria-label="Next step" className="mt-10 border-t border-hairline pt-6 sm:mt-12">
             <p className="eyebrow mb-3">Next step</p>
             <Button asChild variant="secondary"><Link to={next.to as never} onMouseEnter={() => prefetch(next.to)} onFocus={() => prefetch(next.to)}>Continue to {next.label}<ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
           </section> : null}
@@ -265,9 +266,10 @@ function ShellChrome({ children }: { children: ReactNode }) {
           const Icon = PLACE_ICONS[tab.place];
           const here = currentPlace === tab.place;
           if (!tab.to) {
-            return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
+            return <span key={tab.place} aria-disabled="true" className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
           }
-          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 px-0.5 text-[11px] ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-3 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-muted"}`}><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></Link>;
+          // The place you are in is marked three ways: its label is bold, its icon takes the accent, and a bar sits on the top edge.
+          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-4 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-secondary"}`}><Icon aria-hidden="true" className={`size-5 shrink-0 ${here ? "text-accent" : ""}`} /><span className="max-w-full truncate">{tab.label}</span></Link>;
         })}
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>
