@@ -7,7 +7,8 @@
 
 import { hookSimilarity, SIMILAR_HOOK_THRESHOLD } from "../content-factory/hook-history.ts";
 import { attentionFindings, type AttentionMetrics, type TimedBeat } from "./attention.ts";
-import { DIRECTION_CODEX_VERSION, type CheckId, type DirectionWindows } from "./codex.ts";
+import { DIRECTION_CODEX_VERSION, DIRECTION_WINDOWS, type CheckId, type DirectionWindows } from "./codex.ts";
+import { craftFindings } from "./craft.ts";
 import { factFindings } from "./facts.ts";
 import { slopFindings, type ScriptFinding, type Severity } from "./slop.ts";
 import type { DirectedScript } from "./script.ts";
@@ -81,6 +82,7 @@ export function directionReport(script: DirectedScript, options: ReportOptions =
   const attention = attentionFindings(script, { windows: options.windows, wordsPerMinute: options.wordsPerMinute });
   const findings = [
     ...attention.findings,
+    ...craftFindings(script, attention.timeline, { ...DIRECTION_WINDOWS, ...options.windows }),
     ...slopFindings(script.beats, script.language),
     ...factFindings(script, { durationMs: attention.metrics.durationMs, maxDurationMs: options.maxDurationMs, forbidden: options.forbidden, facts: options.facts }),
     ...(options.recentHooks ? hookRepeatFindings(script, options.recentHooks) : []),

@@ -17,6 +17,7 @@ import {
   hookFamilyIdSchema,
   nicheProfile,
   shareTriggerIdSchema,
+  videoJobSchema,
   type EmotionId,
   type FormatId,
   type HookFamilyId,
@@ -24,8 +25,17 @@ import {
 } from "./codex.ts";
 import { seededRandom } from "./random.ts";
 
-/** One concept seed, as the concept lab returns it. `probability` is the lab's own estimate of how typical the idea is (verbalized sampling). */
+/**
+ * One concept seed, as the concept lab returns it (concept_lab@2). `probability` is the lab's own estimate of how typical the idea is
+ * (verbalized sampling). The idea is the cake (Kallaway): a topic, a non-obvious core argument with the brief's evidence for it (the
+ * lawyer method), the job, and how broad an audience it aims at (the virality stack).
+ */
 export const conceptSeedSchema = z.strictObject({
+  topic: z.string().min(1).max(80),
+  coreArgument: z.string().min(1).max(240),
+  evidence: z.string().min(1).max(240),
+  job: videoJobSchema,
+  audience: z.enum(["broad", "narrow"]),
   hookFamily: hookFamilyIdSchema,
   format: formatIdSchema,
   feeling: emotionIdSchema,
@@ -107,7 +117,7 @@ export function textSimilarity(a: string, b: string): number {
 
 /** The words of a concept that say what it is: its angle, its hook and its promise. */
 export function conceptText(concept: ConceptSeed): string {
-  return [concept.angle, concept.hook.voice, concept.hook.text, concept.promise].join(" ");
+  return [concept.angle, concept.coreArgument, concept.hook.voice, concept.hook.text, concept.promise].join(" ");
 }
 
 /** How alike two concepts are, from 0 to 1: their wording, and whether they share a hook family, a format and a feeling. */

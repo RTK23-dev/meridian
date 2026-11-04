@@ -66,7 +66,15 @@ Labels are the framework's: `sourced`, `practice`, `hypothesis`, `contested` (se
 | Gemini-class models lead documented long-video understanding; audio and subtitles raise accuracy | `sourced`, secondary | [Video-MME](https://arxiv.org/html/2405.21075v1); Video-MME-v2 (April 2026) names Gemini 3 Pro as the best model | No current audio-inclusive scores were confirmed. |
 | EQ-Bench Creative Writing v3 and the Arena rank creative writers in close to opposite orders | `sourced`, secondary | [Digital Applied, August 2026](https://www.digitalapplied.com/blog/which-ai-model-writes-best-leaderboards-disagree) | The reason Meridian runs its own bake-off. |
 
-## 5. Not found, or not checked
+## 5. The short-form lessons (codex 2)
+
+| Claim | Label | Source | Notes |
+| --- | --- | --- | --- |
+| 147 lessons on hooks, structure, formats, ideas, strategy, trust, conversion and AI workflows | `practice` | A study of the creator Kallaway's posts (@kallawaymarketing and related accounts): 274 posts from October 2023 to November 2026, with captions, local transcripts (186 posts with speech) and slide OCR (572 slides); supplied by the owner on 2026-11-04 | One creator's practice and account data. Each lesson links its posts in the source file; `LESSONS_CROSSWALK.md` maps each into the codex |
+| Figures inside the lessons (for example a 14M vs 40K view gap from hook alignment, leads per 1,000 views rising from 8 to 31, a test group of about 200 viewers, skip-rate bands) | `practice`, self-reported | Same | Not checked against another source. Not used as thresholds except where the codex says so, and then as initial values for the loop to replace |
+| Instagram ranks reach to followers by watch time then likes, and to non-followers by watch time then sends | `sourced`, secondary | The lessons' reading of Mosseri (lesson 79), consistent with section 1 above | |
+
+## 6. Not found, or not checked
 
 - No peer-reviewed study of the first three seconds of short-form video retention (as in the October note).
 - No official retention benchmarks for Shorts, Reels or TikTok.

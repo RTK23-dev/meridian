@@ -1,6 +1,6 @@
 # The direction research programme
 
-Version 1, 2026-11-04. The framework's rules start as sourced findings, practice and hypotheses. This programme turns the hypotheses into
+Version 2, 2026-11-04. The framework's rules start as sourced findings, practice and hypotheses. This programme turns the hypotheses into
 measured rules, finds the models that do each job best, and keeps the codex current. Each study names its question, its method, its data,
 its success measure, its estimated cost, and what it needs from the owner. Agents run the offline studies; only real viewers settle the
 rest.
@@ -26,6 +26,16 @@ rest.
 | R8 | Does a native video model judge renders better than frames? | The same rendered videos to a frame-based critic and a native video-and-audio model; compare with human ratings | 50 renders | Correlation with human ratings | About $5 | Approval; a video-native route |
 | R9 | Which hook families win in which niches? | Label the genome of outliers and medians in discovery data; estimate each family's win rate per niche | The discovery corpus | Priors per niche, with intervals, replacing the codex's defaults | About $10 of genome calls | Approval to run |
 | R10 | Do loop seams raise replays? | A/B of one master with and without a seam on a trial audience | Trial reels | Replays per view; average watch percentage | The test budget | Trial reels access; a test budget |
+
+### Studies added with codex 2 (the short-form lessons)
+
+| # | Question | Method | Data | Success measure | Cost (estimate) | Needs from the owner |
+| --- | --- | --- | --- | --- | --- | --- |
+| R11 | Which power words carry a niche? | Mine the niche's top transcripts and text hooks; weight each word by the video's views and how early it appears; compare with median videos | Discovery corpus per niche | A power-word bank per niche, with each word's lift, read into the text-hook rules | About $5 of transcript passes | Approval; the niches |
+| R12 | Which word patterns separate the brand's winners from its losers? | The story audit: the brand's best and worst ten scripts on one topic, compared phrase by phrase; then the script coach's changes, tested | The brand's scripts joined to results | Patterns that hold on the next ten videos | About $2 | Connected accounts with results |
+| R13 | Where do the brand's viewers stay longer than expected? | Retention hunting: spikes in the flat part of each retention curve, and the line or picture at that moment | The brand's retention insights | Hooks drawn from spikes beat the brand's median hook | None | Retention insights access |
+| R14 | Which call-to-action attributes move leads? | Tag each CTA (keyword, offer, place, framing); regress leads per 1,000 views on them | The brand's CTAs and leads | The attributes with an effect, and their size | None | A lead source per video (a DM tool or a CRM) |
+| R15 | Is there a mushy middle in length for this brand? | Bucket the brand's videos by length and topic; compare average watch percentage and views | The brand's own posts | Length buckets that do better, per topic | None | Connected accounts |
 
 ## 3. A 24-hour run, if the owner authorizes it
 

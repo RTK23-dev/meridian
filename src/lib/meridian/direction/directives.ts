@@ -12,12 +12,15 @@ import {
   DIRECTION_CODEX_VERSION,
   EMOTION_RULES,
   END_RULES,
+  FUNNEL_BLOCKERS,
   HOOK_RULES,
   RETENTION_RULES,
   RUBRIC,
+  SAVE_DEVICES,
   SCRIPT_RULES,
   SOUND_RULES,
   SPREAD_RULES,
+  STRATEGY_RULES,
   TRUST_RULES,
   VISUAL_RULES,
   formatArchetype,
@@ -27,6 +30,7 @@ import {
   type FormatId,
   type HookFamilyId,
   type NicheFamily,
+  type VideoJob,
 } from "./codex.ts";
 
 export type DirectionRole = (typeof COOKBOOK_INSTRUCTION_ROLES)[number];
@@ -45,19 +49,22 @@ export const DIRECTION_BUDGETS: Record<DirectionRole, number> = {
   agent: 2000,
 };
 
-export type DirectiveOptions = { format?: FormatId; hookFamily?: HookFamilyId; niche?: NicheFamily };
+export type DirectiveOptions = { format?: FormatId; hookFamily?: HookFamilyId; niche?: NicheFamily; job?: VideoJob };
+
+/** How much direction the pipeline's own prompts carry per role. The engine's cookbook path stays at DIRECTION_BUDGETS. */
+export const PIPELINE_DIRECTIVE_CHARS = 12_000;
 
 const SHORT_VERSION: readonly string[] = [
-  "Stop the eye in the first half-second with motion, a face, or the result. Never an intro.",
-  "Promise one specific thing by 3 seconds, and open one question. Do not answer it yet.",
-  "Every beat raises the stakes or pays a small reward: but, therefore.",
-  "Specific beats general. Every line has a picture. Never invent a fact.",
-  "Pay more than you promised, at the peak, in the last third.",
-  "End on a punch or a seam that restarts the video. No outro.",
-  "Know who it gets sent to and why.",
-  "One feeling, high arousal where it fits.",
-  "No AI register, no stock jokes, no stock hooks, no bait.",
-  "Diverge widely, judge pairwise, and let real viewers pick the winner.",
+  "Stop the eye in the first second: motion, a face, the result, or a pattern interrupt with a matching sound. Never an intro.",
+  "Line 1 names the topic on picture, text and voice; then lean one way and snap back the other. Two sentences, 15 words at most.",
+  "Write the text hook first: a subject plus a pain, a desire or a state change, specific, with power words.",
+  "Prove a bold claim at once, with proof the brief gives; lock the viewer in with the next two or three sentences.",
+  "Rehook within 15 seconds, and turn into a new part at least every 25 seconds: but, therefore.",
+  "Fight a villain (the old way, a false belief), and land two non-obvious ahas early.",
+  "Simple words, zig-zag rhythm, every picture matching its words; say a new idea twice.",
+  "Pay more than you promised, at the peak; end on a punch or a seam. No outro.",
+  "One job per video: shares for reach, saves for follows, an aligned call to action to convert.",
+  "Never invent a fact, a proof, a trend or an endorsement. No bait, no stock hooks, no AI register.",
 ];
 
 function ruleLines(rules: readonly DirectionRule[]): string[] {
@@ -74,24 +81,25 @@ function linesFor(role: DirectionRole, options: DirectiveOptions): string[] {
   if (options.format) {
     const format = formatArchetype(options.format);
     const beats = format.beats.map((beat) => `${beat.role} ${Math.round(beat.from * 100)}-${Math.round(beat.to * 100)}%: ${lowerFirst(beat.job)}`).join(" ");
-    context.push(`Format: ${format.name}. ${beats} It ends with: ${lowerFirst(format.endsWith)}`);
+    context.push(`Format: ${format.name}. ${beats} It ends with: ${lowerFirst(format.endsWith)}${format.notes ? ` ${format.notes}` : ""}`);
   }
   if (options.niche) {
     const profile = nicheProfile(options.niche);
     context.push(`For this niche, watch for: ${profile.pitfalls.join("; ")}.`);
   }
+  if (options.job) context.push(JOB_LINES[options.job]);
 
   switch (role) {
     case "script":
       return [
         ...ruleLines(TRUST_RULES),
-        ...ruleLines(HOOK_RULES),
         ...context,
+        ...ruleLines(HOOK_RULES),
         ...ruleLines(RETENTION_RULES),
-        ...ruleLines(END_RULES),
         ...ruleLines(SCRIPT_RULES),
-        ...ruleLines(EMOTION_RULES),
+        ...ruleLines(END_RULES),
         ...ruleLines(SPREAD_RULES),
+        ...ruleLines(EMOTION_RULES),
       ];
     case "plan":
     case "visual":
@@ -106,7 +114,10 @@ function linesFor(role: DirectionRole, options: DirectiveOptions): string[] {
     case "edit":
       return [
         RETENTION_RULES.find((rule) => rule.id === "rehook")?.text ?? "",
+        RETENTION_RULES.find((rule) => rule.id === "hourglass")?.text ?? "",
         VISUAL_RULES.find((rule) => rule.id === "change_on_beat")?.text ?? "",
+        VISUAL_RULES.find((rule) => rule.id === "interrupt_sound")?.text ?? "",
+        VISUAL_RULES.find((rule) => rule.id === "text_hook_place")?.text ?? "",
         ...ruleLines(END_RULES.filter((rule) => rule.id !== "end_first")),
         ...ruleLines(SOUND_RULES.filter((rule) => rule.id === "sound_marks_cut" || rule.id === "music_curve")),
       ].filter((line) => line.length > 0);
@@ -114,12 +125,22 @@ function linesFor(role: DirectionRole, options: DirectiveOptions): string[] {
       return [
         "Score each dimension 0 to 4, citing the beat or moment it is about; a score with no evidence counts as 0.",
         "Find failures; do not predict hits. Prefer comparing two versions to scoring one.",
+        `Name the biggest leak: ${FUNNEL_BLOCKERS.filter((blocker) => blocker !== "none").join(", ")}, or none.`,
+        "At each window, would the viewer find what comes next worse than, equal to, or better than they expected? Equal or worse loses them.",
         ...RUBRIC.map((dimension) => `${dimension.name}: 4 = ${lowerFirst(dimension.four)} 0 = ${lowerFirst(dimension.zero)}`),
       ];
     case "agent":
-      return [...SHORT_VERSION, ...AI_WEAK_SPOTS.map((spot) => `${spot.name}: ${lowerFirst(spot.countermeasure)}`)];
+      return [...SHORT_VERSION, ...ruleLines(STRATEGY_RULES), ...AI_WEAK_SPOTS.map((spot) => `${spot.name}: ${lowerFirst(spot.countermeasure)}`)];
   }
 }
+
+const JOB_LINES: Record<VideoJob, string> = {
+  reach:
+    "This video's job is reach: a large-audience topic, a non-obvious angle, broad terms, high watch time, and something surprising, contrarian or emotional enough to send. No call to action, or a native one.",
+  follow: `This video's job is follows: be worth saving and bingeing. ${SAVE_DEVICES.join(" ")} Keep the series' look and opening.`,
+  convert:
+    "This video's job is to convert: a narrow buyer's pain, a desire hook, proof early, a non-obvious answer, and one call to action aligned to the topic, framed as a favour, for a resource the brief names.",
+};
 
 function lowerFirst(text: string): string {
   return text.length > 0 ? text[0]!.toLowerCase() + text.slice(1) : text;

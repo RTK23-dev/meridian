@@ -1,9 +1,9 @@
-// The answer contracts of the viewer panel and the swipe test (prompts.ts). A model's answer is untrusted data until it parses here; a
+// The answer contracts of the viewer panel and the swipe test (prompts.ts, version 2). A model's answer is untrusted data until it parses here; a
 // field outside the contract is refused (strict objects). The concept lab's contract is in concepts.ts and the script director's in
 // script.ts.
 
 import { z } from "zod";
-import { RUBRIC_MAX, rubricIdSchema } from "./codex.ts";
+import { RUBRIC_MAX, funnelBlockerSchema, rubricIdSchema } from "./codex.ts";
 import { verdictSchema } from "./tournament.ts";
 
 export const viewerPanelAnswerSchema = z.strictObject({
@@ -29,6 +29,8 @@ export const swipeTestAnswerSchema = z.strictObject({
         beatId: z.string().regex(/^b[0-9]{1,2}$/),
         sees: z.string().max(160),
         openQuestion: z.string().max(160),
+        /** Is this moment better than the viewer expected? Equal or worse loses them (expectations versus reality). */
+        expectation: z.enum(["worse", "equal", "better"]),
         risk: z.enum(["low", "medium", "high"]),
         reason: z.string().max(200),
       }),
@@ -36,6 +38,8 @@ export const swipeTestAnswerSchema = z.strictObject({
     .min(1)
     .max(40),
   scores: z.partialRecord(rubricIdSchema, z.strictObject({ score: z.int().min(0).max(RUBRIC_MAX), evidence: z.string().max(200) })),
+  /** The biggest leak of the story funnel, or none. */
+  blocker: funnelBlockerSchema,
   verdict: z.enum(["ship", "revise"]),
   fixes: z.array(z.string().min(1).max(200)).max(6),
 });

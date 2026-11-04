@@ -3,6 +3,14 @@ import test from "node:test";
 import { getBibleEntryBySlug } from "../study/bible.ts";
 import {
   AI_WEAK_SPOTS,
+  DIRECTION_CODEX_VERSION,
+  FORMAT_LEVELS,
+  LOCK_IN_APPROACHES,
+  STRATEGY_RULES,
+  TRUST_ANCHOR_TYPES,
+  VIDEO_JOBS,
+  VIEW_CEILINGS,
+  VIRALITY_STACK,
   CHECK_IDS,
   EMOTIONS,
   EMOTION_IDS,
@@ -55,7 +63,7 @@ test("the rubric's prior weights sum to 1, and the Lean-In Score runs from 0 to 
   assert.ok(Math.abs(sum - 1) < 1e-9, `weights sum to ${sum}`);
   assert.equal(leanInScore({}), 0);
   assert.equal(leanInScore(Object.fromEntries(RUBRIC_IDS.map((id) => [id, 4]))), 100);
-  assert.equal(leanInScore({ stop_frame: 9, promise: -3, gap: Number.NaN }), 12, "out-of-range scores are clamped; a non-number counts as 0");
+  assert.equal(leanInScore({ stop_frame: 9, promise: -3, gap: Number.NaN }), 10, "out-of-range scores are clamped; a non-number counts as 0");
 });
 
 test("a hook family's Angle Bible slug names a real entry of the study framework", () => {
@@ -74,5 +82,24 @@ test("niche profiles name only codex ids, and each weak spot's checks are real c
   }
   const checks = new Set<string>(CHECK_IDS);
   for (const spot of AI_WEAK_SPOTS) for (const check of spot.checks) assert.ok(checks.has(check), `${spot.id}: ${check}`);
-  assert.equal(AI_WEAK_SPOTS.length, 15);
+  assert.equal(AI_WEAK_SPOTS.length, 17);
+});
+
+test("version 2 carries the lessons: every format sits on the format pyramid, and the new lists are complete", () => {
+  assert.equal(DIRECTION_CODEX_VERSION, "direction-codex@2");
+  for (const format of FORMAT_ARCHETYPES) assert.ok(FORMAT_LEVELS.includes(format.level), format.id);
+  for (const level of FORMAT_LEVELS) assert.ok(FORMAT_ARCHETYPES.some((format) => format.level === level), `${level} has a format`);
+  assert.deepEqual([...TRUST_ANCHOR_TYPES], ["direct_results", "effort_maxing", "credibility", "association"], "strongest first");
+  assert.equal(LOCK_IN_APPROACHES.length, 6);
+  assert.deepEqual(Object.keys(VIRALITY_STACK), [...VIDEO_JOBS]);
+  assert.ok(Object.values(VIRALITY_STACK).every((entry) => entry.angle === "non_obvious"), "the non-obvious angle is in every job");
+  assert.deepEqual(VIEW_CEILINGS.map((ceiling) => ceiling.below), [1_000, 10_000, 100_000, 1_000_000]);
+  assert.ok(STRATEGY_RULES.some((rule) => rule.id === "one_job"));
+});
+
+test("a listicle pays its best points first; a ranking holds its top back for the end", () => {
+  const listicle = FORMAT_ARCHETYPES.find((format) => format.id === "listicle")!;
+  const ranking = FORMAT_ARCHETYPES.find((format) => format.id === "s_tier_ranking")!;
+  assert.match(listicle.beats[2]!.job, /best point first/);
+  assert.match(ranking.beats.at(-1)!.job, /S tier, revealed last/);
 });

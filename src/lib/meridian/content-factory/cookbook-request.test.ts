@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { factoryPresetCookbook } from "../cookbooks/builtin/factory-presets.ts";
 import { threeDDataExplainerCookbook } from "../cookbooks/builtin/three-d-data-explainer.ts";
 import { resolveCookbook, type ResolvedCookbook } from "../cookbooks/resolve.ts";
+import { DIRECTION_CODEX_VERSION } from "../direction/codex.ts";
 import { applyCookbook } from "./cookbook-request.ts";
 import type { RequestBuild } from "./request.ts";
 
@@ -73,7 +74,7 @@ test("with direction, the codex's script rules join the cookbook's own script in
   const own = plain.request.cookbook?.instructions.script ?? "";
   const script = directed.request.cookbook?.instructions.script ?? "";
   assert.ok(script.startsWith(own), "the cookbook's own instruction comes first, whole");
-  assert.match(script, /Direction \(direction-codex@1\)/);
+  assert.ok(script.includes(`Direction (${DIRECTION_CODEX_VERSION})`));
   assert.match(script, /Format: Explainer with a visual metaphor/);
   assert.ok(script.length <= 4000);
   assert.deepEqual(

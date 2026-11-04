@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { CURRENT_DIRECTION_PROMPTS, DIRECTION_STEPS, directionPrompt, shippedDirectionPrompts } from "./prompts.ts";
 import { evidencedScores, parseAnswer, parseJsonText, swipeTestAnswerSchema } from "./answers.ts";
-import { HOOK_FAMILY_IDS, FORMAT_IDS, EMOTION_IDS, SHARE_TRIGGER_IDS, REWATCH_DEVICE_IDS, RUBRIC_IDS } from "./codex.ts";
+import { EMOTION_IDS, FORMAT_IDS, FUNNEL_BLOCKERS, HOOK_FAMILY_IDS, LOCK_IN_APPROACHES, REWATCH_DEVICE_IDS, RUBRIC_IDS, SHARE_TRIGGER_IDS, TRUST_ANCHOR_TYPES, VIDEO_JOBS, VILLAIN_TYPES } from "./codex.ts";
 
 /** A shipped prompt never changes: an edit is a new version with a new pin (Bible 11.3, followed here). */
 const PINNED: Record<string, string> = {
-  "concept_lab@1": "sha256:28d2915eb2f706458e24480fdd3a201b89fd384e2aac716813fd6e7becccdd37",
-  "viewer_panel@1": "sha256:a0911bdf205712255126329aef74ce4950319f21cf1d0d7ef0309a931ebc4437",
-  "script_director@1": "sha256:54ca02d1d57417786a79305f78b6532a36f7989cc0803e03d95598c460086fee",
-  "swipe_test@1": "sha256:7c90785fa28703d83b322d6dc3d02f55a7369978b88683175cd8ae4906959dc0",
+  "concept_lab@2": "sha256:ff7fe897e230bef0d8b5d4e20191ddbee1275a4b1e312b637d9e6d9c91d8aa78",
+  "viewer_panel@2": "sha256:53ea7ff4db7b3069f608fb53e4872ac4ade041a0265db4c409010f1b5d948685",
+  "script_director@2": "sha256:10f4e65d101a7ef2cd17a4781d32134e49aae482a2773b0fdb256983184bfaf9",
+  "swipe_test@2": "sha256:4899aa25b9cae6d9f94e266366dc822cacf0678a10f0881df3d42b8f2fafef78",
 };
 
 test("every shipped direction prompt is pinned to its hash", () => {
@@ -33,9 +33,26 @@ test("each prompt has the four parts and names itself on its first line", () => 
 
 test("the ids a prompt lists are exactly the codex's, so the prompt and the contract agree", () => {
   const lab = directionPrompt("concept_lab").text;
-  for (const ids of [HOOK_FAMILY_IDS, FORMAT_IDS, EMOTION_IDS, SHARE_TRIGGER_IDS]) assert.ok(lab.includes(ids.join(", ")), ids.join(","));
-  assert.ok(directionPrompt("script_director").text.includes(REWATCH_DEVICE_IDS.join(", ")));
-  assert.ok(directionPrompt("swipe_test").text.includes(RUBRIC_IDS.join(", ")));
+  for (const ids of [HOOK_FAMILY_IDS, FORMAT_IDS, EMOTION_IDS, SHARE_TRIGGER_IDS, VIDEO_JOBS]) assert.ok(lab.includes(ids.join(", ")), ids.join(","));
+  const director = directionPrompt("script_director").text;
+  for (const ids of [REWATCH_DEVICE_IDS, LOCK_IN_APPROACHES, TRUST_ANCHOR_TYPES, VILLAIN_TYPES]) assert.ok(director.includes(ids.join(", ")), ids.join(","));
+  const swipe = directionPrompt("swipe_test").text;
+  assert.ok(swipe.includes(RUBRIC_IDS.join(", ")));
+  assert.ok(swipe.includes(FUNNEL_BLOCKERS.join(", ")));
+});
+
+test("the version 2 prompts carry the lessons a model must follow", () => {
+  const lab = directionPrompt("concept_lab").text;
+  assert.match(lab, /like a lawyer/);
+  assert.match(lab, /triple hook/);
+  assert.match(lab, /one degree away/);
+  const director = directionPrompt("script_director").text;
+  assert.match(director, /core template: hook, lock-in/);
+  assert.match(director, /within 15 seconds/);
+  assert.match(director, /zig-zag/);
+  assert.match(director, /trust anchor is proof the brief gives/);
+  assert.match(directionPrompt("viewer_panel").text, /send what surprises you/);
+  assert.match(directionPrompt("swipe_test").text, /"expectation"/);
 });
 
 test("answers are read as plain, fenced or embedded JSON, and a contract miss names its path", () => {
@@ -43,15 +60,16 @@ test("answers are read as plain, fenced or embedded JSON, and a contract miss na
   assert.deepEqual(parseJsonText('```json\n{"a":2}\n```'), { ok: true, value: { a: 2 } });
   assert.deepEqual(parseJsonText('Sure! {"a":3} Hope this helps.'), { ok: true, value: { a: 3 } });
   assert.equal(parseJsonText("no json at all").ok, false);
-  const miss = parseAnswer('{"windows":[],"scores":{},"verdict":"ship","fixes":[]}', swipeTestAnswerSchema);
+  const miss = parseAnswer('{"windows":[],"scores":{},"blocker":"none","verdict":"ship","fixes":[]}', swipeTestAnswerSchema);
   assert.equal(miss.ok, false);
   assert.match(miss.ok ? "" : miss.error, /^windows:/);
 });
 
 test("a swipe-test score with no evidence counts as 0", () => {
   const scores = evidencedScores({
-    windows: [{ fromMs: 0, toMs: 500, beatId: "b1", sees: "s", openQuestion: "q", risk: "low", reason: "r" }],
+    windows: [{ fromMs: 0, toMs: 500, beatId: "b1", sees: "s", openQuestion: "q", expectation: "better", risk: "low", reason: "r" }],
     scores: { stop_frame: { score: 4, evidence: "b1: motion" }, payoff: { score: 4, evidence: "  " } },
+    blocker: "none",
     verdict: "ship",
     fixes: [],
   });

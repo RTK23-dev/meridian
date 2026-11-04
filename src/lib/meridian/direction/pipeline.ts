@@ -11,7 +11,7 @@
 
 import { untrustedBlock } from "../../../engine/prompts/untrusted.ts";
 import { evidencedScores, parseAnswer, swipeTestAnswerSchema, viewerPanelAnswerSchema, type SwipeTestAnswer, type ViewerPanelAnswer } from "./answers.ts";
-import { DIRECTION_CODEX_VERSION, formatArchetype, leanInScore, type NicheFamily } from "./codex.ts";
+import { DIRECTION_CODEX_VERSION, formatArchetype, leanInScore, type NicheFamily, type VideoJob } from "./codex.ts";
 import {
   cardsForCall,
   conceptLabAnswerSchema,
@@ -24,10 +24,10 @@ import {
   type ConceptLabAnswer,
   type DeckCard,
 } from "./concepts.ts";
-import { directionDirectives } from "./directives.ts";
+import { PIPELINE_DIRECTIVE_CHARS, directionDirectives } from "./directives.ts";
 import { CURRENT_DIRECTION_PROMPTS, directionPrompt, type DirectionStep } from "./prompts.ts";
 import { directionReport, revisionNotes, type DirectionReport } from "./report.ts";
-import { directedScriptSchema, type DirectedScript } from "./script.ts";
+import { directedScriptV2Schema, type DirectedScript } from "./script.ts";
 import {
   bradleyTerry,
   pairSchedule,
@@ -55,6 +55,8 @@ export type DirectionRequest = {
   recentHooks: string[];
   /** Dated trends from Meridian's discovery data. The models may use these and no others. */
   trends: { text: string; observedAt: string }[];
+  /** The video's one job (codex 2): reach, follow or convert. Reach when not given. */
+  job?: VideoJob;
 };
 
 /**
@@ -253,7 +255,7 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
       run.finalists.push(record);
       let draft: ScriptAttempt | null = null;
       for (let round = 0; round <= settings.maxRevisions; round += 1) {
-        const script: DirectedScript | null = await call("script_director", settings.director, directorUser(request, concept, draft), directedScriptSchema);
+        const script: DirectedScript | null = await call("script_director", settings.director, directorUser(request, concept, draft), directedScriptV2Schema);
         if (!script) {
           record.error = draft ? "A revision was not returned; the last draft stands." : "The script director returned no usable script.";
           break;
@@ -272,7 +274,7 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
           record.error = "The swipe test returned no usable answer, so the draft could not be judged or revised.";
           break;
         }
-        if (!report.blocked && swipe.verdict === "ship") break;
+        if (!report.blocked && swipe.verdict === "ship" && swipe.blocker === "none") break;
       }
     }
 
@@ -284,8 +286,9 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
       reasons.push("No script passed the checks: every finalist still has a blocking finding.");
       return finish(run);
     }
-    const shippable = finished.filter((entry) => entry.last.swipe?.verdict === "ship");
-    for (const entry of finished.filter((candidate) => candidate.last.swipe?.verdict !== "ship")) {
+    const ships = (attempt: ScriptAttempt) => attempt.swipe?.verdict === "ship" && attempt.swipe.blocker === "none";
+    const shippable = finished.filter((entry) => ships(entry.last));
+    for (const entry of finished.filter((candidate) => !ships(candidate.last))) {
       const line = `The swipe test would not ship the script of ${entry.record.conceptId} after ${entry.record.attempts.length} draft${entry.record.attempts.length === 1 ? "" : "s"}.`;
       (shippable.length === 0 ? reasons : notes).push(line);
     }
@@ -382,36 +385,52 @@ function directionBlock(text: string): string {
   return `Meridian's direction (trusted, ours):\n${text}`;
 }
 
+function jobOf(request: DirectionRequest): VideoJob {
+  return request.job ?? "reach";
+}
+
 function conceptLabUser(request: DirectionRequest, cards: DeckCard[]): string {
+  const options = { niche: request.niche, job: jobOf(request) };
   return [
-    directionBlock(`${directionDirectives("script", { niche: request.niche })}\n\n${directionDirectives("agent")}`),
+    directionBlock(`${directionDirectives("script", options, PIPELINE_DIRECTIVE_CHARS)}\n\n${directionDirectives("agent", options, PIPELINE_DIRECTIVE_CHARS)}`),
     untrustedBlock("brief", request.brief),
     untrustedBlock("brand", request.brand),
     untrustedBlock("audience", { notes: request.audience ?? "" }),
     untrustedBlock("trends", request.trends),
     untrustedBlock("cards", cards),
-    untrustedBlock("limits", { maxDurationMs: request.maxDurationMs, language: request.language }),
+    untrustedBlock("limits", { maxDurationMs: request.maxDurationMs, language: request.language, job: jobOf(request) }),
   ].join("\n\n");
 }
 
 function panelUser(request: DirectionRequest, pairs: { pair: number; first: unknown; second: unknown }[]): string {
-  return [`Audience notes are in the first block. Judge each pair as these viewers.`, untrustedBlock("audience", { notes: request.audience ?? "" }), untrustedBlock("pairs", pairs)].join("\n\n");
+  return [
+    `The video's job is ${jobOf(request)}. Audience notes are in the first block. Judge each pair as these viewers.`,
+    untrustedBlock("audience", { notes: request.audience ?? "" }),
+    untrustedBlock("pairs", pairs),
+  ].join("\n\n");
 }
 
 function directorUser(request: DirectionRequest, concept: Concept, draft: ScriptAttempt | null): string {
-  const options = { format: concept.format, hookFamily: concept.hookFamily, niche: request.niche };
+  const options = { format: concept.format, hookFamily: concept.hookFamily, niche: request.niche, job: jobOf(request) };
   const blocks = [
-    directionBlock(`${directionDirectives("script", options)}\n\n${directionDirectives("visual", options)}\n\n${directionDirectives("voice", options)}`),
+    directionBlock(
+      [
+        directionDirectives("script", options, PIPELINE_DIRECTIVE_CHARS),
+        directionDirectives("visual", options, PIPELINE_DIRECTIVE_CHARS),
+        directionDirectives("voice", options, PIPELINE_DIRECTIVE_CHARS),
+      ].join("\n\n"),
+    ),
     untrustedBlock("concept", conceptItemForDirector(concept)),
     untrustedBlock("brief", request.brief),
     untrustedBlock("brand", request.brand),
-    untrustedBlock("limits", { maxDurationMs: request.maxDurationMs, wordsPerMinute: request.wordsPerMinute ?? null, language: request.language }),
+    untrustedBlock("limits", { maxDurationMs: request.maxDurationMs, wordsPerMinute: request.wordsPerMinute ?? null, language: request.language, job: jobOf(request) }),
   ];
   if (draft) {
     blocks.push(
       untrustedBlock("draft", draft.script),
       untrustedBlock("findings", revisionNotes(draft.report)),
       untrustedBlock("critique", {
+        blocker: draft.swipe?.blocker ?? "none",
         risky: (draft.swipe?.windows ?? []).filter((window) => window.risk === "high").map((window) => ({ beatId: window.beatId, fromMs: window.fromMs, reason: window.reason })),
         fixes: draft.swipe?.fixes ?? [],
       }),
@@ -427,7 +446,7 @@ function conceptItemForDirector(concept: Concept): unknown {
 
 function swipeUser(request: DirectionRequest, script: DirectedScript, report: DirectionReport): string {
   return [
-    directionBlock(directionDirectives("critic")),
+    directionBlock(directionDirectives("critic", {}, PIPELINE_DIRECTIVE_CHARS)),
     untrustedBlock("audience", { notes: request.audience ?? "" }),
     untrustedBlock("script", script),
     untrustedBlock(

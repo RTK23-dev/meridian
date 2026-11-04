@@ -3,7 +3,10 @@
 
 import type { DirectedScript } from "./script.ts";
 
-/** A script that follows the framework: hook first, promise on screen, payoff late, loops closed, ends on the payoff. */
+/**
+ * A script that follows the framework: hook first with its context and a sound, promise on screen, proof in the lock-in, a villain, two
+ * early ahas, a rehook, payoff late, loops closed, ends on the payoff. It declares every codex 2 field.
+ */
 export const STRONG_SCRIPT: DirectedScript = {
   language: "en",
   hookFamily: "challenge_test",
@@ -16,6 +19,17 @@ export const STRONG_SCRIPT: DirectedScript = {
     { question: "Which mug wins", opensAt: "b1", closesAt: "b6" },
     { question: "Why did the steel mug fail", opensAt: "b4", closesAt: "b5" },
   ],
+  topic: "Which mug keeps coffee hot",
+  job: "reach",
+  lockIn: { approach: "tease_proof", beatId: "b2" },
+  trustAnchor: { type: "effort_maxing", beatId: "b2" },
+  villain: { type: "false_belief", text: "The steel mug everyone buys keeps coffee hottest" },
+  ahas: [
+    { text: "The popular steel mug loses to glass", beatId: "b4" },
+    { text: "A gap in the lid lets the heat out", beatId: "b5" },
+  ],
+  rehooks: ["b4"],
+  cta: null,
   beats: [
     {
       beatId: "b1",
@@ -23,6 +37,7 @@ export const STRONG_SCRIPT: DirectedScript = {
       voice: "Three mugs. Same coffee. Two hours.",
       onScreenText: "Only 1 stays hot",
       picture: "Three mugs filled at once, steam rising, a kitchen timer starts.",
+      sound: "A kettle click, then the timer starts ticking",
     },
     {
       beatId: "b2",
@@ -65,7 +80,10 @@ export const STRONG_SCRIPT: DirectedScript = {
   rationale: "A test with an unknown winner, the obvious favourite failing in the middle, and the reason shown before the verdict.",
 };
 
-/** A typical first draft: an intro, the answer in the hook, AI register, bait, an outro, and a loop that never closes. */
+/**
+ * A typical first draft: an intro, the answer in the hook, AI register, bait, an outro, a loop that never closes, a late lock-in, no proof,
+ * no villain, no ahas, and a convert job with no call to action.
+ */
 export const WEAK_SCRIPT: DirectedScript = {
   language: "en",
   hookFamily: "question_gap",
@@ -75,6 +93,14 @@ export const WEAK_SCRIPT: DirectedScript = {
   rewatchDevice: "loop_seam",
   promise: { text: "The best mug for hot coffee", paidByBeatId: "b1" },
   loops: [{ question: "Why it works", opensAt: "b3", closesAt: "b2" }],
+  topic: "Double wall mug",
+  job: "convert",
+  lockIn: { approach: "tease_proof", beatId: "b4" },
+  trustAnchor: null,
+  villain: null,
+  ahas: [],
+  rehooks: [],
+  cta: null,
   beats: [
     {
       beatId: "b1",

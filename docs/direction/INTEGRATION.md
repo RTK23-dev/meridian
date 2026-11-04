@@ -1,6 +1,6 @@
 # Plugging direction into Meridian
 
-Version 1, 2026-11-04. How the [Viral Direction Framework](./VIRAL_DIRECTION_FRAMEWORK.md) and its code (`src/lib/meridian/direction/`)
+Version 2, 2026-11-04 (codex `direction-codex@2`). How the [Viral Direction Framework](./VIRAL_DIRECTION_FRAMEWORK.md) and its code (`src/lib/meridian/direction/`)
 connect to the rest of Meridian, step by step. Each step says what it changes, whether it changes an engine contract, whether it spends
 money, and what the owner decides.
 
@@ -33,15 +33,16 @@ No engine contract changed. No provider was called. No money was spent.
 | Piece | Where |
 | --- | --- |
 | The framework, its evidence, this plan, the research programme | `docs/direction/` |
-| The codex (`direction-codex@1`) and the checks: attention, slop, facts, report with the two floors | `src/lib/meridian/direction/` |
+| The codex (`direction-codex@2`, with the 147 short-form lessons, `LESSONS_CROSSWALK.md`) and the checks: attention, craft, slop, facts, and the report with the two floors | `src/lib/meridian/direction/` |
 | Direction as prompt text per role, inside the engine's cookbook limits | `directives.ts` (`directionDirectives`, `withDirection`) |
 | Divergence and convergence: the creative deck, filters, diverse finalists, order-swapped tournament, Bradley-Terry, judge reliability | `concepts.ts`, `tournament.ts` |
-| Four pinned prompts and their answer contracts | `prompts.ts`, `answers.ts` |
+| Four pinned prompts (version 2) and their answer contracts | `prompts.ts`, `answers.ts` |
+| The content planner: calendar grids, jobs per content game, the bullseye mix, outliers, repost candidates, Lego variations, view ceilings | `plan.ts` |
 | The pipeline, with a model port and a hard call limit | `pipeline.ts` |
 | The live port over Meridian's generation path (budget hold, ledger, workspace key) | `live.server.ts`, not called anywhere |
 | The switch for cookbook scripts, off by default | `applyCookbook(build, resolved, { direction })` in `content-factory/cookbook-request.ts` |
 
-Tests: 67 in the direction module and one in `cookbook-request.test.ts`, all fixture-based.
+Tests: 96 in the direction module and one in `cookbook-request.test.ts`, all fixture-based.
 
 ## 2. Step 1: direction in every cookbook script (no contract change, no new spend)
 
@@ -105,6 +106,17 @@ request contract (v13). Then `withDirection` can fill every role.
    target (framework 13, initial 65%), its ranking does not choose without a person.
 4. Test hook variants of one master on trial audiences, and let the results, not the critic, pick winners (the LOLA result).
 
+## 5a. Proposed next roles and inputs (codex 2; no contract change)
+
+- **A brand voice profile.** Three short texts kept with the brand brain (how the brand talks: voice, pace, rhythm, metaphors; how it
+  works: rules for messages and answers; who it is: background and milestones), sent with every direction prompt as Meridian's own block.
+  It lets direction write in the brand's voice instead of a generic one (lesson 140).
+- **A script coach.** A direction prompt that reads the brand's five worst and five best scripts, with their results, and returns three to
+  five concrete changes (lessons 133, 138, 139). It needs the learning loop's join of scripts to results first.
+- **Conversational ideation.** A concept-lab card that carries one top reference and asks what its maker missed or got wrong (lesson 74).
+- **The planner in the Create page.** A content plan of subtopics, formats and layouts, with a job per slot, that a person approves; each
+  slot then starts a direction run with its job.
+
 ## 6. Changes proposed to existing modules (not made here)
 
 These touch the study framework that the genome role and JEV questions read; AGENTS.md rule 6 keeps them for the owner:
@@ -113,7 +125,7 @@ These touch the study framework that the genome role and JEV questions read; AGE
   Proposed: "curiosity about a promised answer, and the tendency to resume an interrupted task (Ovsiankina)".
 - **Angle Bible, `relational-tag-bait`:** "Tag your friend who..." is the engagement bait Meta demotes. Proposed: keep the share trigger
   (a habit two people share) and drop the tag request.
-- **Angle Bible entries:** add the codex's hook families as entries, and replace the flat `predictiveWeight: 1.0` with weights fitted in
+- **Angle Bible entries:** add the codex's 27 hook families as entries, and replace the flat `predictiveWeight: 1.0` with weights fitted in
   step 4.
 - **Engine configuration:** move `DIRECTION_WINDOWS` into `engine/config/thresholds.ts` when an engine stage reads them (Bible 0: numbers
   live in configuration).

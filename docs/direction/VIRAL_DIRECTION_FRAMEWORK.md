@@ -1,9 +1,10 @@
 # The Viral Direction Framework
 
-Version 1, 2026-11-04. Status: reference for Meridian's creative direction agents (script writing, creative and visual direction,
+Version 2, 2026-11-04 (codex `direction-codex@2`). Status: reference for Meridian's creative direction agents (script writing, creative and visual direction,
 critique). It sets no engine behaviour by itself. The machine-readable part is `src/lib/meridian/direction/` (the direction codex); every
 rule there names the section of this document it comes from. Evidence is in [`EVIDENCE.md`](./EVIDENCE.md), the plan to wire it into
-Meridian is in [`INTEGRATION.md`](./INTEGRATION.md), and the research programme is in [`RND_PROGRAM.md`](./RND_PROGRAM.md).
+Meridian is in [`INTEGRATION.md`](./INTEGRATION.md), and the research programme is in [`RND_PROGRAM.md`](./RND_PROGRAM.md). Version 2
+adds 147 short-form lessons from one creator's 274 posts; [`LESSONS_CROSSWALK.md`](./LESSONS_CROSSWALK.md) says where each one lives.
 
 ## 0. How to read this
 
@@ -122,7 +123,7 @@ originality, human value and craft, with disclosure where the platform asks for 
 
 ## 3. The Lean-In Score: what a strong video is made of
 
-The Lean-In Score (LIS) is the rubric every direction agent writes toward and every critic scores against. It has twelve scored
+The Lean-In Score (LIS) is the rubric every direction agent writes toward and every critic scores against. It has fourteen scored
 dimensions in four groups, and two floors that are not scored but gate. It is the codex's `RUBRIC`.
 
 ### 3.1 The two floors (gates, not scores)
@@ -132,7 +133,7 @@ dimensions in four groups, and two floors that are not scored but gate. It is th
 - **Originality floor.** Not a copy of a reference's words, footage, voice or music, not a near-repeat of the brand's own recent hooks, and
   not a template clone the platform would treat as mass-produced. A video below the floor is rewritten.
 
-### 3.2 The twelve dimensions
+### 3.2 The fourteen dimensions
 
 Each scores 0 to 4 against the anchors in the codex. The weights in the codex are priors (`hypothesis`) until the learning loop fits them to
 outcomes (section 13).
@@ -140,8 +141,10 @@ outcomes (section 13).
 | Group | Id | Dimension | 4 means | 0 means |
 | --- | --- | --- | --- | --- |
 | Stop | `stop_frame` | First-frame stopping power | Frame 0 has motion, a face, contrast or an impossible image, and reads without sound | A logo, title card, or static establishing shot |
-| Stop | `promise` | Promise clarity by 3 s | The viewer knows exactly what they will get and why it is for them | No promise, or a vague one |
-| Stop | `gap` | A specific open question | One concrete question the viewer now needs answered | Nothing unresolved, or the answer is in the hook |
+| Stop | `promise` | Context and promise in the first line | Line 1 names the topic on all three channels; the viewer knows what they will get | Late context, or a vague promise |
+| Stop | `gap` | A lean and a snapback | The hook leans one way and snaps back: one concrete question the viewer now needs answered | Nothing unresolved, or the answer is in the hook |
+| Stop | `clarity` | Simple, short, easy to follow | Simple words, short sentences, one thread; a new idea said twice; pictures that match the words | Jargon, a drifting thread, pictures that do not match |
+| Stop | `proof` | Proof early | A claim followed at once by proof the brief gives | A bold claim with no proof, or invented proof |
 | Hold | `escalation` | Each beat raises the stakes or pays a reward | A but-and-therefore chain; the last item is the best | A flat list; the best item first; and-then-and-then |
 | Hold | `density` | Value per second | No dead air, no throat-clearing, every line works | Preamble, repetition, filler |
 | Hold | `specificity` | Concrete over abstract | Named situations, real numbers from the brief, sensory detail, a picture for every line | Categories, generalities, adjectives doing the work |
@@ -191,7 +194,7 @@ The direction report records each hook's promise and the beat that pays it; a pr
 
 ### 4.3 Hook families
 
-The codex holds 22 hook families (`HOOK_FAMILIES`), each with its mechanism, the niches it suits, its failure modes, the payoff it owes and
+The codex holds 27 hook families (`HOOK_FAMILIES`), each with its mechanism, the niches it suits, its failure modes, the payoff it owes and
 the Angle Bible entry it maps to where one exists. In short:
 
 | Family | Mechanism | Owes the viewer |
@@ -218,6 +221,11 @@ the Angle Bible entry it maps to where one exists. In short:
 | `genre_flip` | Begin as one kind of video and turn into another | The turn, and why it was worth it |
 | `challenge_test` | "I tested X so you don't have to" | The result, with what was surprising |
 | `insider_reveal` | How it works behind the curtain | Something true the viewer could not see before |
+| `fortune_teller` | A prediction that something will change how the viewer works | The change, specific enough to act on today |
+| `proven_winner` | A result already achieved, checkable against the video | The exact thing that produced it, shown |
+| `connector` | Two unrelated things linked; only the link closes the gap | The link, and why it matters |
+| `desire_outcome` | An outcome the viewer secretly wants, tied to a relatable character | A non-obvious path to it |
+| `pattern_interrupt` | A picture that does not belong, with a matching sound, in one or two seconds | A fast turn into the topic |
 
 Rules for every hook (`HOOK_RULES` in the codex):
 
@@ -228,6 +236,24 @@ Rules for every hook (`HOOK_RULES` in the codex):
 4. The hook is specific: a number, a named situation, a visible object. "This changed everything" is not a hook. `practice`
 5. The hook is true. Every promise in it is kept by a beat in the video. `hypothesis`, trust floor.
 6. A new hook for every video: the brand's recent hooks are checked for repeats (content-factory `hook-history`). `hypothesis`
+
+### 4.4 The triple hook and the text hook (codex 2)
+
+From one creator's 274 posts (`practice`; see `LESSONS_CROSSWALK.md`, lessons 1 to 18):
+
+1. **Context first.** Line 1 names the topic on picture, text and voice. Context that arrives even at the end of the first sentence raises
+   the skip rate. Check `context_first`.
+2. **Lean, then snap back.** Pull the viewer one way (a stat or proof, a pain, a benefit, a shock), then yank them the other way with a
+   contrarian turn. Keep the first two sentences to 15 words. Check `opening_overload`.
+3. **The text hook is read first.** Write it first: a subject plus a pain, a desire or a state change, specific, with power words
+   (subject, action, state change, and above all contrast), no filler words, no punctuation but parentheses and quotes, at most two lines,
+   placed about a third down, never over eyes or mouth. Check `text_hook_style`.
+4. **Prove it at once.** A bold claim gets a trust anchor in line 2 or the lock-in: a direct result, the effort spent, a credible source,
+   an association, strongest first. In Meridian the anchor must come from the brief; with none, the script makes no claim that needs one.
+   Check `trust_anchor`.
+5. **Declarative, not if-then.** "Do Y to get X." Check `if_then_hook`.
+6. **Stun the eye.** An overlay, a pattern interrupt, subject motion, an effect, or a picture nobody else would choose; an interrupt needs a
+   matching sound and lasts one or two seconds. Check `hook_sound`.
 
 ## 5. Retention architecture: designing the middle
 
@@ -273,9 +299,24 @@ longer. `practice`
 
 The codex holds a beat skeleton for each common format (`FORMAT_ARCHETYPES`), as fractions of the duration: where the hook, the promise,
 the re-hooks, the peak and the end sit. The engine's grammar measured from a reference overrides a skeleton when a reference exists, because
-measurement beats a template (Bible principle: copy genes). The archetypes are: list or ranking, story, tutorial, transformation, myth
-versus fact, test or experiment, POV skit, explainer with a visual metaphor, reaction or commentary, comparison, behind the scenes, and
-satisfying process.
+measurement beats a template (Bible principle: copy genes). Codex 2 has 22: listicle (the best two points first), S-tier ranking (the top
+held back), three levels, story, hero's journey, personal epiphany, tutorial, transformation, myth versus fact, challenge or test, scenario,
+case study, live breakdown, POV skit, through my eyes, explainer with a visual metaphor, whiteboard reveal, reaction or commentary, A versus
+B, show the factory, extremes, and satisfying process. Each sits on the format pyramid (facts, explanation, application, story): as a niche
+saturates, facts and lists stop working first, and application and one-of-one stories hold up longest.
+
+### 5.7 The core template, the lock-in and the hourglass (codex 2)
+
+1. **Template.** Hook, lock-in, body block, rehook, body block, an optional rehook and block, the payoff, and a call to action only when
+   the job is to convert.
+2. **Lock-in.** The two or three sentences after the hook: tease the proof or the transformation, add a clarifying contrast, name a method
+   (a magic box), answer the top objection, or double down and twist the pain. Check `lock_in`.
+3. **The hourglass.** Short-form attention runs about 25 seconds. Rehook within 15 seconds, and turn into a new part at least every 25
+   seconds with a turn that opens a new loop. Checks `double_hook`, `peak_gap`.
+4. **Beat the expectation.** At every beat, would most viewers be surprised by what comes next? An equal or worse moment loses them. The
+   swipe test scores each window's expectation.
+5. **A villain.** A video that teaches attacks the old way, a false belief, or the frustration they cause. Check `villain`.
+6. **Two ahas, early.** Two non-obvious lightbulb moments in the first part. Check `double_aha`.
 
 ## 6. The rewatch and the loop
 
@@ -296,7 +337,12 @@ The questions to answer before writing, from Berger's STEPPS (social currency, t
 - **Who is this sent to, and what does sending it say?** If there is no answer, there is no send. The codex's `SHARE_TRIGGERS` lists the
   reasons people send: identity ("this is me"), relationship ("this is us"), utility ("you need this"), status ("I found it first"),
   emotion ("you have to see this"), and conversation ("what do you think?").
-- **Why would someone save it?** Lasting practical value: a method, a list, a recipe, a reference to return to.
+- **Why would someone save it?** Lasting practical value: a method, a list, a recipe, a reference to return to. Saves turn into follows:
+  signal the outcome, show tactical detail and the exact inputs on screen, give more than one pass can hold (codex `SAVE_DEVICES`).
+- **Shares and likes are different.** Likes come from agreement; sends come from the surprising, the contrarian and the emotional, and
+  reach new viewers.
+- **A call to action, only to convert.** One CTA aligned to the topic, framed as a favour, for a resource the brief names. A keyword for a
+  real resource is not bait; "comment YES" is. Check `cta_alignment`.
 - **What would someone say?** A genuine opinion split, a recognisable experience, a question the video leaves open honestly. Never
   "comment YES if you agree": engagement bait can limit distribution (`sourced`).
 
@@ -328,6 +374,12 @@ These are the codex's `SCRIPT_RULES`. The checks in `slop.ts` and `attention.ts`
 7. **No AI register.** The words and patterns in the codex's slop lexicon are refused or warned (section 11, W4).
 8. **Contrast.** Before and after, expected and actual, them and us. Contrast is how a viewer sees a difference fast.
 9. **Read it aloud at speed.** The critic estimates speech time at the voice's pace and flags lines over the beat's budget.
+10. **Zig-zag the rhythm.** Mix short, medium and long sentences with short punchy resets; models do not check rhythm by themselves.
+    Check `rhythm`.
+11. **Simple and short.** Third-grade words, punchy sentences. Check `reading_level`.
+12. **Say a new idea twice.** Precisely, then plainly; anchor it to something familiar; name your best idea so two words replace a
+    sentence.
+13. **Small effort, big reward.** One setting, two small things; a big result.
 
 ## 10. Visual, photo and sound direction
 
@@ -343,6 +395,7 @@ These are the codex's `SCRIPT_RULES`. The checks in `slop.ts` and `attention.ts`
    slop rubric checks the rest.
 5. **Text is drawn by code.** No text, label, price or logo in a generation prompt (Bible rule).
 6. **Safe zones.** Key content stays out of the lower fifth and the right twelfth (the final critic's rule).
+7. **Move with intention.** A talking head changes position or setting between beats; a series keeps one look so it is recognised.
 
 ### 10.2 Photo and carousel
 
@@ -352,7 +405,8 @@ These are the codex's `SCRIPT_RULES`. The checks in `slop.ts` and `attention.ts`
 
 ### 10.3 Sound
 
-1. **The voice performs.** Vary the pace; pause before the reveal; stress the one word that matters (the script's `emphasis`).
+1. **The voice performs.** Vary the pace; pause before the reveal; stress the one word that matters (the script's `emphasis`). Speak about
+   20% more powerfully than feels natural: recordings sound thinner than the voice in your head.
 2. **Music follows the energy curve.** It rises into the peak and drops under the key line.
 3. **Sound marks the cut.** A hit, a whoosh or a silence at a turn of the story is a pattern interrupt for the ear.
 4. **Silence is a tool.** A half-second of silence before the payoff is louder than any effect.
@@ -382,6 +436,8 @@ that catches it.
 | W13 | **Recites memorised viral lines.** Familiar hooks reappear word for word. | `practice`; joke repetition (`sourced`) | The reference copy check (six words), the hook history check, and the slop lexicon's stock hooks. |
 | W14 | **The generated look.** Plastic skin, warped backgrounds, morphing objects, and one shared glossy aesthetic. | Bible 12.2 slop rubric | The take critic's rubric, art direction toward texture and imperfection, and real footage where it matters. |
 | W15 | **No stakes.** Information without a want, an obstacle, or a cost. | `practice` | The direction brief requires stakes: who wants what, and what stands in the way. |
+| W16 | **Flat rhythm.** Sentences of one length; the ear tunes out. | `practice` (lesson 31) | The zig-zag rule in every script prompt; check `rhythm`. |
+| W17 | **Hedged, generic hooks.** If-then openings, info teases, claims with no proof. | `practice` | Declarative desire hooks, a trust anchor from the brief, the text-hook rules; checks `if_then_hook`, `text_hook_style`, `trust_anchor`, `lock_in`. |
 
 ## 12. The machine: how the agents work together
 
@@ -483,9 +539,11 @@ proof devices, and the pitfalls. They are priors (`hypothesis`) for the learning
 
 For each video, one direction document:
 
-1. **The concept, in one sentence**, and its hook family, format, feeling, angle and novelty element.
+1. **The concept, in one sentence**, and its topic, core argument and evidence, job, hook family, format, feeling, angle and novelty
+   element.
 2. **The hook on three channels:** frame 0, the on-screen text, the first spoken line. Its promise, and the beat that pays it.
-3. **The beat timeline:** each beat's role, duration, voice line, on-screen text, picture, link to the previous beat, emphasis words.
+3. **The beat timeline:** each beat's role, duration, voice line, on-screen text, picture, sound, link to the previous beat, emphasis
+   words; and the declared lock-in, trust anchor, villain, ahas, rehooks and call to action.
 4. **The open loops:** where each opens and where it closes.
 5. **The end:** the payoff, the rewatch device, the send trigger, the save or comment reason.
 6. **The sound plan:** voice performance notes, music energy, sound marks.
@@ -496,13 +554,44 @@ For each video, one direction document:
 
 ## 16. The short version, for every prompt
 
-1. Stop the eye in the first half-second with motion, a face, or the result. Never an intro.
-2. Promise one specific thing by 3 s, and open one question. Do not answer it yet.
-3. Every beat raises the stakes or pays a small reward: but, therefore.
-4. Specific beats general. Every line has a picture. Never invent a fact.
-5. Pay more than you promised, at the peak, in the last third.
-6. End on a punch or a seam that restarts the video. No outro.
-7. Know who it gets sent to and why.
-8. One feeling, high arousal where it fits.
-9. No AI register, no stock jokes, no stock hooks, no bait.
-10. Diverge widely, judge pairwise, and let real viewers pick the winner.
+1. Stop the eye in the first second: motion, a face, the result, or a pattern interrupt with a matching sound. Never an intro.
+2. Line 1 names the topic on picture, text and voice; then lean one way and snap back the other. Two sentences, 15 words at most.
+3. Write the text hook first: a subject plus a pain, a desire or a state change, specific, with power words.
+4. Prove a bold claim at once, with proof the brief gives; lock the viewer in with the next two or three sentences.
+5. Rehook within 15 seconds, and turn into a new part at least every 25 seconds: but, therefore.
+6. Fight a villain (the old way, a false belief), and land two non-obvious ahas early.
+7. Simple words, zig-zag rhythm, every picture matching its words; say a new idea twice.
+8. Pay more than you promised, at the peak; end on a punch or a seam. No outro.
+9. One job per video: shares for reach, saves for follows, an aligned call to action to convert.
+10. Never invent a fact, a proof, a trend or an endorsement. No bait, no stock hooks, no AI register.
+
+## 17. What version 2 added
+
+Codex `direction-codex@2` folds in 147 short-form lessons from one creator's 274 posts. They are `practice` (his own data), so the
+learning loop tests them on the brand's results before any becomes a measured rule. Version 2 adds:
+
+- Five hook families, the triple hook, text-hook rules, power words, the four S's, visual-hook types and trust anchors (section 4.4).
+- The core template, the lock-in zone, the hourglass rehook, expectations versus reality, villains and the double aha (section 5.7).
+- Ten formats and the format pyramid (section 5.6).
+- Two rubric dimensions, `clarity` and `proof`.
+- Save and comment devices, and the native call to action (section 7).
+- Zig-zag rhythm, reading level, the double tap and small-effort framing (section 9).
+- Fourteen checks: `context_first`, `opening_overload`, `if_then_hook`, `double_hook`, `peak_gap`, `rhythm`, `reading_level`,
+  `text_hook_style`, `lock_in`, `trust_anchor`, `villain`, `double_aha`, `hook_sound`, `cta_alignment`.
+- The video's job and the content planner (section 18).
+
+Two lessons were not adopted, because they break a Meridian rule: opening on another creator's viral clip (copy genes, never content) and
+secret brand-owned "fan" accounts (they hide who is speaking). Three were adapted: proof and trust anchors only from the brief, reposting
+only the brand's own winners, and keyword calls to action only for a real resource the brief names.
+
+## 18. What each video is for
+
+1. **One job per video.** Reach (shares to new viewers: a broad audience, a non-obvious angle), follow (saves and binges: tactical
+   density, a series), or convert (a narrow buyer's pain, a desire hook, proof, an aligned call to action). `VIDEO_JOBS`.
+2. **The virality stack.** Topic commonness, angle obviousness and audience breadth: the non-obvious angle is in every winner; go broad to
+   reach, narrow to convert. Too much broad reach too early fills the audience with people who will never buy (the viral trap).
+3. **The idea is the cake.** A relevant, painful topic with a large audience, from data; a non-obvious, contrarian angle, from creativity;
+   a format transposed from where it already won. Hook, edit and style are icing.
+4. **The planner** (`plan.ts`) turns that into a calendar: subtopics x formats x layouts (the 6x5, 532 and 331 grids, and the 321 week),
+   jobs per content game and a 3-2-2 bullseye mix, the brand's outliers (5x its median) remixed one brick at a time and reposted after four
+   months, and the view ceiling that says which lever to pull next.

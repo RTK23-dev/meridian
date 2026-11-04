@@ -16,6 +16,11 @@ import {
 import { seededRandom, shuffled } from "./random.ts";
 
 const seed = (overrides: Partial<ConceptSeed> = {}): ConceptSeed => ({
+  topic: "Which mug keeps coffee hot",
+  coreArgument: "The popular steel mug is not the one that keeps heat",
+  evidence: "The brief's two-hour test",
+  job: "reach",
+  audience: "broad",
   hookFamily: "challenge_test",
   format: "test_experiment",
   feeling: "surprise",

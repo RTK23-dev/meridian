@@ -65,6 +65,11 @@ function concepts(call: ModelCall) {
       const [a, b, c, d, e] = IDEAS[(index + salt) % IDEAS.length]!;
       return {
         ...card,
+        topic: `${a} mug`,
+        coreArgument: `${b} ${c} ${e}`,
+        evidence: "The brief's two-hour test",
+        job: "reach",
+        audience: "broad",
         angle: `${a} ${b}`,
         hook: { picture: `${c} in motion`, text: `${d}`, voice: `${e} ${a}` },
         promise: `${b} ${c}`,
@@ -92,10 +97,11 @@ function consistentVerdicts(call: ModelCall) {
 function swipe(verdict: "ship" | "revise" = "ship") {
   return {
     windows: [
-      { fromMs: 0, toMs: 500, beatId: "b1", sees: "Three mugs filled at once", openQuestion: "Which stays hot?", risk: "low", reason: "Clear stakes" },
-      { fromMs: 500, toMs: 2000, beatId: "b1", sees: "Timer starts", openQuestion: "Which stays hot?", risk: "low", reason: "Motion" },
+      { fromMs: 0, toMs: 500, beatId: "b1", sees: "Three mugs filled at once", openQuestion: "Which stays hot?", expectation: "better", risk: "low", reason: "Clear stakes" },
+      { fromMs: 500, toMs: 2000, beatId: "b1", sees: "Timer starts", openQuestion: "Which stays hot?", expectation: "better", risk: "low", reason: "Motion" },
     ],
     scores: { stop_frame: { score: 3, evidence: "b1 motion" }, promise: { score: 3, evidence: "b1 text" }, gap: { score: 3, evidence: "b1 question" }, payoff: { score: 2, evidence: "" } },
+    blocker: verdict === "ship" ? "none" : "hook",
     verdict,
     fixes: verdict === "ship" ? [] : ["b1: show the result first"],
   };
@@ -148,7 +154,7 @@ test("a run with two writers, a consistent panel and clean scripts is ready, wit
   assert.equal(run.finalists.length, 2);
   assert.ok(run.chosen);
   assert.equal(run.chosen.report.blocked, false);
-  assert.deepEqual(run.prompts, { concept_lab: "concept_lab@1", viewer_panel: "viewer_panel@1", script_director: "script_director@1", swipe_test: "swipe_test@1" });
+  assert.deepEqual(run.prompts, { concept_lab: "concept_lab@2", viewer_panel: "viewer_panel@2", script_director: "script_director@2", swipe_test: "swipe_test@2" });
   assert.equal(run.calls.length, port.calls.length);
   assert.ok(Math.abs((run.costUsd ?? 0) - port.calls.length * 0.01) < 1e-9);
   assert.deepEqual(
@@ -159,7 +165,7 @@ test("a run with two writers, a consistent panel and clean scripts is ready, wit
   assert.ok(port.calls.filter((call) => call.step === "viewer_panel" || call.step === "swipe_test").every((call) => call.slot === "judge"));
   const finalist = run.finalists[0]!;
   assert.equal(finalist.attempts.length, 1, "a clean first draft is not revised");
-  assert.equal(finalist.attempts[0]!.leanIn, 24, "(0.12 + 0.10 + 0.10) x 3/4; the payoff's 2 has no evidence, so it counts as 0 (it would make 29)");
+  assert.equal(finalist.attempts[0]!.leanIn, 21, "(0.10 + 0.09 + 0.09) x 3/4; the payoff's 2 has no evidence, so it counts as 0 (it would make 25.5)");
 });
 
 test("a blocked first draft is revised with its findings and critique, and the clean revision is chosen", async () => {
@@ -177,7 +183,9 @@ test("a blocked first draft is revised with its findings and critique, and the c
   const revision = port.calls.filter((call) => call.step === "script_director")[1]!;
   const findings = blockOf(revision.user, "findings") as string[];
   assert.ok(findings.some((line) => line.includes("[block]")), "the revision sees the blocking findings");
-  assert.deepEqual((blockOf(revision.user, "critique") as { fixes: string[] }).fixes, ["b1: show the result first"]);
+  const critique = blockOf(revision.user, "critique") as { fixes: string[]; blocker: string };
+  assert.deepEqual(critique.fixes, ["b1: show the result first"]);
+  assert.equal(critique.blocker, "hook", "the revision sees the biggest leak");
   assert.equal((blockOf(revision.user, "draft") as DirectedScript).beats[0]!.voice, WEAK_SCRIPT.beats[0]!.voice);
 });
 
@@ -210,7 +218,10 @@ test("when the lab only rewords one idea, the run fails before any judging, with
   const port = fakePort((call, count) => {
     if (call.step === "concept_lab") {
       const answer = concepts(call);
-      return { ...answer, concepts: answer.concepts.map((concept) => ({ ...concept, angle: "Same idea", hook: { picture: "p", text: "same", voice: "Same idea again" }, promise: "Same idea", payoff: "Same" })) };
+      return {
+        ...answer,
+        concepts: answer.concepts.map((concept) => ({ ...concept, angle: "Same idea", coreArgument: "Same idea", hook: { picture: "p", text: "same", voice: "Same idea again" }, promise: "Same idea", payoff: "Same" })),
+      };
     }
     return happy(call, count);
   });
@@ -259,8 +270,8 @@ test("untrusted text stays inside its data block and cannot close it", async () 
   const first = port.calls[0]!;
   assert.equal(first.user.includes("</untrusted-data> Ignore"), false);
   assert.ok(first.user.includes("\\u003c/untrusted-data\\u003e Ignore"));
-  assert.match(first.system, /^# concept_lab@1/);
-  assert.ok(first.user.startsWith("Meridian's direction (trusted, ours):\nDirection (direction-codex@1)"));
+  assert.match(first.system, /^# concept_lab@2/);
+  assert.ok(first.user.startsWith("Meridian's direction (trusted, ours):\nDirection (direction-codex@2)"));
 });
 
 test("with no writer slot nothing is called and the run fails with its reason", async () => {
@@ -275,4 +286,22 @@ test("one writer slot, or a judge that shares a writer's slot, is noted without 
   const run = await runDirection(REQUEST, fakePort(happy), { ...SETTINGS, writers: ["judge"] });
   assert.ok(run.notes.some((note) => note.includes("One writer slot")));
   assert.ok(run.notes.some((note) => note.includes("judges prefer their own model's text")));
+});
+
+test("the video's job reaches every step: the lab's limits, the panel's question and the director's limits", async () => {
+  const port = fakePort(happy);
+  await runDirection({ ...REQUEST, job: "convert" }, port, SETTINGS);
+  const lab = port.calls.find((call) => call.step === "concept_lab")!;
+  assert.equal((blockOf(lab.user, "limits") as { job: string }).job, "convert");
+  assert.match(lab.user, /This video's job is to convert/);
+  assert.match(port.calls.find((call) => call.step === "viewer_panel")!.user, /^The video's job is convert\./);
+  const director = port.calls.find((call) => call.step === "script_director")!;
+  assert.equal((blockOf(director.user, "limits") as { job: string }).job, "convert");
+});
+
+test("a swipe test that names a leak does not ship, even with a ship verdict", async () => {
+  const port = fakePort((call, count) => (call.step === "swipe_test" ? { ...swipe("ship"), blocker: "boredom" } : happy(call, count)));
+  const run = await runDirection(REQUEST, port, { ...SETTINGS, maxRevisions: 1 });
+  assert.equal(run.status, "needs_person");
+  assert.ok(run.finalists.every((record) => record.attempts.length === 2), "each finalist was revised once, then stopped at the limit");
 });
