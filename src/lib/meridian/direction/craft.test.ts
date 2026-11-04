@@ -123,3 +123,43 @@ test("another language skips the English-only checks and says so", () => {
   const notes = run(german).filter((finding) => finding.severity === "info");
   assert.ok(notes.some((finding) => /English only/.test(finding.message)));
 });
+
+const STITCH: DirectedScript = {
+  ...STRONG_SCRIPT,
+  hookFamily: "clip_stitch",
+  beats: [
+    {
+      beatId: "b1",
+      role: "hook",
+      voice: "",
+      onScreenText: "This mug test went viral",
+      picture: "The viral mug clip, as it was posted",
+      sound: "The original clip's audio",
+      durationMs: 3000,
+      borrowed: { source: "https://www.tiktok.com/@maker/video/1", credit: "@maker" },
+    },
+    { ...STRONG_SCRIPT.beats[1]!, voice: "But they tested the wrong mug. I tested three for two hours." },
+    ...STRONG_SCRIPT.beats.slice(2),
+  ],
+};
+
+test("a clip-stitch opening that keeps the rule passes: first beat only, planned, short, then the brand's own take", () => {
+  assert.deepEqual(
+    run(STITCH).filter((finding) => finding.check === "borrowed_clip"),
+    [],
+  );
+});
+
+test("a borrowed clip anywhere but the opening, too long, or unplanned fails; its own voice or a silent follow-up is warned", () => {
+  const severities = (script: DirectedScript) =>
+    run(script)
+      .filter((finding) => finding.check === "borrowed_clip")
+      .map((finding) => `${finding.beatId}:${finding.severity}`);
+  assert.deepEqual(severities({ ...STITCH, beats: [STITCH.beats[0]!, { ...STITCH.beats[1]!, borrowed: { source: "x", credit: "@x" } }, ...STITCH.beats.slice(2)] }), ["b2:block"]);
+  assert.deepEqual(severities({ ...STITCH, beats: [{ ...STITCH.beats[0]!, durationMs: 9000 }, ...STITCH.beats.slice(1)] }), ["b1:block"]);
+  const { durationMs: _unplanned, ...unplanned } = STITCH.beats[0]!;
+  assert.deepEqual(severities({ ...STITCH, beats: [unplanned, ...STITCH.beats.slice(1)] }), ["b1:block"]);
+  assert.deepEqual(severities({ ...STITCH, beats: [{ ...STITCH.beats[0]!, voice: "Their words" }, ...STITCH.beats.slice(1)] }), ["b1:warn"]);
+  assert.deepEqual(severities({ ...STITCH, beats: [STITCH.beats[0]!, { ...STITCH.beats[1]!, voice: "" }, ...STITCH.beats.slice(2)] }), ["b2:warn"]);
+  assert.deepEqual(severities({ ...STRONG_SCRIPT, hookFamily: "clip_stitch" }), ["b1:warn"], "a clip-stitch hook must declare its clip");
+});

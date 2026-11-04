@@ -38,6 +38,11 @@ export const directedBeatSchema = z.strictObject({
   picture: z.string().max(400).optional(),
   /** A sound cue: an effect, a music change, or a silence (codex 2). */
   sound: z.string().max(120).optional(),
+  /**
+   * A borrowed clip of another creator's video (the clip-stitch hook; owner decision 2026-11-04): where it comes from (a link or a label the
+   * brief or the trends name) and the credit shown on screen. Only the first beat may borrow, within the borrowed-clip rule.
+   */
+  borrowed: z.strictObject({ source: z.string().min(1).max(300), credit: z.string().min(1).max(80) }).optional(),
   /** How the beat follows the one before. The first beat has none. */
   link: beatLinkSchema.optional(),
   /** Words of the voice line to stress. Each must appear in the line. */

@@ -313,6 +313,47 @@ export function craftFindings(script: DirectedScript, timed: readonly TimedBeat[
     }
   }
 
+  // A borrowed opening clip (owner decision 2026-11-04): the first beat only, planned and short, then the brand's own take at once.
+  script.beats.forEach((beat, index) => {
+    if (beat.borrowed && index > 0) {
+      findings.push({
+        check: "borrowed_clip",
+        severity: "block",
+        evidence: "practice",
+        beatId: beat.beatId,
+        message: `Beat ${beat.beatId} borrows another creator's clip. Only the opening beat may borrow; the rest of the video is the brand's own.`,
+      });
+    }
+  });
+  if (first.borrowed) {
+    if (first.durationMs === undefined) {
+      findings.push({ check: "borrowed_clip", severity: "block", evidence: "practice", beatId: first.beatId, message: "The borrowed clip has no planned length. Give the opening beat its durationMs." });
+    } else if (first.durationMs > windows.maxBorrowedMs) {
+      findings.push({
+        check: "borrowed_clip",
+        severity: "block",
+        evidence: "sourced",
+        beatId: first.beatId,
+        message: `The borrowed clip runs ${seconds(first.durationMs)} s. Keep it to ${seconds(windows.maxBorrowedMs)} s, so the video stays the brand's.`,
+      });
+    }
+    if (first.voice.trim()) {
+      findings.push({ check: "borrowed_clip", severity: "warn", evidence: "practice", beatId: first.beatId, message: "The borrowed beat's sound is the other creator's. Leave its voice empty and put the brand's words in the next beat." });
+    }
+    const next = script.beats[1];
+    if (!next || !next.voice.trim()) {
+      findings.push({ check: "borrowed_clip", severity: "warn", evidence: "practice", beatId: next?.beatId, message: "Follow the borrowed clip at once with the brand's own take, in its own voice." });
+    }
+  } else if (script.hookFamily === "clip_stitch") {
+    findings.push({
+      check: "borrowed_clip",
+      severity: "warn",
+      evidence: "practice",
+      beatId: first.beatId,
+      message: "A clip-stitch hook declares its borrowed clip on the first beat: where it comes from and the credit shown.",
+    });
+  }
+
   if (!english) {
     findings.push({ check: "reading_level", severity: "info", evidence: "practice", message: `The reading-level, if-then and filler-word checks cover English only; the ${script.language} script was not checked for them.` });
   }

@@ -6,9 +6,9 @@ import { EMOTION_IDS, FORMAT_IDS, FUNNEL_BLOCKERS, HOOK_FAMILY_IDS, LOCK_IN_APPR
 
 /** A shipped prompt never changes: an edit is a new version with a new pin (Bible 11.3, followed here). */
 const PINNED: Record<string, string> = {
-  "concept_lab@2": "sha256:ff7fe897e230bef0d8b5d4e20191ddbee1275a4b1e312b637d9e6d9c91d8aa78",
+  "concept_lab@2": "sha256:0d686dc7e15bb3ce515f0a00fa71ada6956131aba4138ab283e248b22f622e8a",
   "viewer_panel@2": "sha256:53ea7ff4db7b3069f608fb53e4872ac4ade041a0265db4c409010f1b5d948685",
-  "script_director@2": "sha256:10f4e65d101a7ef2cd17a4781d32134e49aae482a2773b0fdb256983184bfaf9",
+  "script_director@2": "sha256:99d9b977c796b2908887ac0b69e38a95f940c7e54f2d63121cb20bc4062d36b6",
   "swipe_test@2": "sha256:4899aa25b9cae6d9f94e266366dc822cacf0678a10f0881df3d42b8f2fafef78",
 };
 
@@ -53,6 +53,8 @@ test("the version 2 prompts carry the lessons a model must follow", () => {
   assert.match(director, /trust anchor is proof the brief gives/);
   assert.match(directionPrompt("viewer_panel").text, /send what surprises you/);
   assert.match(directionPrompt("swipe_test").text, /"expectation"/);
+  assert.match(lab, /clip_stitch hook opens on up to five seconds of another creator's clip that the brief or the trends name/);
+  assert.match(director, /A clip-stitch opening: the first beat is the borrowed clip/);
 });
 
 test("answers are read as plain, fenced or embedded JSON, and a contract miss names its path", () => {

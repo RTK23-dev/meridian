@@ -41,7 +41,7 @@ Paths: `codex` is `src/lib/meridian/direction/codex.ts`; checks are named by the
 | 12 | The visual stun gun | `VISUAL_HOOK_TYPES`, rule `stun_gun`; rubric `stop_frame` | Encoded |
 | 13 | Pattern-interrupt hooks with matching audio | Hook family `pattern_interrupt`; rules `interrupt_sound`, `interrupt_audio`; beat field `sound`; check `hook_sound` | Checked |
 | 14 | Framebreaker hooks and hook mining | Adapted: mine the psychology of proven hooks (the genome role and hook families), never their footage; per-niche priors are study R9 | Adapted, Learning |
-| 15 | Clip-stitch hooks | Opening on another creator's viral clip puts their footage in our video (Bible principle 4: copy genes, never content), and Instagram now cuts reach for reposted content. The reaction format recreates or describes the moment instead | Not adopted |
+| 15 | Clip-stitch hooks | Owner decision 2026-11-04: allowed. Hook family `clip_stitch`; beat field `borrowed`; rule `borrowed_clip`; check `borrowed_clip` (the first beat only, at most 5 seconds as TikTok's Stitch allows, a clip the brief or trends name whose maker allows stitching, credited, followed at once by the brand's own take). The engine does not render another creator's footage yet: `INTEGRATION.md`, contract item 4 | Checked, Adapted |
 | 16 | Psychology attention triggers | Hook families `oddly_specific`, `desire_outcome`, `proven_winner`; rule `specific`. Adapted: a named person or a result appears only when the brief gives it | Adapted |
 | 17 | Power words, and a power-word bank | `POWER_WORD_ROLES`; the bank, mined from the niche's top transcripts by performance and position, is study R11 | Encoded, Learning |
 | 18 | Retention hunting | Retention spikes on the brand's posts become future hooks: study R13; skip-rate bands are recorded as one creator's benchmarks | Learning |
@@ -147,7 +147,7 @@ Paths: `codex` is `src/lib/meridian/direction/codex.ts`; checks are named by the
 | 98 | The five content games | `CONTENT_GAMES`; `JOB_WEEK` per game | Planner |
 | 99 | The three worst pieces of advice | One niche per plan; jobs, not views, as the goal | Planner |
 | 100 | From variety show to TV network | One format, topic and goal per channel is a planner input per account | Planner |
-| 101 | The rogue employee strategy | Secret brand-owned "fan" accounts hide who is speaking; that conflicts with platform authenticity rules and advertising-disclosure law, and with Meridian's no-deception rule | Not adopted |
+| 101 | The rogue employee strategy | Secret brand-owned "fan" accounts hide who is speaking; that conflicts with platform authenticity rules and advertising-disclosure law, and with Meridian's no-deception rule. Confirmed by the owner, 2026-11-04 | Not adopted |
 | 102 | Instagram Shops | Product tagging belongs to publishing and commerce | Outside direction |
 | 103 | Audience math and platform choice | A business decision about platforms | Outside direction |
 | 104 | Master the skill before content | Shapes the brand, not a video; direction never claims a skill or result the brief does not show | Outside direction |
@@ -219,12 +219,12 @@ Paths: `codex` is `src/lib/meridian/direction/codex.ts`; checks are named by the
 
 | Status | Lessons |
 | --- | --- |
-| Checked (a check runs on every script) | 20 |
+| Checked (a check runs on every script) | 21 |
 | Encoded (rules, lists, prompts) | 75 |
 | Planner | 27 |
 | Learning (needs the brand's own results) | 15 |
-| Adapted (with a stated change) | 6 |
-| Not adopted | 2 (clip-stitch hooks, rogue employee accounts) |
+| Adapted (with a stated change) | 7 |
+| Not adopted | 1 (secret brand-owned fan accounts) |
 | Outside direction | 13 |
 
 A lesson can carry more than one status, so the counts add up to more than 147.

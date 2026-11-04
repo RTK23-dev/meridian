@@ -22,7 +22,8 @@ friend. It is written for agents first: each section ends in rules an agent can 
 | `contested` | Evidence exists against it, or the findings disagree. Do not build on it alone. |
 
 **What it never permits.** No invented claims, numbers, testimonials or results (AGENTS.md rule 1). No engagement bait. No copied words,
-footage, voice or music (Bible principle 4: copy genes, never content). No misleading hooks. No undisclosed AI people where the platform
+footage, voice or music (Bible principle 4: copy genes, never content), except a credited borrowed opening clip within the rule in
+section 4.5 (owner decision 2026-11-04). No misleading hooks. No undisclosed AI people where the platform
 asks for disclosure. A video that wins attention by deceiving the viewer loses on every signal that follows: completion, sends, comments,
 and the account's trust.
 
@@ -130,7 +131,7 @@ dimensions in four groups, and two floors that are not scored but gate. It is th
 
 - **Trust floor.** No invented claim, no bait-and-switch, no fake urgency, no misleading thumbnail or first frame, no engagement bait, the
   hook's promise is paid. A video below the floor is not published, whatever its score.
-- **Originality floor.** Not a copy of a reference's words, footage, voice or music, not a near-repeat of the brand's own recent hooks, and
+- **Originality floor.** Not a copy of a reference's words, footage, voice or music (a borrowed opening clip within section 4.5 aside), not a near-repeat of the brand's own recent hooks, and
   not a template clone the platform would treat as mass-produced. A video below the floor is rewritten.
 
 ### 3.2 The fourteen dimensions
@@ -194,7 +195,7 @@ The direction report records each hook's promise and the beat that pays it; a pr
 
 ### 4.3 Hook families
 
-The codex holds 27 hook families (`HOOK_FAMILIES`), each with its mechanism, the niches it suits, its failure modes, the payoff it owes and
+The codex holds 28 hook families (`HOOK_FAMILIES`), each with its mechanism, the niches it suits, its failure modes, the payoff it owes and
 the Angle Bible entry it maps to where one exists. In short:
 
 | Family | Mechanism | Owes the viewer |
@@ -226,6 +227,7 @@ the Angle Bible entry it maps to where one exists. In short:
 | `connector` | Two unrelated things linked; only the link closes the gap | The link, and why it matters |
 | `desire_outcome` | An outcome the viewer secretly wants, tied to a relatable character | A non-obvious path to it |
 | `pattern_interrupt` | A picture that does not belong, with a matching sound, in one or two seconds | A fast turn into the topic |
+| `clip_stitch` | A few seconds of a clip the audience already loves, then the brand's reaction (section 4.5) | The brand's own take, at once |
 
 Rules for every hook (`HOOK_RULES` in the codex):
 
@@ -254,6 +256,20 @@ From one creator's 274 posts (`practice`; see `LESSONS_CROSSWALK.md`, lessons 1 
 5. **Declarative, not if-then.** "Do Y to get X." Check `if_then_hook`.
 6. **Stun the eye.** An overlay, a pattern interrupt, subject motion, an effect, or a picture nobody else would choose; an interrupt needs a
    matching sound and lasts one or two seconds. Check `hook_sound`.
+
+### 4.5 The clip-stitch opening (owner decision 2026-11-04)
+
+Opening on a few seconds of another creator's already-viral clip, then reacting or turning into the topic, is common practice (lesson 15),
+and the owner allows it. It borrows attention that does not turn into trust by itself, so it suits consumer products more than coaches or
+services. The rule (`borrowed_clip`, checked):
+
+1. The first beat only, and at most 5 seconds: TikTok's own Stitch takes up to five seconds of the original (`sourced`, secondary).
+2. A clip the brief or the trends name, from a maker who allows stitching or remixing. Never a clip the model imagines.
+3. Credited on screen. The borrowed beat carries the other creator's sound, not the brand's voice; its on-screen text names the topic.
+4. Followed at once by the brand's own take. The rest of the video is the brand's; it is never a repost.
+
+The engine does not render another creator's footage yet (`INTEGRATION.md`, contract item 4). Until it does, the clip is attached at
+publishing with the platform's own Stitch or Remix feature, or by a person.
 
 ## 5. Retention architecture: designing the middle
 
@@ -570,19 +586,19 @@ For each video, one direction document:
 Codex `direction-codex@2` folds in 147 short-form lessons from one creator's 274 posts. They are `practice` (his own data), so the
 learning loop tests them on the brand's results before any becomes a measured rule. Version 2 adds:
 
-- Five hook families, the triple hook, text-hook rules, power words, the four S's, visual-hook types and trust anchors (section 4.4).
+- Six hook families (with the clip stitch, section 4.5), the triple hook, text-hook rules, power words, the four S's, visual-hook types and trust anchors (section 4.4).
 - The core template, the lock-in zone, the hourglass rehook, expectations versus reality, villains and the double aha (section 5.7).
 - Ten formats and the format pyramid (section 5.6).
 - Two rubric dimensions, `clarity` and `proof`.
 - Save and comment devices, and the native call to action (section 7).
 - Zig-zag rhythm, reading level, the double tap and small-effort framing (section 9).
-- Fourteen checks: `context_first`, `opening_overload`, `if_then_hook`, `double_hook`, `peak_gap`, `rhythm`, `reading_level`,
-  `text_hook_style`, `lock_in`, `trust_anchor`, `villain`, `double_aha`, `hook_sound`, `cta_alignment`.
+- Fifteen checks: `context_first`, `opening_overload`, `if_then_hook`, `double_hook`, `peak_gap`, `rhythm`, `reading_level`,
+  `text_hook_style`, `lock_in`, `trust_anchor`, `villain`, `double_aha`, `hook_sound`, `cta_alignment`, `borrowed_clip`.
 - The video's job and the content planner (section 18).
 
-Two lessons were not adopted, because they break a Meridian rule: opening on another creator's viral clip (copy genes, never content) and
-secret brand-owned "fan" accounts (they hide who is speaking). Three were adapted: proof and trust anchors only from the brief, reposting
-only the brand's own winners, and keyword calls to action only for a real resource the brief names.
+One lesson was not adopted, by the owner's decision: secret brand-owned "fan" accounts (they hide who is speaking). The clip-stitch opening
+is allowed by the owner's decision, within the rule in section 4.5. Others were adapted: proof and trust anchors only from the brief,
+reposting only the brand's own winners, and keyword calls to action only for a real resource the brief names.
 
 ## 18. What each video is for
 

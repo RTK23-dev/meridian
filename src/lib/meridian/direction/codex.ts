@@ -14,6 +14,9 @@ import { BEAT_ROLES, type BeatRole } from "../../../engine/contracts/request.ts"
  * maps each one): the triple hook, text-hook rules and power words, the lock-in zone, trust anchors, villains, the hourglass rehook,
  * zig-zag rhythm, the double aha, save and comment devices, video jobs, the format pyramid and its new formats, and the rubric's clarity
  * and proof dimensions. His numbers are one creator's own results, so every rule from them is labelled `practice`.
+ *
+ * Owner decisions of 2026-11-04 in this version: a video may open on a short borrowed clip of another creator's video (the clip-stitch
+ * hook, lesson 15), within the borrowed-clip rule; secret brand-owned "fan" accounts are not used (lesson 101).
  */
 export const DIRECTION_CODEX_VERSION = "direction-codex@2";
 
@@ -63,6 +66,8 @@ export type DirectionWindows = {
   lockInByMs: number;
   /** The second aha starts by this fraction of the duration. */
   secondAhaByFraction: number;
+  /** The longest a borrowed opening clip may run (TikTok's Stitch takes up to five seconds of the original). */
+  maxBorrowedMs: number;
 };
 
 export const DIRECTION_WINDOWS: DirectionWindows = {
@@ -84,6 +89,7 @@ export const DIRECTION_WINDOWS: DirectionWindows = {
   maxReadingGrade: 6,
   lockInByMs: 12_000,
   secondAhaByFraction: 0.7,
+  maxBorrowedMs: 5_000,
 };
 
 /** Where each window comes from. */
@@ -106,6 +112,7 @@ export const DIRECTION_WINDOW_EVIDENCE: Record<keyof DirectionWindows, EvidenceL
   maxReadingGrade: "practice",
   lockInByMs: "practice",
   secondAhaByFraction: "practice",
+  maxBorrowedMs: "sourced",
 };
 
 // ---------------------------------------------------------------------------------------------------------------------------------
@@ -160,6 +167,7 @@ export const HOOK_FAMILY_IDS = [
   "connector",
   "desire_outcome",
   "pattern_interrupt",
+  "clip_stitch",
 ] as const;
 export const hookFamilyIdSchema = z.enum(HOOK_FAMILY_IDS);
 export type HookFamilyId = z.infer<typeof hookFamilyIdSchema>;
@@ -456,6 +464,21 @@ export const HOOK_FAMILIES: readonly HookFamily[] = [
     leadChannel: "picture",
     bestFor: "all",
     failureModes: ["The interrupt has no matching sound", "It runs past two seconds", "The same interrupt every video"],
+    evidence: "practice",
+  },
+  {
+    id: "clip_stitch",
+    name: "Clip stitch",
+    mechanism: "A few seconds of a clip the audience already loves borrows its attention; the brand's reaction or turn takes the viewer into the topic.",
+    owes: "The brand's own take, at once: why the clip matters for the viewer.",
+    leadChannel: "picture",
+    bestFor: ["ecommerce", "entertainment", "food", "tech"],
+    failureModes: [
+      "The borrowed clip runs long, so the video is mostly someone else's",
+      "No turn into the brand's topic",
+      "Borrowed attention that never turns into trust (usually wrong for coaches and services)",
+      "A clip whose maker does not allow stitching, or no credit",
+    ],
     evidence: "practice",
   },
 ];
@@ -1195,7 +1218,13 @@ export const TRUST_RULES: readonly DirectionRule[] = [
   { id: "no_invented_claims", text: "Never invent a claim, number, result, testimonial, person, endorsement or trend. Every proof and every trust anchor comes from the brief.", evidence: "sourced", section: "0" },
   { id: "promise_kept", text: "No bait-and-switch: the payoff is the thing the hook promised.", evidence: "hypothesis", section: "3.1" },
   { id: "no_fake_urgency", text: "No fake urgency, fake scarcity or fake confession.", evidence: "hypothesis", section: "3.1" },
-  { id: "original", text: "Copy genes, never content: no words, footage, voice or music of a reference or another creator's video.", evidence: "sourced", section: "3.1" },
+  { id: "original", text: "Copy genes, never content: no words, footage, voice or music of a reference or another creator's video, except a borrowed opening clip as the next rule allows.", evidence: "sourced", section: "3.1" },
+  {
+    id: "borrowed_clip",
+    text: "A borrowed opening clip (owner decision 2026-11-04) is the first beat only, at most 5 seconds, from a video the brief or the trends name and whose maker allows stitching or remixing, credited on screen, and followed at once by the brand's own take. Never a repost, and never a clip that is not named.",
+    evidence: "practice",
+    section: "4.5",
+  },
 ];
 
 /** What a video is for and how it fits the account (framework 18). The agent and the planner read these. */
@@ -1257,6 +1286,7 @@ export const CHECK_IDS = [
   "double_aha",
   "hook_sound",
   "cta_alignment",
+  "borrowed_clip",
   "hook_repeat",
   "concept_similarity",
   "obvious_idea",
@@ -1296,8 +1326,8 @@ export type NicheProfile = { id: NicheFamily; emotions: readonly EmotionId[]; ho
 
 export const NICHE_PROFILES: readonly NicheProfile[] = [
   { id: "education", emotions: ["surprise", "awe", "inspiration"], hookFamilies: ["question_gap", "myth_bust", "connector", "impossible_image", "oddly_specific"], proofDevices: ["demonstration", "side_by_side"], pitfalls: ["Lecturing", "Answering the question in the hook"] },
-  { id: "entertainment", emotions: ["amusement", "surprise", "tension"], hookFamilies: ["in_medias_res", "pattern_interrupt", "pov_relatable", "genre_flip", "story_cliff"], proofDevices: ["demonstration"], pitfalls: ["Stock jokes", "A slow setup"] },
-  { id: "ecommerce", emotions: ["surprise", "relief", "amusement"], hookFamilies: ["mystery_object", "versus", "challenge_test", "genre_flip"], proofDevices: ["demonstration", "test_result", "customer_words", "side_by_side"], pitfalls: ["Reading the product page aloud", "A product that never moves"] },
+  { id: "entertainment", emotions: ["amusement", "surprise", "tension"], hookFamilies: ["in_medias_res", "pattern_interrupt", "clip_stitch", "pov_relatable", "genre_flip", "story_cliff"], proofDevices: ["demonstration"], pitfalls: ["Stock jokes", "A slow setup"] },
+  { id: "ecommerce", emotions: ["surprise", "relief", "amusement"], hookFamilies: ["mystery_object", "clip_stitch", "versus", "challenge_test", "genre_flip"], proofDevices: ["demonstration", "test_result", "customer_words", "side_by_side"], pitfalls: ["Reading the product page aloud", "A product that never moves"] },
   { id: "beauty", emotions: ["surprise", "relief", "belonging"], hookFamilies: ["before_after", "result_first", "myth_bust", "mistake"], proofDevices: ["before_after", "process_shown", "customer_words"], pitfalls: ["Unbelievable results", "Lighting that changes between states"] },
   { id: "fitness", emotions: ["inspiration", "tension", "surprise"], hookFamilies: ["mistake", "contrarian", "stakes_clock", "before_after"], proofDevices: ["demonstration", "before_after", "time_lapse"], pitfalls: ["Promised results the brief cannot support", "Shaming the viewer"] },
   { id: "finance", emotions: ["tension", "relief", "surprise"], hookFamilies: ["desire_outcome", "oddly_specific", "confession", "contrarian", "mistake"], proofDevices: ["brief_numbers", "side_by_side"], pitfalls: ["Implied guaranteed returns", "Jargon"] },

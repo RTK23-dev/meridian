@@ -40,3 +40,13 @@ test("the hook line is the first hook beat's voice, or its on-screen text when i
   const silent = { ...STRONG_SCRIPT, beats: [{ ...STRONG_SCRIPT.beats[0]!, voice: "" }, ...STRONG_SCRIPT.beats.slice(1)] };
   assert.equal(hookLine(silent), "Only 1 stays hot");
 });
+
+test("breaking the borrowed-clip rule fails the originality floor", () => {
+  const borrowedLate = {
+    ...STRONG_SCRIPT,
+    beats: [STRONG_SCRIPT.beats[0]!, { ...STRONG_SCRIPT.beats[1]!, borrowed: { source: "https://example.com/v/1", credit: "@maker" }, durationMs: 3000 }, ...STRONG_SCRIPT.beats.slice(2)],
+  };
+  const report = directionReport(borrowedLate, { recentHooks: [] });
+  assert.equal(report.floors.originality, "fail");
+  assert.equal(report.blocked, true);
+});

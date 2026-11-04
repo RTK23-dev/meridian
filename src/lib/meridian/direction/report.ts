@@ -29,7 +29,7 @@ export type DirectionReport = {
 /** The checks whose blocking finding fails the trust floor. */
 export const TRUST_CHECKS: readonly CheckId[] = ["engagement_bait", "promise_paid", "loops_close", "forbidden_term"];
 /** The checks whose blocking finding fails the originality floor. */
-export const ORIGINALITY_CHECKS: readonly CheckId[] = ["hook_repeat"];
+export const ORIGINALITY_CHECKS: readonly CheckId[] = ["hook_repeat", "borrowed_clip"];
 
 const SEVERITY_ORDER: Record<Severity, number> = { block: 0, warn: 1, info: 2 };
 

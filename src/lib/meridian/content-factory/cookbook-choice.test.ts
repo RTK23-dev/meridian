@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
 import { cookbookSelectionOf } from "../cookbooks/run-record.ts";
+import { DIRECTION_CODEX_VERSION } from "../direction/codex.ts";
 import { applyRecordedCookbook, chooseCookbookFor, proposalForRunFor, runInputsOf } from "./cookbook-choice.ts";
 import type { RequestBuild } from "./request.ts";
 import { sessionAccess } from "./service-core.ts";
@@ -134,6 +135,9 @@ test("a recorded cookbook is applied to the request: its style replaces the page
   assert.equal(applied.request.page.styleKitId, "sk_3d_data_explainer");
   assert.equal(applied.request.cookbook?.id, "ck_3d_data_explainer");
   assert.equal(applied.request.constraints.maxMs, 60000, "the shorter of the person's cap and the cookbook's length");
+  const script = applied.request.cookbook?.instructions.script ?? "";
+  assert.ok(script.includes(`Direction (${DIRECTION_CODEX_VERSION})`), "every cookbook run carries the direction codex's script rules");
+  assert.ok(script.includes("Format: Explainer with a visual metaphor."), "an explainer cookbook gets the matching format");
 });
 
 test("a draft run is offered the eligible cookbooks by label and version, read on the server from the session (K18c)", async () => {

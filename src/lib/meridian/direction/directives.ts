@@ -7,6 +7,7 @@
 // later, shorter line may still fit); a rule is never cut in the middle. Pure.
 
 import { COOKBOOK_INSTRUCTIONS_MAX, COOKBOOK_INSTRUCTION_ROLES } from "../../../engine/contracts/request.ts";
+import type { COOKBOOK_FAMILIES } from "../cookbooks/families.ts";
 import {
   AI_WEAK_SPOTS,
   DIRECTION_CODEX_VERSION,
@@ -34,6 +35,20 @@ import {
 } from "./codex.ts";
 
 export type DirectionRole = (typeof COOKBOOK_INSTRUCTION_ROLES)[number];
+type CookbookFamily = (typeof COOKBOOK_FAMILIES)[number];
+
+/** The codex format that matches a cookbook family, where one does. Other families keep their own grammar. */
+export const FORMAT_OF_COOKBOOK_FAMILY: Partial<Record<CookbookFamily, FormatId>> = {
+  explainer: "metaphor_explainer",
+  listicle: "listicle",
+  story: "story",
+};
+
+/** The direction options for a cookbook run, from its family. */
+export function cookbookDirection(family: CookbookFamily): DirectiveOptions {
+  const format = FORMAT_OF_COOKBOOK_FAMILY[family];
+  return format ? { format } : {};
+}
 
 /** One role's limit in the engine's cookbook reference. */
 export const ROLE_TEXT_MAX = 4000;

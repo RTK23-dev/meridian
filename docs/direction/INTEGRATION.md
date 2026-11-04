@@ -42,7 +42,7 @@ No engine contract changed. No provider was called. No money was spent.
 | The live port over Meridian's generation path (budget hold, ledger, workspace key) | `live.server.ts`, not called anywhere |
 | The switch for cookbook scripts, off by default | `applyCookbook(build, resolved, { direction })` in `content-factory/cookbook-request.ts` |
 
-Tests: 96 in the direction module and one in `cookbook-request.test.ts`, all fixture-based.
+Tests: 99 in the direction module, one in `cookbook-request.test.ts` and one in `cookbook-choice.test.ts`, all fixture-based.
 
 ## 2. Step 1: direction in every cookbook script (no contract change, no new spend)
 
@@ -54,11 +54,9 @@ anti-slop rules. The cost is the extra input tokens of one Opus call, about 1,00
 **What it does not do.** The engine reads only the `script` instruction today (`jobs/handlers/write-script.ts`). The other roles' instructions
 are carried on the request but not read, so `withDirection` is limited to `script` there.
 
-**How to switch it on.** As a challenger first (Bible 11.3): pick the arm per request with `challengerArmOf` (`factory/sleep-holdout.ts`)
-at `thresholds.claude.challengerShare` (10% to start). The stored request records the arm, because its instruction text names the codex
-version. Promote it when the arm's gate pass rate and published results beat the plain arm.
-
-**Owner decides:** all runs, or a challenger share first (recommended: challenger at 10%).
+**Switched on for every run** (owner decision 2026-11-04: all runs, not a challenger share). `applyRecordedCookbook`
+(`content-factory/cookbook-choice.ts`) passes the direction for every cookbook run, with the codex format that matches the cookbook's
+family (explainer, listicle, story). The stored request records it, because its instruction text names the codex version.
 
 ## 3. Step 2: a direction run from the Create page (no contract change, spends money)
 
@@ -96,6 +94,12 @@ request contract (v13). Then `withDirection` can fill every role.
    the documented long-video benchmarks; Claude sees frames, Bible 20.1), and scores the Lean-In rubric's stop, promise, gap, payoff and
    rewatch dimensions on the render, with evidence. Warn-only until its gold set meets Bible 12.4's targets.
 3. A `direction.decided` event in `engine_events` (Bible 16.1), with the direction record.
+4. A borrowed-clip asset (owner decision 2026-11-04 allows a clip-stitch opening). Today the engine never renders another creator's
+   footage: Bible principle 4 keeps source footage out of a render, and reference media is deleted after analysis. To render a borrowed
+   opening, the engine needs an asset kind for a credited clip of at most 5 seconds, with its source, its credit and a rights record (the
+   maker allows stitching or remixing, or a licence), drawn as the first shot with the credit overlaid by code; plus a Bible note on
+   principle 4. Until it is built, a direction run can plan the clip-stitch opening, and the clip is attached at publishing with the
+   platform's own Stitch or Remix feature, or by a person.
 
 ## 5. Step 4: learning (no contract change beyond 3b)
 
@@ -132,9 +136,10 @@ These touch the study framework that the genome role and JEV questions read; AGE
 
 ## 7. Decisions for the owner
 
-1. Step 1: switch direction on for cookbook scripts, for all runs or as a 10% challenger.
+1. ~~Step 1: switch direction on for cookbook scripts.~~ Decided 2026-11-04: on for all runs, and built.
 2. Step 2: allow direction runs from the Create page (under $1 a run, estimated), and the default second-writer and judge families.
 3. Step 3b: approve contract v15 (direction on the request, the watch-test role, the direction event).
 4. Section 6: the Angle Bible corrections.
+5. Contract item 4: build the borrowed-clip asset, so the engine can render a clip-stitch opening itself.
 5. A monthly budget for live tests (trial reels or small paid hook tests). Only real viewers decide winners.
 6. Reference reels or account data for the gold set (the October note's Q7).
