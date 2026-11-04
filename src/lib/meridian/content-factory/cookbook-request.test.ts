@@ -63,3 +63,22 @@ test("the input is not changed", () => {
   applyCookbook(input, resolved(threeDDataExplainerCookbook));
   assert.equal(JSON.stringify(input), before);
 });
+
+test("with direction, the codex's script rules join the cookbook's own script instruction, and nothing else changes", () => {
+  const plain = applyCookbook(candidate(), resolved(threeDDataExplainerCookbook));
+  const directed = applyCookbook(candidate(), resolved(threeDDataExplainerCookbook), { direction: { format: "metaphor_explainer", niche: "education" } });
+  assert.equal(plain.status, "ready");
+  assert.equal(directed.status, "ready", directed.status === "incomplete" ? directed.problems.join("; ") : "");
+  if (plain.status !== "ready" || directed.status !== "ready") return;
+  const own = plain.request.cookbook?.instructions.script ?? "";
+  const script = directed.request.cookbook?.instructions.script ?? "";
+  assert.ok(script.startsWith(own), "the cookbook's own instruction comes first, whole");
+  assert.match(script, /Direction \(direction-codex@1\)/);
+  assert.match(script, /Format: Explainer with a visual metaphor/);
+  assert.ok(script.length <= 4000);
+  assert.deepEqual(
+    { ...directed.request, cookbook: { ...directed.request.cookbook, instructions: { ...directed.request.cookbook?.instructions, script: own } } },
+    plain.request,
+    "only the script instruction differs",
+  );
+});

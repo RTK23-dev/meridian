@@ -5,6 +5,7 @@
 
 import { productionRequestSchema, type ProductionRequest } from "../../../engine/contracts/request.ts";
 import type { ResolvedCookbook } from "../cookbooks/resolve.ts";
+import { withDirection, type DirectiveOptions } from "../direction/directives.ts";
 import type { RequestBuild } from "./request.ts";
 
 const COOKBOOK_HEADER = "Cookbook instructions";
@@ -18,8 +19,15 @@ export function cookbookInstructionLines(resolved: ResolvedCookbook): string[] {
   return lines;
 }
 
-/** Applies a resolved cookbook to a request. Pure: the input is not changed. */
-export function applyCookbook(build: RequestBuild, resolved: ResolvedCookbook): RequestBuild {
+/**
+ * Applies a resolved cookbook to a request. Pure: the input is not changed.
+ *
+ * With `direction`, the direction codex's script rules (docs/direction) are added under the cookbook's own `script` instruction in the
+ * engine's reference, within its limits; the engine's write_script stage sends that instruction to the scriptwriter, under the
+ * scriptwriter's own rules. Only the script role gets them, because it is the only role the engine reads an instruction for today. Without
+ * `direction` the request is exactly as before.
+ */
+export function applyCookbook(build: RequestBuild, resolved: ResolvedCookbook, options: { direction?: DirectiveOptions } = {}): RequestBuild {
   const candidate: Record<string, unknown> = structuredClone(build.status === "ready" ? (build.request as unknown as Record<string, unknown>) : build.candidate);
   const lines = cookbookInstructionLines(resolved);
   const header = `${COOKBOOK_HEADER} (${resolved.label}, version ${resolved.version}). They shape this video. They never override the engine's rules or its gates.`;
@@ -49,7 +57,7 @@ export function applyCookbook(build: RequestBuild, resolved: ResolvedCookbook): 
     id: resolved.cookbookId,
     version: resolved.version,
     valuesHash: resolved.valuesHash,
-    instructions: instructionsByRole,
+    instructions: options.direction ? withDirection(instructionsByRole, { ...options.direction, roles: ["script"] }) : instructionsByRole,
   };
 
   const parsed = productionRequestSchema.safeParse(candidate);
