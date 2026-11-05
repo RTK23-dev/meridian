@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="title.hook" data-width="1080" data-height="1920">
@@ -58,12 +59,18 @@
       });
       var seconds = vars.entranceMs / 1000;
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
+      // Motion kit (lib/motion-kit.js): the hook is on screen from the first frame, so it never fades in unless the plan asks for a fade.
       if (vars.entrance === "slide") {
-        tl.fromTo(box, { y: 90 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: seconds, ease: "power3.out" }, 0);
+        // Thrown up from below: arrives at speed, long confident settle. Distance sets the time, never less than the plan's.
+        tl.fromTo(box, { y: 90 * motion }, { y: 0, duration: Math.max(seconds, MK.dur(90 * motion, 1)), ease: MK.curve("kit.land") }, 0);
       } else if (vars.entrance === "fade") {
-        tl.fromTo(box, { opacity: 0 }, { opacity: 1, duration: seconds, ease: "power1.out" }, 0);
+        // A chosen fade: the line becomes, softly.
+        tl.fromTo(box, { opacity: 0 }, { opacity: 1, duration: seconds, ease: MK.curve("kit.drift") }, 0);
       } else {
-        tl.fromTo(box, { scale: 1 - 0.4 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: seconds, ease: "back.out(1.7)" }, 0);
+        // Pop: there at once, the scale landing on a spring that is felt, not seen.
+        var pop = MK.spring({ response: Math.max(0.2, seconds * 1.2), damping: 0.78 });
+        tl.fromTo(box, { scale: 1 - 0.4 * motion }, { scale: 1, duration: pop.duration, ease: pop.ease }, 0);
       }
       tl.set({}, {}, vars.durationMs / 1000);
       window.__timelines["title.hook"] = tl;

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="panel.line" data-width="1080" data-height="1920">
@@ -57,6 +58,7 @@
       var vars = window.__hyperframes.getVariables();
       var kit = getComputedStyle(document.documentElement);
       var accent = kit.getPropertyValue("--kit-accent").trim();
+      var motion = parseFloat(kit.getPropertyValue("--kit-motion")) || 0;
       var panel = document.querySelector(".pl-panel");
       var titleEl = document.querySelector(".pl-title");
       var plot = document.querySelector(".pl-plot");
@@ -114,11 +116,33 @@
       var length = path.getTotalLength();
       path.style.strokeDasharray = String(length);
       var tl = gsap.timeline({ paused: true });
-      tl.fromTo(panel, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power1.out" }, 0);
-      tl.fromTo(path, { strokeDashoffset: length }, { strokeDashoffset: 0, duration: 1.2, ease: "power1.inOut" }, 0.3);
+      var MK = window.MotionKit;
+      // Cut on: hidden until its cue, then simply there. Elements start hidden by CSS; a cue at 0 shows the element at once (outside
+      // the timeline: HyperFrames does not render a set at exactly 0 on frame 0).
+      function reveal(el, at) {
+        if (at > 0) {
+          gsap.set(el, { autoAlpha: 0 });
+          MK.cut(tl, el, at);
+        } else {
+          gsap.set(el, { autoAlpha: 1 });
+        }
+      }
+      // Motion kit: the panel settles with weight; the line pushes off slowly and arrives decisively; each point cuts on the moment
+      // the line reaches it (cause and effect: the draw curve is inverted to find that moment).
+      reveal(panel, 0);
+      tl.fromTo(panel, { y: 18 * motion }, { y: 0, duration: MK.dur(18 * motion, 1.35), ease: MK.curve("kit.heavy") }, 0);
+      var draw = MK.curve("kit.heavy");
+      tl.fromTo(path, { strokeDashoffset: length }, { strokeDashoffset: 0, duration: 1.2, ease: draw }, 0.3);
+      function reached(share) {
+        var lo = 0, hi = 1;
+        for (var k = 0; k < 30; k++) {
+          var mid = (lo + hi) / 2;
+          if (draw(mid) < share) lo = mid; else hi = mid;
+        }
+        return hi;
+      }
       dots.forEach(function (dot, index) {
-        var at = 0.3 + (index / Math.max(1, points.length - 1)) * 1.2;
-        tl.fromTo(dot, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, at);
+        reveal(dot, 0.3 + reached(index / Math.max(1, points.length - 1)) * 1.2);
       });
       tl.set({}, {}, seconds);
       window.__timelines["panel.line"] = tl;

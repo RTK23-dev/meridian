@@ -1,5 +1,5 @@
 {
-  "contentHash": "sha256:8e1fb555d2a7d6eca3587475ab9f6c5bb96761a9797a19791347ba078befea14",
+  "contentHash": "sha256:c5c1845eb619b366012fd881a06b8257983eeaf573ef9cb26fef88ba27e3bb1c",
   "files": [
     {
       "path": "assets.json",
@@ -13,18 +13,23 @@
     },
     {
       "path": "components/cta.card.html",
-      "contentHash": "sha256:a824864aa8097367a3ca9ce9cb79382f4e5ec42285e7c52fc3e9c90c000ec116",
-      "bytes": 4008
+      "contentHash": "sha256:ad6e6ee550561dcf33d15ab8567698ab9f9264681d7ab1e88d3e2afe1fa4e3dd",
+      "bytes": 4531
     },
     {
       "path": "components/product.card.html",
-      "contentHash": "sha256:b08ea3424349a301be032c97df50bde8af27bd1ffa01100022feeffa17df4cd2",
-      "bytes": 4577
+      "contentHash": "sha256:813527611150c5f8357a76f868b8443dbd1212ad78286e781b0b8980baccdb28",
+      "bytes": 5503
     },
     {
       "path": "index.html",
-      "contentHash": "sha256:21c80c4fb71692b305b3a34e9f9fc1049dbb9b32664d3ebd3943d57ca3a9ad0e",
-      "bytes": 3097
+      "contentHash": "sha256:6395d1c766ed955f01aa5c30ab3ed35166aed6493b1c5a756a9537cdfd2c6c83",
+      "bytes": 3172
+    },
+    {
+      "path": "lib/motion-kit.js",
+      "contentHash": "sha256:150fe5f887e0b2f9dd99e27d5ead142482ea359fd1bc95af850070dfffc22be6",
+      "bytes": 20360
     },
     {
       "path": "style.css",

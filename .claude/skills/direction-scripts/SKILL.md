@@ -54,6 +54,11 @@ model, and the CLI checks what you write with the same checks a run applies. Not
 9. **Use.** `$C use --request request.json --script script.json` prints the script lines, the engine's `script` (`{ language, beats }`)
    and the direction note. A blocked script is refused.
 
+## Motion
+
+When a script is drawn as a video (a component plan, an agent-mode render), animate it with the motion-designer skill: its register
+follows the script's feeling (`src/engine/compose/motion/registers.ts`).
+
 ## Hard stops
 
 - Never invent a number, result, price, testimonial, person, quote or trend. A fact the brief does not give stays out; when it gives

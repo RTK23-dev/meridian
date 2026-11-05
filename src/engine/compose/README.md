@@ -13,6 +13,7 @@ Implements Bible section **9** (compiler and component library), **13** (style k
 | `html.ts` | 9.1, L8 | Escaping for every string that reaches HTML (text nodes and JSON in attributes). |
 | `components/<name>/` | 9.2 | `component.html` (template), `props.ts` (zod), `fixtures/` (3 prop sets), `index.ts` (definition), golden PNGs in `golden/`. |
 | `components/components.test.ts` | 9.2 | Contract checks for every component (props, declared variables, no wall-clock or markup APIs, kit colours only). |
+| `motion/` | 9.1, 9.2 | Designer motion (motion-kit, MIT, vendored): the kit file the compiler ships as `lib/motion-kit.js`, its curves as data, the registers, and the motion lint. See `motion/README.md`. |
 | `lint.test.ts` | 6.9 | Runs `hyperframes lint` on the compiled EDL fixture and on every component fixture. Zero errors and zero warnings. |
 | `golden/` | 17.3 | Local render harness and the golden-frame runner (`npm run engine:golden`). Not in `npm test`. |
 | `snapshots/edl-fixture/` | 17.3 | Snapshot of the compiled contracts EDL fixture (`UPDATE_SNAPSHOTS=1` rewrites it). |
@@ -40,6 +41,9 @@ rest of the 9.2 list arrives in later phases.
 - A clip has exactly one of `srcUri` or `component`. Clip ids use `[A-Za-z0-9_-]` and are unique.
 - Transitions: `hard`, `fade`, `whip`. Effects: `punch_in`, `shake`, `flash`. Anything else is refused (`speed_ramp` is not
   yet drawn), so nothing is dropped silently.
+- Motion: every composition ships `lib/motion-kit.js`, loaded after GSAP. The root's whip, punch-in and shake use the kit's curves,
+  and every animated component loads it from `../lib/motion-kit.js`. No named GSAP preset is chosen as a default anywhere
+  (`motion/lint.test.ts`).
 - Audio gain must stay within HyperFrames' +12 dB (`data-volume` ≤ 3.98).
 - Music ducking is pre-rendered upstream (9.1 rule 5). The compiler uses the stem as given and ignores `duckDb`.
 - Each `*Uri` prop (and each string in a `*Uris` list) is a media URI, at any depth: a list item's image is mapped too.

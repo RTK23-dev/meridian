@@ -16,6 +16,9 @@ export default tseslint.config(
       "node_modules/**",
       "src/routeTree.gen.ts",
       ".claude/worktrees/**",
+      // Vendored as published (MIT), and checked byte for byte by src/engine/compose/motion/kit.test.ts.
+      "src/engine/compose/motion/motion-kit.js",
+      ".claude/skills/motion-designer/motion-kit.js",
     ],
   },
   js.configs.recommended,

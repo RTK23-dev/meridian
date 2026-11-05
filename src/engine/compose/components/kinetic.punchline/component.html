@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="kinetic.punchline" data-width="1080" data-height="1920">
@@ -37,6 +38,8 @@
       var scale = vars.scale;
       var punch = scale * (1 + 0.25 * motion);
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
+      var slam = MK.spring({ response: 0.22, damping: 0.72 });
       lines.forEach(function (text, index) {
         var el = document.createElement("div");
         el.className = "kp-line";
@@ -48,7 +51,8 @@
         layer.appendChild(el);
         var start = index * rhythm;
         tl.set(el, { opacity: 1 }, start);
-        tl.fromTo(el, { scale: punch }, { scale: scale, duration: 0.12, ease: "power3.out" }, start);
+        // Motion kit: each line slams in from its punch scale and lands on a spring, inside its own beat.
+        tl.fromTo(el, { scale: punch }, { scale: scale, duration: Math.min(slam.duration, rhythm * 0.95), ease: slam.ease }, start);
         if (!isLast) {
           tl.set(el, { opacity: 0 }, (index + 1) * rhythm);
         }

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="list.tierBoard" data-width="1080" data-height="1920">
@@ -159,6 +160,18 @@
 
       // Each card drops into place at its own time on the composition clock. Before its drop it stays hidden.
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
+      var drop = MK.spring({ response: 0.3, damping: 0.62 });
+      // Cut on: hidden until its cue, then simply there. Elements start hidden by CSS; a cue at 0 shows the element at once (outside
+      // the timeline: HyperFrames does not render a set at exactly 0 on frame 0).
+      function reveal(el, at) {
+        if (at > 0) {
+          gsap.set(el, { autoAlpha: 0 });
+          MK.cut(tl, el, at);
+        } else {
+          gsap.set(el, { autoAlpha: 1 });
+        }
+      }
       items.forEach(function (item) {
         var grid = grids[item.tier];
         if (!grid) {
@@ -179,7 +192,10 @@
         name.textContent = String(item.name);
         tile.appendChild(name);
         grid.appendChild(tile);
-        tl.fromTo(tile, { y: -48 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power3.out" }, item.dropMs / 1000);
+        // Motion kit: the tile cuts on at its drop and lands with a visible, physical settle.
+        var dropAt = item.dropMs / 1000;
+        reveal(tile, dropAt);
+        tl.fromTo(tile, { y: -48 * motion }, { y: 0, duration: drop.duration, ease: drop.ease }, dropAt);
       });
       tl.set({}, {}, vars.durationMs / 1000);
       window.__timelines["list.tierBoard"] = tl;
