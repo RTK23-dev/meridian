@@ -9,6 +9,7 @@ import { recordCookbookSelection } from "../cookbooks/run-record.ts";
 import { confirmSelection, pickFromList, type SelectionRecord } from "../cookbooks/select.ts";
 import type { Proposal, SelectorPort } from "../cookbooks/selector.ts";
 import type { Sql } from "../learning/store.ts";
+import { cookbookDirection } from "../direction/directives.ts";
 import { applyCookbook } from "./cookbook-request.ts";
 import { cookbookSelectionOf } from "../cookbooks/run-record.ts";
 import { readCookbookFor } from "../cookbooks/service.ts";
@@ -139,7 +140,7 @@ function incompleteWith(build: RequestBuild, problems: string[]): RequestBuild {
 
 /**
  * Applies the cookbook a draft run recorded (K18b), if there is one: its style, its length cap and its instructions join the request, using the
- * values the person chose. With no record the request is returned as it is. A recorded cookbook that can no longer be read or resolved makes the
+ * values the person chose, and the direction codex's script rules join its script instruction. With no record the request is returned as it is. A recorded cookbook that can no longer be read or resolved makes the
  * request incomplete, with the reason, rather than running without it.
  */
 export async function applyRecordedCookbook(sql: Sql, row: SessionRow, build: RequestBuild): Promise<RequestBuild> {
@@ -152,6 +153,8 @@ export async function applyRecordedCookbook(sql: Sql, row: SessionRow, build: Re
   if (!read.ok) return incompleteWith(build, ["The chosen cookbook is no longer available. Choose it again."]);
   const resolved = resolveCookbook(read.value.cookbook, { values: record.values, lengthMs: settings.maxSeconds * 1000 });
   if (!resolved.ok) return incompleteWith(build, resolved.issues);
-  return applyCookbook(build, resolved.resolved);
+  // Every cookbook run gets the direction codex's script rules (owner decision 2026-11-04: all runs, not a share), with the format its
+  // family matches. The engine sends them to the scriptwriter under its own rules (docs/direction/INTEGRATION.md, step 1).
+  return applyCookbook(build, resolved.resolved, { direction: cookbookDirection(read.value.cookbook.family) });
 }
 
