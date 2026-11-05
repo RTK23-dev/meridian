@@ -39,13 +39,14 @@ export function CreateThread({ messages, onSuggest }: { messages: Message[]; onS
           <li key={message.id} className="flex flex-col items-end gap-1">
             <div className="max-w-[85%] whitespace-pre-wrap border border-hairline bg-raised px-4 py-3 text-body text-fg-primary">{message.text}</div>
             <p className="text-caption text-fg-muted">
+              {message.beatRole ? `Script line, ${message.beatRole} · ` : ""}
               {message.authorName ?? "You"} · <time dateTime={message.createdAt}>{new Date(message.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</time>
             </p>
           </li>
         ))}
       </ol>
       <p role="status" className="border-t border-hairline pt-3 text-caption text-fg-muted">
-        Saved to your draft. Nothing has started, and nothing has been spent.
+        Saved to your draft. No video has started. A script run below says what it spent.
       </p>
     </section>
   );

@@ -18,13 +18,17 @@ Read in this order:
 | `directives.ts` | The codex as prompt text per role, and `withDirection`, which adds it to a cookbook's instructions inside the engine's limits. |
 | `concepts.ts`, `random.ts` | Divergence: the creative deck, the concept lab's contract, the obvious/history/duplicate filters, diverse finalists. |
 | `tournament.ts` | Convergence: order-swapped pairwise judging, Bradley-Terry ranking, judge reliability. |
-| `prompts.ts`, `answers.ts` | The four direction prompts, version 2 (pinned), and the panel and swipe-test answer contracts. |
-| `pipeline.ts` | The whole run with an injected model port and a hard call limit. |
+| `prompts.ts`, `answers.ts` | The four direction prompts (pinned; `script_director@3` adds the person's note on a revision) and the panel and swipe-test answer contracts. |
+| `pipeline.ts` | The whole run with an injected model port and a hard call limit. `choose: "person"` returns every finished script as an option; `reviseDirectedScript` regenerates one with a note. |
 | `plan.ts` | The content planner: calendar grids, jobs per content game, the bullseye mix, outliers, repost candidates, Lego variations, view ceilings. |
-| `live.server.ts` | The live port over Meridian's generation path (budget hold, ledger, workspace key). Not called anywhere yet. |
+| `live.server.ts` | The live port over Meridian's generation path (budget hold, ledger, workspace key). |
+| `seats.ts` | Which model sits in each seat: the copy model writes and directs; the second writer and the judge are Settings tasks whose Auto is the copy model. |
+| `service.ts`, `actions.ts`, `input.ts` | Scripts for a draft: ask for 1 to 4 options or a revision (a queued job, run once, `direction.write` and `direction.revise`), read the panel, choose a script (its lines become the draft's script lines). Admins of the draft's workspace only. Migration 0153. |
+| `scripts-view.ts` | What a person sees of a script, and what choosing it writes: the script lines and the direction note. |
+| `agent-tools.ts`, `lists.ts` | Agent mode (`scripts/direction/cli.ts`, skill `.claude/skills/direction-scripts`): the role messages, the filters and the checks, with no provider call. `lists.ts` holds the id lists a page reads. |
 
 Tests: `NODE_ENV=development node --experimental-strip-types --test src/lib/meridian/direction/*.test.ts`. No test calls a live API.
 
-What is wired: `applyCookbook(build, resolved, { direction })` (content-factory/cookbook-request.ts) adds the script direction to the
-engine's cookbook reference, which the engine's write_script stage sends to the scriptwriter. It is off unless a caller passes
-`direction`. The plan for the rest is in [`INTEGRATION.md`](../../../../docs/direction/INTEGRATION.md).
+What is wired: every cookbook run adds the script direction to the engine's cookbook reference (`applyRecordedCookbook`), which the
+engine's write_script stage sends to the scriptwriter; and the Create page's Scripts panel writes, regenerates and chooses scripts for a
+draft (step 2). The plan for the rest is in [`INTEGRATION.md`](../../../../docs/direction/INTEGRATION.md).

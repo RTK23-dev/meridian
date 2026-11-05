@@ -77,6 +77,11 @@ export type DirectionSettings = {
   maxCalls: number;
   /** The seed of the deck and the pair order, so a run can be replayed. */
   seed: string;
+  /**
+   * Who picks among the finished scripts. "panel" (the default) runs a last pairwise panel and returns its pick; "person" returns every
+   * finished script as an option, best-ranked concept first, and lets a person choose (the Scripts panel, an agent).
+   */
+  choose?: "panel" | "person";
 };
 
 export const DEFAULT_DIRECTION_SETTINGS = {
@@ -113,6 +118,23 @@ export type CallRecord = { step: DirectionStep; slot: string; promptId: string; 
 export type ScriptAttempt = { script: DirectedScript; report: DirectionReport; swipe: SwipeTestAnswer | null; leanIn: number | null };
 export type FinalistRecord = { conceptId: string; attempts: ScriptAttempt[]; error?: string };
 
+/** One finished script a person can choose: its concept, its drafts (the last is the script), and whether it ships. */
+export type ScriptOption = {
+  conceptId: string;
+  concept: Concept;
+  attempts: ScriptAttempt[];
+  /** The last draft passed every check and the swipe test would ship it with no leak. */
+  ships: boolean;
+  /** 1 for the panel's pick: the final panel's order, or, when a person chooses, the concept ranking's. */
+  rank: number;
+  error?: string;
+};
+
+/** The swipe test would ship the attempt, and nothing blocks it. */
+export function attemptShips(attempt: ScriptAttempt): boolean {
+  return !attempt.report.blocked && attempt.swipe?.verdict === "ship" && attempt.swipe.blocker === "none";
+}
+
 export type DirectionRun = {
   status: "ready" | "needs_person" | "failed";
   /** Why the run has its status. Empty only when it is ready. */
@@ -130,6 +152,8 @@ export type DirectionRun = {
   finalists: FinalistRecord[];
   finalReliability: Reliability | null;
   chosen: { conceptId: string; script: DirectedScript; report: DirectionReport } | null;
+  /** Every finalist with at least one draft, best first. */
+  options: ScriptOption[];
   calls: CallRecord[];
   /** The sum of the costs the provider reported. Null when any call's cost is unknown: none reported, or a failure that may have been billed. */
   costUsd: number | null;
@@ -165,6 +189,7 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
     finalists: [],
     finalReliability: null,
     chosen: null,
+    options: [],
     calls,
     costUsd: null,
   };
@@ -176,32 +201,7 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
   if (settings.writers.length < 2) notes.push("One writer slot only: the concepts come from one model, and models converge on the same ideas. Add a second family.");
   if (settings.writers.includes(settings.judge)) notes.push("The judge shares a slot with a writer: judges prefer their own model's text, so the ranking may lean to that writer.");
 
-  const call = async <T>(step: DirectionStep, slot: string, user: string, schema: z.ZodType<T>): Promise<T | null> => {
-    const prompt = directionPrompt(step, CURRENT_DIRECTION_PROMPTS[step]);
-    let message = user;
-    for (let attempt = 1; attempt <= 2; attempt += 1) {
-      if (calls.length >= settings.maxCalls) throw new CallBudget();
-      const reply = await port.complete({
-        step,
-        slot,
-        promptId: prompt.id,
-        promptHash: prompt.hash,
-        system: prompt.text,
-        user: message,
-        temperature: TEMPERATURE[step],
-        maxTokens: MAX_TOKENS[step],
-      });
-      if (!reply.ok) {
-        calls.push({ step, slot, promptId: prompt.id, attempt, ok: false, error: reply.error, costUsd: reply.billed === "no" ? 0 : null });
-        return null;
-      }
-      const parsed = parseAnswer(reply.content, schema);
-      calls.push({ step, slot, promptId: prompt.id, attempt, ok: parsed.ok, model: reply.model, costUsd: reply.costUsd, ...(parsed.ok ? {} : { error: parsed.error }) });
-      if (parsed.ok) return parsed.value;
-      message = `${user}\n\nYour last answer was refused (${parsed.error}). Answer again with one JSON object that follows the output contract.`;
-    }
-    return null;
-  };
+  const call = makeCaller(port, settings.maxCalls, calls);
 
   try {
     // C. Divergence: the concept lab on the deck, alternating writer slots.
@@ -253,30 +253,10 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
     for (const concept of finalists) {
       const record: FinalistRecord = { conceptId: concept.id, attempts: [] };
       run.finalists.push(record);
-      let draft: ScriptAttempt | null = null;
-      for (let round = 0; round <= settings.maxRevisions; round += 1) {
-        const script: DirectedScript | null = await call("script_director", settings.director, directorUser(request, concept, draft), directedScriptV2Schema);
-        if (!script) {
-          record.error = draft ? "A revision was not returned; the last draft stands." : "The script director returned no usable script.";
-          break;
-        }
-        const report = directionReport(script, {
-          wordsPerMinute: request.wordsPerMinute,
-          recentHooks: request.recentHooks,
-          maxDurationMs: request.maxDurationMs,
-          forbidden: request.brand.forbidden,
-          facts: factsOf(request),
-        });
-        const swipe: SwipeTestAnswer | null = await call("swipe_test", settings.judge, swipeUser(request, script, report), swipeTestAnswerSchema);
-        draft = { script, report, swipe, leanIn: swipe ? leanInScore(evidencedScores(swipe)) : null };
-        record.attempts.push(draft);
-        if (!swipe) {
-          record.error = "The swipe test returned no usable answer, so the draft could not be judged or revised.";
-          break;
-        }
-        if (!report.blocked && swipe.verdict === "ship" && swipe.blocker === "none") break;
-      }
+      const outcome = await draftAndCheck({ request, concept, draft: null, rounds: settings.maxRevisions + 1, director: settings.director, judge: settings.judge, call, attempts: record.attempts });
+      if (outcome.error) record.error = outcome.error;
     }
+    run.options = optionsOf(run);
 
     // Final choice among the finished scripts.
     const finished = run.finalists
@@ -286,15 +266,18 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
       reasons.push("No script passed the checks: every finalist still has a blocking finding.");
       return finish(run);
     }
-    const ships = (attempt: ScriptAttempt) => attempt.swipe?.verdict === "ship" && attempt.swipe.blocker === "none";
-    const shippable = finished.filter((entry) => ships(entry.last));
-    for (const entry of finished.filter((candidate) => !ships(candidate.last))) {
+    const shippable = finished.filter((entry) => attemptShips(entry.last));
+    for (const entry of finished.filter((candidate) => !attemptShips(candidate.last))) {
       const line = `The swipe test would not ship the script of ${entry.record.conceptId} after ${entry.record.attempts.length} draft${entry.record.attempts.length === 1 ? "" : "s"}.`;
       (shippable.length === 0 ? reasons : notes).push(line);
     }
     const candidates = shippable.length > 0 ? shippable : finished;
     let winner = candidates[0]!;
-    if (candidates.length > 1) {
+    if (settings.choose === "person") {
+      // A person chooses: every finished script is an option, in concept-ranking order; the first that ships is the suggestion.
+      const first = run.options.find((option) => option.ships) ?? run.options.find((option) => !option.attempts.at(-1)!.report.blocked);
+      if (first) winner = { record: run.finalists.find((record) => record.conceptId === first.conceptId)!, last: first.attempts.at(-1)! };
+    } else if (candidates.length > 1) {
       const scripts = new Map(candidates.map((entry) => [entry.record.conceptId, entry.last.script]));
       const ids = candidates.map((entry) => entry.record.conceptId);
       const final = await panel(ids, pairSchedule(ids, ids.length, `${settings.seed}:final`), (id) => scriptItem(scripts.get(id)!), request, settings, call);
@@ -305,6 +288,10 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
         reasons.push("The panel did not reliably prefer one finished script. A person should choose between them.");
       }
       winner = candidates.find((entry) => entry.record.conceptId === top?.id) ?? winner;
+      const finalRank = new Map(final.order.map((entry, index) => [entry.id, index]));
+      run.options = [...run.options]
+        .sort((a, b) => (finalRank.get(a.conceptId) ?? Number.MAX_SAFE_INTEGER) - (finalRank.get(b.conceptId) ?? Number.MAX_SAFE_INTEGER))
+        .map((option, index) => ({ ...option, rank: index + 1 }));
     }
     run.chosen = { conceptId: winner.record.conceptId, script: winner.last.script, report: winner.last.report };
     run.status = reasons.length === 0 ? "ready" : "needs_person";
@@ -312,9 +299,28 @@ export async function runDirection(request: DirectionRequest, port: DirectionPor
   } catch (error) {
     if (!(error instanceof CallBudget)) throw error;
     reasons.push(`The run reached its limit of ${settings.maxCalls} model calls before it finished.`);
+    // The drafts already paid for stay options, so a person can still see and choose them.
+    if (run.options.length === 0) run.options = optionsOf(run);
     run.status = run.finalists.some((record) => record.attempts.some((attempt) => !attempt.report.blocked)) ? "needs_person" : "failed";
     return finish(run, true);
   }
+}
+
+/** Every finalist with at least one draft, in concept-ranking order. */
+function optionsOf(run: DirectionRun): ScriptOption[] {
+  const byId = new Map(run.concepts.map((concept) => [concept.id, concept]));
+  const rankOf = new Map(run.ranking.map((entry, index) => [entry.id, index]));
+  return run.finalists
+    .filter((record) => record.attempts.length > 0 && byId.has(record.conceptId))
+    .sort((a, b) => (rankOf.get(a.conceptId) ?? 0) - (rankOf.get(b.conceptId) ?? 0))
+    .map((record, index) => ({
+      conceptId: record.conceptId,
+      concept: byId.get(record.conceptId)!,
+      attempts: record.attempts,
+      ships: attemptShips(record.attempts.at(-1)!),
+      rank: index + 1,
+      ...(record.error ? { error: record.error } : {}),
+    }));
 }
 
 function finish(run: DirectionRun, keepStatus = false): DirectionRun {
@@ -325,6 +331,133 @@ function finish(run: DirectionRun, keepStatus = false): DirectionRun {
 }
 
 type Caller = <T>(step: DirectionStep, slot: string, user: string, schema: z.ZodType<T>) => Promise<T | null>;
+
+/** A model caller with one retry on a contract miss, recording every call, and a hard limit on the number of calls. */
+function makeCaller(port: DirectionPort, maxCalls: number, calls: CallRecord[]): Caller {
+  return async <T>(step: DirectionStep, slot: string, user: string, schema: z.ZodType<T>): Promise<T | null> => {
+    const prompt = directionPrompt(step, CURRENT_DIRECTION_PROMPTS[step]);
+    let message = user;
+    for (let attempt = 1; attempt <= 2; attempt += 1) {
+      if (calls.length >= maxCalls) throw new CallBudget();
+      const reply = await port.complete({
+        step,
+        slot,
+        promptId: prompt.id,
+        promptHash: prompt.hash,
+        system: prompt.text,
+        user: message,
+        temperature: TEMPERATURE[step],
+        maxTokens: MAX_TOKENS[step],
+      });
+      if (!reply.ok) {
+        calls.push({ step, slot, promptId: prompt.id, attempt, ok: false, error: reply.error, costUsd: reply.billed === "no" ? 0 : null });
+        return null;
+      }
+      const parsed = parseAnswer(reply.content, schema);
+      calls.push({ step, slot, promptId: prompt.id, attempt, ok: parsed.ok, model: reply.model, costUsd: reply.costUsd, ...(parsed.ok ? {} : { error: parsed.error }) });
+      if (parsed.ok) return parsed.value;
+      message = `${user}\n\nYour last answer was refused (${parsed.error}). Answer again with one JSON object that follows the output contract.`;
+    }
+    return null;
+  };
+}
+
+/**
+ * Script a concept (or revise a draft of it), check it, swipe-test it, and revise until it ships or the rounds run out. A person's note, when
+ * given, goes with every revision. Each draft is added to `attempts` as soon as it is written, so a run stopped by its call limit keeps
+ * every draft it paid for (one stopped before its swipe test has none).
+ */
+async function draftAndCheck(input: {
+  request: DirectionRequest;
+  concept: DirectorConcept;
+  draft: ScriptAttempt | null;
+  note?: string;
+  rounds: number;
+  director: string;
+  judge: string;
+  call: Caller;
+  attempts: ScriptAttempt[];
+}): Promise<{ error?: string }> {
+  let draft = input.draft;
+  for (let round = 0; round < input.rounds; round += 1) {
+    const script: DirectedScript | null = await input.call("script_director", input.director, directorUser(input.request, input.concept, draft, input.note), directedScriptV2Schema);
+    if (!script) return { error: draft ? "A revision was not returned; the last draft stands." : "The script director returned no usable script." };
+    const attempt: ScriptAttempt = { script, report: reportFor(input.request, script), swipe: null, leanIn: null };
+    input.attempts.push(attempt);
+    draft = attempt;
+    const swipe: SwipeTestAnswer | null = await input.call("swipe_test", input.judge, swipeUser(input.request, script, attempt.report), swipeTestAnswerSchema);
+    if (!swipe) return { error: "The swipe test returned no usable answer, so the draft could not be judged or revised." };
+    attempt.swipe = swipe;
+    attempt.leanIn = leanInScore(evidencedScores(swipe));
+    if (attemptShips(attempt)) break;
+  }
+  return {};
+}
+
+export type RevisionRun = {
+  status: "ready" | "needs_person" | "failed";
+  reasons: string[];
+  attempts: ScriptAttempt[];
+  prompts: Pick<Record<DirectionStep, string>, "script_director" | "swipe_test">;
+  codexVersion: string;
+  calls: CallRecord[];
+  costUsd: number | null;
+};
+
+/**
+ * Regenerate one script by revising it (the Scripts panel's Regenerate, an agent's revise): the director gets the draft, its findings, the
+ * swipe test's critique and the person's note, then each new draft is checked and swipe-tested, at most `rounds` times. "ready" when the
+ * last draft ships; "needs_person" when it passes the checks but the swipe test would not ship it; "failed" when nothing usable came back
+ * or a check still blocks.
+ */
+export async function reviseDirectedScript(
+  input: { request: DirectionRequest; concept: Concept; draft: ScriptAttempt; note?: string },
+  port: DirectionPort,
+  settings: { director: string; judge: string; maxCalls: number; rounds?: number },
+): Promise<RevisionRun> {
+  const calls: CallRecord[] = [];
+  const reasons: string[] = [];
+  const out: RevisionRun = {
+    status: "failed",
+    reasons,
+    attempts: [],
+    prompts: { script_director: directionPrompt("script_director").id, swipe_test: directionPrompt("swipe_test").id },
+    codexVersion: DIRECTION_CODEX_VERSION,
+    calls,
+    costUsd: null,
+  };
+  try {
+    const outcome = await draftAndCheck({
+      request: input.request,
+      concept: input.concept,
+      draft: input.draft,
+      note: input.note?.trim() || undefined,
+      rounds: Math.max(1, settings.rounds ?? 2),
+      director: settings.director,
+      judge: settings.judge,
+      call: makeCaller(port, settings.maxCalls, calls),
+      attempts: out.attempts,
+    });
+    if (outcome.error) reasons.push(outcome.error);
+  } catch (error) {
+    if (!(error instanceof CallBudget)) throw error;
+    reasons.push(`The revision reached its limit of ${settings.maxCalls} model calls before it finished.`);
+  }
+  const last = out.attempts.at(-1);
+  if (!last) {
+    if (reasons.length === 0) reasons.push("No revision came back.");
+  } else if (last.report.blocked) {
+    reasons.push("The revision still has a blocking finding.");
+  } else if (attemptShips(last)) {
+    out.status = "ready";
+  } else {
+    out.status = "needs_person";
+    reasons.push(last.swipe ? "The revision passes the checks, but the swipe test would not ship it yet." : "The revision passes the checks, but the swipe test did not judge it.");
+  }
+  const costs = calls.map((record) => record.costUsd);
+  out.costUsd = costs.some((cost) => cost === null || cost === undefined) ? null : costs.reduce<number>((total, cost) => total + (cost ?? 0), 0);
+  return out;
+}
 
 /** One tournament: every pair judged in both orders, in calls of PAIRS_PER_CALL pairs; a missing verdict is a tie, never a win. */
 async function panel(
@@ -366,6 +499,43 @@ async function panel(
 /** Everything the brief gives, for the number check: its text, its sources and the approved claims. */
 function factsOf(request: DirectionRequest): string {
   return [request.brief.text, ...request.brief.sources.map((source) => source.text), ...request.brand.claims].join("\n");
+}
+
+/** The report of a script for a request: the checks a run applies to every draft (the agent tools check a script the same way). */
+export function reportFor(request: DirectionRequest, script: DirectedScript): DirectionReport {
+  return directionReport(script, {
+    wordsPerMinute: request.wordsPerMinute,
+    recentHooks: request.recentHooks,
+    maxDurationMs: request.maxDurationMs,
+    forbidden: request.brand.forbidden,
+    facts: factsOf(request),
+  });
+}
+
+/** A concept as the director reads it: the agent tools pass one an agent wrote, which has no id or source yet. */
+export type DirectorConcept = Omit<Concept, "id" | "source"> & Partial<Pick<Concept, "id" | "source">>;
+
+/**
+ * The user message a run sends one step, so an agent acting as that role (agent mode, scripts/direction.ts) is given exactly what a
+ * model is given: the same direction block and the same data blocks.
+ */
+export function directionUserMessage(
+  input:
+    | { step: "concept_lab"; request: DirectionRequest; cards: DeckCard[] }
+    | { step: "viewer_panel"; request: DirectionRequest; pairs: { pair: number; first: unknown; second: unknown }[] }
+    | { step: "script_director"; request: DirectionRequest; concept: DirectorConcept; draft?: ScriptAttempt | null; note?: string }
+    | { step: "swipe_test"; request: DirectionRequest; script: DirectedScript },
+): string {
+  switch (input.step) {
+    case "concept_lab":
+      return conceptLabUser(input.request, input.cards);
+    case "viewer_panel":
+      return panelUser(input.request, input.pairs);
+    case "script_director":
+      return directorUser(input.request, input.concept, input.draft ?? null, input.note?.trim() || undefined);
+    case "swipe_test":
+      return swipeUser(input.request, input.script, reportFor(input.request, input.script));
+  }
 }
 
 function conceptItem(concept: Concept): unknown {
@@ -410,7 +580,7 @@ function panelUser(request: DirectionRequest, pairs: { pair: number; first: unkn
   ].join("\n\n");
 }
 
-function directorUser(request: DirectionRequest, concept: Concept, draft: ScriptAttempt | null): string {
+function directorUser(request: DirectionRequest, concept: DirectorConcept, draft: ScriptAttempt | null, note?: string): string {
   const options = { format: concept.format, hookFamily: concept.hookFamily, niche: request.niche, job: jobOf(request) };
   const blocks = [
     directionBlock(
@@ -435,11 +605,12 @@ function directorUser(request: DirectionRequest, concept: Concept, draft: Script
         fixes: draft.swipe?.fixes ?? [],
       }),
     );
+    if (note) blocks.push(untrustedBlock("person", { notes: note }));
   }
   return blocks.join("\n\n");
 }
 
-function conceptItemForDirector(concept: Concept): unknown {
+function conceptItemForDirector(concept: DirectorConcept): unknown {
   const { id: _id, source: _source, probability: _probability, ...seed } = concept;
   return seed;
 }

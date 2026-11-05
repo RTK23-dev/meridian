@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { useWorkspace } from "@/components/workspace";
 import { fileBase64 } from "@/components/content-factory/file-base64";
 import { EmptyState, ErrorNotice, ScreenSkeleton } from "@/components/ui";
@@ -8,6 +8,7 @@ import type { Message } from "@/lib/meridian/content-factory/model";
 import { CreateAttachSheet } from "./create-attach-sheet";
 import { CreateComposer, type ComposerFile, type ModelOption } from "./create-composer";
 import { CREATE_MODE_COPY, fileProblem, purposeFor, ruleFor, sendBlock, titleFor, type CreateMode } from "./create-model";
+import { CreateScripts } from "./create-scripts";
 import { CreateThread } from "./create-thread";
 
 // Studio is the existing controls page. It loads the first time Studio is chosen, so Orchestrator stays light.
@@ -23,7 +24,7 @@ type PendingFile = { id: string; file: File; purpose: "reference_video" | "mater
  * Content chat. Studio shows the controls on this page instead. Sending never starts a run, so nothing is generated or spent until a person
  * starts one from the draft.
  */
-export function CreatePage() {
+export function CreatePage({ draftId = null, onDraft }: { draftId?: string | null; onDraft?: (draftId: string | null) => void } = {}) {
   const { data: workspace } = useWorkspace();
   const organizationId = workspace?.active?.id ?? "";
   const canAdmin = hasRole(workspace?.active?.role ?? "viewer", "admin");
@@ -40,6 +41,32 @@ export function CreatePage() {
   const [busy, setBusy] = useState(false);
   const [problems, setProblems] = useState<string[]>([]);
 
+  const [draftLanguage, setDraftLanguage] = useState<string | null>(null);
+
+  // A draft named in the address is read back, so a reload or a shared link returns to it and its scripts.
+  useEffect(() => {
+    if (!draftId || draftId === sessionId) return;
+    let live = true;
+    getContentFactorySession({ data: { sessionId: draftId } })
+      .then((detail) => {
+        if (!live) return;
+        setSessionId(detail.id);
+        setMessages(detail.messages);
+        setBrandId(detail.brandId ?? "");
+        setDraftLanguage(detail.settings.language);
+      })
+      .catch((failure: unknown) => {
+        if (!live) return;
+        setProblems([failure instanceof Error ? failure.message : "That draft could not be opened."]);
+        onDraft?.(null);
+      });
+    return () => {
+      live = false;
+    };
+    // The draft is read once per id it names; the session state follows from it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftId]);
+
   const block = organizationId ? sendBlock({ text, mode, canAdmin, busy }) : "Open a workspace first.";
   const canSend = block === null;
   // The reason is shown once there is something to act on. An empty box only shows the mode's own hint.
@@ -53,6 +80,7 @@ export function CreatePage() {
     setSessionId(null);
     setMessages([]);
     setProblems([]);
+    onDraft?.(null);
   }
 
   function startOver() {
@@ -61,6 +89,7 @@ export function CreatePage() {
     setText("");
     setFiles([]);
     setProblems([]);
+    onDraft?.(null);
   }
 
   function addFiles(picked: File[]) {
@@ -90,6 +119,7 @@ export function CreatePage() {
         const created = await createContentFactorySession({ data: { organizationId, brandId: brandId || null, title: titleFor(body) } });
         id = created.id;
         setSessionId(id);
+        onDraft?.(id);
       }
       const { messageId } = await postContentFactoryMessage({ data: { sessionId: id, text: body, beatRole: null } });
       // The message is saved, so its text is cleared. A file that was not stored stays in the composer, so it is not lost.
@@ -161,6 +191,7 @@ export function CreatePage() {
         ) : (
           <>
             <CreateThread messages={messages} onSuggest={setText} />
+            {sessionId !== null && canAdmin ? <CreateScripts sessionId={sessionId} canAdmin={canAdmin} language={draftLanguage} onMessages={setMessages} /> : null}
             {problems.length > 0 ? (
               <ul className="space-y-2 pt-4" aria-label="Problems">
                 {problems.map((problem) => (

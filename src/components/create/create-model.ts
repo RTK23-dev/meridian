@@ -59,3 +59,11 @@ export function fileProblem(file: { type: string; name: string; size: number }):
 export function purposeFor(file: { type: string }): "reference_video" | "material" {
   return file.type.startsWith("video/") ? "reference_video" : "material";
 }
+
+/** The Create page's address: `?draft=<id>` reopens a draft, so a reload or a shared link comes back to it and its scripts. */
+export type CreateSearch = { draft?: string };
+
+export function createSearchOf(search: Record<string, unknown>): CreateSearch {
+  const draft = search.draft;
+  return typeof draft === "string" && /^[A-Za-z0-9_:-]{1,100}$/.test(draft) ? { draft } : {};
+}

@@ -129,6 +129,17 @@ export function inputNotes(attachments: readonly Attachment[]): string[] {
   });
 }
 
+/**
+ * The brief's sources: the record snapshots and the text files, in the order the person attached them, each with its label and its text.
+ * The direction brief (direction/service.ts) reads the same sources.
+ */
+export function briefSources(attachments: readonly Attachment[]): Array<{ label: string; text: string }> {
+  return attachments.flatMap((item): Array<{ label: string; text: string }> => {
+    if (item.kind === "source") return [{ label: SOURCE_PAGE_LABELS[item.page], text: item.snapshot.slice(0, BRIEF_SOURCE_TEXT_MAX) }];
+    return isTextFile(item) ? [{ label: item.fileName, text: item.content ?? "" }] : [];
+  });
+}
+
 /** Maps a session to the engine's request and checks it with the engine's own schema. */
 export function buildProductionRequest(session: SessionForRequest): RequestBuild {
   const attachments = attachmentsOf(session);
@@ -147,11 +158,7 @@ export function buildProductionRequest(session: SessionForRequest): RequestBuild
   const page = session.themePage;
 
   const briefText = instructions.join("\n\n");
-  // Record sources and text files, in the order the person attached them. Each is the brief's source: its label and its text.
-  const sources = attachments.flatMap((item): Array<{ label: string; text: string }> => {
-    if (item.kind === "source") return [{ label: SOURCE_PAGE_LABELS[item.page], text: item.snapshot.slice(0, BRIEF_SOURCE_TEXT_MAX) }];
-    return isTextFile(item) ? [{ label: item.fileName, text: item.content ?? "" }] : [];
-  });
+  const sources = briefSources(attachments);
   // The instructions and the text files share the brief's total limit. Record snapshots are not counted, as before.
   const briefCharacters = characterCount(briefText) + textFiles.reduce((total, file) => total + characterCount(file.content ?? ""), 0);
   const overTotal = !scripted && briefCharacters > BRIEF_TEXT_MAX;

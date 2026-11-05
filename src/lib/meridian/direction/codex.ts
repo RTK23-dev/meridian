@@ -6,6 +6,7 @@
 
 import { z } from "zod";
 import { BEAT_ROLES, type BeatRole } from "../../../engine/contracts/request.ts";
+import { NICHE_FAMILIES, VIDEO_JOBS } from "./lists.ts";
 
 /**
  * The codex's version. A change to any rule, list or weight here is a new version, recorded on every direction record.
@@ -118,21 +119,7 @@ export const DIRECTION_WINDOW_EVIDENCE: Record<keyof DirectionWindows, EvidenceL
 // ---------------------------------------------------------------------------------------------------------------------------------
 // Niche families (framework 14).
 
-export const NICHE_FAMILIES = [
-  "education",
-  "entertainment",
-  "ecommerce",
-  "beauty",
-  "fitness",
-  "finance",
-  "food",
-  "tech",
-  "b2b",
-  "home",
-  "parenting",
-  "travel",
-  "local",
-] as const;
+export { NICHE_FAMILIES };
 export const nicheFamilySchema = z.enum(NICHE_FAMILIES);
 export type NicheFamily = z.infer<typeof nicheFamilySchema>;
 
@@ -1088,7 +1075,7 @@ export const COMMENT_DEVICES = [
  * Every video has one job. Reach: shares to new viewers (broad audience, non-obvious angle). Follow: saves and binges (series,
  * tactical density). Convert: a narrow buyer pain, a desire hook, proof, and a call to action aligned to the topic.
  */
-export const VIDEO_JOBS = ["reach", "follow", "convert"] as const;
+export { VIDEO_JOBS };
 export const videoJobSchema = z.enum(VIDEO_JOBS);
 export type VideoJob = z.infer<typeof videoJobSchema>;
 
