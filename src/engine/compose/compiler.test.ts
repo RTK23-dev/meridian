@@ -10,6 +10,7 @@ import { edlFixture, styleKitFixture } from "../contracts/fixtures/index.ts";
 import { compile, COMPOSITION_FPS, GSAP_SCRIPT_URL, SUPPORTED_TRANSITIONS } from "./compiler.ts";
 import { COMPONENT_LIBRARY } from "./components/index.ts";
 import { escapeHtml } from "./html.ts";
+import { MOTION_KIT_PATH, MOTION_KIT_SOURCE } from "./motion/kit.ts";
 import { z } from "zod";
 import type { ComponentDefinition } from "./library.ts";
 
@@ -341,7 +342,18 @@ describe("compile: the EDL rules HyperFrames needs", () => {
     );
     const html = textOf(result, "index.html");
     assert.match(html, /tl\.fromTo\(document\.getElementById\("clip-c_base_2"\), \{ opacity: 0 \}/);
-    assert.match(html, /tl\.fromTo\(document\.getElementById\("clip-c_base_3"\), \{ x: 120 \}/);
+    assert.match(html, /tl\.fromTo\(document\.getElementById\("clip-c_base_3"\), \{ x: 120 \}, \{ x: 0, duration: 0\.15, ease: MotionKit\.curve\("kit\.whip"\) \}/);
+  });
+
+  it("ships the motion kit with every composition and loads it after GSAP, so the root and the components author with its curves", () => {
+    const result = compile(edlFixture, styleKitFixture);
+    assert.equal(textOf(result, MOTION_KIT_PATH), MOTION_KIT_SOURCE);
+    assert.ok(result.composition.files.some((file) => file.path === MOTION_KIT_PATH));
+    const html = textOf(result, "index.html");
+    const gsap = html.indexOf(`<script src="${GSAP_SCRIPT_URL}"></script>`);
+    const kit = html.indexOf(`<script src="${MOTION_KIT_PATH}"></script>`);
+    assert.ok(gsap > 0 && kit > gsap);
+    assert.equal(/ease: "(power|back|sine|expo|circ|elastic)/.test(html), false, "no named GSAP preset on the root timeline");
   });
 
   it("draws punch-ins, shakes and flashes on the composition clock, and refuses what it cannot draw", () => {
@@ -354,7 +366,15 @@ describe("compile: the EDL rules HyperFrames needs", () => {
     );
     const html = textOf(result, "index.html");
     assert.match(html, /tl\.to\(document\.getElementById\("stage"\), \{ scale: 1\.1/);
-    assert.match(html, /tl\.to\(document\.getElementById\("stage"\), \{ x: 8/);
+    assert.match(html, /tl\.to\(document\.getElementById\("stage"\), \{ x: 8, y: 0,/);
+    // The shake is a decaying, uneven jolt, one step per frame, that comes back to rest.
+    const shake = [...html.matchAll(/tl\.to\(document\.getElementById\("stage"\), \{ x: (-?[\d.]+), y: (-?[\d.]+), duration: [\d.]+, ease: "none" \}, ([\d.]+)\);/g)];
+    assert.equal(shake.length, 9, "300 ms at 30 fps");
+    assert.deepEqual([Number(shake.at(-1)![1]), Number(shake.at(-1)![2])], [0, 0]);
+    const sizes = shake.slice(1, -1).map((m) => Math.abs(Number(m[1])));
+    assert.ok(sizes[0]! > sizes.at(-1)!, "it decays");
+    assert.ok(new Set(sizes.map((x) => x.toFixed(2))).size > 3, "it is uneven, not a metronome");
+    assert.match(html, /scale: 1\.1, duration: 0\.1, ease: MotionKit\.curve\("kit\.land"\)/);
     assert.match(html, /tl\.fromTo\(document\.getElementById\("fx-flash"\), \{ opacity: 0 \}, \{ opacity: 0\.6/);
     assertInvalid(
       () =>

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="character.rig" data-width="1080" data-height="1920">
@@ -88,6 +89,7 @@
       document.querySelector(".cr-root").className = "cr-root cr-" + position;
       var seconds = vars.durationMs / 1000;
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
 
       // The pose library: arm angles in degrees (positive swings the left arm out and the right arm in), and the head tilt.
       var POSES = {
@@ -135,12 +137,15 @@
         var face = FACES[event.expression || "neutral"];
         var at = event.atMs / 1000;
         var from = state;
-        tl.fromTo(leftArm, { rotation: from.left }, { rotation: target.left, duration: 0.25, ease: "power2.out", immediateRender: false }, at);
-        tl.fromTo(rightArm, { rotation: from.right }, { rotation: target.right, duration: 0.25, ease: "power2.out", immediateRender: false }, at);
-        tl.fromTo(head, { rotation: from.head }, { rotation: target.head, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
-        tl.fromTo(browLeft, { rotation: from.face.browL, y: from.face.browY * lift }, { rotation: face.browL, y: face.browY * lift, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
-        tl.fromTo(browRight, { rotation: from.face.browR, y: from.face.browY * lift }, { rotation: face.browR, y: face.browY * lift, duration: 0.2, ease: "power2.out", immediateRender: false }, at);
-        tl.fromTo(lids, { scaleY: from.face.lid }, { scaleY: face.lid, duration: 0.2, ease: "power1.out", immediateRender: false }, at);
+        // Motion kit: the arms lead and land with a long settle; the head follows two frames behind with weight (drag), inside the
+        // same 0.2 s; the brows snap; the lids ease. Every move ends where it did before, so poses keep their timing.
+        var lag = MK.F(2);
+        tl.fromTo(leftArm, { rotation: from.left }, { rotation: target.left, duration: 0.25, ease: MK.curve("kit.land"), immediateRender: false }, at);
+        tl.fromTo(rightArm, { rotation: from.right }, { rotation: target.right, duration: 0.25, ease: MK.curve("kit.land"), immediateRender: false }, at);
+        tl.fromTo(head, { rotation: from.head }, { rotation: target.head, duration: 0.2 - lag, ease: MK.curve("kit.heavy"), immediateRender: false }, at + lag);
+        tl.fromTo(browLeft, { rotation: from.face.browL, y: from.face.browY * lift }, { rotation: face.browL, y: face.browY * lift, duration: 0.2, ease: MK.curve("kit.whip"), immediateRender: false }, at);
+        tl.fromTo(browRight, { rotation: from.face.browR, y: from.face.browY * lift }, { rotation: face.browR, y: face.browY * lift, duration: 0.2, ease: MK.curve("kit.whip"), immediateRender: false }, at);
+        tl.fromTo(lids, { scaleY: from.face.lid }, { scaleY: face.lid, duration: 0.2, ease: MK.curve("kit.drift"), immediateRender: false }, at);
         state = { left: target.left, right: target.right, head: target.head, face: face, at: at };
         faceAt.push({ at: at, lid: face.lid });
       });

@@ -25,6 +25,8 @@ type TaskChoice = {
   needsImage: boolean;
   saved: { modelId: string; updatedAt: string; updatedBy: string } | null;
   deploymentDefault: string | null;
+  /** What the task uses when nothing is chosen, when it has its own Auto. */
+  auto: string | null;
 };
 
 type TaskChoices = { connected: boolean; connectionReason: string | null; tasks: TaskChoice[] };
@@ -91,6 +93,7 @@ function describeCurrent(task: TaskChoice): string {
   if (task.saved) {
     return `Chosen for this workspace: ${task.saved.modelId}, saved ${new Date(task.saved.updatedAt).toLocaleDateString("en-GB")}.`;
   }
+  if (task.auto) return `Not chosen: Auto. Until a model is chosen here, ${task.auto}`;
   if (task.deploymentDefault) {
     return `Not chosen. This task uses the deployment's default, ${task.deploymentDefault}, until a model is chosen here.`;
   }

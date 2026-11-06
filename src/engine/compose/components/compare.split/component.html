@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="compare.split" data-width="1080" data-height="1920">
@@ -117,10 +118,11 @@
       // The right panel wipes in from the divider at its time, and slides a little with the kit's motion intensity.
       // Before that it is clipped away entirely.
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
       tl.fromTo(
         right,
         { clipPath: "inset(0% 0% 0% 100%)", x: 60 * motion },
-        { clipPath: "inset(0% 0% 0% 0%)", x: 0, duration: 0.4, ease: "power3.out" },
+        { clipPath: "inset(0% 0% 0% 0%)", x: 0, duration: 0.4, ease: MK.curve("kit.reveal") },
         vars.revealMs / 1000,
       );
       tl.set({}, {}, seconds);

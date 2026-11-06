@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="cta.card" data-width="1080" data-height="1920">
@@ -85,13 +86,22 @@
         arrowEl.setAttribute("class", "cc-arrow cc-arrow-on cc-arrow-" + vars.arrow);
       }
       var tl = gsap.timeline({ paused: true });
-      tl.fromTo(card, { scale: 1 - 0.12 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.7)" }, 0);
+      var MK = window.MotionKit;
+      // Motion kit: the card is there from the first frame and settles on a spring; the keyword answers it a beat later, cut on, with a
+      // visible settle; the arrow breathes.
+      var land = MK.spring({ response: 0.32, damping: 0.8 });
+      gsap.set(card, { autoAlpha: 1 });
+      tl.fromTo(card, { scale: 1 - 0.12 * motion }, { scale: 1, duration: land.duration, ease: land.ease }, 0);
       if (keywordEl.className.indexOf("cc-keyword-on") !== -1) {
-        tl.fromTo(keywordEl, { scale: 1 - 0.2 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.7)" }, 0.25);
+        var keywordAt = MK.react(3);
+        var hit = MK.spring({ response: 0.3, damping: 0.66 });
+        gsap.set(keywordEl, { autoAlpha: 0 });
+        MK.cut(tl, keywordEl, keywordAt);
+        tl.fromTo(keywordEl, { scale: 1 - 0.2 * motion }, { scale: 1, duration: hit.duration, ease: hit.ease }, keywordAt);
       }
       if (vars.arrow !== "none") {
         var cycles = Math.max(0, Math.floor((seconds - 0.5) / 0.6) - 1);
-        tl.fromTo(arrowEl, { y: 0 }, { y: 16 * motion, duration: 0.3, ease: "sine.inOut", yoyo: true, repeat: cycles }, 0.5);
+        tl.fromTo(arrowEl, { y: 0 }, { y: 16 * motion, duration: 0.3, ease: MK.curve("kit.drift"), yoyo: true, repeat: cycles }, 0.5);
       }
       tl.set({}, {}, seconds);
       window.__timelines["cta.card"] = tl;

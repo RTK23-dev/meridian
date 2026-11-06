@@ -9,6 +9,7 @@ const PINNED: Record<string, string> = {
   "concept_lab@2": "sha256:0d686dc7e15bb3ce515f0a00fa71ada6956131aba4138ab283e248b22f622e8a",
   "viewer_panel@2": "sha256:53ea7ff4db7b3069f608fb53e4872ac4ade041a0265db4c409010f1b5d948685",
   "script_director@2": "sha256:99d9b977c796b2908887ac0b69e38a95f940c7e54f2d63121cb20bc4062d36b6",
+  "script_director@3": "sha256:ce55f8a5edc4db6adfc17d26cd1f8233dd5306030d4a6780223b197a16f5694c",
   "swipe_test@2": "sha256:4899aa25b9cae6d9f94e266366dc822cacf0678a10f0881df3d42b8f2fafef78",
 };
 
@@ -55,6 +56,18 @@ test("the version 2 prompts carry the lessons a model must follow", () => {
   assert.match(directionPrompt("swipe_test").text, /"expectation"/);
   assert.match(lab, /clip_stitch hook opens on up to five seconds of another creator's clip that the brief or the trends name/);
   assert.match(director, /A clip-stitch opening: the first beat is the borrowed clip/);
+});
+
+test("script_director@3 is version 2 plus the person's notes on a revision", () => {
+  const two = directionPrompt("script_director", 2).text;
+  const three = directionPrompt("script_director", 3).text;
+  assert.equal(CURRENT_DIRECTION_PROMPTS.script_director, 3);
+  assert.doesNotMatch(two, /"person"/);
+  assert.match(three, /when a "person" block is given, its notes say what the person reviewing the script wants changed/);
+  assert.match(three, /leave that part out and say so in the rationale/);
+  assert.match(three, /"person" \(their notes\)/);
+  // Everything else is unchanged: the rules, the ids and the output contract.
+  assert.equal(three.slice(three.indexOf("## Output contract")), two.slice(two.indexOf("## Output contract")));
 });
 
 test("answers are read as plain, fenced or embedded JSON, and a contract miss names its path", () => {

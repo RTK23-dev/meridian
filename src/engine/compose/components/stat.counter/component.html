@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="stat.counter" data-width="1080" data-height="1920">
@@ -63,8 +64,12 @@
       }
       show();
       var tl = gsap.timeline({ paused: true });
-      tl.fromTo(wrap, { scale: 1 - 0.1 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.25, ease: "back.out(1.6)" }, 0);
-      tl.to(counter, { n: target, duration: Math.max(0.2, Math.min(1.2, seconds * 0.5)), ease: "power2.out", onUpdate: show }, 0.15);
+      var MK = window.MotionKit;
+      // Motion kit: the number is there from the first frame and settles on a spring; the count arrives at speed and lands softly.
+      var land = MK.spring({ response: 0.3, damping: 0.82 });
+      gsap.set(wrap, { autoAlpha: 1 });
+      tl.fromTo(wrap, { scale: 1 - 0.1 * motion }, { scale: 1, duration: land.duration, ease: land.ease }, 0);
+      tl.to(counter, { n: target, duration: Math.max(0.2, Math.min(1.2, seconds * 0.5)), ease: MK.curve("kit.land"), onUpdate: show }, MK.react(2));
       tl.set({}, {}, seconds);
       window.__timelines["stat.counter"] = tl;
     })();

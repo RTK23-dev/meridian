@@ -351,8 +351,10 @@ export const getGenerationModels = createServerFn({ method: "GET" })
           description: GENERATION_TASKS[task].description,
           needsImage: GENERATION_TASKS[task].needsImage,
           saved,
-          // The deployment default serves a text task only, and only while the workspace has chosen nothing for it.
-          deploymentDefault: saved === null && !GENERATION_TASKS[task].needsImage ? deployment : null,
+          // The deployment default serves a text task only, and only while the workspace has chosen nothing for it. A task with its own
+          // Auto (direction's seats) uses that instead.
+          deploymentDefault: saved === null && !GENERATION_TASKS[task].needsImage && GENERATION_TASKS[task].auto === null ? deployment : null,
+          auto: GENERATION_TASKS[task].auto,
         };
       }),
     };

@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="product.card" data-width="1080" data-height="1920">
@@ -88,6 +89,17 @@
       var nameEl = document.querySelector(".pc-name");
       var list = document.querySelector(".pc-bullets");
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
+      // Cut on: hidden until its cue, then simply there. Elements start hidden by CSS; a cue at 0 shows the element at once (outside
+      // the timeline: HyperFrames does not render a set at exactly 0 on frame 0).
+      function reveal(el, at) {
+        if (at > 0) {
+          gsap.set(el, { autoAlpha: 0 });
+          MK.cut(tl, el, at);
+        } else {
+          gsap.set(el, { autoAlpha: 1 });
+        }
+      }
 
       if (typeof vars.heroUri === "string" && vars.heroUri.length > 0) {
         var img = document.createElement("img");
@@ -110,11 +122,17 @@
         list.appendChild(li);
       });
 
-      tl.fromTo(card, { y: 80 * motion, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 0);
-      tl.fromTo(price, { scale: 1 - 0.3 * motion }, { scale: 1, duration: 0.3, ease: "back.out(1.7)" }, 0.2);
+      // Motion kit: the card is there from the first frame and arrives with weight; the price answers it on a spring; the bullets cut
+      // on, the first leading and the rest answering at uneven offsets, each settling a short slide.
+      reveal(card, 0);
+      tl.fromTo(card, { y: 80 * motion }, { y: 0, duration: MK.dur(80 * motion, 1.35), ease: MK.curve("kit.land") }, 0);
+      var priceLand = MK.spring({ response: 0.3, damping: 0.75 });
+      tl.fromTo(price, { scale: 1 - 0.3 * motion }, { scale: 1, duration: priceLand.duration, ease: priceLand.ease }, MK.react(2));
       var items = list.querySelectorAll(".pc-bullet");
       for (var i = 0; i < items.length; i++) {
-        tl.fromTo(items[i], { x: 24 * motion, opacity: 0 }, { x: 0, opacity: 1, duration: 0.25, ease: "power2.out" }, 0.35 + i * 0.18);
+        var itemAt = 0.35 + MK.react(i, 2);
+        reveal(items[i], itemAt);
+        tl.fromTo(items[i], { x: 24 * motion }, { x: 0, duration: MK.dur(24 * motion, 0.7), ease: MK.curve("kit.land") }, itemAt);
       }
       tl.set({}, {}, vars.durationMs / 1000);
       window.__timelines["product.card"] = tl;

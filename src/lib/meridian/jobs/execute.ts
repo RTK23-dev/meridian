@@ -42,6 +42,11 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     const { productionEngineRuntime } = await import("../../../engine/jobs/runtime.ts");
     return executeEngineJob(sql, job, productionEngineRuntime(sql));
   }
+  if (job.job_type.startsWith("direction.")) {
+    // A direction run of a draft's scripts (direction/service.ts). It runs once: its job is queued with one attempt.
+    const { executeDirectionJob } = await import("../direction/service.ts");
+    return executeDirectionJob(sql, job, payload);
+  }
   if (job.job_type === "research.collect") {
     const { executeResearchCollection } = await import("../research/worker.ts");
     return executeResearchCollection(sql, job, payload);

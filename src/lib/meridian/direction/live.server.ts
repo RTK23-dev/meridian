@@ -5,8 +5,8 @@
 // failure, never retried here.
 //
 // Slots name model seats. The caller maps each slot to a model the workspace chose from the live catalogue (AGENTS.md rule 5: an explicit
-// choice, or Auto resolved by the caller); a slot with no model is refused, never filled with a guess. Nothing in Meridian calls this
-// port yet: starting a direction run spends money, and the owner decides where a run may start.
+// choice, or Auto resolved by the caller, seats.ts); a slot with no model is refused, never filled with a guess. The direction jobs
+// (service.ts) use this port; a run spends money, so it starts only when an admin asks for scripts.
 
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 import { completeWithModel, type GenerationResult } from "../providers/chat.server.ts";

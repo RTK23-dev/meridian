@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="kinetic.type" data-width="1080" data-height="1920">
@@ -52,6 +53,7 @@
       var seconds = vars.durationMs / 1000;
       var pop = vars.entrance === "pop";
       var tl = gsap.timeline({ paused: true });
+      var MK = window.MotionKit;
 
       lines.forEach(function (line, index) {
         var start = line.atMs / 1000;
@@ -80,19 +82,29 @@
         tl.set(el, { display: "block" }, start);
         tl.set(el, { display: "none" }, end);
 
+        // Motion kit: the line cuts on with its display; emphasis words land on a spring with a visible settle.
+        var settle = MK.spring({ response: 0.26, damping: 0.62 });
         if (pop) {
-          tl.fromTo(el, { opacity: 0, scale: 1 + 0.25 * motion }, { opacity: 1, scale: 1, duration: 0.18, ease: "back.out(1.6)" }, start);
+          var popSpring = MK.spring({ response: 0.24, damping: 0.76 });
+          tl.fromTo(el, { scale: 1 + 0.25 * motion }, { scale: 1, duration: popSpring.duration, ease: popSpring.ease }, start);
           spans.forEach(function (span) {
             if (span.classList.contains("kt-em")) {
-              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: 0.2, ease: "back.out(2)" }, start);
+              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: settle.duration, ease: settle.ease }, start + MK.react(1));
             }
           });
         } else {
+          // The first word leads; the others answer at uneven offsets (quick, then less so), paced by the word step. Each cuts on and
+          // settles a short rise. Followers are hidden until their cue (outside the timeline, so a cold seek renders the same frame).
+          var stepScale = step / MK.F(6);
           spans.forEach(function (span, i) {
-            var at = start + i * step;
-            tl.fromTo(span, { opacity: 0, y: 36 * motion }, { opacity: 1, y: 0, duration: 0.14, ease: "power2.out" }, at);
+            var at = start + MK.react(i, stepScale);
+            if (i > 0) {
+              gsap.set(span, { autoAlpha: 0 });
+              MK.cut(tl, span, at);
+            }
+            tl.fromTo(span, { y: 36 * motion }, { y: 0, duration: MK.dur(36 * motion, 0.7), ease: MK.curve("kit.land") }, at);
             if (span.classList.contains("kt-em")) {
-              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: 0.2, ease: "back.out(2)" }, at);
+              tl.fromTo(span, { scale: 1 + 0.18 * motion }, { scale: 1, duration: settle.duration, ease: settle.ease }, at);
             }
           });
         }

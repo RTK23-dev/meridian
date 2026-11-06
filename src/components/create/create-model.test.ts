@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_SUGGESTIONS, fileProblem, purposeFor, ruleFor, sendBlock, titleFor } from "./create-model.ts";
+import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_SUGGESTIONS, createSearchOf, fileProblem, purposeFor, ruleFor, sendBlock, titleFor } from "./create-model.ts";
 import { MAX_MESSAGE_CHARS } from "../../lib/meridian/content-factory/model.ts";
 
 const ready = { text: "A 30-second video for my new mug", mode: "orchestrator" as const, canAdmin: true, busy: false };
@@ -56,4 +56,11 @@ test("a video is a reference, and anything else is material", () => {
   assert.equal(purposeFor({ type: "video/quicktime" }), "reference_video");
   assert.equal(purposeFor({ type: "image/png" }), "material");
   assert.equal(purposeFor({ type: "" }), "material");
+});
+
+test("the address reopens a draft by its id, and ignores anything else", () => {
+  assert.deepEqual(createSearchOf({ draft: "3f2a-41" }), { draft: "3f2a-41" });
+  assert.deepEqual(createSearchOf({ draft: "../x" }), {});
+  assert.deepEqual(createSearchOf({ draft: 4, other: "y" }), {});
+  assert.deepEqual(createSearchOf({}), {});
 });

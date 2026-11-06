@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="label.pill" data-width="1080" data-height="1920">
@@ -61,10 +62,16 @@
       placeEl.textContent = String(vars.place || "");
       dateEl.textContent = date;
       // The separator and the date show only when there is a date.
+      // The CSS sets the separator's display, which overrides the hidden attribute, so its display is set here.
       sepEl.hidden = date === "";
       dateEl.hidden = date === "";
+      sepEl.style.display = date === "" ? "none" : "";
       var tl = gsap.timeline({ paused: true });
-      tl.fromTo(pill, { scale: 1 - 0.08 * motion, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.3, ease: "back.out(1.4)" }, 0);
+      var MK = window.MotionKit;
+      // Motion kit: there from the first frame, settling on a spring that is felt, not seen.
+      var land = MK.spring({ response: 0.3, damping: 0.82 });
+      gsap.set(pill, { autoAlpha: 1 });
+      tl.fromTo(pill, { scale: 1 - 0.08 * motion }, { scale: 1, duration: land.duration, ease: land.ease }, 0);
       tl.set({}, {}, seconds);
       window.__timelines["label.pill"] = tl;
     })();

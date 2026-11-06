@@ -1,6 +1,6 @@
 # Plugging direction into Meridian
 
-Version 2, 2026-11-04 (codex `direction-codex@2`). How the [Viral Direction Framework](./VIRAL_DIRECTION_FRAMEWORK.md) and its code (`src/lib/meridian/direction/`)
+Version 3, 2026-11-05 (codex `direction-codex@2`). How the [Viral Direction Framework](./VIRAL_DIRECTION_FRAMEWORK.md) and its code (`src/lib/meridian/direction/`)
 connect to the rest of Meridian, step by step. Each step says what it changes, whether it changes an engine contract, whether it spends
 money, and what the owner decides.
 
@@ -39,7 +39,7 @@ No engine contract changed. No provider was called. No money was spent.
 | Four pinned prompts (version 2) and their answer contracts | `prompts.ts`, `answers.ts` |
 | The content planner: calendar grids, jobs per content game, the bullseye mix, outliers, repost candidates, Lego variations, view ceilings | `plan.ts` |
 | The pipeline, with a model port and a hard call limit | `pipeline.ts` |
-| The live port over Meridian's generation path (budget hold, ledger, workspace key) | `live.server.ts`, not called anywhere |
+| The live port over Meridian's generation path (budget hold, ledger, workspace key) | `live.server.ts`, called by the direction jobs since step 2 |
 | The switch for cookbook scripts, off by default | `applyCookbook(build, resolved, { direction })` in `content-factory/cookbook-request.ts` |
 
 Tests: 99 in the direction module, one in `cookbook-request.test.ts` and one in `cookbook-choice.test.ts`, all fixture-based.
@@ -58,9 +58,33 @@ are carried on the request but not read, so `withDirection` is limited to `scrip
 (`content-factory/cookbook-choice.ts`) passes the direction for every cookbook run, with the codex format that matches the cookbook's
 family (explainer, listicle, story). The stored request records it, because its instruction text names the codex version.
 
-## 3. Step 2: a direction run from the Create page (no contract change, spends money)
+## 3. Step 2: scripts from the Create page (no contract change, spends money): built 2026-11-05
 
-**What.** A server function (admin only, with the tenancy check, AGENTS.md rule 2) that builds a `DirectionRequest` from the draft
+**Built.** Asked for on 2026-11-05 ("real tools for agents and users to generate a new script, several to choose between, and
+regenerate"). What follows the list below is the plan it was built from; the differences are noted here.
+
+- **The Scripts panel** (`src/components/create/create-scripts.tsx`), under a draft on the Create page, admins only. Write one script or
+  2 to 4 options, with the video's job, niche, length and language; regenerate one with a note (a new version of the same concept) or
+  ask for a new idea; use one as the draft's script. `?draft=<id>` reopens a draft and its scripts after a reload.
+- **The service** (`direction/service.ts`, server functions in `direction/actions.ts`). A run is a queued job (`direction.write`,
+  `direction.revise`) with one attempt, because it spends: the worker runs it once through `liveDirectionPort`, and a run that stops is
+  shown as stopped, never retried by itself. One run at a time per draft. Write runs use `choose: "person"`: every finished script is an
+  option, in concept-ranking order, and the final panel is skipped because a person chooses. The call limit is `18 + 7 × options`.
+- **Choosing** writes the script's spoken beats as the draft's script lines (the engine then skips `write_script`) and one direction
+  note (pictures, words on screen, sound, a borrowed opening to attach at publishing) as an instruction, and sets the draft's language.
+  Choosing another script replaces both. A blocked script cannot be chosen, and a draft with script lines a person wrote refuses a
+  chosen script rather than mixing them.
+- **Storage**: `direction_runs` and `direction_scripts` (migration 0153), with the request as built, the record, every call and cost,
+  every draft with its findings and swipe test, and each revision's parent.
+- **Seats**: "Copy and scripts" writes and directs. "Second script writer" and "Script judge" are new Settings tasks; Auto is the copy
+  model, and the run notes that one family wrote or judged (the plan's Auto was "the newest priced model of another family", but the
+  catalogue gives no release date, so a newest model cannot be chosen without guessing).
+- **Not yet**: dated trends from discovery data (a run is told of none, and may use none), and the brand voice profile (5a).
+- **Agents**: the same server functions; and agent mode, free, in `scripts/direction/cli.ts` with the skill
+  `.claude/skills/direction-scripts`: an agent acts as each role with the pinned prompts and is checked by the same checks.
+- **Live**: no live run has been recorded. The first one, on a workspace with a model chosen, is the owner's to run (CLAUDE.md rule 5).
+
+**The plan.** A server function (admin only, with the tenancy check, AGENTS.md rule 2) that builds a `DirectionRequest` from the draft
 session and the brand, runs `runDirection` with `liveDirectionPort`, stores the run (the direction record, framework 12.4) and shows it:
 
 - The input: the session's messages and file notes as the brief; the brand brain's approved claims and prohibited words; the brand's recent
@@ -76,8 +100,8 @@ session and the brand, runs `runDirection` with `liveDirectionPort`, stores the 
 tournament, $0.35 for the scripts, $0.17 for the swipe tests and $0.03 for the final panel: under $1 a run at most. The ledger records the
 real cost of every call.
 
-**Owner decides:** whether a run may start from the Create page (the earlier open question: "should the Orchestrator start runs?"), the
-default families of the second writer and the judge, and who may start a run.
+**Owner decides:** the default families of the second writer and the judge (today: Auto is the copy model), and whether members as well
+as admins may start a run (today: admins only, like every Content Factory action).
 
 ## 4. Step 3: the engine reads direction (some contract changes, for approval)
 
@@ -137,9 +161,10 @@ These touch the study framework that the genome role and JEV questions read; AGE
 ## 7. Decisions for the owner
 
 1. ~~Step 1: switch direction on for cookbook scripts.~~ Decided 2026-11-04: on for all runs, and built.
-2. Step 2: allow direction runs from the Create page (under $1 a run, estimated), and the default second-writer and judge families.
+2. ~~Step 2: allow direction runs from the Create page.~~ Asked for 2026-11-05, and built. Open: the default second-writer and judge
+   families, and whether members may start a run.
 3. Step 3b: approve contract v15 (direction on the request, the watch-test role, the direction event).
 4. Section 6: the Angle Bible corrections.
 5. Contract item 4: build the borrowed-clip asset, so the engine can render a clip-stitch opening itself.
-5. A monthly budget for live tests (trial reels or small paid hook tests). Only real viewers decide winners.
-6. Reference reels or account data for the gold set (the October note's Q7).
+6. A monthly budget for live tests (trial reels or small paid hook tests). Only real viewers decide winners.
+7. Reference reels or account data for the gold set (the October note's Q7).

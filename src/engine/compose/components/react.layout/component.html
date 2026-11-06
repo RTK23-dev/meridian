@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.15.0/dist/gsap.min.js"></script>
+<script src="../lib/motion-kit.js"></script>
 </head>
 <body>
 <div data-composition-id="react.layout" data-width="1080" data-height="1920">
@@ -90,7 +91,22 @@
       pip.style.width = vars.pipWidthPct + "%";
 
       var tl = gsap.timeline({ paused: true });
-      tl.fromTo(pip, { opacity: 0, scale: 1 - 0.15 * motion }, { opacity: 1, scale: 1, duration: 0.3, ease: "back.out(1.5)" }, vars.pipInMs / 1000);
+      var MK = window.MotionKit;
+      // Cut on: hidden until its cue, then simply there. Elements start hidden by CSS; a cue at 0 shows the element at once (outside
+      // the timeline: HyperFrames does not render a set at exactly 0 on frame 0).
+      function reveal(el, at) {
+        if (at > 0) {
+          gsap.set(el, { autoAlpha: 0 });
+          MK.cut(tl, el, at);
+        } else {
+          gsap.set(el, { autoAlpha: 1 });
+        }
+      }
+      // Motion kit: the presenter cuts on at their time and lands on a spring that is felt, not seen.
+      var land = MK.spring({ response: 0.32, damping: 0.82 });
+      var pipAt = vars.pipInMs / 1000;
+      reveal(pip, pipAt);
+      tl.fromTo(pip, { scale: 1 - 0.15 * motion }, { scale: 1, duration: land.duration, ease: land.ease }, pipAt);
       tl.set({}, {}, seconds);
       window.__timelines["react.layout"] = tl;
     })();

@@ -7,6 +7,7 @@
 // Claude never sees this code: it selects components and fills props (L6).
 
 import { createHash } from "node:crypto";
+import { MOTION_KIT_PATH, MOTION_KIT_SOURCE } from "./motion/kit.ts";
 import {
   compositionHash,
   compositionSchema,
@@ -361,7 +362,21 @@ function audioElement(id: string, src: string, startMs: number, endMs: number, g
   return `<audio class="clip" id="${id}" src="${escapeHtml(src)}" data-start="${secs(startMs)}" data-duration="${secs(endMs - startMs)}" data-track-index="${track}" data-volume="${num(volume)}"></audio>`;
 }
 
-/** Transitions and effects, drawn with GSAP on the composition clock. Every number here comes from validated input. */
+/**
+ * A camera shake's offset for one frame: it alternates sides with a seeded, uneven size, so it reads as a physical jolt and not a
+ * metronome. Pure: the same frame always gives the same offset.
+ */
+function shakeJitter(frame: number, seed: number): number {
+  const h = Math.sin((frame + seed * 101.3) * 127.1) * 43758.5453;
+  const size = 0.55 + 0.45 * (h - Math.floor(h));
+  return (frame % 2 === 0 ? 1 : -1) * size;
+}
+
+/**
+ * Transitions and effects, drawn with GSAP on the composition clock. Every number here comes from validated input. Curves come from the
+ * motion kit (lib/motion-kit.js, loaded after GSAP): a whip snaps on kit.whip, a punch-in lands on kit.land and settles back on
+ * kit.heavy, a shake is a decaying seeded jolt, one step per frame. A crossfade and a flash stay linear: they mean "becomes" and "hit".
+ */
 function timelineLines(edl: EditDecisionList): string[] {
   const lines: string[] = [];
   const stage = 'document.getElementById("stage")';
@@ -373,7 +388,7 @@ function timelineLines(edl: EditDecisionList): string[] {
       if (clip.transitionIn === "fade") {
         lines.push(`tl.fromTo(${el}, { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "none" }, ${num(at)});`);
       } else if (clip.transitionIn === "whip") {
-        lines.push(`tl.fromTo(${el}, { x: 120 }, { x: 0, duration: 0.15, ease: "power3.out" }, ${num(at)});`);
+        lines.push(`tl.fromTo(${el}, { x: 120 }, { x: 0, duration: 0.15, ease: MotionKit.curve("kit.whip") }, ${num(at)});`);
       }
     }
   }
@@ -393,8 +408,8 @@ function timelineLines(edl: EditDecisionList): string[] {
       if (!(scale > 1 && scale <= 1.5)) {
         throw invalid("punch_in scale must be above 1 and at most 1.5");
       }
-      lines.push(`tl.to(${stage}, { scale: ${num(scale)}, duration: 0.1, ease: "power2.out" }, ${num(at)});`);
-      lines.push(`tl.to(${stage}, { scale: 1, duration: 0.2, ease: "power2.in" }, ${num(at + 0.1)});`);
+      lines.push(`tl.to(${stage}, { scale: ${num(scale)}, duration: 0.1, ease: MotionKit.curve("kit.land") }, ${num(at)});`);
+      lines.push(`tl.to(${stage}, { scale: 1, duration: 0.24, ease: MotionKit.curve("kit.heavy") }, ${num(at + 0.1)});`);
     } else if (effect.kind === "shake") {
       known(["amplitude", "durationMs"]);
       const amplitude = params.amplitude ?? 10;
@@ -405,11 +420,16 @@ function timelineLines(edl: EditDecisionList): string[] {
       if (!(durationMs >= 100 && durationMs <= 2000)) {
         throw invalid("shake durationMs must be between 100 and 2000");
       }
-      const steps = [1, -1, 0.8, -0.8, 0.4, 0];
-      const step = durationMs / 1000 / steps.length;
-      steps.forEach((factor, index) => {
-        lines.push(`tl.to(${stage}, { x: ${num(amplitude * factor)}, duration: ${num(step)}, ease: "none" }, ${num(at + index * step)});`);
-      });
+      // One step per frame at 30 fps: the full hit first, then a decaying, uneven jolt on both axes, back to rest on the last frame.
+      const frames = Math.max(3, Math.round((durationMs / 1000) * 30));
+      const step = durationMs / 1000 / frames;
+      for (let frame = 0; frame < frames; frame++) {
+        const last = frame === frames - 1;
+        const decay = last ? 0 : Math.pow(1 - frame / (frames - 1), 1.6);
+        const x = frame === 0 ? amplitude : amplitude * decay * shakeJitter(frame, 1);
+        const y = frame === 0 ? 0 : amplitude * 0.45 * decay * shakeJitter(frame + 1, 2);
+        lines.push(`tl.to(${stage}, { x: ${num(x)}, y: ${num(y)}, duration: ${num(step)}, ease: "none" }, ${num(at + frame * step)});`);
+      }
     } else if (effect.kind === "flash") {
       known(["opacity"]);
       const opacity = params.opacity ?? 0.8;
@@ -544,6 +564,7 @@ export function compile(
     `<title>${escapeHtml(edl.edlId)}</title>`,
     '<link rel="stylesheet" href="style.css">',
     `<script src="${GSAP_SCRIPT_URL}"></script>`,
+    `<script src="${MOTION_KIT_PATH}"></script>`,
     "</head>",
     "<body>",
     `<div id="root" data-composition-id="root" data-start="0" data-duration="${secs(edl.durationMs)}" data-width="${COMPOSITION_WIDTH}" data-height="${COMPOSITION_HEIGHT}">`,
@@ -574,6 +595,8 @@ export function compile(
     ["index.html", indexHtml],
     ["style.css", styleCss],
     ["assets.json", assetsJson],
+    // The motion kit, which the root timeline and the components author with (motion/README.md).
+    [MOTION_KIT_PATH, MOTION_KIT_SOURCE],
   ]);
   for (const name of componentNames) {
     texts.set(`components/${name}.html`, (usedComponents.get(name) as ComponentDefinition).template);

@@ -1,33 +1,60 @@
 // The workspace's model for each ordinary text-generation task (migration 0134): the studio's copy and scripts, the research analysis,
-// the brand brain's suggestions and the Factory's image labels. Every read and write is scoped to one organization. A model is saved
+// the brand brain's suggestions and the Factory's image labels; and direction's two extra seats (migration 0153), the second script writer
+// and the judge, whose Auto is the copy model. Every read and write is scoped to one organization. A model is saved
 // only when the live catalogue lists it as a text model for that task, and only pinned ids are accepted: an alias moves to new builds,
 // so it is refused. A decision model is never a text model, so it cannot be saved here.
 
 import type { Sql } from "../learning/store.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 
+export type GenerationTaskInfo = {
+  label: string;
+  description: string;
+  needsImage: boolean;
+  /** What an unset task uses instead of the deployment default, in words; null when the deployment default applies (or nothing does). */
+  auto: string | null;
+};
+
 export const GENERATION_TASKS = {
   copy: {
     label: "Copy and scripts",
-    description: "Writes the studio's creative script and its copy.",
+    description: "Writes the studio's creative script and its copy, and directs the Scripts panel's scripts.",
     needsImage: false,
+    auto: null,
   },
   research_analysis: {
     label: "Research analysis",
     description: "Analyses the transcripts of collected ads.",
     needsImage: false,
+    auto: null,
   },
   brain_suggest: {
     label: "Brand brain suggestions",
     description: "Suggests brand brain fields from a stored page.",
     needsImage: false,
+    auto: null,
   },
   vision: {
     label: "Image understanding",
     description: "Labels Factory keyframes. Only a model that takes images is accepted, and the deployment default is never used.",
     needsImage: true,
+    auto: null,
   },
-} as const;
+  direction_writer: {
+    label: "Second script writer",
+    description:
+      "Writes half of the script ideas in a direction run. Choose a model of another family than Copy and scripts: two families reach more ideas than one.",
+    needsImage: false,
+    auto: "only the Copy and scripts model writes the ideas, and each run notes that one family wrote them.",
+  },
+  direction_judge: {
+    label: "Script judge",
+    description:
+      "Ranks the script ideas as viewers would and walks each script second by second. Choose a model of another family than the writers: a judge prefers its own model's text.",
+    needsImage: false,
+    auto: "the Copy and scripts model judges, and each run notes that the judge shares a writer's model.",
+  },
+} as const satisfies Record<string, GenerationTaskInfo>;
 
 export type GenerationTask = keyof typeof GENERATION_TASKS;
 
