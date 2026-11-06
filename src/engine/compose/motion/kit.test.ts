@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { runInNewContext } from "node:vm";
-import { KIT_CURVES, MOTION_KIT_PATH, MOTION_KIT_SOURCE, bez, curve, dur, react } from "./kit.ts";
+import { KIT_CURVES, MOTION_KIT_PATH, motionKitSource, bez, curve, dur, react } from "./kit.ts";
 import { MOTION_REGISTERS, REGISTER_PROFILES, registerForFeeling } from "./registers.ts";
 
 type Kit = { LIB: Record<string, ((p: number) => number) & { points: number[] }>; dur: (px: number, w?: number) => number; react: (i: number, s?: number) => number };
@@ -11,7 +11,7 @@ type Kit = { LIB: Record<string, ((p: number) => number) & { points: number[] }>
 /** The vendored kit, evaluated as a browser would: it only needs `window` to load. */
 function loadKit(): Kit {
   const window: { MotionKit?: Kit } = {};
-  runInNewContext(MOTION_KIT_SOURCE, { window });
+  runInNewContext(motionKitSource(), { window });
   assert.ok(window.MotionKit, "motion-kit.js sets window.MotionKit");
   return window.MotionKit;
 }

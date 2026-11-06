@@ -10,7 +10,7 @@ import { edlFixture, styleKitFixture } from "../contracts/fixtures/index.ts";
 import { compile, COMPOSITION_FPS, GSAP_SCRIPT_URL, SUPPORTED_TRANSITIONS } from "./compiler.ts";
 import { COMPONENT_LIBRARY } from "./components/index.ts";
 import { escapeHtml } from "./html.ts";
-import { MOTION_KIT_PATH, MOTION_KIT_SOURCE } from "./motion/kit.ts";
+import { MOTION_KIT_PATH, motionKitSource } from "./motion/kit.ts";
 import { z } from "zod";
 import type { ComponentDefinition } from "./library.ts";
 
@@ -347,7 +347,7 @@ describe("compile: the EDL rules HyperFrames needs", () => {
 
   it("ships the motion kit with every composition and loads it after GSAP, so the root and the components author with its curves", () => {
     const result = compile(edlFixture, styleKitFixture);
-    assert.equal(textOf(result, MOTION_KIT_PATH), MOTION_KIT_SOURCE);
+    assert.equal(textOf(result, MOTION_KIT_PATH), motionKitSource());
     assert.ok(result.composition.files.some((file) => file.path === MOTION_KIT_PATH));
     const html = textOf(result, "index.html");
     const gsap = html.indexOf(`<script src="${GSAP_SCRIPT_URL}"></script>`);
