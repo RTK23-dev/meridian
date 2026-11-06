@@ -118,6 +118,26 @@ function ShellChrome({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, [path]);
 
+  // On a phone the page scrolls inside <main>, never the window. iOS Safari scrolls the window to lift a focused field above the keyboard and
+  // can leave it scrolled when the keyboard closes, which pushed the header's page and the five places up the screen. Once no text field
+  // has focus, the window goes back to the top. (The phone shell is also fixed to the screen, so a scrolled window cannot move it.)
+  useEffect(() => {
+    const phone = window.matchMedia("(max-width: 63.99rem)");
+    const settle = () => {
+      if (!phone.matches || window.scrollY === 0 || isTypingTarget(document.activeElement)) return;
+      window.scrollTo({ top: 0, left: window.scrollX });
+    };
+    const later = () => requestAnimationFrame(settle);
+    window.addEventListener("scroll", later, { passive: true });
+    document.addEventListener("focusout", later);
+    window.visualViewport?.addEventListener("resize", later);
+    return () => {
+      window.removeEventListener("scroll", later);
+      document.removeEventListener("focusout", later);
+      window.visualViewport?.removeEventListener("resize", later);
+    };
+  }, []);
+
   // The rail's state is kept on the root, so the meridian line can sit at the rail's edge on desktop.
   useEffect(() => {
     const root = document.documentElement;
@@ -223,9 +243,9 @@ function ShellChrome({ children }: { children: ReactNode }) {
   return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[64px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[232px_1fr]"}`}>
     <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
     <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="nav-glass nav-glass-panel flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
-    {/* On a phone the page fills the visible height (dvh, so Safari's address and bottom bars are not counted) and only the page scrolls, so the
-        five places stay on screen. On desktop the page grows and the window scrolls, as before. */}
-    <div className="flex h-dvh min-w-0 flex-col lg:h-auto lg:min-h-screen">
+    {/* On a phone the shell is fixed to the screen and only the page scrolls, inside <main>, so the five places stay at the bottom edge even
+        when Safari leaves the window scrolled after the keyboard closes. On desktop the page grows and the window scrolls, as before. */}
+    <div className="fixed inset-0 flex min-w-0 flex-col lg:static lg:h-auto lg:min-h-screen">
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
       <header className="nav-glass sticky top-0 z-20 border-b border-hairline">

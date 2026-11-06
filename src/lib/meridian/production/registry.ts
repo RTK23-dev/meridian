@@ -14,7 +14,7 @@ export type ModelAvailabilityState = "ACTIVE" | "DEPRECATED" | "SHUTDOWN" | "PRE
 export interface ModelCapabilityRecord {
   model_id: string;
   provider_id: string;
-  api_family: "interactions" | "predictLongRunning" | "higgsfield_v1" | "hypit_v1" | "manual";
+  api_family: "interactions" | "predictLongRunning" | "higgsfield_v1" | "hypit_v1" | "manual" | "openrouter_images" | "openrouter_videos";
   release_channel: "ga" | "preview" | "experimental";
   supported_modalities: string[];
   supported_tasks: string[];
@@ -65,6 +65,51 @@ export class ModelCapabilityRegistry {
       availability_state: "ACTIVE",
       last_verified_at: "2026-10-09",
       source_url: "https://ai.google.dev/gemini-api/docs/omni",
+    });
+
+    // 1. OpenRouter Studio images: the image model the workspace chose under Settings, Models (owner direction 2026-11-06). One seat, read
+    // when the image is made (production/openrouter-image.ts). Only the aspect ratios the recorded image endpoint names are listed.
+    this.register({
+      model_id: "studio-image-model",
+      provider_id: "openrouter_image",
+      api_family: "openrouter_images",
+      release_channel: "ga",
+      supported_modalities: ["text", "image"],
+      supported_tasks: ["text-to-image"],
+      durations: [],
+      aspect_ratios: ["1:1", "9:16", "16:9"],
+      resolutions: [],
+      input_reference_types: [],
+      native_audio: false,
+      editing_support: false,
+      region_constraints: ["global"],
+      pricing_basis: "per_image",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-11-06",
+      source_url: "https://openrouter.ai/docs/guides/overview/multimodal/image-generation",
+    });
+
+    // 1'. OpenRouter Studio videos: the video model the workspace chose under Settings, Models. One seat, kept here for its lifecycle; its
+    // durations, aspect ratios and price are the chosen model's, read for the workspace from OpenRouter's live video listing when the router
+    // selects (production/openrouter-video.ts offerFor). Nothing is declared for it here, so this record alone offers nothing.
+    this.register({
+      model_id: "studio-video-model",
+      provider_id: "openrouter_video",
+      api_family: "openrouter_videos",
+      release_channel: "ga",
+      supported_modalities: ["text", "video"],
+      supported_tasks: ["text-to-video"],
+      durations: [],
+      aspect_ratios: [],
+      resolutions: [],
+      input_reference_types: [],
+      native_audio: false,
+      editing_support: false,
+      region_constraints: ["global"],
+      pricing_basis: "per_second",
+      availability_state: "ACTIVE",
+      last_verified_at: "2026-11-06",
+      source_url: "https://openrouter.ai/docs/api-reference/videos",
     });
 
     // 1a. Gemini Nano Banana 2.1 (Default image generation/editing)

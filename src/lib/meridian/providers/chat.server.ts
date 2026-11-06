@@ -165,10 +165,11 @@ export async function generationModelFor(organizationId: string | null, task: Ge
   if (stored) {
     model = stored;
     source = "workspace";
-  } else if (task === "vision") {
+  } else if (GENERATION_TASKS[task].needsImage || (GENERATION_TASKS[task] as { needsAudio?: boolean }).needsAudio) {
+    const takes = GENERATION_TASKS[task].needsImage ? "images" : "audio";
     return {
       status: "unset",
-      reason: "Choose a model that takes images for Image understanding in Settings. The deployment default is not used for images, because its inputs are not verified.",
+      reason: `Choose a model that takes ${takes} for ${GENERATION_TASKS[task].label} in Settings. The deployment default is not used for ${takes}, because its inputs are not verified.`,
     };
   } else {
     const deployment = deploymentTextModel(deps.env);

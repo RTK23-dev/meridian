@@ -85,6 +85,9 @@ export function UserButton() {
           {user.primaryEmail && user.primaryEmail !== label ? <p className="truncate text-xs text-fg-muted">{user.primaryEmail}</p> : null}
         </div>
         <DropdownMenuItem asChild>
+          <Link to="/settings">Settings</Link>
+        </DropdownMenuItem>
+        <DropdownMenuItem asChild>
           <Link to="/notifications">Notification preferences</Link>
         </DropdownMenuItem>
         <p className="eyebrow px-2 pb-1 pt-2">Appearance</p>

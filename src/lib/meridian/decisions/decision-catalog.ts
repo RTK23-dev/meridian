@@ -28,6 +28,8 @@ export type DecisionModelProfile = {
 };
 
 const TYPESAFE_PROFILE_SOURCE = "TypeSafe's published decision documentation, as recorded in docs/OPENROUTER.md. No live call has been recorded.";
+const OPENAI_PROFILE_SOURCE =
+  "OpenRouter's listing (2026-11-06): GPT-6 Luna served through OpenAI's Decisions API, reading text, JSON or images and returning typed answers; the question types are the ones Meridian's own OpenAI Decisions engine sends to GPT-6 Luna (decisions/openai-engine.ts). Added on the owner's direction (2026-11-06). No live call has been recorded.";
 
 /**
  * The decision models Meridian has verified. A model is offered only with a profile here, and the profile is the source of what it
@@ -47,7 +49,40 @@ export const DECISION_MODEL_PROFILES: Record<string, DecisionModelProfile> = {
     inputModalities: ["text"],
     source: TYPESAFE_PROFILE_SOURCE,
   },
+  "openai/gpt-6-luna-decisions": {
+    questionKinds: ["predicate", "choice", "score"],
+    inputModalities: ["text", "image"],
+    source: OPENAI_PROFILE_SOURCE,
+  },
 };
+
+/**
+ * The decision families a workspace picks from: OpenAI's Decisions models and TypeSafe's JEV, both served through OpenRouter. A family is
+ * matched by the model id's vendor. Its latest model is the newest one the live catalogue lists that Meridian has verified, so choosing
+ * "the latest" never picks an alias (which moves to new builds without a check) or a model with no recorded profile.
+ */
+export const DECISION_FAMILIES = [
+  { id: "openai", vendor: "openai", label: "OpenAI Decisions" },
+  { id: "typesafe", vendor: "typesafe", label: "TypeSafe JEV" },
+] as const;
+export type DecisionFamilyId = (typeof DECISION_FAMILIES)[number]["id"];
+
+export function isDecisionFamily(value: unknown): value is DecisionFamilyId {
+  return typeof value === "string" && DECISION_FAMILIES.some((family) => family.id === value);
+}
+
+/** The family a decision model belongs to, by its vendor, or null when it is in neither. */
+export function decisionFamilyOf(model: string): DecisionFamilyId | null {
+  const vendor = model.split("/")[0] ?? "";
+  return DECISION_FAMILIES.find((family) => family.vendor === vendor)?.id ?? null;
+}
+
+/** The newest verified model of a family in the catalogue (by the listing's date, then by id), or null when the catalogue lists none. */
+export function latestDecisionModel<T extends { id: string; verified: boolean; created: number | null }>(models: readonly T[], family: DecisionFamilyId): T | null {
+  const candidates = models.filter((model) => model.verified && decisionFamilyOf(model.id) === family);
+  candidates.sort((a, b) => (b.created ?? 0) - (a.created ?? 0) || b.id.localeCompare(a.id));
+  return candidates[0] ?? null;
+}
 
 /** The profile for a pinned model ID, or null when Meridian has not verified it. Aliases never have one. */
 export function decisionModelProfile(model: string): DecisionModelProfile | null {
@@ -67,6 +102,7 @@ const catalogEntrySchema = z.object({
   pricing: z.object({ prompt: z.string().optional(), completion: z.string().optional() }).optional(),
   top_provider: z.object({ max_completion_tokens: z.number().int().nonnegative().nullable().optional() }).optional(),
   alias_target: z.unknown().optional(),
+  created: z.number().nonnegative().optional(),
 });
 
 const catalogBodySchema = z.object({ data: z.array(z.unknown()) });
@@ -84,6 +120,8 @@ export type DecisionCatalogEntry = {
   completionUsdPerToken: number;
   /** Tokens. The largest output the model can return, which bounds a call's output cost. */
   maxCompletionTokens: number;
+  /** When the listing says the model was added, in seconds since 1970, or null. It tells the newest model of a family. */
+  created: number | null;
 };
 
 export type DecisionCatalogExclusion = { id: string; reason: string };
@@ -154,6 +192,7 @@ export function parseDecisionCatalog(body: unknown, meta: { endpoint: string; re
       promptUsdPerToken: price,
       completionUsdPerToken: completion,
       maxCompletionTokens: maxCompletionTokens ?? 0,
+      created: entry.created ?? null,
     });
   }
   return { ok: true, entries, excluded, ...meta };

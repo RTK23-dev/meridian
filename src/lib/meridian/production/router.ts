@@ -19,6 +19,8 @@ import { modelCapabilityRegistry } from "./registry.ts";
 import { selectOffer, type SelectionCandidate, type SelectionModality, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
 import { configuredQuote, estimateCost, unknownQuote, type PriceQuote } from "./pricing.ts";
 import { GoogleNanoBananaImageProvider, TestImageProvider, type ProductionImageProvider } from "./image-providers.ts";
+import { OPENROUTER_IMAGE_PROVIDER_ID, OpenRouterStudioImageProvider } from "./openrouter-image.ts";
+import { OPENROUTER_VIDEO_PROVIDER_ID, OpenRouterStudioVideoProvider, type VideoOfferRead } from "./openrouter-video.ts";
 import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
 import type { ProviderHealth } from "./types.ts";
 
@@ -134,12 +136,14 @@ export class ProductionRouter {
       this.register(new HypitProvider());
       this.register(new GeminiOmniVideoProvider());
       this.register(new HiggsfieldProvider());
+      this.register(new OpenRouterStudioVideoProvider());
     }
 
     if (options?.imageProviders) {
       for (const p of options.imageProviders) this.registerImage(p);
     } else {
       this.registerImage(new GoogleNanoBananaImageProvider());
+      this.registerImage(new OpenRouterStudioImageProvider());
       // The test double is always listed, but it is resolved and selected only while the testing runtime is active.
       const testImage = new TestImageProvider();
       this.imageProviders.set(testImage.id, testImage);
@@ -250,7 +254,7 @@ export class ProductionRouter {
       const provider = await this.routeExplicit(requestedProvider, spec);
       // An explicit provider is a deliberate choice: deprecated, zero-spend and unpriced candidates are allowed, and recorded.
       const selection = selectOffer({
-        candidates: this.candidatesFor([provider], requirement.modality),
+        candidates: await this.candidatesForWorkspace([provider], requirement.modality, spec.organizationId),
         requirement,
         registry: modelCapabilityRegistry,
         mode: "PREFERENCE",
@@ -291,12 +295,18 @@ export class ProductionRouter {
 
     // Automatic selection never sends work to an unknown or stale price (allowUnknownCost is not set). BALANCED and QUALITY_FIRST
     // use the explicit preference, if one is set, and otherwise the cheapest known price. There is no measured quality yet.
+    // OpenRouter is ready for a workspace only once it chose a Studio video model, and that explicit choice is the workspace's preference
+    // (as for images). LOWEST_COST still takes the cheapest known price.
+    const workspaceChoseOpenRouter = healthy.some((provider) => provider.id === OPENROUTER_VIDEO_PROVIDER_ID);
+    const preference = workspaceChoseOpenRouter
+      ? [OPENROUTER_VIDEO_PROVIDER_ID, ...(this.preference.video ?? []).filter((id) => id !== OPENROUTER_VIDEO_PROVIDER_ID)]
+      : this.preference.video;
     const selection = selectOffer({
-      candidates: this.candidatesFor(healthy, requirement.modality),
+      candidates: await this.candidatesForWorkspace(healthy, requirement.modality, spec.organizationId),
       requirement,
       registry: modelCapabilityRegistry,
       mode: mode === "LOWEST_COST" ? "LOWEST_COST" : "PREFERENCE",
-      preference: mode === "LOWEST_COST" ? undefined : this.preference.video,
+      preference: mode === "LOWEST_COST" ? undefined : preference,
     });
     if (!selection.chosen) throw new Error(`No eligible production provider for mode ${mode}: ${summarize(selection)}`);
     const provider = healthy.find((p) => p.id === selection.chosen!.providerId);
@@ -340,12 +350,14 @@ export class ProductionRouter {
 
     const healthy = await this.healthyImageProviders(spec.organizationId);
     if (healthy.length === 0) throw new Error("No configured image provider is available.");
+    // OpenRouter is ready for a workspace only once it chose a Studio image model, and that explicit choice is the workspace's preference.
+    const workspaceChoseOpenRouter = healthy.some((provider) => provider.id === OPENROUTER_IMAGE_PROVIDER_ID);
     const selection = selectOffer({
       candidates: this.candidatesFor(healthy, "image"),
       requirement,
       registry: modelCapabilityRegistry,
       mode: "PREFERENCE",
-      preference: this.preference.image,
+      preference: workspaceChoseOpenRouter ? [OPENROUTER_IMAGE_PROVIDER_ID, ...(this.preference.image ?? []).filter((id) => id !== OPENROUTER_IMAGE_PROVIDER_ID)] : this.preference.image,
       allowUnknownCost: options.allowUnknownCost,
     });
     if (!selection.chosen) throw new Error(`No eligible image provider: ${summarize(selection)}`);
@@ -366,6 +378,36 @@ export class ProductionRouter {
       Array.from(this.providers.values()).map(async (p) => ({ provider: p, health: await healthOf(p, organizationId) })),
     );
     return checks.filter((c) => c.health.state === "HEALTHY" || c.health.state === "CONFIGURED").map((c) => c.provider);
+  }
+
+  /**
+   * The candidates for one workspace's video. A provider whose model and price depend on the workspace (OpenRouter's chosen Studio video
+   * model) states them with offerFor: its candidate takes the listed durations and aspect ratios, and the listed per-second price, or an
+   * unknown price when the listing states none. Every other provider is offered from the registry, as before.
+   */
+  private async candidatesForWorkspace(providers: ProductionProvider[], modality: SelectionModality, organizationId: string | undefined): Promise<SelectionCandidate[]> {
+    const candidates: SelectionCandidate[] = [];
+    for (const provider of providers) {
+      const offering = provider as ProductionProvider & { offerFor?: (organizationId: string) => Promise<VideoOfferRead> };
+      if (modality !== "video" || typeof offering.offerFor !== "function") {
+        candidates.push(...this.candidatesFor([provider], modality));
+        continue;
+      }
+      if (!organizationId) continue;
+      const offer = await offering.offerFor(organizationId);
+      const seat = modelCapabilityRegistry.listModels(provider.id)[0];
+      if ("unavailable" in offer || !seat) continue;
+      const source = `OpenRouter's live video listing for ${offer.model}, per second at 1080p`;
+      candidates.push({
+        provider: {
+          id: provider.id,
+          zeroSpend: provider.capabilities.zeroSpend,
+          price: offer.pricePerSecondUsd === null ? unknownQuote("per_second", `${source}: no price is stated`) : configuredQuote("per_second", offer.pricePerSecondUsd, source),
+        },
+        record: { ...seat, durations: offer.durations, aspect_ratios: offer.aspectRatios, resolutions: offer.resolutions },
+      });
+    }
+    return candidates;
   }
 
   /** Every registered model of these providers, as selection candidates, priced for this modality. */

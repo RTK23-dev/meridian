@@ -41,9 +41,9 @@ describe("connections view", () => {
     }
     assert.equal(feature(view, "studio_images").light, "missing");
     assert.deepEqual(view.openRouterUnlocks, {
-      count: 9,
+      count: 12,
       of: FEATURES.length,
-      missing: ["Speech to text", "Studio images", "Studio video", "Reference analysis", "Competitor ad research"],
+      missing: ["Speech to text", "Competitor ad research"],
     });
     assert.equal(provider(view, "openrouter").status, "ready");
     assert.ok(provider(view, "openrouter").usedFor.includes("Decisions and scoring"));
@@ -90,5 +90,22 @@ describe("connections view", () => {
     const categories = PROVIDERS.flatMap((row) => row.categories);
     assert.equal(new Set(categories).size, categories.length);
     for (const row of FEATURES) for (const id of row.candidates) assert.ok(PROVIDERS.some((p) => p.id === id), `${row.id} names ${id}`);
+  });
+  it("OpenRouter serves reference analysis only once a model is chosen for it, and then it comes before a Google key", () => {
+    const keyOnly = connectionsView({ summaries: { openrouter: usable("openrouter") }, engines: null });
+    assert.equal(feature(keyOnly, "perception").light, "missing");
+    assert.equal(feature(keyOnly, "perception").line, "Choose a model under Models");
+    const chosen = connectionsView({ summaries: { openrouter: usable("openrouter") }, engines: null, chosenTasks: new Set(["reference_analysis"]) });
+    assert.equal(feature(chosen, "perception").light, "working");
+    assert.equal(feature(chosen, "perception").usedProvider, "openrouter");
+    const both = connectionsView({
+      summaries: { openrouter: usable("openrouter"), perception: usable("perception"), production: usable("production") },
+      engines: null,
+      chosenTasks: new Set(["reference_analysis"]),
+    });
+    assert.equal(feature(both, "perception").usedProvider, "openrouter", "the explicit choice wins, as the runtime does");
+    assert.equal(feature(both, "perception").light, "overlap");
+    const googleOnly = connectionsView({ summaries: { openrouter: usable("openrouter"), perception: usable("perception"), production: usable("production") }, engines: null });
+    assert.equal(feature(googleOnly, "perception").usedProvider, "google", "with no model chosen, the Google key reads references");
   });
 });

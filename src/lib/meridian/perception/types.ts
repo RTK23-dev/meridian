@@ -1,3 +1,5 @@
+import type { Sql } from "../learning/store.ts";
+
 /**
  * Perception contracts. A perception provider extracts grounded observations from images and video frames. It does not
  * judge them: a DecisionEngine judges the textual evidence under Meridian's policy. A perception provider is never a decision
@@ -90,6 +92,14 @@ export type PerceptionHealth = {
   detail: string;
 };
 
+/** Where a call is recorded and paid from, for a provider that holds its own spend (the OpenRouter path). */
+export type PerceptionCallContext = { sql: Sql; organizationId: string; brandId: string; runId: string };
+
+/** A provider's own key check. `apiKey` is empty for a provider whose key is resolved inside its call path. */
+export type PerceptionCredentialCheck =
+  | { status: "ready"; source: string; apiKey: string }
+  | { status: "unusable" | "not_configured"; reason: string };
+
 export interface MultimodalPerceptionProvider {
   readonly id: string;
   readonly model: string;
@@ -97,6 +107,16 @@ export interface MultimodalPerceptionProvider {
   readonly promptVersion: string;
   /** Whether the provider module can run. Credentials are resolved per request by perception/credential.ts, not here. */
   health(): Promise<PerceptionHealth>;
+  /**
+   * The provider's own key check, when its key is not the workspace's Gemini perception key. Without it, the runner resolves the Gemini
+   * key, as before.
+   */
+  resolveCredential?(sql: Sql, organizationId: string): Promise<PerceptionCredentialCheck>;
+  /** True when the provider's call path records its own spend, so the runner records none. */
+  readonly meteredElsewhere?: boolean;
   /** The credential is passed in by the caller that resolved it, so the request uses the same credential the panel reports. */
-  perceive(input: { kind: PerceptionMediaKind; media: PerceptionMedia[] }, options: { apiKey: string }): Promise<PerceptionResult>;
+  perceive(
+    input: { kind: PerceptionMediaKind; media: PerceptionMedia[] },
+    options: { apiKey: string; context?: PerceptionCallContext },
+  ): Promise<PerceptionResult>;
 }

@@ -26,7 +26,7 @@ import { submitWithPreflight, type SubmitWithPreflightResult } from "../producti
 import { transitionCreativePlan } from "../creative/state-transition.server.ts";
 import { accountSnapshots, competitorCopy, factsFor, measureVideoFrames, qcBrandOf, sampleVideoForJudgment, videoVisualEvidence, writeJudgment } from "./image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
-import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
+import { perceptionProviderFor, perceptionReadiness } from "../perception/run.ts";
 import { asJson, asNumber, asText, loadSession } from "./session-load.server.ts";
 import { loadGatedJevDecision } from "./session-jev.server.ts";
 
@@ -761,7 +761,7 @@ export async function executeApprovedCreativePlan(
       // Whether the engine this video is judged by can see frames, resolved once for this video.
       const engineSeesFrames = (await resolveImageSupport({ selection, sql, organizationId: access.organizationId })).takesImages;
       // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
-      const perceptionCandidate = selectPerceptionProvider().provider;
+      const perceptionCandidate = (await perceptionProviderFor(sql, access.organizationId)).provider;
       const perceptionForJudgment = !engineSeesFrames &&
         (await perceptionReadiness(sql, access.organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
       const facts = factsFor(loaded, {

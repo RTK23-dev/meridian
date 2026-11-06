@@ -11,6 +11,8 @@ export type GenerationTaskInfo = {
   label: string;
   description: string;
   needsImage: boolean;
+  /** The task reads sound (a transcription), so only a model that takes audio is accepted, and the deployment default is never used. */
+  needsAudio?: boolean;
   /** What an unset task uses instead of the deployment default, in words; null when the deployment default applies (or nothing does). */
   auto: string | null;
 };
@@ -47,6 +49,13 @@ export const GENERATION_TASKS = {
     needsImage: false,
     auto: "only the Copy and scripts model writes the ideas, and each run notes that one family wrote them.",
   },
+  reference_analysis: {
+    label: "Reference analysis",
+    description:
+      "Describes a reference image or sampled video frames for the production checks (shot, product, text on screen). Only a model that takes images is accepted. When none is chosen, the workspace's Google Gemini key is used if it has one.",
+    needsImage: true,
+    auto: "the workspace's Google Gemini key reads references, when one is saved; otherwise references are not read.",
+  },
   direction_judge: {
     label: "Script judge",
     description:
@@ -73,8 +82,12 @@ export function isPinnedModelId(value: string): boolean {
 
 /** Whether a catalogue text model may be used for a task, and why not when it may not. */
 export function eligibleForTask(task: GenerationTask, choice: TextModelChoice): { ok: true } | { ok: false; reason: string } {
-  if (GENERATION_TASKS[task].needsImage && !choice.inputModalities.includes("image")) {
-    return { ok: false, reason: `${choice.id} does not take images, so it cannot read a Factory keyframe.` };
+  const info: GenerationTaskInfo = GENERATION_TASKS[task];
+  if (info.needsImage && !choice.inputModalities.includes("image")) {
+    return { ok: false, reason: `${choice.id} does not take images, so it cannot do ${info.label.toLowerCase()}.` };
+  }
+  if (info.needsAudio && !choice.inputModalities.includes("audio")) {
+    return { ok: false, reason: `${choice.id} does not take audio, so it cannot do ${info.label.toLowerCase()}.` };
   }
   return { ok: true };
 }

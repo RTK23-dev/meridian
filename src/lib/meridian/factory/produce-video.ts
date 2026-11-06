@@ -22,7 +22,7 @@ import {
   writeJudgment,
 } from "../studio/image-qc.server.ts";
 import { resolveActiveEngine } from "../decisions/selection.ts";
-import { perceptionReadiness, selectPerceptionProvider } from "../perception/run.ts";
+import { perceptionProviderFor, perceptionReadiness } from "../perception/run.ts";
 import { finalizeProductionArtifact } from "../production/artifact-finalizer.ts";
 import { productionRouter } from "../production/router.ts";
 import { productionCostMode } from "../production/cost-mode.ts";
@@ -449,7 +449,7 @@ async function judgeFactoryVideo(
   // Whether the engine this video is judged by can see frames, resolved once for this video (for JEV, from its backend and model).
   const engineSeesFrames = (await resolveImageSupport({ selection, sql, organizationId })).takesImages;
   // Perception is used only when the engine cannot see frames. It is checked here, before any frame is sampled for it.
-  const perceptionCandidate = selectPerceptionProvider().provider;
+  const perceptionCandidate = (await perceptionProviderFor(sql, organizationId)).provider;
   const perceptionForJudgment =
     !engineSeesFrames && (await perceptionReadiness(sql, organizationId, perceptionCandidate)).ready ? perceptionCandidate : null;
   const facts = factsFor(loaded, {

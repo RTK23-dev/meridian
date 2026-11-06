@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getJevTypesafeModel, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getJevTypesafeModel, getMediaModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
@@ -177,6 +177,11 @@ export const openRouterDecisionModelsQueryOptions = (userId: string | null | und
 export const generationModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.generationModels(organizationId)),
   queryFn: () => getGenerationModels({ data: { organizationId } }),
+});
+export const mediaModelsQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
+  queryKey: userScopedQueryKey(userId, qk.mediaModels(organizationId)),
+  queryFn: () => getMediaModels({ data: { organizationId } }),
+  staleTime: 0,
 });
 export const generationCatalogueQueryOptions = (userId: string | null | undefined, organizationId: string) => queryOptions({
   queryKey: userScopedQueryKey(userId, qk.generationCatalogue(organizationId)),
@@ -432,6 +437,11 @@ export const useOpenRouterDecisionModelsQuery = (organizationId: string, enabled
 export const useGenerationModelsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...generationModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+export const useMediaModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({ ...mediaModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
 };
 
 export const useGenerationCatalogueQuery = (organizationId: string, enabled = true) => {

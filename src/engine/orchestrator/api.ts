@@ -87,6 +87,24 @@ export async function textModelsFor(sql: Sql, input: { organizationId: string; n
   return { status: "ok", models: textChoices(catalog.catalog) };
 }
 
+/** One image or video model as the live listing states it. A price the listing does not state is null, never 0. */
+export type MediaModelListing = { id: string; name: string; kind: "image" | "video"; imageUsd: number | null; usdPerSecond1080p: number | null };
+export type MediaModelsState = { status: "ok"; models: MediaModelListing[] } | { status: "not_connected" | "failed"; reason: string };
+
+/** The image and video models of the live catalog, for the Studio's model seats (Settings, Models). Aliases are left out. */
+export async function mediaModelsFor(sql: Sql, input: { organizationId: string; now: () => string }, deps: ApiDeps = {}): Promise<MediaModelsState> {
+  const policy = await requireOrchestratorPolicy(sql, input.organizationId);
+  const catalog = await catalogFor(sql, input.organizationId, input.now, policy.disabledModelFamilies, deps);
+  if (catalog.status !== "ok") return catalog;
+  const models: MediaModelListing[] = [];
+  for (const entry of catalog.catalog.values()) {
+    if ((entry.kind !== "image" && entry.kind !== "video") || entry.id.startsWith("~")) continue;
+    models.push({ id: entry.id, name: entry.name, kind: entry.kind, imageUsd: entry.pricing.imageUsd, usdPerSecond1080p: entry.pricing.usdPerSecond1080p });
+  }
+  models.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  return { status: "ok", models };
+}
+
 /** The live catalog with the switched-off families removed. A read that is not connected or fails is returned as it is, and nothing is guessed. */
 async function catalogFor(sql: Sql, organizationId: string, now: () => string, disabledFamilies: readonly string[], deps: ApiDeps): Promise<CatalogState> {
   const { gateway } = await runtimeFor(sql, deps);
