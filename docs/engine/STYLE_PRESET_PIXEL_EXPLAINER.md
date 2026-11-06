@@ -219,7 +219,35 @@ Its claims and sources:
   - a small subject (the microwave now fills the width);
   - a dive whose splash did not read: the take check refused it, and the camera now hits the surface at speed and stops on the beat.
 
-**The directed-versus-described benchmark** (`bench.ts`, L12) is filled in by the follow-up commit.
+**The directed-versus-described benchmark** (`bench.ts`, L12). This is the same film twice.
+
+- **The described control** has the same cards, worlds and characters, but:
+  - every actor only idles;
+  - the words sit in the centre over the subject;
+  - the camera drifts;
+  - there is no sound on the moments;
+  - the film stops instead of looping.
+- **Both** are drawn by the same engine and scored by the same checks:
+
+| | Directed | Described |
+| --- | --- | --- |
+| Moments built at their time (crew check) | 7 of 7 | 1 of 7 |
+| Moments visible in the picture (take check) | 7 of 7 | 1 of 7 (the readout landing) |
+| Words over the subject (check findings) | 1 warning (the dive filling the frame) | 14 blocks |
+| Silent moments | 0 | 7 |
+| Loop distance, first to last frame | 0.002 | 0.074 (not a loop) |
+| Mean motion | 0.0173 | 0.0050 |
+| Blocking findings | 0 | 20 |
+
+The benchmark also changed the take check:
+
+- The first run passed every described moment, for two reasons:
+  - a card cutting on counted as the picture changing;
+  - a moving-camera rule let a slow drift through.
+- Now the motion is measured outside the words' band.
+- A moment must stand 4 times above its shot's median change and reach 0.008. Directed moments measured 9 to 80 times above; the idle drift measured 1.4 to 6 times.
+
+`directed-vs-described.mp4` puts the two side by side, directed on the left.
 
 ## 4. What is still the owner's
 

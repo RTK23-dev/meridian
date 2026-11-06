@@ -1,7 +1,7 @@
 // The directed-versus-described benchmark for the code-drawn crew (L12). The same idea twice: once as directed (the film and its
 // build), once as described (the same cards and the same worlds, but what a one-line prompt gives: nothing happens on the beat, the
 // words sit over the subject, the camera drifts, the film stops instead of looping, no sound on the moments). Both are drawn by the
-// same engine and scored by the same checks, and a side-by-side video is written, directed on top.
+// same engine and scored by the same checks, and a side-by-side video is written, directed on the left.
 //
 //   node --experimental-strip-types scripts/engine/pixel-explainer/bench.ts --out dir [--film f.json --build b.json]
 

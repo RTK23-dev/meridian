@@ -22,9 +22,12 @@ export type TakeRule = "moment_invisible" | "loop_open" | "subject_drift" | "loo
 export type TakeFinding = { rule: TakeRule; severity: "block" | "warn"; lesson: string; at: string; message: string; value: number | null };
 
 export type TakeCheckOptions = {
-  /** The moment's peak change must be this many times the shot's median change (default 1.5)... */
+  /**
+   * The moment's peak change must be this many times the shot's median change (default 4)... Measured on the microwave film and its
+   * described control: directed moments stand 9 to 80 times above their shot, an idle drift with a bob 1.4 to 6 times.
+   */
   momentRatio?: number;
-  /** ...and at least this much (default 0.003, about one small sprite moving). */
+  /** ...and at least this much (default 0.008: a subject of about 30 by 30 of 90 by 160 changing). */
   momentFloor?: number;
   /** Within this window either side of the moment (default 200 ms, L4). */
   momentWindowMs?: number;
@@ -42,8 +45,8 @@ const median = (values: number[]) => {
 
 export function takeFindings(film: DirectedFilm, measures: TakeMeasures, options: TakeCheckOptions = {}): TakeFinding[] {
   const out: TakeFinding[] = [];
-  const ratio = options.momentRatio ?? 1.5;
-  const floor = options.momentFloor ?? 0.003;
+  const ratio = options.momentRatio ?? 4;
+  const floor = options.momentFloor ?? 0.008;
   const window = options.momentWindowMs ?? 200;
   const frameOf = (ms: number) => Math.round((ms / 1000) * measures.fps);
 
@@ -56,19 +59,7 @@ export function takeFindings(film: DirectedFilm, measures: TakeMeasures, options
     const rest = [...measures.motion.slice(from, Math.max(from, hit - w)), ...measures.motion.slice(Math.min(to, hit + w) + 1, to)];
     const peak = inWindow.length > 0 ? Math.max(...inWindow) : 0;
     const base = median(rest);
-    // On a moving camera the frame changes all the time, so the moment shows as a change in the motion itself: an impact, a stop or
-    // a burst is a jump in the motion series (its jerk), not only a peak.
-    const jerk = (from_: number, to_: number) => {
-      const out_: number[] = [];
-      for (let i = Math.max(from_ + 1, 1); i <= to_; i++) out_.push(Math.abs((measures.motion[i] ?? 0) - (measures.motion[i - 1] ?? 0)));
-      return out_;
-    };
-    const jerkIn = jerk(Math.max(from, hit - w), Math.min(to, hit + w));
-    const jerkRest = [...jerk(from, Math.max(from, hit - w) - 1), ...jerk(Math.min(to, hit + w) + 1, to)];
-    const jerkPeak = jerkIn.length > 0 ? Math.max(...jerkIn) : 0;
-    const moving = shot.composition.camera !== "locked";
-    const jumps = moving && jerkPeak >= floor / 2 && jerkPeak >= 2 * median(jerkRest);
-    if (!jumps && (peak < floor || peak < ratio * base)) {
+    if (peak < floor || peak < ratio * base) {
       out.push({
         rule: "moment_invisible",
         severity: "block",
