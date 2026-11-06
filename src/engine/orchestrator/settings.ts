@@ -21,6 +21,8 @@ export type TextModelChoice = {
   inputModalities: string[];
   /** The context window in tokens as the listing states it, or null. Image input cannot be priced without it. */
   contextLength: number | null;
+  /** When the listing says the model was added, in seconds since 1970, or null when it does not say. */
+  created?: number | null;
 };
 
 /**
@@ -49,6 +51,7 @@ export function textChoices(catalog: Map<string, CatalogEntry>): TextModelChoice
       completionUsdPerToken,
       inputModalities: entry.input_modalities ?? [],
       contextLength: entry.context_length ?? null,
+      created: entry.created ?? null,
     });
   }
   return choices.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));

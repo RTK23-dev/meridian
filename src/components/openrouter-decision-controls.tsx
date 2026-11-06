@@ -59,20 +59,26 @@ export function OpenRouterDecisionControls({
   const [test, setTest] = useState<TestResult | null>(null);
   const catalog = useOpenRouterDecisionModelsQuery(organizationId);
   const listing = (catalog.data as CatalogListing | undefined) ?? null;
-  const eligible = listing?.ok ? listing.eligible : [];
-  const chosen = eligible.find((entry) => entry.id === draft.trim()) ?? null;
+  // The server saves only a model Meridian has verified (validateDecisionModel), so verified models come first and the others are shown
+  // for what they are: listed by OpenRouter, not choosable yet.
+  const eligible = listing?.ok ? [...listing.eligible].sort((a, b) => Number(b.verified) - Number(a.verified) || a.id.localeCompare(b.id)) : [];
+  const chosen = eligible.find((entry) => entry.id === draft.trim() && entry.verified) ?? null;
+  const [refused, setRefused] = useState<string | null>(null);
   const save = useScopedMutation({
     mutationKey: ["mutation", "decision-engine.openrouter-model", organizationId],
     mutationFn: async (value: string) => {
-      const result = (await saveOpenRouterDecisionModel({ data: { organizationId, model: value } })) as
+      // A refusal is the server's own sentence, so it is shown as it is (not as a failed request), and the stored model is unchanged.
+      return (await saveOpenRouterDecisionModel({ data: { organizationId, model: value } })) as
         | { ok: true; model: string }
         | { ok: false; reason: string };
-      // A refused model is thrown, so the reason is shown and the stored model is unchanged.
-      if (!result.ok) throw new Error(result.reason);
-      return result;
     },
     invalidate: () => [qk.decisionEngines(organizationId), qk.openRouterDecisionModels(organizationId)],
     onSuccess: (result) => {
+      if (!result.ok) {
+        setRefused(result.reason);
+        return;
+      }
+      setRefused(null);
       setSaved(`The OpenRouter decision model is now ${result.model}. Test the connection before choosing this engine.`);
       setDraft(result.model);
     },
@@ -98,7 +104,7 @@ export function OpenRouterDecisionControls({
       <div>
         <p className="font-semibold">OpenRouter decision model</p>
         <p className="text-sm text-fg-muted">
-          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Choose any decision model OpenRouter lists, including TypeSafe JEV and OpenAI decision models. A model Meridian has not verified is read as text only, and it works only after the connection test below passes.
+          The model is {SOURCE_TEXT[model.source] ?? "not chosen yet"}. Choose a decision model Meridian has verified; it works once the connection test below passes. Other decision models OpenRouter lists are shown, and cannot be chosen yet.
         </p>
         {model.reason ? (
           <>
@@ -112,6 +118,7 @@ export function OpenRouterDecisionControls({
         ) : null}
       </div>
       {saveError ? <PlainErrorMessage message={saveError.message} raw={saveError.raw} /> : null}
+      {refused ? <p className="text-sm text-warning" role="alert">Not saved: {refused}</p> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
 
       {catalog.isPending ? <p className="text-sm text-fg-muted">Reading the OpenRouter model catalogue...</p> : null}
@@ -125,11 +132,13 @@ export function OpenRouterDecisionControls({
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-full sm:w-96">
             <Field label="Decision model" hint={`Read from the OpenRouter catalogue at ${listing.readAt}.`}>
-              <SelectInput value={draft} onChange={(event) => { setSaved(null); setDraft(event.target.value); }} disabled={!canAdmin || save.isPending}>
-                {!chosen && draft.trim() !== "" ? <option value={draft}>{draft} (not in the live catalogue)</option> : null}
+              <SelectInput value={draft} onChange={(event) => { setSaved(null); setRefused(null); setDraft(event.target.value); }} disabled={!canAdmin || save.isPending}>
+                {/* With no model saved the value is empty: say so, rather than let the browser show the first model as if it were chosen. */}
+                {draft.trim() === "" ? <option value="" disabled>Choose a decision model</option> : null}
+                {draft.trim() !== "" && !eligible.some((entry) => entry.id === draft.trim()) ? <option value={draft}>{draft} (not in the live catalogue)</option> : null}
                 {eligible.map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.id}{entry.verified ? "" : " (not verified by Meridian)"}
+                  <option key={entry.id} value={entry.id} disabled={!entry.verified}>
+                    {entry.id}{entry.verified ? "" : " (not verified by Meridian, cannot be chosen yet)"}
                   </option>
                 ))}
               </SelectInput>
@@ -144,7 +153,8 @@ export function OpenRouterDecisionControls({
           >
             {save.isPending ? "Saving..." : "Save model"}
           </Button>
-          {canAdmin && !save.isPending && unchanged ? <DisabledReason id="openrouter-model-unsaved">This model is already saved.</DisabledReason> : null}
+          {canAdmin && !save.isPending && unchanged && draft.trim() !== "" ? <DisabledReason id="openrouter-model-unsaved">This model is already saved.</DisabledReason> : null}
+          {canAdmin && !save.isPending && draft.trim() === "" ? <DisabledReason id="openrouter-model-unsaved">Choose a model from the list first.</DisabledReason> : null}
           {canAdmin && !save.isPending && !unchanged && !chosen ? (
             <DisabledReason id="openrouter-model-unsaved">Choose a model from the list. It must be in the live OpenRouter catalogue.</DisabledReason>
           ) : null}

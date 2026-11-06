@@ -7,17 +7,13 @@ import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
 import { submitOnShortcut } from "@/components/forms/shortcut";
 import { useWorkspace } from "@/components/workspace";
-import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
-import { GenerationModelSettings } from "@/components/generation-model-settings";
-import { DriveConnectionPanel } from "@/components/settings/drive-connection";
-import { SetupPanel } from "./setup-panel";
 import { createOrganization, renameOrganization } from "@/lib/meridian/api";
 import { workspaceNameSchema, type WorkspaceNameInput } from "@/lib/meridian/schemas/settings";
 import { useScopedMutation } from "@/lib/query/hooks";
 import { FormError } from "./form-error";
 import { plainServerError } from "./form-model";
 
-/** Workspace name, a second workspace, the provider configuration, and what is and is not connected. */
+/** Workspace name, billing and limits, and a second workspace. Keys and models have their own tabs. */
 export function GeneralTab({ organizationId, name, canAdmin }: { organizationId: string; name: string; canAdmin: boolean }) {
   const { reload } = useWorkspace();
   const renameForm = useForm<WorkspaceNameInput>({ resolver: zodResolver(workspaceNameSchema), defaultValues: { name }, mode: "onBlur" });
@@ -114,64 +110,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         </div>
       </details>
 
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Keys and connections<span className="ml-2 text-sm font-normal text-fg-muted">Every provider, its state and its key</span></summary>
-        <div className="mt-4">
-      <SetupPanel organizationId={organizationId} canAdmin={canAdmin} />
-        </div>
-      </details>
-
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Engine and provider settings<span className="ml-2 text-sm font-normal text-fg-muted">Decision engine, models and connection tests</span></summary>
-        <div className="mt-4">
-      <section aria-labelledby="provider-settings-title" className="space-y-3">
-        <div>
-          <h2 id="provider-settings-title" className="text-section font-semibold text-fg-primary">Engine, sources and provider settings</h2>
-          <p className="mt-1 text-sm text-fg-muted">Each provider's settings and connection test. Keys are entered once, in Setup above.</p>
-        </div>
-        <ProviderSettingsPanel organizationId={organizationId} canAdmin={canAdmin} />
-      </section>
-        </div>
-      </details>
-
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Text and image models<span className="ml-2 text-sm font-normal text-fg-muted">Which model each task uses</span></summary>
-        <div className="mt-4">
-      <section aria-labelledby="generation-models-title" className="space-y-3">
-        <div>
-          <h2 id="generation-models-title" className="text-section font-semibold text-fg-primary">Text and image models</h2>
-          <p className="mt-1 text-sm text-fg-muted">
-            The model each task uses: copy and scripts, research analysis, brand brain suggestions and Factory image labels. Each choice is checked
-            against the live OpenRouter catalogue before any paid call.
-          </p>
-        </div>
-        <GenerationModelSettings organizationId={organizationId} canAdmin={canAdmin} />
-      </section>
-        </div>
-      </details>
-
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg-primary">Google Drive<span className="ml-2 text-sm font-normal text-fg-muted">Where files are kept</span></summary>
-        <div className="mt-4">
-      <DriveConnectionPanel organizationId={organizationId} canAdmin={canAdmin} />
-        </div>
-      </details>
-
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
-        <summary className="cursor-pointer text-base font-semibold text-fg-primary">What is and is not connected<span className="ml-2 text-sm font-normal text-fg-muted">For whoever runs the server</span></summary>
-        <div className="mt-4">
-      <section aria-labelledby="connected-title" className="space-y-3 panel">
-        <h2 id="connected-title" className="text-section font-semibold text-fg-primary">What is and is not connected</h2>
-        <ul className="space-y-2 text-sm text-fg-muted">
-          <li>A public page you name can be fetched and stored as untrusted text. It does not change the brand brain until you accept a suggestion, and only if a text model is configured.</li>
-          <li>Plain text, DOCX, and PDF text can be stored. Instruction-like lines are dropped. An image-only PDF fails closed.</li>
-          <li>Meta, TikTok, Google Ads, and Ad Library clients exist. They stay not configured until a request succeeds. This environment has no ad account.</li>
-          <li>The worker and scheduler are separate processes. A serverless host does not keep them running. Learning still changes the next rank when performance rows exist.</li>
-          <li>Calibration can propose a threshold. It changes nothing until an admin approves it on the learning page.</li>
-        </ul>
-      </section>
-        </div>
-      </details>
+      <p className="text-sm text-fg-muted">Keys, connections and models are in the Connections and Models tabs.</p>
     </div>
   );
 }
