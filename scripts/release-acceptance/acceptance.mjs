@@ -128,8 +128,10 @@ try {
 
   await check("B1", "a stored key reads as saved and not checked live, and nothing claims a live verification", async () => {
     await openSettings(page, "connections");
-    // The Google Gemini row on Connections (one key serves perception and production).
-    const row = page.locator("li", { has: page.getByText("Google Gemini", { exact: true }) }).first();
+    // The Google Gemini row in the Providers list (one key serves perception and production). Feature rows name the provider too once
+    // its key is saved, so the row is looked for in the Providers section only.
+    const providers = page.locator('section[aria-labelledby="providers-title"]');
+    const row = providers.locator("li", { has: page.getByText("Google Gemini", { exact: true }) }).first();
     await row.scrollIntoViewIfNeeded();
     let rowText = await row.innerText();
     if (!/Key saved/.test(rowText)) {
