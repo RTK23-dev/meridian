@@ -1,0 +1,624 @@
+{
+  "schema": "meridian.directed_film/v1",
+  "filmId": "microwave-inside-myth",
+  "idea": "Microwaves do not cook from the inside: they shake water, and the middle heats last.",
+  "presetId": "pixel_explainer",
+  "durationMs": 32000,
+  "fps": 30,
+  "clock": "cards",
+  "look": {
+    "palette": {
+      "background": "#12163c",
+      "hero": "#f08a3c",
+      "accent": "#4fd6e8",
+      "glow": "#ffd27a",
+      "text": "#f4f1e8",
+      "keyword": "#f5cf45",
+      "world": [
+        "#090b22",
+        "#1a1f4d",
+        "#262b63",
+        "#3c3a75",
+        "#7a5a3a",
+        "#b0844f",
+        "#c9cbd6",
+        "#6fc8f0",
+        "#2e6b8a",
+        "#ff5d6c",
+        "#4fa8e8"
+      ],
+      "concepts": [
+        {
+          "name": "field one way",
+          "colour": "#ff5d6c"
+        },
+        {
+          "name": "field the other way",
+          "colour": "#4fd6e8"
+        },
+        {
+          "name": "hot",
+          "colour": "#f08a3c"
+        },
+        {
+          "name": "cold",
+          "colour": "#4fa8e8"
+        }
+      ]
+    },
+    "rendering": "pixel_dither",
+    "edges": "crisp",
+    "texture": [
+      "dither",
+      "grain"
+    ],
+    "lighting": "stylized_glow",
+    "referenceShotId": "s1",
+    "notes": "A dark navy kitchen at night; the warm subject (the soup) against a cool ground; two concept pairs, red and cyan for the field, orange and blue for hot and cold."
+  },
+  "shots": [
+    {
+      "shotId": "s1",
+      "startMs": 0,
+      "endMs": 4500,
+      "line": "MICROWAVES COOK FROM THE INSIDE? NOPE. THEY SHAKE WATER.",
+      "picture": "A soup bowl with a smug face turning inside a glowing microwave; on the zap it jolts, squashes and puffs steam",
+      "world": "kitchen at night",
+      "subject": "the soup bowl",
+      "oneMoment": {
+        "kind": "impact",
+        "what": "the microwave zaps and the bowl jolts, squashes and puffs steam, its face flipping from smug to surprised",
+        "hitAtMs": 2500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          1700,
+          2500
+        ],
+        "releaseMs": [
+          2500,
+          2900
+        ],
+        "settleMs": [
+          2900,
+          4500
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": true
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.39,
+          "y": 0.63
+        },
+        "subjectScale": 0.12,
+        "emptyBand": "top",
+        "camera": "push"
+      },
+      "loop": "none",
+      "avoid": [
+        "a realistic photo of a microwave",
+        "radiation or hazard symbols",
+        "food that looks real"
+      ],
+      "sound": {
+        "hitSfx": "zap"
+      }
+    },
+    {
+      "shotId": "s2",
+      "startMs": 4500,
+      "endMs": 6500,
+      "line": "SHAKE IT... HOW?",
+      "picture": "The camera dives through the microwave window into the soup's surface, which splashes as we hit it",
+      "world": "kitchen at night",
+      "subject": "the soup's surface",
+      "oneMoment": {
+        "kind": "transform",
+        "what": "the camera hits the soup's surface at full speed and stops dead: a splash and a white flash",
+        "hitAtMs": 1500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          0,
+          300
+        ],
+        "releaseMs": [
+          300,
+          1500
+        ],
+        "settleMs": [
+          1500,
+          2000
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": false
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.5,
+          "y": 0.55
+        },
+        "subjectScale": 0.6,
+        "emptyBand": "top",
+        "camera": "dive_in"
+      },
+      "loop": "seam_to_next",
+      "avoid": [
+        "a cut instead of the dive",
+        "a realistic liquid splash"
+      ],
+      "sound": {
+        "hitSfx": "whoosh"
+      }
+    },
+    {
+      "shotId": "s3",
+      "startMs": 6500,
+      "endMs": 12000,
+      "line": "WATER BITS ARE LOPSIDED: + AND −. THE FIELD TURNS THEM ALL ONE WAY.",
+      "picture": "A field of sleepy, lopsided water droplets pointing every way; a red field arrow sweeps in and they all snap to point along it",
+      "world": "inside the soup",
+      "subject": "the field of water droplets",
+      "oneMoment": {
+        "kind": "flip",
+        "what": "the field arrives and every droplet snaps to point the same way, the lead first, the rest a beat behind",
+        "hitAtMs": 2500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          1900,
+          2500
+        ],
+        "releaseMs": [
+          2500,
+          2900
+        ],
+        "settleMs": [
+          2900,
+          5500
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": true
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.5,
+          "y": 0.61
+        },
+        "subjectScale": 0.48,
+        "emptyBand": "top",
+        "camera": "dive_in"
+      },
+      "loop": "none",
+      "avoid": [
+        "ball-and-stick chemistry models",
+        "letters H and O drawn on the molecules",
+        "glowing orbs with no job"
+      ],
+      "sound": {
+        "hitSfx": "click"
+      }
+    },
+    {
+      "shotId": "s4",
+      "startMs": 12000,
+      "endMs": 18500,
+      "line": "THEN IT FLIPS. AND FLIPS BACK. 2.45 BILLION TIMES A SECOND.",
+      "picture": "The field arrow flips back and forth, faster each time, and the droplets flip with it until they blur, dizzy",
+      "world": "inside the soup",
+      "subject": "the field of water droplets",
+      "oneMoment": {
+        "kind": "count",
+        "what": "the readout slams in at 2,450,000,000 as the flipping blurs",
+        "hitAtMs": 2500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          0,
+          2000
+        ],
+        "releaseMs": [
+          2000,
+          2700
+        ],
+        "settleMs": [
+          2700,
+          6500
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": true,
+        "squashStretch": false
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.5,
+          "y": 0.61
+        },
+        "subjectScale": 0.48,
+        "emptyBand": "top",
+        "camera": "locked"
+      },
+      "loop": "none",
+      "avoid": [
+        "lightning bolts",
+        "radiation symbols",
+        "a spinning vortex"
+      ],
+      "sound": {
+        "hitSfx": "boom"
+      }
+    },
+    {
+      "shotId": "s5",
+      "startMs": 18500,
+      "endMs": 23500,
+      "line": "ALL THAT JOSTLING = HEAT.",
+      "picture": "The jostling droplets turn from blue to hot orange and steam rises off them while a thermometer climbs",
+      "world": "inside the soup",
+      "subject": "the field of water droplets",
+      "oneMoment": {
+        "kind": "transform",
+        "what": "the droplets flush orange and a puff of steam bursts off the top",
+        "hitAtMs": 2500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          1800,
+          2500
+        ],
+        "releaseMs": [
+          2500,
+          3000
+        ],
+        "settleMs": [
+          3000,
+          5000
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": false
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.5,
+          "y": 0.61
+        },
+        "subjectScale": 0.48,
+        "emptyBand": "top",
+        "camera": "locked"
+      },
+      "loop": "none",
+      "avoid": [
+        "flames or fire",
+        "a realistic thermometer photo"
+      ],
+      "sound": {
+        "hitSfx": "pop"
+      }
+    },
+    {
+      "shotId": "s6",
+      "startMs": 23500,
+      "endMs": 28500,
+      "line": "THE OUTSIDE HEATS, THE MIDDLE WAITS. STIR HALFWAY.",
+      "picture": "The soup from above: a hot orange ring around a cold blue middle with a worried face; a spoon sweeps in and stirs, and the middle warms and smiles",
+      "world": "the bowl from above",
+      "subject": "the cold middle",
+      "oneMoment": {
+        "kind": "transform",
+        "what": "the spoon lands in the cold middle and it starts turning orange",
+        "hitAtMs": 2500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          1800,
+          2200
+        ],
+        "releaseMs": [
+          2200,
+          2600
+        ],
+        "settleMs": [
+          2600,
+          5000
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": true
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.5,
+          "y": 0.53
+        },
+        "subjectScale": 0.16,
+        "emptyBand": "top",
+        "camera": "dive_out"
+      },
+      "loop": "none",
+      "avoid": [
+        "a realistic soup photo",
+        "a 3D bowl seen at an angle",
+        "a hand holding the spoon"
+      ],
+      "sound": {
+        "hitSfx": "whoosh"
+      }
+    },
+    {
+      "shotId": "s7",
+      "startMs": 28500,
+      "endMs": 32000,
+      "line": "SEND THIS TO A MICROWAVE STARER.",
+      "picture": "Back in the kitchen: the microwave beeps at 0:00, the bowl hops, then settles back to its smug opening pose",
+      "world": "kitchen at night",
+      "subject": "the soup bowl",
+      "oneMoment": {
+        "kind": "pop",
+        "what": "the beep: the microwave pops and the bowl hops",
+        "hitAtMs": 1500
+      },
+      "motionArc": {
+        "anticipationMs": [
+          1200,
+          1500
+        ],
+        "releaseMs": [
+          1500,
+          1800
+        ],
+        "settleMs": [
+          1800,
+          3500
+        ]
+      },
+      "motionStyle": {
+        "cadence": "twos",
+        "smears": false,
+        "squashStretch": true
+      },
+      "composition": {
+        "eyeTarget": {
+          "x": 0.39,
+          "y": 0.63
+        },
+        "subjectScale": 0.12,
+        "emptyBand": "top",
+        "camera": "dive_out"
+      },
+      "loop": "seamless",
+      "avoid": [
+        "a fade to black",
+        "an end card that breaks the loop"
+      ],
+      "sound": {
+        "hitSfx": "beep"
+      }
+    }
+  ],
+  "cards": [
+    {
+      "atMs": 0,
+      "untilMs": 2500,
+      "lines": [
+        "MICROWAVES COOK",
+        "FROM THE INSIDE?"
+      ],
+      "keywords": [
+        "INSIDE?"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 2500,
+      "untilMs": 4500,
+      "lines": [
+        "NOPE.",
+        "THEY SHAKE WATER."
+      ],
+      "keywords": [
+        "SHAKE WATER."
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 4500,
+      "untilMs": 6500,
+      "lines": [
+        "SHAKE IT... HOW?"
+      ],
+      "keywords": [
+        "HOW?"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 6500,
+      "untilMs": 9000,
+      "lines": [
+        "WATER BITS ARE",
+        "LOPSIDED: + AND −"
+      ],
+      "keywords": [
+        "+ AND −"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 9000,
+      "untilMs": 12000,
+      "lines": [
+        "THE FIELD TURNS",
+        "THEM ALL ONE WAY"
+      ],
+      "keywords": [
+        "ONE WAY"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 12000,
+      "untilMs": 14500,
+      "lines": [
+        "THEN IT FLIPS.",
+        "AND FLIPS BACK."
+      ],
+      "keywords": [
+        "FLIPS BACK."
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 14500,
+      "untilMs": 18500,
+      "lines": [
+        "2.45 BILLION",
+        "TIMES A SECOND"
+      ],
+      "keywords": [
+        "2.45 BILLION"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 18500,
+      "untilMs": 21000,
+      "lines": [
+        "ALL THAT",
+        "JOSTLING..."
+      ],
+      "keywords": [],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 21000,
+      "untilMs": 23500,
+      "lines": [
+        "JOSTLING = HEAT"
+      ],
+      "keywords": [
+        "HEAT"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 23500,
+      "untilMs": 26000,
+      "lines": [
+        "THE OUTSIDE HEATS,",
+        "THE MIDDLE WAITS."
+      ],
+      "keywords": [
+        "MIDDLE WAITS."
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 26000,
+      "untilMs": 28500,
+      "lines": [
+        "STIR HALFWAY."
+      ],
+      "keywords": [
+        "STIR"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 28500,
+      "untilMs": 31500,
+      "lines": [
+        "SEND THIS TO A",
+        "MICROWAVE STARER"
+      ],
+      "keywords": [
+        "MICROWAVE STARER"
+      ],
+      "band": "top",
+      "kind": "line"
+    },
+    {
+      "atMs": 31500,
+      "untilMs": 32000,
+      "lines": [
+        "MICROWAVES COOK",
+        "FROM THE INSIDE?"
+      ],
+      "keywords": [
+        "INSIDE?"
+      ],
+      "band": "top",
+      "kind": "line"
+    }
+  ],
+  "hud": [
+    {
+      "id": "swings",
+      "kind": "readout",
+      "fromMs": 14500,
+      "untilMs": 18500,
+      "from": 0,
+      "to": 2450000000,
+      "unit": "",
+      "format": "thousands",
+      "band": "top",
+      "ticks": true,
+      "countMs": 1200
+    }
+  ],
+  "avoidGlobal": [
+    "muddy or blurred edges",
+    "generic glowing orbs or particle soup with no job",
+    "a subject that drifts with no reason",
+    "lettering, captions, logos or watermarks drawn by a model",
+    "realistic default colours where the look says otherwise"
+  ],
+  "claims": [
+    {
+      "text": "Home microwave ovens run at 2,450 MHz: the field swings back and forth 2,450,000,000 (2.45 billion) times a second.",
+      "source": "US FDA, Microwave Ovens (radiation-emitting products); HyperPhysics, Microwave Ovens",
+      "url": "https://hyperphysics.gsu.edu/hbase/waves/mwoven.html"
+    },
+    {
+      "text": "Water molecules are polar (one end slightly positive, the other negative); the oscillating field turns them, and the jostling heats the food (dielectric heating, a simplified picture).",
+      "source": "HyperPhysics, Microwave Ovens"
+    },
+    {
+      "text": "Microwave ovens heat unevenly and leave cold spots; stir or rotate food midway so the heat reaches the centre.",
+      "source": "USDA FSIS, Cooking Safely in the Microwave Oven"
+    }
+  ],
+  "cta": {
+    "kind": "share",
+    "text": "SEND THIS TO A MICROWAVE STARER",
+    "atMs": 28500
+  },
+  "loop": "seamless"
+}

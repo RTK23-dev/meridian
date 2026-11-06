@@ -11,6 +11,9 @@ so it needs no version bump. Whether presets get fields of their own is the owne
   the preset's style kit into one workspace's kit store (`engine_kits`, through `jobs/kit-store.ts`).
 - `three-d-data-explainer.ts`: the first preset, the 3D satellite data explainer. Its run report is
   `docs/engine/STYLE_PRESET_3D_DATA_EXPLAINER.md`.
+- `pixel-explainer.ts`: the 8-bit science explainer, studied from a sample of 14 reels (`reference` is null and `sample` names
+  them). It adds `PIXEL_EXPLAINER_DIRECTION`, the Director's template for the style. Its report is
+  `docs/engine/STYLE_PRESET_PIXEL_EXPLAINER.md`.
 - `style-presets.test.ts`: the contract checks, the kit's CSS, the format id rule and the install on PGlite.
 
 ## What a preset holds, and where each part goes

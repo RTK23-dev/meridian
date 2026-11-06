@@ -5,6 +5,7 @@
 // plan's own estimateUsd is advisory and is overwritten: a model that understates its cost cannot pass the budget check. A step whose
 // model has no usable price in the listing, or whose parameters do not give a basis for the price, does not run.
 
+import { directionNotes } from "./direction.ts";
 import { isDisabledModel } from "../config/model-policy.ts";
 import { positionOfLine, type BudgetPosition } from "../budget/line.ts";
 import { BUDGET_CATEGORIES, categoryOf, type BudgetCategory, type CategoryAmounts } from "./categories.ts";
@@ -284,6 +285,7 @@ export function validatePlan(plan: OrchestratorPlan, catalog: Map<string, Catalo
 
   if (reasons.length > 0 || order === null) return { ok: false, reasons };
 
+  notes.push(...directionNotes(plan));
   const priced = plan.nodes.map((node) => ({ ...node, estimateUsd: costs.get(node.id) ?? null }));
   return { ok: true, order, plan: { ...plan, nodes: priced }, budget, categories, notes };
 }

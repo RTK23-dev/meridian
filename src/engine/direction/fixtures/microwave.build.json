@@ -1,0 +1,1054 @@
+{
+ "schema": "meridian.pixel_build/v1",
+ "filmId": "microwave-inside-myth",
+ "stages": [
+  {
+   "shotId": "s1",
+   "subjectId": "bowl",
+   "backdrop": {
+    "kind": "kitchen_night",
+    "seed": 3
+   },
+   "camera": {
+    "move": "push",
+    "from": {
+     "x": 0,
+     "y": 20,
+     "zoom": 1.7
+    },
+    "to": {
+     "x": 0,
+     "y": 22,
+     "zoom": 1.76
+    },
+    "curve": "kit.drift"
+   },
+   "actors": [
+    {
+     "id": "mw",
+     "shape": "microwave",
+     "x": 0,
+     "y": 38,
+     "w": 100,
+     "h": 64,
+     "colour": "#c9cbd6",
+     "shade": "#7d7f99",
+     "z": 0,
+     "actions": [
+      {
+       "do": "shake",
+       "atMs": 2500,
+       "durMs": 300,
+       "amount": 1.5,
+       "hz": 20
+      }
+     ]
+    },
+    {
+     "id": "bowl",
+     "shape": "bowl",
+     "x": -12,
+     "y": 45,
+     "w": 32,
+     "h": 22,
+     "colour": "#f4f1e8",
+     "shade": "#a9a3b8",
+     "glow": "#ffb860",
+     "z": 2,
+     "face": {
+      "expression": "smug"
+     },
+     "actions": [
+      {
+       "do": "bob",
+       "atMs": 0,
+       "durMs": 4500,
+       "amount": 1,
+       "hz": 0.5714
+      },
+      {
+       "do": "wiggle",
+       "atMs": 0,
+       "durMs": 4500,
+       "amount": 4,
+       "hz": 0.5714
+      },
+      {
+       "do": "express",
+       "atMs": 1750,
+       "durMs": 200,
+       "to": {
+        "expression": "worried"
+       }
+      },
+      {
+       "do": "squash",
+       "atMs": 1900,
+       "durMs": 600,
+       "amount": 10
+      },
+      {
+       "do": "pop",
+       "atMs": 2500,
+       "durMs": 700,
+       "amount": 28,
+       "to": {
+        "expression": "surprised"
+       }
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "steam",
+     "atMs": 0,
+     "durMs": 4500,
+     "x": -12,
+     "y": 34,
+     "colour": "#e8e4f0",
+     "count": 3,
+     "size": 16
+    },
+    {
+     "kind": "flash",
+     "atMs": 2500,
+     "durMs": 220,
+     "x": 0,
+     "y": 0,
+     "colour": "#ffd27a"
+    },
+    {
+     "kind": "shake",
+     "atMs": 2500,
+     "durMs": 260,
+     "x": 0,
+     "y": 0,
+     "colour": "#ffffff",
+     "size": 2
+    },
+    {
+     "kind": "sparks",
+     "atMs": 2500,
+     "durMs": 450,
+     "x": -12,
+     "y": 40,
+     "colour": "#ffd27a",
+     "count": 16,
+     "size": 22
+    },
+    {
+     "kind": "steam",
+     "atMs": 2500,
+     "durMs": 2250,
+     "x": -12,
+     "y": 33,
+     "colour": "#e8e4f0",
+     "count": 9,
+     "size": 22
+    }
+   ]
+  },
+  {
+   "shotId": "s2",
+   "subjectId": "surface",
+   "backdrop": {
+    "kind": "kitchen_night",
+    "seed": 3
+   },
+   "camera": {
+    "move": "dive_in",
+    "from": {
+     "x": 0,
+     "y": 22,
+     "zoom": 1.76
+    },
+    "to": {
+     "x": -12,
+     "y": 41,
+     "zoom": 40
+    },
+    "atMs": 300,
+    "durMs": 1200,
+    "curve": "kit.leave"
+   },
+   "actors": [
+    {
+     "id": "mw",
+     "shape": "microwave",
+     "x": 0,
+     "y": 38,
+     "w": 100,
+     "h": 64,
+     "colour": "#c9cbd6",
+     "shade": "#7d7f99",
+     "z": 0,
+     "actions": []
+    },
+    {
+     "id": "bowl",
+     "shape": "bowl",
+     "x": -12,
+     "y": 45,
+     "w": 32,
+     "h": 22,
+     "colour": "#f4f1e8",
+     "shade": "#a9a3b8",
+     "glow": "#ffb860",
+     "z": 2,
+     "face": {
+      "expression": "surprised",
+      "look": [
+       0,
+       -1
+      ]
+     },
+     "actions": [
+      {
+       "do": "squash",
+       "atMs": 150,
+       "durMs": 500,
+       "amount": 14
+      }
+     ]
+    },
+    {
+     "id": "surface",
+     "shape": "ellipse",
+     "x": -12,
+     "y": 41,
+     "w": 29,
+     "h": 5,
+     "colour": "#f08a3c",
+     "outline": false,
+     "z": 3,
+     "actions": []
+    }
+   ],
+   "fx": [
+    {
+     "kind": "steam",
+     "atMs": 0,
+     "durMs": 1500,
+     "x": -12,
+     "y": 33,
+     "colour": "#e8e4f0",
+     "count": 7,
+     "size": 20
+    },
+    {
+     "kind": "burst",
+     "atMs": 1500,
+     "durMs": 450,
+     "x": -12,
+     "y": 41,
+     "colour": "#ffd27a",
+     "count": 18,
+     "size": 3
+    },
+    {
+     "kind": "ring",
+     "atMs": 1500,
+     "durMs": 350,
+     "x": -12,
+     "y": 41,
+     "colour": "#f4f1e8",
+     "size": 2.5
+    },
+    {
+     "kind": "flash",
+     "atMs": 1500,
+     "durMs": 300,
+     "x": 0,
+     "y": 0,
+     "colour": "#f4f1e8"
+    }
+   ]
+  },
+  {
+   "shotId": "s3",
+   "subjectId": "water",
+   "backdrop": {
+    "kind": "micro_field",
+    "seed": 5
+   },
+   "camera": {
+    "move": "dive_in",
+    "from": {
+     "x": 0,
+     "y": 40,
+     "zoom": 0.45
+    },
+    "to": {
+     "x": 0,
+     "y": 40,
+     "zoom": 1
+    },
+    "atMs": 0,
+    "durMs": 700,
+    "curve": "kit.land"
+   },
+   "actors": [
+    {
+     "id": "water",
+     "shape": "droplet",
+     "x": -64,
+     "y": 12,
+     "w": 20,
+     "h": 24,
+     "colour": "#6fc8f0",
+     "shade": "#2e6b8a",
+     "z": 1,
+     "face": {
+      "expression": "sleepy"
+     },
+     "repeat": {
+      "cols": 5,
+      "rows": 5,
+      "dx": 32,
+      "dy": 32,
+      "jitter": 5,
+      "stagger": 260,
+      "spin": 170
+     },
+     "actions": [
+      {
+       "do": "bob",
+       "atMs": 0,
+       "durMs": 2000,
+       "amount": 1,
+       "hz": 0.8
+      },
+      {
+       "do": "rotate",
+       "atMs": 2050,
+       "durMs": 450,
+       "to": {
+        "rotate": 90,
+        "expression": "surprised"
+       },
+       "anticipation": 0.15,
+       "overshoot": 0.25,
+       "curve": "kit.whip"
+      },
+      {
+       "do": "wiggle",
+       "atMs": 2950,
+       "durMs": 2550,
+       "amount": 5,
+       "hz": 1.5
+      }
+     ]
+    },
+    {
+     "id": "field",
+     "shape": "arrow",
+     "x": -220,
+     "y": -8,
+     "w": 160,
+     "h": 20,
+     "colour": "#ff5d6c",
+     "glow": "#ff5d6c",
+     "z": 2,
+     "actions": [
+      {
+       "do": "move",
+       "atMs": 1650,
+       "durMs": 450,
+       "to": {
+        "x": 0
+       },
+       "overshoot": 0.08,
+       "curve": "kit.whip"
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "ring",
+     "atMs": 2500,
+     "durMs": 320,
+     "x": -54,
+     "y": 12,
+     "colour": "#f4f1e8",
+     "size": 14
+    },
+    {
+     "kind": "shake",
+     "atMs": 2500,
+     "durMs": 200,
+     "x": 0,
+     "y": 0,
+     "colour": "#ffffff",
+     "size": 1.5
+    }
+   ]
+  },
+  {
+   "shotId": "s4",
+   "subjectId": "water",
+   "backdrop": {
+    "kind": "micro_field",
+    "seed": 5
+   },
+   "camera": {
+    "move": "locked",
+    "from": {
+     "x": 0,
+     "y": 40,
+     "zoom": 1
+    },
+    "to": {
+     "x": 0,
+     "y": 40,
+     "zoom": 1
+    }
+   },
+   "actors": [
+    {
+     "id": "water",
+     "shape": "droplet",
+     "x": -64,
+     "y": 12,
+     "w": 20,
+     "h": 24,
+     "colour": "#6fc8f0",
+     "shade": "#2e6b8a",
+     "rotate": 90,
+     "z": 1,
+     "face": {
+      "expression": "surprised"
+     },
+     "repeat": {
+      "cols": 5,
+      "rows": 5,
+      "dx": 32,
+      "dy": 32,
+      "jitter": 5,
+      "stagger": 120,
+      "spin": 12
+     },
+     "actions": [
+      {
+       "do": "rotate",
+       "atMs": 340,
+       "durMs": 300,
+       "to": {
+        "rotate": -90
+       },
+       "overshoot": 0.12,
+       "curve": "kit.whip"
+      },
+      {
+       "do": "rotate",
+       "atMs": 1040,
+       "durMs": 260,
+       "to": {
+        "rotate": 90
+       },
+       "overshoot": 0.12,
+       "curve": "kit.whip"
+      },
+      {
+       "do": "rotate",
+       "atMs": 1540,
+       "durMs": 200,
+       "to": {
+        "rotate": -90
+       },
+       "curve": "kit.whip"
+      },
+      {
+       "do": "rotate",
+       "atMs": 1940,
+       "durMs": 160,
+       "to": {
+        "rotate": 90
+       },
+       "curve": "kit.whip"
+      },
+      {
+       "do": "rotate",
+       "atMs": 2240,
+       "durMs": 130,
+       "to": {
+        "rotate": -90
+       },
+       "curve": "kit.whip"
+      },
+      {
+       "do": "express",
+       "atMs": 2500,
+       "durMs": 200,
+       "to": {
+        "expression": "dizzy"
+       }
+      },
+      {
+       "do": "wiggle",
+       "atMs": 2400,
+       "durMs": 4100,
+       "amount": 85,
+       "hz": 7
+      },
+      {
+       "do": "jitter",
+       "atMs": 2400,
+       "durMs": 4100,
+       "amount": 1.5,
+       "hz": 15
+      }
+     ]
+    },
+    {
+     "id": "field",
+     "shape": "arrow",
+     "x": 0,
+     "y": -8,
+     "w": 160,
+     "h": 20,
+     "colour": "#ff5d6c",
+     "glow": "#ff5d6c",
+     "z": 2,
+     "actions": [
+      {
+       "do": "mirror",
+       "atMs": 300,
+       "durMs": 350
+      },
+      {
+       "do": "colour",
+       "atMs": 300,
+       "durMs": 250,
+       "to": {
+        "colour": "#4fd6e8"
+       }
+      },
+      {
+       "do": "mirror",
+       "atMs": 1000,
+       "durMs": 280
+      },
+      {
+       "do": "colour",
+       "atMs": 1000,
+       "durMs": 200,
+       "to": {
+        "colour": "#ff5d6c"
+       }
+      },
+      {
+       "do": "mirror",
+       "atMs": 1500,
+       "durMs": 220
+      },
+      {
+       "do": "colour",
+       "atMs": 1500,
+       "durMs": 150,
+       "to": {
+        "colour": "#4fd6e8"
+       }
+      },
+      {
+       "do": "mirror",
+       "atMs": 1900,
+       "durMs": 180
+      },
+      {
+       "do": "colour",
+       "atMs": 1900,
+       "durMs": 120,
+       "to": {
+        "colour": "#ff5d6c"
+       }
+      },
+      {
+       "do": "mirror",
+       "atMs": 2200,
+       "durMs": 140
+      },
+      {
+       "do": "exit",
+       "atMs": 2400,
+       "durMs": 100
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "waves",
+     "atMs": 2400,
+     "durMs": 4100,
+     "x": 0,
+     "y": -10,
+     "colour": "#ff5d6c",
+     "size": 16
+    },
+    {
+     "kind": "waves",
+     "atMs": 2400,
+     "durMs": 4100,
+     "x": 0,
+     "y": -4,
+     "colour": "#4fd6e8",
+     "size": 16
+    },
+    {
+     "kind": "flash",
+     "atMs": 2500,
+     "durMs": 160,
+     "x": 0,
+     "y": 0,
+     "colour": "#f4f1e8"
+    },
+    {
+     "kind": "shake",
+     "atMs": 2500,
+     "durMs": 300,
+     "x": 0,
+     "y": 0,
+     "colour": "#ffffff",
+     "size": 2.5
+    }
+   ]
+  },
+  {
+   "shotId": "s5",
+   "subjectId": "water",
+   "backdrop": {
+    "kind": "micro_field",
+    "seed": 5
+   },
+   "camera": {
+    "move": "locked",
+    "from": {
+     "x": 0,
+     "y": 40,
+     "zoom": 1
+    },
+    "to": {
+     "x": 0,
+     "y": 40,
+     "zoom": 1
+    }
+   },
+   "actors": [
+    {
+     "id": "water",
+     "shape": "droplet",
+     "x": -64,
+     "y": 12,
+     "w": 20,
+     "h": 24,
+     "colour": "#6fc8f0",
+     "shade": "#2e6b8a",
+     "rotate": 90,
+     "z": 1,
+     "face": {
+      "expression": "strained"
+     },
+     "repeat": {
+      "cols": 5,
+      "rows": 5,
+      "dx": 32,
+      "dy": 32,
+      "jitter": 5,
+      "stagger": 500,
+      "spin": 12
+     },
+     "actions": [
+      {
+       "do": "wiggle",
+       "atMs": 0,
+       "durMs": 5000,
+       "amount": 60,
+       "hz": 6
+      },
+      {
+       "do": "jitter",
+       "atMs": 0,
+       "durMs": 5000,
+       "amount": 1.5,
+       "hz": 15
+      },
+      {
+       "do": "jitter",
+       "atMs": 1800,
+       "durMs": 700,
+       "amount": 3,
+       "hz": 15
+      },
+      {
+       "do": "colour",
+       "atMs": 2500,
+       "durMs": 700,
+       "to": {
+        "colour": "#f08a3c"
+       },
+       "curve": "kit.reveal"
+      },
+      {
+       "do": "pop",
+       "atMs": 2500,
+       "durMs": 500,
+       "amount": 20
+      },
+      {
+       "do": "express",
+       "atMs": 3100,
+       "durMs": 200,
+       "to": {
+        "expression": "happy"
+       }
+      }
+     ]
+    },
+    {
+     "id": "tube",
+     "shape": "roundrect",
+     "x": 78,
+     "y": 66,
+     "w": 10,
+     "h": 104,
+     "colour": "#e8e4f0",
+     "shade": "#a9a3b8",
+     "z": 3,
+     "actions": []
+    },
+    {
+     "id": "mercury",
+     "shape": "box",
+     "x": 78,
+     "y": 106,
+     "w": 4,
+     "h": 20,
+     "colour": "#ff5d6c",
+     "outline": false,
+     "z": 4,
+     "actions": [
+      {
+       "do": "grow",
+       "atMs": 2300,
+       "durMs": 1500,
+       "to": {
+        "h": 86,
+        "y": 73
+       },
+       "overshoot": 0.04,
+       "curve": "kit.heavy"
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "steam",
+     "atMs": 2500,
+     "durMs": 2500,
+     "x": 0,
+     "y": 4,
+     "colour": "#f4f1e8",
+     "count": 18,
+     "size": 60
+    },
+    {
+     "kind": "sparks",
+     "atMs": 2500,
+     "durMs": 500,
+     "x": 0,
+     "y": 60,
+     "colour": "#ffd27a",
+     "count": 24,
+     "size": 60
+    }
+   ]
+  },
+  {
+   "shotId": "s6",
+   "subjectId": "core",
+   "backdrop": {
+    "kind": "plain",
+    "colours": [
+     "#120f1d",
+     "#2b2236"
+    ]
+   },
+   "camera": {
+    "move": "dive_out",
+    "from": {
+     "x": 0,
+     "y": 60,
+     "zoom": 2.6
+    },
+    "to": {
+     "x": 0,
+     "y": 60,
+     "zoom": 1
+    },
+    "atMs": 0,
+    "durMs": 900,
+    "curve": "kit.land"
+   },
+   "actors": [
+    {
+     "id": "rim",
+     "shape": "ellipse",
+     "x": 0,
+     "y": 72,
+     "w": 168,
+     "h": 126,
+     "colour": "#f4f1e8",
+     "shade": "#a9a3b8",
+     "z": 0,
+     "actions": []
+    },
+    {
+     "id": "soup",
+     "shape": "ellipse",
+     "x": 0,
+     "y": 72,
+     "w": 148,
+     "h": 108,
+     "colour": "#f08a3c",
+     "shade": "#b8563c",
+     "glow": "#f08a3c",
+     "z": 1,
+     "actions": []
+    },
+    {
+     "id": "core",
+     "shape": "blob",
+     "x": 0,
+     "y": 72,
+     "w": 72,
+     "h": 52,
+     "colour": "#4fa8e8",
+     "shade": "#2e6b8a",
+     "z": 2,
+     "face": {
+      "expression": "worried"
+     },
+     "actions": [
+      {
+       "do": "shake",
+       "atMs": 600,
+       "durMs": 1500,
+       "amount": 1,
+       "hz": 10
+      },
+      {
+       "do": "colour",
+       "atMs": 2500,
+       "durMs": 1500,
+       "to": {
+        "colour": "#f08a3c"
+       },
+       "curve": "kit.reveal"
+      },
+      {
+       "do": "pop",
+       "atMs": 2500,
+       "durMs": 500,
+       "amount": 15
+      },
+      {
+       "do": "express",
+       "atMs": 3300,
+       "durMs": 200,
+       "to": {
+        "expression": "happy"
+       }
+      }
+     ]
+    },
+    {
+     "id": "spoon",
+     "shape": "capsule",
+     "x": 150,
+     "y": 20,
+     "w": 16,
+     "h": 96,
+     "colour": "#c9cbd6",
+     "shade": "#7d7f99",
+     "rotate": 35,
+     "z": 3,
+     "actions": [
+      {
+       "do": "move",
+       "atMs": 1900,
+       "durMs": 600,
+       "to": {
+        "x": 22,
+        "y": 48
+       },
+       "anticipation": 0.2,
+       "overshoot": 0.12,
+       "curve": "kit.whip"
+      },
+      {
+       "do": "wiggle",
+       "atMs": 2600,
+       "durMs": 2400,
+       "amount": 16,
+       "hz": 1.6
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "steam",
+     "atMs": 0,
+     "durMs": 5000,
+     "x": -48,
+     "y": 40,
+     "colour": "#f4f1e8",
+     "count": 6,
+     "size": 26
+    },
+    {
+     "kind": "steam",
+     "atMs": 0,
+     "durMs": 5000,
+     "x": 50,
+     "y": 56,
+     "colour": "#f4f1e8",
+     "count": 6,
+     "size": 26
+    },
+    {
+     "kind": "ring",
+     "atMs": 2500,
+     "durMs": 420,
+     "x": 0,
+     "y": 72,
+     "colour": "#ffd27a",
+     "size": 34
+    }
+   ]
+  },
+  {
+   "shotId": "s7",
+   "subjectId": "bowl",
+   "backdrop": {
+    "kind": "kitchen_night",
+    "seed": 3
+   },
+   "camera": {
+    "move": "dive_out",
+    "from": {
+     "x": -12,
+     "y": 40,
+     "zoom": 7
+    },
+    "to": {
+     "x": 0,
+     "y": 20,
+     "zoom": 1.7
+    },
+    "atMs": 0,
+    "durMs": 1200,
+    "curve": "kit.land"
+   },
+   "actors": [
+    {
+     "id": "mw",
+     "shape": "microwave",
+     "x": 0,
+     "y": 38,
+     "w": 100,
+     "h": 64,
+     "colour": "#c9cbd6",
+     "shade": "#7d7f99",
+     "z": 0,
+     "actions": [
+      {
+       "do": "pop",
+       "atMs": 1500,
+       "durMs": 400,
+       "amount": 5
+      }
+     ]
+    },
+    {
+     "id": "bowl",
+     "shape": "bowl",
+     "x": -12,
+     "y": 45,
+     "w": 32,
+     "h": 22,
+     "colour": "#f4f1e8",
+     "shade": "#a9a3b8",
+     "glow": "#ffb860",
+     "z": 2,
+     "face": {
+      "expression": "happy"
+     },
+     "actions": [
+      {
+       "do": "bob",
+       "atMs": 0,
+       "durMs": 3500,
+       "amount": 1,
+       "hz": 0.5714
+      },
+      {
+       "do": "wiggle",
+       "atMs": 0,
+       "durMs": 3500,
+       "amount": 4,
+       "hz": 0.5714
+      },
+      {
+       "do": "squash",
+       "atMs": 1250,
+       "durMs": 300,
+       "amount": 10
+      },
+      {
+       "do": "pop",
+       "atMs": 1500,
+       "durMs": 600,
+       "amount": 26,
+       "to": {
+        "expression": "surprised"
+       }
+      },
+      {
+       "do": "express",
+       "atMs": 2900,
+       "durMs": 200,
+       "to": {
+        "expression": "smug"
+       }
+      }
+     ]
+    }
+   ],
+   "fx": [
+    {
+     "kind": "ring",
+     "atMs": 1500,
+     "durMs": 380,
+     "x": 34,
+     "y": 18,
+     "colour": "#78ffaa",
+     "size": 12
+    },
+    {
+     "kind": "sparks",
+     "atMs": 1500,
+     "durMs": 400,
+     "x": -12,
+     "y": 36,
+     "colour": "#ffd27a",
+     "count": 10,
+     "size": 18
+    }
+   ]
+  }
+ ]
+}

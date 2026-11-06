@@ -46,7 +46,7 @@ export const threeDDataExplainerKit: StyleKit = {
   stickers: [],
 };
 
-export const threeDDataExplainer: StylePackage = {
+export const threeDDataExplainer = {
   packageId: "3d_data_explainer",
   version: 2,
   label: "3D satellite data explainer",
@@ -294,4 +294,4 @@ export const threeDDataExplainer: StylePackage = {
       needs: "One live analysis of this reference; the DNA is then cached for the format and reused by every later run.",
     },
   ],
-};
+} satisfies StylePackage;

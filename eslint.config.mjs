@@ -18,6 +18,7 @@ export default tseslint.config(
       ".claude/worktrees/**",
       // Vendored as published (MIT), and checked byte for byte by src/engine/compose/motion/kit.test.ts.
       "src/engine/compose/motion/motion-kit.js",
+      "src/engine/compose/pixel/pixel-engine.js",
       ".claude/skills/motion-designer/motion-kit.js",
     ],
   },

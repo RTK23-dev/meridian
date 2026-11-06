@@ -57,7 +57,8 @@ model, and the CLI checks what you write with the same checks a run applies. Not
 ## Motion
 
 When a script is drawn as a video (a component plan, an agent-mode render), animate it with the motion-designer skill: its register
-follows the script's feeling (`src/engine/compose/motion/registers.ts`).
+follows the script's feeling (`src/engine/compose/motion/registers.ts`). For an 8-bit explainer, hand the chosen script to the
+pixel-explainer skill: a Director writes the shot direction, the checks refuse what is only described, and the pixel crew draws it.
 
 ## Hard stops
 

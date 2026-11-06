@@ -14,10 +14,11 @@ import type { RoleDefinition } from "../role.ts";
 export const ORCHESTRATOR_PLAN_ROLE = "orchestrator_plan";
 
 /**
- * The prompt version this code is written against. The file is prompts/orchestrator_plan@4.md: v4 states the budget as a line (owner direction
- * 2026-10-23, D12). v3 added the category budgets, and v2 named the video class and the avatar inputs.
+ * The prompt version this code is written against. The file is prompts/orchestrator_plan@5.md: v5 plans the video directed, not described
+ * (a Director step, a fact-check step, one picture step per directed shot, a take review: L1, L2, L23). v4 states the budget as a line
+ * (owner direction 2026-10-23, D12). v3 added the category budgets, and v2 named the video class and the avatar inputs.
  */
-export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 4 } as const;
+export const ORCHESTRATOR_PLAN_PROMPT = { role: ORCHESTRATOR_PLAN_ROLE, version: 5 } as const;
 
 /** The model brief the orchestrator reads with its candidates (prompts/model_brief@1.md): a dated reference of the models the engine can price. */
 export const MODEL_BRIEF_PROMPT = { role: "model_brief", version: 1 } as const;
