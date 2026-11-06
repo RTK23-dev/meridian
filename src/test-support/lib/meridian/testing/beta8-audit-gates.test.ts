@@ -214,7 +214,9 @@ test("Gate 6: Model Capability Registry & Gemini Omni as the Google video engine
   const ranked = router.rankProviders({} as any, "QUALITY_FIRST");
   assert.equal(ranked.some((p) => p.id === "veo"), false);
   assert.equal(ranked.some((p) => p.id === "manual_cloud"), false);
-  assert.deepEqual(ranked.map((p) => p.id), ["google_omni", "higgsfield", "hypit"]);
+  // OpenRouter's Studio video provider declares no provider-wide price (each workspace's chosen model has its own, read when a spec is
+  // routed), so it ranks last here, as an unpriced provider does.
+  assert.deepEqual(ranked.map((p) => p.id), ["google_omni", "higgsfield", "hypit", "openrouter_video"]);
 });
 
 test("Gate 7: Multi-Source Discovery with Cyclone Optional (P1.3, P1.4)", async () => {
