@@ -16,7 +16,7 @@ type Seat = {
 type Listing = { seats: Seat[] };
 
 const priceOf = (seat: Seat, model: Seat["models"][number]) =>
-  seat.kind === "image" ? (model.imageUsd === null ? "" : ` · $${model.imageUsd.toFixed(3)} per image`) : model.usdPerSecond === null ? "" : ` · $${model.usdPerSecond.toFixed(3)} per second`;
+  seat.kind === "image" ? "" : model.usdPerSecond === null ? "" : ` · $${model.usdPerSecond.toFixed(3)} per second`;
 
 /**
  * The Studio's image and video model seats: the model OpenRouter makes Studio images (and, once wired, videos) with, from the live

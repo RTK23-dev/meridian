@@ -9,7 +9,7 @@ export const MEDIA_TASKS = {
   studio_image: {
     label: "Studio image model",
     kind: "image",
-    description: "Makes the Studio's creative images through the workspace's OpenRouter key. Without a choice, the Studio uses its Google image key when one is saved.",
+    description: "Makes the Studio's creative images through the workspace's OpenRouter key. OpenRouter prices a made image by its output, so the cost is the one it reports for each image, within the job's spend cap. Without a choice, the Studio uses its Google image key when one is saved.",
   },
   studio_video: {
     label: "Studio video model",
@@ -29,19 +29,27 @@ export type MediaModelChoice = {
   id: string;
   name: string;
   kind: "image" | "video";
-  /** USD per image, for an image model. */
+  /**
+   * Not used for a seat: the listing's `pricing.image` is the price of an image sent to a model, not of one it makes (a generated image is
+   * priced per output token). Kept null for an image seat, so no per-image price is shown or assumed.
+   */
   imageUsd: number | null;
   /** USD per second at the resolution a Studio job asks for, for a video model (production/openrouter-video.ts studioVideoPrice). */
   usdPerSecond: number | null;
 };
 
-/** Whether a listed model may serve a media seat: the right kind, a pinned id, and a stated price. */
+/**
+ * Whether a listed model may serve a media seat: the right kind and a pinned id, and for video a stated per-second price (a Studio video is
+ * refused without a known estimate). An image's cost is not stated per image by the listing; a Studio image runs under its job's reserved
+ * spend cap and records the cost OpenRouter reports, as the Google image provider does.
+ */
 export function eligibleForMediaTask(task: MediaTask, choice: MediaModelChoice): { ok: true } | { ok: false; reason: string } {
   const kind = MEDIA_TASKS[task].kind;
   if (choice.kind !== kind) return { ok: false, reason: `${choice.id} is not ${kind === "image" ? "an image" : "a video"} model.` };
   if (!isPinnedModelId(choice.id)) return { ok: false, reason: `${choice.id} is not a pinned id.` };
-  const price = kind === "image" ? choice.imageUsd : choice.usdPerSecond;
-  if (price === null) return { ok: false, reason: `The listing states no ${kind === "image" ? "per-image" : "per-second"} price for ${choice.id}, so its cost cannot be shown.` };
+  // OpenRouter's own routers (openrouter/auto and the like) choose a model per call, so what a seat would run, and its cost, are unknown.
+  if (choice.id.startsWith("openrouter/")) return { ok: false, reason: `${choice.id} is a router that picks a model per call, not a model.` };
+  if (kind === "video" && choice.usdPerSecond === null) return { ok: false, reason: `The listing states no per-second price for ${choice.id}, so a Studio video could not be estimated.` };
   return { ok: true };
 }
 

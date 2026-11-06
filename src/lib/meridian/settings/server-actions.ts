@@ -40,7 +40,8 @@ async function mediaChoicesFor(sql: Awaited<ReturnType<typeof getSql>>, organiza
   const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
   const state = await mediaModelsFor(sql, { organizationId, now: () => new Date().toISOString() });
   if (state.status !== "ok") return { ok: false, reason: state.reason };
-  return { ok: true, models: state.models.filter((model) => model.kind === "image").map((model) => ({ id: model.id, name: model.name, kind: "image" as const, imageUsd: model.imageUsd, usdPerSecond: null })) };
+  // The listing's per-image field prices an image sent in, not one made, so no per-image price is carried for a Studio image seat.
+  return { ok: true, models: state.models.filter((model) => model.kind === "image").map((model) => ({ id: model.id, name: model.name, kind: "image" as const, imageUsd: null, usdPerSecond: null })) };
 }
 import { generationCeilingUsd } from "../providers/generation-ledger.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
