@@ -9,22 +9,9 @@
  * variant (":free", ":batch", ":thinking" and the like) or an alias ("~..."). A task a preset cannot fill is left on Auto, and the
  * result says why.
  */
+// The Settings page loads this module in the browser, so it imports nothing that only runs on the server (the ceiling check is in
+// preset-image-fit.ts).
 import type { GenerationTask } from "./generation-models.ts";
-import { boundGenerationCall } from "../providers/generation-ledger.ts";
-import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
-
-/** The output an image call is bounded at when a preset checks it against the per-call ceiling (perception asks for at most 2,000 tokens). */
-export const PRESET_IMAGE_MAX_TOKENS = 2_000;
-
-/**
- * Whether one image call to this model fits the per-call ceiling. An image call is bounded at the model's whole context (the listing
- * states no image tokens) plus the output limit, the same bound the call itself is checked against, so a model that does not fit would
- * be refused on every image call.
- */
-export function imageCallFitsCeiling(model: Pick<TextModelChoice, "promptUsdPerToken" | "completionUsdPerToken" | "contextLength">, ceilingUsd: number): boolean {
-  const bound = boundGenerationCall({ choice: model, system: "", user: [{ type: "image_url", image_url: { url: "data:image/png;base64," } }], maxTokens: PRESET_IMAGE_MAX_TOKENS });
-  return bound.ok && bound.usd <= ceilingUsd;
-}
 
 export type PresetCatalogueModel = {
   id: string;

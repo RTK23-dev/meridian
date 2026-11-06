@@ -5,7 +5,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { CURRENT_GENERATION_SECONDS, imageCallFitsCeiling, presetChoices, type PresetCatalogueModel } from "./model-presets.ts";
+import { CURRENT_GENERATION_SECONDS, presetChoices, type PresetCatalogueModel } from "./model-presets.ts";
+import { imageCallFitsCeiling } from "./preset-image-fit.ts";
 
 const ALL = ["copy", "research_analysis", "brain_suggest", "direction_writer", "direction_judge"] as const;
 const IMAGE = ["vision", "reference_analysis"] as const;

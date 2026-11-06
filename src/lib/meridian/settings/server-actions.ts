@@ -23,7 +23,8 @@ import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeM
 import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
-import { MODEL_PRESETS, imageCallFitsCeiling, isModelPreset, presetChoices } from "./model-presets.ts";
+import { MODEL_PRESETS, isModelPreset, presetChoices } from "./model-presets.ts";
+import { imageCallFitsCeiling } from "./preset-image-fit.ts";
 import { MEDIA_TASKS, eligibleForMediaTask, isMediaTask, saveMediaModel, storedMediaModels, type MediaModelChoice, type MediaTask } from "./media-models.ts";
 
 /**
