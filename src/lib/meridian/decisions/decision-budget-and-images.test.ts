@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { Sql } from "../learning/store.ts";
 import type { JevProviderRouter, JevQuestionSpec } from "../jev/types.ts";
-import { recordedDecisionCatalogSource, RECORDED_DECISION_CATALOG_BODY } from "./recorded-decision-catalog.ts";
+import { recordedDecisionCatalogSource, recordedDecisionCatalogBody } from "./recorded-decision-catalog.ts";
 import { resolveImageSupport } from "./capabilities.ts";
 import { DecisionCatalogSource } from "./decision-catalog.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
@@ -98,7 +98,7 @@ function withLimit<T>(value: string | undefined, run: () => Promise<T>): Promise
 
 test("a model the live catalogue does not list is refused before any call", async () => {
   const body = {
-    data: (RECORDED_DECISION_CATALOG_BODY as { data: Array<{ id: string }> }).data.filter((entry) => entry.id !== "typesafe/jev-1.13"),
+    data: (recordedDecisionCatalogBody() as { data: Array<{ id: string }> }).data.filter((entry) => entry.id !== "typesafe/jev-1.13"),
   };
   const catalog = new DecisionCatalogSource({
     fetchImpl: (async () => new Response(JSON.stringify(body), { status: 200 })) as typeof fetch,

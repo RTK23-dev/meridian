@@ -11,7 +11,7 @@ commit `6173e5c` (2026-11-04). The agent skill is `.claude/skills/motion-designe
 | File | What it is |
 | --- | --- |
 | `motion-kit.js` | The kit, byte for byte as published. `kit.test.ts` checks its hash. Plain browser JavaScript, so it is excluded from the TypeScript and ESLint runs. |
-| `kit.ts` | `MOTION_KIT_PATH` (`lib/motion-kit.js` in a composition) and `MOTION_KIT_SOURCE`; every curve as data (`KIT_CURVES`), with `bez`, `curve`, `dur` and `react` for code that does not run GSAP (canvas renderers, agent-mode scenes). `kit.test.ts` checks the numbers match the kit exactly. |
+| `kit.ts` | `MOTION_KIT_PATH` (`lib/motion-kit.js` in a composition) and `motionKitSource()` (read on first use, see `src/engine/source-file.ts`); every curve as data (`KIT_CURVES`), with `bez`, `curve`, `dur` and `react` for code that does not run GSAP (canvas renderers, agent-mode scenes). `kit.test.ts` checks the numbers match the kit exactly. |
 | `registers.ts` | The six registers (technical, editorial, premium, expressive, playful, calm) with their curves, spring damping and pace, and the register a feeling suggests (the direction codex's emotion ids). |
 | `lint.ts` | The motion "unslop" check: named presets, `gsap.defaults` and blur-ins block; even staggers and fades from nothing warn. |
 

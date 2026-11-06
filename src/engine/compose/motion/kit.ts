@@ -5,13 +5,13 @@
 // for physical landings. This module holds the same curves as data, for code that does not run GSAP (canvas renderers, the motion lint,
 // agent-mode scenes); kit.test.ts checks that the numbers match motion-kit.js exactly.
 
-import { readFileSync } from "node:fs";
+import { sourceFile } from "../../source-file.ts";
 
 /** Where the kit lives in a compiled composition. Components load it as `../lib/motion-kit.js`. */
 export const MOTION_KIT_PATH = "lib/motion-kit.js";
 
-/** The vendored kit, byte for byte. */
-export const MOTION_KIT_SOURCE = readFileSync(new URL("./motion-kit.js", import.meta.url), "utf8");
+/** The vendored kit, byte for byte. Read on first use, never at module load (see source-file.ts). */
+export const motionKitSource = sourceFile(import.meta.url, "./motion-kit.js", "src/engine/compose/motion/motion-kit.js");
 
 /** The upstream commit the vendored file is taken from. */
 export const MOTION_KIT_UPSTREAM = { repo: "https://github.com/hughminhphan/motion-kit", commit: "6173e5c408f81f1989435843af3f0788b74bda96" } as const;

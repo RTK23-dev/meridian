@@ -7,7 +7,7 @@
 // Claude never sees this code: it selects components and fills props (L6).
 
 import { createHash } from "node:crypto";
-import { MOTION_KIT_PATH, MOTION_KIT_SOURCE } from "./motion/kit.ts";
+import { MOTION_KIT_PATH, motionKitSource } from "./motion/kit.ts";
 import {
   compositionHash,
   compositionSchema,
@@ -596,7 +596,7 @@ export function compile(
     ["style.css", styleCss],
     ["assets.json", assetsJson],
     // The motion kit, which the root timeline and the components author with (motion/README.md).
-    [MOTION_KIT_PATH, MOTION_KIT_SOURCE],
+    [MOTION_KIT_PATH, motionKitSource()],
   ]);
   for (const name of componentNames) {
     texts.set(`components/${name}.html`, (usedComponents.get(name) as ComponentDefinition).template);
