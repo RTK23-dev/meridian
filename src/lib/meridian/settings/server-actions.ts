@@ -24,7 +24,24 @@ import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
 import { MODEL_PRESETS, imageCallFitsCeiling, isModelPreset, presetChoices } from "./model-presets.ts";
-import { MEDIA_TASKS, eligibleForMediaTask, isMediaTask, saveMediaModel, storedMediaModels, type MediaTask } from "./media-models.ts";
+import { MEDIA_TASKS, eligibleForMediaTask, isMediaTask, saveMediaModel, storedMediaModels, type MediaModelChoice, type MediaTask } from "./media-models.ts";
+
+/**
+ * The models a Studio seat can choose from, for one workspace: image models from the live catalogue's image listing (per-image price),
+ * video models from OpenRouter's video listing (per-second price at the resolution a Studio job asks for).
+ */
+async function mediaChoicesFor(sql: Awaited<ReturnType<typeof getSql>>, organizationId: string, task: MediaTask): Promise<{ ok: true; models: MediaModelChoice[] } | { ok: false; reason: string }> {
+  if (MEDIA_TASKS[task].kind === "video") {
+    const { studioVideoModels } = await import("../production/openrouter-video.ts");
+    const listed = await studioVideoModels(organizationId);
+    if (!listed.ok) return listed;
+    return { ok: true, models: listed.models.map((model) => ({ id: model.id, name: model.name, kind: "video" as const, imageUsd: null, usdPerSecond: model.usdPerSecond })) };
+  }
+  const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
+  const state = await mediaModelsFor(sql, { organizationId, now: () => new Date().toISOString() });
+  if (state.status !== "ok") return { ok: false, reason: state.reason };
+  return { ok: true, models: state.models.filter((model) => model.kind === "image").map((model) => ({ id: model.id, name: model.name, kind: "image" as const, imageUsd: model.imageUsd, usdPerSecond: null })) };
+}
 import { generationCeilingUsd } from "../providers/generation-ledger.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
@@ -484,7 +501,7 @@ export const applyModelPreset = createServerFn({ method: "POST" })
   });
 
 /** The Studio model seats that are wired to a provider. A seat is shown only once something uses it. */
-export const WIRED_MEDIA_TASKS: readonly MediaTask[] = ["studio_image"];
+export const WIRED_MEDIA_TASKS: readonly MediaTask[] = ["studio_image", "studio_video"];
 
 /**
  * The Studio's image and video model seats: each seat's saved model, and the live catalogue's models of its kind with their stated prices.
@@ -502,19 +519,20 @@ export const getMediaModels = createServerFn({ method: "GET" })
     const sql = await getSql();
     await requireMembership(sql, context.userId, data.organizationId, "viewer");
     const stored = await storedMediaModels(sql, data.organizationId);
-    const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
-    const state = await mediaModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
-    return {
-      catalogue: state.status === "ok" ? { ok: true as const } : { ok: false as const, reason: state.reason },
-      seats: WIRED_MEDIA_TASKS.map((task) => ({
+    const seats = [];
+    for (const task of WIRED_MEDIA_TASKS) {
+      const choices = await mediaChoicesFor(sql, data.organizationId, task);
+      seats.push({
         task,
         label: MEDIA_TASKS[task].label,
         description: MEDIA_TASKS[task].description,
         kind: MEDIA_TASKS[task].kind,
         saved: stored[task] ?? null,
-        models: state.status === "ok" ? state.models.filter((model) => eligibleForMediaTask(task, model).ok) : [],
-      })),
-    };
+        unavailable: choices.ok ? null : choices.reason,
+        models: choices.ok ? choices.models.filter((model) => eligibleForMediaTask(task, model).ok) : [],
+      });
+    }
+    return { seats };
   });
 
 /** Saves or clears one Studio model seat. The model is checked against the live catalogue first; admin only. */
@@ -532,11 +550,10 @@ export const saveMediaModelChoice = createServerFn({ method: "POST" })
   .handler(async ({ context, data }) => {
     const sql = await getSql();
     await requireMembership(sql, context.userId, data.organizationId, "admin");
-    let choices = null;
+    let choices: MediaModelChoice[] | null = null;
     if (data.modelId !== null) {
-      const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
-      const state = await mediaModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
-      choices = state.status === "ok" ? state.models : null;
+      const read = await mediaChoicesFor(sql, data.organizationId, data.task);
+      choices = read.ok ? read.models : null;
     }
     try {
       const result = await saveMediaModel(sql, { organizationId: data.organizationId, task: data.task, modelId: data.modelId, actorId: context.userId, choices });

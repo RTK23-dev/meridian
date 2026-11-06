@@ -41,9 +41,9 @@ describe("connections view", () => {
     }
     assert.equal(feature(view, "studio_images").light, "missing");
     assert.deepEqual(view.openRouterUnlocks, {
-      count: 11,
+      count: 12,
       of: FEATURES.length,
-      missing: ["Speech to text", "Studio video", "Competitor ad research"],
+      missing: ["Speech to text", "Competitor ad research"],
     });
     assert.equal(provider(view, "openrouter").status, "ready");
     assert.ok(provider(view, "openrouter").usedFor.includes("Decisions and scoring"));

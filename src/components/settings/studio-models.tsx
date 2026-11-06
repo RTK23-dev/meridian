@@ -10,12 +10,13 @@ type Seat = {
   description: string;
   kind: "image" | "video";
   saved: { modelId: string; updatedAt: string } | null;
-  models: Array<{ id: string; name: string; imageUsd: number | null; usdPerSecond1080p: number | null }>;
+  unavailable: string | null;
+  models: Array<{ id: string; name: string; imageUsd: number | null; usdPerSecond: number | null }>;
 };
-type Listing = { catalogue: { ok: true } | { ok: false; reason: string }; seats: Seat[] };
+type Listing = { seats: Seat[] };
 
 const priceOf = (seat: Seat, model: Seat["models"][number]) =>
-  seat.kind === "image" ? (model.imageUsd === null ? "" : ` · $${model.imageUsd.toFixed(3)} per image`) : model.usdPerSecond1080p === null ? "" : ` · $${model.usdPerSecond1080p.toFixed(3)} per second`;
+  seat.kind === "image" ? (model.imageUsd === null ? "" : ` · $${model.imageUsd.toFixed(3)} per image`) : model.usdPerSecond === null ? "" : ` · $${model.usdPerSecond.toFixed(3)} per second`;
 
 /**
  * The Studio's image and video model seats: the model OpenRouter makes Studio images (and, once wired, videos) with, from the live
@@ -28,7 +29,6 @@ export function StudioModels({ organizationId, canAdmin }: { organizationId: str
   if (!data) return <p className="text-sm text-warning">The Studio models could not be read.</p>;
   return (
     <div className="space-y-4">
-      {!data.catalogue.ok ? <p className="text-sm text-warning" role="status">{data.catalogue.reason} No model can be chosen until the catalogue can be read.</p> : null}
       {data.seats.map((seat) => <SeatRow key={seat.task} seat={seat} organizationId={organizationId} canAdmin={canAdmin} />)}
     </div>
   );
@@ -52,6 +52,7 @@ function SeatRow({ seat, organizationId, canAdmin }: { seat: Seat; organizationI
         <p className="text-sm text-fg-muted">{seat.description}</p>
         <p className="text-sm text-fg-muted">{seat.saved ? `Chosen: ${seat.saved.modelId}.` : "Not chosen: the Studio's own providers apply."}</p>
       </div>
+      {seat.unavailable ? <p className="text-sm text-warning" role="status">{seat.unavailable} No model can be chosen until it can be read.</p> : null}
       <div className="flex flex-wrap items-end gap-2">
         <div className="w-full sm:w-96">
           <Field label={seat.label}>

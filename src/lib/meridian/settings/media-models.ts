@@ -31,8 +31,8 @@ export type MediaModelChoice = {
   kind: "image" | "video";
   /** USD per image, for an image model. */
   imageUsd: number | null;
-  /** USD per second of 1080p video, for a video model. */
-  usdPerSecond1080p: number | null;
+  /** USD per second at the resolution a Studio job asks for, for a video model (production/openrouter-video.ts studioVideoPrice). */
+  usdPerSecond: number | null;
 };
 
 /** Whether a listed model may serve a media seat: the right kind, a pinned id, and a stated price. */
@@ -40,7 +40,7 @@ export function eligibleForMediaTask(task: MediaTask, choice: MediaModelChoice):
   const kind = MEDIA_TASKS[task].kind;
   if (choice.kind !== kind) return { ok: false, reason: `${choice.id} is not ${kind === "image" ? "an image" : "a video"} model.` };
   if (!isPinnedModelId(choice.id)) return { ok: false, reason: `${choice.id} is not a pinned id.` };
-  const price = kind === "image" ? choice.imageUsd : choice.usdPerSecond1080p;
+  const price = kind === "image" ? choice.imageUsd : choice.usdPerSecond;
   if (price === null) return { ok: false, reason: `The listing states no ${kind === "image" ? "per-image" : "per-second"} price for ${choice.id}, so its cost cannot be shown.` };
   return { ok: true };
 }

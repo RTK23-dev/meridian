@@ -5,8 +5,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { eligibleForMediaTask, saveMediaModel, type MediaModelChoice } from "./media-models.ts";
 
-const image: MediaModelChoice = { id: "google/gemini-nano-banana-2.1", name: "Nano Banana 2.1", kind: "image", imageUsd: 0.039, usdPerSecond1080p: null };
-const video: MediaModelChoice = { id: "google/veo-3.1", name: "Veo 3.1", kind: "video", imageUsd: null, usdPerSecond1080p: 0.4 };
+const image: MediaModelChoice = { id: "google/gemini-nano-banana-2.1", name: "Nano Banana 2.1", kind: "image", imageUsd: 0.039, usdPerSecond: null };
+const video: MediaModelChoice = { id: "google/veo-3.1", name: "Veo 3.1", kind: "video", imageUsd: null, usdPerSecond: 0.4 };
 
 test("a seat takes only a pinned model of its kind with a stated price", () => {
   assert.deepEqual(eligibleForMediaTask("studio_image", image), { ok: true });

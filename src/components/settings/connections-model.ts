@@ -132,7 +132,7 @@ export const FEATURES: readonly FeatureInfo[] = [
   { id: "transcription", label: "Speech to text", group: "video", candidates: ["deepgram"], choice: "fixed", about: "Transcribes a reference or an upload for the video engine." },
   { id: "cloud_render", label: "Cloud rendering", group: "video", candidates: ["heygen"], choice: "fixed", optional: true, about: "Renders finished videos in the cloud (HyperFrames)." },
   { id: "studio_images", label: "Studio images", group: "studio", candidates: ["google", "openrouter"], choice: "fixed", modelTask: "studio_image", about: "Creative images in the Studio: through OpenRouter with the Studio image model chosen under Models, otherwise Google Nano Banana with a Google key." },
-  { id: "studio_video", label: "Studio video", group: "studio", candidates: ["google"], choice: "fixed", about: "Studio videos with Gemini Omni. Hypit and Higgsfield run as server-set options." },
+  { id: "studio_video", label: "Studio video", group: "studio", candidates: ["google", "openrouter"], choice: "fixed", modelTask: "studio_video", about: "Studio videos: through OpenRouter with the Studio video model chosen under Models, otherwise Gemini Omni with a Google key. Hypit and Higgsfield run as server-set options." },
   { id: "perception", label: "Reference analysis", group: "studio", candidates: ["google", "openrouter"], choice: "fixed", modelTask: "reference_analysis", about: "Reads reference images and video frames: shot, product, on-screen text. Through OpenRouter, with the model chosen under Models; otherwise with a Google Gemini key." },
   { id: "ad_library", label: "Competitor ad research", group: "research", candidates: ["meta_ad_library"], choice: "fixed", about: "Reads the public Meta Ad Library." },
   {

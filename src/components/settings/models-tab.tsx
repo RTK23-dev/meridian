@@ -91,7 +91,7 @@ export function ModelsTab({ organizationId, canAdmin }: { organizationId: string
       <section aria-labelledby="studio-models-title" className="space-y-3">
         <div className="space-y-1">
           <h2 id="studio-models-title" className="text-section font-semibold text-fg-primary">Studio models</h2>
-          <p className="text-sm text-fg-muted">The image model the Studio makes images with through OpenRouter. Each is checked against the live catalogue before it is saved.</p>
+          <p className="text-sm text-fg-muted">The image and video models the Studio makes its creatives with through OpenRouter. Each is checked against the live catalogue before it is saved.</p>
         </div>
         <StudioModels organizationId={organizationId} canAdmin={canAdmin} />
       </section>
