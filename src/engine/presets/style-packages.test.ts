@@ -8,6 +8,7 @@ import { styleKitCss } from "../compose/styleKit.ts";
 import { readKit } from "../jobs/kit-store.ts";
 import { createTestDatabase, seedWorkspace, type TestDatabase } from "../test/pg-test-db.ts";
 import { installStylePackage, packageProblems, STYLE_PACKAGES, stylePackage, type StylePackage } from "./style-packages.ts";
+import { PIXEL_EXPLAINER_DIRECTION, PIXEL_EXPLAINER_SAMPLE, pixelExplainer } from "./pixel-explainer.ts";
 import { REFERENCE_SHA256, threeDDataExplainer } from "./three-d-data-explainer.ts";
 
 const WS = "ws_style_presets";
@@ -103,4 +104,30 @@ test("installing writes one kit row per workspace, and the kit loader finds it",
   assert.deepEqual(found?.body, threeDDataExplainer.styleKit);
   const elsewhere = await readKit(db.sql, { organizationId: OTHER_WS, kind: "style", kitId: "sk_3d_data_explainer" });
   assert.equal(elsewhere, null, "a kit installed in one workspace is not visible in another");
+});
+
+test("the 8-bit explainer is studied from a sample: every video has the hash of the file read, and the beats fill the template", () => {
+  assert.equal(pixelExplainer.reference, null);
+  assert.equal(pixelExplainer.sample?.videos.length, 14);
+  assert.equal(PIXEL_EXPLAINER_SAMPLE.videos.filter((video) => video.set === "pinned").length, 6);
+  assert.equal(PIXEL_EXPLAINER_SAMPLE.videos.filter((video) => video.kind === "ad").length, 2);
+  assert.equal(pixelExplainer.structure.at(-1)?.toMs, pixelExplainer.sample?.templateDurationMs);
+  const noSample: StylePackage = { ...pixelExplainer, sample: undefined };
+  assert.ok(packageProblems(noSample).some((problem) => problem.includes("names the sample")));
+  const badHash: StylePackage = { ...pixelExplainer, sample: { ...pixelExplainer.sample!, videos: [{ code: "x", sha256: "nope", durationMs: 1 }] } };
+  assert.ok(packageProblems(badHash).some((problem) => problem.includes("SHA-256")));
+});
+
+test("the 8-bit explainer's kit and direction hold the study's measured values, and nothing unmeasured is filled in", () => {
+  assert.equal(pixelExplainer.styleKit.palette.accent, "#F4CE44");
+  assert.equal(pixelExplainer.styleKit.captionStyle.case, "upper");
+  const measured = pixelExplainer.grammar.measured as { loopDistance: { max: number; under0_04: number }; integratedLufs: { median: number } };
+  assert.ok(measured.loopDistance.max <= 0.04);
+  assert.equal(measured.loopDistance.under0_04, 12);
+  assert.equal(measured.integratedLufs.median, -14.25);
+  assert.ok(pixelExplainer.grammar.unknown.some((item) => item.startsWith("the animation cadence")));
+  assert.ok(pixelExplainer.grammar.unknown.some((item) => item.startsWith("performance")));
+  assert.equal(PIXEL_EXPLAINER_DIRECTION.timing.answerByMs, 3000);
+  assert.equal(PIXEL_EXPLAINER_DIRECTION.cards.maxLines, 2);
+  for (const world of PIXEL_EXPLAINER_DIRECTION.worlds) assert.ok(world.colours.every((colour) => /^#[0-9A-F]{6}$/.test(colour)), world.id);
 });

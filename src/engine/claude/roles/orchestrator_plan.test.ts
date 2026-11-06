@@ -16,12 +16,15 @@ const input: OrchestratorPlanInput = {
 };
 
 describe("orchestrator_plan role", () => {
-  it("runs on the direction tier at the plan stage, against orchestrator_plan@4, which has the four prompt parts", () => {
+  it("runs on the direction tier at the plan stage, against orchestrator_plan@5, which has the four prompt parts", () => {
     assert.equal(orchestratorPlan.role, "orchestrator_plan");
     assert.equal(orchestratorPlan.capability, "llm.direction");
     assert.equal(orchestratorPlan.stage, "plan");
     const prompt = loadPrompt(orchestratorPlan.prompt);
-    assert.equal(prompt.id, "orchestrator_plan@4");
+    assert.equal(prompt.id, "orchestrator_plan@5");
+    assert.match(prompt.text, /params\.role` "director"/, "rule 11 plans a Director step before the pictures");
+    assert.match(prompt.text, /`fact_check`/, "rule 12 plans a fact-check between the Director and the crew");
+    assert.match(prompt.text, /params\.shot/, "rule 13 ties each picture step to one directed shot");
     assert.match(prompt.text, /params\.model_class/, "the video class is named in the rules");
     assert.match(prompt.text, /copyBudgetUsd/, "the category budgets are named in the rules, so the split is delegated to the orchestrator");
     assert.match(prompt.text, /A paid step starts only while the committed spend is below the budget/, "rule 7 states the budget as a line (D12)");

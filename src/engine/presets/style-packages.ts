@@ -19,6 +19,7 @@ import {
 } from "../contracts/index.ts";
 import { writeKit, type StoredKit } from "../jobs/kit-store.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
+import { pixelExplainer } from "./pixel-explainer.ts";
 import { threeDDataExplainer } from "./three-d-data-explainer.ts";
 
 export type StylePackage = {
@@ -26,8 +27,19 @@ export type StylePackage = {
   version: number;
   label: string;
   summary: string;
-  /** The reference the preset was built from. formatId follows the Content Factory rule: `ref_` and the first 24 hex of the SHA-256. */
-  reference: { formatId: string; sha256: string; durationMs: number; width: number; height: number; fps: number; analysedOn: string };
+  /**
+   * The reference the preset was built from. formatId follows the Content Factory rule: `ref_` and the first 24 hex of the SHA-256.
+   * Null for a preset built from a sample of several videos, which names them in `sample` instead.
+   */
+  reference: { formatId: string; sha256: string; durationMs: number; width: number; height: number; fps: number; analysedOn: string } | null;
+  /** The videos a sample-built preset was studied from, and the length its beat template is written for. */
+  sample?: {
+    account: string;
+    videos: ReadonlyArray<{ code: string; sha256: string; durationMs: number }>;
+    analysedOn: string;
+    templateDurationMs: number;
+    note: string;
+  };
   styleKit: StyleKit;
   look: { preset: LookPreset; strength: number; source: "chosen" | "read" };
   grammar: {
@@ -65,7 +77,7 @@ export type PresetLayout = {
   zoomJumpKinds: Array<{ atMs: number; kind: "punch" | "camera_move" }>;
 };
 
-export const STYLE_PACKAGES: readonly StylePackage[] = [threeDDataExplainer];
+export const STYLE_PACKAGES: readonly StylePackage[] = [threeDDataExplainer, pixelExplainer];
 
 /** The preset with this id. An unknown id is refused, never defaulted (CLAUDE.md rule 1). */
 export function stylePackage(packageId: string): StylePackage {
@@ -83,8 +95,14 @@ export function packageProblems(preset: StylePackage): string[] {
   if (!kit.success) problems.push(`style kit: ${kit.error.message}`);
   const look = visualTreatmentSchema.safeParse({ version: 1, look: { preset: preset.look.preset, strength: preset.look.strength } });
   if (!look.success) problems.push(`look: ${look.error.message}`);
-  if (!/^ref_[0-9a-f]{24}$/.test(preset.reference.formatId) || preset.reference.formatId !== `ref_${preset.reference.sha256.slice(0, 24)}`) {
-    problems.push("reference: formatId must be ref_ and the first 24 hex characters of the SHA-256");
+  if (preset.reference !== null) {
+    if (!/^ref_[0-9a-f]{24}$/.test(preset.reference.formatId) || preset.reference.formatId !== `ref_${preset.reference.sha256.slice(0, 24)}`) {
+      problems.push("reference: formatId must be ref_ and the first 24 hex characters of the SHA-256");
+    }
+  } else if (preset.sample === undefined || preset.sample.videos.length === 0) {
+    problems.push("reference: a preset without one reference names the sample it was studied from");
+  } else if (preset.sample.videos.some((video) => !/^[0-9a-f]{64}$/.test(video.sha256))) {
+    problems.push("sample: every video carries the SHA-256 of the file that was read");
   }
   let previousEnd = 0;
   for (const beat of preset.structure) {
@@ -92,8 +110,9 @@ export function packageProblems(preset: StylePackage): string[] {
     if (beat.toMs <= beat.fromMs) problems.push(`structure: the ${beat.role} beat ends before it starts`);
     previousEnd = beat.toMs;
   }
-  if (preset.structure.length > 0 && previousEnd !== preset.reference.durationMs) {
-    problems.push(`structure: the beats end at ${previousEnd} ms, not at the reference's ${preset.reference.durationMs} ms`);
+  const templateMs = preset.reference?.durationMs ?? preset.sample?.templateDurationMs;
+  if (preset.structure.length > 0 && previousEnd !== templateMs) {
+    problems.push(`structure: the beats end at ${previousEnd} ms, not at the template's ${templateMs} ms`);
   }
   if (preset.layout !== undefined) {
     const layout = preset.layout;

@@ -93,8 +93,10 @@ test("the line given to the validator is the one the plan is placed against, and
   if (!result.ok) return;
   assert.equal(result.budget.budgetUsd, 1);
   assert.equal(result.budget.position, "over_budget");
-  assert.equal(result.notes.length, 1);
+  assert.equal(result.notes.length, 2);
   assert.match(result.notes[0] ?? "", /^the plan's estimate of \$1\.0846 is above its \$1\.0000 budget; the run stops at the first step that does not fit$/);
+  // The sample plan makes a video with no Director step before it, so it also carries the direction note (orchestrator/direction.ts).
+  assert.match(result.notes[1] ?? "", /^the picture steps are described, not directed/);
 });
 
 test("an unpriced video step is refused unless measure mode holds it, and a measured step is held to its ceiling, not to the plan's own figure", () => {
