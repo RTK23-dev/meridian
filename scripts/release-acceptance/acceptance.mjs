@@ -588,9 +588,9 @@ try {
   });
 
   await check("H3", "Cyclone is set by the deployment: its tab is read-only, names the environment variables, and offers no gateway field", async () => {
-    await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
-    // The provider settings sit in a section that is closed by default: open it, then the Cyclone tab.
-    await page.locator("summary", { hasText: "Engine and provider settings" }).click();
+    await page.goto(`${base}/settings?tab=connections`, { waitUntil: "networkidle" });
+    // The provider settings sit under Connections, in Advanced settings, closed by default: open it, then the Cyclone tab.
+    await page.getByRole("button", { name: "Advanced settings" }).click();
     await page.getByRole("button", { name: /^cyclone/ }).click();
     const text = await page.locator("main").innerText();
     assert.match(text, /set by the deployment's environment/);

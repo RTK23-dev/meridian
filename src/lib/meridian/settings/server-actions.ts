@@ -23,6 +23,7 @@ import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeM
 import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
+import { MODEL_PRESETS, isModelPreset, presetChoices } from "./model-presets.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 
@@ -430,4 +431,44 @@ export const saveGenerationModelChoice = createServerFn({ method: "POST" })
     } catch (error) {
       return { ok: false as const, reason: error instanceof Error ? error.message : "The model could not be saved." };
     }
+  });
+
+/**
+ * Applies a model preset: every writing task's model, picked from the live OpenRouter catalogue as it is now (model-presets.ts), and
+ * saved through the same checked path as one task's choice. A task the preset leaves on Auto is cleared. Admin only. When the catalogue
+ * cannot be read, nothing changes.
+ */
+export const applyModelPreset = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const preset = asText(obj.preset);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!isModelPreset(preset)) throw new Error(`'${preset}' is not a model preset.`);
+    return { organizationId, preset };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    const state = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+    if (state.status !== "ok") return { ok: false as const, reason: `${state.reason} No model was changed.`, applied: [] };
+    const catalogue = state.models.map((model) => ({
+      id: model.id,
+      name: model.name,
+      promptUsdPerMillionTokens: model.promptUsdPerToken * 1_000_000,
+      completionUsdPerMillionTokens: model.completionUsdPerToken * 1_000_000,
+      created: model.created ?? null,
+      suitsTasks: GENERATION_TASK_IDS.filter((task) => eligibleForTask(task, model).ok),
+    }));
+    const applied: Array<{ task: string; label: string; modelId: string | null; reason: string; saved: boolean }> = [];
+    for (const choice of presetChoices(data.preset, catalogue)) {
+      try {
+        await saveGenerationModel(sql, { organizationId: data.organizationId, task: choice.task, modelId: choice.modelId, actorId: context.userId, choices: state.models });
+        applied.push({ task: choice.task, label: GENERATION_TASKS[choice.task].label, modelId: choice.modelId, reason: choice.reason, saved: true });
+      } catch (error) {
+        applied.push({ task: choice.task, label: GENERATION_TASKS[choice.task].label, modelId: null, reason: error instanceof Error ? error.message : "Not saved.", saved: false });
+      }
+    }
+    return { ok: true as const, preset: data.preset, label: MODEL_PRESETS[data.preset].label, applied };
   });

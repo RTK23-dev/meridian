@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
 import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { GeneralTab } from "@/components/settings/general-tab";
+import { ConnectionsTab } from "@/components/settings/connections-tab";
+import { ModelsTab } from "@/components/settings/models-tab";
 import { MembersTab } from "@/components/settings/members-tab";
 import { WeightsTab } from "@/components/settings/weights-tab";
 import { LearningTab } from "@/components/settings/learning-tab";
@@ -10,12 +11,22 @@ import { DangerTab } from "@/components/settings/danger-tab";
 import { hasRole } from "@/lib/meridian/access";
 import { SETTINGS_SCREEN_LINKS } from "@/lib/navigation/model";
 
-export const Route = createFileRoute("/_app/settings")({ staticData: { pageTitle: "Settings" }, component: SettingsPage });
+type SettingsTab = "general" | "connections" | "models" | "members" | "weights" | "alerts" | "learning" | "danger";
 
-type SettingsTab = "general" | "members" | "weights" | "alerts" | "learning" | "danger";
+const TAB_IDS: readonly SettingsTab[] = ["general", "connections", "models", "members", "weights", "alerts", "learning", "danger"];
+
+export const Route = createFileRoute("/_app/settings")({
+  staticData: { pageTitle: "Settings" },
+  // The open tab is in the URL (?tab=connections), so a link elsewhere, or from one tab to another, lands on it.
+  validateSearch: (search: Record<string, unknown>): { tab?: SettingsTab } =>
+    typeof search.tab === "string" && (TAB_IDS as readonly string[]).includes(search.tab) ? { tab: search.tab as SettingsTab } : {},
+  component: SettingsPage,
+});
 
 const TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: "general", label: "General" },
+  { id: "connections", label: "Connections" },
+  { id: "models", label: "Models" },
   { id: "members", label: "Members" },
   { id: "weights", label: "Scoring weights" },
   { id: "alerts", label: "Alerts" },
@@ -25,7 +36,10 @@ const TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
 
 function SettingsPage() {
   const { data } = useWorkspace();
-  const [tab, setTab] = useState<SettingsTab>("general");
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const tab: SettingsTab = search.tab ?? "general";
+  const setTab = (next: SettingsTab) => void navigate({ search: { tab: next }, replace: true, resetScroll: false });
   if (!data?.active) return <p className="text-fg-muted">Create a workspace first.</p>;
   const active = data.active;
   const canAdmin = hasRole(active.role, "admin");
@@ -38,12 +52,12 @@ function SettingsPage() {
         breadcrumbs={[{ label: "Overview", to: "/" }]}
       />
       {/* Screens that moved out of the sidebar. Each keeps its own role checks; this list only links to them. */}
-      <nav aria-label="Other screens in Settings" className="space-y-3">
+      {tab === "general" ? <nav aria-label="Other screens in Settings" className="space-y-3">
         <p className="eyebrow">Also in Settings</p>
         <div className="flex flex-wrap gap-2">
           {SETTINGS_SCREEN_LINKS.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
         </div>
-      </nav>
+      </nav> : null}
       <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)} className="space-y-6">
         <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-hairline">
           {TABS.map((item) => (
@@ -54,6 +68,14 @@ function SettingsPage() {
         {/* General and Weights keep their drafts when the person switches tabs, so they stay mounted (hidden). */}
         <TabsContent value="general" forceMount className="data-[state=inactive]:hidden">
           <GeneralTab organizationId={active.id} name={active.name} canAdmin={canAdmin} />
+        </TabsContent>
+
+        <TabsContent value="connections">
+          <ConnectionsTab organizationId={active.id} canAdmin={canAdmin} />
+        </TabsContent>
+
+        <TabsContent value="models">
+          <ModelsTab organizationId={active.id} canAdmin={canAdmin} />
         </TabsContent>
 
         <TabsContent value="members">

@@ -56,6 +56,7 @@ export function rowOf(raw: unknown, kind: string): Record<string, unknown> {
     output_modalities: stringsOrNull(architecture.output_modalities),
     // The context window, in tokens, as the listing states it. Null when the listing does not state one.
     context_length: numberOrNull(row.context_length),
+    created: numberOrNull(row.created),
     pricing: {
       promptUsdPerToken: kind === "text" || kind === "speech" ? numberOrNull(pricing.prompt) : null,
       completionUsdPerToken: kind === "text" ? numberOrNull(pricing.completion) : null,
