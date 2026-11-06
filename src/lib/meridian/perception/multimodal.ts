@@ -37,6 +37,11 @@ function sha256Hex(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/** The fixed instructions every perception provider sends with the media: what to report, in what form. No copy, prompt or brand text. */
+export function perceptionInstructions(kind: PerceptionMediaKind, count: number): string {
+  return instructions(kind, count);
+}
+
 function instructions(kind: PerceptionMediaKind, count: number): string {
   const scope = kind === "video_frames"
     ? `These are ${count} frames sampled from one video, in time order. Describe each frame on its own. Do not describe what happens between frames.`

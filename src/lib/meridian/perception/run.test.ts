@@ -11,7 +11,7 @@ import { getSql } from "../../db.ts";
 import { studioTenant } from "../../../test-support/lib/meridian/testing/durable-image-fixtures.ts";
 import { solidFrame } from "../video/inspect.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionHealth, PerceptionMedia, PerceptionMediaKind, PerceptionResult } from "./types.ts";
-import { PERCEPTION_MAX_MEDIA, groundedPerceptionText, runPerception, selectPerceptionProvider, type PerceptionInputMedia } from "./run.ts";
+import { PERCEPTION_MAX_MEDIA, groundedPerceptionText, perceptionProviderFor, perceptionReadiness, runPerception, selectPerceptionProvider, type PerceptionInputMedia } from "./run.ts";
 
 // A stub perception provider. It records every call, so tests can prove when production calls it and when it does not.
 function stubProvider(options: { health?: PerceptionHealth; fail?: "provider" | "throw"; id?: string; productPresence?: boolean | null } = {}) {
@@ -176,4 +176,47 @@ test("invalid bytes are refused before any call, and the whole run fails rather 
   assert.equal(outcome.status, "failed");
   assert.equal(outcome.failureKind, "unsupported_media");
   assert.equal(calls.length, 0);
+});
+
+test("a workspace that chose a Reference analysis model reads references through OpenRouter; otherwise the deployment's setting applies", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "perception-openrouter-choice");
+  assert.equal((await perceptionProviderFor(sql, tenant.organizationId, {})).provider?.id, "gemini_multimodal", "no choice: Gemini, as before");
+  await sql`insert into generation_task_models (organization_id, task, model_id, updated_by) values (${tenant.organizationId}, 'reference_analysis', 'google/gemini-3.8-flash', 'test')`;
+  const chosen = await perceptionProviderFor(sql, tenant.organizationId, {});
+  assert.equal(chosen.provider?.id, "openrouter_multimodal");
+  assert.equal(chosen.provider?.model, "google/gemini-3.8-flash");
+  const off = await perceptionProviderFor(sql, tenant.organizationId, { PERCEPTION_PROVIDER: "none" });
+  assert.equal(off.provider, null, "PERCEPTION_PROVIDER=none still turns perception off");
+});
+
+test("a provider with its own key check is checked by it, not by the Gemini key, and its spend is not recorded twice", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "perception-own-credential");
+  const { provider, calls } = stubProvider({ id: "own_key_perception" });
+  // The Gemini shared default is set for this file, so a refusal here can only come from the provider's own check.
+  const refusing = { ...provider, resolveCredential: async () => ({ status: "not_configured" as const, reason: "No OpenRouter key is saved." }) };
+  const refused = await runPerception(sql, { ...subject(tenant), kind: "image", provider: refusing, media: [{ id: "still", bytes: solidFrame(8, 8, [6, 6, 6]), timestampMs: null, label: "Reference" }] });
+  assert.equal(refused.failureKind, "not_configured");
+  assert.match(refused.message ?? "", /OpenRouter key/);
+  assert.equal(calls.length, 0);
+  assert.equal((await perceptionReadiness(sql, tenant.organizationId, refusing)).ready, false);
+
+  // It reports token usage, which the runner would otherwise record as spend.
+  const accepting: typeof provider = {
+    ...provider,
+    meteredElsewhere: true,
+    resolveCredential: async () => ({ status: "ready" as const, source: "openrouter", apiKey: "" }),
+    perceive: async (input, options) => {
+      const result = await provider.perceive(input, options);
+      return result.status === "observed" ? { ...result, usage: { inputTokens: 120, outputTokens: 40 } } : result;
+    },
+  };
+  const observed = await runPerception(sql, { ...subject(tenant), kind: "image", provider: accepting, media: [{ id: "still", bytes: solidFrame(8, 8, [7, 7, 7]), timestampMs: null, label: "Reference" }] });
+  assert.equal(observed.status, "observed");
+  const spend = await sql`select id from factory_costs where id = ${`spend:perception:${observed.runId}`}`;
+  assert.equal(spend.length, 0, "the provider's own path holds the spend, so the runner writes none");
+  const metered = await runPerception(sql, { ...subject(tenant), kind: "image", provider: { ...accepting, id: "metered_here", meteredElsewhere: false }, media: [{ id: "still", bytes: solidFrame(8, 8, [8, 8, 8]), timestampMs: null, label: "Reference" }] });
+  assert.equal((await sql`select id from factory_costs where id = ${`spend:perception:${metered.runId}`}`).length, 1, "a provider without its own ledger is still recorded");
+  assert.equal((await perceptionReadiness(sql, tenant.organizationId, accepting)).ready, true);
 });

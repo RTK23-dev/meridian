@@ -12,6 +12,8 @@ import { recordPerceptionSpend } from "../factory/decision-spend.ts";
 import type { Sql } from "../learning/store.ts";
 import { checkImageBytes } from "../media/image-input.ts";
 import { GeminiPerceptionProvider } from "./multimodal.ts";
+import { OpenRouterPerceptionProvider } from "./openrouter.ts";
+import { storedGenerationModel } from "../settings/generation-models.ts";
 import { resolvePerceptionCredential } from "./credential.ts";
 import { resolveCredential } from "../credentials/resolve.ts";
 import { credentialStateOf } from "../credentials/contract.ts";
@@ -33,6 +35,24 @@ export function selectPerceptionProvider(env: Record<string, string | undefined>
   if (raw === "" || raw === "gemini") return { provider: new GeminiPerceptionProvider(), reason: "gemini" };
   if (raw === "none") return { provider: null, reason: "Perception is turned off by PERCEPTION_PROVIDER=none." };
   return { provider: null, reason: `PERCEPTION_PROVIDER=${raw} is not a known perception provider.` };
+}
+
+/**
+ * The perception provider for one workspace. A workspace that chose a model for "Reference analysis" in Settings reads references with it,
+ * through its OpenRouter key: an explicit choice comes first. Otherwise the deployment's setting applies (Gemini by default), as before.
+ * PERCEPTION_PROVIDER=none turns perception off for every workspace.
+ */
+export async function perceptionProviderFor(
+  sql: Sql,
+  organizationId: string,
+  env: Record<string, string | undefined> = process.env,
+): Promise<{ provider: MultimodalPerceptionProvider | null; reason: string }> {
+  const raw = (env[PERCEPTION_PROVIDER_ENV] ?? "").trim().toLowerCase();
+  if (raw === "none") return { provider: null, reason: "Perception is turned off by PERCEPTION_PROVIDER=none." };
+  const chosen = await storedGenerationModel(sql, organizationId, "reference_analysis");
+  if (chosen) return { provider: new OpenRouterPerceptionProvider(chosen), reason: "openrouter" };
+  if (raw === "openrouter") return { provider: null, reason: "Choose a model for Reference analysis in Settings, Models, to read references through OpenRouter." };
+  return selectPerceptionProvider(env);
 }
 
 export type PerceptionInputMedia = {
@@ -173,7 +193,9 @@ export async function runPerception(
   if (!input.provider) return failedOutcome("not_configured", input.providerReason ?? "No perception provider is configured.");
   // The credential is resolved first, for every run, reused ones included. A credential that is removed or unusable stops
   // perception at once, instead of serving results from it.
-  const credential = await resolvePerceptionCredential(sql, input.organizationId);
+  const credential = input.provider.resolveCredential
+    ? await input.provider.resolveCredential(sql, input.organizationId)
+    : await resolvePerceptionCredential(sql, input.organizationId);
   if (credential.status !== "ready") {
     return failedOutcome(credential.status === "unusable" ? "credential_unusable" : "not_configured", credential.reason);
   }
@@ -214,7 +236,10 @@ export async function runPerception(
 
   let result;
   try {
-    result = await input.provider.perceive({ kind: input.kind, media: prepared.map(({ label: _label, ...item }) => item) }, { apiKey: credential.apiKey });
+    result = await input.provider.perceive(
+      { kind: input.kind, media: prepared.map(({ label: _label, ...item }) => item) },
+      { apiKey: credential.apiKey, context: { sql, organizationId: input.organizationId, brandId: input.brandId, runId } },
+    );
   } catch (error) {
     result = {
       status: "failed" as const, providerId, model, promptVersion, failureKind: "provider_unavailable" as const,
@@ -232,7 +257,8 @@ export async function runPerception(
     id: runId, providerId: result.providerId, model: result.model, promptVersion: result.promptVersion, requestKey, status: "observed",
     media: summaries, observations: result.observations, coverage, credentialSource, latencyMs: result.latencyMs, usage: result.usage,
   });
-  await recordPerceptionSpend(sql, {
+  // A provider whose call path holds and settles its own spend (OpenRouter) is not recorded a second time.
+  if (!input.provider.meteredElsewhere) await recordPerceptionSpend(sql, {
     organizationId: input.organizationId,
     brandId: input.brandId,
     perceptionRunId: runId,
@@ -282,6 +308,11 @@ export async function perceptionReadiness(
   if (!provider) return { ready: false, reason: "No perception provider is configured.", source: null };
   const health = await provider.health();
   if (health.state !== "HEALTHY") return { ready: false, reason: health.detail, source: null };
+  if (provider.resolveCredential) {
+    const own = await provider.resolveCredential(sql, organizationId);
+    if (own.status !== "ready") return { ready: false, reason: own.reason, source: null };
+    return { ready: true, reason: `Ready with the workspace's OpenRouter key and ${provider.model}.`, source: own.source };
+  }
   const state = credentialStateOf(await resolveCredential(sql, organizationId, "perception"));
   if (state.state !== "usable" || !state.source) {
     return { ready: false, reason: state.reason ?? "No Gemini credential is available for this workspace.", source: null };

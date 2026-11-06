@@ -20,7 +20,7 @@ import { judgeMedia, rollupDecision, ENGINE_REPLACED_MEDIA_QUESTIONS, type Media
 import type { AccountSnapshot } from "../publishing/readiness.ts";
 import { measureLogo, measurePalette, combineLogoFrames, combinePaletteFrames, type LogoMeasurement, type PaletteMeasurement } from "../vision/measure.ts";
 import { IMAGE_SCOPE, runEngineGate, type GateEvidenceInput, type GateEvidenceSelection, type GateImage, type GateQuestion } from "../decisions/gate.ts";
-import { selectPerceptionProvider, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
+import { perceptionProviderFor, type PerceptionInputMedia, type PerceptionRunOutcome } from "../perception/run.ts";
 import type { MediaObservation, MultimodalPerceptionProvider, PerceptionMediaKind } from "../perception/types.ts";
 import { readVisualMedia } from "../providers/vision.server.ts";
 import { EVIDENCE_CONTRACTS, PERCEPTION_EVIDENCE_NAME, checkQuestionContract, satisfiedContractLines } from "../perception/contracts.ts";
@@ -310,7 +310,7 @@ export async function writeJudgment(sql: Sql, input: CreativeJudgmentInput): Pro
       source: item.source,
     }));
   } else if (visual.media.length > 0) {
-    const provider = input.perception === undefined ? selectPerceptionProvider().provider : input.perception;
+    const provider = input.perception === undefined ? (await perceptionProviderFor(sql, input.organizationId)).provider : input.perception;
     // The media is checked by its own bytes and then perceived by the configured provider, through the shared runner.
     const run = await readVisualMedia(sql, {
       organizationId: input.organizationId,
