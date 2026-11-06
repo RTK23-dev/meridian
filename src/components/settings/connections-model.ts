@@ -110,6 +110,11 @@ type FeatureInfo = {
   /** How the provider is chosen: fixed by the code, or by the workspace's decision engine. */
   choice: "fixed" | "decision_engine";
   optional?: true;
+  /**
+   * The model seat (Settings, Models) OpenRouter needs for this feature. OpenRouter serves the feature only once a model is chosen there,
+   * and then it comes first: an explicit choice wins over the feature's own provider.
+   */
+  modelTask?: string;
   /** One line for the info button. */
   about: string;
 };
@@ -128,7 +133,7 @@ export const FEATURES: readonly FeatureInfo[] = [
   { id: "cloud_render", label: "Cloud rendering", group: "video", candidates: ["heygen"], choice: "fixed", optional: true, about: "Renders finished videos in the cloud (HyperFrames)." },
   { id: "studio_images", label: "Studio images", group: "studio", candidates: ["google"], choice: "fixed", about: "Creative images in the Studio (Google Nano Banana)." },
   { id: "studio_video", label: "Studio video", group: "studio", candidates: ["google"], choice: "fixed", about: "Studio videos with Gemini Omni. Hypit and Higgsfield run as server-set options." },
-  { id: "perception", label: "Reference analysis", group: "studio", candidates: ["google"], choice: "fixed", about: "Reads reference images and video frames: transcript, scenes, on-screen text." },
+  { id: "perception", label: "Reference analysis", group: "studio", candidates: ["google", "openrouter"], choice: "fixed", modelTask: "reference_analysis", about: "Reads reference images and video frames: shot, product, on-screen text. Through OpenRouter, with the model chosen under Models; otherwise with a Google Gemini key." },
   { id: "ad_library", label: "Competitor ad research", group: "research", candidates: ["meta_ad_library"], choice: "fixed", about: "Reads the public Meta Ad Library." },
   {
     id: "social_sources",
@@ -205,12 +210,18 @@ const isUsable = (status: ProviderStatus) => status === "ready" || status === "s
 export function connectionsView(input: {
   summaries: Partial<Record<ProviderCategory, ProviderConfigSummary>>;
   engines: EngineStatus | null;
+  /** The model seats the workspace has chosen a model for (Settings, Models). */
+  chosenTasks?: ReadonlySet<string>;
 }): { providers: ProviderRow[]; features: FeatureRow[]; openRouterUnlocks: { count: number; of: number; missing: string[] } } {
   const states = new Map(PROVIDERS.map((info) => [info.id, providerState(info, input.summaries)]));
   const usable = (id: ProviderId) => isUsable(states.get(id)?.status ?? "none");
+  const chosen = (task: string | undefined) => task !== undefined && (input.chosenTasks?.has(task) ?? false);
 
   const features: FeatureRow[] = FEATURES.map((feature) => {
-    const ready = feature.candidates.filter(usable);
+    // OpenRouter serves a feature with a model seat only once that seat has a model, and then it comes first, as the runtime does.
+    const servable = (id: ProviderId) => usable(id) && !(id === "openrouter" && feature.modelTask !== undefined && !chosen(feature.modelTask));
+    const order = feature.modelTask && chosen(feature.modelTask) ? ["openrouter" as ProviderId, ...feature.candidates.filter((id) => id !== "openrouter")] : feature.candidates;
+    const ready = order.filter(servable);
     let used: ProviderId | null;
     if (feature.choice === "decision_engine") {
       const engineProvider = input.engines ? ENGINE_PROVIDER[input.engines.active.engineId] ?? null : null;
@@ -233,6 +244,8 @@ export function connectionsView(input: {
     } else if (feature.choice === "decision_engine" && input.engines) {
       const engineProvider = ENGINE_PROVIDER[input.engines.active.engineId];
       line = engineProvider ? `${labelOf(engineProvider)} is chosen but has no key` : "No engine chosen";
+    } else if (feature.modelTask && usable("openrouter")) {
+      line = "Choose a model under Models";
     } else {
       line = feature.optional ? "Not set (optional)" : `Needs ${feature.candidates.slice(0, 2).map(labelOf).join(" or ")}`;
     }

@@ -5,9 +5,10 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { CURRENT_GENERATION_SECONDS, presetChoices, type PresetCatalogueModel } from "./model-presets.ts";
+import { CURRENT_GENERATION_SECONDS, imageCallFitsCeiling, presetChoices, type PresetCatalogueModel } from "./model-presets.ts";
 
 const ALL = ["copy", "research_analysis", "brain_suggest", "direction_writer", "direction_judge"] as const;
+const IMAGE = ["vision", "reference_analysis"] as const;
 const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
 const model = (id: string, out: number, created: string | null, vision = false): PresetCatalogueModel => ({
   id,
@@ -15,7 +16,7 @@ const model = (id: string, out: number, created: string | null, vision = false):
   promptUsdPerMillionTokens: out / 5,
   completionUsdPerMillionTokens: out,
   created: created === null ? null : day(created),
-  suitsTasks: vision ? [...ALL, "vision"] : [...ALL],
+  suitsTasks: vision ? [...ALL, ...IMAGE] : [...ALL],
 });
 const CATALOGUE: PresetCatalogueModel[] = [
   model("anthropic/claude-opus-old", 75, "2025-08-05", true),
@@ -42,6 +43,7 @@ describe("model presets", () => {
       research_analysis: "anthropic/claude-small",
       brain_suggest: "anthropic/claude-small",
       vision: "anthropic/claude-top",
+      reference_analysis: "anthropic/claude-small",
       direction_writer: null,
       direction_judge: null,
     });
@@ -96,5 +98,13 @@ describe("model presets", () => {
     const copy = presetChoices("claude", noClaude).find((choice) => choice.task === "copy")!;
     assert.equal(copy.modelId, null);
     assert.match(copy.reason, /^Auto: the catalogue lists no Claude model/);
+  });
+
+  it("an image model fits a preset only when one image call's worst case is within the per-call ceiling", () => {
+    // 200,000 tokens at $0.10 per million, plus 2,000 output tokens at $0.50 per million: $0.021.
+    assert.equal(imageCallFitsCeiling({ promptUsdPerToken: 0.1e-6, completionUsdPerToken: 0.5e-6, contextLength: 200_000 }, 0.05), true);
+    // 1,000,000 tokens at $2 per million: $2, refused on every image call at the default ceiling.
+    assert.equal(imageCallFitsCeiling({ promptUsdPerToken: 2e-6, completionUsdPerToken: 10e-6, contextLength: 1_000_000 }, 0.05), false);
+    assert.equal(imageCallFitsCeiling({ promptUsdPerToken: 0.1e-6, completionUsdPerToken: 0.5e-6, contextLength: null }, 0.05), false, "no stated context: no bound");
   });
 });

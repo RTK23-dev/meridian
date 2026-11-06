@@ -5,7 +5,7 @@ import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Err
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
 import { qk } from "@/lib/query/keys";
-import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useDecisionEnginesQuery, useGenerationModelsQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
   getOpenRouterDecisionModels,
   removeProviderConfig,
@@ -69,13 +69,15 @@ export function ConnectionsTab({ organizationId, canAdmin }: { organizationId: s
   const engines = useDecisionEnginesQuery(organizationId);
   const summaries = (providers.data as Partial<Record<ProviderCategory, ProviderConfigSummary>> | undefined) ?? null;
   const engineStatus = (engines.data as EngineStatus | undefined) ?? null;
+  const models = useGenerationModelsQuery(organizationId);
+  const chosenTasks = new Set(((models.data as { tasks?: Array<{ task: string; saved: unknown }> } | undefined)?.tasks ?? []).filter((task) => task.saved).map((task) => task.task));
 
   if (providers.isError && !summaries) {
     return <ErrorState message="Connections could not be loaded." onRetry={() => void providers.refetch()} />;
   }
   if (!summaries) return <p className="text-sm text-fg-muted">Loading connections...</p>;
 
-  const view = connectionsView({ summaries, engines: engineStatus });
+  const view = connectionsView({ summaries, engines: engineStatus, chosenTasks });
   const openRouter = view.providers.find((provider) => provider.id === "openrouter")!;
   const main = view.providers.filter((provider) => !provider.more && provider.id !== "openrouter");
   const more = view.providers.filter((provider) => provider.more);

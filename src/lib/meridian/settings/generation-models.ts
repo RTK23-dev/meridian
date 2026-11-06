@@ -56,14 +56,6 @@ export const GENERATION_TASKS = {
     needsImage: true,
     auto: "the workspace's Google Gemini key reads references, when one is saved; otherwise references are not read.",
   },
-  transcription: {
-    label: "Speech to text",
-    description:
-      "Transcribes a reference's or an upload's speech, with a time for every word. Only a model that takes audio is accepted. The times are the model's own reading of the audio, not measured, so the captions should be checked. When none is chosen, the workspace's Deepgram key is used if it has one.",
-    needsImage: false,
-    needsAudio: true,
-    auto: "the workspace's Deepgram key transcribes, when one is saved; otherwise nothing is transcribed.",
-  },
   direction_judge: {
     label: "Script judge",
     description:

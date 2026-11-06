@@ -23,7 +23,8 @@ import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeM
 import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
-import { MODEL_PRESETS, isModelPreset, presetChoices } from "./model-presets.ts";
+import { MODEL_PRESETS, imageCallFitsCeiling, isModelPreset, presetChoices } from "./model-presets.ts";
+import { generationCeilingUsd } from "../providers/generation-ledger.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
 
@@ -454,13 +455,17 @@ export const applyModelPreset = createServerFn({ method: "POST" })
     await requireMembership(sql, context.userId, data.organizationId, "admin");
     const state = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
     if (state.status !== "ok") return { ok: false as const, reason: `${state.reason} No model was changed.`, applied: [] };
+    // An image task's call is bounded at the model's whole context (the listing states no image tokens), so a model whose bound is above
+    // the per-call ceiling would be refused on every call. Such a model does not suit an image task here.
+    const ceiling = generationCeilingUsd();
+    const imageCallFits = (model: TextModelChoice) => ceiling.ok && imageCallFitsCeiling(model, ceiling.usd);
     const catalogue = state.models.map((model) => ({
       id: model.id,
       name: model.name,
       promptUsdPerMillionTokens: model.promptUsdPerToken * 1_000_000,
       completionUsdPerMillionTokens: model.completionUsdPerToken * 1_000_000,
       created: model.created ?? null,
-      suitsTasks: GENERATION_TASK_IDS.filter((task) => eligibleForTask(task, model).ok),
+      suitsTasks: GENERATION_TASK_IDS.filter((task) => eligibleForTask(task, model).ok && (!GENERATION_TASKS[task].needsImage || imageCallFits(model))),
     }));
     const applied: Array<{ task: string; label: string; modelId: string | null; reason: string; saved: boolean }> = [];
     for (const choice of presetChoices(data.preset, catalogue)) {

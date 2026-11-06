@@ -10,6 +10,21 @@
  * result says why.
  */
 import type { GenerationTask } from "./generation-models.ts";
+import { boundGenerationCall } from "../providers/generation-ledger.ts";
+import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
+
+/** The output an image call is bounded at when a preset checks it against the per-call ceiling (perception asks for at most 2,000 tokens). */
+export const PRESET_IMAGE_MAX_TOKENS = 2_000;
+
+/**
+ * Whether one image call to this model fits the per-call ceiling. An image call is bounded at the model's whole context (the listing
+ * states no image tokens) plus the output limit, the same bound the call itself is checked against, so a model that does not fit would
+ * be refused on every image call.
+ */
+export function imageCallFitsCeiling(model: Pick<TextModelChoice, "promptUsdPerToken" | "completionUsdPerToken" | "contextLength">, ceilingUsd: number): boolean {
+  const bound = boundGenerationCall({ choice: model, system: "", user: [{ type: "image_url", image_url: { url: "data:image/png;base64," } }], maxTokens: PRESET_IMAGE_MAX_TOKENS });
+  return bound.ok && bound.usd <= ceilingUsd;
+}
 
 export type PresetCatalogueModel = {
   id: string;
@@ -18,7 +33,10 @@ export type PresetCatalogueModel = {
   promptUsdPerMillionTokens: number;
   /** When the listing says the model was added, in seconds since 1970, or null when it does not say. */
   created: number | null;
-  /** The tasks this model suits (a vision task needs a model that reads images). */
+  /**
+   * The tasks this model suits. An image task (vision, reference analysis) needs a model that reads images and whose worst-case image call
+   * fits the per-call ceiling; the server decides this, so a preset never picks a model every call of which would be refused.
+   */
   suitsTasks: readonly GenerationTask[];
 };
 
@@ -103,7 +121,8 @@ export function presetChoices(preset: ModelPresetId, models: readonly PresetCata
       pick("copy", flagship(models, "copy", ["anthropic"]), "the Claude flagship writes.", "the catalogue lists no Claude model for writing."),
       pick("research_analysis", cheapest(models, "research_analysis", ["anthropic"]), "a fast Claude analyses.", "no Claude model suits analysis."),
       pick("brain_suggest", cheapest(models, "brain_suggest", ["anthropic"]), "a fast Claude suggests.", "no Claude model suits suggestions."),
-      pick("vision", flagship(models, "vision", ["anthropic"]), "a Claude that reads images.", "no Claude model reads images."),
+      pick("vision", flagship(models, "vision", ["anthropic"]), "a Claude that reads images.", "no Claude model that reads images fits the per-call ceiling."),
+      pick("reference_analysis", cheapest(models, "reference_analysis", ["anthropic"]), "a fast Claude reads references.", "no Claude model that reads images fits the per-call ceiling."),
       { task: "direction_writer", modelId: null, reason: "Auto: one family only, so the Claude writer writes every idea." },
       { task: "direction_judge", modelId: null, reason: "Auto: one family only, so the Claude writer also judges." },
     ];
@@ -117,7 +136,8 @@ export function presetChoices(preset: ModelPresetId, models: readonly PresetCata
       pick("direction_judge", flagship(models, "direction_judge", judgeVendors), "a third family judges, so no writer judges its own ideas.", "no third family is listed."),
       pick("research_analysis", cheapest(models, "research_analysis", MAIN_FAMILIES), "cheap bulk analysis.", "no model suits analysis."),
       pick("brain_suggest", cheapest(models, "brain_suggest", MAIN_FAMILIES), "cheap suggestions.", "no model suits suggestions."),
-      pick("vision", flagship(models, "vision", ["google", "openai", "anthropic"]), "a frontier model that reads images.", "no frontier model reads images."),
+      pick("vision", flagship(models, "vision", ["google", "openai", "anthropic"]), "a frontier model that reads images.", "no frontier model that reads images fits the per-call ceiling."),
+      pick("reference_analysis", cheapest(models, "reference_analysis", ["google", "openai", "anthropic"]), "a fast frontier model reads references.", "no frontier model that reads images fits the per-call ceiling."),
     ];
   }
   const deepseekWriter = flagship(models, "copy", ["deepseek"]);
@@ -131,7 +151,8 @@ export function presetChoices(preset: ModelPresetId, models: readonly PresetCata
       : pick("copy", cheapest(models, "copy", MAIN_FAMILIES), "a cheap current model writes (no DeepSeek model is listed).", "no model suits writing."),
     pick("research_analysis", analysis, cheap(analysis, "analyses"), "no model suits analysis."),
     pick("brain_suggest", suggest, cheap(suggest, "suggests"), "no model suits suggestions."),
-    pick("vision", cheapest(models, "vision", MAIN_FAMILIES), "a cheap current model that reads images.", "no model reads images."),
+    pick("vision", cheapest(models, "vision", MAIN_FAMILIES), "a cheap current model that reads images.", "no model that reads images fits the per-call ceiling."),
+    pick("reference_analysis", cheapest(models, "reference_analysis", MAIN_FAMILIES), "a cheap current model reads references.", "no model that reads images fits the per-call ceiling."),
     { task: "direction_writer", modelId: null, reason: "Auto: the writer writes every idea, which keeps the run cheap." },
     { task: "direction_judge", modelId: null, reason: "Auto: the writer also judges, which keeps the run cheap." },
   ];
