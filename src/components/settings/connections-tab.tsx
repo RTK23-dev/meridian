@@ -176,6 +176,10 @@ function FeatureItem({ feature, engineStatus, organizationId, canAdmin, provider
       <span className="min-w-0 flex-1 text-sm font-medium text-fg-primary">
         {feature.label}
         <span className="sr-only">: {light.word}</span>
+        {/* The engine picker shows no status line, so a decisions row that cannot answer says so in words, not only by its dot. */}
+        {feature.choice === "decision_engine" && feature.light === "missing" ? (
+          <span className="block text-sm font-normal text-fg-muted">Cannot answer decisions yet</span>
+        ) : null}
       </span>
       {feature.choice === "decision_engine" && engineStatus ? (
         <label className="order-last flex basis-full items-center gap-2 text-sm text-fg-muted sm:order-none sm:basis-auto">

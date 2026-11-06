@@ -40,8 +40,9 @@ async function focusedWithin(locator, ms = 5000) {
   return locator.evaluate((node) => node === document.activeElement);
 }
 
-async function openSettings(page) {
-  await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+// Settings has tabs, and the open one is in the URL: Models holds the task models and the uncertain holds, Connections the keys.
+async function openSettings(page, tab = "general") {
+  await page.goto(`${base}/settings?tab=${tab}`, { waitUntil: "networkidle" });
   await page.locator("main").waitFor();
   await page.evaluate(() => {
     for (const details of document.querySelectorAll("main details")) if (!details.parentElement?.closest("details")) details.open = true;
@@ -65,7 +66,7 @@ try {
   await page.getByRole("button", { name: "Sign in" }).click();
   await page.waitForURL((url) => !url.pathname.endsWith("/login"));
 
-  await openSettings(page);
+  await openSettings(page, "models");
   const holds = page.locator('[aria-labelledby="uncertain-holds-title"]');
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
@@ -126,24 +127,27 @@ try {
   });
 
   await check("B1", "a stored key reads as saved and not checked live, and nothing claims a live verification", async () => {
-    const anchor = page.getByText("Gemini perception", { exact: true }).first();
-    const row = anchor.locator("xpath=ancestor::li[1]");
+    await openSettings(page, "connections");
+    // The Google Gemini row on Connections (one key serves perception and production).
+    const row = page.locator("li", { has: page.getByText("Google Gemini", { exact: true }) }).first();
     await row.scrollIntoViewIfNeeded();
     let rowText = await row.innerText();
-    if (!/Stored key/.test(rowText)) {
-      const keyField = row.getByLabel("Gemini perception key");
+    if (!/Key saved/.test(rowText)) {
+      await row.getByRole("button", { name: /^(Add key|Replace)$/ }).click();
+      const keyField = row.getByLabel("Google Gemini key");
       await keyField.fill("fixture-gemini-key-not-real");
       await keyField.press("Enter");
-      await page.waitForTimeout(2000);
+      await row.getByText("Key saved").waitFor();
       rowText = await row.innerText();
     }
-    assert.match(rowText, /Stored key/, "the saved key is shown by its last characters only");
-    assert.match(rowText, /Saved, not checked live/, "the row says the key is saved and not checked live");
-    assert.doesNotMatch(rowText, /Usable/, "the row no longer calls a saved key usable");
+    assert.match(rowText, /Key saved/, "the row says the key is saved");
+    assert.match(rowText, /real/, "the saved key is shown by its last characters only");
+    assert.doesNotMatch(rowText, /fixture-gemini-key/, "the key itself is never shown again");
+    assert.doesNotMatch(rowText, /Usable/, "the row does not call a saved key usable");
     assert.doesNotMatch(rowText, /healthy|live verified|verified against|connected and tested/i, "the row never claims a live verification");
     const main = await page.locator("main").innerText();
-    assert.match(main, /Nothing is checked against a live provider here\./, "the page says nothing was checked against a live provider");
-    await row.screenshot({ path: join(out, "gemini-perception-stored-key-desktop.png") });
+    assert.match(main, /A key is checked against its provider the first time it is used\./, "the page says a saved key has not been checked yet");
+    await row.screenshot({ path: join(out, "gemini-stored-key-desktop.png") });
   });
 
   await page.goto(`${base}/integrations`, { waitUntil: "networkidle" });
@@ -204,8 +208,9 @@ try {
   await page.setViewportSize({ width: 1280, height: 900 });
   await openSettings(page);
   await check("C2", "blank configuration fails closed: the decision engine says it cannot answer", async () => {
-    await openSettings(page);
-    assert.match(await page.locator("main").innerText(), /cannot answer decisions yet/);
+    await openSettings(page, "connections");
+    const decisions = page.locator("li", { hasText: "Decisions and scoring" }).first();
+    assert.match(await decisions.innerText(), /cannot answer decisions yet/i);
   });
 
   // The first-run journey of a person who has not read the code: Market, the three outcomes, the sources, the budget and the engine.
@@ -653,7 +658,7 @@ try {
   });
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await openSettings(page);
+  await openSettings(page, "models");
   await holds.waitFor();
   await holds.scrollIntoViewIfNeeded();
   await check("E1", "phone width: no horizontal page scroll", async () => {
