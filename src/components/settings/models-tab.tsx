@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui";
 import { GenerationModelSettings } from "@/components/generation-model-settings";
+import { StudioModels } from "@/components/settings/studio-models";
 import { OpenRouterDecisionControls, type OpenRouterModelStatus } from "@/components/openrouter-decision-controls";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useGenerationCatalogueQuery, useGenerationModelsQuery, useScopedMutation } from "@/lib/query/hooks";
@@ -85,6 +86,14 @@ export function ModelsTab({ organizationId, canAdmin }: { organizationId: string
           <p className="text-sm text-fg-muted">Each choice is checked against the live OpenRouter catalogue before it is saved.</p>
         </div>
         <GenerationModelSettings organizationId={organizationId} canAdmin={canAdmin} />
+      </section>
+
+      <section aria-labelledby="studio-models-title" className="space-y-3">
+        <div className="space-y-1">
+          <h2 id="studio-models-title" className="text-section font-semibold text-fg-primary">Studio models</h2>
+          <p className="text-sm text-fg-muted">The image model the Studio makes images with through OpenRouter. Each is checked against the live catalogue before it is saved.</p>
+        </div>
+        <StudioModels organizationId={organizationId} canAdmin={canAdmin} />
       </section>
 
       <section ref={decisionSection} id="decision-model" aria-labelledby="decision-model-title" className="space-y-3">

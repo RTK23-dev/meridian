@@ -70,7 +70,8 @@ export function ConnectionsTab({ organizationId, canAdmin }: { organizationId: s
   const summaries = (providers.data as Partial<Record<ProviderCategory, ProviderConfigSummary>> | undefined) ?? null;
   const engineStatus = (engines.data as EngineStatus | undefined) ?? null;
   const models = useGenerationModelsQuery(organizationId);
-  const chosenTasks = new Set(((models.data as { tasks?: Array<{ task: string; saved: unknown }> } | undefined)?.tasks ?? []).filter((task) => task.saved).map((task) => task.task));
+  const modelState = models.data as { tasks?: Array<{ task: string; saved: unknown }>; mediaChosen?: string[] } | undefined;
+  const chosenTasks = new Set([...(modelState?.tasks ?? []).filter((task) => task.saved).map((task) => task.task), ...(modelState?.mediaChosen ?? [])]);
 
   if (providers.isError && !summaries) {
     return <ErrorState message="Connections could not be loaded." onRetry={() => void providers.refetch()} />;

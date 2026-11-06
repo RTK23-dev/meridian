@@ -19,6 +19,7 @@ import { modelCapabilityRegistry } from "./registry.ts";
 import { selectOffer, type SelectionCandidate, type SelectionModality, type SelectionRecord, type SelectionRequirement } from "./capability-matrix.ts";
 import { configuredQuote, estimateCost, unknownQuote, type PriceQuote } from "./pricing.ts";
 import { GoogleNanoBananaImageProvider, TestImageProvider, type ProductionImageProvider } from "./image-providers.ts";
+import { OPENROUTER_IMAGE_PROVIDER_ID, OpenRouterStudioImageProvider } from "./openrouter-image.ts";
 import { isTestingRuntimeNow as testingRuntimeNow } from "../runtime-mode.ts";
 import type { ProviderHealth } from "./types.ts";
 
@@ -140,6 +141,7 @@ export class ProductionRouter {
       for (const p of options.imageProviders) this.registerImage(p);
     } else {
       this.registerImage(new GoogleNanoBananaImageProvider());
+      this.registerImage(new OpenRouterStudioImageProvider());
       // The test double is always listed, but it is resolved and selected only while the testing runtime is active.
       const testImage = new TestImageProvider();
       this.imageProviders.set(testImage.id, testImage);
@@ -340,12 +342,14 @@ export class ProductionRouter {
 
     const healthy = await this.healthyImageProviders(spec.organizationId);
     if (healthy.length === 0) throw new Error("No configured image provider is available.");
+    // OpenRouter is ready for a workspace only once it chose a Studio image model, and that explicit choice is the workspace's preference.
+    const workspaceChoseOpenRouter = healthy.some((provider) => provider.id === OPENROUTER_IMAGE_PROVIDER_ID);
     const selection = selectOffer({
       candidates: this.candidatesFor(healthy, "image"),
       requirement,
       registry: modelCapabilityRegistry,
       mode: "PREFERENCE",
-      preference: this.preference.image,
+      preference: workspaceChoseOpenRouter ? [OPENROUTER_IMAGE_PROVIDER_ID, ...(this.preference.image ?? []).filter((id) => id !== OPENROUTER_IMAGE_PROVIDER_ID)] : this.preference.image,
       allowUnknownCost: options.allowUnknownCost,
     });
     if (!selection.chosen) throw new Error(`No eligible image provider: ${summarize(selection)}`);

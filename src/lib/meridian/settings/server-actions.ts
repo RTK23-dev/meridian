@@ -24,6 +24,7 @@ import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
 import { MODEL_PRESETS, imageCallFitsCeiling, isModelPreset, presetChoices } from "./model-presets.ts";
+import { MEDIA_TASKS, eligibleForMediaTask, isMediaTask, saveMediaModel, storedMediaModels, type MediaTask } from "./media-models.ts";
 import { generationCeilingUsd } from "../providers/generation-ledger.ts";
 import { textModelsFor } from "../../../engine/orchestrator/api.ts";
 import type { TextModelChoice } from "../../../engine/orchestrator/settings.ts";
@@ -341,9 +342,12 @@ export const getGenerationModels = createServerFn({ method: "GET" })
     const sql = await getSql();
     await requireMembership(sql, context.userId, data.organizationId, "viewer");
     const stored = await storedGenerationModels(sql, data.organizationId);
+    const media = await storedMediaModels(sql, data.organizationId);
     const deployment = deploymentTextModel();
     const credential = await generationCredentialStatus(data.organizationId);
     return {
+      // The Studio's model seats that have a model, so Connections can say which Studio features OpenRouter serves (no catalogue read).
+      mediaChosen: Object.keys(media),
       connected: credential.status === "ready",
       connectionReason: credential.status === "ready" ? null : credential.reason,
       tasks: GENERATION_TASK_IDS.map((task) => {
@@ -477,4 +481,67 @@ export const applyModelPreset = createServerFn({ method: "POST" })
       }
     }
     return { ok: true as const, preset: data.preset, label: MODEL_PRESETS[data.preset].label, applied };
+  });
+
+/** The Studio model seats that are wired to a provider. A seat is shown only once something uses it. */
+export const WIRED_MEDIA_TASKS: readonly MediaTask[] = ["studio_image"];
+
+/**
+ * The Studio's image and video model seats: each seat's saved model, and the live catalogue's models of its kind with their stated prices.
+ * A catalogue that cannot be read offers no model, and says why.
+ */
+export const getMediaModels = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    const stored = await storedMediaModels(sql, data.organizationId);
+    const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
+    const state = await mediaModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+    return {
+      catalogue: state.status === "ok" ? { ok: true as const } : { ok: false as const, reason: state.reason },
+      seats: WIRED_MEDIA_TASKS.map((task) => ({
+        task,
+        label: MEDIA_TASKS[task].label,
+        description: MEDIA_TASKS[task].description,
+        kind: MEDIA_TASKS[task].kind,
+        saved: stored[task] ?? null,
+        models: state.status === "ok" ? state.models.filter((model) => eligibleForMediaTask(task, model).ok) : [],
+      })),
+    };
+  });
+
+/** Saves or clears one Studio model seat. The model is checked against the live catalogue first; admin only. */
+export const saveMediaModelChoice = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const task = asText(obj.task);
+    const modelId = obj.modelId === null ? null : asText(obj.modelId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!isMediaTask(task) || !WIRED_MEDIA_TASKS.includes(task)) throw new Error(`'${task}' is not a Studio model seat.`);
+    return { organizationId, task, modelId: modelId || null };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    let choices = null;
+    if (data.modelId !== null) {
+      const { mediaModelsFor } = await import("../../../engine/orchestrator/api.ts");
+      const state = await mediaModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+      choices = state.status === "ok" ? state.models : null;
+    }
+    try {
+      const result = await saveMediaModel(sql, { organizationId: data.organizationId, task: data.task, modelId: data.modelId, actorId: context.userId, choices });
+      return { ok: true as const, result };
+    } catch (error) {
+      return { ok: false as const, reason: error instanceof Error ? error.message : "The model could not be saved." };
+    }
   });
