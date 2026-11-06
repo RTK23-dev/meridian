@@ -156,6 +156,7 @@ export const getOpenRouterDecisionModels = createServerFn({ method: "GET" })
         contextLength: model.contextLength,
         promptUsdPerMillionTokens: model.promptUsdPerToken * 1_000_000,
         callCeilingUsd: decisionModelCeilingUsd(model),
+        created: model.created,
       })),
       notOffered,
     };

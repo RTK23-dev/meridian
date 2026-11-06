@@ -12,8 +12,10 @@ import {
   decisionCallCapUsd,
   decisionCallCeilingUsd,
   decisionModelCeilingUsd,
+  decisionFamilyOf,
   decisionModelProfile,
   eligibleDecisionModels,
+  latestDecisionModel,
   parseDecisionCatalog,
   parseUsdPerToken,
 } from "./decision-catalog.ts";
@@ -52,18 +54,18 @@ test("every decision model in the catalogue is offered, and only the ones with a
   assert.ok(ids.includes("openai/gpt-6-luna-decisions"), "an OpenAI decision model is offered");
   assert.ok(ids.includes("nace-ai/drex-max"), "a model with no recorded profile is offered too");
   const verified = eligible.filter((entry) => entry.verified).map((entry) => entry.id).sort();
-  assert.deepEqual(verified, ["typesafe/jev-1.13", "typesafe/jev-1.14"], "only the models with a recorded profile are verified");
+  assert.deepEqual(verified, ["openai/gpt-6-luna-decisions", "typesafe/jev-1.13", "typesafe/jev-1.14"], "only the models with a recorded profile are verified");
   // An alias is still never offered, and it says why.
   assert.ok(notOffered.some((item) => item.id === "~typesafe/jev-latest" && /alias/i.test(item.reason)));
 });
 
 test("a model without a recorded profile is read as text only, whatever its catalogue listing says about images", () => {
   const { eligible } = eligibleDecisionModels(recordedRead());
-  const luna = eligible.find((entry) => entry.id === "openai/gpt-6-luna-decisions");
-  assert.ok(luna);
-  assert.ok(luna.inputModalities.includes("image"), "the catalogue lists images for it");
-  assert.deepEqual(luna.profile.inputModalities, ["text"], "Meridian reads it as text only until it is verified");
-  assert.equal(luna.verified, false);
+  const drex = eligible.find((entry) => entry.id === "inception/mercury-decide");
+  assert.ok(drex);
+  assert.ok(drex.inputModalities.includes("image"), "the catalogue lists images for it");
+  assert.deepEqual(drex.profile.inputModalities, ["text"], "Meridian reads it as text only until it is verified");
+  assert.equal(drex.verified, false);
 });
 
 test("a profile is a claim about the vendor's documentation, and jev-1.13 stays text-only although the catalogue lists image input", () => {
@@ -198,4 +200,37 @@ test("a catalogue that cannot be reached is reported as unavailable, with no mod
   const read = await source.read();
   assert.equal(read.ok, false);
   if (!read.ok) assert.match(read.reason, /could not be reached, so no decision model could be checked/);
+});
+
+test("OpenAI's decision model is verified on the owner's direction, reads images, and answers the three question types", () => {
+  const profile = decisionModelProfile("openai/gpt-6-luna-decisions");
+  assert.ok(profile, "openai/gpt-6-luna-decisions has a recorded profile");
+  assert.deepEqual(profile.questionKinds, ["predicate", "choice", "score"]);
+  assert.deepEqual(profile.inputModalities, ["text", "image"]);
+  assert.match(profile.source, /No live call has been recorded/);
+});
+
+test("the latest model of a family is its newest verified one in the catalogue, never an alias or an unverified model", () => {
+  const day = (iso: string) => Date.parse(`${iso}T00:00:00Z`) / 1000;
+  const models = [
+    { id: "typesafe/jev-1.13", verified: true, created: day("2026-09-18") },
+    { id: "typesafe/jev-1.14", verified: true, created: day("2026-10-14") },
+    { id: "typesafe/jev-1.15", verified: false, created: day("2026-11-01") },
+    { id: "openai/gpt-6-luna-decisions", verified: true, created: day("2026-10-06") },
+    { id: "parallel/decisions-fast", verified: false, created: day("2026-11-06") },
+  ];
+  assert.equal(latestDecisionModel(models, "typesafe")?.id, "typesafe/jev-1.14", "an unverified newer build is not the latest");
+  assert.equal(latestDecisionModel(models, "openai")?.id, "openai/gpt-6-luna-decisions");
+  assert.equal(latestDecisionModel(models.filter((model) => !model.id.startsWith("openai/")), "openai"), null);
+  assert.equal(decisionFamilyOf("typesafe/jev-1.14"), "typesafe");
+  assert.equal(decisionFamilyOf("parallel/decisions-fast"), null);
+});
+
+test("an entry keeps the listing's date, so the newest model of a family can be told", () => {
+  const read = parseDecisionCatalog(
+    { data: [{ id: "typesafe/jev-1.14", architecture: { input_modalities: ["text"], output_modalities: ["decisions"] }, context_length: 1000, pricing: { prompt: "0.000000042", completion: "0" }, created: 1791936000 }] },
+    META,
+  );
+  assert.ok(read.ok);
+  if (read.ok) assert.equal(read.entries[0]?.created, 1791936000);
 });

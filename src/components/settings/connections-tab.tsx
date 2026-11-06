@@ -6,7 +6,15 @@ import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
-import { removeProviderConfig, saveDecisionEngine, saveProviderConfig, testOpenRouterDecisionConnection } from "@/lib/meridian/settings/server-actions";
+import {
+  getOpenRouterDecisionModels,
+  removeProviderConfig,
+  saveDecisionEngine,
+  saveOpenRouterDecisionModel,
+  saveProviderConfig,
+  testOpenRouterDecisionConnection,
+} from "@/lib/meridian/settings/server-actions";
+import { DECISION_FAMILIES, decisionFamilyOf, latestDecisionModel, type DecisionFamilyId } from "@/lib/meridian/decisions/decision-catalog";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 import {
   connectionsView,
@@ -146,30 +154,54 @@ function FeatureItem({ feature, engineStatus, organizationId, canAdmin, provider
     invalidate: () => [qk.decisionEngines(organizationId), qk.providerSettings(organizationId)],
     success: (_engineId, result) => (result.ok ? "Decision engine saved." : ""),
   });
-  // OpenRouter Decisions counts as ready only after its connection check passes for this key and model (one small call on the
-  // workspace's key, made only when an admin asks). So the switch runs the check first, then saves the engine.
-  const switchToOpenRouter = useScopedMutation({
+  // Decisions through OpenRouter: the family's newest verified model is saved, its connection is checked (one small call on the workspace's
+  // key, made only because an admin chose it), and only a passed check switches the engine. A refusal at any step stops there and says why.
+  const useOpenRouter = useScopedMutation({
     mutationKey: ["mutation", "connections.engine.openrouter", organizationId],
-    mutationFn: async () => {
+    mutationFn: async (family: DecisionFamilyId): Promise<{ ok: true; model: string } | { ok: false; reason: string }> => {
+      const label = DECISION_FAMILIES.find((item) => item.id === family)?.label ?? family;
+      const listing = await getOpenRouterDecisionModels({ data: { organizationId } });
+      if (!listing.ok) return { ok: false, reason: `${listing.reason} The engine is unchanged.` };
+      const latest = latestDecisionModel(listing.eligible, family);
+      if (!latest) return { ok: false, reason: `OpenRouter lists no ${label} model Meridian has verified right now. The engine is unchanged.` };
+      if (engineStatus?.openrouterModel?.model !== latest.id) {
+        const saved = await saveOpenRouterDecisionModel({ data: { organizationId, model: latest.id } });
+        if (!saved.ok) return { ok: false, reason: saved.reason };
+      }
       const check = await testOpenRouterDecisionConnection({ data: { organizationId } });
-      if (!check.ok) return { ok: false as const, reason: check.message };
-      return saveDecisionEngine({ data: { organizationId, engineId: "openrouter-decisions" } });
+      if (!check.ok) return { ok: false, reason: check.message };
+      const engine = await saveDecisionEngine({ data: { organizationId, engineId: "openrouter-decisions" } });
+      return engine.ok ? { ok: true, model: latest.id } : { ok: false, reason: engine.reason ?? "The engine could not be saved." };
+    },
+    invalidate: () => [qk.decisionEngines(organizationId), qk.providerSettings(organizationId), qk.openRouterDecisionModels(organizationId)],
+    success: (_family, result) => (result.ok ? `Decisions now use ${result.model} through OpenRouter.` : ""),
+  });
+  // A check after a refusal (for example once the decision cap is set on the Billing page), for the OpenRouter engine already chosen.
+  const recheck = useScopedMutation({
+    mutationKey: ["mutation", "connections.engine.recheck", organizationId],
+    mutationFn: async (): Promise<{ ok: boolean; reason?: string }> => {
+      const check = await testOpenRouterDecisionConnection({ data: { organizationId } });
+      return check.ok ? { ok: true } : { ok: false, reason: check.message };
     },
     invalidate: () => [qk.decisionEngines(organizationId), qk.providerSettings(organizationId)],
-    success: (_vars, result) => (result.ok ? "Decisions now use OpenRouter." : ""),
+    success: (_vars, result) => (result.ok ? "The OpenRouter decision connection passed its check." : ""),
   });
-  const failed = [choose.data, switchToOpenRouter.data].find((answer) => answer && !(answer as { ok: boolean }).ok) as { reason?: string } | undefined;
-  const refusal = failed?.reason ?? null;
+  const latestAnswer = [useOpenRouter, recheck, choose].filter((mutation) => mutation.data).sort((a, b) => b.submittedAt - a.submittedAt)[0]?.data as { ok: boolean; reason?: string } | undefined;
+  const refusal = latestAnswer && !latestAnswer.ok ? (latestAnswer.reason ?? null) : null;
   const usableLabel = (id: string) => providers.find((provider) => provider.id === id);
-  const openRouter = usableLabel("openrouter");
-  // The main key can answer decisions too: when the chosen engine has no key and OpenRouter has one, offer the switch in one tap.
-  const offerOpenRouter =
-    canAdmin &&
-    feature.choice === "decision_engine" &&
-    feature.light === "missing" &&
-    engineStatus?.active.engineId !== "openrouter-decisions" &&
-    (openRouter?.status === "ready" || openRouter?.status === "shared");
-  const decisionModelChosen = Boolean(engineStatus?.openrouterModel && engineStatus.openrouterModel.source !== "none" && engineStatus.openrouterModel.model);
+  const openRouterReady = ["ready", "shared"].includes(usableLabel("openrouter")?.status ?? "none");
+  const busy = choose.isPending || useOpenRouter.isPending || recheck.isPending;
+  const activeEngine = engineStatus?.active.engineId ?? "";
+  const storedFamily = engineStatus?.openrouterModel?.model ? decisionFamilyOf(engineStatus.openrouterModel.model) : null;
+  const value = activeEngine === "openrouter-decisions" ? `openrouter:${storedFamily ?? "other"}` : activeEngine;
+  const onChoose = (next: string) => {
+    if (next.startsWith("openrouter:")) {
+      const family = next.slice("openrouter:".length);
+      if (family === "openai" || family === "typesafe") void useOpenRouter.mutateAsync(family).catch(() => undefined);
+      return;
+    }
+    void choose.mutateAsync(next).catch(() => undefined);
+  };
   return (
     <li className="flex flex-wrap items-center gap-x-3 gap-y-2 p-3">
       <Dot className={light.dot} />
@@ -178,37 +210,34 @@ function FeatureItem({ feature, engineStatus, organizationId, canAdmin, provider
         <span className="sr-only">: {light.word}</span>
         {/* The engine picker shows no status line, so a decisions row that cannot answer says so in words, not only by its dot. */}
         {feature.choice === "decision_engine" && feature.light === "missing" ? (
-          <span className="block text-sm font-normal text-fg-muted">Cannot answer decisions yet</span>
+          <span className="block text-sm font-normal text-fg-muted">{busy ? "Checking the connection..." : "Cannot answer decisions yet"}</span>
         ) : null}
       </span>
       {feature.choice === "decision_engine" && engineStatus ? (
         <label className="order-last flex basis-full items-center gap-2 text-sm text-fg-muted sm:order-none sm:basis-auto">
           <span className="sr-only">Decision engine</span>
-          <SelectInput
-            value={engineStatus.active.engineId}
-            disabled={!canAdmin || choose.isPending}
-            onChange={(event) => void choose.mutateAsync(event.target.value).catch(() => undefined)}
-            className="h-9 w-full sm:w-auto sm:min-w-44"
-          >
-            {feature.candidates.map((id) => {
-              const provider = usableLabel(id);
-              const ready = provider ? provider.status === "ready" || provider.status === "shared" : false;
-              return <option key={id} value={PROVIDER_ENGINE[id]}>{provider?.label ?? id}{ready ? "" : " (no key)"}</option>;
-            })}
+          <SelectInput value={value} disabled={!canAdmin || busy} onChange={(event) => onChoose(event.target.value)} className="h-9 w-full sm:w-auto sm:min-w-56">
+            {DECISION_FAMILIES.map((family) => (
+              <option key={family.id} value={`openrouter:${family.id}`}>
+                {family.label} via OpenRouter{openRouterReady ? "" : " (no key)"}
+              </option>
+            ))}
+            {value === "openrouter:other" ? <option value="openrouter:other">OpenRouter: {engineStatus.openrouterModel?.model}</option> : null}
+            {feature.candidates
+              .filter((id) => id !== "openrouter")
+              .map((id) => {
+                const provider = usableLabel(id);
+                const ready = provider ? provider.status === "ready" || provider.status === "shared" : false;
+                return <option key={id} value={PROVIDER_ENGINE[id]}>{provider?.label ?? id} (own key){ready ? "" : ", no key"}</option>;
+              })}
           </SelectInput>
         </label>
       ) : (
         <span className="text-sm text-fg-muted">{feature.line}</span>
       )}
-      {offerOpenRouter && !decisionModelChosen ? (
-        // OpenRouter decides only with a chosen decision model, so the first step is to choose one (on the Models tab).
-        <Button asChild size="sm" variant="secondary" className="order-last basis-full sm:order-none sm:basis-auto">
-          <Link to="/settings" search={{ tab: "models" }} hash="decision-model" resetScroll={false}>Choose a decision model</Link>
-        </Button>
-      ) : null}
-      {offerOpenRouter && decisionModelChosen ? (
-        <Button type="button" size="sm" variant="secondary" className="order-last basis-full sm:order-none sm:basis-auto" disabled={choose.isPending || switchToOpenRouter.isPending} onClick={() => void switchToOpenRouter.mutateAsync(undefined).catch(() => undefined)}>
-          {switchToOpenRouter.isPending ? "Checking..." : "Check and use OpenRouter"}
+      {canAdmin && feature.choice === "decision_engine" && feature.light === "missing" && activeEngine === "openrouter-decisions" ? (
+        <Button type="button" size="sm" variant="secondary" className="order-last basis-full sm:order-none sm:basis-auto" disabled={busy} onClick={() => void recheck.mutateAsync(undefined).catch(() => undefined)}>
+          {recheck.isPending ? "Checking..." : "Check again"}
         </Button>
       ) : null}
       <InfoButton label={feature.label}>

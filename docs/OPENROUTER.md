@@ -65,12 +65,15 @@ Decision models come from OpenRouter's live model catalogue, read without a key 
 | No verified profile | Listed under "Not offered", with the reason. Meridian does not infer a model's questions or inputs from its name. |
 | Catalogue unavailable | No decision model is offered, and no decision is sent. A failed read is remembered for one minute. |
 
-The profiles in code (`src/lib/meridian/decisions/decision-catalog.ts`) at 2026-10-25:
+The profiles in code (`src/lib/meridian/decisions/decision-catalog.ts`) at 2026-11-06:
 
 | Model | Answers | Takes | Basis |
 | --- | --- | --- | --- |
 | `typesafe/jev-1.14` | probability, choice, score | text, PNG/JPEG images | TypeSafe's documentation, as recorded. The catalogue agrees on modalities. |
 | `typesafe/jev-1.13` | probability, choice, score | text only | TypeSafe's documentation, as recorded. **The catalogue now lists image input too.** Meridian keeps the stricter reading until a vendor source or a live check says otherwise. |
+| `openai/gpt-6-luna-decisions` | probability, choice, score | text, images | Added on the owner's direction (2026-11-06). OpenRouter's listing: GPT-6 Luna served through OpenAI's Decisions API, reading text, JSON or images and returning typed answers. The question types are the ones Meridian's own OpenAI Decisions engine sends to GPT-6 Luna. No live call recorded. |
+
+**Choosing the latest.** Settings offers two families through OpenRouter: OpenAI Decisions and TypeSafe JEV. Choosing one picks that family's newest model in the live catalogue that has a profile here (by the listing's date), saves it as the workspace's decision model, runs the connection check, and switches the engine only when the check passes. An alias such as `~typesafe/jev-latest` is still never used: a new build is offered once it has a profile.
 
 The other 25 decision models in the recorded catalogue (`nace-ai/…`, `perplexity/…`, `liquid/…`, `cloudflare/…` and others) are listed and not offered. Each needs a profile, and a profile needs evidence of which primitives it answers. None has been recorded.
 

@@ -5,6 +5,7 @@ import { budgetBlocker } from "@/components/setup/engine-progress";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { saveOpenRouterDecisionModel, testOpenRouterDecisionConnection } from "@/lib/meridian/settings/server-actions";
+import { DECISION_FAMILIES, latestDecisionModel } from "@/lib/meridian/decisions/decision-catalog";
 import { qk } from "@/lib/query/keys";
 import { useOpenRouterDecisionModelsQuery, useScopedMutation } from "@/lib/query/hooks";
 
@@ -25,6 +26,7 @@ type EligibleModel = {
   contextLength: number;
   promptUsdPerMillionTokens: number;
   callCeilingUsd: number;
+  created: number | null;
 };
 
 type CatalogListing =
@@ -63,6 +65,13 @@ export function OpenRouterDecisionControls({
   // for what they are: listed by OpenRouter, not choosable yet.
   const eligible = listing?.ok ? [...listing.eligible].sort((a, b) => Number(b.verified) - Number(a.verified) || a.id.localeCompare(b.id)) : [];
   const chosen = eligible.find((entry) => entry.id === draft.trim() && entry.verified) ?? null;
+  // The newest verified model of each family is marked, so "the latest OpenAI Decisions" or "the latest JEV" is one pick.
+  const latestLabel = new Map(
+    DECISION_FAMILIES.flatMap((family) => {
+      const latest = latestDecisionModel(eligible, family.id);
+      return latest ? [[latest.id, `latest ${family.label}`] as const] : [];
+    }),
+  );
   const [refused, setRefused] = useState<string | null>(null);
   const save = useScopedMutation({
     mutationKey: ["mutation", "decision-engine.openrouter-model", organizationId],
@@ -138,7 +147,7 @@ export function OpenRouterDecisionControls({
                 {draft.trim() !== "" && !eligible.some((entry) => entry.id === draft.trim()) ? <option value={draft}>{draft} (not in the live catalogue)</option> : null}
                 {eligible.map((entry) => (
                   <option key={entry.id} value={entry.id} disabled={!entry.verified}>
-                    {entry.id}{entry.verified ? "" : " (not verified by Meridian, cannot be chosen yet)"}
+                    {entry.id}{latestLabel.has(entry.id) ? ` (${latestLabel.get(entry.id)})` : ""}{entry.verified ? "" : " (not verified by Meridian, cannot be chosen yet)"}
                   </option>
                 ))}
               </SelectInput>

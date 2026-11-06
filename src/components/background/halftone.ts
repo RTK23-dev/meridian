@@ -13,11 +13,23 @@ const LEVELS = 8;
 export const HALFTONE_DEFAULTS = Object.freeze({ pitch: 8, block: 1, sharp: 2, step: 11, jitter: 0.3, zoom: 8 });
 
 export type HalftoneStyle = { pitch: number; block: number; sharp: number; step: number; jitter: number };
+/** centreLat is the journey's position along the meridian, in degrees: the latitude at the middle of the window. It is not held to -90..90:
+ *  past a pole the journey carries on down the other side of the world (journeyPoint). */
 export type HalftoneView = { width: number; height: number; centreLat: number; zoom: number };
 export type HalftonePalette = { bg: string; line: string };
 
 const wrap = (value: number, period: number) => ((value % period) + period) % period;
-const wrapLat = (lat: number) => wrap(lat + 90, 180) - 90;
+
+/**
+ * Where a point of the journey is on the world. The journey runs along the meridian as one great circle: south from the north, over the
+ * South Pole, up the far side (longitude 180) and over the North Pole again, so a long page never reaches an edge or jumps. `position` is
+ * the distance along that circle in degrees, as a latitude on the near side; `lon` is the point's longitude as seen on the near side. On the
+ * far side the world is upside down on the screen, so a point to the right of the line is still in the same half of the world.
+ */
+export function journeyPoint(position: number, lon: number): { lat: number; lon: number } {
+  const t = wrap(position + 90, 360) - 90;
+  return t <= 90 ? { lat: t, lon } : { lat: 180 - t, lon: 180 - lon };
+}
 const clamp = (value: number, low: number, high: number) => Math.min(high, Math.max(low, value));
 // A stable value from 0 to 1 for each block, so the variation does not change from frame to frame.
 const hash01 = (i: number, j: number) => {
@@ -68,8 +80,7 @@ export function drawHalftone(
     for (let i = 0; i < cols; i += 1) {
       const x = (i + 0.5) * pitch;
       const y = (j + 0.5) * pitch;
-      const lon = (x - width / 2) / zoom;
-      const lat = wrapLat(centreLat - (y - height / 2) / zoom);
+      const { lat, lon } = journeyPoint(centreLat - (y - height / 2) / zoom, (x - width / 2) / zoom);
       const distance = sampleField(field, (lon + 180) / CELL_DEG - 0.5, (90 - lat) / CELL_DEG - 0.5);
       const ink = inkAt(distance, step, sharp);
       if (ink < 0.02) continue;
