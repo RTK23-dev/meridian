@@ -17,7 +17,7 @@ const MIN_REASON = 10;
  * The budget holds whose call may have been billed. Each one counts against the month until an administrator checks the provider's
  * account and releases it with a reason. Nothing releases a hold on its own, and each release is recorded with who released it.
  */
-export function UncertainHoldsPanel({ organizationId }: { organizationId: string }) {
+export function UncertainHoldsPanel({ organizationId, compact = false }: { organizationId: string; compact?: boolean }) {
   const holds = useUncertainHoldsQuery(organizationId);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -39,14 +39,16 @@ export function UncertainHoldsPanel({ organizationId }: { organizationId: string
   const releaseError = release.error ? plainError(release.error) : null;
 
   return (
-    <section className="space-y-3 border-t border-hairline pt-4" aria-labelledby="uncertain-holds-title" data-row="uncertain_holds">
+    <section className={compact ? "space-y-3" : "space-y-3 border-t border-hairline pt-4"} aria-labelledby="uncertain-holds-title" data-row="uncertain_holds">
+      {/* In compact form a surrounding summary shows the title, so it is kept for screen readers and the explanation is one line. */}
       <div className="space-y-1">
-        <h3 id="uncertain-holds-title" className="font-semibold text-fg-primary">
+        <h3 id="uncertain-holds-title" className={compact ? "sr-only" : "font-semibold text-fg-primary"}>
           Uncertain holds
         </h3>
         <p className="text-sm text-fg-muted">
-          A call that may have been billed keeps its hold, and the hold counts against the month, until an administrator checks the
-          provider's account and releases it. Nothing releases a hold automatically. Each release is recorded with who released it and why.
+          {compact
+            ? "A call that may have been billed counts against the month until an admin checks the provider's account and releases it with a reason."
+            : "A call that may have been billed keeps its hold, and the hold counts against the month, until an administrator checks the provider's account and releases it. Nothing releases a hold automatically. Each release is recorded with who released it and why."}
         </p>
       </div>
       {holds.isPending ? <p className="text-sm text-fg-muted">Reading the uncertain holds...</p> : null}

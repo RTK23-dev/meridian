@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Info } from "lucide-react";
-import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, ErrorState, Input, Popover, PopoverContent, PopoverTrigger, SelectInput } from "@/components/ui";
+import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, ErrorState, Input, SelectInput } from "@/components/ui";
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
+import { InfoButton } from "@/components/settings/info-button";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useGenerationModelsQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
@@ -44,20 +44,6 @@ const PROVIDER_STATUS: Record<ProviderStatus, { dot: string; word: string }> = {
 
 function Dot({ className }: { className: string }) {
   return <span aria-hidden="true" className={`inline-block size-2.5 shrink-0 rounded-full ${className}`} />;
-}
-
-/** The small info button. Details are there when a person wants them, never in the row itself. */
-function InfoButton({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" aria-label={`About ${label}`} className="inline-flex size-7 items-center justify-center rounded-full text-fg-muted hover:text-fg-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent">
-          <Info aria-hidden="true" className="size-4" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 space-y-2 text-sm">{children}</PopoverContent>
-    </Popover>
-  );
 }
 
 /**

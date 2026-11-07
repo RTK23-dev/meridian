@@ -22,7 +22,7 @@ import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeModel, writeJevBackend, writeJevTypesafeModel, type JevTypesafeModel } from "../decisions/jev-backend.ts";
 import { resolveJevConfig } from "../jev/config.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
-import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, saveGenerationModel, storedGenerationModels } from "./generation-models.ts";
+import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, isPinnedModelId, saveGenerationModel, storedGenerationModels, type GenerationTask } from "./generation-models.ts";
 import { MODEL_PRESETS, isModelPreset, presetChoices } from "./model-presets.ts";
 import { imageCallFitsCeiling } from "./preset-image-fit.ts";
 import { MEDIA_TASKS, eligibleForMediaTask, isMediaTask, saveMediaModel, storedMediaModels, type MediaModelChoice, type MediaTask } from "./media-models.ts";
@@ -407,7 +407,8 @@ export const getGenerationCatalogue = createServerFn({ method: "GET" })
       ok: true as const,
       reason: null,
       readAt: new Date().toISOString(),
-      models: state.models.map((model) => ({
+      // An alias ("~vendor/model-latest") moves to new builds, so a save refuses it (isPinnedModelId); it is not offered either.
+      models: state.models.filter((model) => isPinnedModelId(model.id)).map((model) => ({
         id: model.id,
         name: model.name,
         takes: model.inputModalities,
@@ -456,6 +457,45 @@ export const saveGenerationModelChoice = createServerFn({ method: "POST" })
     } catch (error) {
       return { ok: false as const, reason: error instanceof Error ? error.message : "The model could not be saved." };
     }
+  });
+
+/**
+ * Saves or clears one model for several tasks at once (the Models tab's multi-select). The catalogue is read once, here, and each task goes
+ * through the same checked save as one task's choice, so a model that does not suit a task is refused for that task alone and the others
+ * still save. Admin only. When the catalogue cannot be read, nothing changes.
+ */
+export const saveGenerationModelChoices = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const modelId = obj.modelId === null || obj.modelId === undefined ? null : asText(obj.modelId).trim() || null;
+    if (!organizationId) throw new Error("organizationId is required.");
+    const rawTasks = Array.isArray(obj.tasks) ? obj.tasks : [];
+    const tasks = [...new Set(rawTasks.map((task) => asText(task)))];
+    if (tasks.length === 0) throw new Error("Choose at least one task.");
+    for (const task of tasks) if (!isGenerationTask(task)) throw new Error(`'${task}' is not a generation task.`);
+    return { organizationId, modelId, tasks: tasks as GenerationTask[] };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    let choices: TextModelChoice[] | null = null;
+    if (data.modelId !== null) {
+      const state = await textModelsFor(sql, { organizationId: data.organizationId, now: () => new Date().toISOString() });
+      if (state.status !== "ok") return { ok: false as const, reason: `${state.reason} No model was changed.`, results: [] };
+      choices = state.models;
+    }
+    const results: Array<{ task: GenerationTask; label: string; saved: boolean; reason: string | null }> = [];
+    for (const task of data.tasks) {
+      try {
+        await saveGenerationModel(sql, { organizationId: data.organizationId, task, modelId: data.modelId, actorId: context.userId, choices });
+        results.push({ task, label: GENERATION_TASKS[task].label, saved: true, reason: null });
+      } catch (error) {
+        results.push({ task, label: GENERATION_TASKS[task].label, saved: false, reason: error instanceof Error ? error.message : "Not saved." });
+      }
+    }
+    return { ok: true as const, modelId: data.modelId, results };
   });
 
 /**
