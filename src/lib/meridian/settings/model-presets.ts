@@ -30,13 +30,15 @@ export type PresetCatalogueModel = {
 export const MODEL_PRESET_IDS = ["claude", "frontier", "budget"] as const;
 export type ModelPresetId = (typeof MODEL_PRESET_IDS)[number];
 
-export const MODEL_PRESETS: Record<ModelPresetId, { label: string; description: string }> = {
-  claude: { label: "Claude only", description: "Every task on Anthropic's Claude: the flagship writes, a fast Claude analyses." },
+/** `tagline` is the few words a preset card shows; `description` is the whole of it, behind the card's info button. */
+export const MODEL_PRESETS: Record<ModelPresetId, { label: string; tagline: string; description: string }> = {
+  claude: { label: "Claude only", tagline: "One family, top quality", description: "Every task on Anthropic's Claude: the flagship writes, a fast Claude analyses." },
   frontier: {
     label: "Frontier mix",
+    tagline: "Three families check each other",
     description: "Claude writes, OpenAI or Google writes a second set of ideas and judges, and a cheap DeepSeek model does the bulk analysis.",
   },
-  budget: { label: "Budget", description: "DeepSeek for every text task and a cheap current model that reads images for vision." },
+  budget: { label: "Budget", tagline: "Lowest cost", description: "DeepSeek for every text task and a cheap current model that reads images for vision." },
 };
 
 export function isModelPreset(value: unknown): value is ModelPresetId {
