@@ -1,15 +1,15 @@
-import { FILE_RULES, MAX_MESSAGE_CHARS, type MediaTypeRule } from "../../lib/meridian/content-factory/model.ts";
+import { FILE_RULES, MAX_MESSAGE_CHARS, type FileKind, type FilePurpose, type MediaTypeRule } from "../../lib/meridian/content-factory/model.ts";
 
 /**
- * How the Create page runs what you type. Orchestrator takes your words, plans the piece and makes it, and saves it as a draft. Studio
- * leaves every control to you, on the same page. Pure, so the rules can be tested without a browser.
+ * How the Create page runs what you type. In both modes your words and files are saved as the draft. Orchestrator then plans the piece
+ * for you; Studio leaves each step to you, phase by phase, on the same page. Pure, so the rules can be tested without a browser.
  */
 export const CREATE_MODES = ["orchestrator", "studio"] as const;
 export type CreateMode = (typeof CREATE_MODES)[number];
 
 export const CREATE_MODE_COPY: Record<CreateMode, { label: string; hint: string }> = {
-  orchestrator: { label: "Orchestrator", hint: "Describe it. Meridian plans and makes the piece for you." },
-  studio: { label: "Studio", hint: "Set each control yourself, on this page." },
+  orchestrator: { label: "Orchestrator", hint: "Meridian plans the piece for you." },
+  studio: { label: "Studio", hint: "You set each step yourself, phase by phase." },
 };
 
 /** Starting points a person can tap, so an empty page still shows what it can make. */
@@ -19,9 +19,14 @@ export const CREATE_SUGGESTIONS = [
   "Ten variations of one draft for a batch",
 ] as const;
 
-/** Why the message cannot be sent yet, in words a person can act on. Null when it can be sent. */
-export function sendBlock({ text, mode, canAdmin, busy }: { text: string; mode: CreateMode; canAdmin: boolean; busy: boolean }): string | null {
-  if (mode === "studio") return "Studio works on the controls on this page. Switch to Orchestrator to write it out.";
+/** The composer's placeholder in each mode. */
+export const CREATE_PLACEHOLDER: Record<CreateMode, string> = {
+  orchestrator: "Describe the video, the product or the reference",
+  studio: "Describe what to make; you set each step below",
+};
+
+/** Why the message cannot be sent yet, in words a person can act on. Null when it can be sent. Both modes send the same way. */
+export function sendBlock({ text, canAdmin, busy }: { text: string; mode?: CreateMode; canAdmin: boolean; busy: boolean }): string | null {
   if (!canAdmin) return "Only a workspace admin can start a draft.";
   if (busy) return "Sending.";
   if (text.trim() === "") return "Write what you want to make.";
@@ -58,6 +63,20 @@ export function fileProblem(file: { type: string; name: string; size: number }):
 /** A video is a reference to copy from; anything else is material for the draft. A person can change it on the file. */
 export function purposeFor(file: { type: string }): "reference_video" | "material" {
   return file.type.startsWith("video/") ? "reference_video" : "material";
+}
+
+/** The reference a file of this kind can be: a video is the reference video, a picture a reference image. Text and PDFs are material only. */
+export function referencePurposeOf(kind: FileKind): Exclude<FilePurpose, "material"> | null {
+  if (kind === "video") return "reference_video";
+  if (kind === "image") return "reference_image";
+  return null;
+}
+
+/** The purpose after a person taps the file's Reference/Material switch. A file that cannot be a reference stays material. */
+export function togglePurposeOf(kind: FileKind, purpose: FilePurpose): FilePurpose {
+  const reference = referencePurposeOf(kind);
+  if (reference === null) return "material";
+  return purpose === "material" ? reference : "material";
 }
 
 /** The Create page's address: `?draft=<id>` reopens a draft, so a reload or a shared link comes back to it and its scripts. */

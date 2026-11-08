@@ -211,7 +211,7 @@ export function uploadInput(input: unknown): { sessionId: string; messageId: str
   const base64 = typeof body.base64 === "string" ? body.base64 : "";
   if (!base64) throw new Error("No file was sent.");
   if (base64.length > MAX_BASE64_CHARS) throw new Error("The file is too large to store.");
-  if (!isFilePurpose(body.purpose)) throw new Error("Say whether the file is the reference video or other material.");
+  if (!isFilePurpose(body.purpose)) throw new Error("Say whether the file is a reference (a video or an image) or other material.");
   return {
     sessionId: idOf(body.sessionId, "session"),
     messageId: idOf(body.messageId, "message"),

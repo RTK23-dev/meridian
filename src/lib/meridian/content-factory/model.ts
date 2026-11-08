@@ -49,7 +49,12 @@ export const SOURCE_PAGE_LABELS: Record<SourcePage, string> = {
   market: "Market research",
 };
 
-export const FILE_PURPOSES = ["reference_video", "material"] as const;
+/**
+ * What a file is for. The reference video is the one video a draft copies its format from (one per session). A reference image is a
+ * picture the person marked as a look to follow: it goes to the engine as a brief attachment named as a reference image (its pixels are
+ * not read). Material is everything else.
+ */
+export const FILE_PURPOSES = ["reference_video", "reference_image", "material"] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
 export type FileKind = "video" | "image" | "text" | "document";
@@ -77,8 +82,22 @@ export const MAX_FILE_BYTES = Math.max(...FILE_RULES.map((rule) => rule.maxBytes
 /** The base64 length of the largest file, with its padding. */
 export const MAX_BASE64_CHARS = Math.ceil(MAX_FILE_BYTES / 3) * 4;
 
-/** A text file is read into the brief when it has at most this many characters: the engine's brief source limit (BRIEF_SOURCE_TEXT_MAX). */
-export const TEXT_FILE_MAX_CHARS = 4000;
+/**
+ * A text file (and a PDF's text) is read into the brief when it has at most this many characters: the engine's whole brief
+ * (BRIEF_TEXT_MAX). It travels in parts of at most TEXT_PART_MAX_CHARS, the engine's brief source limit (BRIEF_SOURCE_TEXT_MAX), so a
+ * long file is split, never cut. request.test.ts keeps both equal to the engine's values.
+ */
+export const TEXT_FILE_MAX_CHARS = 8000;
+export const TEXT_PART_MAX_CHARS = 4000;
+
+/** The longest text file accepted. One longer than TEXT_FILE_MAX_CHARS is kept with the session and sent as an attachment, not read. */
+export const TEXT_FILE_ACCEPT_MAX_CHARS = 200_000;
+
+/** Stored instead of the text when a text file is longer than the brief takes. It is not brief text. */
+export const TEXT_OVER_LIMIT_CONTENT = "text-over-brief-limit";
+
+/** What the session says about a text file too long for the brief. */
+export const TEXT_LIMIT_NOTE = "Its text is longer than the brief allows, so it is not in the brief. The file is kept with the session.";
 
 /** What the session says about a PDF whose text was not readable. A readable PDF within the text limit is used in the brief. */
 export const PDF_TEXT_NOTE = "PDF text could not be read, so it is not in the brief. The file is kept with the session.";
@@ -89,7 +108,7 @@ export const PDF_OVER_LIMIT_CONTENT = "pdf-over-brief-limit";
 /** What the session says when the PDF was read and excluded because it is too long. */
 export const PDF_TEXT_LIMIT_NOTE = "PDF text is longer than the brief allows, so it is not in the brief. The file is kept with the session.";
 
-export const ACCEPTED_FILE_LABEL = `MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and text files (TXT, Markdown, CSV or JSON) of at most ${TEXT_FILE_MAX_CHARS} characters`;
+export const ACCEPTED_FILE_LABEL = `MP4, MOV or WEBM video up to 40 MB, PNG, JPEG or WEBP images and PDFs up to 10 MB, and text files (TXT, Markdown, CSV or JSON) up to ${TEXT_FILE_ACCEPT_MAX_CHARS.toLocaleString("en-GB")} characters (one of up to ${TEXT_FILE_MAX_CHARS.toLocaleString("en-GB")} is read into the brief; a longer one is kept with the draft)`;
 
 export const MAX_MESSAGE_CHARS = 4000;
 export const MAX_TITLE_CHARS = 120;
@@ -132,7 +151,10 @@ export type FileAttachment = {
   mediaType: string;
   bytes: number;
   sha256: string;
-  /** A text file's content, read into the brief (at most TEXT_FILE_MAX_CHARS characters). Null for every other file. */
+  /**
+   * A text file's or PDF's text, read into the brief (at most TEXT_FILE_MAX_CHARS characters), or the over-limit marker; an image's
+   * measured size. Null for every other file.
+   */
   content: string | null;
   createdAt: string;
 };

@@ -5,7 +5,8 @@
  * Binary types (video, images, PDF) are read from their first bytes, never from the name or the browser's claim. A text file must be
  * UTF-8 with no NUL bytes and no control character that plain text does not use. Its name only picks its text type (Markdown, CSV or
  * JSON; a JSON file must parse). A text file of at most TEXT_FILE_MAX_CHARS characters is read into the brief: its text comes back as
- * `content`, and the request sends it as a brief source. Every checked file is stored, so a text file also needs a brand and Drive.
+ * `content`, and the request sends it as brief sources. A longer one, up to TEXT_FILE_ACCEPT_MAX_CHARS, is kept with the session and
+ * marked as over the limit. Every checked file is stored, so a text file also needs a brand and Drive.
  *
  * The bytes go to Meridian's storage layer (src/lib/meridian/storage: Google Drive, indexed by storage_objects), through the
  * ContentFactoryFileStore port. No vendor SDK and no other object store. Drive keeps files per brand, so a session needs a brand before
@@ -13,11 +14,14 @@
  */
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
-import { FILE_RULES, MAX_BASE64_CHARS, MAX_FILE_BYTES, TEXT_FILE_MAX_CHARS, type FileKind, type FilePurpose, type MediaTypeRule } from "./model.ts";
+import { FILE_RULES, MAX_BASE64_CHARS, MAX_FILE_BYTES, TEXT_FILE_ACCEPT_MAX_CHARS, TEXT_FILE_MAX_CHARS, TEXT_OVER_LIMIT_CONTENT, type FileKind, type FilePurpose, type MediaTypeRule } from "./model.ts";
 
-export { ACCEPTED_FILE_LABEL, FILE_RULES, MAX_BASE64_CHARS, MAX_FILE_BYTES, TEXT_FILE_MAX_CHARS } from "./model.ts";
+export { ACCEPTED_FILE_LABEL, FILE_RULES, MAX_BASE64_CHARS, MAX_FILE_BYTES, TEXT_FILE_ACCEPT_MAX_CHARS, TEXT_FILE_MAX_CHARS } from "./model.ts";
 
-const REFERENCE_REASON = "The reference must be a video file (MP4, MOV or WEBM).";
+const REFERENCE_REASON: Record<Exclude<FilePurpose, "material">, string> = {
+  reference_video: "A reference video must be a video file (MP4, MOV or WEBM). A picture can be a reference image instead.",
+  reference_image: "A reference image must be a PNG, JPEG or WEBP image.",
+};
 
 const SUBJECT: Record<FileKind, string> = { video: "This video", image: "This image", document: "This PDF", text: "This text file" };
 
@@ -187,8 +191,8 @@ export type CheckedFile = { mediaType: string; kind: FileKind; extension: string
 export type FileCheck = { ok: true; file: CheckedFile } | { ok: false; reason: string };
 
 /**
- * Checks one file's bytes for its purpose. A reference video must be a video. A text file is checked as text; when it has at most
- * TEXT_FILE_MAX_CHARS characters, its content comes back for the brief.
+ * Checks one file's bytes for its purpose. A reference video must be a video and a reference image an image. A text file is checked as
+ * text; when it has at most TEXT_FILE_MAX_CHARS characters, its content comes back for the brief, and a longer one comes back marked.
  */
 export function checkFile(bytes: Uint8Array, purpose: FilePurpose, fileName = ""): FileCheck {
   if (bytes.byteLength === 0) return { ok: false, reason: "The file is empty, so it was not stored." };
@@ -200,7 +204,7 @@ export function checkFile(bytes: Uint8Array, purpose: FilePurpose, fileName = ""
   if (binary !== null) return checkBinary(bytes, binary, purpose);
   const plain = readPlainText(bytes);
   if (!plain.ok) return { ok: false, reason: plain.reason };
-  if (purpose === "reference_video") return { ok: false, reason: REFERENCE_REASON };
+  if (purpose !== "material") return { ok: false, reason: REFERENCE_REASON[purpose] };
   return checkText(bytes, plain.text, fileName);
 }
 
@@ -209,15 +213,16 @@ function checkBinary(bytes: Uint8Array, mediaType: string, purpose: FilePurpose)
   if (found.maxBytes !== undefined && bytes.byteLength > found.maxBytes) {
     return { ok: false, reason: `${SUBJECT[found.kind]} can be at most ${found.maxBytes / 1_000_000} MB, so it was not stored.` };
   }
-  if (purpose === "reference_video" && found.kind !== "video") return { ok: false, reason: REFERENCE_REASON };
+  if (purpose === "reference_video" && found.kind !== "video") return { ok: false, reason: REFERENCE_REASON.reference_video };
+  if (purpose === "reference_image" && found.kind !== "image") return { ok: false, reason: REFERENCE_REASON.reference_image };
   return { ok: true, file: checkedFile(bytes, found, null) };
 }
 
 function checkText(bytes: Uint8Array, text: string, fileName: string): FileCheck {
   if (text.trim() === "") return { ok: false, reason: "This text file has no text in it, so it was not stored." };
   const characters = characterCount(text);
-  if (characters > TEXT_FILE_MAX_CHARS) {
-    return { ok: false, reason: `This file has ${characters} characters; the limit for a text file is ${TEXT_FILE_MAX_CHARS}. Shorten it or split it into two files.` };
+  if (characters > TEXT_FILE_ACCEPT_MAX_CHARS) {
+    return { ok: false, reason: `This file has ${characters} characters; the limit for a text file is ${TEXT_FILE_ACCEPT_MAX_CHARS}. Split it into smaller files.` };
   }
   const found = rule(textMediaTypeOf(fileName));
   if (found.mediaType === "application/json") {
@@ -227,7 +232,8 @@ function checkText(bytes: Uint8Array, text: string, fileName: string): FileCheck
       return { ok: false, reason: "This file is named as JSON, but its content is not valid JSON, so it was not stored." };
     }
   }
-  return { ok: true, file: checkedFile(bytes, found, text) };
+  // A file longer than the brief takes is kept whole with the session, and marked, so it is never cut to fit.
+  return { ok: true, file: checkedFile(bytes, found, characters > TEXT_FILE_MAX_CHARS ? TEXT_OVER_LIMIT_CONTENT : text) };
 }
 
 function checkedFile(bytes: Uint8Array, found: MediaTypeRule, content: string | null): CheckedFile {

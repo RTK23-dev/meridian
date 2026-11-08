@@ -34,7 +34,7 @@ const BRAND_SCREENS = [
   { path: "/brain", label: "brain" },
   { path: "/market", label: "market" },
   { path: "/opportunities", label: "opportunities" },
-  { path: "/studio", label: "studio", tabs: ["1. Direction", "2. Brief", "3. Generate", "4. Review", "5. Queue & schedule"] },
+  { path: "/studio", label: "studio", tablist: "Studio phases", tabs: ["Direction", "Brief", "Generate", "Review", "Queue"] },
   { path: "/library", label: "library" },
   { path: "/learning", label: "learning" },
   { path: "/reviews", label: "reviews" },
@@ -201,10 +201,12 @@ async function checkDialogs(page, screenLabel, screenUrl) {
   return results;
 }
 
-async function auditScreen(page, label, url, tab, dialogs) {
+async function auditScreen(page, label, url, tab, dialogs, tablist = null) {
   try {
     await page.goto(url, { waitUntil: "networkidle" });
-    if (tab) await page.getByRole("tab", { name: tab }).click();
+    // A screen whose tab names also appear in another tab list on the page names its own list, so the right tab is clicked.
+    const scope = tablist ? page.getByRole("tablist", { name: tablist }) : page;
+    if (tab) await scope.getByRole("tab", { name: tab }).click();
     await page.waitForLoadState("networkidle");
     const facts = await page.evaluate(collectButtonFacts);
     const controls = facts.map((fact) => ({ ...fact, ...classifyControl(fact) }));
@@ -237,7 +239,7 @@ try {
       continue;
     }
     for (const tab of screen.tabs) {
-      screens.push(await auditScreen(page, `${screen.label} · ${tab}`, url, tab, dialogs));
+      screens.push(await auditScreen(page, `${screen.label} · ${tab}`, url, tab, dialogs, screen.tablist ?? null));
     }
   }
 } catch (error) {

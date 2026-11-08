@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_SUGGESTIONS, createSearchOf, fileProblem, purposeFor, ruleFor, sendBlock, titleFor } from "./create-model.ts";
+import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_PLACEHOLDER, CREATE_SUGGESTIONS, createSearchOf, fileProblem, purposeFor, referencePurposeOf, ruleFor, sendBlock, titleFor, togglePurposeOf } from "./create-model.ts";
 import { MAX_MESSAGE_CHARS } from "../../lib/meridian/content-factory/model.ts";
 
 const ready = { text: "A 30-second video for my new mug", mode: "orchestrator" as const, canAdmin: true, busy: false };
@@ -9,9 +9,9 @@ test("a message can be sent in Orchestrator mode by an admin, when it has words"
   assert.equal(sendBlock(ready), null);
 });
 
-test("Studio never sends text: it says where the controls are", () => {
-  const reason = sendBlock({ ...ready, mode: "studio" });
-  assert.match(reason ?? "", /controls on this page/);
+test("Studio takes a typed request like Orchestrator, with its own placeholder", () => {
+  assert.equal(sendBlock({ ...ready, mode: "studio" }), null);
+  assert.match(CREATE_PLACEHOLDER.studio, /you set each step/);
 });
 
 test("a non-admin is told why nothing is sent, and a busy page says so", () => {
@@ -56,6 +56,16 @@ test("a video is a reference, and anything else is material", () => {
   assert.equal(purposeFor({ type: "video/quicktime" }), "reference_video");
   assert.equal(purposeFor({ type: "image/png" }), "material");
   assert.equal(purposeFor({ type: "" }), "material");
+});
+
+test("a video can be the reference video and a picture a reference image; text and PDFs stay material", () => {
+  assert.equal(referencePurposeOf("video"), "reference_video");
+  assert.equal(referencePurposeOf("image"), "reference_image");
+  assert.equal(referencePurposeOf("text"), null);
+  assert.equal(togglePurposeOf("image", "material"), "reference_image");
+  assert.equal(togglePurposeOf("image", "reference_image"), "material");
+  assert.equal(togglePurposeOf("video", "material"), "reference_video");
+  assert.equal(togglePurposeOf("document", "material"), "material", "a PDF has no reference to switch to");
 });
 
 test("the address reopens a draft by its id, and ignores anything else", () => {

@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { extractPdf } from "../ingestion/pdf.ts";
 import { characterCount, checkFile, decodeUpload, driveFileStore, imageDimensions, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
-import { isPriority, isScriptRole, isSourcePage, MAX_SECONDS, MIN_SECONDS, TEXT_FILE_MAX_CHARS, PDF_OVER_LIMIT_CONTENT, type Attachment, type FilePurpose, type KeepableGene, type Message, type ScriptRole, type SessionDetail, type SessionSummary, type SourcePage, type SourceResult } from "./model.ts";
+import { isFilePurpose, isPriority, isScriptRole, isSourcePage, MAX_SECONDS, MIN_SECONDS, TEXT_FILE_MAX_CHARS, PDF_OVER_LIMIT_CONTENT, type Attachment, type FilePurpose, type KeepableGene, type Message, type ScriptRole, type SessionDetail, type SessionSummary, type SourcePage, type SourceResult } from "./model.ts";
 import { readSourceRecord, searchSourceRecords } from "./sources.ts";
 import { SESSION_REFUSAL, STARTED_REFUSAL, SESSION_COLUMNS, iso, jsonList, summaryOf, settingsOf, audit, requireWorkspaceAdmin, sessionAccess, requireBrandInWorkspace, requireDraft, lockDraft, hasReferenceVideo, requireMessage, touch } from "./service-core.ts";
 import type { ContentFactoryPorts, SessionRow } from "./service-core.ts";
@@ -144,7 +144,7 @@ export async function messagesOf(sql: Sql, row: SessionRow): Promise<Message[]> 
         id: String(item.id),
         kind: "file",
         messageId,
-        purpose: item.purpose === "reference_video" ? "reference_video" : "material",
+        purpose: isFilePurpose(item.purpose) ? item.purpose : "material",
         fileName: String(item.file_name ?? ""),
         storageObjectId: item.storage_object_id === null ? null : String(item.storage_object_id),
         storageKey: String(item.storage_key ?? ""),
