@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef } from "react";
-import { ArrowUp, Check, ChevronDown, FileText, Film, Image as ImageIcon, Plus, SlidersHorizontal, Sparkles, X } from "lucide-react";
+import { Link } from "@tanstack/react-router";
+import { ArrowUp, Check, ChevronDown, FileText, Film, Image as ImageIcon, Plus, Settings, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui";
 import { MAX_MESSAGE_CHARS } from "@/lib/meridian/content-factory/model";
-import { CREATE_MODE_COPY, CREATE_MODES, type CreateMode } from "./create-model";
+import { CREATE_MODE_COPY, CREATE_MODES, CREATE_PLACEHOLDER, type CreateMode } from "./create-model";
 
-export type ModelOption = { value: string; label: string };
-export type ComposerFile = { id: string; name: string; kind: "video" | "image" | "document" | "text"; purpose: "reference_video" | "material" };
+/** A file waiting in the composer. `reference` is null for a file that can only be material (text, PDF). */
+export type ComposerFile = { id: string; name: string; kind: "video" | "image" | "document" | "text"; reference: boolean | null };
 
 /*
  * Design rules for this composer, kept in one place so every part follows them:
@@ -25,22 +26,21 @@ function KindIcon({ kind }: { kind: ComposerFile["kind"] }) {
 
 /**
  * The input under the conversation, built as one shell: the attachments and the text on top, and one row beneath with the plus, the
- * mode, the model and Send. It sticks to the bottom of the page, so it is in reach on a phone.
+ * mode (whose menu also leads to the model settings) and Send. It sticks to the bottom of the page, so it is in reach on a phone, and it
+ * has no band of its own behind it: the page's background shows around it.
  */
 export function CreateComposer({
   text,
   onText,
   mode,
   onMode,
-  models,
-  model,
-  onModel,
   files,
   onTogglePurpose,
   onRemoveFile,
   onAttach,
   canSend,
-  hint,
+  blockReason,
+  notice,
   busy,
   onSend,
 }: {
@@ -48,19 +48,18 @@ export function CreateComposer({
   onText: (text: string) => void;
   mode: CreateMode;
   onMode: (mode: CreateMode) => void;
-  models: ModelOption[];
-  model: string;
-  onModel: (model: string) => void;
   files: ComposerFile[];
   onTogglePurpose: (id: string) => void;
   onRemoveFile: (id: string) => void;
   onAttach: () => void;
   canSend: boolean;
-  hint: string;
+  /** Why Send is off. Read out to a screen reader and shown on the button's tooltip; the page shows no line of text for it. */
+  blockReason: string | null;
+  /** A lasting reason the person cannot send at all (not an admin), shown under the box. Null otherwise. */
+  notice?: string | null;
   busy: boolean;
   onSend: () => void;
 }) {
-  const studio = mode === "studio";
   const field = useRef<HTMLTextAreaElement>(null);
 
   // The box grows with the text, up to a limit, then scrolls. Growing from the content keeps the first line in place.
@@ -72,18 +71,19 @@ export function CreateComposer({
   }, [text]);
 
   const ModeIcon = mode === "studio" ? SlidersHorizontal : Sparkles;
-  const modelLabel = models.find((option) => option.value === model)?.label ?? "Auto";
 
   return (
     <form
       aria-label="Compose"
-      className="sticky bottom-0 z-10 -mx-4 bg-ground px-4 pb-4 pt-3 sm:-mx-6 sm:px-6"
+      // On a phone the page scrolls inside <main>, whose 24px bottom padding sits under a sticky box; the box docks onto the bottom bar
+      // (-bottom-6), so no page text shows beneath it and it needs no band of its own. On a wide screen the window scrolls.
+      className="sticky -bottom-6 z-10 pt-3 lg:bottom-0 lg:pb-4"
       onSubmit={(event) => {
         event.preventDefault();
         if (canSend && !busy) onSend();
       }}
     >
-      <div className={`${SHELL} border border-border-strong bg-overlay p-2 transition-colors has-[textarea:focus-visible]:border-fg-secondary`}>
+      <div className={`${SHELL} border border-border-strong bg-overlay p-2 transition-colors has-[textarea:focus-visible]:border-fg-secondary max-lg:border-b-0`}>
         <div className="px-3 pt-1">
           {files.length > 0 ? (
             <ul aria-label="Attached files" className="mb-2 flex flex-wrap gap-2">
@@ -91,14 +91,18 @@ export function CreateComposer({
                 <li key={file.id} className="flex h-9 max-w-full items-center gap-2 rounded-sharp bg-raised py-0.5 pl-3 pr-0.5 text-caption text-fg-primary">
                   <KindIcon kind={file.kind} />
                   <span className="min-w-0 max-w-40 truncate">{file.name}</span>
-                  <button
-                    type="button"
-                    onClick={() => onTogglePurpose(file.id)}
-                    aria-label={`${file.name}: ${file.purpose === "reference_video" ? "a reference video" : "material"}. Change`}
-                    className="h-7 rounded-sharp border border-border-strong px-2.5 text-caption text-fg-secondary hover:text-fg-primary"
-                  >
-                    {file.purpose === "reference_video" ? "Reference" : "Material"}
-                  </button>
+                  {file.reference === null ? (
+                    <span className="px-1 text-caption text-fg-muted">Material</span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => onTogglePurpose(file.id)}
+                      aria-label={`${file.name}: ${file.reference ? (file.kind === "video" ? "the reference video" : "a reference image") : "material"}. Change`}
+                      className="h-7 rounded-sharp border border-border-strong px-2.5 text-caption text-fg-secondary hover:text-fg-primary"
+                    >
+                      {file.reference ? "Reference" : "Material"}
+                    </button>
+                  )}
                   <button type="button" onClick={() => onRemoveFile(file.id)} aria-label={`Remove ${file.name}`} className="grid size-7 place-items-center rounded-sharp text-fg-muted hover:bg-overlay hover:text-fg-primary">
                     <X aria-hidden="true" className="size-3.5" />
                   </button>
@@ -113,9 +117,8 @@ export function CreateComposer({
             value={text}
             rows={1}
             maxLength={MAX_MESSAGE_CHARS}
-            disabled={studio}
-            aria-describedby="create-hint"
-            placeholder={studio ? "Studio uses the controls on this page." : "Describe the video, the product or the reference"}
+            aria-describedby={blockReason ? "create-block" : undefined}
+            placeholder={CREATE_PLACEHOLDER[mode]}
             onChange={(event) => onText(event.target.value)}
             onKeyDown={(event) => {
               // Enter sends and Shift+Enter starts a line, as in a chat app. Not while an input method is still composing a word.
@@ -162,23 +165,14 @@ export function CreateComposer({
                     </DropdownMenuItem>
                   );
                 })}
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button type="button" className={PILL} aria-label={`Model: ${modelLabel}`}>
-                  {modelLabel}
-                  <ChevronDown aria-hidden="true" className="size-3.5 text-fg-muted" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-64 p-1.5">
-                {models.map((option) => (
-                  <DropdownMenuItem key={option.value} onSelect={() => onModel(option.value)} className="items-center gap-3 rounded-sharp p-3">
-                    <span className="min-w-0 flex-1 text-sm text-fg-primary">{option.label}</span>
-                    {model === option.value ? <Check aria-hidden="true" className="size-4 shrink-0 text-fg-primary" /> : null}
-                  </DropdownMenuItem>
-                ))}
+                {/* The models each task runs on are chosen in Settings; the menu leads there instead of a second picker here. */}
+                <div role="separator" className="mx-2 my-1 h-px bg-hairline" />
+                <DropdownMenuItem asChild className="items-center gap-3 rounded-sharp p-3">
+                  <Link to="/settings" search={{ tab: "models" }}>
+                    <Settings aria-hidden="true" className="size-4 shrink-0 text-fg-secondary" />
+                    <span className="min-w-0 flex-1 text-sm font-semibold text-fg-primary">Models</span>
+                  </Link>
+                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
@@ -187,6 +181,8 @@ export function CreateComposer({
             type="submit"
             aria-label={busy ? "Sending" : "Send"}
             aria-busy={busy || undefined}
+            aria-describedby={blockReason ? "create-block" : undefined}
+            title={blockReason ?? undefined}
             disabled={!canSend || busy}
             className={`grid size-10 shrink-0 place-items-center rounded-sharp transition-colors pointer-coarse:size-11 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fg-primary disabled:cursor-not-allowed ${canSend ? "bg-accent text-on-accent hover:bg-accent-hover" : "bg-raised text-fg-muted"}`}
           >
@@ -195,7 +191,8 @@ export function CreateComposer({
         </div>
       </div>
 
-      <p id="create-hint" role={canSend ? undefined : "status"} className="px-5 pt-2 text-caption text-fg-muted">{hint}</p>
+      <p id="create-block" role="status" className="sr-only">{blockReason ?? ""}</p>
+      {notice ? <p className="px-1 pt-2 text-caption text-fg-muted">{notice}</p> : null}
     </form>
   );
 }

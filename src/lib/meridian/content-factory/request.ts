@@ -6,9 +6,10 @@
  * - format.referenceVideo: the session's reference video file. format.formatId: named after that file's SHA-256, so the same reference
  *   is the same format. format.keep: the genes the person ticked.
  * - By default the request carries a brief and the engine writes the script (contract v8, write_script). The chat instructions are the
- *   brief's text. The snapshots of the attached Meridian records and the text files (each at most TEXT_FILE_MAX_CHARS characters) are its
- *   sources, labelled by page or by file name. Every other file that is not the reference (images and PDFs) is an attachment with its
- *   store:// uri, media type and a note. The instructions and the text files share the brief's total limit (BRIEF_TEXT_MAX).
+ *   brief's text. The snapshots of the attached Meridian records and the text files (each at most TEXT_FILE_MAX_CHARS characters, in
+ *   parts of at most TEXT_PART_MAX_CHARS) are its sources, labelled by page or by file name. Every other file that is not the reference
+ *   video (images, reference images, PDFs and text too long for the brief) is an attachment with its store:// uri, media type and a
+ *   note. The instructions and the text files share the brief's total limit (BRIEF_TEXT_MAX).
  * - When the person marked script lines, the request carries that script instead (never both): the lines in order, each with its beat
  *   role, in the language the person set. The instructions, record snapshots and text files then go to format.change as plain text.
  * - page: the kits of an attached theme page. constraints: the length, budget and priority the person set. The aspect is 9:16, the only
@@ -22,7 +23,19 @@ import { BRIEF_LIST_MAX, BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX, productionReques
 import { engineRequestIdFor } from "../factory/engine-request.ts";
 import type { PageRequestKits } from "../pages/model.ts";
 import { characterCount, referenceVideoUri } from "./files.ts";
-import { type Attachment, type FileAttachment, type Message, PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, PDF_TEXT_NOTE, type SessionSettings, type SourceAttachment } from "./model.ts";
+import {
+  type Attachment,
+  type FileAttachment,
+  type Message,
+  PDF_OVER_LIMIT_CONTENT,
+  PDF_TEXT_LIMIT_NOTE,
+  PDF_TEXT_NOTE,
+  type SessionSettings,
+  type SourceAttachment,
+  TEXT_LIMIT_NOTE,
+  TEXT_OVER_LIMIT_CONTENT,
+  TEXT_PART_MAX_CHARS,
+} from "./model.ts";
 import { SOURCE_PAGE_LABELS } from "./model.ts";
 
 export type SessionForRequest = {
@@ -87,22 +100,56 @@ function isOverLimitPdf(item: FileAttachment): boolean {
   return item.mediaType === "application/pdf" && item.content === PDF_OVER_LIMIT_CONTENT;
 }
 
-/** A text file read into the brief: a material file that carries its text. An image's content is its measured size, not text. */
-function isTextFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && item.content !== null && !item.mediaType.startsWith("image/") && !isOverLimitPdf(item);
+/** A text file kept with the session but too long to read into the brief. */
+function isOverLimitText(item: FileAttachment): boolean {
+  return item.content === TEXT_OVER_LIMIT_CONTENT;
 }
 
-/** A file that goes to the engine as an attachment: not the reference and not read into the brief. */
+function isOverLimit(item: FileAttachment): boolean {
+  return isOverLimitPdf(item) || isOverLimitText(item);
+}
+
+/** A text file read into the brief: a material file that carries its text. An image's content is its measured size, not text. */
+function isTextFile(item: Attachment): item is FileAttachment {
+  return item.kind === "file" && item.purpose === "material" && item.content !== null && !item.mediaType.startsWith("image/") && !isOverLimit(item);
+}
+
+/** A file that goes to the engine as an attachment: not the reference video and not read into the brief. */
 function isMaterialFile(item: Attachment): item is FileAttachment {
-  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/") || isOverLimitPdf(item));
+  return item.kind === "file" && item.purpose !== "reference_video" && (item.content === null || item.mediaType.startsWith("image/") || isOverLimit(item));
+}
+
+/**
+ * A text in parts of at most `max` characters (as the engine counts them), split at the last line break in a part's second half when
+ * there is one, so a paragraph stays whole where it can. Every character is kept, in order; a part of only white space is left out.
+ */
+export function textParts(text: string, max = TEXT_PART_MAX_CHARS): string[] {
+  const units = Array.from(text);
+  const parts: string[] = [];
+  let start = 0;
+  while (start < units.length) {
+    let end = Math.min(start + max, units.length);
+    if (end < units.length) {
+      const window = units.slice(start, end);
+      const breakAt = window.lastIndexOf("\n");
+      if (breakAt >= Math.floor(max / 2)) end = start + breakAt + 1;
+    }
+    const part = units.slice(start, end).join("");
+    if (part.trim() !== "") parts.push(part);
+    start = end;
+  }
+  return parts;
 }
 
 const IMAGE_SIZE = /^(\d+)×(\d+)$/;
 
 /** The note a brief attachment carries. A measured image names its size. A PDF whose text was not readable says so. */
 function attachmentNote(file: FileAttachment): string {
-  if (file.mediaType.startsWith("image/") && file.content && IMAGE_SIZE.test(file.content)) return `${file.fileName}: ${file.content}`;
+  const size = file.mediaType.startsWith("image/") && file.content && IMAGE_SIZE.test(file.content) ? file.content : null;
+  if (file.purpose === "reference_image") return `${file.fileName}: reference image${size ? `, ${size}` : ""}`;
+  if (size) return `${file.fileName}: ${size}`;
   if (isOverLimitPdf(file)) return `${file.fileName}: ${PDF_TEXT_LIMIT_NOTE}`;
+  if (isOverLimitText(file)) return `${file.fileName}: ${TEXT_LIMIT_NOTE}`;
   return file.mediaType === "application/pdf" ? `${file.fileName}: ${PDF_TEXT_NOTE}` : file.fileName;
 }
 
@@ -122,8 +169,11 @@ function textFileLine(file: FileAttachment): string {
 export function inputNotes(attachments: readonly Attachment[]): string[] {
   return attachments.flatMap((item): string[] => {
     if (item.kind !== "file" || item.purpose === "reference_video") return [];
-    if (item.mediaType.startsWith("image/") && item.content && IMAGE_SIZE.test(item.content)) return [`${item.fileName}: ${item.content}. Pixels were not read.`];
+    const size = item.mediaType.startsWith("image/") && item.content && IMAGE_SIZE.test(item.content) ? item.content : null;
+    if (item.purpose === "reference_image") return [`${item.fileName}: reference image${size ? `, ${size}` : ""}. Pixels were not read.`];
+    if (size) return [`${item.fileName}: ${size}. Pixels were not read.`];
     if (isOverLimitPdf(item)) return [`${item.fileName}: ${PDF_TEXT_LIMIT_NOTE}`];
+    if (isOverLimitText(item)) return [`${item.fileName}: ${TEXT_LIMIT_NOTE}`];
     if (item.content !== null && !item.mediaType.startsWith("image/")) return [`${item.fileName}: read into the brief, ${characterCount(item.content)} characters.`];
     return item.mediaType === "application/pdf" ? [attachmentNote(item)] : [];
   });
@@ -136,7 +186,10 @@ export function inputNotes(attachments: readonly Attachment[]): string[] {
 export function briefSources(attachments: readonly Attachment[]): Array<{ label: string; text: string }> {
   return attachments.flatMap((item): Array<{ label: string; text: string }> => {
     if (item.kind === "source") return [{ label: SOURCE_PAGE_LABELS[item.page], text: item.snapshot.slice(0, BRIEF_SOURCE_TEXT_MAX) }];
-    return isTextFile(item) ? [{ label: item.fileName, text: item.content ?? "" }] : [];
+    if (!isTextFile(item)) return [];
+    // A text longer than one source travels in labelled parts, so the engine gets all of it.
+    const parts = textParts(item.content ?? "");
+    return parts.map((text, index) => ({ label: parts.length === 1 ? item.fileName : `${item.fileName} (part ${index + 1} of ${parts.length})`, text }));
   });
 }
 

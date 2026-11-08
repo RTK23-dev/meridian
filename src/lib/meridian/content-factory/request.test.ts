@@ -7,8 +7,8 @@ import { test } from "node:test";
 import { requestProblems } from "../../../engine/api/index.ts";
 import { BRIEF_SOURCE_TEXT_MAX, BRIEF_TEXT_MAX } from "../../../engine/contracts/request.ts";
 import type { Attachment, FileAttachment, Message, SessionSettings } from "./model.ts";
-import { PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, TEXT_FILE_MAX_CHARS } from "./model.ts";
-import { buildProductionRequest, inputNotes, problemWords, type SessionForRequest } from "./request.ts";
+import { PDF_OVER_LIMIT_CONTENT, PDF_TEXT_LIMIT_NOTE, TEXT_FILE_MAX_CHARS, TEXT_LIMIT_NOTE, TEXT_OVER_LIMIT_CONTENT, TEXT_PART_MAX_CHARS } from "./model.ts";
+import { buildProductionRequest, inputNotes, problemWords, textParts, type SessionForRequest } from "./request.ts";
 
 const REFERENCE: FileAttachment = {
   id: "att-ref",
@@ -189,10 +189,51 @@ test("a text file becomes a brief source labelled with its file name, and is not
   assert.deepEqual(requestProblems(built.request), []);
 });
 
-test("a text file at the limit is accepted by the engine's schema, even when each character is two UTF-16 units", () => {
-  assert.equal(TEXT_FILE_MAX_CHARS, BRIEF_SOURCE_TEXT_MAX, "the text file limit is the engine's brief source limit");
-  const built = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, textFile("😀".repeat(TEXT_FILE_MAX_CHARS))])] }));
+test("a text file's parts are the engine's source limit, and the file limit is the engine's whole brief", () => {
+  assert.equal(TEXT_PART_MAX_CHARS, BRIEF_SOURCE_TEXT_MAX, "a part is one brief source");
+  assert.equal(TEXT_FILE_MAX_CHARS, BRIEF_TEXT_MAX, "a file is at most the whole brief");
+  const built = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, textFile("😀".repeat(TEXT_PART_MAX_CHARS))])] }));
   assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+});
+
+test("a text file longer than one source travels in labelled parts, every character kept, each within the engine's limit", () => {
+  const paragraph = `${"word ".repeat(400).trim()}\n`;
+  const content = paragraph.repeat(3).slice(0, 5329);
+  const built = buildProductionRequest(session({ messages: [message("Use the note.", null, [REFERENCE, textFile(content, "00_NOTE.md")])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  const sources = built.request.brief?.sources ?? [];
+  assert.deepEqual(sources.map((source) => source.label), ["00_NOTE.md (part 1 of 2)", "00_NOTE.md (part 2 of 2)"]);
+  assert.equal(sources.map((source) => source.text).join(""), content, "nothing is dropped or reordered");
+  assert.ok(sources.every((source) => Array.from(source.text).length <= BRIEF_SOURCE_TEXT_MAX));
+  assert.ok(sources[0]!.text.endsWith("\n"), "the cut falls on a line break when one is in the part's second half");
+  assert.deepEqual(requestProblems(built.request), []);
+});
+
+test("text parts split by characters, not UTF-16 units, and leave out a part of only white space", () => {
+  assert.deepEqual(textParts("😀".repeat(5), 2), ["😀😀", "😀😀", "😀"]);
+  assert.deepEqual(textParts("ab   ", 2), ["ab"]);
+  assert.deepEqual(textParts("short"), ["short"]);
+});
+
+test("a text file too long for the brief goes as an attachment with a note, and is never cut", () => {
+  const long = { ...(textFile(TEXT_OVER_LIMIT_CONTENT, "book.md") as FileAttachment), mediaType: "text/markdown" };
+  const built = buildProductionRequest(session({ messages: [message("Idea.", null, [REFERENCE, long])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.deepEqual(built.request.brief?.sources, []);
+  assert.deepEqual(built.request.brief?.attachments.map((item) => item.note), [`book.md: ${TEXT_LIMIT_NOTE}`]);
+  assert.deepEqual(inputNotes([long]), [`book.md: ${TEXT_LIMIT_NOTE}`]);
+});
+
+test("a reference image goes to the engine as an attachment named as a reference image, next to the reference video", () => {
+  const reference: Attachment = { ...(IMAGE as FileAttachment), id: "att-ref-img", purpose: "reference_image", fileName: "look.png", content: "1170×2532" };
+  const built = buildProductionRequest(session({ messages: [message("Match this look.", null, [REFERENCE, reference])] }));
+  assert.equal(built.status, "ready", built.status === "incomplete" ? built.problems.join(" | ") : "");
+  if (built.status !== "ready") return;
+  assert.deepEqual(built.request.brief?.attachments, [{ uri: `store://content-factory/sess-1/${"c".repeat(64)}.png`, mediaType: "image/png", note: "look.png: reference image, 1170×2532" }]);
+  assert.deepEqual(built.request.brief?.sources, [], "its size is not brief text");
+  assert.deepEqual(inputNotes([reference]), ["look.png: reference image, 1170×2532. Pixels were not read."]);
 });
 
 test("a PDF stays an attachment, and its note says its text is not read yet", () => {

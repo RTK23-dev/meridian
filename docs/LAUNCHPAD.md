@@ -76,7 +76,7 @@ Trust these over any older line in the checkpoint, the README or the roadmap:
   No manual insert is needed.
 - **Rate limits** share one Postgres window when `DATABASE_URL` is set (`rate_limit_windows`, migration `0103`). Without a database the
   limit stays in one process.
-- **PDFs** within 4000 characters are read into the brief. Longer ones are refused with a reason (beta.13 notes; I did not re-check this code).
+- **PDFs and text files** within 8000 characters are read into the brief, in parts of at most 4000. A longer text file is kept with the draft and sent as an attachment with a note; a longer PDF is kept and not read into the brief.
 - **Revisions** exist (migration `0106`). The older text saying they are not built is wrong.
 - **Other changes on `main`:** OAuth return path (`0104`), grade history (`0105`), organic observation keys (`0107`), Google Ads and TikTok ad
   accounts, a `wiki/` folder, a rewritten README and product docs.

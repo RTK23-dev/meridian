@@ -135,7 +135,7 @@ export function OrchestratorCanvas({
             />
           </div>
 
-          <div role="region" aria-label="Plan canvas" tabIndex={0} className={cn("max-h-[70vh] overflow-auto bg-[radial-gradient(var(--border-hairline)_1px,transparent_1px)] [background-size:20px_20px] focus-visible:outline-2 focus-visible:outline-accent", TOOLBAR_CLEARANCE)}>
+          <div role="region" aria-label="Plan canvas" tabIndex={0} className={cn("canvas-grid max-h-[70vh] overflow-auto focus-visible:outline-2 focus-visible:outline-accent", TOOLBAR_CLEARANCE)}>
             <div className="relative" style={{ width: drawn.width * scale, height: drawn.height * scale }}>
               <div className="absolute left-0 top-0 origin-top-left" style={{ width: drawn.width, height: drawn.height, transform: `scale(${scale})` }}>
                 <svg className="absolute left-0 top-0" width={drawn.width} height={drawn.height} aria-hidden="true">

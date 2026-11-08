@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { ScreenSkeleton, Stepper, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { ScreenSkeleton, Tabs, TabsContent } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { Term } from "@/components/glossary";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -19,11 +19,10 @@ import { QueuePanel } from "@/components/studio/queue-panel.tsx";
 import { PlanDialog } from "@/components/studio/plan-dialog.tsx";
 import { useStudioActions } from "@/components/studio/use-studio-actions.ts";
 import { DEFAULT_VIDEO_PROVIDER, isImageProviderValue, isVideoProviderValue, productionStatusFrom } from "@/components/studio/provider-options.ts";
-import { studioStepperSteps } from "@/components/studio/stepper-states.ts";
+import { PhaseDots } from "@/components/studio/phase-dots.tsx";
+import { isStudioPhase, studioPhases, type StudioPhaseKey } from "@/components/studio/studio-phases.ts";
 import type { ReviewPayload } from "@/components/studio/review-rules.ts";
 import type { StudioVariant } from "@/components/studio/types.ts";
-
-type StepKey = "direction" | "brief" | "generate" | "review" | "queue";
 
 const DEFAULT_GENERATION: StudioGeneration = {
   imageProvider: "none",
@@ -36,7 +35,11 @@ const DEFAULT_GENERATION: StudioGeneration = {
   aspectRatio: "9:16",
 };
 
-export function Studio({ brandId }: { brandId: string }) {
+/**
+ * The Studio: five phases a person drives one by one (direction, brief, generate, review, queue), with the phase dots as both progress and
+ * navigation. `embedded` leaves out the Studio's own title, for a page (Create) that already has one.
+ */
+export function Studio({ brandId, embedded = false }: { brandId: string; embedded?: boolean }) {
   const query = useStudioQuery(brandId);
   const session = query.data ?? null;
   const { data: workspace } = useWorkspace();
@@ -46,7 +49,8 @@ export function Studio({ brandId }: { brandId: string }) {
   const channelsQuery = useDistributionChannelsQuery(brandId);
   const organicQuery = useOrganicDistributionQuery(brandId);
   const actions = useStudioActions(brandId);
-  const [step, setStep] = useState<StepKey>("direction");
+  // The Studio opens on Direction, where accepting a direction writes the brief; the dots show how far the brand has come.
+  const [step, setStep] = useState<StudioPhaseKey>("direction");
   const [retryNotice, setRetryNotice] = useState<string | null>(null);
 
   const generationForm = useForm<StudioGeneration>({
@@ -70,6 +74,7 @@ export function Studio({ brandId }: { brandId: string }) {
   const previous = briefIndex >= 0 ? session.briefs[briefIndex + 1] ?? null : null;
   const changed = Boolean(brief && previous && brief.constraints !== previous.constraints);
   const production = productionStatusFrom({ organizationId, data: providerQuery.data, isError: providerQuery.isError });
+  const phases = studioPhases(session, brief);
 
   async function generate(values: StudioGeneration) {
     if (!brief) return;
@@ -120,29 +125,23 @@ export function Studio({ brandId }: { brandId: string }) {
   return (
     <div className="space-y-6">
       <UnsavedChangesGuard dirty={generationDirty} />
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <p className="eyebrow">Studio</p>
-          <h1 className="page-title">Make the next ads from evidence</h1>
+      {embedded ? null : (
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <p className="eyebrow">Studio</p>
+            <h1 className="page-title">Make the next ads from evidence</h1>
+          </div>
+          <p className="max-w-md text-sm text-fg-muted">
+            {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; a connected video provider renders approved briefs (<Term id="hypit" /> is not connected). Media appears only after a provider stores bytes.
+          </p>
         </div>
-        <p className="max-w-md text-sm text-fg-muted">
-          {session.observationCount} competitor observations. <Term id="jev" /> evaluates the evidence; a connected video provider renders approved briefs (<Term id="hypit" /> is not connected). Media appears only after a provider stores bytes.
-        </p>
-      </div>
-
-      <Stepper steps={studioStepperSteps(session, brief)} className="grid grid-cols-2 lg:grid-cols-4" />
+      )}
 
       {actions.actionErrors.map((error, index) => <PlainErrorNotice key={index} error={error} />)}
       {actions.anyActionPending ? <p className="text-sm" role="status" aria-live="polite">Working. This screen keeps the last stored result until the step finishes.</p> : null}
 
-      <Tabs value={step} onValueChange={(value) => setStep(value as StepKey)} className="space-y-5">
-        <TabsList className="grid h-auto w-full grid-cols-2 gap-1 sm:grid-cols-5">
-          <TabsTrigger value="direction">1. Direction</TabsTrigger>
-          <TabsTrigger value="brief">2. Brief</TabsTrigger>
-          <TabsTrigger value="generate">3. Generate</TabsTrigger>
-          <TabsTrigger value="review">4. Review</TabsTrigger>
-          <TabsTrigger value="queue">5. Queue &amp; schedule</TabsTrigger>
-        </TabsList>
+      <Tabs value={step} onValueChange={(value) => { if (isStudioPhase(value)) setStep(value); }} className="space-y-5">
+        <PhaseDots phases={phases} open={step} />
 
         <TabsContent value="direction">
           <DirectionStep

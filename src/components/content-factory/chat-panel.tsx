@@ -229,6 +229,7 @@ function Composer({ session, brands, files, hasReference, onChanged }: { session
               <label className="sr-only" htmlFor={`purpose-${item.key}`}>Use of {item.file.name}</label>
               <SelectInput id={`purpose-${item.key}`} className="w-auto py-2 text-sm" value={item.purpose} onChange={(event) => setPendingFiles((current) => current.map((entry) => entry.key === item.key ? { ...entry, purpose: event.target.value as FilePurpose } : entry))}>
                 <option value="reference_video">Reference video</option>
+                <option value="reference_image">Reference image</option>
                 <option value="material">Material</option>
               </SelectInput>
               <Button type="button" variant="quiet" size="sm" aria-label={`Remove ${item.file.name}`} onClick={() => setPendingFiles((current) => current.filter((entry) => entry.key !== item.key))}><X aria-hidden="true" className="size-4" /></Button>

@@ -470,9 +470,11 @@ this page makes one video with the video engine. It is admin only.
 
 - **Chat.** Type instructions, attach files from your computer, and attach records from Meridian pages (brand brain, products, library,
   pages and market intelligence). Each message stays with the session.
-- **Files.** A video is the reference: the engine analyses it and never reuses its footage, words, voice or music (Bible principle 4). Text
-  files up to 4000 characters are read into the brief; longer ones are refused with a plain message. Images and PDFs are kept with the
-  session. A readable PDF within the text limit is used in the brief. A PDF whose text cannot be read is kept and says so. An image whose header gives a width and height records that size. The pixels are not read.
+- **Files.** A video is the reference: the engine analyses it and never reuses its footage, words, voice or music (Bible principle 4). A
+  picture can be marked as a reference image: it goes to the engine as a brief attachment named as one, and its pixels are not read. Text
+  files up to 8000 characters (the engine's whole brief) are read into the brief, in parts of at most 4000 (one brief source each); longer
+  ones, up to 200,000 characters, are kept with the session and sent as an attachment with a note, never cut. Images and PDFs are kept
+  with the session. A readable PDF within the text limit is used in the brief. A PDF whose text cannot be read is kept and says so. An image whose header gives a width and height records that size. The pixels are not read.
 - **Brief.** A session is sent as a brief request by default. The engine writes the script from the brief and the reference's analysis, and
   a run of six or more words copied from the reference is refused. A session that has script lines typed by hand sends those instead.
 - **Run.** "Make the video" is enabled when the session has a reference video, a theme page with its kits, a length, a budget and a priority.

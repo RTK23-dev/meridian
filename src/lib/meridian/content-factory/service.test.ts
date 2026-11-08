@@ -31,6 +31,7 @@ import {
   uploadFile,
   WORKSPACE_REFUSAL,
 } from "./service.ts";
+import { TEXT_OVER_LIMIT_CONTENT } from "./model.ts";
 
 const WS = "ws_cf_a";
 const OTHER_WS = "ws_cf_b";
@@ -211,14 +212,23 @@ describe("Content Factory sessions", () => {
     assert.equal(text.status === "stored" ? text.mediaType : "", "text/plain");
     const pdf = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "specs.pdf", purpose: "material", base64: Buffer.from("%PDF-1.7\n").toString("base64") }, { files: store });
     assert.equal(pdf.status, "stored");
-    const long = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "long.txt", purpose: "material", base64: Buffer.from("a".repeat(4001)).toString("base64") }, { files: store });
-    assert.equal(long.status, "refused");
-    assert.equal(long.status === "refused" ? long.reason : "", "This file has 4001 characters; the limit for a text file is 4000. Shorten it or split it into two files.");
-    assert.equal(store.puts.length, 2, "the text file and the PDF are stored; the refused file is not");
+    const read = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "note.md", purpose: "material", base64: Buffer.from("a".repeat(5329)).toString("base64") }, { files: store });
+    assert.equal(read.status, "stored", "a 5,329-character note is read into the brief");
+    const long = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "long.txt", purpose: "material", base64: Buffer.from("a".repeat(8001)).toString("base64") }, { files: store });
+    assert.equal(long.status, "stored", "a longer file is kept with the session");
+    const huge = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "huge.txt", purpose: "material", base64: Buffer.from("a".repeat(200_001)).toString("base64") }, { files: store });
+    assert.equal(huge.status, "refused");
+    assert.equal(huge.status === "refused" ? huge.reason : "", "This file has 200001 characters; the limit for a text file is 200000. Split it into smaller files.");
+    const look = await uploadFile(db.sql, ADMIN, { sessionId: session.id, messageId: message.messageId, fileName: "look.png", purpose: "reference_image", base64: PNG }, { files: store });
+    assert.equal(look.status, "stored", "a picture can be a reference image");
+    assert.equal(store.puts.length, 5, "the text files, the PDF and the reference image are stored; the refused file is not");
 
     const detail = await getSession(db.sql, ADMIN, { sessionId: session.id });
     const files = detail.messages.flatMap((item) => item.attachments).flatMap((item) => (item.kind === "file" ? [item] : []));
     assert.equal(files.find((item) => item.fileName === "angle.txt")?.content, note);
+    assert.equal(files.find((item) => item.fileName === "note.md")?.content?.length, 5329);
+    assert.equal(files.find((item) => item.fileName === "long.txt")?.content, TEXT_OVER_LIMIT_CONTENT);
+    assert.equal(files.find((item) => item.fileName === "look.png")?.purpose, "reference_image");
     assert.equal(files.find((item) => item.fileName === "specs.pdf")?.content, null);
 
     const view = await readRun(db.sql, ADMIN, { sessionId: session.id }, { readiness: readyPorts(), files: store });

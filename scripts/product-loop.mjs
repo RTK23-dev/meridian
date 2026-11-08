@@ -130,7 +130,7 @@ try {
   // Accepting a direction needs a reason of at least 20 characters. It is recorded with the decision.
   await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the stored lather evidence supports this direction.");
   await page.getByRole("button", { name: "Accept direction and write the brief" }).click();
-  await page.getByRole("tab", { name: "2. Brief" }).click();
+  await page.getByRole("tab", { name: "Brief" }).click();
   await page.getByRole("heading", { name: "Brief", exact: true }).waitFor();
   const firstConstraints = await page.getByTestId("brief-constraints").innerText();
   // The decision engine is not configured in the testing runtime, so the brief the engine could not judge is held. Generation
@@ -139,14 +139,14 @@ try {
   await held.waitFor({ timeout: 60000 });
   // The disclosure loads after the panel heading, so wait for its content rather than checking once.
   await page.getByText("Questions the engine did not answer").waitFor({ timeout: 60000 });
-  await page.getByRole("tab", { name: "3. Generate" }).click();
+  await page.getByRole("tab", { name: "Generate" }).click();
   if (!(await page.getByRole("button", { name: "Generate variants" }).isDisabled())) throw new Error("Generation was not blocked for a brief awaiting review.");
-  await page.getByRole("tab", { name: "2. Brief" }).click();
+  await page.getByRole("tab", { name: "Brief" }).click();
   await page.getByRole("checkbox", { name: /I have read the failure/ }).check();
   await page.getByLabel("Reason", { exact: true }).fill("E2E testing runtime: the decision engine is not configured, so the brief is reviewed explicitly here.");
   await page.getByRole("button", { name: "Approve for production" }).click();
   await held.waitFor({ state: "hidden" });
-  await page.getByRole("tab", { name: "3. Generate" }).click();
+  await page.getByRole("tab", { name: "Generate" }).click();
   await page.getByRole("radio", { name: /^Test image/ }).check();
   await page.getByRole("radio", { name: /^No video/ }).check();
   await page.getByRole("button", { name: "Generate variants" }).click();
@@ -154,7 +154,7 @@ try {
   await planReview.waitFor({ state: "visible" });
   await planReview.getByRole("button", { name: "Approve and generate" }).click();
   await planReview.waitFor({ state: "hidden" });
-  await page.getByRole("tab", { name: "4. Review" }).click();
+  await page.getByRole("tab", { name: "Review" }).click();
   await page.getByRole("img", { name: /^Image \d+:/ }).first().waitFor({ timeout: 60000 });
   const previewCount = await page.getByRole("img", { name: /^Image \d+:/ }).count();
   if (previewCount < 3) throw new Error(`Expected 3 image previews, saw ${previewCount}.`);
@@ -201,7 +201,7 @@ try {
   await page.getByText("Test publication · publisher ID").first().waitFor({ timeout: 30000 });
   await page.getByRole("button", { name: "Record test-provider performance and learn" }).click();
   await page.getByText(/angle=offer:/).first().waitFor({ timeout: 30000 });
-  await page.getByRole("tab", { name: "2. Brief" }).click();
+  await page.getByRole("tab", { name: "Brief" }).click();
   // Writing the next brief accepts a direction too, so it needs the same reason as the accept step.
   await page.getByLabel(/Why accept this direction/).fill("E2E testing run: the learned offer angle is the next direction.");
   await page.getByRole("button", { name: "Write the next brief" }).click();

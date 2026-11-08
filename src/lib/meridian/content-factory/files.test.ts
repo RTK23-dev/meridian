@@ -1,10 +1,12 @@
 // Checks for Content Factory files. A binary type comes from its bytes and has its own size limit. A text file is checked as text, takes its
-// type from its name (Markdown, CSV or JSON, and JSON must parse) and is read into the brief up to TEXT_FILE_MAX_CHARS characters. A
-// reference must be a video, and an upload that is not whole base64 is refused before it is decoded.
+// type from its name (Markdown, CSV or JSON, and JSON must parse) and is read into the brief up to TEXT_FILE_MAX_CHARS characters; a
+// longer one, up to TEXT_FILE_ACCEPT_MAX_CHARS, is kept and marked. A reference video must be a video and a reference image an image, and
+// an upload that is not whole base64 is refused before it is decoded.
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { characterCount, checkFile, decodeUpload, imageDimensions, MAX_BASE64_CHARS, referenceVideoUri, safeFileName, sessionFileKey, sniffBinaryMediaType, TEXT_FILE_MAX_CHARS, textMediaTypeOf } from "./files.ts";
+import { characterCount, checkFile, decodeUpload, imageDimensions, MAX_BASE64_CHARS, referenceVideoUri, safeFileName, sessionFileKey, sniffBinaryMediaType, TEXT_FILE_ACCEPT_MAX_CHARS, TEXT_FILE_MAX_CHARS, textMediaTypeOf } from "./files.ts";
+import { TEXT_OVER_LIMIT_CONTENT } from "./model.ts";
 
 function encode(text: string): Uint8Array {
   return new TextEncoder().encode(text);
@@ -113,23 +115,33 @@ test("a small text file is checked as text and comes back with its content for t
   assert.equal(json.file.content, '{"claim":"quiet"}');
 });
 
-test("a text file over the character limit is refused with the limit, and one at the limit is kept", () => {
-  const over = checkFile(encode("a".repeat(TEXT_FILE_MAX_CHARS + 1)), "material", "long.txt");
-  assert.equal(over.ok, false);
-  assert.equal(
-    over.ok ? "" : over.reason,
-    "This file has 4001 characters; the limit for a text file is 4000. Shorten it or split it into two files.",
-  );
-  assert.ok(checkFile(encode("a".repeat(TEXT_FILE_MAX_CHARS)), "material", "limit.txt").ok, "exactly the limit is kept");
+test("a text file up to the brief's limit is read, a longer one is kept and marked, and one over the accepted limit is refused", () => {
+  // The 5,329-character note from the report is read into the brief whole.
+  const note = checkFile(encode("a".repeat(5329)), "material", "00_NOTE.md");
+  assert.ok(note.ok);
+  assert.equal(note.ok ? note.file.content?.length : 0, 5329);
+  const atLimit = checkFile(encode("a".repeat(TEXT_FILE_MAX_CHARS)), "material", "limit.txt");
+  assert.equal(atLimit.ok ? atLimit.file.content?.length : 0, TEXT_FILE_MAX_CHARS, "exactly the limit is read");
 
-  // The limit is in characters, not bytes: an accented letter is two bytes, and a long file is refused by its characters, not its size.
-  const accents = checkFile(encode("é".repeat(TEXT_FILE_MAX_CHARS + 1)), "material", "accents.txt");
-  assert.match(accents.ok ? "" : accents.reason, /has 4001 characters/);
+  const over = checkFile(encode("a".repeat(TEXT_FILE_MAX_CHARS + 1)), "material", "long.txt");
+  assert.ok(over.ok, "a longer file is kept with the session");
+  assert.equal(over.ok ? over.file.content : "", TEXT_OVER_LIMIT_CONTENT, "and marked, never cut to fit");
+
+  const refused = checkFile(encode("a".repeat(TEXT_FILE_ACCEPT_MAX_CHARS + 1)), "material", "huge.txt");
+  assert.equal(
+    refused.ok ? "" : refused.reason,
+    `This file has ${TEXT_FILE_ACCEPT_MAX_CHARS + 1} characters; the limit for a text file is ${TEXT_FILE_ACCEPT_MAX_CHARS}. Split it into smaller files.`,
+  );
+
+  // The limit is in characters, not bytes: an accented letter is two bytes, and a long file is judged by its characters, not its size.
+  const accents = checkFile(encode("é".repeat(TEXT_FILE_MAX_CHARS)), "material", "accents.txt");
+  assert.equal(accents.ok ? accents.file.content?.length : 0, TEXT_FILE_MAX_CHARS);
   const large = checkFile(encode("a".repeat(1_500_000)), "material", "large.txt");
-  assert.match(large.ok ? "" : large.reason, /has 1500000 characters; the limit for a text file is 4000/);
+  assert.match(large.ok ? "" : large.reason, /has 1500000 characters; the limit for a text file is 200000/);
 
   // An emoji is one character, as the engine's schema counts it, though it is two UTF-16 units.
-  assert.ok(checkFile(encode("😀".repeat(TEXT_FILE_MAX_CHARS)), "material", "emoji.txt").ok);
+  const emoji = checkFile(encode("😀".repeat(TEXT_FILE_MAX_CHARS)), "material", "emoji.txt");
+  assert.ok(emoji.ok && emoji.file.content !== TEXT_OVER_LIMIT_CONTENT);
   assert.equal(characterCount("😀😀😀"), 3);
   assert.equal(characterCount("a😀é"), 3);
 });
@@ -165,11 +177,17 @@ test("a file is checked for its purpose and its type's size limit", () => {
 
   const image = checkFile(PNG, "reference_video");
   assert.equal(image.ok, false);
-  assert.match(image.ok ? "" : image.reason, /reference must be a video/);
+  assert.match(image.ok ? "" : image.reason, /reference video must be a video file/);
   assert.ok(checkFile(PNG, "material").ok, "an image is accepted as material");
+  const referenceImage = checkFile(PNG, "reference_image");
+  assert.ok(referenceImage.ok, "an image is accepted as a reference image");
+  assert.equal(referenceImage.ok ? referenceImage.file.mediaType : "", "image/png");
+  assert.match((() => { const video = checkFile(MP4, "reference_image"); return video.ok ? "" : video.reason; })(), /reference image must be a PNG, JPEG or WEBP image/);
 
   const textReference = checkFile(TEXT, "reference_video", "notes.txt");
-  assert.match(textReference.ok ? "" : textReference.reason, /reference must be a video/, "text is never the reference");
+  assert.match(textReference.ok ? "" : textReference.reason, /reference video must be a video file/, "text is never the reference");
+  const textImage = checkFile(TEXT, "reference_image", "notes.txt");
+  assert.match(textImage.ok ? "" : textImage.reason, /reference image must be/, "text is never a reference image");
 
   const pdf = checkFile(PDF, "material", "specs.pdf");
   assert.ok(pdf.ok);

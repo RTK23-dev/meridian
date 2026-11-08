@@ -34,7 +34,7 @@ const BRAND_SCREENS = [
   { path: "/brain", label: "brain" },
   { path: "/market", label: "market" },
   { path: "/opportunities", label: "opportunities" },
-  { path: "/studio", label: "studio", tabs: ["1. Direction", "2. Brief", "3. Generate", "4. Review", "5. Queue & schedule"] },
+  { path: "/studio", label: "studio", tabs: ["Direction", "Brief", "Generate", "Review", "Queue"] },
   { path: "/library", label: "library" },
   { path: "/learning", label: "learning" },
   { path: "/reviews", label: "reviews" },

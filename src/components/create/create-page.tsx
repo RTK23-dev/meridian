@@ -4,25 +4,23 @@ import { fileBase64 } from "@/components/content-factory/file-base64";
 import { EmptyState, ErrorNotice, ScreenSkeleton } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import { createContentFactorySession, getContentFactorySession, postContentFactoryMessage, uploadContentFactoryFile } from "@/lib/meridian/content-factory/actions";
-import type { Message } from "@/lib/meridian/content-factory/model";
+import type { FilePurpose, Message } from "@/lib/meridian/content-factory/model";
 import { CreateAttachSheet } from "./create-attach-sheet";
-import { CreateComposer, type ComposerFile, type ModelOption } from "./create-composer";
-import { CREATE_MODE_COPY, fileProblem, purposeFor, ruleFor, sendBlock, titleFor, type CreateMode } from "./create-model";
+import { CreateComposer, type ComposerFile } from "./create-composer";
+import { fileProblem, purposeFor, referencePurposeOf, ruleFor, sendBlock, titleFor, togglePurposeOf, type CreateMode } from "./create-model";
 import { CreateScripts } from "./create-scripts";
 import { CreateThread } from "./create-thread";
 
 // Studio is the existing controls page. It loads the first time Studio is chosen, so Orchestrator stays light.
 const Studio = lazy(() => import("@/components/content-factory/sections/studio").then((module) => ({ default: module.Studio })));
 
-/** The models a draft can use. Only Auto is offered until the workspace has connected a model, and the list then grows from its providers. */
-const MODELS: ModelOption[] = [{ value: "auto", label: "Auto" }];
-
-type PendingFile = { id: string; file: File; purpose: "reference_video" | "material" };
+type PendingFile = { id: string; file: File; purpose: FilePurpose };
 
 /**
- * The Create page: one place to make something. Orchestrator takes what you write and the files you add, and saves them as a draft in the
- * Content chat. Studio shows the controls on this page instead. Sending never starts a run, so nothing is generated or spent until a person
- * starts one from the draft.
+ * The Create page: one place to make something. In both modes what you write and the files you add are saved as a draft in the Content
+ * chat. Orchestrator then offers Meridian's plan (the scripts); Studio shows its five phases, which the person drives one by one, on a
+ * canvas. Sending never starts a run, so nothing is generated or spent until a person starts one. The models each task uses are chosen
+ * in Settings, reached from the mode menu.
  */
 export function CreatePage({ draftId = null, onDraft }: { draftId?: string | null; onDraft?: (draftId: string | null) => void } = {}) {
   const { data: workspace } = useWorkspace();
@@ -32,7 +30,6 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
 
   const [mode, setMode] = useState<CreateMode>("orchestrator");
   const [brandId, setBrandId] = useState("");
-  const [model, setModel] = useState("auto");
   const [text, setText] = useState("");
   const [files, setFiles] = useState<PendingFile[]>([]);
   const [attachOpen, setAttachOpen] = useState(false);
@@ -69,10 +66,13 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
 
   const block = organizationId ? sendBlock({ text, mode, canAdmin, busy }) : "Open a workspace first.";
   const canSend = block === null;
-  // The reason is shown once there is something to act on. An empty box only shows the mode's own hint.
-  const hint = block !== null && (mode === "studio" || !canAdmin || busy || text.trim() !== "") ? block : CREATE_MODE_COPY[mode].hint;
+  // Only a reason the person cannot act on from the box is shown as text; the rest is on Send's tooltip and read to a screen reader.
+  const notice = !organizationId ? "Open a workspace first." : !canAdmin ? "Only a workspace admin can start a draft." : null;
 
-  const composerFiles: ComposerFile[] = files.map(({ id, file, purpose }) => ({ id, name: file.name, purpose, kind: ruleFor(file)?.kind ?? "document" }));
+  const composerFiles: ComposerFile[] = files.map(({ id, file, purpose }) => {
+    const kind = ruleFor(file)?.kind ?? "document";
+    return { id, name: file.name, kind, reference: referencePurposeOf(kind) === null ? null : purpose !== "material" };
+  });
 
   function chooseBrand(next: string) {
     // A draft belongs to one brand, so a new brand starts a new draft.
@@ -105,7 +105,7 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
   }
 
   function togglePurpose(id: string) {
-    setFiles((current) => current.map((item) => (item.id === id ? { ...item, purpose: item.purpose === "reference_video" ? "material" : "reference_video" } : item)));
+    setFiles((current) => current.map((item) => (item.id === id ? { ...item, purpose: togglePurposeOf(ruleFor(item.file)?.kind ?? "document", item.purpose) } : item)));
   }
 
   async function send() {
@@ -151,7 +151,8 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
   }
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-3xl flex-col">
+    // On a phone the page reaches into <main>'s bottom padding (-mb-6), so the composer docks on the bottom bar at every scroll position.
+    <div className="mx-auto -mb-6 flex min-h-[calc(100dvh-9rem)] w-full max-w-3xl flex-col lg:mb-0">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="space-y-1">
           <h1 className="page-title">Create</h1>
@@ -179,28 +180,34 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
 
       <div className="flex-1 pb-6">
         {mode === "studio" ? (
-          brandId ? (
-            <Suspense fallback={<ScreenSkeleton label="Loading Studio" shape="cards" />}>
-              <div className="pt-4"><Studio brandId={brandId} /></div>
-            </Suspense>
-          ) : (
-            <div className="pt-4">
-              <EmptyState title="Pick a brand for Studio" reason="Studio sets the controls for one brand, so choose a brand above first." />
-            </div>
-          )
+          <>
+            {/* The request typed here is saved as the draft, as in Orchestrator, and stays in view above the phases. */}
+            {messages.length > 0 ? <CreateThread messages={messages} onSuggest={setText} /> : null}
+            {brandId ? (
+              <Suspense fallback={<ScreenSkeleton label="Loading Studio" shape="cards" />}>
+                <section aria-label="Studio canvas" className="canvas-grid -mx-4 mt-4 px-4 py-5 sm:mx-0 sm:rounded-sharp sm:border sm:border-hairline sm:px-5">
+                  <Studio brandId={brandId} embedded />
+                </section>
+              </Suspense>
+            ) : (
+              <div className="pt-4">
+                <EmptyState title="Pick a brand for Studio" reason="Studio works on one brand's phases, so choose a brand above. You can already type what to make below." />
+              </div>
+            )}
+          </>
         ) : (
           <>
             <CreateThread messages={messages} onSuggest={setText} />
             {sessionId !== null && canAdmin ? <CreateScripts sessionId={sessionId} canAdmin={canAdmin} language={draftLanguage} onMessages={setMessages} /> : null}
-            {problems.length > 0 ? (
-              <ul className="space-y-2 pt-4" aria-label="Problems">
-                {problems.map((problem) => (
-                  <li key={problem}><ErrorNotice>{problem}</ErrorNotice></li>
-                ))}
-              </ul>
-            ) : null}
           </>
         )}
+        {problems.length > 0 ? (
+          <ul className="space-y-2 pt-4" aria-label="Problems">
+            {problems.map((problem) => (
+              <li key={problem}><ErrorNotice>{problem}</ErrorNotice></li>
+            ))}
+          </ul>
+        ) : null}
       </div>
 
       <CreateComposer
@@ -208,15 +215,13 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
         onText={setText}
         mode={mode}
         onMode={setMode}
-        models={MODELS}
-        model={model}
-        onModel={setModel}
         files={composerFiles}
         onTogglePurpose={togglePurpose}
         onRemoveFile={(id) => setFiles((current) => current.filter((item) => item.id !== id))}
         onAttach={() => setAttachOpen(true)}
         canSend={canSend}
-        hint={hint}
+        blockReason={block}
+        notice={notice}
         busy={busy}
         onSend={() => void send()}
       />
