@@ -5,9 +5,11 @@ import { parseSpeechListing, speechModelLine, speechRequestBody, voiceProblem } 
 
 const LISTING = {
   data: [
-    { id: "elevenlabs/eleven-v3", name: "ElevenLabs: Eleven v3", architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00008" }, supported_voices: ["george", "sarah", "adam"] },
-    { id: "hexgrad/kokoro-82m", architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00000062" }, supported_voices: ["af_alloy", "af_bella"] },
-    { id: "fish-audio/drama-3", architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.000002" }, supported_voices: null },
+    { id: "elevenlabs/eleven-v3", name: "ElevenLabs: Eleven v3", created: 1791331200, architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00008" }, supported_voices: ["george", "sarah", "adam"] },
+    { id: "elevenlabs/eleven-v4", name: "ElevenLabs: Eleven v4", created: 1791331200, description: "Eleven v4 is a text-to-speech model from ElevenLabs. It is ElevenLabs' most expressive model.", architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00008" }, supported_voices: ["will", "chris"] },
+    { id: "elevenlabs/eleven-flash-v2", created: 1791331200, architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00004" }, supported_voices: ["will"] },
+    { id: "hexgrad/kokoro-82m", created: 1776902400, architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.00000062" }, supported_voices: ["af_alloy", "af_bella"] },
+    { id: "fish-audio/drama-3", created: 1791849600, architecture: { output_modalities: ["speech"] }, pricing: { prompt: "0.000002" }, supported_voices: null },
     { id: "heygen/heygen-voice-1-turbo:free", architecture: { output_modalities: ["speech"] }, pricing: {}, supported_voices: ["nadine"] },
     { id: "openai/gpt-5", architecture: { output_modalities: ["text"] }, pricing: { prompt: "0.000001" } },
     { id: 42, pricing: { prompt: "1" } },
@@ -15,9 +17,19 @@ const LISTING = {
 };
 
 describe("the speech listing", () => {
-  it("keeps the speech models, cheapest first, with their rate per character and voices; leaves out other rows and bad rows", () => {
+  it("keeps the speech models, newest first and flagship first, with their rate per character and voices; leaves out other rows and bad rows", () => {
     const models = parseSpeechListing(LISTING);
-    assert.deepEqual(models.map((model) => model.id), ["hexgrad/kokoro-82m", "fish-audio/drama-3", "elevenlabs/eleven-v3", "heygen/heygen-voice-1-turbo:free"]);
+    assert.deepEqual(models.map((model) => model.id), [
+      "fish-audio/drama-3",
+      "elevenlabs/eleven-v4",
+      "elevenlabs/eleven-v3",
+      "elevenlabs/eleven-flash-v2",
+      "hexgrad/kokoro-82m",
+      "heygen/heygen-voice-1-turbo:free",
+    ]);
+    const v4 = models.find((model) => model.id === "elevenlabs/eleven-v4")!;
+    assert.equal(v4.listedOn, "2026-10-07");
+    assert.equal(v4.summary, "Eleven v4 is a text-to-speech model from ElevenLabs.");
     const eleven = models.find((model) => model.id === "elevenlabs/eleven-v3")!;
     assert.equal(eleven.usdPerCharacter, 0.00008);
     assert.deepEqual(eleven.voices, ["george", "sarah", "adam"]);
@@ -27,7 +39,9 @@ describe("the speech listing", () => {
   });
 
   it("checks a voice against the model's own voices, and asks a model that lists none as given", () => {
-    const [kokoro, drama] = parseSpeechListing(LISTING);
+    const models = parseSpeechListing(LISTING);
+    const kokoro = models.find((model) => model.id === "hexgrad/kokoro-82m");
+    const drama = models.find((model) => model.id === "fish-audio/drama-3");
     assert.equal(voiceProblem(kokoro!, "af_bella"), null);
     assert.match(voiceProblem(kokoro!, "alloy") ?? "", /hexgrad\/kokoro-82m has no voice 'alloy'\. Its voices include: af_alloy, af_bella\./);
     assert.equal(voiceProblem(drama!, "anyone"), null);
@@ -40,10 +54,13 @@ describe("the speech listing", () => {
     });
   });
 
-  it("shows each model's rate per 1,000 characters and a few of its voices", () => {
+  it("shows when each model was listed, its rate per 1,000 characters, what it is, and its voices", () => {
     const models = parseSpeechListing(LISTING);
-    assert.equal(speechModelLine(models.find((model) => model.id === "elevenlabs/eleven-v3")!), "elevenlabs/eleven-v3: $0.0800 per 1,000 characters; voices: george, sarah, adam");
-    assert.equal(speechModelLine(models.find((model) => model.id === "fish-audio/drama-3")!), "fish-audio/drama-3: $0.0020 per 1,000 characters; voices: not listed");
+    assert.equal(
+      speechModelLine(models.find((model) => model.id === "elevenlabs/eleven-v4")!),
+      "elevenlabs/eleven-v4 (listed 2026-10-07): $0.0800 per 1,000 characters. Eleven v4 is a text-to-speech model from ElevenLabs. voices: will, chris",
+    );
+    assert.equal(speechModelLine(models.find((model) => model.id === "fish-audio/drama-3")!), "fish-audio/drama-3 (listed 2026-10-13): $0.0020 per 1,000 characters. voices: not listed");
     assert.match(speechModelLine(models.find((model) => model.id.endsWith(":free"))!), /price not stated/);
   });
 });

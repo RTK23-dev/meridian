@@ -267,7 +267,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         if (listing.models.length === 0) return { text: "The live catalogue lists no speech model right now, so no voiceover can be made.", data: { models: [] } };
         const lines = listing.models.map(speechModelLine);
         return {
-          text: ["Speech models, cheapest first (list rates per character of text; each voiceover holds a fixed amount and settles at OpenRouter's bill):", ...lines].join("\n"),
+          text: ["Speech models, newest first (list rates per character of text; each voiceover holds a fixed amount and settles at OpenRouter's bill). Prefer a recent flagship unless the person asks otherwise:", ...lines].join("\n"),
           data: { models: listing.models },
         };
       },
