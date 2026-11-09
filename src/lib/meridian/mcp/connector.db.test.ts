@@ -65,6 +65,10 @@ describe("MCP connector", () => {
       brands: async () => [{ id: BRAND, name: "Calm Mug Co" }, { id: BARE_BRAND, name: "Bare" }],
       brand: async (id) => (id === BRAND ? { id, name: "Calm Mug Co", facts: { Tone: "plain and warm", "Words to avoid": "" } } : null),
       speechModels: async () => ({ ok: true, models: [{ id: "openai/gpt-audio-mini", priceUnit: "per_token", usd: 0.0000006 }] }),
+      styles: async () => [
+        { cookbookId: "ck_voice_listicle", label: "Voice-led list", summary: "A spoken list over kinetic type.", modes: ["agent", "engine"], instructions: [{ role: "script", text: "One item to a beat." }] },
+        { cookbookId: "ck_engine_only", label: "Engine only", summary: "Not for chats.", modes: ["engine"], instructions: [] },
+      ],
       async speak(input) {
         if (input.voice === "unknown") throw new NotSentError("OpenRouter refused the voiceover (HTTP 400).");
         spoken.push(input.text);
@@ -182,6 +186,70 @@ describe("MCP connector", () => {
     assert.match(denied.body!.result.content[0].text, /needs the member role/);
     const allowed = await call(viewer.secret, "meridian_brand", { brandId: BRAND });
     assert.match(allowed.body!.result.content[0].text, /Tone: plain and warm/);
+  });
+
+  it("runs the Q&A and a Studio video over HTTP: the person's checkpoints, the asset gate, the video's budget and delivery", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Workflow" });
+    const start = await call(secret, "meridian_start");
+    const intake = start.body!.result.content[0].text as string;
+    assert.match(intake, /^Quick Q&A before making the video\. Ask these questions in ONE message/);
+    assert.match(intake, /1\. Which brand is this video for\?\n {3}A\. Calm Mug Co \(\$\d+\.\d\d left\)\n {3}B\. Bare \(no budget set: paid steps are refused\)/);
+    assert.match(intake, /Voice-led list: A spoken list over kinetic type\./);
+    assert.doesNotMatch(intake, /Engine only/, "a style a chat cannot make is not offered");
+
+    const created = await call(secret, "meridian_project_create", { brandId: BRAND, goal: "Sell a product", idea: "Our mug keeps coffee hot for two hours", seconds: 30, style: "ck_voice_listicle", voiceover: true, mode: "studio", render: "chat", budgetUsd: 1.5 });
+    const createdText = created.body!.result.content[0].text as string;
+    assert.equal(created.body!.result.isError, false, createdText);
+    assert.match(createdText, /Studio mode/);
+    assert.match(createdText, /- Concept: you choose/);
+    assert.match(createdText, /- Render: the chat decides/);
+    assert.match(createdText, /One item to a beat/, "the chosen style's rules travel with the project");
+    const projectId = created.body!.result.structuredContent.project.id as string;
+
+    const forced = await call(secret, "meridian_checkpoint", { projectId, phase: "concept", action: "resolve", decidedBy: "chat", content: "x" });
+    assert.match(forced.body!.result.content[0].text, /person's choice in Studio mode/);
+    const early = await call(secret, "meridian_image", { brandId: BRAND, prompt: "A mug", projectId });
+    assert.match(early.body!.result.content[0].text, /Settle the asset plan first.*Nothing was spent/);
+
+    const options = [{ label: "A", summary: "First" }, { label: "B", summary: "Second" }];
+    for (const phase of ["concept", "script", "storyboard", "assets"]) {
+      const proposed = await call(secret, "meridian_checkpoint", { projectId, phase, action: "propose", options });
+      assert.match(proposed.body!.result.content[0].text, /options recorded/);
+      const resolved = await call(secret, "meridian_checkpoint", { projectId, phase, action: "resolve", decidedBy: "person", choice: "A", content: `${phase}: settled` });
+      assert.equal(resolved.body!.result.isError, false, resolved.body!.result.content[0].text);
+    }
+    const before = (await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!;
+    const image = await call(secret, "meridian_image", { brandId: BRAND, prompt: "A mug at dawn", projectId });
+    assert.equal(image.body!.result.isError, false, image.body!.result.content[0].text);
+    const second = await call(secret, "meridian_image", { brandId: BRAND, prompt: "A mug at noon", projectId });
+    assert.match(second.body!.result.content[0].text, /\$0\.50 is left, less than this call's hold of \$1\.00.*Nothing was spent/);
+    const after = (await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!;
+    assert.equal(after.spentMicros - before.spentMicros, 1_000_000n, "only the first image is booked on the brand");
+    assert.equal(after.reservedMicros, 0n);
+    const raised = await call(secret, "meridian_project_update", { projectId, budgetUsd: 3 });
+    assert.match(raised.body!.result.content[0].text, /Spent on this video: \$1\.00 of \$3\.00/);
+    const lowered = await call(secret, "meridian_project_update", { projectId, budgetUsd: 0.5 });
+    assert.match(lowered.body!.result.content[0].text, /already spent on this video/);
+
+    const status = await call(secret, "meridian_project", { projectId });
+    assert.match(status.body!.result.content[0].text, /Assets?|Asset plan: settled by the person \(A\)/);
+    assert.match(status.body!.result.content[0].text, /Files: 1\./);
+    assert.match(status.body!.result.content[0].text, /Next: Build/);
+
+    await call(secret, "meridian_checkpoint", { projectId, phase: "build", action: "propose", options });
+    await call(secret, "meridian_checkpoint", { projectId, phase: "build", action: "resolve", decidedBy: "person", choice: "B" });
+    const render = await call(secret, "meridian_checkpoint", { projectId, phase: "render", action: "resolve", decidedBy: "chat", content: "video.mp4 in the chat" });
+    assert.match(render.body!.result.content[0].text, /Next: Deliver/);
+    await call(secret, "meridian_checkpoint", { projectId, phase: "deliver", action: "propose", options });
+    const delivered = await call(secret, "meridian_checkpoint", { projectId, phase: "deliver", action: "resolve", decidedBy: "person", choice: "A" });
+    assert.match(delivered.body!.result.content[0].text, /The video is delivered\. Spent on this video: \$1\.00 of \$3\.00/);
+    const again = await call(secret, "meridian_checkpoint", { projectId, phase: "deliver", action: "reopen" });
+    assert.match(again.body!.result.content[0].text, /This video is delivered/);
+    const listed = await call(secret, "meridian_project");
+    assert.match(listed.body!.result.content[0].text, new RegExp(`${projectId}: "Our mug keeps coffee hot for two hours", studio, delivered`));
+
+    const prompts = await rpc(secret, "prompts/list");
+    assert.deepEqual((prompts.body!.result.prompts as Array<{ name: string }>).map((prompt) => prompt.name), ["make_video", "studio_video", "resume_video"]);
   });
 
   it("asks the decision engine, lists the files with fresh links, gives the render commands, and audits paid calls", async () => {

@@ -10,7 +10,8 @@ import type { Sql } from "../learning/store.ts";
 import { resolveConnector, secretFrom, type ResolvedConnector } from "./connectors.ts";
 import { linkSecretFrom } from "./files.ts";
 import { ERROR, handleBody } from "./protocol.ts";
-import { connectorTools, type ConnectorContext, type ConnectorPorts } from "./tools.ts";
+import { CONNECTOR_PROMPTS, connectorTools } from "./registry.ts";
+import type { ConnectorContext, ConnectorPorts } from "./tools.ts";
 
 export const MCP_MAX_BODY_BYTES = 1_000_000;
 export const MCP_CALLS_PER_MINUTE = 60;
@@ -82,6 +83,7 @@ export async function handleMcpRequest(request: Request, input: { pathSecret: st
   const answer = await handleBody(body, {
     role: connector.role,
     tools: connectorTools(),
+    prompts: CONNECTOR_PROMPTS,
     context,
     onToolError: (name, error) => deps.logError?.(`mcp tool ${name} failed`, error instanceof Error ? error.message : error),
     onToolResult: async (name, args, result) => {
