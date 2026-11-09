@@ -10,6 +10,7 @@ import { fileLink, listFiles, storeFile, type McpFile, type McpFileStore } from 
 import { budgetName, usd, withHold, type HoldLedger } from "./paid.ts";
 import { defineTool, type McpTool, type ToolContent, type ToolResult } from "./protocol.ts";
 import { readProject, recordProjectSpend } from "./projects.ts";
+import { speechModelLine, voiceProblem, type SpeechModel } from "./speech.ts";
 import { paidCallProblem, type PaidKind, type ProjectState } from "./workflow.ts";
 
 /**
@@ -27,8 +28,7 @@ export type Readiness = { ready: boolean; detail: string };
 
 export type BrandContext = { id: string; name: string; facts: Record<string, string> };
 
-/** A speech model as the live catalogue lists it: its list rate and the unit the rate is per (a token, a request). */
-export type SpeechModel = { id: string; priceUnit: string; usd: number };
+export type { SpeechModel } from "./speech.ts";
 
 export type SpeechAnswer = { bytes: Uint8Array; mediaType: string; model: string; costUsd: number | null };
 export type ImageAnswer = { bytes: Uint8Array; mediaType: string; model: string; width: number; height: number; costUsd: number | null };
@@ -60,7 +60,7 @@ export type ConnectorPorts = {
   /** Meridian's cookbooks, for the intake's style question and the chosen style's rules. */
   styles(): Promise<Array<{ cookbookId: string; label: string; summary: string; modes: readonly string[]; instructions: Array<{ role: string; text: string }> }>>;
   /** Throws NotSentError when it refuses before a request is sent. */
-  speak(input: { model: string; voice: string; text: string; speed: number }): Promise<SpeechAnswer>;
+  speak(input: { model: string; voice: string; text: string; speed: number; instructions: string | null }): Promise<SpeechAnswer>;
   /** Throws NotSentError when it refuses before a request is sent. */
   image(input: { prompt: string; aspectRatio: "9:16" | "1:1" | "16:9"; seed: string }): Promise<ImageAnswer>;
   decide(input: { brandId: string | null; kind: DecisionKind; question: string; options: string[]; context: string }): Promise<DecisionAnswer>;
@@ -141,8 +141,8 @@ workspace's monthly budget for a video without a brand (meridian_status shows bo
   workspace's decision engine should choose between hooks, check a claim, or score a draft, instead of judging your own work.
 
 ## 2. Assets (paid)
-- meridian_voiceover: one call per take, the whole narration or one beat. Pick a model from meridian_voice_models and a voice the
-  model offers; ask the person when unsure. Word timings are not returned: time captions to the beats you wrote.
+- meridian_voiceover: one call per take, the whole narration or one beat. Pick a model from meridian_voice_models and one of the
+  voices it lists; ask the person when unsure. Word timings are not returned: time captions to the beats you wrote.
 - meridian_image: one call per image, 9:16 for a full-screen shot. Uses the Studio image model chosen in Settings, Models.
 - Every file is stored by Meridian (the brand's space, or the workspace's own for a video without a brand) and comes back with a
   download link that lasts an hour (meridian_files makes fresh ones).
@@ -257,7 +257,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
     defineTool({
       name: "meridian_voice_models",
       title: "Voice models",
-      description: "The speech models the workspace's OpenRouter key can use, read live, with their list prices. Free. Pick one for meridian_voiceover.",
+      description: "The text-to-speech models on OpenRouter, read live, each with its list rate per 1,000 characters and the voices it offers. Free. Pick a model and one of its voices for meridian_voiceover.",
       input: z.object({}),
       role: "viewer",
       annotations: { readOnlyHint: true, openWorldHint: true },
@@ -265,8 +265,11 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         const listing = await context.ports.speechModels();
         if (!listing.ok) return { text: `The speech models could not be read: ${listing.reason}`, isError: true };
         if (listing.models.length === 0) return { text: "The live catalogue lists no speech model right now, so no voiceover can be made.", data: { models: [] } };
-        const lines = listing.models.map((model) => `${model.id}: $${model.usd} ${model.priceUnit.replace(/_/g, " ")} (list rate)`);
-        return { text: ["Speech models (the voice names each model offers are the vendor's; ask the person or try a common one):", ...lines].join("\n"), data: { models: listing.models } };
+        const lines = listing.models.map(speechModelLine);
+        return {
+          text: ["Speech models, newest first (list rates per character of text; each voiceover holds a fixed amount and settles at OpenRouter's bill). Prefer a recent flagship unless the person asks otherwise:", ...lines].join("\n"),
+          data: { models: listing.models },
+        };
       },
     }),
 
@@ -278,8 +281,9 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         brandId: optionalBrandIdSchema,
         text: z.string().min(1).max(VOICEOVER_MAX_CHARS).describe("The words to speak, exactly as they should be said."),
         model: z.string().min(3).max(200).describe("A speech model id from meridian_voice_models."),
-        voice: z.string().min(1).max(80).describe("The voice name the model offers (for example 'alloy' for OpenAI audio models)."),
-        speed: z.number().min(0.5).max(2).default(1).describe("Speaking rate; 1 is the voice's own pace."),
+        voice: z.string().min(1).max(120).describe("One of the voices meridian_voice_models lists for the model (for example 'george' for ElevenLabs)."),
+        speed: z.number().min(0.5).max(2).default(1).describe("Speaking rate; 1 is the voice's own pace. Not every model honours it."),
+        instructions: z.string().max(500).optional().describe("How to say it, for models that take a delivery style (for example 'upbeat, playful'). Other models ignore it."),
         label: z.string().max(120).optional().describe("A short name for the take, for example 'hook' or 'full narration'."),
         projectId: projectIdSchema.optional(),
       }),
@@ -293,9 +297,12 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         if (ready.status !== "ready") return { text: `${ready.reason} No voiceover was made, and nothing was spent.`, isError: true };
         const listing = await context.ports.speechModels();
         if (!listing.ok) return { text: `The speech models could not be read, so the model cannot be checked: ${listing.reason} Nothing was spent.`, isError: true };
-        if (!listing.models.some((item) => item.id === input.model)) return { text: `${input.model} is not a speech model in the live catalogue. meridian_voice_models lists them. Nothing was spent.`, isError: true };
+        const model: SpeechModel | undefined = listing.models.find((item) => item.id === input.model);
+        if (!model) return { text: `${input.model} is not a speech model in the live catalogue. meridian_voice_models lists them. Nothing was spent.`, isError: true };
+        const voice = voiceProblem(model, input.voice);
+        if (voice) return { text: `${voice} Nothing was spent.`, isError: true };
         const outcome = await withHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: scope.brandId, ceilingUsd: VOICE_CEILING_USD, purpose: "voiceover", model: input.model }, async () => {
-          const spoken = await context.ports.speak({ model: input.model, voice: input.voice, text: input.text, speed: input.speed });
+          const spoken = await context.ports.speak({ model: input.model, voice: input.voice, text: input.text, speed: input.speed, instructions: input.instructions ?? null });
           const file = await storeFile(context.sql, store, {
             organizationId: context.connector.organizationId,
             brandId: scope.brandId,
@@ -305,7 +312,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
             mediaType: spoken.mediaType,
             bytes: spoken.bytes,
             costUsd: spoken.costUsd,
-            details: { model: spoken.model, voice: input.voice, speed: input.speed, characters: [...input.text].length, label: input.label ?? null, text: input.text },
+            details: { model: spoken.model, voice: input.voice, speed: input.speed, instructions: input.instructions ?? null, characters: [...input.text].length, label: input.label ?? null, text: input.text },
           });
           return { value: file, costUsd: spoken.costUsd };
         });
