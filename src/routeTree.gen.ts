@@ -40,6 +40,9 @@ import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$asset
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDriveCallbackRouteImport } from './routes/api/drive/callback'
 import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
+import { Route as ApiMcpFilesFileIdRouteImport } from './routes/api/mcp-files/$fileId'
+import { Route as ApiMcpIndexRouteImport } from './routes/api/mcp/index'
+import { Route as ApiMcpTokenRouteImport } from './routes/api/mcp/$token'
 import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
 import { Route as ApiOauthCallbackRouteImport } from './routes/api/oauth/callback'
 import { Route as ApiWebhooksReceiveRouteImport } from './routes/api/webhooks/receive'
@@ -215,6 +218,21 @@ const ApiDriveConnectRoute = ApiDriveConnectRouteImport.update({
   path: '/api/drive/connect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMcpFilesFileIdRoute = ApiMcpFilesFileIdRouteImport.update({
+  id: '/api/mcp-files/$fileId',
+  path: '/api/mcp-files/$fileId',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpIndexRoute = ApiMcpIndexRouteImport.update({
+  id: '/api/mcp/',
+  path: '/api/mcp/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMcpTokenRoute = ApiMcpTokenRouteImport.update({
+  id: '/api/mcp/$token',
+  path: '/api/mcp/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMediaLinksCreativeIdRoute = ApiMediaLinksCreativeIdRouteImport.update({
   id: '/api/media-links/$creativeId',
   path: '/api/media-links/$creativeId',
@@ -354,10 +372,13 @@ export interface FileRoutesByFullPath {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
+  '/api/mcp/': typeof ApiMcpIndexRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -406,10 +427,13 @@ export interface FileRoutesByTo {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
+  '/api/mcp': typeof ApiMcpIndexRoute
   '/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -460,10 +484,13 @@ export interface FileRoutesById {
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
+  '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
   '/api/webhooks/receive': typeof ApiWebhooksReceiveRoute
   '/api/webhooks/shopify': typeof ApiWebhooksShopifyRoute
+  '/api/mcp/': typeof ApiMcpIndexRoute
   '/_app/brands/$brandId/accounts': typeof AppBrandsBrandIdAccountsRoute
   '/_app/brands/$brandId/brain': typeof AppBrandsBrandIdBrainRoute
   '/_app/brands/$brandId/calibration': typeof AppBrandsBrandIdCalibrationRoute
@@ -514,10 +541,13 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/mcp-files/$fileId'
+    | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/api/webhooks/shopify'
+    | '/api/mcp/'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -566,10 +596,13 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/mcp-files/$fileId'
+    | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/api/webhooks/shopify'
+    | '/api/mcp'
     | '/brands/$brandId/accounts'
     | '/brands/$brandId/brain'
     | '/brands/$brandId/calibration'
@@ -619,10 +652,13 @@ export interface FileRouteTypes {
     | '/api/auth/$'
     | '/api/drive/callback'
     | '/api/drive/connect'
+    | '/api/mcp-files/$fileId'
+    | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
     | '/api/webhooks/receive'
     | '/api/webhooks/shopify'
+    | '/api/mcp/'
     | '/_app/brands/$brandId/accounts'
     | '/_app/brands/$brandId/brain'
     | '/_app/brands/$brandId/calibration'
@@ -654,10 +690,13 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
   ApiDriveConnectRoute: typeof ApiDriveConnectRoute
+  ApiMcpFilesFileIdRoute: typeof ApiMcpFilesFileIdRoute
+  ApiMcpTokenRoute: typeof ApiMcpTokenRoute
   ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
   ApiWebhooksReceiveRoute: typeof ApiWebhooksReceiveRoute
   ApiWebhooksShopifyRoute: typeof ApiWebhooksShopifyRoute
+  ApiMcpIndexRoute: typeof ApiMcpIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -877,6 +916,27 @@ declare module '@tanstack/react-router' {
       path: '/api/drive/connect'
       fullPath: '/api/drive/connect'
       preLoaderRoute: typeof ApiDriveConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp-files/$fileId': {
+      id: '/api/mcp-files/$fileId'
+      path: '/api/mcp-files/$fileId'
+      fullPath: '/api/mcp-files/$fileId'
+      preLoaderRoute: typeof ApiMcpFilesFileIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp/': {
+      id: '/api/mcp/'
+      path: '/api/mcp'
+      fullPath: '/api/mcp/'
+      preLoaderRoute: typeof ApiMcpIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp/$token': {
+      id: '/api/mcp/$token'
+      path: '/api/mcp/$token'
+      fullPath: '/api/mcp/$token'
+      preLoaderRoute: typeof ApiMcpTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/media-links/$creativeId': {
@@ -1113,10 +1173,13 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,
   ApiDriveConnectRoute: ApiDriveConnectRoute,
+  ApiMcpFilesFileIdRoute: ApiMcpFilesFileIdRoute,
+  ApiMcpTokenRoute: ApiMcpTokenRoute,
   ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,
   ApiWebhooksReceiveRoute: ApiWebhooksReceiveRoute,
   ApiWebhooksShopifyRoute: ApiWebhooksShopifyRoute,
+  ApiMcpIndexRoute: ApiMcpIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
