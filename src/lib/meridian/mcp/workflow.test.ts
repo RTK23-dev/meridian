@@ -106,17 +106,18 @@ describe("video workflow", () => {
     assert.equal(paidCallProblem({ ...withAssets, budgetUsd: null }, "voiceover", 1), null, "no cap beyond the brand budget");
   });
 
-  it("asks the brand only when there is more than one, and offers the styles a chat can make plus kinetic type", () => {
+  it("offers each brand and 'No brand', asks nothing about a brand when there is none, and offers the styles a chat can make plus kinetic type", () => {
     const styles = styleOptions([
       { cookbookId: "ck_voice_listicle", label: "Voice-led list", summary: "Spoken list.", modes: ["agent", "engine"] },
       { cookbookId: "ck_engine", label: "Engine only", summary: "No.", modes: ["engine"] },
     ]);
     assert.deepEqual(styles.map((style) => style.label), ["Voice-led list", "Kinetic type"]);
-    const one = intakeQuestions({ brands: [{ id: "b1", name: "Calm Mug", leftUsd: 5 }], styles });
-    assert.ok(!one.some((question) => question.id === "brand"));
-    assert.deepEqual(one.map((question) => question.id), ["goal", "idea", "format", "style", "voice", "mode", "render", "budget"]);
-    const two = intakeQuestions({ brands: [{ id: "b1", name: "Calm Mug", leftUsd: 5 }, { id: "b2", name: "Bare", leftUsd: null }], styles });
-    assert.deepEqual(two[0]!.options, ["Calm Mug ($5.00 left)", "Bare (no budget set: paid steps are refused)"]);
+    const none = intakeQuestions({ brands: [], workspaceLeftUsd: 1, styles });
+    assert.deepEqual(none.map((question) => question.id), ["goal", "idea", "format", "style", "voice", "mode", "render", "budget"], "no brand in the workspace: the brand is not asked");
+    const one = intakeQuestions({ brands: [{ id: "b1", name: "Calm Mug", leftUsd: 5 }], workspaceLeftUsd: 1, styles });
+    assert.deepEqual(one[0]!.options, ["Calm Mug ($5.00 left)", "No brand: the workspace's own video (paid from the monthly budget, $1.00 left)"]);
+    const two = intakeQuestions({ brands: [{ id: "b1", name: "Calm Mug", leftUsd: 5 }, { id: "b2", name: "Bare", leftUsd: null }], workspaceLeftUsd: null, styles });
+    assert.deepEqual(two[0]!.options, ["Calm Mug ($5.00 left)", "Bare (no budget set: paid steps are refused)", "No brand: the workspace's own video (no monthly budget set: paid steps are refused)"]);
   });
 
   it("tells the chat the next move: the word budget, the style's rules, and the person's checkpoint", () => {

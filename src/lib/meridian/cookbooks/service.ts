@@ -30,7 +30,7 @@ function fromStore<T>(result: StoreResult<T>): ServiceResult<T> {
 }
 
 /** The library of a brand: every built-in cookbook, and the workspace cookbooks visible to the brand (latest version of each). */
-export async function libraryFor(sql: Sql, input: { organizationId: string; brandId: string; includeArchived?: boolean }) {
+export async function libraryFor(sql: Sql, input: { organizationId: string; brandId: string | null; includeArchived?: boolean }) {
   const workspace = await listCookbooks(sql, input);
   const builtins = builtinCookbooks();
   // The cards are computed here, on the server (K19b2): the browser gets them, and never imports the rules that make them.
@@ -40,7 +40,7 @@ export async function libraryFor(sql: Sql, input: { organizationId: string; bran
 /** One cookbook by id: a built-in, or the visible workspace version (the latest unless a version is named). */
 export async function readCookbookFor(
   sql: Sql,
-  input: { organizationId: string; brandId: string; cookbookId: string; version?: number },
+  input: { organizationId: string; brandId: string | null; cookbookId: string; version?: number },
 ): Promise<ServiceResult<CookbookSource>> {
   const builtin = builtinCookbook(input.cookbookId, input.version);
   if (builtin !== undefined) return { ok: true, value: { source: "builtin", cookbook: builtin } };
@@ -153,7 +153,7 @@ export async function archiveCookbookFor(
  */
 export async function resolveFor(
   sql: Sql,
-  input: { organizationId: string; brandId: string; cookbookId: string; version?: number } & Omit<ResolveOptions, "context">,
+  input: { organizationId: string; brandId: string | null; cookbookId: string; version?: number } & Omit<ResolveOptions, "context">,
 ): Promise<ServiceResult<ResolvedCookbook>> {
   const source = await readCookbookFor(sql, input);
   if (!source.ok) return source;
@@ -168,7 +168,7 @@ export async function resolveFor(
  */
 export async function proposeFor(
   sql: Sql,
-  input: { organizationId: string; brandId: string; inputs: RunInputs; lengthMs: number; voiceCharacters?: number; port?: SelectorPort | null },
+  input: { organizationId: string; brandId: string | null; inputs: RunInputs; lengthMs: number; voiceCharacters?: number; port?: SelectorPort | null },
 ): Promise<Proposal> {
   const library = await libraryFor(sql, { organizationId: input.organizationId, brandId: input.brandId });
   const cookbooks = [...library.builtins, ...library.workspace.map((stored) => stored.cookbook)];

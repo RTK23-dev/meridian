@@ -7,14 +7,18 @@ import { z } from "zod";
 import type { Sql } from "../learning/store.ts";
 import type { ResolvedConnector } from "./connectors.ts";
 import { fileLink, listFiles, storeFile, type McpFile, type McpFileStore } from "./files.ts";
-import { usd, withBrandHold, type HoldLedger } from "./paid.ts";
+import { budgetName, usd, withHold, type HoldLedger } from "./paid.ts";
 import { defineTool, type McpTool, type ToolContent, type ToolResult } from "./protocol.ts";
 import { readProject, recordProjectSpend } from "./projects.ts";
 import { paidCallProblem, type PaidKind, type ProjectState } from "./workflow.ts";
 
-/** The brand's budget and what it has committed, from the Billing page. Null amounts are not set. */
+/**
+ * The budgets, from the Billing page. Null amounts are not set. A video made without a brand is paid from the monthly budget, which counts
+ * the month's held spend across text and video (monthlyHeldUsd).
+ */
 export type LimitsView = {
   monthlyBudgetUsd: number | null;
+  monthlyHeldUsd: number;
   decisionCapUsd: number | null;
   brands: Array<{ brandId: string; name: string; budgetUsd: number | null; committedUsd: number }>;
 };
@@ -40,6 +44,8 @@ export type DecisionAnswer = {
   distribution: Record<string, number> | null;
   reason: string | null;
   costUsd: number | null;
+  /** Whether the decision was written to the workspace's decision log. */
+  recorded: boolean;
 };
 
 /** What the tools reach. Production: ports.server.ts. Tests: in-memory fakes, so no test calls a provider. */
@@ -57,7 +63,7 @@ export type ConnectorPorts = {
   speak(input: { model: string; voice: string; text: string; speed: number }): Promise<SpeechAnswer>;
   /** Throws NotSentError when it refuses before a request is sent. */
   image(input: { prompt: string; aspectRatio: "9:16" | "1:1" | "16:9"; seed: string }): Promise<ImageAnswer>;
-  decide(input: { brandId: string; kind: DecisionKind; question: string; options: string[]; context: string }): Promise<DecisionAnswer>;
+  decide(input: { brandId: string | null; kind: DecisionKind; question: string; options: string[]; context: string }): Promise<DecisionAnswer>;
 };
 
 export type ConnectorContext = {
@@ -81,6 +87,18 @@ const INLINE_IMAGE_MAX_BYTES = 750_000;
 export const VOICEOVER_MAX_CHARS = 4000;
 
 export const brandIdSchema = z.string().min(1).max(80).describe("The brand id, from meridian_status.");
+/** A brand is optional for a video: without one, the video is the workspace's own and is paid from the monthly budget. */
+export const optionalBrandIdSchema = z
+  .string()
+  .min(1)
+  .max(80)
+  .optional()
+  .describe("The brand id, from meridian_status. Leave it out for a video without a brand: it is the workspace's own, paid from the monthly budget. With a projectId, the project's brand is used.");
+
+/** What the monthly budget has left for a video without a brand, or null when no monthly budget is set. */
+export function workspaceLeftUsd(limits: Pick<LimitsView, "monthlyBudgetUsd" | "monthlyHeldUsd">): number | null {
+  return limits.monthlyBudgetUsd === null ? null : Math.max(0, Math.round((limits.monthlyBudgetUsd - limits.monthlyHeldUsd) * 100) / 100);
+}
 export const projectIdSchema = z.string().min(1).max(80).describe("The video project id, from meridian_project_create.");
 
 function linkOf(context: ConnectorContext, file: McpFile) {
@@ -102,30 +120,32 @@ export async function requireBrand(context: ConnectorContext, brandId: string): 
 
 export const noBrand = (brandId: string): ToolResult => ({ text: `There is no brand '${brandId}' in this workspace. meridian_status lists its brands.`, isError: true });
 
-function costLine(outcome: { costUsd: number | null; settledUsd: number; basis: "reported" | "ceiling" }): string {
+function costLine(outcome: { costUsd: number | null; settledUsd: number; basis: "reported" | "ceiling" }, brandId: string | null): string {
   return outcome.basis === "reported"
-    ? `Cost: ${usd(outcome.costUsd ?? 0)}, as the provider reported it.`
-    : `The provider reported no cost, so ${usd(outcome.settledUsd)} (the hold's ceiling) is booked against the brand budget.`;
+    ? `Cost: ${usd(outcome.costUsd ?? 0)}, as the provider reported it, paid from ${budgetName(brandId)}.`
+    : `The provider reported no cost, so ${usd(outcome.settledUsd)} (the hold's ceiling) is booked against ${budgetName(brandId)}.`;
 }
 
 export const VIDEO_GUIDE = `# Making a Meridian video from this chat
 
 You are the orchestrator. Write the script, the plan and the coded video yourself; that costs the workspace nothing. Use Meridian only
-for what a chat cannot do: meridian_voiceover, meridian_image, meridian_decide. Each is paid from the brand's budget (meridian_status
-shows it) and reports its own cost.
+for what a chat cannot do: meridian_voiceover, meridian_image, meridian_decide. Each is paid from the brand's budget, or from the
+workspace's monthly budget for a video without a brand (meridian_status shows both), and reports its own cost.
 
 ## 1. Plan (as a project)
 - Start with meridian_start: ask its quick Q&A in one message, then meridian_project_create. The project keeps the order (concept,
   script, storyboard, assets, build, render, deliver) and who decides each step in the mode the person chose; follow the next step every
   tool returns, and pass projectId to the paid tools.
-- Read meridian_brand (the brand's voice, claims, words to avoid). Keep claims to what the brand states. Ask meridian_decide when the
+- With a brand, read meridian_brand (the brand's voice, claims, words to avoid) and keep claims to what the brand states; without one,
+  keep claims to what the person said. Ask meridian_decide when the
   workspace's decision engine should choose between hooks, check a claim, or score a draft, instead of judging your own work.
 
 ## 2. Assets (paid)
 - meridian_voiceover: one call per take, the whole narration or one beat. Pick a model from meridian_voice_models and a voice the
   model offers; ask the person when unsure. Word timings are not returned: time captions to the beats you wrote.
 - meridian_image: one call per image, 9:16 for a full-screen shot. Uses the Studio image model chosen in Settings, Models.
-- Every file is stored under the brand and comes back with a download link that lasts an hour (meridian_files makes fresh ones).
+- Every file is stored by Meridian (the brand's space, or the workspace's own for a video without a brand) and comes back with a
+  download link that lasts an hour (meridian_files makes fresh ones).
 
 ## 3. The coded video (free, you write it)
 A HyperFrames composition: one folder with index.html at its root.
@@ -144,16 +164,33 @@ A HyperFrames composition: one folder with index.html at its root.
 `;
 
 /**
- * The project a paid call is made for, when the chat names one: it must be this workspace's, of the same brand, active, past its asset
- * plan (for media), and within the video's own budget. Nothing is held or sent when it is not.
+ * Who a paid call is for: the project's brand when the chat names a project, else the brand it names, else no brand (the workspace's own
+ * video, paid from the monthly budget). A named project must be this workspace's, active, past its asset plan (for media), within the
+ * video's own budget, and of the brand the chat names, if it names one. Nothing is held or sent when it is not.
  */
-export async function projectGate(context: ConnectorContext, projectId: string, brandId: string, kind: PaidKind, holdUsd: number): Promise<{ ok: true; project: ProjectState } | { ok: false; result: ToolResult }> {
-  const project = await readProject(context.sql, context.connector.organizationId, projectId);
-  if (!project) return { ok: false, result: { text: `There is no video project '${projectId}' in this workspace. meridian_project lists them.`, isError: true } };
-  if (project.brandId !== brandId) return { ok: false, result: { text: `That video project belongs to another brand (${project.brandId}). Nothing was spent.`, isError: true } };
-  const problem = paidCallProblem(project, kind, holdUsd);
-  if (problem) return { ok: false, result: { text: `${problem} Nothing was spent.`, isError: true } };
-  return { ok: true, project };
+export async function paidScope(
+  context: ConnectorContext,
+  input: { brandId?: string; projectId?: string },
+  kind: PaidKind,
+  holdUsd: number,
+): Promise<{ ok: true; brandId: string | null; project: ProjectState | null } | { ok: false; result: ToolResult }> {
+  if (input.projectId) {
+    const project = await readProject(context.sql, context.connector.organizationId, input.projectId);
+    if (!project) return { ok: false, result: { text: `There is no video project '${input.projectId}' in this workspace. meridian_project lists them.`, isError: true } };
+    if (input.brandId !== undefined && input.brandId !== project.brandId) {
+      const owner = project.brandId === null ? "the workspace, with no brand" : `brand ${project.brandId}`;
+      return { ok: false, result: { text: `That video project belongs to ${owner}. Leave brandId out to use the project's. Nothing was spent.`, isError: true } };
+    }
+    const problem = paidCallProblem(project, kind, holdUsd);
+    if (problem) return { ok: false, result: { text: `${problem} Nothing was spent.`, isError: true } };
+    return { ok: true, brandId: project.brandId, project };
+  }
+  if (input.brandId !== undefined) {
+    const brand = await requireBrand(context, input.brandId);
+    if (!brand) return { ok: false, result: noBrand(input.brandId) };
+    return { ok: true, brandId: brand.id, project: null };
+  }
+  return { ok: true, brandId: null, project: null };
 }
 
 /** The connector's context and media tools (status, brand, guide, voice, image, decide, files, render). */
@@ -162,7 +199,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
     defineTool<ConnectorContext, z.ZodObject<Record<string, never>>>({
       name: "meridian_status",
       title: "Workspace status and limits",
-      description: "The workspace this connector reaches, your role, every brand with its budget and what it has committed, the monthly budget, and which paid services (voice, images, decisions, storage) are ready. Free. Call this first.",
+      description: "The workspace this connector reaches, your role, every brand with its budget and what it has committed, the monthly budget (which pays for videos without a brand) and what it has left, and which paid services (voice, images, decisions, storage) are ready. Free.",
       input: z.object({}),
       role: "viewer",
       annotations: { readOnlyHint: true, openWorldHint: false },
@@ -174,7 +211,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         }));
         const lines = [
           `Connector "${context.connector.name}", acting as ${context.connector.role}.`,
-          `Monthly budget: ${limits.monthlyBudgetUsd === null ? "not set" : usd(limits.monthlyBudgetUsd)}. Decision cap per call: ${limits.decisionCapUsd === null ? "not set" : usd(limits.decisionCapUsd)}.`,
+          `Monthly budget: ${limits.monthlyBudgetUsd === null ? "not set, so paid calls for videos without a brand are refused" : `${usd(limits.monthlyBudgetUsd)}, held this month ${usd(limits.monthlyHeldUsd)}, left ${usd(workspaceLeftUsd(limits) ?? 0)}`}. A video without a brand is paid from it. Decision cap per call: ${limits.decisionCapUsd === null ? "not set" : usd(limits.decisionCapUsd)}.`,
           ...brands.map((brand) => `Brand ${brand.name} (${brand.brandId}): budget ${brand.budgetUsd === null ? "not set, so paid calls for it are refused" : `${usd(brand.budgetUsd)}, committed ${usd(brand.committedUsd)}, left ${usd(brand.remainingUsd ?? 0)}`}.`),
           `Voice: ${readiness.voice.ready ? "ready" : "not ready"}. ${readiness.voice.detail}`,
           `Images: ${readiness.image.ready ? "ready" : "not ready"}. ${readiness.image.detail}`,
@@ -182,7 +219,10 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
           `Storage: ${readiness.storage.ready ? "ready" : "not ready"}. ${readiness.storage.detail}`,
           "This chat's own work (scripts, plans, the coded video, rendering in your sandbox) costs the workspace nothing.",
         ];
-        return { text: lines.join("\n"), data: { connector: { name: context.connector.name, role: context.connector.role }, limits: { monthlyBudgetUsd: limits.monthlyBudgetUsd, decisionCapUsd: limits.decisionCapUsd }, brands, readiness } };
+        return {
+          text: lines.join("\n"),
+          data: { connector: { name: context.connector.name, role: context.connector.role }, limits: { monthlyBudgetUsd: limits.monthlyBudgetUsd, monthlyHeldUsd: limits.monthlyHeldUsd, monthlyLeftUsd: workspaceLeftUsd(limits), decisionCapUsd: limits.decisionCapUsd }, brands, readiness },
+        };
       },
     }),
 
@@ -233,9 +273,9 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
     defineTool({
       name: "meridian_voiceover",
       title: "Make a voiceover",
-      description: `Speaks your text with a speech model and stores the MP3 under the brand. Paid from the brand budget: a hold is taken first, and the call is refused when the budget is not set or too low. Up to ${VOICEOVER_MAX_CHARS} characters per call. Returns the file and a download link.`,
+      description: `Speaks your text with a speech model and stores the MP3. Paid from the brand budget, or from the workspace's monthly budget for a video without a brand: a hold is taken first, and the call is refused when the budget is not set or too low. Up to ${VOICEOVER_MAX_CHARS} characters per call. Returns the file and a download link.`,
       input: z.object({
-        brandId: brandIdSchema,
+        brandId: optionalBrandIdSchema,
         text: z.string().min(1).max(VOICEOVER_MAX_CHARS).describe("The words to speak, exactly as they should be said."),
         model: z.string().min(3).max(200).describe("A speech model id from meridian_voice_models."),
         voice: z.string().min(1).max(80).describe("The voice name the model offers (for example 'alloy' for OpenAI audio models)."),
@@ -246,23 +286,19 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async run(context: ConnectorContext, input) {
-        const brand = await requireBrand(context, input.brandId);
-        if (!brand) return noBrand(input.brandId);
+        const scope = await paidScope(context, input, "voiceover", VOICE_CEILING_USD);
+        if (!scope.ok) return scope.result;
         const store = await context.ports.files();
         const ready = await store.ready(context.connector.organizationId);
         if (ready.status !== "ready") return { text: `${ready.reason} No voiceover was made, and nothing was spent.`, isError: true };
-        if (input.projectId) {
-          const gate = await projectGate(context, input.projectId, brand.id, "voiceover", VOICE_CEILING_USD);
-          if (!gate.ok) return gate.result;
-        }
         const listing = await context.ports.speechModels();
         if (!listing.ok) return { text: `The speech models could not be read, so the model cannot be checked: ${listing.reason} Nothing was spent.`, isError: true };
         if (!listing.models.some((item) => item.id === input.model)) return { text: `${input.model} is not a speech model in the live catalogue. meridian_voice_models lists them. Nothing was spent.`, isError: true };
-        const outcome = await withBrandHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: brand.id, ceilingUsd: VOICE_CEILING_USD, purpose: "voiceover" }, async () => {
+        const outcome = await withHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: scope.brandId, ceilingUsd: VOICE_CEILING_USD, purpose: "voiceover", model: input.model }, async () => {
           const spoken = await context.ports.speak({ model: input.model, voice: input.voice, text: input.text, speed: input.speed });
           const file = await storeFile(context.sql, store, {
             organizationId: context.connector.organizationId,
-            brandId: brand.id,
+            brandId: scope.brandId,
             connectorId: context.connector.id,
             projectId: input.projectId ?? null,
             kind: "voiceover",
@@ -277,7 +313,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         if (input.projectId) await recordProjectSpend(context.sql, { organizationId: context.connector.organizationId, projectId: input.projectId, usd: outcome.settledUsd });
         const view = fileView(context, outcome.value);
         return {
-          text: [`Voiceover stored as file ${view.id} (${Math.round(view.bytes / 1024)} KB MP3, ${input.model}, voice ${input.voice}).`, costLine(outcome), view.url ? `Download (1 hour): ${view.url}` : "", linkNote(context)].filter(Boolean).join("\n"),
+          text: [`Voiceover stored as file ${view.id} (${Math.round(view.bytes / 1024)} KB MP3, ${input.model}, voice ${input.voice}).`, costLine(outcome, scope.brandId), view.url ? `Download (1 hour): ${view.url}` : "", linkNote(context)].filter(Boolean).join("\n"),
           data: { file: view, cost: { reportedUsd: outcome.costUsd, bookedUsd: outcome.settledUsd, basis: outcome.basis } },
         };
       },
@@ -286,9 +322,9 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
     defineTool({
       name: "meridian_image",
       title: "Make an image",
-      description: "Makes one image with the workspace's Studio image model (Settings, Models) and stores it under the brand. Paid from the brand budget: a hold is taken first and the call is refused when the budget is not set or too low. Returns the file, a download link, and the image itself when it is small enough to show.",
+      description: "Makes one image with the workspace's Studio image model (Settings, Models) and stores it. Paid from the brand budget, or from the workspace's monthly budget for a video without a brand: a hold is taken first and the call is refused when the budget is not set or too low. Returns the file, a download link, and the image itself when it is small enough to show.",
       input: z.object({
-        brandId: brandIdSchema,
+        brandId: optionalBrandIdSchema,
         prompt: z.string().min(3).max(4000).describe("What the image shows. Describe it; do not ask for copyrighted characters or real people."),
         aspectRatio: z.enum(["9:16", "1:1", "16:9"]).default("9:16"),
         label: z.string().max(120).optional().describe("A short name, for example 'shot 2 background'."),
@@ -297,23 +333,19 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async run(context: ConnectorContext, input) {
-        const brand = await requireBrand(context, input.brandId);
-        if (!brand) return noBrand(input.brandId);
+        const scope = await paidScope(context, input, "image", IMAGE_CEILING_USD);
+        if (!scope.ok) return scope.result;
         const store = await context.ports.files();
         const ready = await store.ready(context.connector.organizationId);
         if (ready.status !== "ready") return { text: `${ready.reason} No image was made, and nothing was spent.`, isError: true };
         const readiness = await context.ports.readiness();
         if (!readiness.image.ready) return { text: `${readiness.image.detail} No image was made, and nothing was spent.`, isError: true };
-        if (input.projectId) {
-          const gate = await projectGate(context, input.projectId, brand.id, "image", IMAGE_CEILING_USD);
-          if (!gate.ok) return gate.result;
-        }
         const seed = `${context.connector.id}:${context.now().getTime()}`;
-        const outcome = await withBrandHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: brand.id, ceilingUsd: IMAGE_CEILING_USD, purpose: "image" }, async () => {
+        const outcome = await withHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: scope.brandId, ceilingUsd: IMAGE_CEILING_USD, purpose: "image", model: readiness.image.model ?? "studio_image" }, async () => {
           const made = await context.ports.image({ prompt: input.prompt, aspectRatio: input.aspectRatio, seed });
           const file = await storeFile(context.sql, store, {
             organizationId: context.connector.organizationId,
-            brandId: brand.id,
+            brandId: scope.brandId,
             connectorId: context.connector.id,
             projectId: input.projectId ?? null,
             kind: "image",
@@ -329,7 +361,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         const view = fileView(context, outcome.value.file);
         const media: ToolContent[] = outcome.value.bytes.byteLength <= INLINE_IMAGE_MAX_BYTES ? [{ type: "image", data: Buffer.from(outcome.value.bytes).toString("base64"), mimeType: view.mediaType }] : [];
         return {
-          text: [`Image stored as file ${view.id} (${String(view.details.width)} x ${String(view.details.height)}, ${String(view.details.model)}).`, costLine(outcome), view.url ? `Download (1 hour): ${view.url}` : "", linkNote(context)].filter(Boolean).join("\n"),
+          text: [`Image stored as file ${view.id} (${String(view.details.width)} x ${String(view.details.height)}, ${String(view.details.model)}).`, costLine(outcome, scope.brandId), view.url ? `Download (1 hour): ${view.url}` : "", linkNote(context)].filter(Boolean).join("\n"),
           data: { file: view, cost: { reportedUsd: outcome.costUsd, bookedUsd: outcome.settledUsd, basis: outcome.basis } },
           media,
         };
@@ -341,7 +373,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       title: "Ask the decision engine",
       description: "Asks the workspace's decision engine (chosen in Connections) to choose between options, answer a yes/no question, or score something 1 to 5, with its probability. Use it instead of judging your own work. Paid under the workspace's decision cap. The answer is uncalibrated until a calibration report says otherwise.",
       input: z.object({
-        brandId: brandIdSchema,
+        brandId: optionalBrandIdSchema,
         kind: z.enum(["choose", "yes_no", "score"]),
         question: z.string().min(5).max(600).describe("The question, plainly. For 'choose': which option is best for what."),
         options: z.array(z.string().min(1).max(500)).min(2).max(10).optional().describe("For 'choose': the options, each in full."),
@@ -351,14 +383,10 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
       async run(context: ConnectorContext, input) {
-        const brand = await requireBrand(context, input.brandId);
-        if (!brand) return noBrand(input.brandId);
         if (input.kind === "choose" && (!input.options || input.options.length < 2)) return { text: "A 'choose' question needs at least two options.", isError: true };
-        if (input.projectId) {
-          const gate = await projectGate(context, input.projectId, brand.id, "decision", 0);
-          if (!gate.ok) return gate.result;
-        }
-        const answer = await context.ports.decide({ brandId: brand.id, kind: input.kind, question: input.question, options: input.options ?? [], context: input.context });
+        const scope = await paidScope(context, input, "decision", 0);
+        if (!scope.ok) return scope.result;
+        const answer = await context.ports.decide({ brandId: scope.brandId, kind: input.kind, question: input.question, options: input.options ?? [], context: input.context });
         if (input.projectId && answer.costUsd !== null) await recordProjectSpend(context.sql, { organizationId: context.connector.organizationId, projectId: input.projectId, usd: answer.costUsd });
         if (answer.status !== "answered") {
           return { text: `The decision engine (${answer.engine}) did not answer: ${answer.reason ?? answer.status}.`, data: { decision: answer }, isError: answer.status === "failed" };
@@ -370,6 +398,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
           answer.distribution ? `Distribution: ${Object.entries(answer.distribution).map(([key, value]) => `${key} ${value.toFixed(2)}`).join(", ")}.` : "",
           answer.costUsd !== null ? `Cost ${usd(answer.costUsd)}, as reported.` : "The engine reported no cost for this call.",
           "Uncalibrated: a probability, not a promise.",
+          answer.recorded ? "" : "This decision could not be written to the workspace's decision log.",
         ];
         return { text: parts.filter(Boolean).join(" "), data: { decision: answer } };
       },
@@ -379,7 +408,7 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       name: "meridian_files",
       title: "Files made from chats",
       description: "The voiceovers and images this workspace's connectors made, newest first, each with a fresh download link. Free.",
-      input: z.object({ brandId: brandIdSchema.optional(), projectId: projectIdSchema.optional(), limit: z.int().min(1).max(50).default(20) }),
+      input: z.object({ brandId: brandIdSchema.optional().describe("Only this brand's files."), projectId: projectIdSchema.optional(), limit: z.int().min(1).max(50).default(20) }),
       role: "viewer",
       annotations: { readOnlyHint: true, openWorldHint: false },
       async run(context: ConnectorContext, input) {

@@ -1,5 +1,22 @@
 # STATUS: storage (engine shot ports, production)
 
+**Videos without a brand, and files without Drive (owner direction 2026-11-09, migration 0158).** A video does not have to belong to a
+brand, and making one does not need Google Drive.
+
+- `meridian-store.ts`: the one store the engine (`engineObjectStore`), Create (`content-factory/files.ts`, `meridianFileStore`) and the
+  chat connector (`mcp/files.ts`, `meridianMcpFileStore`) use. A new file goes to Drive when the workspace has Drive set up, else to
+  Meridian's database. A Drive that is set up but failing is still Drive: its error is reported, and the file is not moved elsewhere.
+  A file is read from where its record says it is (`storage_objects.provider`).
+- `database-store.ts`: the bytes in `storage_blobs`, the record in `storage_objects` with provider `database`. At most 50 MB a file;
+  larger is refused before anything is written, with a reason that says to connect Drive. Immutable: the same bytes again are a retry,
+  different bytes under a taken name are refused.
+- brandId null is the workspace's own space. `storage_objects.brand_id` and `artifact_upload_sessions.brand_id` may be null, and null
+  counts as one value in their keys (NULLS NOT DISTINCT). In Drive, a workspace file sits under `tenants/<org>/workspace/`, next to
+  `brands/`, and its brandId property is `workspace`.
+- The engine's shot connection no longer requires Drive (`engine/jobs/production-ports.ts`).
+- Tests: `meridian-store.db.test.ts` (11, PGlite). Not verified live: a database-kept render served through the media link route on the
+  hosting (a response of several MB), and a Drive upload into the workspace folder.
+
 **Engine reference store (this branch, `engine-reference-store.ts`).** The engine's reference video, uploaded to Meridian's store as
 store://<key>, is read under its request's brand and released when the analysis ends: the Drive file the index names is deleted, then the
 storage_objects row. The object store is a parameter (a test passes a fake), and production passes the Drive store (`engineObjectStore`).

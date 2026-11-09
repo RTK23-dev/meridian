@@ -3,7 +3,7 @@
 
 import { EngineError, newId, productionRequestSchema, scenePlanSchema, takeSchema, takeVerdictSchema, type ProductionRequest, type ScenePlan } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
-import { mediaKey, readArtifact, writeArtifact, type MediaStorePort } from "../jobs/artifact-store.ts";
+import { mediaKey, readArtifact, storageBrandOfRequest, writeArtifact, type MediaStorePort } from "../jobs/artifact-store.ts";
 import type { MediaFunctions } from "../media/interface.ts";
 import { takeShapeOf } from "../jobs/handlers/produce-shot.ts";
 import { applyEngineEvent, readEngineRequest } from "../jobs/orchestrator-sql.ts";
@@ -417,11 +417,8 @@ function clipReplacementOf(context: RemakeContext, replacement: ShotReplacement 
 
 async function writeReviewerTake(sql: Sql, input: RemakeInput, clip: ClipPlan, planArtifactId: string | null, objects: MediaStorePort): Promise<ReviewerTake> {
   if (clip.bytes === null) throw new EngineError("invalid_input", "a clip is stored only for a remake, not for a quote", { stage: "produce_shot" });
-  const rows = (await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${input.requestId} and organization_id = ${input.organizationId} limit 1
-  `) as Array<{ brand_id: string | null }>;
-  const brandId = rows[0]?.brand_id ?? null;
-  if (brandId === null) throw new EngineError("invalid_input", "the request has no brand, so the clip cannot be stored (Bible 5.2)", { stage: "produce_shot" });
+  // A request made without a brand keeps the clip in the workspace's own space (null).
+  const brandId = await storageBrandOfRequest(sql, input.organizationId, input.requestId, "produce_shot");
   const take = takeSchema.parse({
     schema: "meridian.take/v1",
     takeId: clip.takeId,

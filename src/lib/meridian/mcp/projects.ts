@@ -21,7 +21,7 @@ import {
 type ProjectRow = {
   id: string;
   organization_id: string;
-  brand_id: string;
+  brand_id: string | null;
   title: string;
   mode: string;
   brief: unknown;
@@ -33,7 +33,7 @@ type ProjectRow = {
   updated_at: unknown;
 };
 
-export type ProjectSummary = { id: string; title: string; brandId: string; mode: ProjectMode; status: ProjectStatus; phase: string | null; updatedAt: string };
+export type ProjectSummary = { id: string; title: string; brandId: string | null; mode: ProjectMode; status: ProjectStatus; phase: string | null; updatedAt: string };
 
 const json = <T>(value: unknown, fallback: T): T => (value === null || value === undefined ? fallback : typeof value === "string" ? (JSON.parse(value) as T) : (value as T));
 
@@ -55,7 +55,7 @@ function stateOf(row: ProjectRow): ProjectState & { updatedAt: string } {
 
 export async function createProject(
   sql: Sql,
-  input: { organizationId: string; brandId: string; connectorId: string; title: string; mode: ProjectMode; brief: Brief; budgetUsd: number | null },
+  input: { organizationId: string; brandId: string | null; connectorId: string; title: string; mode: ProjectMode; brief: Brief; budgetUsd: number | null },
 ): Promise<ProjectState> {
   const id = randomUUID();
   const title = input.title.replace(/\s+/g, " ").trim().slice(0, 120) || "New video";

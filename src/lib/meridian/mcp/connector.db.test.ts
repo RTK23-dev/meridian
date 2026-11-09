@@ -9,7 +9,8 @@ import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../e
 import type { Sql } from "../learning/store.ts";
 import { BudgetLedgerService } from "../security/budget-ledger.ts";
 import { createConnector, listConnectors, resolveConnector, revokeConnector } from "./connectors.ts";
-import type { McpFileStore } from "./files.ts";
+import { meridianMcpFileStore, type McpFileStore } from "./files.ts";
+import { serveMcpFile } from "./serve-file.server.ts";
 import { handleMcpRequest, type McpHttpDeps } from "./handler.ts";
 import { NotSentError, sqlHoldLedger } from "./paid.ts";
 import type { ConnectorPorts } from "./tools.ts";
@@ -45,16 +46,19 @@ function memoryFiles(): McpFileStore & { puts: string[] } {
 describe("MCP connector", () => {
   let db: TestDatabase;
   const files = memoryFiles();
+  // The files port. Most tests use the in-memory store; the test of a video without a brand uses Meridian's real database store.
+  let filesPort: McpFileStore = files;
   const spoken: string[] = [];
   const env = { MEDIA_LINK_SECRET: "m".repeat(40), PUBLIC_APP_URL: "https://meridian.example" };
 
   function ports(sql: Sql): ConnectorPorts {
     return {
       ledger: sqlHoldLedger(sql),
-      files: async () => files,
+      files: async () => filesPort,
       limits: async () => {
         const account = await BudgetLedgerService.getAccount(sql, WS, BRAND);
-        return { monthlyBudgetUsd: 50, decisionCapUsd: 0.05, brands: [{ brandId: BRAND, name: "Calm Mug Co", budgetUsd: account ? Number(account.maxSpendMicros) / 1e6 : null, committedUsd: account ? Number(account.spentMicros + account.reservedMicros) / 1e6 : 0 }, { brandId: BARE_BRAND, name: "Bare", budgetUsd: null, committedUsd: 0 }] };
+        const { monthlyHeldUsd } = await import("../providers/generation-ledger.ts");
+        return { monthlyBudgetUsd: 50, monthlyHeldUsd: await monthlyHeldUsd(sql, WS), decisionCapUsd: 0.05, brands: [{ brandId: BRAND, name: "Calm Mug Co", budgetUsd: account ? Number(account.maxSpendMicros) / 1e6 : null, committedUsd: account ? Number(account.spentMicros + account.reservedMicros) / 1e6 : 0 }, { brandId: BARE_BRAND, name: "Bare", budgetUsd: null, committedUsd: 0 }] };
       },
       readiness: async () => ({
         voice: { ready: true, detail: "ready" },
@@ -75,7 +79,7 @@ describe("MCP connector", () => {
         return { bytes: MP3, mediaType: "audio/mpeg", model: input.model, costUsd: 0.012 };
       },
       image: async () => ({ bytes: PNG, mediaType: "image/png", model: "google/image-model", width: 1080, height: 1920, costUsd: null }),
-      decide: async (input) => ({ engine: "OpenRouter Decisions", model: "openai/gpt-6-luna-decisions", status: "answered", answer: input.options[1] ?? "true", probability: 0.71, confidence: null, distribution: null, reason: null, costUsd: 0.004 }),
+      decide: async (input) => ({ engine: "OpenRouter Decisions", model: "openai/gpt-6-luna-decisions", status: "answered", answer: input.options[1] ?? "true", probability: 0.71, confidence: null, distribution: null, reason: null, costUsd: 0.004, recorded: true }),
     };
   }
 
@@ -250,6 +254,63 @@ describe("MCP connector", () => {
 
     const prompts = await rpc(secret, "prompts/list");
     assert.deepEqual((prompts.body!.result.prompts as Array<{ name: string }>).map((prompt) => prompt.name), ["make_video", "studio_video", "resume_video"]);
+  });
+
+  it("makes a video with no brand: the Q&A, a project, a voiceover held on the monthly budget and kept in Meridian's database, served by its link", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "No brand" });
+    filesPort = await meridianMcpFileStore(db.sql, async () => ({ kind: "database", detail: "Files are kept in Meridian's own database." }));
+    try {
+      const start = await call(secret, "meridian_start");
+      assert.match(start.body!.result.content[0].text, /No brand: the workspace's own video/);
+      const created = await call(secret, "meridian_project_create", {
+        goal: "Explain how something works", idea: "Microwaves shake water; the middle heats last.", seconds: 30, style: "8-bit pixel explainer",
+        voiceover: true, mode: "orchestrator", render: "chat",
+      });
+      const project = created.body!.result.structuredContent.project;
+      assert.equal(project.brandId, null);
+      assert.match(created.body!.result.content[0].text, /with no brand \(the workspace's own, paid from the monthly budget\)/);
+      for (const phase of ["concept", "script", "storyboard", "assets"]) {
+        const step = await call(secret, "meridian_checkpoint", { projectId: project.id, phase, action: "resolve", decidedBy: "chat", content: `${phase} settled` });
+        assert.notEqual(step.body!.result.isError, true, phase);
+      }
+
+      // No monthly budget yet: nothing is sent, and nothing is held.
+      await db.sql`update organizations set monthly_video_budget_usd = null where id = ${WS}`;
+      const refused = await call(secret, "meridian_voiceover", { projectId: project.id, text: "Microwaves shake water.", model: "openai/gpt-audio-mini", voice: "alloy" });
+      assert.equal(refused.body!.result.isError, true);
+      assert.match(refused.body!.result.content[0].text, /No monthly budget is set/);
+      assert.equal((await db.sql`select id from model_runs where organization_id = ${WS} and operation = 'mcp.voiceover'`).length, 0);
+
+      await db.sql`update organizations set monthly_video_budget_usd = 3 where id = ${WS}`;
+      const made = await call(secret, "meridian_voiceover", { projectId: project.id, text: "Microwaves shake water.", model: "openai/gpt-audio-mini", voice: "alloy" });
+      assert.notEqual(made.body!.result.isError, true, made.body!.result.content[0].text);
+      assert.match(made.body!.result.content[0].text, /paid from the workspace's monthly budget/);
+      const holds = await db.sql<{ status: string; brand_id: string | null; cost_usd: string | number; estimate_usd: string | number }>`
+        select status, brand_id, cost_usd, estimate_usd from model_runs where organization_id = ${WS} and operation = 'mcp.voiceover'
+      `;
+      assert.equal(holds.length, 1);
+      assert.deepEqual({ ...holds[0]!, cost_usd: Number(holds[0]!.cost_usd), estimate_usd: Number(holds[0]!.estimate_usd) }, { status: "completed", brand_id: null, cost_usd: 0.012, estimate_usd: 1 });
+
+      const file = made.body!.result.structuredContent.file;
+      assert.equal(file.brandId, null);
+      const stored = await db.sql<{ provider: string; brand_id: string | null }>`
+        select o.provider, o.brand_id from storage_objects o join mcp_files f on f.storage_object_id = o.id where f.id = ${file.id}
+      `;
+      assert.deepEqual(stored, [{ provider: "database", brand_id: null }]);
+      const served = await serveMcpFile(new Request(file.url), file.id, {
+        getSql: async () => db.sql,
+        env,
+        store: async (sql) => meridianMcpFileStore(sql, async () => ({ kind: "database", detail: "" })),
+        nowSeconds: Date.parse("2026-11-09T10:00:00Z") / 1000 + 60,
+      });
+      assert.equal(served.status, 200);
+      assert.deepEqual(new Uint8Array(await served.arrayBuffer()), MP3);
+
+      const status = await call(secret, "meridian_project", { projectId: project.id });
+      assert.match(status.body!.result.content[0].text, /no cap beyond the monthly budget/);
+    } finally {
+      filesPort = files;
+    }
   });
 
   it("asks the decision engine, lists the files with fresh links, gives the render commands, and audits paid calls", async () => {

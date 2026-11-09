@@ -55,7 +55,6 @@ export async function chooseCookbookFor(
   }
   const settings = settingsOf(row);
   if (settings.maxSeconds === null) return { ok: false, reason: "Set the length before choosing a cookbook." };
-  if (row.brand_id === null) return { ok: false, reason: "Choose a brand before choosing a cookbook." };
   const messages = await messagesOf(sql, row);
   const inputs = runInputsOf({ budgetUsd: settings.budgetUsd, messages });
   const lengthMs = settings.maxSeconds * 1000;
@@ -95,7 +94,6 @@ export async function proposalForRunFor(sql: Sql, input: { userId: string; sessi
   }
   const settings = settingsOf(row);
   if (settings.maxSeconds === null) return { ok: false, reason: "Set the length before choosing a cookbook." };
-  if (row.brand_id === null) return { ok: false, reason: "Choose a brand before choosing a cookbook." };
   const messages = await messagesOf(sql, row);
   const inputs = runInputsOf({ budgetUsd: settings.budgetUsd, messages });
   const proposal = await proposeFor(sql, {
@@ -124,7 +122,6 @@ export async function liveSummaryFor(
   }
   const settings = settingsOf(row);
   if (settings.maxSeconds === null) return { ok: false, reason: "Set the length before choosing a cookbook." };
-  if (row.brand_id === null) return { ok: false, reason: "Choose a brand before choosing a cookbook." };
   const read = await readCookbookFor(sql, { organizationId: row.organization_id, brandId: row.brand_id, cookbookId: input.cookbookId, version: input.version });
   if (!read.ok) return { ok: false, reason: read.reason };
   const resolved = resolveCookbook(read.value.cookbook, { values: input.values, lengthMs: settings.maxSeconds * 1000 });
@@ -147,8 +144,9 @@ export async function applyRecordedCookbook(sql: Sql, row: SessionRow, build: Re
   const record = await cookbookSelectionOf(sql, { organizationId: row.organization_id, sessionId: row.id });
   if (record === null) return build;
   const settings = settingsOf(row);
-  // Without a length or a brand the request already names what is missing (its cap, its page), so there is nothing to apply yet.
-  if (settings.maxSeconds === null || row.brand_id === null) return build;
+  // Without a length the request already names what is missing (its cap), so there is nothing to apply yet. A draft made without a brand
+  // reads the built-in cookbooks and the workspace's own.
+  if (settings.maxSeconds === null) return build;
   const read = await readCookbookFor(sql, { organizationId: row.organization_id, brandId: row.brand_id, cookbookId: record.cookbookId, version: record.version });
   if (!read.ok) return incompleteWith(build, ["The chosen cookbook is no longer available. Choose it again."]);
   const resolved = resolveCookbook(read.value.cookbook, { values: record.values, lengthMs: settings.maxSeconds * 1000 });

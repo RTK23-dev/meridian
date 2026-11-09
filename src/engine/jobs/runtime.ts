@@ -345,6 +345,8 @@ export function shotGeneratorOf(composition: EngineComposition, shot: ShotPorts)
               gaps: loader?.gapsFor(input.organizationId) ?? [],
             });
       if (refusal !== null) return { status: "not_connected", reasons: refusal };
+      // A request that is not in this workspace has nowhere to keep its media, so it is refused before the paid call. A request made
+      // without a brand keeps its media in the workspace's own space (owner direction 2026-11-09).
       await brandOfRequest(input.sql, input.organizationId, input.requestId);
       return routerGenerator(routerFor(composition, shot, profiles)).generate(input);
     },

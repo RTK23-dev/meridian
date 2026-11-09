@@ -498,14 +498,20 @@ try {
     assert.match(csv, /DEMO \(fixture\) video C \(draft\),,ready/);
   });
 
-  await check("G15", "upload: with no Google Drive connected, the draft says why a reference cannot be stored, instead of failing silently", async () => {
+  await check("G15", "upload: with no Google Drive connected, the draft still takes a file and keeps it in Meridian's own database", async () => {
     await page.goto(`${base}/content-factory`, { waitUntil: "networkidle" });
     await page.getByRole("button", { name: "Open video Acceptance reference draft" }).first().click().catch(() => undefined);
     const main = page.locator("main");
-    await main.getByText(/Files cannot be stored yet\./).first().waitFor();
-    assert.match(await main.innerText(), /Google Drive/);
-    assert.match(await main.innerText(), /Uploading needs Google Drive to be connected/);
-    assert.equal(await page.getByLabel("Choose files").count() >= 1, true, "the upload control is still there");
+    await page.getByLabel("Choose files").first().waitFor({ state: "attached" });
+    assert.match(await main.innerText(), /Meridian's own database when it is not/, "the guide says where files go without Drive");
+    assert.doesNotMatch(await main.innerText(), /Files cannot be stored yet/, "no Drive is no longer a reason to refuse a file");
+    // A real 1x1 PNG, sent with a message: it is stored and listed on the message.
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    await page.getByLabel("Choose files").first().setInputFiles({ name: "acceptance-note.png", mimeType: "image/png", buffer: png });
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill("A still for the opening shot.");
+    await page.getByRole("button", { name: "Send", exact: true }).click();
+    await page.getByRole("list", { name: "Messages" }).getByText("acceptance-note.png").first().waitFor();
+    assert.equal(await page.getByRole("list", { name: "Files to send" }).count(), 0, "nothing is left waiting to send");
   });
 
   await check("G16", "one journey: Setup, Market, research format, sample, approve, batch, demo review, export, with nothing started and nothing leaving the server", async () => {

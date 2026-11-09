@@ -53,8 +53,9 @@ Go to `/settings` (and `/setup` for the guided path). Save each key the first ru
 - **OpenRouter:** the chat and video catalogue, decisions and speech. Saved keys read "Saved, not checked live" until a live check passes.
 - **Deepgram:** speech-to-text for the reference video. Save the key. The engine uses the one Deepgram project the key can see, and
   refuses when there are none or several (`src/engine/media/stt-deepgram.ts`).
-- **Google Drive:** where artifacts and exports are kept. The roadmap lists a Drive connection as a requirement for the engine's production
-  shots (`docs/ROADMAP.md`).
+- **Google Drive (optional):** where artifacts and exports are kept once it is connected. Without it, video files (takes, renders,
+  uploads, connector files) are kept in Meridian's own database, up to 50 MB each (owner direction 2026-11-09,
+  `src/lib/meridian/storage/meridian-store.ts`).
 - **Media functions:** `MEDIA_FUNCTIONS_BASE_URL`, or the worker's in-process mode (`MEDIA_FUNCTIONS_MODE=in_process`).
 - **HyperFrames:** the render key. Its price per minute is not set in the repo (see step 6).
 

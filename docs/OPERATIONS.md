@@ -36,7 +36,7 @@ Run `npm run check:deployment` with the deployment's environment loaded. It prin
 1. `NODE_ENV=production`, `DATABASE_URL` (PostgreSQL 16 with pgvector), `BETTER_AUTH_SECRET` and `TOKEN_ENCRYPTION_KEY` (32+ characters each), and `BETTER_AUTH_URL` (https).
 2. No test switches: `MERIDIAN_TESTING_RUNTIME`, `ALLOW_SYNTHETIC_TELEMETRY` and `VITE_AUTH_ENABLED=false` are errors in production.
 3. Run the migrations (`npm run db:migrate`), then three processes: the web app, `npm run worker` and `npm run scheduler`. Without the worker, queued runs and analysis never progress.
-4. Google Drive must be configured (a service account or an OAuth client) before anyone can upload a reference video. There is no other file store for session uploads, and the draft says so next to the upload button.
+4. Google Drive is optional. Without it, uploads, takes, renders and connector files are kept in Meridian's own database, up to 50 MB each (`storage_blobs`, migration 0158); larger files are refused with a reason. Configure Drive (a service account or an OAuth client) to keep files there instead, and to keep the database small.
 5. Back up the database before an upgrade. Every batch, approval and ledger entry is in it.
 6. Read `/jobs` (Jobs & health) after the first start: it shows the worker, the queue and any stalled job.
 

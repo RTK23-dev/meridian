@@ -29,7 +29,8 @@ import {
 
 export const DEFAULT_MAX_FAILURES = 6;
 
-export type ArtifactUploadScope = { organizationId: string; brandId: string };
+/** brandId null: the workspace's own space (a video made without a brand). */
+export type ArtifactUploadScope = { organizationId: string; brandId: string | null };
 
 export type ArtifactUploadSession = ArtifactUploadScope & {
   id: string;

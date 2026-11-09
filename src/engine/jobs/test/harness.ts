@@ -113,10 +113,10 @@ export function fakeMedia(options: { probe?: (bytes: Uint8Array) => ProbeResult 
   };
 }
 
-/** An in-memory object store with the port's shape. Keys are per organization and brand, as the Drive store keys them. */
+/** An in-memory object store with the port's shape. Keys are per organization and brand (or the workspace's own space), as Meridian's store keys them. */
 export function fakeObjects(): MediaStorePort & { objects: Map<string, { mimeType: string; bytes: Uint8Array }> } {
   const objects = new Map<string, { mimeType: string; bytes: Uint8Array }>();
-  const slot = (organizationId: string, brandId: string, key: string) => `${organizationId}|${brandId}|${key}`;
+  const slot = (organizationId: string, brandId: string | null, key: string) => `${organizationId}|${brandId ?? "(workspace)"}|${key}`;
   return {
     objects,
     async put(input) {
