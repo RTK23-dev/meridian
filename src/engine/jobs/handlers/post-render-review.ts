@@ -31,8 +31,7 @@ import { TIMELINE_STEPS } from "../../../../functions/ffmpeg/types.ts";
 import type { BlackFrameMeasurement, LoudnessMeasurement, OcrMeasurement, OverlayMeasurement, SilenceMeasurement } from "../../review/gates/postRender.ts";
 import { checkPostRender, criticFrameTimes, requiredFrameTimes, type PostRenderOutcome } from "../../review/gates/postRender.ts";
 import { runCriticFinal, type CriticFinalOutcome } from "../../review/criticFinal.ts";
-import type { Sql } from "../../../lib/meridian/learning/store.ts";
-import { readArtifact, writeArtifact, type MediaStorePort } from "../artifact-store.ts";
+import { readArtifact, storageBrandOfRequest, writeArtifact, type MediaStorePort } from "../artifact-store.ts";
 import { scopedLedgerStore } from "../asset-stores-sql.ts";
 import { sqlRoleCallJournal } from "../role-call-store.ts";
 import type { StageContext, StageHandler, StageRunResult } from "../types.ts";
@@ -218,15 +217,6 @@ async function readInputs(ctx: StageContext): Promise<PostInputs> {
   return { rendered: rendered.value, edl, integrity: integrities[0] };
 }
 
-async function brandOf(sql: Sql, organizationId: string, requestId: string): Promise<string> {
-  const rows = await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
-  `;
-  const brand = rows[0]?.brand_id ?? null;
-  if (brand === null) throw new EngineError("invalid_input", "the request has no brand, so its rendered file cannot be read (Bible 5.2)", { stage: "post_render_review" });
-  return brand;
-}
-
 function reservationOf(ctx: StageContext): string {
   if (ctx.payload.budgetReservationId === null) {
     throw refuse("post_render_review is a paid stage and has no budget reservation (Bible 14)", ctx.stage);
@@ -248,7 +238,7 @@ export function createPostRenderReviewHandler(ports: PostRenderPorts): StageHand
       const { rendered, edl } = inputs;
       if (rendered.edlId !== edl.edlId) throw refuse("the rendered video was made from another EDL", stage);
       const reservationId = reservationOf(ctx);
-      const brandId = await brandOf(ctx.sql, ctx.organizationId, ctx.requestId);
+      const brandId = await storageBrandOfRequest(ctx.sql, ctx.organizationId, ctx.requestId, stage);
       const object = await ports.objects.get(ctx.organizationId, brandId, rendered.uri);
       if (!object) throw new EngineError("not_found", `the file of video ${rendered.videoId} is missing from the object store`, { stage });
       const bytes: Uint8Array<ArrayBuffer> = new Uint8Array(object.bytes);

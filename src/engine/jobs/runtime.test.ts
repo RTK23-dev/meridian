@@ -23,7 +23,7 @@ import { EngineError } from "../contracts/index.ts";
 import { memoryMediaStore } from "../assets/adapter.ts";
 import { createGateway } from "../gateway/gateway.ts";
 import { engineMediaLinkSigner } from "../../lib/meridian/storage/engine-media-link.ts";
-import { mediaFunctionsProblem } from "./production-ports.ts";
+import { brandOfRequest, mediaFunctionsProblem } from "./production-ports.ts";
 
 /** Ports that are only registered, never called: the runtime builds handlers and does not run them. */
 function fakeRenderPorts(): RenderPorts {
@@ -254,8 +254,17 @@ test("a video shot is refused with the listing's reason when no video profile is
   );
 });
 
-test("an image shot reads no video listing, and a request with no brand is refused before its paid call", async () => {
+test("a request made without a brand keeps its media in the workspace's own space", async () => {
   await seedRequest(SHOT_NO_BRAND_REQUEST, null);
+  assert.equal(await brandOfRequest(db.sql, PROD_ORG, SHOT_NO_BRAND_REQUEST), null, "no brand is the workspace's own space, not a refusal");
+  await assert.rejects(
+    brandOfRequest(db.sql, PROD_ORG, "req_not_in_this_workspace"),
+    (error: unknown) => error instanceof EngineError && error.kind === "not_found",
+    "a request that is not in the workspace has no media",
+  );
+});
+
+test("an image shot reads no video listing, and a request that is not in the workspace is refused before its paid call", async () => {
   const { transport, requests } = recordedTransport({});
   const gateway = gatewayWith(transport);
   const shotPorts: ShotPorts = {
@@ -267,8 +276,8 @@ test("an image shot reads no video listing, and a request with no brand is refus
   };
   const generator = shotGeneratorOf(composition({ gateway, shotPorts }), shotPorts);
   await assert.rejects(
-    generator.generate(generateOf(SHOT_NO_BRAND_REQUEST, assetSpec({ modelClass: "image.keyframe" }))),
-    (error: unknown) => error instanceof EngineError && error.kind === "invalid_input",
+    generator.generate(generateOf("req_not_in_this_workspace", assetSpec({ modelClass: "image.keyframe" }))),
+    (error: unknown) => error instanceof EngineError && error.kind === "not_found",
   );
   assert.equal(requests.length, 0, "no listing and no image call were made");
 });
@@ -321,7 +330,7 @@ test("MEDIA_FUNCTIONS_MODE=http, the default: the media functions are NOT_CONNEC
   assert.ok(problem !== null && problem.startsWith("NOT_CONNECTED: "), "NOT_CONNECTED with its reason");
 });
 
-test("the shot connection names the media functions in http mode, and names only a missing Drive in in_process mode", async () => {
+test("the shot connection names the media functions in http mode, and is ready in in_process mode with no Drive (takes go to Meridian's database)", async () => {
   const http = productionComposition(db.sql, {
     gateway: gatewayWith(recordedTransport({}).transport),
     mediaLinks: prodSigner(),
@@ -336,8 +345,7 @@ test("the shot connection names the media functions in http mode, and names only
     mediaFunctionsMode: "in_process",
   });
   const inProcessReason = await inProcess.shotPorts?.shotConnection?.(PROD_ORG);
-  assert.doesNotMatch(inProcessReason ?? "", /media functions/, "in_process: the media functions are not the reason");
-  assert.match(inProcessReason ?? "", /Google Drive is not connected/, "the workspace's Drive is still required");
+  assert.equal(inProcessReason, null, "in_process with no Drive: ready, because a take is kept in Meridian's database (owner direction 2026-11-09)");
 });
 
 test("the speech ports resolve the stt route to Deepgram, with the route's list price, and the composition carries them", () => {

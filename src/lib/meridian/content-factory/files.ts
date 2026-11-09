@@ -6,11 +6,11 @@
  * UTF-8 with no NUL bytes and no control character that plain text does not use. Its name only picks its text type (Markdown, CSV or
  * JSON; a JSON file must parse). A text file of at most TEXT_FILE_MAX_CHARS characters is read into the brief: its text comes back as
  * `content`, and the request sends it as brief sources. A longer one, up to TEXT_FILE_ACCEPT_MAX_CHARS, is kept with the session and
- * marked as over the limit. Every checked file is stored, so a text file also needs a brand and Drive.
+ * marked as over the limit. Every checked file is stored (in Drive, or in Meridian's database when the workspace has no Drive).
  *
- * The bytes go to Meridian's storage layer (src/lib/meridian/storage: Google Drive, indexed by storage_objects), through the
- * ContentFactoryFileStore port. No vendor SDK and no other object store. Drive keeps files per brand, so a session needs a brand before
- * a file can be stored; without Drive connected, a file is refused as not connected and nothing is written.
+ * The bytes go to Meridian's storage layer (src/lib/meridian/storage: Google Drive when the workspace has it, else Meridian's own
+ * database, indexed by storage_objects), through the ContentFactoryFileStore port. No vendor SDK and no other object store. A session
+ * made without a brand keeps its files in the workspace's own space.
  */
 import { createHash } from "node:crypto";
 import type { Sql } from "../learning/store.ts";
@@ -271,55 +271,58 @@ export function referenceVideoUri(storageKey: string): string {
 
 export type FileStoreReadiness = { status: "ready" } | { status: "not_connected"; reason: string };
 
-/** The storage a session's files go to. Production: Meridian's Drive-backed object store. Tests: an in-memory store. */
+/**
+ * The storage a session's files go to. Production: Meridian's object store (Drive when the workspace has it, else Meridian's database).
+ * Tests: an in-memory store. brandId null is the workspace's own space, for a session made without a brand.
+ */
 export type ContentFactoryFileStore = {
   ready(organizationId: string): Promise<FileStoreReadiness>;
   /** Stores the bytes. Returns the storage_objects row id when the storage layer records one. */
-  put(input: { organizationId: string; brandId: string; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ storageObjectId: string | null }>;
+  put(input: { organizationId: string; brandId: string | null; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ storageObjectId: string | null }>;
   /**
    * Removes an object that no attachment records: an upload whose file was stored but not recorded, because the session started or the
    * write failed. An object an attachment still records is never removed. Returns true when the object was removed. Optional: a store
    * without it keeps the object, and nothing in a session refers to it.
    */
-  discard?(input: { organizationId: string; brandId: string; key: string }): Promise<boolean>;
+  discard?(input: { organizationId: string; brandId: string | null; key: string }): Promise<boolean>;
 };
 
 /**
- * Meridian's object store for session files: Google Drive, with each object recorded in storage_objects (object-store.ts). Drive's
- * health decides readiness, so a workspace with no Drive credential is not connected and no file is sent anywhere.
+ * Meridian's object store for session files (storage/meridian-store.ts): Google Drive when the workspace has it, Meridian's own database
+ * when it does not, with each object recorded in storage_objects. It is always ready: a workspace needs neither a brand nor Drive to
+ * attach files (owner direction 2026-11-09).
  */
-export function driveFileStore(sql: Sql): ContentFactoryFileStore {
+export function meridianFileStore(sql: Sql): ContentFactoryFileStore {
   return {
-    async ready(organizationId) {
-      const { GoogleDriveClient } = await import("../storage/drive.ts");
-      const health = await new GoogleDriveClient().health(organizationId).catch((error: unknown) => ({
-        status: "UNAVAILABLE" as const,
-        detail: error instanceof Error ? error.message : "Google Drive could not be checked.",
-      }));
-      if (health.status === "HEALTHY") return { status: "ready" };
-      return { status: "not_connected", reason: `Files cannot be stored yet. ${health.detail || "Google Drive is not connected for this workspace."}` };
+    async ready() {
+      return { status: "ready" };
     },
     async put(input) {
-      const { createGoogleDriveObjectStore, createSqlStorageMetadataRepository } = await import("../storage/object-store.ts");
-      const store = createGoogleDriveObjectStore(undefined, { metadataRepo: createSqlStorageMetadataRepository(sql) });
-      await store.put({ ...input, lifecycle: "stored" });
+      const { createMeridianObjectStore } = await import("../storage/meridian-store.ts");
+      await createMeridianObjectStore(sql).put({ ...input, lifecycle: "stored" });
       const rows = await sql<{ id: string }>`
         select id from storage_objects
-        where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and name = ${input.key}
+        where organization_id = ${input.organizationId} and brand_id is not distinct from ${input.brandId} and name = ${input.key}
         limit 1
       `;
       return { storageObjectId: rows[0]?.id ?? null };
     },
     async discard(input) {
-      // Only an object no attachment records is removed. The record is kept, archived, so the metadata says what became of the object.
-      const rows = await sql<{ id: string; provider_file_id: string | null }>`
-        select id, provider_file_id from storage_objects
-        where organization_id = ${input.organizationId} and brand_id = ${input.brandId} and name = ${input.key}
+      // Only an object no attachment records is removed. A Drive object's record is kept, archived, so the metadata says what became of
+      // it; a database object goes with its bytes.
+      const rows = await sql<{ id: string; provider: string; provider_file_id: string | null }>`
+        select id, provider, provider_file_id from storage_objects
+        where organization_id = ${input.organizationId} and brand_id is not distinct from ${input.brandId} and name = ${input.key}
           and not exists (select 1 from content_factory_attachments where storage_object_id = storage_objects.id)
         limit 1
       `;
       const row = rows[0];
-      if (!row?.provider_file_id) return false;
+      if (!row) return false;
+      if (row.provider === "database") {
+        await sql`delete from storage_objects where id = ${row.id} and provider = 'database'`;
+        return true;
+      }
+      if (!row.provider_file_id) return false;
       const { googleDriveClient } = await import("../storage/drive.ts");
       await googleDriveClient.delete(row.provider_file_id, input.organizationId);
       await sql`update storage_objects set lifecycle = 'archived', updated_at = now() where id = ${row.id}`;

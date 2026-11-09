@@ -107,6 +107,5 @@ export type Refused = { kind: "hold"; hold: ProduceHold };
 
 export type Stored = { kind: "take"; takeId: string; artifacts: Record<string, string> };
 
-/** The request's brand, which the media store is keyed by. A request with no brand has no media store (fail closed). */
 
 export type ShotChoices = ReadonlyMap<string, ModelChoice>;

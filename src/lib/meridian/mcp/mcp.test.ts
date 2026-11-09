@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import { z } from "zod";
 import { CONNECTOR_SECRET_PREFIX, hashConnectorSecret, isConnectorSecret, newConnectorSecret, secretFrom } from "./connectors.ts";
 import { fileLink, MCP_FILE_LINK_TTL_SECONDS, verifyFileLink } from "./files.ts";
-import { NotSentError, UNPRICED_CEILING_ESTIMATOR, withBrandHold, type HoldLedger } from "./paid.ts";
+import { NotSentError, UNPRICED_CEILING_ESTIMATOR, withHold, type HoldLedger } from "./paid.ts";
 import { defineTool, ERROR, handleBody, handleMessage, MCP_PROTOCOL_VERSIONS, type McpTool, type ProtocolContext } from "./protocol.ts";
 import { connectorTools } from "./registry.ts";
 import { VIDEO_GUIDE } from "./tools.ts";
@@ -106,7 +106,7 @@ describe("MCP protocol", () => {
   });
 });
 
-describe("paid calls under a brand hold", () => {
+describe("paid calls under a hold", () => {
   function ledger(refuse?: string) {
     const events: string[] = [];
     const value: HoldLedger = {
@@ -121,15 +121,18 @@ describe("paid calls under a brand hold", () => {
       async release(input) {
         events.push(`release ${input.reservationId}`);
       },
+      async keep(input) {
+        events.push(`keep ${input.reservationId}`);
+      },
     };
     return { events, value };
   }
-  const scope = { organizationId: "o", brandId: "b", ceilingUsd: 1, purpose: "image" };
+  const scope = { organizationId: "o", brandId: "b", ceilingUsd: 1, purpose: "image", model: "m" };
 
   it("sends nothing when the budget refuses the hold", async () => {
     const { value, events } = ledger("No budget is set for this brand.");
     let called = false;
-    const outcome = await withBrandHold(value, scope, async () => { called = true; return { value: 1, costUsd: 0.1 }; });
+    const outcome = await withHold(value, scope, async () => { called = true; return { value: 1, costUsd: 0.1 }; });
     assert.equal(called, false);
     assert.deepEqual(outcome, { ok: false, held: false, reason: "No budget is set for this brand. Nothing was sent." });
     assert.deepEqual(events, []);
@@ -137,25 +140,35 @@ describe("paid calls under a brand hold", () => {
 
   it("settles at the reported cost, or at the ceiling when none is reported", async () => {
     const reported = ledger();
-    const a = await withBrandHold(reported.value, scope, async () => ({ value: "x", costUsd: 0.04 }));
+    const a = await withHold(reported.value, scope, async () => ({ value: "x", costUsd: 0.04 }));
     assert.deepEqual(reported.events, ["reserve 1000000", "settle PROVIDER_ACTUAL 40000"]);
     assert.ok(a.ok && a.basis === "reported" && a.settledUsd === 0.04);
     const unknown = ledger();
-    const b = await withBrandHold(unknown.value, scope, async () => ({ value: "x", costUsd: null }));
+    const b = await withHold(unknown.value, scope, async () => ({ value: "x", costUsd: null }));
     assert.deepEqual(unknown.events, ["reserve 1000000", `settle ESTIMATED 1000000 ${UNPRICED_CEILING_ESTIMATOR}`]);
     assert.ok(b.ok && b.basis === "ceiling" && b.costUsd === null);
   });
 
   it("releases the hold when nothing was sent, and keeps it when the provider may have been reached", async () => {
     const notSent = ledger();
-    const a = await withBrandHold(notSent.value, scope, async () => { throw new NotSentError("OpenRouter is not connected."); });
+    const a = await withHold(notSent.value, scope, async () => { throw new NotSentError("OpenRouter is not connected."); });
     assert.deepEqual(notSent.events, ["reserve 1000000", "release res-1"]);
     assert.ok(!a.ok && !a.held);
     const maybe = ledger();
-    const b = await withBrandHold(maybe.value, scope, async () => { throw new Error("The connection dropped."); });
-    assert.deepEqual(maybe.events, ["reserve 1000000"]);
+    const b = await withHold(maybe.value, scope, async () => { throw new Error("The connection dropped."); });
+    assert.deepEqual(maybe.events, ["reserve 1000000", "keep res-1"]);
     assert.ok(!b.ok && b.held);
     assert.match(b.ok ? "" : b.reason, /stays held on the brand budget/);
+  });
+
+  it("says which budget pays: the monthly budget for a video without a brand, and never doubles 'Nothing was sent'", async () => {
+    const maybe = ledger();
+    const workspace = { ...scope, brandId: null };
+    const b = await withHold(maybe.value, workspace, async () => { throw new Error("The connection dropped."); });
+    assert.match(b.ok ? "" : b.reason, /stays held on the workspace's monthly budget/);
+    const refused = ledger("No monthly budget is set for this workspace, so paid generation is blocked. Nothing was sent.");
+    const c = await withHold(refused.value, workspace, async () => ({ value: 1, costUsd: 0 }));
+    assert.deepEqual(c, { ok: false, held: false, reason: "No monthly budget is set for this workspace, so paid generation is blocked. Nothing was sent." });
   });
 });
 

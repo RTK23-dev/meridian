@@ -16,11 +16,10 @@ import { checkRenderIntegrity } from "../media/integrity.ts";
 import { notConnectedReason } from "../media/stt-connection.ts";
 import { createHyperframesCloudAdapter, RENDER_EXPECTATION, type IntegrityInput, type RenderDeps } from "../render/hyperframesCloud.ts";
 import { createShotstackAdapter, type ShotstackDeps } from "../render/shotstack.ts";
-import { mediaKey, type MediaStorePort } from "./artifact-store.ts";
+import { mediaKey, storageBrandOfRequest, type MediaStorePort } from "./artifact-store.ts";
 import { scopedLedgerStore } from "./asset-stores-sql.ts";
 import { kitPorts, productKitBySku, readKit } from "./kit-store.ts";
 import { ENGINE_MEDIA_LINK_TTL_SECONDS, sourceUrlResolver, type MediaLinkSigner } from "./media-link.ts";
-import { readDriveConnectionMeta } from "../../lib/meridian/storage/drive-connection-store.ts";
 import { sqlEventStore } from "./event-store-sql.ts";
 import { withReservationLedger } from "./sql-ledger-store.ts";
 import type { ProduceShotPorts } from "./handlers/produce-shot.ts";
@@ -73,16 +72,12 @@ export function gatewayMediaFunctions(gateway: Gateway): HttpMediaFunctions {
   };
 }
 
-/** The brand a request's media is stored under (Bible 5.2). A request with no brand has nowhere to store media, so it is refused. */
-export async function brandOfRequest(sql: Sql, organizationId: string, requestId: string): Promise<string> {
-  const rows = await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
-  `;
-  const brand = rows[0]?.brand_id ?? null;
-  if (brand === null) {
-    throw new EngineError("invalid_input", "the request has no brand, so its media cannot be stored (Bible 5.2)", { stage: "render" });
-  }
-  return brand;
+/**
+ * The brand a request's media is stored under, or null for a request made without a brand: its media is kept in the workspace's own space
+ * (owner direction 2026-11-09). A request that is not in the workspace is refused.
+ */
+export async function brandOfRequest(sql: Sql, organizationId: string, requestId: string): Promise<string | null> {
+  return storageBrandOfRequest(sql, organizationId, requestId, "render");
 }
 
 /**
@@ -341,18 +336,10 @@ export type ShotConnection = (organizationId: string) => Promise<string | null>;
 
 /**
  * The reason a shot's ports cannot make or store a take for this workspace, or null when they can. It is checked before any paid call
- * (produce_shot, check_take): the media functions must be connected, and the workspace's Google Drive must be connected, because a
- * finished image or take is stored there after it is paid for. Sends nothing and makes no paid call (Bible 10.4, 14, fail closed).
- * The Drive check reads whether the workspace has a connection, not whether its token opens: an unreadable token still fails the store.
+ * (produce_shot, check_take): the media functions must be connected. Storage is always there: a finished image or take goes to the
+ * workspace's Google Drive when it has one, and to Meridian's own database when it does not (owner direction 2026-11-09,
+ * lib/meridian/storage/meridian-store.ts). Sends nothing and makes no paid call (Bible 10.4, 14, fail closed).
  */
 export function productionShotConnection(input: { sql: Sql; gateway: Gateway; mediaFunctionsMode?: MediaFunctionsMode }): ShotConnection {
-  return async (organizationId) => {
-    const media = await mediaFunctionsProblem(input.gateway, input.mediaFunctionsMode ?? "http");
-    if (media !== null) return media;
-    const drive = await readDriveConnectionMeta(input.sql, organizationId);
-    if (!drive.connected) {
-      return notConnectedReason("Google Drive is not connected for this workspace, so a take's media cannot be stored (Bible 5.2)");
-    }
-    return null;
-  };
+  return async () => mediaFunctionsProblem(input.gateway, input.mediaFunctionsMode ?? "http");
 }

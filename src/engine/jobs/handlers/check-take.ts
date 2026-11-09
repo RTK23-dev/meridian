@@ -26,8 +26,7 @@ import type { TakeMeasurements } from "../../review/take/code.ts";
 import type { TakeGoldMetrics, TakeShot } from "../../review/take/types.ts";
 import type { MediaFunctions } from "../../media/interface.ts";
 import { takeMeasurementsFromDetectors, type TakeDetectors } from "../gate-measures.ts";
-import type { Sql } from "../../../lib/meridian/learning/store.ts";
-import { readJobInputs, writeArtifact, type MediaStorePort, type StoredArtifact } from "../artifact-store.ts";
+import { readJobInputs, storageBrandOfRequest, writeArtifact, type MediaStorePort, type StoredArtifact } from "../artifact-store.ts";
 import { scopedLedgerStore } from "../asset-stores-sql.ts";
 import { sqlRoleCallJournal } from "../role-call-store.ts";
 import type { StageContext, StageHandler, StageOutput, StageRunResult } from "../types.ts";
@@ -110,15 +109,6 @@ async function takeInputsOf(ctx: StageContext): Promise<TakeInputs> {
   return { takeArtifact, take: take.data, shot };
 }
 
-async function brandOf(sql: Sql, organizationId: string, requestId: string): Promise<string> {
-  const rows = await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
-  `;
-  const brand = rows[0]?.brand_id ?? null;
-  if (brand === null) throw new EngineError("invalid_input", "the request has no brand, so its take media cannot be read (Bible 5.2)", { stage: "check_take" });
-  return brand;
-}
-
 /** Six frames of the stored take as PNG data URLs. A frame call the media functions refuse is missing evidence, not a guess. */
 async function framesOf(ports: CheckTakePorts, take: Take, bytes: Uint8Array<ArrayBuffer>): Promise<Array<{ atMs: number; imageUrl: string }> | null> {
   const atMs = frameTimesFor(take.durationMs);
@@ -137,7 +127,7 @@ async function framesOf(ports: CheckTakePorts, take: Take, bytes: Uint8Array<Arr
 
 /** The take's bytes. A take with no stored file is an integrity failure: the stage fails, it does not judge nothing. */
 async function bytesOf(ctx: StageContext, ports: CheckTakePorts, take: Take): Promise<Uint8Array<ArrayBuffer>> {
-  const brandId = await brandOf(ctx.sql, ctx.organizationId, ctx.requestId);
+  const brandId = await storageBrandOfRequest(ctx.sql, ctx.organizationId, ctx.requestId, ctx.stage);
   const object = await ports.objects.get(ctx.organizationId, brandId, take.uri);
   if (!object) throw new EngineError("not_found", `the media of take ${take.takeId} is missing from the object store`, { stage: ctx.stage });
   return new Uint8Array(object.bytes);

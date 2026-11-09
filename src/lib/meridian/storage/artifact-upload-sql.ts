@@ -28,7 +28,7 @@ const COLUMNS = `id, organization_id, brand_id, storage_key, mime_type, total_by
 type SessionRow = {
   id: string;
   organization_id: string;
-  brand_id: string;
+  brand_id: string | null;
   storage_key: string;
   mime_type: string;
   total_bytes: string | number | bigint;
@@ -69,7 +69,7 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
     async findActive(scope: ArtifactUploadScope, storageKey: string) {
       const rows = await sql.query<SessionRow>(
         `select ${COLUMNS} from artifact_upload_sessions
-         where organization_id = $1 and brand_id = $2 and storage_key = $3 and status = 'uploading'
+         where organization_id = $1 and brand_id is not distinct from $2 and storage_key = $3 and status = 'uploading'
          limit 1`,
         [scope.organizationId, scope.brandId, storageKey],
       );
@@ -94,7 +94,7 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
 
     async load(scope: ArtifactUploadScope, sessionId: string) {
       const rows = await sql.query<SessionRow>(
-        `select ${COLUMNS} from artifact_upload_sessions where organization_id = $1 and brand_id = $2 and id = $3 limit 1`,
+        `select ${COLUMNS} from artifact_upload_sessions where organization_id = $1 and brand_id is not distinct from $2 and id = $3 limit 1`,
         [scope.organizationId, scope.brandId, sessionId],
       );
       return rows[0] ? toSession(rows[0], masterKey()) : null;
@@ -108,7 +108,7 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
       const rows = await sql.query<{ session_uri: string }>(
         `update artifact_upload_sessions
          set session_uri = case when session_uri = '' then $4 else session_uri end, updated_at = now()
-         where organization_id = $1 and brand_id = $2 and id = $3 and status = 'uploading'
+         where organization_id = $1 and brand_id is not distinct from $2 and id = $3 and status = 'uploading'
          returning session_uri`,
         [scope.organizationId, scope.brandId, sessionId, sealed],
       );
@@ -120,7 +120,7 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
       await sql.query(
         `update artifact_upload_sessions
          set confirmed_offset = $4, attempts = $5, last_error = $6, updated_at = now()
-         where organization_id = $1 and brand_id = $2 and id = $3 and status = 'uploading'`,
+         where organization_id = $1 and brand_id is not distinct from $2 and id = $3 and status = 'uploading'`,
         [scope.organizationId, scope.brandId, sessionId, progress.confirmedOffset, progress.attempts, progress.lastError],
       );
     },
@@ -132,13 +132,13 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
           `update artifact_upload_sessions
            set status = 'completed', confirmed_offset = total_bytes, provider_file_id = $4,
                attempts = 0, last_error = null, updated_at = now()
-           where organization_id = $1 and brand_id = $2 and id = $3 and status = 'uploading' and session_uri <> ''
+           where organization_id = $1 and brand_id is not distinct from $2 and id = $3 and status = 'uploading' and session_uri <> ''
            returning storage_key, mime_type, sha256, total_bytes`,
           [scope.organizationId, scope.brandId, sessionId, input.providerFileId],
         );
         if (rows.length === 0) {
           const current = await tx.query<{ status: string }>(
-            `select status from artifact_upload_sessions where organization_id = $1 and brand_id = $2 and id = $3`,
+            `select status from artifact_upload_sessions where organization_id = $1 and brand_id is not distinct from $2 and id = $3`,
             [scope.organizationId, scope.brandId, sessionId],
           );
           if (current[0]?.status === "completed") return;
@@ -155,7 +155,7 @@ export function createSqlArtifactUploadStore(sql: Sql, options: ArtifactUploadSt
       await sql.query(
         `update artifact_upload_sessions
          set status = 'failed', attempts = $4, last_error = $5, updated_at = now()
-         where organization_id = $1 and brand_id = $2 and id = $3 and status = 'uploading'`,
+         where organization_id = $1 and brand_id is not distinct from $2 and id = $3 and status = 'uploading'`,
         [scope.organizationId, scope.brandId, sessionId, input.attempts, input.lastError],
       );
     },
@@ -196,7 +196,7 @@ async function recordStorageObject(
   );
   const stored = await tx.query<{ id: string; mime_type: string; sha256: string; size_bytes: string | number | bigint }>(
     `select id, mime_type, sha256, size_bytes from storage_objects
-     where organization_id = $1 and brand_id = $2 and name = $3 limit 1`,
+     where organization_id = $1 and brand_id is not distinct from $2 and name = $3 limit 1`,
     [scope.organizationId, scope.brandId, done.storage_key],
   );
   const existing = stored[0];
@@ -206,7 +206,7 @@ async function recordStorageObject(
   }
   await tx.query(
     `update artifact_upload_sessions set storage_object_id = $4, updated_at = now()
-     where organization_id = $1 and brand_id = $2 and id = $3`,
+     where organization_id = $1 and brand_id is not distinct from $2 and id = $3`,
     [scope.organizationId, scope.brandId, sessionId, existing.id],
   );
 }

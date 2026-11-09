@@ -96,7 +96,8 @@ None of these is resolved in code. Each is recorded in `docs/engine/PHASE_LOG.md
 4. **Held calls.** Should a call held from a failed or stopped request alert, and after how long?
 5. **Six-decimal bills.** Bills are rounded up to four decimals now. Six needs a contract change and a column change.
 6. **Lip-sync and avatar** vendors are not chosen. Those shot classes stay not connected.
-7. **Text files and Drive.** Text files are stored in Drive, so they need a brand and a connected Drive. Should they skip Drive?
+7. **Text files and Drive.** Decided 2026-11-09: a file needs neither a brand nor Drive. Without Drive it is kept in Meridian's own
+   database (`src/lib/meridian/storage/meridian-store.ts`).
 8. **Prices we do not guess:** HyperFrames per minute, Apify per 1,000 results, and `image.edit`. Each stays null, and its feature stays not
    connected until the owner sets it.
 9. **Deepgram project id.** The gateway resolves it from the key: exactly one project is used, otherwise the bill lookup is not connected.

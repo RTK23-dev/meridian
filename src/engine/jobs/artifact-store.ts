@@ -33,6 +33,7 @@ import {
 } from "../contracts/index.ts";
 import type { Sql } from "../../lib/meridian/learning/store.ts";
 import type { createGoogleDriveObjectStore } from "../../lib/meridian/storage/object-store.ts";
+import type { MeridianObjectStore } from "../../lib/meridian/storage/meridian-store.ts";
 
 /** The validated body schema of each artifact type (Bible 4, with the v1 additions). */
 export const ARTIFACT_BODY_SCHEMAS: Record<ArtifactType, z.ZodType> = {
@@ -71,15 +72,33 @@ export const MEDIA_MIME_TYPES = {
 } as const;
 export type MediaExtension = keyof typeof MEDIA_MIME_TYPES;
 
-/** The object-store port. Meridian's Google Drive store has this shape (checked below), and tests use a fake. */
+/**
+ * The object-store port. brandId is the brand the request was made for, or null for a request made without one: its media is kept in the
+ * workspace's own space (owner direction 2026-11-09; Bible 5.2 keys media by workspace and request, not by brand). Meridian's store has
+ * this shape (checked below), and tests use a fake.
+ */
 export type MediaStorePort = {
-  put(input: { organizationId: string; brandId: string; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ key: string; checksum: string; size: number }>;
-  get(organizationId: string, brandId: string, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
+  put(input: { organizationId: string; brandId: string | null; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ key: string; checksum: string; size: number }>;
+  get(organizationId: string, brandId: string | null, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
 };
 
-// Compile-time check: Meridian's object store satisfies the port the artifact store uses.
+// Compile-time checks: Meridian's object stores satisfy the port the artifact store uses.
 type DriveObjectStore = ReturnType<typeof createGoogleDriveObjectStore>;
 export const mediaPortMatchesDriveStore: DriveObjectStore extends MediaStorePort ? true : never = true;
+export const mediaPortMatchesMeridianStore: MeridianObjectStore extends MediaStorePort ? true : never = true;
+
+/**
+ * The brand a request's media is kept under: its brand, or null when it was made without one (the workspace's own space). A request
+ * that is not in this workspace has no media at all, so it is refused.
+ */
+export async function storageBrandOfRequest(sql: Sql, organizationId: string, requestId: string, stage?: string): Promise<string | null> {
+  const rows = await sql<{ brand_id: string | null }>`
+    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
+  `;
+  const row = rows[0];
+  if (!row) throw new EngineError("not_found", `there is no request ${requestId} in this workspace, so it has no media`, { stage, retryable: false });
+  return row.brand_id ?? null;
+}
 
 const SAFE_PART = /^[A-Za-z0-9_][A-Za-z0-9_.-]*$/;
 
@@ -94,7 +113,7 @@ export function mediaKey(input: { workspaceId: string; requestId: string; stage:
   return `engine/${input.workspaceId}/${input.requestId}/${input.stage}/${input.artifactId}.${input.extension}`;
 }
 
-export type MediaInput = { store: MediaStorePort; brandId: string; extension: MediaExtension; bytes: Uint8Array };
+export type MediaInput = { store: MediaStorePort; brandId: string | null; extension: MediaExtension; bytes: Uint8Array };
 
 export type WriteArtifactInput = {
   organizationId: string;

@@ -5,7 +5,7 @@ import { plainErrorText } from "./error-text.ts";
 import { engineReadiness, engineRequestFeed, engineRequestStatus, productionReadinessPorts, startEngineRequest, type EngineReadiness } from "../../../engine/api/index.ts";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { feedCards, type RunFeed } from "./feed.ts";
-import { driveFileStore, type FileStoreReadiness } from "./files.ts";
+import { meridianFileStore, type FileStoreReadiness } from "./files.ts";
 import type { Message } from "./model.ts";
 import { buildProductionRequest, inputNotes, referenceOf } from "./request.ts";
 import { themePageKits } from "./sources.ts";
@@ -189,9 +189,7 @@ export async function readRun(sql: Sql, userId: string, input: { sessionId: stri
   }
   const build = await buildFor(sql, row, messages);
   const readiness = await readinessOf(sql, row.organization_id, ports);
-  const files: FileStoreReadiness = row.brand_id === null
-    ? { status: "not_connected", reason: "Choose a brand for this session to attach files. Meridian keeps files in the brand's Google Drive folder." }
-    : await (ports.files ?? driveFileStore(sql)).ready(row.organization_id);
+  const files: FileStoreReadiness = await (ports.files ?? meridianFileStore(sql)).ready(row.organization_id);
   return {
     stage: "draft",
     problems: build.status === "incomplete" ? build.problems : [],

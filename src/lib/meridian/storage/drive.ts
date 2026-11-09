@@ -67,13 +67,22 @@ export type GoogleDriveClientOptions = {
  */
 export type DriveWriteInput = {
   organizationId: string;
-  brandId: string;
+  /** The brand the file is kept under, or null for the workspace's own space (a video made without a brand). */
+  brandId: string | null;
   path: string;
   mimeType: string;
   bytes: Uint8Array;
   metadata?: Record<string, unknown>;
   storageRecord?: { lifecycle: AssetLifecycle };
 };
+
+/** The folder name, and the brandId property value, of the workspace's own space. Brand ids are generated, so none is this word. */
+export const WORKSPACE_DRIVE_SCOPE = "workspace";
+
+/** The brandId property a Drive file carries: the brand's id, or the workspace's own space when it has no brand. */
+export function driveScopeOf(brandId: string | null): string {
+  return brandId ?? WORKSPACE_DRIVE_SCOPE;
+}
 
 /** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
 function driveTransportFor(organizationId: string, fetchImpl: typeof fetch = gatedFetch("drive.write")): ResumableTransport {
@@ -246,15 +255,17 @@ export class GoogleDriveClient {
 
   async getFolderForPath(input: {
     organizationId: string;
-    brandId: string;
+    brandId: string | null;
     subpath: string;
   }): Promise<string> {
     const rootId = this.getRootFolderId();
     const org = input.organizationId;
     const tenantsFolder = await this.findOrCreateFolder("tenants", rootId, org);
     const orgFolder = await this.findOrCreateFolder(input.organizationId, tenantsFolder, org);
-    const brandsFolder = await this.findOrCreateFolder("brands", orgFolder, org);
-    const brandFolder = await this.findOrCreateFolder(input.brandId, brandsFolder, org);
+    // A brand's files sit under brands/<brand id>; a workspace file (no brand) sits under workspace/, next to brands/.
+    const brandFolder = input.brandId === null
+      ? await this.findOrCreateFolder(WORKSPACE_DRIVE_SCOPE, orgFolder, org)
+      : await this.findOrCreateFolder(input.brandId, await this.findOrCreateFolder("brands", orgFolder, org), org);
 
     const segments = input.subpath.split("/").filter(Boolean);
     let currentFolderId = brandFolder;
@@ -334,7 +345,7 @@ export class GoogleDriveClient {
       const properties = existing.appProperties || {};
       if (
         properties.organizationId !== input.organizationId ||
-        properties.brandId !== input.brandId ||
+        properties.brandId !== driveScopeOf(input.brandId) ||
         properties.sha256 !== sha256
       ) {
         throw new Error("Google Drive storage key already exists with different tenant ownership or content.");
@@ -360,13 +371,13 @@ export class GoogleDriveClient {
       properties: {
         sha256,
         organizationId: input.organizationId,
-        brandId: input.brandId,
+        brandId: driveScopeOf(input.brandId),
       },
       appProperties: {
         meridian_storage_key_hash: storageKeyHash,
         sha256,
         organizationId: input.organizationId,
-        brandId: input.brandId,
+        brandId: driveScopeOf(input.brandId),
       },
     };
 

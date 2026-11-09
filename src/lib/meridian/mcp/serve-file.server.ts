@@ -1,7 +1,7 @@
 // Serves one connector file by its signed link. The link is checked first (signature, then expiry); only then is the row read and the bytes
 // fetched from storage. The answer is the stored bytes with their stored media type, marked as an attachment and never sniffed.
 import type { Sql } from "../learning/store.ts";
-import { driveMcpFileStore, linkSecretFrom, storedFileFor, verifyFileLink, type McpFileStore } from "./files.ts";
+import { linkSecretFrom, meridianMcpFileStore, storedFileFor, verifyFileLink, type McpFileStore } from "./files.ts";
 
 const text = (status: number, message: string) => new Response(message, { status, headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" } });
 
@@ -19,7 +19,7 @@ export async function serveMcpFile(
   const sql = await deps.getSql();
   const row = await storedFileFor(sql, fileId);
   if (!row) return text(404, "No such file.");
-  const store = await (deps.store ?? driveMcpFileStore)(sql);
+  const store = await (deps.store ?? meridianMcpFileStore)(sql);
   const bytes = await store.get({ organizationId: row.organizationId, brandId: row.brandId, key: row.key }).catch(() => null);
   if (!bytes) return text(404, "The file could not be read from storage.");
   const extension = row.key.split(".").pop() ?? "bin";

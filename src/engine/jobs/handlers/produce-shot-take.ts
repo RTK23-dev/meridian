@@ -7,7 +7,7 @@ import type { AsyncAssetRouter, ProduceInput, ProduceReport, StepReport } from "
 import { parseAssetJob, type AssetJob } from "../../assets/job.ts";
 import type { ProbeResult } from "../../media/interface.ts";
 import type { Sql } from "../../../lib/meridian/learning/store.ts";
-import { mediaKey, writeArtifact } from "../artifact-store.ts";
+import { mediaKey, storageBrandOfRequest, writeArtifact } from "../artifact-store.ts";
 import { stableId } from "../stable-id.ts";
 import type { StageContext, StageOutput } from "../types.ts";
 import { TAKE_MAX_BYTES, TAKE_WIDTH, TAKE_HEIGHT } from "./produce-shot-types.ts";
@@ -182,20 +182,6 @@ export function takeShapeOf(probe: ProbeResult): { durationMs: number; width: nu
   return { durationMs: probe.durationMs, width: probe.width, height: probe.height };
 }
 
-async function brandOf(sql: Sql, organizationId: string, requestId: string): Promise<string> {
-  const rows = await sql<{ brand_id: string | null }>`
-    select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
-  `;
-  const brand = rows[0]?.brand_id ?? null;
-  if (brand === null) {
-    throw new EngineError("invalid_input", "the request has no brand, so its take media cannot be stored (Bible 5.2)", {
-      stage: "produce_shot",
-      retryable: false,
-    });
-  }
-  return brand;
-}
-
 /** Downloads, checks, probes and stores one take, then writes its Take artifact. Refuses a file of another shape as a hold. */
 
 export async function storeTake(
@@ -235,7 +221,7 @@ export async function storeTake(
   const shape = takeShapeOf(probe);
   if (shape === null) return refuse();
 
-  const brandId = await brandOf(ctx.sql, ctx.organizationId, ctx.requestId);
+  const brandId = await storageBrandOfRequest(ctx.sql, ctx.organizationId, ctx.requestId, ctx.stage);
   const artifactId = newId("art_");
   // The take is named by the job's subject (a master shot's subject is its id), so a variant's take has its own id.
   const takeId = takeIdFor(ctx.requestId, ctx.subjectId, input.attempt);

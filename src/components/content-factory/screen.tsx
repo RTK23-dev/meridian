@@ -93,7 +93,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
       {list.length === 0 ? (
         <EmptyState
           title="No sessions yet"
-          reason={guided ? "Start with one video draft. Give it a title, keep it on the current brand, and attach a reference Reel plus Market research in the brief. Create more drafts in the same format, then group them into one batch." : "A session is one chat about one video. Give it a title to start. A brand is optional, but files are kept in a brand folder, so a session needs a brand to take files."}
+          reason={guided ? "Start with one video draft. Give it a title, keep it on the current brand, and attach a reference Reel plus Market research in the brief. Create more drafts in the same format, then group them into one batch." : "A session is one chat about one video. Give it a title to start. A brand is optional: without one, the video and its files are the workspace's own."}
           action={<NewSessionForm organizationId={organizationId} brands={brands} initialBrandId={initialBrandId} onCreated={(created) => { setSelectedId(created.id); }} />}
         />
       ) : null}

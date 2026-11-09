@@ -176,13 +176,16 @@ describe("Content Factory sessions", () => {
     await assert.rejects(saveSettings(db.sql, ADMIN, { sessionId: created.id, brandId: OTHER_BRAND, budgetUsd: null, maxSeconds: null, language: null, priority: null, keepGenes: [] }), { message: BRAND_REFUSAL });
   });
 
-  test("files are checked from their bytes, need a brand and a connected store, and are stored under the session", async () => {
+  test("files are checked from their bytes, need a ready store, and are stored under the session, with or without a brand", async () => {
+    // A session made without a brand keeps its files in the workspace's own space (owner direction 2026-11-09).
     const noBrand = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: null, title: "No brand" });
     const first = await postMessage(db.sql, ADMIN, { sessionId: noBrand.id, text: "Here is the reel.", beatRole: null });
+    const workspaceStore = memoryStore();
+    const unbranded = await uploadFile(db.sql, ADMIN, { sessionId: noBrand.id, messageId: first.messageId, fileName: "reel.mp4", purpose: "reference_video", base64: MP4 }, { files: workspaceStore });
+    assert.equal(unbranded.status, "stored");
+    assert.equal(workspaceStore.puts.length, 1);
+    assert.ok(workspaceStore.puts[0]!.startsWith(`${WS}/null/`), "kept in the workspace's own space, not a brand's");
     const store = memoryStore();
-    const unbranded = await uploadFile(db.sql, ADMIN, { sessionId: noBrand.id, messageId: first.messageId, fileName: "reel.mp4", purpose: "reference_video", base64: MP4 }, { files: store });
-    assert.equal(unbranded.status, "not_connected");
-    assert.equal(store.puts.length, 0);
 
     const session = await createSession(db.sql, ADMIN, { organizationId: WS, brandId: BRAND, title: "Files" });
     const message = await postMessage(db.sql, ADMIN, { sessionId: session.id, text: "Reference attached.", beatRole: null });

@@ -3,7 +3,12 @@
 A Claude chat (claude.ai, the desktop app or the phone app) or a ChatGPT chat can make Meridian videos. **The chat is the orchestrator:** it writes the
 script, the plan and the coded video (a HyperFrames composition), and it can render the video in its own code sandbox, so none of that
 costs the workspace anything. **Meridian does only what a chat cannot do:** a voiceover, an image and a decision from the workspace's
-decision engine. It also stores the files. Each paid call draws on the brand budgets on the Billing page and reports its own cost.
+decision engine. It also stores the files. Each paid call reports its own cost and draws on a budget on the Billing page: the brand's
+budget, or, for a video made without a brand, the workspace's monthly budget.
+
+**A video does not need a brand** (owner direction 2026-11-09). Without one, the video is the workspace's own: its files are kept in
+the workspace's own space and its paid calls come from the monthly budget. Google Drive is not needed either: until it is connected,
+Meridian keeps the files in its own database.
 
 ## The workflow
 
@@ -11,7 +16,8 @@ Every video starts with a **quick Q&A** and is then made as a **project** throug
 
 **The Q&A (`meridian_start`).** Before making anything, the chat asks every question in one message: numbered questions, lettered
 options, and the person's own words always welcome.
-- the brand (asked only when there is more than one, with what each has left);
+- the brand, with what each has left, or "No brand" (the workspace's own video, paid from the monthly budget). A workspace with no
+  brand is not asked;
 - what the video should do;
 - what it is about;
 - where it runs and how long;
@@ -50,7 +56,8 @@ The answers create the project (`meridian_project_create`), which returns the pl
 - the concept, the script, the storyboard and the asset plan are kept as text, so each phase builds on the last;
 - going back is a *reopen*, which clears that phase and every later one;
 - nothing is paid for (voice, images) before the asset plan is settled;
-- no paid call is made past the video's own budget (`meridian_project_update` changes it). The brand budget still applies on top;
+- no paid call is made past the video's own budget (`meridian_project_update` changes it). The brand's budget, or the monthly budget
+  for a video without a brand, still applies on top;
 - a delivered or abandoned video takes no more steps.
 
 Every tool answer ends with the exact next step, so a chat can resume a video at any time (`meridian_project`).
@@ -70,11 +77,11 @@ What the workspace needs before paid calls work:
 
 | Needed for | Where |
 | --- | --- |
-| Any paid call | A brand budget on the Billing page. A brand without one is refused and nothing is sent. |
+| Any paid call | On the Billing page: the brand's budget for a brand's video, or the monthly budget for a video without a brand. A call whose budget is not set, or too low, is refused and nothing is sent. |
 | Voice, images | The OpenRouter key (Settings, Connections). |
 | Images | A Studio image model (Settings, Models, Studio, Images). |
 | Decisions | A decision engine that is ready (Settings, Connections, Decisions) and the decision cap on Billing. |
-| Storing files | Google Drive connected (Settings, Connections). Without it, voice and images are refused before any call. |
+| Storing files | Nothing. Without Google Drive, files are kept in Meridian's own database (up to 50 MB each). Once Drive is connected (Settings, Connections), new files go there; earlier ones stay readable where they are. |
 | Download links | `MEDIA_LINK_SECRET` (at least 32 characters) in the deployment environment. Without it, files are stored but not linked. |
 | Rendering in the chat | In claude.ai, allow this Meridian site in the code execution network settings, so the sandbox can download the files. |
 
@@ -91,21 +98,26 @@ What the workspace needs before paid calls work:
 | `meridian_brand` | free | The brand brain in the brand's own words (tone, claims, words to avoid, colours, imagery rules). |
 | `meridian_video_guide` | free | The steps, the HyperFrames format (1080 × 1920, 30 fps, GSAP timeline) and the render options. |
 | `meridian_voice_models` | free | The speech models the OpenRouter key can use, read live, with list prices. |
-| `meridian_voiceover` | paid, $1 hold | Speaks the text with the chosen model and voice; stores the MP3. Settles at OpenRouter's bill. |
-| `meridian_image` | paid, $1 hold | One image with the Studio image model; stores it. Settles at the reported cost, else at the hold. |
+| `meridian_voiceover` | paid, $1 hold | Speaks the text with the chosen model and voice; stores the MP3. Settles at OpenRouter's bill. A brand is optional. |
+| `meridian_image` | paid, $1 hold | One image with the Studio image model; stores it. Settles at the reported cost, else at the hold. A brand is optional. |
 | `meridian_decide` | paid, decision cap | Choose between options, yes/no, or a 1 to 5 score from the active decision engine, with its probability. |
 | `meridian_files` | free | The files made from chats, with fresh one-hour download links. |
 | `meridian_render` | free | `claude`: the download links and the exact commands to render in the chat's sandbox. `hyperframes`: not available from the connector yet (see below). |
 
-`meridian_voiceover`, `meridian_image` and `meridian_decide` take an optional `projectId`. With it, a paid call is linked to the video,
-checked against its phase and budget, and counted in its spend.
+`meridian_voiceover`, `meridian_image` and `meridian_decide` take an optional `projectId` and an optional `brandId`. With a project, a
+paid call is linked to the video, checked against its phase and budget, counted in its spend, and paid like the project (its brand, or
+the monthly budget when it has none). Without either, the call is the workspace's own, paid from the monthly budget.
 
 How a paid call is guarded. This is the same lifecycle Studio and Factory media use.
-1. A hold is reserved on the brand budget before the provider is called. With no budget, or not enough left, nothing is sent.
+1. A hold is reserved before the provider is called: on the brand's budget, or, for a video without a brand, on the monthly budget
+   (the same ledger as paid text generation, `providers/generation-ledger.ts`). With no budget, or not enough left, nothing is sent.
 2. A call refused before sending (not connected, or a 4xx from the provider) releases its hold.
-3. A call that may have reached the provider and then failed keeps its hold, and says so.
+3. A call that may have reached the provider and then failed keeps its hold, and says so. On the monthly budget it is marked
+   uncertain, so an admin can check it against the provider's account and release it on the Billing page.
 4. A call that succeeds settles at the cost the provider reported. If it reported none, it settles at the hold's ceiling
    (`unpriced-ceiling-v1`), so the budget never undercounts.
+
+A decision asked for a video without a brand is recorded in the decision log with no brand, so it is in no brand's calibration.
 
 Every paid call is written to the audit log with the link that made it.
 
@@ -141,5 +153,7 @@ Code:
 - `src/lib/meridian/mcp/`: the protocol, the connectors, the tools, the workflow and its tools, the projects, the paid holds, the files
   and the HTTP handler;
 - the routes `src/routes/api/mcp/` and `src/routes/api/mcp-files/`;
-- migrations `0156_mcp_connector.sql` and `0157_mcp_projects.sql`;
+- migrations `0156_mcp_connector.sql`, `0157_mcp_projects.sql` and `0158_videos_without_a_brand.sql`;
+- the store every video file goes through: `src/lib/meridian/storage/meridian-store.ts` (Drive when connected, else
+  `database-store.ts`);
 - the Settings section `src/components/settings/claude-connector.tsx`.

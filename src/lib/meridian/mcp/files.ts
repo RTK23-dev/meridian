@@ -1,6 +1,7 @@
-// The files a connector makes (a voiceover, an image) and the links a chat opens them with. The bytes go to Meridian's storage layer under
-// the brand (Google Drive, indexed by storage_objects), never to a vendor SDK, and each file is a row of mcp_files with the cost the provider
-// reported (null when it reported none).
+// The files a connector makes (a voiceover, an image) and the links a chat opens them with. The bytes go to Meridian's storage layer
+// (storage/meridian-store.ts: the workspace's Google Drive when it has one, else Meridian's own database; indexed by storage_objects), never
+// to a vendor SDK, under the brand, or in the workspace's own space for a video made without one (brandId null). Each file is a row of
+// mcp_files with the cost the provider reported (null when it reported none).
 //
 // A link is an HMAC-SHA256 over the file id and an expiry, signed with MEDIA_LINK_SECRET under its own label, so a creative's media link and
 // a connector file's link can never stand in for each other. It lasts an hour: long enough for a chat to fetch the files and render. The
@@ -16,14 +17,15 @@ const MIN_SECRET_LENGTH = 32;
 export type McpFileKind = "voiceover" | "image" | "video";
 
 export type McpFileStore = {
-  ready(organizationId: string): Promise<{ status: "ready" } | { status: "not_connected"; reason: string }>;
-  put(input: { organizationId: string; brandId: string; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ storageObjectId: string | null }>;
-  get(input: { organizationId: string; brandId: string; key: string }): Promise<Uint8Array | null>;
+  ready(organizationId: string): Promise<{ status: "ready"; detail?: string } | { status: "not_connected"; reason: string }>;
+  put(input: { organizationId: string; brandId: string | null; key: string; mimeType: string; bytes: Uint8Array }): Promise<{ storageObjectId: string | null }>;
+  get(input: { organizationId: string; brandId: string | null; key: string }): Promise<Uint8Array | null>;
 };
 
 export type McpFile = {
   id: string;
-  brandId: string;
+  /** Null: a file of a video made without a brand, kept in the workspace's own space. */
+  brandId: string | null;
   projectId: string | null;
   kind: McpFileKind;
   mediaType: string;
@@ -75,7 +77,7 @@ export function fileKey(connectorId: string, sha256: string, mediaType: string):
 export async function storeFile(
   sql: Sql,
   store: McpFileStore,
-  input: { organizationId: string; brandId: string; connectorId: string; projectId?: string | null; kind: McpFileKind; mediaType: string; bytes: Uint8Array; costUsd: number | null; details: Record<string, unknown> },
+  input: { organizationId: string; brandId: string | null; connectorId: string; projectId?: string | null; kind: McpFileKind; mediaType: string; bytes: Uint8Array; costUsd: number | null; details: Record<string, unknown> },
 ): Promise<McpFile> {
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
   const key = fileKey(input.connectorId, sha256, input.mediaType);
@@ -90,7 +92,7 @@ export async function storeFile(
   return { id, brandId: input.brandId, projectId: input.projectId ?? null, kind: input.kind, mediaType: input.mediaType, bytes: input.bytes.byteLength, costUsd: input.costUsd, details: input.details, createdAt: new Date(rows[0]!.created_at as string).toISOString() };
 }
 
-type FileRow = { id: string; brand_id: string; project_id: string | null; kind: McpFileKind; media_type: string; byte_size: string | number; cost_usd: string | number | null; details: unknown; created_at: unknown; storage_key: string; organization_id: string };
+type FileRow = { id: string; brand_id: string | null; project_id: string | null; kind: McpFileKind; media_type: string; byte_size: string | number; cost_usd: string | number | null; details: unknown; created_at: unknown; storage_key: string; organization_id: string };
 
 function fileOf(row: FileRow): McpFile {
   const details = typeof row.details === "string" ? (JSON.parse(row.details) as Record<string, unknown>) : ((row.details ?? {}) as Record<string, unknown>);
@@ -117,22 +119,37 @@ export async function fileOfWorkspace(sql: Sql, organizationId: string, fileId: 
 }
 
 /** The stored row a signed link names, for the route that serves it. */
-export async function storedFileFor(sql: Sql, fileId: string): Promise<{ organizationId: string; brandId: string; key: string; mediaType: string } | null> {
+export async function storedFileFor(sql: Sql, fileId: string): Promise<{ organizationId: string; brandId: string | null; key: string; mediaType: string } | null> {
   const rows = await sql<FileRow>`select * from mcp_files where id = ${fileId} limit 1`;
   const row = rows[0];
   return row ? { organizationId: row.organization_id, brandId: row.brand_id, key: row.storage_key, mediaType: row.media_type } : null;
 }
 
-/** Meridian's storage for connector files: Drive readiness and writes as the Content Factory uses them, and reads by key. */
-export async function driveMcpFileStore(sql: Sql): Promise<McpFileStore> {
-  const { driveFileStore } = await import("../content-factory/files.ts");
-  const drive = driveFileStore(sql);
+/**
+ * Meridian's storage for connector files: writes as the Content Factory makes them, reads by key. It is always ready: without Drive, files
+ * are kept in Meridian's own database, and the detail says which (owner direction 2026-11-09).
+ */
+export async function meridianMcpFileStore(
+  sql: Sql,
+  home?: (organizationId: string) => Promise<import("../storage/meridian-store.ts").StorageHome>,
+): Promise<McpFileStore> {
+  const { createMeridianObjectStore } = await import("../storage/meridian-store.ts");
+  const store = createMeridianObjectStore(sql, home ? { home } : {});
   return {
-    ready: (organizationId) => drive.ready(organizationId),
-    put: (input) => drive.put(input),
+    async ready(organizationId) {
+      const home = await store.home(organizationId);
+      return { status: "ready", detail: home.detail };
+    },
+    async put(input) {
+      await store.put({ ...input, lifecycle: "stored" });
+      const rows = await sql<{ id: string }>`
+        select id from storage_objects
+        where organization_id = ${input.organizationId} and brand_id is not distinct from ${input.brandId} and name = ${input.key}
+        limit 1
+      `;
+      return { storageObjectId: rows[0]?.id ?? null };
+    },
     async get(input) {
-      const { createGoogleDriveObjectStore, createSqlStorageMetadataRepository } = await import("../storage/object-store.ts");
-      const store = createGoogleDriveObjectStore(undefined, { metadataRepo: createSqlStorageMetadataRepository(sql) });
       const object = await store.get(input.organizationId, input.brandId, input.key);
       return object?.bytes ?? null;
     },

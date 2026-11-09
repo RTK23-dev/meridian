@@ -12,7 +12,8 @@ import type { AssetLifecycle } from "./object-store.ts";
 
 export type DriveObjectRecord = {
   organizationId: string;
-  brandId: string;
+  /** Null: the workspace's own space (a video made without a brand). */
+  brandId: string | null;
   /** The object key: the path the file was written under. */
   key: string;
   fileId: string;
@@ -37,7 +38,7 @@ export async function recordDriveObject(sql: Sql, record: DriveObjectRecord): Pr
   `;
   const rows = await sql<{ id: string; provider_file_id: string; mime_type: string; size_bytes: string | number | bigint; sha256: string }>`
     select id, provider_file_id, mime_type, size_bytes, sha256 from storage_objects
-    where organization_id = ${record.organizationId} and brand_id = ${record.brandId} and name = ${record.key}
+    where organization_id = ${record.organizationId} and brand_id is not distinct from ${record.brandId} and name = ${record.key}
     limit 1
   `;
   const row = rows[0];

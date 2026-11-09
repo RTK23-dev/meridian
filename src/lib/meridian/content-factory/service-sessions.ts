@@ -7,7 +7,7 @@ import { canMakeBrief } from "../opportunity/triage-states.ts";
 import { randomUUID } from "node:crypto";
 import { withTransaction, type Sql } from "../learning/store.ts";
 import { extractPdf } from "../ingestion/pdf.ts";
-import { characterCount, checkFile, decodeUpload, driveFileStore, imageDimensions, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
+import { characterCount, checkFile, decodeUpload, imageDimensions, meridianFileStore, safeFileName, sessionFileKey, type ContentFactoryFileStore, type FileStoreReadiness } from "./files.ts";
 import { isFilePurpose, isPriority, isScriptRole, isSourcePage, MAX_SECONDS, MIN_SECONDS, TEXT_FILE_MAX_CHARS, PDF_OVER_LIMIT_CONTENT, type Attachment, type FilePurpose, type KeepableGene, type Message, type ScriptRole, type SessionDetail, type SessionSummary, type SourcePage, type SourceResult } from "./model.ts";
 import { readSourceRecord, searchSourceRecords } from "./sources.ts";
 import { SESSION_REFUSAL, STARTED_REFUSAL, SESSION_COLUMNS, iso, jsonList, summaryOf, settingsOf, audit, requireWorkspaceAdmin, sessionAccess, requireBrandInWorkspace, requireDraft, lockDraft, hasReferenceVideo, requireMessage, touch } from "./service-core.ts";
@@ -277,10 +277,8 @@ export async function uploadFile(sql: Sql, userId: string, input: UploadInput, p
   if (input.purpose === "reference_video" && (await hasReferenceVideo(sql, row))) {
     return { status: "refused", reason: "This session already has a reference video. One session uses one reference." };
   }
-  if (row.brand_id === null) {
-    return { status: "not_connected", reason: "Choose a brand for this session first. Meridian keeps files in the brand's Google Drive folder." };
-  }
-  const store = ports.files ?? driveFileStore(sql);
+  // A session made without a brand keeps its files in the workspace's own space (brand null).
+  const store = ports.files ?? meridianFileStore(sql);
   const ready: FileStoreReadiness = await store.ready(row.organization_id);
   if (ready.status !== "ready") return { status: "not_connected", reason: ready.reason };
 
@@ -340,10 +338,10 @@ async function draftRefusalOf(tx: Sql, row: SessionRow): Promise<string | null> 
   return locked.status === "draft" ? null : STARTED_REFUSAL;
 }
 
-/** Removes a stored object that no attachment records. Best effort: a failed removal leaves the object in the brand's folder, unreferenced. */
+/** Removes a stored object that no attachment records. Best effort: a failed removal leaves the object where it was stored, unreferenced. */
 
 async function discardUnrecorded(store: ContentFactoryFileStore, row: SessionRow, key: string): Promise<void> {
-  if (!store.discard || row.brand_id === null) return;
+  if (!store.discard) return;
   try {
     await store.discard({ organizationId: row.organization_id, brandId: row.brand_id, key });
   } catch {

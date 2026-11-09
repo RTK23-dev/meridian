@@ -45,7 +45,7 @@ export async function persistDecisionLineage(
         engine_id, adapter_version, requested_model, input_modality, image_count, usage, latency_ms, failure_kind,
         upstream_provider, provider_request_id
       ) values (
-        ${result.runId}, ${request.organizationId}, ${request.brandId}, 'semantic_decision',
+        ${result.runId}, ${request.organizationId}, ${request.brandId || null}, 'semantic_decision',
         ${result.model}, ${result.provider}, ${result.inputHash}, ${failed ? "failed" : "completed"},
         ${JSON.stringify(metadata)},
         ${result.engineId}, ${result.adapterVersion}, ${result.requestedModel}, ${result.inputModality},
@@ -65,7 +65,7 @@ export async function persistDecisionLineage(
           model, provider, answer, probability, distribution, confidence, status, evidence,
           engine_id, calibration_status
         ) values (
-          ${crypto.randomUUID()}, ${request.organizationId}, ${request.brandId}, ${result.runId},
+          ${crypto.randomUUID()}, ${request.organizationId}, ${request.brandId || null}, ${result.runId},
           ${recordId || (request.state as { bundleId?: string })?.bundleId || result.runId},
           ${answer.questionId || key}, ${answer.questionVersion || "v1"},
           ${answer.model}, ${answer.provider},

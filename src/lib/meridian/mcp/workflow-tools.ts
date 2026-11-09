@@ -6,7 +6,7 @@ import { z } from "zod";
 import { usd } from "./paid.ts";
 import { checkpointProject, createProject, listProjects, readProject, updateProject } from "./projects.ts";
 import { defineTool, type McpTool, type ToolResult } from "./protocol.ts";
-import { brandIdSchema, noBrand, projectIdSchema, requireBrand, type ConnectorContext } from "./tools.ts";
+import { noBrand, optionalBrandIdSchema, projectIdSchema, requireBrand, workspaceLeftUsd, type ConnectorContext } from "./tools.ts";
 import { listFiles } from "./files.ts";
 import {
   CONTENT_MAX,
@@ -53,7 +53,8 @@ function stateLines(project: ProjectState): string[] {
   });
 }
 
-const spendLine = (project: ProjectState) => `Spent on this video: ${usd(project.spentUsd)}${project.budgetUsd === null ? " (no cap beyond the brand budget)" : ` of ${usd(project.budgetUsd)}`}.`;
+const spendLine = (project: ProjectState) =>
+  `Spent on this video: ${usd(project.spentUsd)}${project.budgetUsd === null ? ` (no cap beyond ${project.brandId === null ? "the monthly budget" : "the brand budget"})` : ` of ${usd(project.budgetUsd)}`}.`;
 
 export function workflowTools(): McpTool<ConnectorContext>[] {
   return [
@@ -67,17 +68,20 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
       async run(context: ConnectorContext) {
         const [limits, cookbooks] = await Promise.all([context.ports.limits(), context.ports.styles()]);
         const brands = limits.brands.map((brand) => ({ id: brand.brandId, name: brand.name, leftUsd: brand.budgetUsd === null ? null : Math.max(0, brand.budgetUsd - brand.committedUsd) }));
-        if (brands.length === 0) return { text: "This workspace has no brand yet. Ask the person to add one in Meridian first; a video belongs to a brand.", isError: true };
+        const workspaceLeft = workspaceLeftUsd(limits);
         const styles = styleOptions(cookbooks);
-        const questions = intakeQuestions({ brands, styles });
+        const questions = intakeQuestions({ brands, workspaceLeftUsd: workspaceLeft, styles });
         const lines = questions.map((question, number) => {
           const options = question.options.map((option, i) => `   ${LETTERS[i]}. ${option}`);
           return [`${number + 1}. ${question.question}${question.required ? "" : " (optional)"}`, ...options, ...(question.ownAnswer && question.options.length > 0 ? ["   Or your own answer."] : [])].join("\n");
         });
-        const single = brands.length === 1 ? `\nThe brand is ${brands[0]!.name} (${brands[0]!.id}), the only one in this workspace.` : "";
+        // A video does not have to belong to a brand: with none in the workspace, the brand is not asked and the video is the workspace's own.
+        const scope = brands.length === 0
+          ? `\nThis workspace has no brand, so the video is the workspace's own: leave brandId out. Paid steps come from the monthly budget${workspaceLeft === null ? ", which is not set yet, so they are refused until an admin sets it on the Billing page" : ` ($${workspaceLeft.toFixed(2)} left)`}.`
+          : `\nFor "No brand", leave brandId out: the video is the workspace's own, paid from the monthly budget.`;
         return {
-          text: [`Quick Q&A before making the video. ${INTAKE_INSTRUCTIONS}${single}`, "", ...lines].join("\n"),
-          data: { questions, brands, styles, modes: PROJECT_MODES.map((mode) => ({ mode, ...MODE_COPY[mode] })) },
+          text: [`Quick Q&A before making the video. ${INTAKE_INSTRUCTIONS}${scope}`, "", ...lines].join("\n"),
+          data: { questions, brands, workspace: { monthlyLeftUsd: workspaceLeft }, styles, modes: PROJECT_MODES.map((mode) => ({ mode, ...MODE_COPY[mode] })) },
         };
       },
     }),
@@ -85,9 +89,9 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
     defineTool({
       name: "meridian_project_create",
       title: "Create the video project",
-      description: "Creates the video project from the person's Q&A answers and returns the plan (who decides each step in the chosen mode) and the first step. Free.",
+      description: "Creates the video project from the person's Q&A answers and returns the plan (who decides each step in the chosen mode) and the first step. A brand is optional: without one the video is the workspace's own. Free.",
       input: z.object({
-        brandId: brandIdSchema,
+        brandId: optionalBrandIdSchema,
         goal: z.string().min(2).max(300),
         idea: z.string().min(3).max(2000),
         platform: z.string().min(2).max(120).default("Reels / TikTok / Shorts"),
@@ -97,7 +101,7 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
         voiceTone: z.string().max(200).default("warm and natural"),
         mode: z.enum(PROJECT_MODES),
         render: z.enum(["chat", "code_only"]),
-        budgetUsd: z.number().min(0).max(10_000).nullable().default(null).describe("The most Meridian may spend on this video; null for no cap beyond the brand budget."),
+        budgetUsd: z.number().min(0).max(10_000).nullable().default(null).describe("The most Meridian may spend on this video; null for no cap beyond the brand's (or, with no brand, the monthly) budget."),
         language: z.string().min(2).max(16).default("en"),
         audience: z.string().max(500).default(""),
         title: z.string().max(120).optional(),
@@ -105,8 +109,8 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       async run(context: ConnectorContext, input) {
-        const brand = await requireBrand(context, input.brandId);
-        if (!brand) return noBrand(input.brandId);
+        const brand = input.brandId === undefined ? null : await requireBrand(context, input.brandId);
+        if (input.brandId !== undefined && !brand) return noBrand(input.brandId);
         const cookbooks = await context.ports.styles();
         const cookbook = cookbooks.find((item) => item.cookbookId === input.style.trim());
         const brief: Brief = {
@@ -122,7 +126,7 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
         };
         const project = await createProject(context.sql, {
           organizationId: context.connector.organizationId,
-          brandId: brand.id,
+          brandId: brand?.id ?? null,
           connectorId: context.connector.id,
           title: input.title?.trim() || input.idea.trim().split(/[.!?\n]/)[0]!.slice(0, 80),
           mode: input.mode,
@@ -132,7 +136,7 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
         const next = nextStep(project);
         return {
           text: [
-            `Video project ${project.id} created: "${project.title}" for ${brand.name}, ${MODE_COPY[project.mode].label} mode.`,
+            `Video project ${project.id} created: "${project.title}" ${brand ? `for ${brand.name}` : "with no brand (the workspace's own, paid from the monthly budget)"}, ${MODE_COPY[project.mode].label} mode.`,
             "Plan:",
             ...planLines(project.mode).map((line) => `- ${line}`),
             spendLine(project),

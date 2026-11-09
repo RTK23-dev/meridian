@@ -23,7 +23,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { Sql } from "../../db.ts";
-import { createGoogleDriveObjectStore, createSqlStorageMetadataRepository } from "./object-store.ts";
+import { createMeridianObjectStore } from "./meridian-store.ts";
 import { MEDIA_LINK_TTL_SECONDS, mediaLinkSecret, publicMediaOrigin } from "./media-link.ts";
 
 /** The path the route serves. A signed link is built on this path under the public origin. */
@@ -59,8 +59,9 @@ export type EngineMediaLinkSigner = {
 };
 
 /** The object store the route and the engine share: Meridian's Drive-backed store (artifact-store.ts). */
+/** brandId null: the workspace's own space, where a request made without a brand keeps its media. */
 export type EngineObjectStore = {
-  get(organizationId: string, brandId: string, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
+  get(organizationId: string, brandId: string | null, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
 };
 
 export type MediaLinkCheck = "ok" | "malformed" | "bad_signature" | "expired";
@@ -172,9 +173,12 @@ export function engineMediaLinkSigner(options: EngineMediaLinkOptions = {}): Eng
   };
 }
 
-/** Meridian's object store for engine media: the Drive-backed store, indexed by Postgres (storage_objects). */
+/**
+ * Meridian's object store for engine media, indexed by Postgres (storage_objects): Google Drive when the workspace has it, Meridian's own
+ * database when it does not (meridian-store.ts).
+ */
 export function engineObjectStore(sql: Sql) {
-  return createGoogleDriveObjectStore(undefined, { metadataRepo: createSqlStorageMetadataRepository(sql) });
+  return createMeridianObjectStore(sql);
 }
 
 export type ServeEngineMediaInput = {
@@ -194,18 +198,19 @@ const refused = (message: string) =>
   new Response(message, { status: 403, headers: { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" } });
 
 /**
- * The brand a linked object is stored under, or null when none is found. A kit image names its brand in its key: the store is keyed
- * by organization, brand and name, so a brand of another organization finds nothing. An engine object's brand is the brand of the
- * request that owns its key, in the organization the link names.
+ * The space a linked object is stored under, or null when none is found. A kit image names its brand in its key: the store is keyed
+ * by organization, brand and name, so a brand of another organization finds nothing. An engine object's space is the brand of the
+ * request that owns its key, in the organization the link names, or the workspace's own space (brandId null) when the request has no brand.
  */
-async function brandOfLinkedKey(sql: Sql, organizationId: string, objectKey: string): Promise<string | null> {
+async function spaceOfLinkedKey(sql: Sql, organizationId: string, objectKey: string): Promise<{ brandId: string | null } | null> {
   const kit = kitKeyParts(objectKey);
-  if (kit !== null) return kit.brandId;
+  if (kit !== null) return { brandId: kit.brandId };
   const requestId = objectKey.split("/")[2] ?? "";
   const rows = await sql<{ brand_id: string | null }>`
     select brand_id from engine_requests where id = ${requestId} and organization_id = ${organizationId} limit 1
   `;
-  return rows[0]?.brand_id ?? null;
+  const row = rows[0];
+  return row ? { brandId: row.brand_id ?? null } : null;
 }
 
 /**
@@ -234,12 +239,12 @@ export async function serveEngineMedia(input: ServeEngineMediaInput): Promise<Re
   if (check !== "ok") return refused("This link is not valid.");
 
   const sql = await input.getSql();
-  const brandId = await brandOfLinkedKey(sql, organizationId, objectKey);
-  if (brandId === null) return notFound();
+  const space = await spaceOfLinkedKey(sql, organizationId, objectKey);
+  if (space === null) return notFound();
 
   let object;
   try {
-    object = await input.objectStore(sql).get(organizationId, brandId, objectKey);
+    object = await input.objectStore(sql).get(organizationId, space.brandId, objectKey);
   } catch (error) {
     input.logError?.("[engine-media] stored bytes could not be read", error instanceof Error ? error.name : "unknown");
     return new Response("The stored file could not be read right now. Try again shortly.", { status: 503, headers: { "Retry-After": "30" } });

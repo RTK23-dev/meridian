@@ -191,7 +191,7 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
               </Suspense>
             ) : (
               <div className="pt-4">
-                <EmptyState title="Pick a brand for Studio" reason="Studio works on one brand's phases, so choose a brand above. You can already type what to make below." />
+                <EmptyState title="Studio starts from a brand's research" reason="Studio's phases begin with a brand's opportunities, so choose a brand above. To make a video without a brand, use Orchestrator: it needs none." />
               </div>
             )}
           </>

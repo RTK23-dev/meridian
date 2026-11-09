@@ -80,7 +80,8 @@ export type ProjectStatus = "active" | "delivered" | "abandoned";
 export type ProjectState = {
   id: string;
   title: string;
-  brandId: string;
+  /** Null: a video made without a brand. It is the workspace's own, paid from the monthly budget. */
+  brandId: string | null;
   mode: ProjectMode;
   status: ProjectStatus;
   brief: Brief;
@@ -171,7 +172,7 @@ export function isComplete(checkpoints: Checkpoints): boolean {
 
 export type PaidKind = "voiceover" | "image" | "decision";
 
-/** Why a paid call for this project cannot be made now; null when it can. The brand budget is checked again when the hold is taken. */
+/** Why a paid call for this project cannot be made now; null when it can. The brand's or the monthly budget is checked again when the hold is taken. */
 export function paidCallProblem(project: Pick<ProjectState, "status" | "checkpoints" | "budgetUsd" | "spentUsd">, kind: PaidKind, holdUsd: number): string | null {
   if (project.status !== "active") return `This video is ${project.status}; nothing more is made for it.`;
   if (kind !== "decision" && project.checkpoints.assets?.status !== "resolved") {
@@ -198,13 +199,25 @@ export function styleOptions(cookbooks: Array<{ cookbookId: string; label: strin
   ];
 }
 
-export function intakeQuestions(input: { brands: Array<{ id: string; name: string; leftUsd: number | null }>; styles: StyleOption[] }): IntakeQuestion[] {
+/** The words for the workspace's own video (no brand) and what its monthly budget has left. */
+export function noBrandOption(workspaceLeftUsd: number | null): string {
+  return `No brand: the workspace's own video${workspaceLeftUsd === null ? " (no monthly budget set: paid steps are refused)" : ` (paid from the monthly budget, $${workspaceLeftUsd.toFixed(2)} left)`}`;
+}
+
+/**
+ * The intake questions. A video does not have to belong to a brand (owner direction 2026-11-09): with brands, the first question offers
+ * each of them and "No brand"; with none, it is not asked and the video is the workspace's own.
+ */
+export function intakeQuestions(input: { brands: Array<{ id: string; name: string; leftUsd: number | null }>; workspaceLeftUsd: number | null; styles: StyleOption[] }): IntakeQuestion[] {
   const questions: IntakeQuestion[] = [];
-  if (input.brands.length !== 1) {
+  if (input.brands.length > 0) {
     questions.push({
       id: "brand",
       question: "Which brand is this video for?",
-      options: input.brands.map((brand) => `${brand.name}${brand.leftUsd === null ? " (no budget set: paid steps are refused)" : ` ($${brand.leftUsd.toFixed(2)} left)`}`),
+      options: [
+        ...input.brands.map((brand) => `${brand.name}${brand.leftUsd === null ? " (no budget set: paid steps are refused)" : ` ($${brand.leftUsd.toFixed(2)} left)`}`),
+        noBrandOption(input.workspaceLeftUsd),
+      ],
       ownAnswer: false,
       required: true,
     });
@@ -217,7 +230,7 @@ export function intakeQuestions(input: { brands: Array<{ id: string; name: strin
     { id: "voice", question: "A voiceover?", options: ["Yes, warm and calm", "Yes, upbeat and energetic", "No voice: text and music only"], ownAnswer: true, required: true },
     { id: "mode", question: "How involved do you want to be?", options: PROJECT_MODES.map((mode) => `${MODE_COPY[mode].label}: ${MODE_COPY[mode].summary}`), ownAnswer: false, required: true },
     { id: "render", question: "Who makes the MP4?", options: ["You, in this chat's code sandbox (free, takes a few minutes)", "Nobody yet: give me the code and the files"], ownAnswer: false, required: true },
-    { id: "budget", question: "The most Meridian may spend on this video (voice, images, decisions)?", options: ["$1", "$3", "$5", "No cap beyond the brand budget"], ownAnswer: true, required: false },
+    { id: "budget", question: "The most Meridian may spend on this video (voice, images, decisions)?", options: ["$1", "$3", "$5", "No cap beyond the brand's or the monthly budget"], ownAnswer: true, required: false },
   );
   return questions;
 }
@@ -262,7 +275,7 @@ export function nextStep(project: ProjectState): string {
   const how = decideHow(project.mode, phase);
   switch (phase) {
     case "concept":
-      return `${header} Write three distinct concepts for "${brief.idea}" (goal: ${brief.goal}; ${brief.platform}, ${brief.seconds} s${brief.audience ? `; audience: ${brief.audience}` : ""}). Each: a hook that stops the scroll in the first second, the angle, and why it serves the goal. Use meridian_brand for the brand's claims and words to avoid.${style} ${how}`;
+      return `${header} Write three distinct concepts for "${brief.idea}" (goal: ${brief.goal}; ${brief.platform}, ${brief.seconds} s${brief.audience ? `; audience: ${brief.audience}` : ""}). Each: a hook that stops the scroll in the first second, the angle, and why it serves the goal. ${project.brandId === null ? "This video has no brand: keep claims to what the person said, and ask them when unsure." : "Use meridian_brand for the brand's claims and words to avoid."}${style} ${how}`;
     case "script":
       return `${header} Write the script from the concept: ${settled(project, "concept")}. At most ${wordBudget(brief.seconds)} spoken words for ${brief.seconds} s, in ${brief.language}, beat by beat with seconds per beat, the hook first.${brief.voice.wanted ? ` Voice: ${brief.voice.tone}.` : " No voiceover: the words are on-screen text."}${style} In studio mode offer two or three versions as options. ${how}`;
     case "storyboard":

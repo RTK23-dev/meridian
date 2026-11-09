@@ -5,14 +5,14 @@
 // - voice: OpenRouter's audio output, as the video engine's speech adapter sends it (engine/assets/providers/openrouterSpeech.ts), read
 //   with its stream parser and checked with its normaliser, and the bill read from OpenRouter's generation stats;
 // - decisions: the workspace's active engine (decisions/dispatcher.ts), which keeps its own caps and lineage;
-// - storage: the Content Factory's Drive store.
+// - storage: Meridian's store (the workspace's Drive when it has one, else Meridian's own database), as the Content Factory uses it.
 // Every provider call goes through the engine's gateway, which adds the workspace's key; no key is read here.
 
 import type { Sql } from "../learning/store.ts";
 import type { DecisionRequest } from "../decisions/types.ts";
 import type { JevQuestionSpec } from "../jev/types.ts";
 import type { ResolvedConnector } from "./connectors.ts";
-import { driveMcpFileStore } from "./files.ts";
+import { meridianMcpFileStore } from "./files.ts";
 import { NotSentError, sqlHoldLedger } from "./paid.ts";
 import type { BrandContext, ConnectorPorts, DecisionAnswer, DecisionKind, SpeechModel } from "./tools.ts";
 
@@ -40,7 +40,7 @@ function bodyOf(response: { body?: unknown }): string {
 }
 
 /** The decision request for one connector question, in the engines' own question format. */
-export function decisionRequestOf(input: { organizationId: string; brandId: string; kind: DecisionKind; question: string; options: string[]; context: string }): DecisionRequest {
+export function decisionRequestOf(input: { organizationId: string; brandId: string | null; kind: DecisionKind; question: string; options: string[]; context: string }): DecisionRequest {
   const id = `mcp.${input.kind}`;
   const optionKeys = input.options.map((_, index) => `option_${index + 1}`);
   const spec: JevQuestionSpec =
@@ -58,7 +58,8 @@ export function decisionRequestOf(input: { organizationId: string; brandId: stri
           };
   return {
     organizationId: input.organizationId,
-    brandId: input.brandId,
+    // A decision for a video without a brand: the engines' requests mark that with an empty brand, and its record has no brand.
+    brandId: input.brandId ?? "",
     state: { description: input.context || "No further context was given.", source: "mcp-connector" },
     questions: { [id]: spec },
   };
@@ -66,21 +67,22 @@ export function decisionRequestOf(input: { organizationId: string; brandId: stri
 
 export function productionPorts(sql: Sql, connector: ResolvedConnector): ConnectorPorts {
   const organizationId = connector.organizationId;
-  let filesCache: Awaited<ReturnType<typeof driveMcpFileStore>> | null = null;
+  let filesCache: Awaited<ReturnType<typeof meridianMcpFileStore>> | null = null;
 
   return {
     ledger: sqlHoldLedger(sql),
 
     async files() {
-      filesCache ??= await driveMcpFileStore(sql);
+      filesCache ??= await meridianMcpFileStore(sql);
       return filesCache;
     },
 
     async limits() {
-      const { readBillingPage } = await import("../billing/store.ts");
+      const [{ readBillingPage }, { monthlyHeldUsd }] = await Promise.all([import("../billing/store.ts"), import("../providers/generation-ledger.ts")]);
       const page = await readBillingPage(sql, { userId: connector.userId, organizationId });
       return {
         monthlyBudgetUsd: page.workspace.monthlyBudgetUsd,
+        monthlyHeldUsd: await monthlyHeldUsd(sql, organizationId),
         decisionCapUsd: page.workspace.decisionCapUsd,
         brands: page.brands.map((brand) => ({ brandId: brand.brandId, name: brand.name, budgetUsd: brand.brandBudgetUsd, committedUsd: brand.committedUsd })),
       };
@@ -106,7 +108,7 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
         voice: key.status === "ready" ? { ready: true, detail: "Voiceovers use the workspace's OpenRouter key; pick a model from meridian_voice_models." } : { ready: false, detail: key.reason },
         image: { ready: imageHealth.state === "CONFIGURED", detail: imageHealth.detail ?? "", model: imageModel },
         decisions: { ready: engineHealth.status === "READY", engine: DECISION_ENGINE_LABELS[selection.engineId] ?? selection.engineId, detail: "message" in engineHealth && engineHealth.message ? engineHealth.message : "" },
-        storage: storage.status === "ready" ? { ready: true, detail: "Files are kept in the brand's Google Drive folder." } : { ready: false, detail: storage.reason },
+        storage: storage.status === "ready" ? { ready: true, detail: storage.detail ?? "Files are kept by Meridian." } : { ready: false, detail: storage.reason },
       };
     },
 
@@ -233,6 +235,7 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
         engine: DECISION_ENGINE_LABELS[result.engineId] ?? result.engineId,
         model: result.returnedModel,
         costUsd: typeof result.usage?.reportedCostUsd === "number" ? result.usage.reportedCostUsd : null,
+        recorded: result.persisted,
       };
       if (!answer) return { ...base, status: "failed", answer: null, probability: null, confidence: null, distribution: null, reason: result.failure?.message ?? "The engine returned no answer for the question." } satisfies DecisionAnswer;
       if (answer.status !== "answered") return { ...base, status: answer.status, answer: null, probability: null, confidence: null, distribution: null, reason: answer.abstainReason } satisfies DecisionAnswer;

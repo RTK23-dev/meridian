@@ -13,10 +13,13 @@ export const ASSET_LIFECYCLE = [
 
 export type AssetLifecycle = (typeof ASSET_LIFECYCLE)[number];
 
+/** The brand an object is kept under, or null for the workspace's own space (a video made without a brand). */
+export type StorageScopeBrand = string | null;
+
 export type StoredObject = {
   key: string;
   organizationId: string;
-  brandId: string;
+  brandId: StorageScopeBrand;
   mimeType: string;
   checksum: string;
   size: number;
@@ -107,7 +110,7 @@ export function objectStorageStatus(): { status: "RETIRED"; detail: string } {
 
 export type StorageObjectRecord = {
   organizationId: string;
-  brandId: string;
+  brandId: StorageScopeBrand;
   key: string;
   providerFileId: string;
   mimeType: string;
@@ -118,17 +121,17 @@ export type StorageObjectRecord = {
 
 export interface StorageMetadataRepository {
   upsert(record: StorageObjectRecord): Promise<void>;
-  getByKey(organizationId: string, brandId: string, key: string): Promise<StorageObjectRecord | null>;
+  getByKey(organizationId: string, brandId: StorageScopeBrand, key: string): Promise<StorageObjectRecord | null>;
 }
 
 export function createMemoryStorageMetadataRepository(): StorageMetadataRepository {
   const map = new Map<string, StorageObjectRecord>();
   return {
     async upsert(record: StorageObjectRecord): Promise<void> {
-      map.set(`${record.organizationId}:${record.brandId}:${record.key}`, record);
+      map.set(`${record.organizationId}:${record.brandId ?? ""}:${record.key}`, record);
     },
-    async getByKey(orgId: string, brandId: string, key: string): Promise<StorageObjectRecord | null> {
-      return map.get(`${orgId}:${brandId}:${key}`) || null;
+    async getByKey(orgId: string, brandId: StorageScopeBrand, key: string): Promise<StorageObjectRecord | null> {
+      return map.get(`${orgId}:${brandId ?? ""}:${key}`) || null;
     },
   };
 }
@@ -136,7 +139,8 @@ export function createMemoryStorageMetadataRepository(): StorageMetadataReposito
 export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRepository {
   return {
     async upsert(record: StorageObjectRecord): Promise<void> {
-      const id = `${record.organizationId}:${record.brandId}:${record.key}`;
+      // A workspace object (no brand) has an empty brand part. Brand ids are never empty, so the two cannot meet.
+      const id = `${record.organizationId}:${record.brandId ?? ""}:${record.key}`;
       await sql`
         insert into storage_objects (
           id, organization_id, brand_id, provider, provider_file_id,
@@ -157,12 +161,12 @@ export function createSqlStorageMetadataRepository(sql: any): StorageMetadataRep
           updated_at = now()
       `;
     },
-    async getByKey(orgId: string, brandId: string, key: string): Promise<StorageObjectRecord | null> {
+    async getByKey(orgId: string, brandId: StorageScopeBrand, key: string): Promise<StorageObjectRecord | null> {
       const rows = await sql`
         select provider_file_id, mime_type, size_bytes, sha256, lifecycle
         from storage_objects
         where organization_id = ${orgId}
-          and brand_id = ${brandId}
+          and brand_id is not distinct from ${brandId}
           and name = ${key}
         limit 1
       `;
@@ -190,10 +194,10 @@ export function createGoogleDriveObjectStore(
   client?: import("./drive.ts").GoogleDriveClient,
   options?: {
     metadataRepo?: StorageMetadataRepository;
-    lookupFileId?: (organizationId: string, brandId: string, key: string) => Promise<string | null>;
+    lookupFileId?: (organizationId: string, brandId: StorageScopeBrand, key: string) => Promise<string | null>;
     recordFileId?: (input: {
       organizationId: string;
-      brandId: string;
+      brandId: StorageScopeBrand;
       key: string;
       fileId: string;
       mimeType: string;
@@ -209,7 +213,7 @@ export function createGoogleDriveObjectStore(
     id: "google_drive" as const,
     async put(input: {
       organizationId: string;
-      brandId: string;
+      brandId: StorageScopeBrand;
       key: string;
       mimeType: string;
       bytes: Uint8Array;
@@ -225,7 +229,7 @@ export function createGoogleDriveObjectStore(
         bytes: input.bytes,
       });
 
-      const mapKey = `${input.organizationId}:${input.brandId}:${key}`;
+      const mapKey = `${input.organizationId}:${input.brandId ?? ""}:${key}`;
       fileIdMap.set(mapKey, res.fileId);
 
       await repo.upsert({
@@ -263,10 +267,10 @@ export function createGoogleDriveObjectStore(
         bytes: input.bytes,
       };
     },
-    async get(organizationId: string, brandId: string, key: string): Promise<StoredObject | null> {
+    async get(organizationId: string, brandId: StorageScopeBrand, key: string): Promise<StoredObject | null> {
       const drive = client || (await import("./drive.ts")).googleDriveClient;
       const cleanKey = safeStorageKey(key);
-      const mapKey = `${organizationId}:${brandId}:${cleanKey}`;
+      const mapKey = `${organizationId}:${brandId ?? ""}:${cleanKey}`;
 
       // Step 1: Resolve provider_file_id from in-memory map or metadata repository
       let fileId = fileIdMap.get(mapKey);

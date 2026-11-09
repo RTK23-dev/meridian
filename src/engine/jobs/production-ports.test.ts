@@ -68,11 +68,6 @@ function mediaGateway() {
   });
 }
 
-/** A SQL handle that answers every statement with the given rows. Only the Drive connection read runs through it here. */
-function sqlAnswering(rows: unknown[]): Sql {
-  return (async () => rows) as unknown as Sql;
-}
-
 /** A SQL handle that fails when it is read: a check that returns before the database must never touch it. */
 const SQL_MUST_NOT_RUN = (() => {
   throw new Error("the database was read");
@@ -89,14 +84,8 @@ test("the shot connection names the media functions when they are not connected,
   assert.ok(reason?.startsWith("NOT_CONNECTED: the media functions are not connected"));
 });
 
-test("with the media functions connected, a workspace with no Drive connection is NOT_CONNECTED: a take has nowhere to be stored", async () => {
-  const reason = await productionShotConnection({ sql: sqlAnswering([]), gateway: mediaGateway() })("org_prod");
-  assert.ok(reason?.startsWith("NOT_CONNECTED: Google Drive is not connected for this workspace"), reason ?? "no reason");
-});
-
-test("with the media functions and the workspace's Drive connected, the shot connection is ready (null)", async () => {
-  const connected = sqlAnswering([{ created_at: new Date("2026-10-01T00:00:00.000Z") }]);
-  assert.equal(await productionShotConnection({ sql: connected, gateway: mediaGateway() })("org_prod"), null);
+test("with the media functions connected, a workspace with no Drive is ready: takes are kept in Meridian's database instead", async () => {
+  assert.equal(await productionShotConnection({ sql: SQL_MUST_NOT_RUN, gateway: mediaGateway() })("org_prod"), null);
 });
 
 test("the HyperFrames adapter sends nothing without a HeyGen key, and says so", async () => {

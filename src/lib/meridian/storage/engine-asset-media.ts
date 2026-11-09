@@ -24,14 +24,17 @@ export type EngineAssetScope = { organizationId: string; requestId: string };
 
 /** The object store the adapter writes to. Meridian's engineObjectStore satisfies it (artifact-store.ts MediaStorePort). */
 export type EngineAssetObjects = {
-  put(input: { organizationId: string; brandId: string; key: string; mimeType: string; bytes: Uint8Array }): Promise<unknown>;
-  get(organizationId: string, brandId: string, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
+  put(input: { organizationId: string; brandId: string | null; key: string; mimeType: string; bytes: Uint8Array }): Promise<unknown>;
+  get(organizationId: string, brandId: string | null, key: string): Promise<{ bytes: Uint8Array; mimeType: string } | null>;
 };
 
 export type EngineAssetMediaInput = {
   objects: EngineAssetObjects;
-  /** The brand a request's media is stored under (Bible 5.2). It throws when the request has no brand, so nothing is stored. */
-  brandOf: (scope: EngineAssetScope) => Promise<string>;
+  /**
+   * The brand a request's media is stored under, or null for a request made without a brand (the workspace's own space). It throws
+   * when the request is not in the workspace, so nothing is stored.
+   */
+  brandOf: (scope: EngineAssetScope) => Promise<string | null>;
 };
 
 /** The router's MediaStore shape (src/engine/assets/adapter.ts), plus the read the adapter also offers. */
