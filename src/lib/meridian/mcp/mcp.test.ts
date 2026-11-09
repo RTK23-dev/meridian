@@ -10,7 +10,8 @@ import { CONNECTOR_SECRET_PREFIX, hashConnectorSecret, isConnectorSecret, newCon
 import { fileLink, MCP_FILE_LINK_TTL_SECONDS, verifyFileLink } from "./files.ts";
 import { NotSentError, UNPRICED_CEILING_ESTIMATOR, withBrandHold, type HoldLedger } from "./paid.ts";
 import { defineTool, ERROR, handleBody, handleMessage, MCP_PROTOCOL_VERSIONS, type McpTool, type ProtocolContext } from "./protocol.ts";
-import { connectorTools, VIDEO_GUIDE } from "./tools.ts";
+import { connectorTools } from "./registry.ts";
+import { VIDEO_GUIDE } from "./tools.ts";
 
 type Ctx = { calls: string[] };
 const echo = defineTool<Ctx, z.ZodObject<{ word: z.ZodString }>>({
@@ -44,7 +45,7 @@ describe("MCP protocol", () => {
     assert.equal(result.protocolVersion, MCP_PROTOCOL_VERSIONS[0]);
     assert.deepEqual(result.capabilities, { tools: { listChanged: false } });
     assert.equal(result.serverInfo.name, "meridian");
-    assert.match(result.instructions, /orchestrator/);
+    assert.match(result.instructions, /Orchestrator mode you decide/);
   });
 
   it("lists tools with a JSON Schema for their arguments", async () => {
@@ -94,7 +95,10 @@ describe("MCP protocol", () => {
 
   it("lists every connector tool with a valid schema, and the guide names the render command", () => {
     const tools = connectorTools();
-    assert.deepEqual(tools.map((tool) => tool.name), ["meridian_status", "meridian_brand", "meridian_video_guide", "meridian_voice_models", "meridian_voiceover", "meridian_image", "meridian_decide", "meridian_files", "meridian_render"]);
+    assert.deepEqual(tools.map((tool) => tool.name), [
+      "meridian_start", "meridian_project_create", "meridian_project", "meridian_checkpoint", "meridian_project_update",
+      "meridian_status", "meridian_brand", "meridian_video_guide", "meridian_voice_models", "meridian_voiceover", "meridian_image", "meridian_decide", "meridian_files", "meridian_render",
+    ]);
     for (const tool of tools) assert.ok(z.toJSONSchema(tool.input), tool.name);
     const paid = tools.filter((tool) => ["meridian_voiceover", "meridian_image", "meridian_decide"].includes(tool.name));
     assert.ok(paid.every((tool) => tool.role === "member" && tool.annotations.readOnlyHint === false), "paid tools need a member and are never marked read-only");

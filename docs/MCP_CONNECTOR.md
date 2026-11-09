@@ -1,16 +1,70 @@
-# Meridian's Claude connector (MCP)
+# Meridian's chat connector (MCP)
 
-A Claude chat (claude.ai, the desktop app or the phone app) can make Meridian videos. **The chat is the orchestrator:** it writes the
+A Claude chat (claude.ai, the desktop app or the phone app) or a ChatGPT chat can make Meridian videos. **The chat is the orchestrator:** it writes the
 script, the plan and the coded video (a HyperFrames composition), and it can render the video in its own code sandbox, so none of that
 costs the workspace anything. **Meridian does only what a chat cannot do:** a voiceover, an image and a decision from the workspace's
 decision engine. It also stores the files. Each paid call draws on the brand budgets on the Billing page and reports its own cost.
 
+## The workflow
+
+Every video starts with a **quick Q&A** and is then made as a **project** through seven phases, each ending at a checkpoint.
+
+**The Q&A (`meridian_start`).** Before making anything, the chat asks every question in one message: numbered questions, lettered
+options, and the person's own words always welcome.
+- the brand (asked only when there is more than one, with what each has left);
+- what the video should do;
+- what it is about;
+- where it runs and how long;
+- the style: Meridian's cookbooks that a chat can make (for example *Voice-led list*, *UGC product*, *3D data explainer*), kinetic type,
+  or the person's own;
+- the voice;
+- **how involved the person wants to be**;
+- who renders;
+- the most Meridian may spend on this video.
+
+The answers create the project (`meridian_project_create`), which returns the plan and the first step.
+
+**The modes.** Who settles each checkpoint:
+
+| Phase | Studio | Guided | Orchestrator |
+| --- | --- | --- | --- |
+| Concept: the hook and the angle | person | chat | chat |
+| Script: the words, timed to the length | person | **person** | chat |
+| Storyboard: each scene, its text and its line | person | chat | chat |
+| Asset plan: what to make and what it holds | person | chat | chat |
+| Build: the coded video, previewed | person | chat | chat |
+| Render: the MP4 | chat | chat | chat |
+| Deliver: the final cut | person | **person** | chat |
+
+**A person's checkpoint.** It works the same way every time:
+1. The chat writes two to five options and records them (`meridian_checkpoint` *propose*).
+2. It shows them as A, B, C, "or tell me your own", and waits.
+3. It settles the checkpoint with the person's choice, or their own words, and the settled text (*resolve*, `decidedBy: "person"`).
+
+**The chat's checkpoint.** The chat settles it itself and says in one line what it chose. Where a choice matters it asks
+`meridian_decide`, Meridian's decision engine, rather than judging its own work.
+
+**What Meridian enforces.** Claude and ChatGPT cannot drift from the workflow, because Meridian checks:
+- the phases go in order;
+- a person's checkpoint needs its options shown first, and a choice that is one of them, or the person's own words;
+- the concept, the script, the storyboard and the asset plan are kept as text, so each phase builds on the last;
+- going back is a *reopen*, which clears that phase and every later one;
+- nothing is paid for (voice, images) before the asset plan is settled;
+- no paid call is made past the video's own budget (`meridian_project_update` changes it). The brand budget still applies on top;
+- a delivered or abandoned video takes no more steps.
+
+Every tool answer ends with the exact next step, so a chat can resume a video at any time (`meridian_project`).
+
+**One-click starters.** The connector also offers MCP prompts that a client can show in its menu: *Make a Meridian video*, *Make a
+video in Studio mode* and *Resume a Meridian video*.
+
 ## Set it up (once)
 
-1. **Meridian, Settings, Connections, Claude connector.** An admin names a link and presses *Make a link*. Copy the link: it is shown
-   once.
-2. **claude.ai, Settings, Connectors, Add custom connector.** Paste the link as the server URL and leave OAuth empty.
-3. **In a chat,** turn the connector on and ask for a video. Claude starts with `meridian_status` and `meridian_video_guide`.
+1. **Meridian, Settings, Connections, Chat connector.** An admin names a link and presses *Make a link*. Copy the link: it is shown once.
+2. **Add it to the chat:**
+   - **Claude:** claude.ai, Settings, Connectors, Add custom connector. Paste the link as the server URL and leave OAuth empty.
+   - **ChatGPT:** turn on developer mode for connectors, then add a connector with the link and no authentication.
+3. **In a chat,** turn the connector on and ask for a video, or pick *Make a Meridian video*. The chat starts with the Q&A.
 
 What the workspace needs before paid calls work:
 
@@ -28,6 +82,11 @@ What the workspace needs before paid calls work:
 
 | Tool | Cost | What it does |
 | --- | --- | --- |
+| `meridian_start` | free | The Q&A to ask first, with options for each question. |
+| `meridian_project_create` | free | The project from the answers: the plan in the chosen mode, and the first step. |
+| `meridian_project` | free | One project's phases, who settled each, its spend against its budget, its files and its next step; without an id, the recent projects. |
+| `meridian_checkpoint` | free | *propose* the options shown, *resolve* a phase, or *reopen* one; Meridian enforces the order and who decides. |
+| `meridian_project_update` | free | Change the mode or the video's budget, or abandon the project. |
 | `meridian_status` | free | Brands with budget, committed and left; the monthly budget and decision cap; which paid services are ready. |
 | `meridian_brand` | free | The brand brain in the brand's own words (tone, claims, words to avoid, colours, imagery rules). |
 | `meridian_video_guide` | free | The steps, the HyperFrames format (1080 × 1920, 30 fps, GSAP timeline) and the render options. |
@@ -37,6 +96,9 @@ What the workspace needs before paid calls work:
 | `meridian_decide` | paid, decision cap | Choose between options, yes/no, or a 1 to 5 score from the active decision engine, with its probability. |
 | `meridian_files` | free | The files made from chats, with fresh one-hour download links. |
 | `meridian_render` | free | `claude`: the download links and the exact commands to render in the chat's sandbox. `hyperframes`: not available from the connector yet (see below). |
+
+`meridian_voiceover`, `meridian_image` and `meridian_decide` take an optional `projectId`. With it, a paid call is linked to the video,
+checked against its phase and budget, and counted in its spend.
 
 How a paid call is guarded. This is the same lifecycle Studio and Factory media use.
 1. A hold is reserved on the brand budget before the provider is called. With no budget, or not enough left, nothing is sent.
@@ -64,6 +126,8 @@ Every paid call is written to the audit log with the link that made it.
   start those, so the tool says so. Rendering in the chat is free and works today.
 - **Saving a chat-rendered MP4 back to Meridian.** Not built: the hosted functions cap request bodies well below a video's size, so it
   needs a direct storage upload.
+- **ChatGPT.** Its connector support is newer than Claude's, and the connector has not been tried from ChatGPT yet. It speaks the
+  standard protocol, with JSON answers and no server stream.
 - **Live runs.** No test calls a provider, so these still need a live run:
   1. One `meridian_voiceover`. The speech request is the video engine's (OpenRouter audio output), which is itself marked unverified live.
   2. One `meridian_image`.
@@ -73,6 +137,9 @@ Every paid call is written to the audit log with the link that made it.
 - **Function time.** An image can take up to 120 seconds. Confirm that the hosting's function time limit allows it (Vercel: the
   function's maximum duration).
 
-Code: `src/lib/meridian/mcp/` (protocol, connectors, tools, paid holds, files, the HTTP handler), the routes `src/routes/api/mcp/`
-and `src/routes/api/mcp-files/`, migration `0156_mcp_connector.sql`, and the Settings section
-`src/components/settings/claude-connector.tsx`.
+Code:
+- `src/lib/meridian/mcp/`: the protocol, the connectors, the tools, the workflow and its tools, the projects, the paid holds, the files
+  and the HTTP handler;
+- the routes `src/routes/api/mcp/` and `src/routes/api/mcp-files/`;
+- migrations `0156_mcp_connector.sql` and `0157_mcp_projects.sql`;
+- the Settings section `src/components/settings/claude-connector.tsx`.

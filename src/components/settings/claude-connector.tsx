@@ -44,15 +44,16 @@ export function ClaudeConnector({ organizationId, canAdmin }: { organizationId: 
   return (
     <section aria-labelledby="claude-connector-title" className="panel space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 id="claude-connector-title" className="text-section font-semibold text-fg-primary">Claude connector</h2>
+        <h2 id="claude-connector-title" className="text-section font-semibold text-fg-primary">Chat connector</h2>
         <Badge variant="info">MCP</Badge>
-        <InfoButton label="the Claude connector">
-          <p>Make Meridian videos from a Claude chat. Claude writes the script and the coded video and can render it in its own sandbox, free. Meridian makes only what a chat cannot: voiceovers, images and decisions, each paid from the brand budgets on the Billing page.</p>
-          <p className="text-fg-muted">In claude.ai: Settings, Connectors, Add custom connector, then paste the link. To render in the chat, allow this site in the chat's code execution network settings.</p>
+        <InfoButton label="the chat connector">
+          <p>Make Meridian videos from a Claude or ChatGPT chat. The chat first asks a quick Q&amp;A (the video, the style, the voice, and how involved you want to be), then makes it step by step. In Studio mode you choose at every step; in Guided mode you approve the script and the final cut; in Orchestrator mode it runs on its own.</p>
+          <p className="text-fg-muted">The chat writes the script and the coded video and can render it in its own sandbox, free. Meridian makes only what a chat cannot: voiceovers, images and decisions, each paid from the brand budgets on the Billing page.</p>
+          <p className="text-fg-muted">Claude: Settings, Connectors, Add custom connector, then paste the link. ChatGPT: turn on developer mode for connectors, then add one with the link and no authentication. To render in the chat, allow this site in the chat's code execution network settings.</p>
           <p className="text-fg-muted">A link acts as the admin who made it. Anyone who has it can spend from this workspace, so keep it private and revoke it if it leaks.</p>
         </InfoButton>
       </div>
-      <p className="text-sm text-fg-muted">Use Meridian from a Claude chat: Claude directs and codes the video, Meridian adds the voice, images and decisions under your limits.</p>
+      <p className="text-sm text-fg-muted">Make videos from Claude or ChatGPT: a quick Q&amp;A, then Studio (you choose each step), Guided or Orchestrator. Meridian adds the voice, images and decisions under your limits.</p>
 
       {!canAdmin ? (
         <p className="text-sm text-fg-muted">Only a workspace admin can make connector links.</p>
@@ -86,7 +87,7 @@ export function ClaudeConnector({ organizationId, canAdmin }: { organizationId: 
                   {copied ? "Copied" : "Copy"}
                 </Button>
               </div>
-              <p className="text-caption text-fg-muted">Paste it in claude.ai, Settings, Connectors, Add custom connector. Keep it private: it can spend from this workspace.</p>
+              <p className="text-caption text-fg-muted">Paste it as a custom connector in Claude (Settings, Connectors) or ChatGPT (developer mode). Keep it private: it can spend from this workspace.</p>
             </div>
           ) : null}
 

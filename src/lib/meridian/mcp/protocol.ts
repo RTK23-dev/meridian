@@ -2,7 +2,8 @@
 // (Streamable HTTP without a server stream, which the transport allows). Pure: the tools and the caller's context are passed in, so the
 // protocol is tested without a network or a database.
 //
-// Served: initialize, ping, tools/list, tools/call, and the client's notifications (accepted, never answered). Anything else is
+// Served: initialize, ping, tools/list, tools/call, prompts/list, prompts/get (one-click starters a client may show), and the client's
+// notifications (accepted, never answered). Anything else is
 // "method not found". A tool that fails returns a result with isError, as the protocol asks, so the chat can read the reason and act on
 // it; a call to an unknown tool, or with arguments that do not fit, is an invalid-params error.
 
@@ -14,11 +15,14 @@ export const SERVER_INFO = { name: "meridian", title: "Meridian", version: "1.0.
 
 /** What the chat is told about Meridian when it connects: who does what, so it spends only where a chat cannot do the work itself. */
 export const SERVER_INSTRUCTIONS = [
-  "Meridian is the brand's video studio. You are the orchestrator: you write the script, the plan and the coded video (a HyperFrames",
-  "composition: HTML, CSS and GSAP) yourself, at no cost to the workspace. Call Meridian only for what a chat cannot do: a voiceover,",
-  "an image, a decision from the workspace's decision engine, and storing files. Each of those is paid from the workspace's own limits.",
-  "Start with meridian_status (limits and what is connected) and meridian_video_guide (the composition format and the two ways to",
-  "render). Every cost a tool reports is the provider's own figure; when a provider reports none, the tool says so.",
+  "Meridian is the brand's video studio. When the person connects Meridian or asks for a video, call meridian_start FIRST and ask its",
+  "short Q&A in one message (numbered questions, lettered options, their own words welcome). Then call meridian_project_create with",
+  "their answers and follow the next step every tool returns. The person chose how involved to be: in Studio mode they choose at every",
+  "checkpoint, in Guided mode the script and the final cut, in Orchestrator mode you decide. At a person's checkpoint, record the",
+  "options (meridian_checkpoint propose), show them, and WAIT for their answer before resolving; never answer for them.",
+  "You write the concept, script, storyboard and the coded video (a HyperFrames composition) yourself, free to the workspace. Meridian",
+  "only does what a chat cannot: voiceovers, images, decisions from its decision engine, and storage, each paid from the workspace's",
+  "own limits; pass the projectId so the video's budget applies. Every cost a tool reports is the provider's own figure.",
 ].join(" ");
 
 export type JsonRpcId = string | number;
@@ -71,9 +75,19 @@ export function toolListing(tool: McpTool<unknown>): Record<string, unknown> {
   return { name: tool.name, title: tool.title, description: tool.description, inputSchema: schema, annotations: { title: tool.title, ...tool.annotations } };
 }
 
+/** A prompt a client may offer the person as a one-click starter. Its messages are fixed text with the person's arguments filled in. */
+export type McpPrompt = {
+  name: string;
+  title: string;
+  description: string;
+  arguments: Array<{ name: string; description: string; required: boolean }>;
+  messages: (args: Record<string, string>) => Array<{ role: "user"; content: { type: "text"; text: string } }>;
+};
+
 export type ProtocolContext<C> = {
   role: Role;
   tools: ReadonlyArray<McpTool<C>>;
+  prompts?: ReadonlyArray<McpPrompt>;
   context: C;
   onToolError?: (name: string, error: unknown) => void;
   /** Called after every tool call that ran, with its arguments and whether it failed (for the audit log). */
@@ -120,13 +134,24 @@ export async function handleMessage<C>(message: unknown, protocol: ProtocolConte
         id,
         result: {
           protocolVersion: negotiatedVersion(params.protocolVersion),
-          capabilities: { tools: { listChanged: false } },
+          capabilities: { tools: { listChanged: false }, ...(protocol.prompts && protocol.prompts.length > 0 ? { prompts: { listChanged: false } } : {}) },
           serverInfo: SERVER_INFO,
           instructions: SERVER_INSTRUCTIONS,
         },
       };
     case "ping":
       return { jsonrpc: "2.0", id, result: {} };
+    case "prompts/list":
+      return { jsonrpc: "2.0", id, result: { prompts: (protocol.prompts ?? []).map((prompt) => ({ name: prompt.name, title: prompt.title, description: prompt.description, arguments: prompt.arguments })) } };
+    case "prompts/get": {
+      const prompt = (protocol.prompts ?? []).find((item) => item.name === params.name);
+      if (!prompt) return failure(id, ERROR.invalidParams, `There is no prompt named '${String(params.name ?? "")}'.`);
+      const given = params.arguments && typeof params.arguments === "object" ? (params.arguments as Record<string, unknown>) : {};
+      const args = Object.fromEntries(Object.entries(given).filter(([, value]) => typeof value === "string").map(([key, value]) => [key, (value as string).slice(0, 2000)]));
+      const missing = prompt.arguments.find((argument) => argument.required && !args[argument.name]?.trim());
+      if (missing) return failure(id, ERROR.invalidParams, `The prompt needs '${missing.name}'.`);
+      return { jsonrpc: "2.0", id, result: { description: prompt.description, messages: prompt.messages(args) } };
+    }
     case "tools/list":
       return { jsonrpc: "2.0", id, result: { tools: protocol.tools.map((tool) => toolListing(tool as McpTool<unknown>)) } };
     case "tools/call": {

@@ -137,6 +137,17 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
       return { id: String(row.id), name: text(row.name), facts } satisfies BrandContext;
     },
 
+    async styles() {
+      const { builtinCookbooks } = await import("../cookbooks/builtin/index.ts");
+      return builtinCookbooks().map((cookbook) => ({
+        cookbookId: cookbook.cookbookId,
+        label: cookbook.label,
+        summary: cookbook.summary,
+        modes: cookbook.modes,
+        instructions: cookbook.instructions.map((rule) => ({ role: rule.role, text: rule.text })),
+      }));
+    },
+
     async speechModels() {
       const { readModelCatalog } = await import("../../../engine/gateway/catalog.ts");
       const read = await readModelCatalog(await gateway(), { organizationId });

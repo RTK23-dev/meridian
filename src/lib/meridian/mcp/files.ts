@@ -24,6 +24,7 @@ export type McpFileStore = {
 export type McpFile = {
   id: string;
   brandId: string;
+  projectId: string | null;
   kind: McpFileKind;
   mediaType: string;
   bytes: number;
@@ -74,31 +75,35 @@ export function fileKey(connectorId: string, sha256: string, mediaType: string):
 export async function storeFile(
   sql: Sql,
   store: McpFileStore,
-  input: { organizationId: string; brandId: string; connectorId: string; kind: McpFileKind; mediaType: string; bytes: Uint8Array; costUsd: number | null; details: Record<string, unknown> },
+  input: { organizationId: string; brandId: string; connectorId: string; projectId?: string | null; kind: McpFileKind; mediaType: string; bytes: Uint8Array; costUsd: number | null; details: Record<string, unknown> },
 ): Promise<McpFile> {
   const sha256 = createHash("sha256").update(input.bytes).digest("hex");
   const key = fileKey(input.connectorId, sha256, input.mediaType);
   const { storageObjectId } = await store.put({ organizationId: input.organizationId, brandId: input.brandId, key, mimeType: input.mediaType, bytes: input.bytes });
   const id = randomUUID();
   const rows = await sql<{ created_at: unknown }>`
-    insert into mcp_files (id, organization_id, brand_id, connector_id, kind, storage_key, storage_object_id, media_type, byte_size, sha256, details, cost_usd)
-    values (${id}, ${input.organizationId}, ${input.brandId}, ${input.connectorId}, ${input.kind}, ${key}, ${storageObjectId}, ${input.mediaType},
+    insert into mcp_files (id, organization_id, brand_id, connector_id, project_id, kind, storage_key, storage_object_id, media_type, byte_size, sha256, details, cost_usd)
+    values (${id}, ${input.organizationId}, ${input.brandId}, ${input.connectorId}, ${input.projectId ?? null}, ${input.kind}, ${key}, ${storageObjectId}, ${input.mediaType},
       ${input.bytes.byteLength}, ${sha256}, ${JSON.stringify(input.details)}::jsonb, ${input.costUsd})
     returning created_at
   `;
-  return { id, brandId: input.brandId, kind: input.kind, mediaType: input.mediaType, bytes: input.bytes.byteLength, costUsd: input.costUsd, details: input.details, createdAt: new Date(rows[0]!.created_at as string).toISOString() };
+  return { id, brandId: input.brandId, projectId: input.projectId ?? null, kind: input.kind, mediaType: input.mediaType, bytes: input.bytes.byteLength, costUsd: input.costUsd, details: input.details, createdAt: new Date(rows[0]!.created_at as string).toISOString() };
 }
 
-type FileRow = { id: string; brand_id: string; kind: McpFileKind; media_type: string; byte_size: string | number; cost_usd: string | number | null; details: unknown; created_at: unknown; storage_key: string; organization_id: string };
+type FileRow = { id: string; brand_id: string; project_id: string | null; kind: McpFileKind; media_type: string; byte_size: string | number; cost_usd: string | number | null; details: unknown; created_at: unknown; storage_key: string; organization_id: string };
 
 function fileOf(row: FileRow): McpFile {
   const details = typeof row.details === "string" ? (JSON.parse(row.details) as Record<string, unknown>) : ((row.details ?? {}) as Record<string, unknown>);
-  return { id: row.id, brandId: row.brand_id, kind: row.kind, mediaType: row.media_type, bytes: Number(row.byte_size), costUsd: row.cost_usd === null ? null : Number(row.cost_usd), details, createdAt: new Date(row.created_at as string).toISOString() };
+  return { id: row.id, brandId: row.brand_id, projectId: row.project_id ?? null, kind: row.kind, mediaType: row.media_type, bytes: Number(row.byte_size), costUsd: row.cost_usd === null ? null : Number(row.cost_usd), details, createdAt: new Date(row.created_at as string).toISOString() };
 }
 
-/** The workspace's connector files, newest first; one brand's only when a brand is given. */
-export async function listFiles(sql: Sql, input: { organizationId: string; brandId?: string | null; limit?: number }): Promise<McpFile[]> {
+/** The workspace's connector files, newest first; one project's or one brand's only when one is given. */
+export async function listFiles(sql: Sql, input: { organizationId: string; brandId?: string | null; projectId?: string | null; limit?: number }): Promise<McpFile[]> {
   const limit = Math.min(Math.max(input.limit ?? 20, 1), 100);
+  if (input.projectId) {
+    const rows = await sql<FileRow>`select * from mcp_files where organization_id = ${input.organizationId} and project_id = ${input.projectId} order by created_at desc limit ${limit}`;
+    return rows.map(fileOf);
+  }
   const rows = input.brandId
     ? await sql<FileRow>`select * from mcp_files where organization_id = ${input.organizationId} and brand_id = ${input.brandId} order by created_at desc limit ${limit}`
     : await sql<FileRow>`select * from mcp_files where organization_id = ${input.organizationId} order by created_at desc limit ${limit}`;
