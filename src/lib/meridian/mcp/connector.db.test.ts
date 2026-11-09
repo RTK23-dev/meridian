@@ -68,7 +68,7 @@ describe("MCP connector", () => {
       }),
       brands: async () => [{ id: BRAND, name: "Calm Mug Co" }, { id: BARE_BRAND, name: "Bare" }],
       brand: async (id) => (id === BRAND ? { id, name: "Calm Mug Co", facts: { Tone: "plain and warm", "Words to avoid": "" } } : null),
-      speechModels: async () => ({ ok: true, models: [{ id: "openai/gpt-audio-mini", priceUnit: "per_token", usd: 0.0000006 }] }),
+      speechModels: async () => ({ ok: true, models: [{ id: "openai/gpt-audio-mini", name: null, usdPerCharacter: 0.0000006, voices: ["alloy", "unknown"] }] }),
       styles: async () => [
         { cookbookId: "ck_voice_listicle", label: "Voice-led list", summary: "A spoken list over kinetic type.", modes: ["agent", "engine"], instructions: [{ role: "script", text: "One item to a beat." }] },
         { cookbookId: "ck_engine_only", label: "Engine only", summary: "Not for chats.", modes: ["engine"], instructions: [] },

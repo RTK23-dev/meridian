@@ -2,8 +2,8 @@
 // the path Meridian already has for the same work, so a chat spends and records exactly as the app does:
 // - limits: the Billing page's own read (billing/store.ts);
 // - images: the Studio image provider (production/openrouter-image.ts), with the Studio image model chosen in Settings, Models;
-// - voice: OpenRouter's audio output, as the video engine's speech adapter sends it (engine/assets/providers/openrouterSpeech.ts), read
-//   with its stream parser and checked with its normaliser, and the bill read from OpenRouter's generation stats;
+// - voice: OpenRouter's text-to-speech endpoint (POST /audio/speech, mcp/speech.ts), checked with the engine's speech normaliser, and the
+//   bill read from OpenRouter's generation stats by the X-Generation-Id the answer carries;
 // - decisions: the workspace's active engine (decisions/dispatcher.ts), which keeps its own caps and lineage;
 // - storage: Meridian's store (the workspace's Drive when it has one, else Meridian's own database), as the Content Factory uses it.
 // Every provider call goes through the engine's gateway, which adds the workspace's key; no key is read here.
@@ -14,7 +14,7 @@ import type { JevQuestionSpec } from "../jev/types.ts";
 import type { ResolvedConnector } from "./connectors.ts";
 import { meridianMcpFileStore } from "./files.ts";
 import { NotSentError, sqlHoldLedger } from "./paid.ts";
-import type { BrandContext, ConnectorPorts, DecisionAnswer, DecisionKind, SpeechModel } from "./tools.ts";
+import type { BrandContext, ConnectorPorts, DecisionAnswer, DecisionKind } from "./tools.ts";
 
 const SPEECH_PROMPT_VERSION = "mcp-voiceover-v1";
 const IMAGE_PROMPT_VERSION = "mcp-image-v1";
@@ -151,51 +151,49 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
     },
 
     async speechModels() {
-      const { readModelCatalog } = await import("../../../engine/gateway/catalog.ts");
-      const read = await readModelCatalog(await gateway(), { organizationId });
-      if (read.status !== "read") return { ok: false, reason: read.reason };
-      const failed = read.catalog.failed.find((item) => item.source === "speech");
-      const models: SpeechModel[] = read.catalog.entries
-        .filter((entry) => entry.modelClasses.includes("tts"))
-        .map((entry) => ({ id: entry.id, priceUnit: entry.price.unit, usd: entry.price.usd }))
-        .sort((a, b) => a.usd - b.usd || a.id.localeCompare(b.id));
-      if (models.length === 0 && failed) return { ok: false, reason: failed.reason };
-      return { ok: true, models };
+      // OpenRouter's text-to-speech listing, read through the gateway. TTS is priced per character, so the engine's catalogue (which keeps
+      // only rates it can reserve) leaves these models out; the connector holds a fixed ceiling per voiceover instead, and shows the rates.
+      const { parseSpeechListing, SPEECH_LISTING_PATH } = await import("./speech.ts");
+      const result = await (await gateway()).call({ provider: "openrouter", organizationId, method: "GET", path: SPEECH_LISTING_PATH, timeoutMs: 20_000 });
+      if (result.status === "not_connected") return { ok: false, reason: `OpenRouter is not connected: ${result.reason}` };
+      if (result.response.status < 200 || result.response.status >= 300) return { ok: false, reason: `OpenRouter answered HTTP ${result.response.status} for the speech models.` };
+      let body: unknown;
+      try {
+        body = JSON.parse(bodyOf(result.response));
+      } catch {
+        return { ok: false, reason: "OpenRouter's speech model listing was not JSON." };
+      }
+      return { ok: true, models: parseSpeechListing(body) };
     },
 
     async speak(input) {
-      const [{ speechFromStream, SPEECH_TIMEOUT_MS }, { normaliseSpeech }, { openRouterGenerationBill }] = await Promise.all([
-        import("../../../engine/assets/providers/openrouterSpeech.ts"),
+      // POST /audio/speech (OpenRouter's TTS endpoint): the answer is the MP3 itself, and X-Generation-Id names the call for its bill.
+      const [{ normaliseSpeech }, { openRouterGenerationBill }, { SPEECH_PATH, speechRequestBody }] = await Promise.all([
         import("../../../engine/assets/normalise.ts"),
         import("../../../engine/gateway/generation.ts"),
+        import("./speech.ts"),
       ]);
       const gw = await gateway();
       const result = await gw.call({
         provider: "openrouter",
         organizationId,
         method: "POST",
-        path: "/chat/completions",
-        headers: { "content-type": "application/json", accept: "text/event-stream", "x-meridian-prompt-version": SPEECH_PROMPT_VERSION },
-        body: JSON.stringify({
-          model: input.model,
-          modalities: ["text", "audio"],
-          audio: { voice: input.voice, format: "mp3" },
-          messages: [{ role: "user", content: input.text }],
-          stream: true,
-          ...(input.speed === 1 ? {} : { speed: input.speed }),
-        }),
-        timeoutMs: SPEECH_TIMEOUT_MS,
+        path: SPEECH_PATH,
+        headers: { "content-type": "application/json", accept: "audio/mpeg", "x-meridian-prompt-version": SPEECH_PROMPT_VERSION },
+        body: speechRequestBody({ model: input.model, text: input.text, voice: input.voice, speed: input.speed, instructions: input.instructions }),
+        timeoutMs: 120_000,
       });
       if (result.status === "not_connected") throw new NotSentError(`OpenRouter is not connected: ${result.reason}`);
       const response = result.response;
-      // A 4xx is the provider refusing the request (an unknown voice, a model without audio); OpenRouter does not bill it.
+      // A 4xx is the provider refusing the request (an unknown voice, an unsupported format); OpenRouter does not bill it.
       if (response.status >= 400 && response.status < 500) throw new NotSentError(`OpenRouter refused the voiceover (HTTP ${response.status}): ${bodyOf(response).slice(0, 300)}`);
       if (response.status < 200 || response.status >= 300) throw new Error(`OpenRouter answered HTTP ${response.status}.`);
-      const stream = speechFromStream(bodyOf(response));
-      if (!stream.ok) throw new Error(`The voiceover stream was not usable: ${stream.reason}`);
-      const checked = normaliseSpeech(stream.bytes, "audio/mpeg");
+      const bytes = response.body instanceof Uint8Array ? response.body : new TextEncoder().encode(typeof response.body === "string" ? response.body : "");
+      const checked = normaliseSpeech(bytes, "audio/mpeg");
       if (!checked.ok) throw new Error(`The voiceover audio was not usable: ${checked.reason}`);
-      const bill = stream.generationId ? await openRouterGenerationBill(gw, { organizationId, generationId: stream.generationId }) : null;
+      const headers = (response as { headers?: Record<string, string> }).headers ?? {};
+      const generationId = headers["x-generation-id"] ?? null;
+      const bill = generationId ? await openRouterGenerationBill(gw, { organizationId, generationId }) : null;
       return { bytes: checked.value.bytes, mediaType: checked.value.mediaType, model: input.model, costUsd: bill?.status === "billed" ? bill.usd : null };
     },
 

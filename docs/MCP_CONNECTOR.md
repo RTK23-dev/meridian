@@ -97,8 +97,8 @@ What the workspace needs before paid calls work:
 | `meridian_status` | free | Brands with budget, committed and left; the monthly budget and decision cap; which paid services are ready. |
 | `meridian_brand` | free | The brand brain in the brand's own words (tone, claims, words to avoid, colours, imagery rules). |
 | `meridian_video_guide` | free | The steps, the HyperFrames format (1080 × 1920, 30 fps, GSAP timeline) and the render options. |
-| `meridian_voice_models` | free | The speech models the OpenRouter key can use, read live, with list prices. |
-| `meridian_voiceover` | paid, $1 hold | Speaks the text with the chosen model and voice; stores the MP3. Settles at OpenRouter's bill. A brand is optional. |
+| `meridian_voice_models` | free | OpenRouter's text-to-speech models, read live (`/models?output_modalities=speech`), each with its rate per 1,000 characters and the voices it lists. |
+| `meridian_voiceover` | paid, $1 hold | Speaks the text with the chosen model and one of its voices (`POST /audio/speech`, MP3), with an optional delivery style; stores the MP3. A voice the model does not list is refused before sending. Settles at OpenRouter's bill, read by the answer's `X-Generation-Id`. A brand is optional. |
 | `meridian_image` | paid, $1 hold | One image with the Studio image model; stores it. Settles at the reported cost, else at the hold. A brand is optional. |
 | `meridian_decide` | paid, decision cap | Choose between options, yes/no, or a 1 to 5 score from the active decision engine, with its probability. |
 | `meridian_files` | free | The files made from chats, with fresh one-hour download links. |
@@ -141,7 +141,7 @@ Every paid call is written to the audit log with the link that made it.
 - **ChatGPT.** Its connector support is newer than Claude's, and the connector has not been tried from ChatGPT yet. It speaks the
   standard protocol, with JSON answers and no server stream.
 - **Live runs.** No test calls a provider, so these still need a live run:
-  1. One `meridian_voiceover`. The speech request is the video engine's (OpenRouter audio output), which is itself marked unverified live.
+  1. One `meridian_voiceover` (OpenRouter's TTS endpoint, `POST /audio/speech`).
   2. One `meridian_image`.
   3. One `meridian_decide`.
 
