@@ -1,0 +1,202 @@
+// The connector end to end, on the test database, with fake providers (no test calls a provider): an admin makes a link and sees it
+// listed without its secret; the link reaches its workspace over HTTP; status shows the brand budget; a voiceover and an image are held on
+// the brand budget, stored and linked, and settle at the reported cost or the ceiling; a brand with no budget sends nothing; a viewer's
+// link cannot spend; a revoked link, or one whose maker left, is refused like an unknown one; every paid call is audited.
+
+import assert from "node:assert/strict";
+import { after, before, describe, it } from "node:test";
+import { createTestDatabase, seedWorkspace, type TestDatabase } from "../../../engine/test/pg-test-db.ts";
+import type { Sql } from "../learning/store.ts";
+import { BudgetLedgerService } from "../security/budget-ledger.ts";
+import { createConnector, listConnectors, resolveConnector, revokeConnector } from "./connectors.ts";
+import type { McpFileStore } from "./files.ts";
+import { handleMcpRequest, type McpHttpDeps } from "./handler.ts";
+import { NotSentError, sqlHoldLedger } from "./paid.ts";
+import type { ConnectorPorts } from "./tools.ts";
+
+const WS = "ws_mcp";
+const BRAND = "brand_mcp";
+const BARE_BRAND = "brand_mcp_bare";
+const ADMIN = "user_mcp_admin";
+const VIEWER = "user_mcp_viewer";
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+const MP3 = new Uint8Array([0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 0, 5, 6, 7]);
+
+async function seedUser(sql: Sql, userId: string, role: string): Promise<void> {
+  await sql`insert into "user" (id, name, email, "emailVerified") values (${userId}, ${userId}, ${`${userId}@fixture.example`}, true)`;
+  await sql`insert into memberships (id, organization_id, user_id, role) values (${`mem-${userId}`}, ${WS}, ${userId}, ${role})`;
+}
+
+function memoryFiles(): McpFileStore & { puts: string[] } {
+  const bytes = new Map<string, Uint8Array>();
+  const puts: string[] = [];
+  return {
+    puts,
+    ready: async () => ({ status: "ready" }),
+    async put(input) {
+      puts.push(input.key);
+      bytes.set(input.key, input.bytes);
+      return { storageObjectId: null };
+    },
+    get: async (input) => bytes.get(input.key) ?? null,
+  };
+}
+
+describe("MCP connector", () => {
+  let db: TestDatabase;
+  const files = memoryFiles();
+  const spoken: string[] = [];
+  const env = { MEDIA_LINK_SECRET: "m".repeat(40), PUBLIC_APP_URL: "https://meridian.example" };
+
+  function ports(sql: Sql): ConnectorPorts {
+    return {
+      ledger: sqlHoldLedger(sql),
+      files: async () => files,
+      limits: async () => {
+        const account = await BudgetLedgerService.getAccount(sql, WS, BRAND);
+        return { monthlyBudgetUsd: 50, decisionCapUsd: 0.05, brands: [{ brandId: BRAND, name: "Calm Mug Co", budgetUsd: account ? Number(account.maxSpendMicros) / 1e6 : null, committedUsd: account ? Number(account.spentMicros + account.reservedMicros) / 1e6 : 0 }, { brandId: BARE_BRAND, name: "Bare", budgetUsd: null, committedUsd: 0 }] };
+      },
+      readiness: async () => ({
+        voice: { ready: true, detail: "ready" },
+        image: { ready: true, detail: "ready", model: "google/image-model" },
+        decisions: { ready: true, engine: "OpenRouter Decisions", detail: "" },
+        storage: { ready: true, detail: "ready" },
+      }),
+      brands: async () => [{ id: BRAND, name: "Calm Mug Co" }, { id: BARE_BRAND, name: "Bare" }],
+      brand: async (id) => (id === BRAND ? { id, name: "Calm Mug Co", facts: { Tone: "plain and warm", "Words to avoid": "" } } : null),
+      speechModels: async () => ({ ok: true, models: [{ id: "openai/gpt-audio-mini", priceUnit: "per_token", usd: 0.0000006 }] }),
+      async speak(input) {
+        if (input.voice === "unknown") throw new NotSentError("OpenRouter refused the voiceover (HTTP 400).");
+        spoken.push(input.text);
+        return { bytes: MP3, mediaType: "audio/mpeg", model: input.model, costUsd: 0.012 };
+      },
+      image: async () => ({ bytes: PNG, mediaType: "image/png", model: "google/image-model", width: 1080, height: 1920, costUsd: null }),
+      decide: async (input) => ({ engine: "OpenRouter Decisions", model: "openai/gpt-6-luna-decisions", status: "answered", answer: input.options[1] ?? "true", probability: 0.71, confidence: null, distribution: null, reason: null, costUsd: 0.004 }),
+    };
+  }
+
+  function deps(): McpHttpDeps {
+    return { getSql: async () => db.sql, ports: (sql) => ports(sql), env, now: () => new Date("2026-11-09T10:00:00Z") };
+  }
+
+  async function rpc(secret: string | null, method: string, params?: unknown, opts: { bearer?: boolean } = {}) {
+    const headers: Record<string, string> = { "content-type": "application/json" };
+    if (secret && opts.bearer) headers.authorization = `Bearer ${secret}`;
+    const request = new Request(`https://meridian.example/api/mcp/${opts.bearer ? "" : (secret ?? "x")}`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }) });
+    const response = await handleMcpRequest(request, { pathSecret: opts.bearer ? null : secret }, deps());
+    return { status: response.status, body: response.status === 202 ? null : ((await response.json()) as Record<string, any>) };
+  }
+  const call = (secret: string, name: string, args: Record<string, unknown> = {}) => rpc(secret, "tools/call", { name, arguments: args });
+
+  before(async () => {
+    db = await createTestDatabase();
+    await seedWorkspace(db.sql, WS, BRAND);
+    await db.sql`insert into brands (id, organization_id, name, created_by) values (${BARE_BRAND}, ${WS}, 'Bare', 'test')`;
+    await seedUser(db.sql, ADMIN, "admin");
+    await seedUser(db.sql, VIEWER, "viewer");
+    await BudgetLedgerService.setBrandBudget(db.sql, { organizationId: WS, brandId: BRAND, capUsd: 5 });
+  });
+  after(async () => db.close());
+
+  it("lets only an admin make and list links, shows the secret once, and stores only its hash", async () => {
+    await assert.rejects(createConnector(db.sql, { organizationId: WS, userId: VIEWER, name: "Mine" }), /permission/i);
+    const made = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "  Victor's   Claude " });
+    assert.equal(made.connector.name, "Victor's Claude");
+    assert.equal(made.connector.hint, made.secret.slice(-4));
+    const listed = await listConnectors(db.sql, { organizationId: WS, userId: ADMIN });
+    assert.equal(listed.length, 1);
+    assert.ok(!JSON.stringify(listed).includes(made.secret), "the secret is never listed");
+    const stored = await db.sql<{ token_hash: string }>`select token_hash from mcp_connectors`;
+    assert.ok(stored.every((row) => row.token_hash !== made.secret));
+  });
+
+  it("answers initialize and lists the tools over HTTP, by link or by Bearer header", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "HTTP" });
+    const init = await rpc(secret, "initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "claude-ai", version: "1" } });
+    assert.equal(init.status, 200);
+    assert.equal(init.body!.result.serverInfo.name, "meridian");
+    const listed = await rpc(secret, "tools/list", undefined, { bearer: true });
+    assert.equal(listed.status, 200);
+    assert.ok((listed.body!.result.tools as Array<{ name: string }>).some((tool) => tool.name === "meridian_voiceover"));
+    const note = await handleMcpRequest(new Request(`https://meridian.example/api/mcp/${secret}`, { method: "POST", body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }) }), { pathSecret: secret }, deps());
+    assert.equal(note.status, 202);
+    const get = await handleMcpRequest(new Request(`https://meridian.example/api/mcp/${secret}`), { pathSecret: secret }, deps());
+    assert.equal(get.status, 405);
+  });
+
+  it("refuses an unknown link, a revoked link and a link whose maker left, all the same way", async () => {
+    assert.equal((await rpc("mrd_" + "a".repeat(43), "tools/list")).status, 401);
+    const revoked = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Old" });
+    assert.deepEqual(await revokeConnector(db.sql, { organizationId: WS, userId: ADMIN, connectorId: revoked.connector.id }), { revoked: true });
+    assert.equal((await rpc(revoked.secret, "tools/list")).status, 401);
+    await seedUser(db.sql, "user_mcp_leaver", "admin");
+    const orphan = await createConnector(db.sql, { organizationId: WS, userId: "user_mcp_leaver", name: "Leaver" });
+    await db.sql`delete from memberships where user_id = 'user_mcp_leaver'`;
+    assert.equal(await resolveConnector(db.sql, orphan.secret), null);
+    assert.equal((await rpc(orphan.secret, "tools/list")).status, 401);
+  });
+
+  it("shows the limits, and makes a voiceover held and settled on the brand budget, stored and linked", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Voice" });
+    const status = await call(secret, "meridian_status");
+    assert.match(status.body!.result.content[0].text, /Brand Calm Mug Co \(brand_mcp\): budget \$5\.00, committed \$0\.00, left \$5\.00/);
+    assert.match(status.body!.result.content[0].text, /Brand Bare \(brand_mcp_bare\): budget not set, so paid calls for it are refused/);
+
+    const voice = await call(secret, "meridian_voiceover", { brandId: BRAND, text: "Hot coffee, two hours later.", model: "openai/gpt-audio-mini", voice: "alloy", label: "hook" });
+    const result = voice.body!.result;
+    assert.equal(result.isError, false, result.content[0].text);
+    assert.match(result.content[0].text, /Cost: \$0\.01, as the provider reported it/);
+    assert.match(result.structuredContent.file.url, /^https:\/\/meridian\.example\/api\/mcp-files\/[0-9a-f-]+\?expires=\d+&sig=[0-9a-f]{64}$/);
+    assert.deepEqual(spoken, ["Hot coffee, two hours later."]);
+    const account = await BudgetLedgerService.getAccount(db.sql, WS, BRAND);
+    assert.equal(account!.spentMicros, 12_000n, "the reported cost is booked");
+    assert.equal(account!.reservedMicros, 0n, "and the hold is gone");
+  });
+
+  it("books an image with no reported cost at its ceiling, and shows a small image inline", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Image" });
+    const before = (await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!.spentMicros;
+    const image = await call(secret, "meridian_image", { brandId: BRAND, prompt: "A ceramic mug on a desk at dawn" });
+    const result = image.body!.result;
+    assert.equal(result.isError, false, result.content[0].text);
+    assert.match(result.content[0].text, /reported no cost, so \$1\.00 \(the hold's ceiling\) is booked/);
+    assert.equal(result.content[1].type, "image");
+    const after = (await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!.spentMicros;
+    assert.equal(after - before, 1_000_000n);
+  });
+
+  it("sends nothing for a brand with no budget, releases the hold of a refused voice, and keeps a viewer from spending", async () => {
+    const { secret } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Refusals" });
+    const bare = await call(secret, "meridian_image", { brandId: BARE_BRAND, prompt: "A mug" });
+    assert.equal(bare.body!.result.isError, true);
+    assert.match(bare.body!.result.content[0].text, /No budget is set for this brand.*Nothing was sent/);
+    const refused = await call(secret, "meridian_voiceover", { brandId: BRAND, text: "Hello", model: "openai/gpt-audio-mini", voice: "unknown" });
+    assert.match(refused.body!.result.content[0].text, /Nothing was sent, and the hold was released/);
+    assert.equal((await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!.reservedMicros, 0n);
+    const wrongModel = await call(secret, "meridian_voiceover", { brandId: BRAND, text: "Hello", model: "made/up", voice: "alloy" });
+    assert.match(wrongModel.body!.result.content[0].text, /not a speech model in the live catalogue/);
+
+    const viewer = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Viewer link" });
+    await db.sql`update mcp_connectors set created_by = ${VIEWER} where id = ${viewer.connector.id}`;
+    const denied = await call(viewer.secret, "meridian_image", { brandId: BRAND, prompt: "A mug" });
+    assert.match(denied.body!.result.content[0].text, /needs the member role/);
+    const allowed = await call(viewer.secret, "meridian_brand", { brandId: BRAND });
+    assert.match(allowed.body!.result.content[0].text, /Tone: plain and warm/);
+  });
+
+  it("asks the decision engine, lists the files with fresh links, gives the render commands, and audits paid calls", async () => {
+    const { secret, connector } = await createConnector(db.sql, { organizationId: WS, userId: ADMIN, name: "Decide" });
+    const decision = await call(secret, "meridian_decide", { brandId: BRAND, kind: "choose", question: "Which hook stops the scroll?", options: ["Coffee goes cold.", "Still hot at hour two."] });
+    assert.match(decision.body!.result.content[0].text, /Answer \(OpenRouter Decisions, openai\/gpt-6-luna-decisions\): "Still hot at hour two\." Probability 0\.71/);
+    const listed = await call(secret, "meridian_files", { brandId: BRAND });
+    const listedFiles = listed.body!.result.structuredContent.files as Array<{ id: string; kind: string; url: string }>;
+    assert.ok(listedFiles.length >= 2 && listedFiles.every((file) => file.url.includes("/api/mcp-files/")));
+    const render = await call(secret, "meridian_render", { renderer: "claude", fileIds: [listedFiles[0]!.id, "missing-file"] });
+    assert.match(render.body!.result.content[0].text, /npx --yes hyperframes@0\.8\.154 render -o video\.mp4/);
+    assert.match(render.body!.result.content[0].text, /Not found in this workspace: missing-file/);
+    const cloud = await call(secret, "meridian_render", { renderer: "hyperframes" });
+    assert.equal(cloud.body!.result.isError, true);
+    const audits = await db.sql<{ action: string }>`select action from audit_log where object_id = ${connector.id} order by created_at`;
+    assert.deepEqual(audits.map((row) => row.action), ["mcp_connector.created", "mcp.meridian_decide"]);
+  });
+});

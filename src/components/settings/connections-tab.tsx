@@ -4,6 +4,7 @@ import { Badge, Button, Collapsible, CollapsibleContent, CollapsibleTrigger, Err
 import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
 import { InfoButton } from "@/components/settings/info-button";
+import { ClaudeConnector } from "@/components/settings/claude-connector";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useGenerationModelsQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
@@ -87,6 +88,8 @@ export function ConnectionsTab({ organizationId, canAdmin }: { organizationId: s
         <p className="text-sm text-fg-muted">Unlocks {view.openRouterUnlocks.count} of {view.openRouterUnlocks.of} features: writing, decisions, image understanding, and the video engine's planning, images, clips and voice.</p>
         <ProviderKeyRow provider={openRouter} organizationId={organizationId} canAdmin={canAdmin} prominent />
       </section>
+
+      <ClaudeConnector organizationId={organizationId} canAdmin={canAdmin} />
 
       <section aria-labelledby="features-title" className="space-y-4">
         <div className="space-y-1">
