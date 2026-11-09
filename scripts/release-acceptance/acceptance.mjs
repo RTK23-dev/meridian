@@ -508,7 +508,7 @@ try {
     // A real 1x1 PNG, sent with a message: it is stored and listed on the message.
     const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
     await page.getByLabel("Choose files").first().setInputFiles({ name: "acceptance-note.png", mimeType: "image/png", buffer: png });
-    await page.getByLabel("Message").fill("A still for the opening shot.");
+    await page.getByRole("textbox", { name: "Message", exact: true }).fill("A still for the opening shot.");
     await page.getByRole("button", { name: "Send", exact: true }).click();
     await page.getByRole("list", { name: "Messages" }).getByText("acceptance-note.png").first().waitFor();
     assert.equal(await page.getByRole("list", { name: "Files to send" }).count(), 0, "nothing is left waiting to send");
