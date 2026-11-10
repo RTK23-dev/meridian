@@ -30,7 +30,11 @@ in agent mode anyway.
 2. **Write the script** from the brief and the cookbook's script instructions. Keep each beat in new words. Make only claims the brief gives.
    The length must fit `request.lengthMs`.
 3. **Draw the scenes** with the coded components and the shader scenes used by `scripts/engine/preset-preview/` (or the cookbook's own renderer,
-   when one exists). Take the style from the style kit named by the cookbook, or from the theme page when the cookbook names none.
+   when one exists). The code-drawn style cookbooks (`ck_isometric_explainer`, `ck_paper_cut_story`, `ck_line_diagram`,
+   `ck_stacked_data_chart`) have their own: write the scene spec (`src/engine/compose/styles/specs.ts`, examples in
+   `src/engine/compose/styles/examples/`) and run `node --experimental-strip-types scripts/engine/applied-styles/render.ts --spec <spec.json>
+   --out artifacts/<name>`; it renders, masters to -14 LUFS and writes `report.json` with the length, loudness and loop distance.
+   `ck_pixel_explainer` uses the pixel-explainer skill and its renderer. Take the style from the style kit named by the cookbook, or from the theme page when the cookbook names none.
    Animate with the motion-designer skill (`.claude/skills/motion-designer`): a curve chosen per move, duration from distance, a lead
    with uneven reactions, text that mostly cuts on. No named easing presets.
 4. **Render locally**: `node --experimental-strip-types scripts/engine/preset-preview/render.ts --chromium <path> --out artifacts/<name>.mp4`.

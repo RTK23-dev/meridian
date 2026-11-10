@@ -5,12 +5,14 @@ import type { Cookbook } from "../schema.ts";
 import { FACTORY_PRESET_NAMES, blankCookbook, factoryPresetCookbook } from "./factory-presets.ts";
 import { threeDDataExplainerCookbook } from "./three-d-data-explainer.ts";
 import { ugcProductCookbook, voiceListicleCookbook } from "./more-built-ins.ts";
+import { CODED_STYLE_COOKBOOKS } from "./coded-styles.ts";
 
 export function builtinCookbooks(): Cookbook[] {
   return [
     threeDDataExplainerCookbook,
     ugcProductCookbook,
     voiceListicleCookbook,
+    ...CODED_STYLE_COOKBOOKS,
     ...FACTORY_PRESET_NAMES.map((name) => factoryPresetCookbook(name)),
     blankCookbook("brief"),
     blankCookbook("reference"),

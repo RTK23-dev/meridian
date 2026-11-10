@@ -53,6 +53,12 @@ export const COOKBOOK_STYLE: Readonly<Record<string, BriefStyleId>> = {
   ck_factory_problem_solution: "product_promo",
   ck_voice_listicle: "tips_list",
   ck_factory_manual_cloud: "talking_head",
+  // The code-drawn styles (owner request 2026-11-09).
+  ck_isometric_explainer: "explainer",
+  ck_line_diagram: "explainer",
+  ck_pixel_explainer: "explainer",
+  ck_paper_cut_story: "cinematic_story",
+  ck_stacked_data_chart: "motion_graphics",
 };
 
 export type StyleCookbook = { cookbookId: string; family: CookbookFamily };

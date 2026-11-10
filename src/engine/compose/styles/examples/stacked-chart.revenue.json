@@ -1,0 +1,9 @@
+{ "style": "stacked_chart", "title": "Revenue by year", "unit": "$100K", "perToken": 0.1, "token": "coins",
+  "bars": [
+    { "label": "2021", "value": 1.2, "display": "$1.2M" },
+    { "label": "2022", "value": 1.8, "display": "$1.8M" },
+    { "label": "2023", "value": 2.6, "display": "$2.6M" },
+    { "label": "2024", "value": 3.1, "display": "$3.1M" },
+    { "label": "2025", "value": 4.4, "display": "$4.4M" }
+  ],
+  "source": null, "illustrative": true, "takeaway": "Almost 4x in four years.", "durationMs": 16000 }

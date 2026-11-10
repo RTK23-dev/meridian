@@ -433,15 +433,15 @@ test("through the real dispatcher, an engine that is not connected refuses, and 
       return {
         runId: "run_recorded", model: "recorded-model", provider: "recorded", inputHash: "h", cached: false, latencyMs: 1, engineId: "jev", adapterVersion: "recorded", requestedModel: "recorded-model",
         returnedModel: "recorded-model", inputModality: "text", imageCount: 0, imagesOmitted: 0,
-        answers: { [STYLE_QUESTION_KEY]: { questionId: question?.id ?? "", questionVersion: question?.version ?? "", type: "choice", model: "recorded-model", provider: "recorded", status: "answered", answer: "explainer", choice: "explainer", probabilities: { explainer: 0.6, tips_list: 0.25, product_promo: 0.1, cinematic_story: 0.05 }, confidence: 0.6, evidenceRefs: [], evaluatedAt: "2026-11-01T00:00:00.000Z" } },
+        answers: { [STYLE_QUESTION_KEY]: { questionId: question?.id ?? "", questionVersion: question?.version ?? "", type: "choice", model: "recorded-model", provider: "recorded", status: "answered", answer: "explainer", choice: "explainer", probabilities: { explainer: 0.6, tips_list: 0.25, product_promo: 0.1, fast_cut_short: 0.05 }, confidence: 0.6, evidenceRefs: [], evaluatedAt: "2026-11-01T00:00:00.000Z" } },
       };
     },
   };
   const registry = { jev: fake, "openai-decisions": fake, "openrouter-decisions": fake } as never;
   const real = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 3, totalBudgetUsd: 9, approvedSample: true, stylePreset: "orchestrator", chooseStyle: chooserFor(registry) });
-  assert.deepEqual(real.items.map((item) => item.style), ["explainer", "tips_list", "product_promo"], "the recorded ranking is used in order, and a style no cookbook carries (cinematic story) is left out");
+  assert.deepEqual(real.items.map((item) => item.style), ["explainer", "tips_list", "product_promo"], "the recorded ranking is used in order, and a style no cookbook carries (fast-cut short) is left out");
   assert.deepEqual(seen[0]?.keys, ["style"]);
-  assert.equal(seen[0]?.options.length, 5, "every style a cookbook carries is an option; the three with no cookbook are not offered");
+  assert.equal(seen[0]?.options.length, 7, "every style a cookbook carries is an option; the one with no cookbook is not offered");
   assert.match(seen[0]?.state ?? "", /^Brand: .*Goal \(data\): .*calm product demo/);
 });
 
@@ -451,7 +451,7 @@ test("decision 5: the cookbook a batch names decides every video's style; a blan
   const named = await createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, cookbookId: "ck_ugc_product" });
   assert.deepEqual(named.items.map((item) => item.style), ["ugc_style", "ugc_style"], "the cookbook's style is every video's style");
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, cookbookId: "ck_blank_brief" }), /has no style, so a batch cannot brief from it/);
-  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, stylePreset: "cinematic_story" }), /No cookbook carries the Cinematic story style/);
+  await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, stylePreset: "fast_cut_short" }), /No cookbook carries the Fast-cut short style/);
   await assert.rejects(createVariations(db.sql, ADMIN, { sourceSessionId: id, count: 2, totalBudgetUsd: 4, approvedSample: true, cookbookId: "ck_does_not_exist" }), /No such cookbook/);
   const after = await counts();
   assert.equal(after.batches, String(Number(before.batches) + 1), "only the accepted batch was written");

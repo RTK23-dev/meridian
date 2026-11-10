@@ -1,0 +1,9 @@
+{ "style": "isometric", "title": "How a message reaches you", "packet": "Hi!",
+  "stages": [
+    { "label": "Your phone", "icon": "phone", "caption": "You hit send. The text becomes a packet of data." },
+    { "label": "Cell tower", "icon": "tower", "caption": "Radio waves carry it to the nearest tower." },
+    { "label": "Fibre cable", "icon": "cable", "caption": "Light pulses race it through glass fibre." },
+    { "label": "Data centre", "icon": "server", "caption": "Servers route it toward your friend." },
+    { "label": "Their phone", "icon": "phone", "caption": "Delivered, in under a second." }
+  ],
+  "durationMs": 18000 }
