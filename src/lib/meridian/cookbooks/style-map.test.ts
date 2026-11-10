@@ -31,10 +31,10 @@ test("every built-in cookbook that has a style is in the family the table names 
   }
 });
 
-test("the built-in cookbooks carry five styles; three styles have no cookbook yet, and they are the gaps the Batch refuses", () => {
+test("the built-in cookbooks carry seven styles; one style has no cookbook yet, and it is the gap the Batch refuses", () => {
   const cookbooks = builtinCookbooks();
-  assert.deepEqual(coveredStyles(cookbooks), ["product_promo", "explainer", "talking_head", "ugc_style", "tips_list"]);
-  assert.deepEqual(styleGaps(cookbooks), ["fast_cut_short", "cinematic_story", "motion_graphics"]);
+  assert.deepEqual(coveredStyles(cookbooks), ["product_promo", "explainer", "talking_head", "ugc_style", "cinematic_story", "motion_graphics", "tips_list"]);
+  assert.deepEqual(styleGaps(cookbooks), ["fast_cut_short"]);
 });
 
 test("a blank cookbook has no style, so no style filter offers it", () => {
@@ -50,10 +50,11 @@ test("a style filter returns the cookbooks of that style, and none of another", 
   const cookbooks = builtinCookbooks();
   assert.deepEqual(
     cookbooksForStyle("explainer", cookbooks).map((cookbook) => cookbook.cookbookId),
-    ["ck_3d_data_explainer", "ck_factory_strict_quality"],
+    ["ck_3d_data_explainer", "ck_isometric_explainer", "ck_line_diagram", "ck_pixel_explainer", "ck_factory_strict_quality"],
   );
   assert.deepEqual(cookbooksForStyle("ugc_style", cookbooks).map((cookbook) => cookbook.cookbookId), ["ck_ugc_product", "ck_factory_viral_ugc"]);
-  assert.deepEqual(cookbooksForStyle("cinematic_story", cookbooks), [], "a gap offers nothing, and the Batch says so");
+  assert.deepEqual(cookbooksForStyle("cinematic_story", cookbooks).map((cookbook) => cookbook.cookbookId), ["ck_paper_cut_story"]);
+  assert.deepEqual(cookbooksForStyle("fast_cut_short", cookbooks), [], "a gap offers nothing, and the Batch says so");
 });
 
 test("a cookbook outside the built-ins takes its style from its family when only one style shares the family, and has none when two do", () => {

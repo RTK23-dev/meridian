@@ -1,0 +1,9 @@
+{ "style": "line_diagram", "title": "The water cycle", "layout": "cycle",
+  "steps": [
+    { "label": "Evaporation", "caption": "The sun warms the sea. Water rises as vapour." },
+    { "label": "Condensation", "caption": "High up, the vapour cools into cloud droplets." },
+    { "label": "Precipitation", "caption": "Droplets join until they are heavy enough to fall." },
+    { "label": "Collection", "caption": "Rivers carry the water back to the sea." }
+  ],
+  "takeaway": "Same water, round and round, for billions of years.",
+  "durationMs": 18000 }

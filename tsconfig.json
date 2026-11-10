@@ -36,6 +36,8 @@
   // The vendored motion kit is plain browser JavaScript, kept byte for byte as published (src/engine/compose/motion/README.md).
   "exclude": [
     "src/engine/compose/motion/motion-kit.js",
-    "src/engine/compose/pixel/pixel-engine.js"
+    "src/engine/compose/pixel/pixel-engine.js",
+    // The code-drawn styles are plain browser JavaScript loaded into the renderer's page, like the pixel crew.
+    "src/engine/compose/styles/*.js"
   ]
 }

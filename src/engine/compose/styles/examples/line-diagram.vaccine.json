@@ -1,0 +1,9 @@
+{ "style": "line_diagram", "title": "How a vaccine teaches your body", "layout": "flow",
+  "steps": [
+    { "label": "A harmless piece", "caption": "The vaccine shows your body a harmless piece of a germ." },
+    { "label": "Alarm raised", "caption": "Immune cells spot it and raise the alarm." },
+    { "label": "Antibodies made", "caption": "B cells build antibodies that fit that piece." },
+    { "label": "Memory kept", "caption": "Memory cells keep the recipe for years." }
+  ],
+  "takeaway": "Meet the real germ, and your body already knows it.",
+  "durationMs": 18000 }

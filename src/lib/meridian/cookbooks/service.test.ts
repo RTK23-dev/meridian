@@ -28,7 +28,7 @@ function mine(cookbookId: string) {
 
 test("the library holds every built-in cookbook, and the workspace has none yet", async () => {
   const library = await libraryFor(db.sql, scope);
-  assert.equal(library.builtins.length, 10, "the 3D explainer, the UGC product and voice-led list, four factory presets and three start modes");
+  assert.equal(library.builtins.length, 15, "the 3D explainer, the UGC product and voice-led list, the five code-drawn styles, four factory presets and three start modes");
   assert.deepEqual(library.workspace, []);
 });
 

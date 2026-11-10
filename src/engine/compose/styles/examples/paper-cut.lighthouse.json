@@ -1,0 +1,8 @@
+{ "style": "paper_cut", "title": "The last lighthouse keeper", "scene": "lighthouse", "time": "night",
+  "beats": [
+    { "caption": "For forty years, Ana climbed the same 112 steps." },
+    { "caption": "Every night, one lamp against the whole dark sea." },
+    { "caption": "Tonight, a small red sail was lost in the fog." },
+    { "caption": "So she turned the light. And it found the way home." }
+  ],
+  "durationMs": 16000 }
