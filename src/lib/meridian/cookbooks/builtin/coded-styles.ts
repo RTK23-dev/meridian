@@ -223,7 +223,7 @@ export const paperCutStoryCookbook = codedCookbook({
     { role: "script", text: "Write a short story in 2 to 6 lines of at most 90 characters, one per beat: who, what they face, the turn, and the payoff on the last line, when the light finds the hero." },
     { role: "script", text: "Plain, warm words. The title (at most 48 characters) reads like a book title." },
     { role: "plan", text: "Fill the paper-cut spec: title, scene, time of day and the beats' captions." },
-    { role: "visual", text: "Matte paper layers with a soft shadow on the layer behind, edges cut by hand (a small wobble), fine paper fibre. One warm accent for the hero. Serif type." },
+    { role: "visual", text: "Matte paper layers each casting a soft shade on the layer behind, edges cut by hand (a small wobble), fine paper fibre. One warm accent for the hero. Serif type." },
   ],
   renderer: RENDER,
   checks: [{ measure: "durationMs", target: 16000, tolerance: 200 }, LOUDNESS, LOOP],
