@@ -17,7 +17,7 @@ passed those checks. Its only outbound calls go to the fixed V2EX API host.
 Two parts of the upstream projects are deliberately not used:
 
 - Scrapling's stealth browser fetchers, which solve Cloudflare Turnstile challenges and impersonate browser fingerprints. Meridian
-  does not solve challenges or get past bot checks (`docs/archive/REVAMP.md`, "Sourcing"). Those modules are not vendored.
+  does not solve challenges or get past bot checks (`REVAMP.md` (removed, in git history), "Sourcing"). Those modules are not vendored.
 - Agent Reach's logged-in channels and proxy setup. Those stay on the operator's host, as described in `docs/AGENT_REACH.md`.
 
 The sidecar also has no cookies, no proxy setting and no browser.

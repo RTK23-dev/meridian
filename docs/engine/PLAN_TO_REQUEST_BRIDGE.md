@@ -1,7 +1,7 @@
 # Plan to request bridge: design proposal (M4.4)
 
 Status: proposed, 2026-10-22. Nothing here is built. It needs the owner's choice of option (section 5) before any code. The task it
-answers is M4.4 in [CONTENT_FACTORY_PLAN.md](../archive/CONTENT_FACTORY_PLAN.md).
+answers is M4.4 in `CONTENT_FACTORY_PLAN.md` (removed, in git history).
 
 ## 1. The problem
 

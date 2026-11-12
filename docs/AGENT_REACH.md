@@ -23,7 +23,7 @@ host directly.
 
 ## What Meridian does not do
 
-- **It does not bypass a bot check.** Meridian's own sources honour `robots.txt` and refuse a challenge page (`docs/archive/REVAMP.md`,
+- **It does not bypass a bot check.** Meridian's own sources honour `robots.txt` and refuse a challenge page (`REVAMP.md` (removed, in git history),
   "Sourcing"). Agent Reach is a separate tool and Meridian does not route its fetches through it.
 - **It does not set up proxies to avoid platform risk controls.** The upstream guide suggests residential proxies for servers that
   a platform restricts. The wrapper refuses `--proxy`, and Meridian does not recommend that setup.

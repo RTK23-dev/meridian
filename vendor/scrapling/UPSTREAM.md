@@ -8,4 +8,4 @@
 Meridian vendors only the HTML parser and its core helpers: `scrapling/parser.py` and `scrapling/core`. The fetchers, browser engines,
 spiders, CLI, integrations, and the AI/shell tool definitions (`core/ai.py`, `core/shell.py`) are not vendored: those define the stealth
 fetch options, and they are removed from this copy. Their stealth features (Cloudflare Turnstile solving, browser fingerprint
-impersonation) are not part of Meridian's sourcing rules, so they are not included. See docs/AGENT_REACH.md and docs/archive/REVAMP.md.
+impersonation) are not part of Meridian's sourcing rules, so they are not included. See docs/AGENT_REACH.md and REVAMP.md (removed, in git history).

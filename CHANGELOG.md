@@ -116,7 +116,7 @@ The cost and time record for paid engine calls, a bound on how often held bills 
 - Video poll costs are not in the telemetry rows. They settle in the asset stages.
 - The cost and time report and dashboard are not built. The existing Usage & cost screen still reads the older model-run data.
 - The pull-request line's engine (contracts v5, its own billing) is not in main. It stays on GitHub as separate branches.
-- Content Factory's remaining open items are listed in `docs/archive/CONTENT_FACTORY_STATE_2026-10-18.md`, section 7.
+- Content Factory's remaining open items are listed in `CONTENT_FACTORY_STATE_2026-10-18.md` (removed, in git history), section 7.
 - Credentials are not yet in one API and hub.
 
 ## 0.1.0-beta.14 — prerelease

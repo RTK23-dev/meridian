@@ -4,7 +4,7 @@ Kept by the lead. One entry per event: setup, merge, phase gate, decision.
 
 ## 2026-10-13 Setup (awaiting owner approval)
 
-- Added `docs/engine/VIDEO_ENGINE_BIBLE.md` and `docs/archive/MERIDIAN_HANDOFF.md` from the owner's uploads.
+- Added `docs/engine/VIDEO_ENGINE_BIBLE.md` and `MERIDIAN_HANDOFF.md` (removed, in git history) from the owner's uploads.
 - Added `.claude/skills/engine-bible/SKILL.md`: Bible sections 0, 1, 4, 5 and 17, verbatim.
 - Added five agents in `.claude/agents/`: eng-contracts (W1, W12), eng-pipeline (W2, W3, W14), eng-media-assets (W4, W5, W6), eng-edit-compose (W8, W9, W10), eng-plan-review (W7, W11, W13).
 - Added the engine working rules and known conflicts to `CLAUDE.md`.
@@ -537,7 +537,7 @@ request lookup, `detect_language`), OpenRouter's video catalog, HyperFrames, the
 ## 2026-10-18 Hot swap: remake one shot of a delivered video, and the Content Factory flow board
 
 Owner request: a reviewer can make one accepted shot of a delivered video again, and the rest of the video is kept. Bible 5.5 has the rules;
-`docs/archive/CONTENT_FACTORY_STATE_2026-10-18.md` has the state of the Content Factory.
+`CONTENT_FACTORY_STATE_2026-10-18.md` (removed, in git history) has the state of the Content Factory.
 
 **Built on fixtures.** The orchestrator's `remake` event (`engine/jobs/orchestrator.ts`, `remakeRefusalOf`, `applyRemake`): a new epoch and
 round 0 for the shot, one produce job with a new attempt, the edit cut again on the new take, and a second master delivered. A remade shot
@@ -637,7 +637,7 @@ push between blocks. Governing document: `docs/engine/run/REPLAN_2026-10-20.md`.
 
 Five read-only reviews ran in parallel (orchestrator logic and canvas, orchestrator server and migrations, Content Factory page, engine
 money and gateway, provider connection state). The lead verified each finding by reading the code before a fix. Full record, with the
-fixed and the open items and the decision each open item needs: [REVIEW_2026-10-22.md](../archive/REVIEW_2026-10-22.md).
+fixed and the open items and the decision each open item needs: `REVIEW_2026-10-22.md` (removed, in git history).
 
 - Fixes merged: `bfaa6e7` (redirects refused; live estimates rounded up to four decimals), `83beebc` (orchestrator admin gate; run budget
   capped at the user's budget; conditional claims; `finally` on runs; cost validation; alias ids refused; error states), `75e9ecd`
@@ -681,7 +681,7 @@ fixed and the open items and the decision each open item needs: [REVIEW_2026-10-
 This pass was written without running any test, lint or typecheck, at the owner's instruction. Every change below is untested. The
 first run of the suites, the typecheck and the lint must come before a merge or a release.
 
-- Review items closed on fixtures (see `docs/archive/REVIEW_2026-10-22.md`, section "Status after the final pass"):
+- Review items closed on fixtures (see `REVIEW_2026-10-22.md` (removed, in git history), section "Status after the final pass"):
   - item 6: a stored OAuth token past its stated expiry is refused by the publish, connect-probe and metric paths, and the status agrees.
   - item 8: a credentialed provider with no credential id is not connected; nothing is sent without its key (`gateway.ts`).
   - item 9: a revision checks and changes the request's status under the same row lock a remake takes (`service.ts` `reviseSession`).
@@ -739,11 +739,11 @@ Still not done:
 - The Veo replacement (handoff phase 0). The Veo preview model shuts down on 22 October 2026.
 - Live runs of every step. The owner runs them.
 
-The plan of record for the next work is [CONTENT_FACTORY_PLAN.md](../archive/CONTENT_FACTORY_PLAN.md).
+The plan of record for the next work is `CONTENT_FACTORY_PLAN.md` (removed, in git history).
 
 ## 2026-10-22: the Content Factory plan, first execution pass (M0 and M1)
 
-Plan of record: [CONTENT_FACTORY_PLAN.md](../archive/CONTENT_FACTORY_PLAN.md), with its status table after the title. Commits on `main`, in order:
+Plan of record: `CONTENT_FACTORY_PLAN.md` (removed, in git history), with its status table after the title. Commits on `main`, in order:
 
 | Commit | Change | Checked |
 | --- | --- | --- |
