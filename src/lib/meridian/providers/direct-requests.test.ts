@@ -52,6 +52,12 @@ const INVENTORY: Record<string, Entry> = {
     governed: "ledger",
     note: "OpenRouter Decisions. Each call is held in the ledger before it is sent and settled once.",
   },
+  "src/lib/meridian/decisions/gemini-engine.ts": {
+    kind: "paid",
+    governed: "ledger",
+    note: "Gemini Decisions. Each call is held at the decision cap before it is sent and settled once.",
+  },
+  "src/lib/meridian/decisions/gemini-models.ts": { kind: "read", governed: "n/a", note: "Google's model list, read with the workspace's key. No generation, no cost." },
   "src/lib/meridian/jev/router.ts": { kind: "paid", governed: "disabled", capability: "decision.typesafe_jev", evidence: CAPABILITY_TEST, note: "TypeSafe JEV decisions, the default JEV backend. Off until its calls are held." },
 
   // Generation through providers outside the gateway

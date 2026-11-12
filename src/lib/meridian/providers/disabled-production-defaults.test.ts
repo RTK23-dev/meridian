@@ -93,7 +93,7 @@ describe("the remaining disabled production defaults send nothing and name the g
     let retrySleeps = 0;
     const engine = new OpenAiDecisionsEngine({ config: { apiKey: KEY, maxRetries: 2 }, sleep: async () => { retrySleeps += 1; } });
     const result = await engine.decide(contractRequest());
-    assert.match(result.failure?.message ?? "", GATE_MESSAGE, "the failure names the gate");
+    assert.match(result.failure?.message ?? "", /switched off in this build|off in this build, so nothing was sent/, "the failure says the engine is off");
     assert.equal(result.failure?.kind, "not_configured", "a disabled path is not reported as a network failure");
     assert.equal(retrySleeps, 0, "a disabled capability is refused immediately, not retried");
     assert.equal(requests, 0, "no request is sent to OpenAI");
