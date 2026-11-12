@@ -65,8 +65,8 @@ Oct 11, 2026 · @Victor
 
 ## Status on 2026-10-22
 
-- **Start here:** [CONTENT_FACTORY_PLAN.md](../CONTENT_FACTORY_PLAN.md), the execution plan. It has milestones M0 to M5. Each task names its files and its acceptance test.
-- **Done on fixtures:** phases 0 to 6 of the 2026-10-22 build plan, with the commit table in [PHASE_LOG.md](PHASE_LOG.md). This includes the saved ad accounts, the video and avatar poll, the splice function and the revision race test.
+- **Start here:** [CONTENT_FACTORY_PLAN.md](CONTENT_FACTORY_PLAN.md), the execution plan. It has milestones M0 to M5. Each task names its files and its acceptance test.
+- **Done on fixtures:** phases 0 to 6 of the 2026-10-22 build plan, with the commit table in [PHASE_LOG.md](../engine/PHASE_LOG.md). This includes the saved ad accounts, the video and avatar poll, the splice function and the revision race test.
 - **Not done:** edit, compose and render plan steps; a remake through the splice; the Veo replacement. The Veo preview model shuts down on 22 October 2026, which is today.
 - **Verified on 2026-10-22:** typecheck, lint (0 errors), build, the scripts suite (160 of 160) and the targeted src suites (177 and 126 tests). The full src suite has not run since 2026-10-21.
 - **Live runs** belong to the owner. Agents hold no live keys.
@@ -74,7 +74,7 @@ Oct 11, 2026 · @Victor
 ## Status on 2026-10-17
 
 The engine and the Content Factory page are code complete on recorded fixtures, and the owner's live runs are the gate for each phase.
-The open items and decisions are in [PHASE_LOG.md](PHASE_LOG.md) (2026-10-17 entry) and [CHECKPOINT_2026-10-17_final.md](CHECKPOINT_2026-10-17_final.md).
+The open items and decisions are in [PHASE_LOG.md](../engine/PHASE_LOG.md) (2026-10-17 entry) and [CHECKPOINT_2026-10-17_final.md](CHECKPOINT_2026-10-17_final.md).
 
 - **Engine.** Contracts through v9. Model choice, brief requests (the engine writes the script), narration through OpenRouter speech,
   held-call reconciliation, and speech-to-text through Deepgram. ffmpeg runs on the worker. No live run is recorded.
@@ -84,7 +84,7 @@ The open items and decisions are in [PHASE_LOG.md](PHASE_LOG.md) (2026-10-17 ent
 
 ## Status on 2026-10-15
 
-The state table above is the state on 11 October. This section is the state on 15 October, from [PHASE_LOG.md](PHASE_LOG.md) and a check of
+The state table above is the state on 11 October. This section is the state on 15 October, from [PHASE_LOG.md](../engine/PHASE_LOG.md) and a check of
 the code. The engine phases E1 to E6 and the Factory items are code complete on recorded fixtures. **No gate in the build plan is met**,
 because each gate needs a recorded live run, and agents hold no keys (NORTH_STAR decision 1). Each task below is marked with what was
 checked. The boxes stay unticked until a gate passes.

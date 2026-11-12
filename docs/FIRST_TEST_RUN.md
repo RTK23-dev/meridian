@@ -103,7 +103,7 @@ The first run that means something is one brief, end to end, with one reference 
 3. Watch the board. Each step shows its status, its model and its cost: estimate, reserved and billed. A cost with no bill shows as unknown,
    never as a number.
 4. When the video is delivered, approve or reject it in the Content Factory. A shot that is wrong can be remade on its own (see
-   `docs/engine/CONTENT_FACTORY_STATE_2026-10-18.md`, section 3).
+   `docs/archive/CONTENT_FACTORY_STATE_2026-10-18.md`, section 3).
 
 Record in `docs/engine/PHASE_LOG.md`, for this run: the request id, the artifact ids, each step's cost (estimate, reserved, billed), the
 output's file name and its size and duration, and anything that failed with its reason. Record nothing you did not see.

@@ -1,14 +1,14 @@
 # Content Factory: execution plan
 
-Last checked 2026-10-22. This is the plan of record for the Content Factory. Product direction is in [NORTH_STAR.md](NORTH_STAR.md), and
-how the Factory works today is in [FACTORY.md](FACTORY.md). Where this plan and NORTH_STAR disagree, NORTH_STAR wins.
+Last checked 2026-10-22. This is the plan of record for the Content Factory. Product direction is in [NORTH_STAR.md](../NORTH_STAR.md), and
+how the Factory works today is in [FACTORY.md](../FACTORY.md). Where this plan and NORTH_STAR disagree, NORTH_STAR wins.
 
 ## How to use this plan
 
 - Take the lowest-numbered unfinished task in the lowest unfinished milestone.
 - Name the task ID (for example `M1.2`) and the loop step (NORTH_STAR section 1) in every PR.
 - Tick a task only when its acceptance test passes. A live task is ticked only when its run is recorded in
-  [PHASE_LOG.md](engine/PHASE_LOG.md), with the artifact ids, the state and the cost.
+  [PHASE_LOG.md](../engine/PHASE_LOG.md), with the artifact ids, the state and the cost.
 - Agents hold no live keys. A live task is a runbook for the owner, and the agent never asks for a key.
 - Stop at a decision marked in section 6. Do not pick an option for the owner.
 - Paths are short. A path with no `src/` prefix is under `src/lib/meridian/`, except `engine/` (`src/engine/`), `routes/` and `components/` (`src/routes/` and `src/components/`). `docs/`, `scripts/` and `migrations/` are from the repo root.

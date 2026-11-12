@@ -176,4 +176,4 @@ Every item below is built and tested on fixtures. Nothing calls a live provider,
 
 Still open, from this list and the record: the production licence port (rights for every video, including a reviewer's clip); the splice execution
 (item 7 above); the orchestrator's handlers for visual, voice, video, avatar, edit, compose and render; and the open review items in
-`docs/engine/REVIEW_2026-10-22.md`.
+`docs/archive/REVIEW_2026-10-22.md`.
