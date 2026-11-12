@@ -24,7 +24,7 @@ export function nodeVersionProblem(version) {
   const major = Number.parseInt(String(version).split(".")[0] ?? "", 10);
   if (!Number.isInteger(major)) return `Could not read the Node.js version "${version}".`;
   if (major < MIN_NODE_MAJOR) {
-    return `Node.js ${MIN_NODE_MAJOR} or newer is required. This is Node.js ${version}. Install a current Node.js and run npm run setup again.`;
+    return `Node.js ${MIN_NODE_MAJOR} or newer is required. This is Node.js ${version}. Get the current LTS from https://nodejs.org (the installer is enough), open a new terminal, and run npm run dev again.`;
   }
   return null;
 }
