@@ -23,7 +23,7 @@
  * documented contract.
  */
 import { createHash } from "node:crypto";
-import { gatedFetch, isCapabilityDisabledError } from "../providers/capability.ts";
+import { DISABLED_CAPABILITIES, gatedFetch, isCapabilityDisabledError } from "../providers/capability.ts";
 import { ACCEPTED_IMAGE_MIME_TYPES, MAX_IMAGE_BYTES, MAX_TOTAL_IMAGE_BYTES, checkImageBytes } from "../media/image-input.ts";
 import { secretForCategory } from "../credentials/resolve.ts";
 import { checkEvidenceSufficiency, minimizeJevState } from "../jev/client.ts";
@@ -301,6 +301,8 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
   readonly adapterVersion = OPENAI_DECISIONS_ADAPTER_VERSION;
   private readonly overrides: Partial<OpenAiDecisionsConfig>;
   private readonly fetchImpl: typeof fetch;
+  /** True when no transport was injected, so the default (which refuses every call) is in use. */
+  private readonly liveCallsOff: boolean;
   private readonly sleep: (ms: number) => Promise<void>;
 
   constructor(options: {
@@ -310,6 +312,7 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
   } = {}) {
     this.overrides = options.config ?? {};
     this.fetchImpl = options.fetchImpl ?? gatedFetch("decision.openai");
+    this.liveCallsOff = options.fetchImpl === undefined;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   }
 
@@ -350,6 +353,8 @@ export class OpenAiDecisionsEngine implements DecisionEngine {
     const config = this.config(key);
     if (!config.apiKey) return { status: "NOT_CONFIGURED", message: reason || "No OpenAI key is saved for this workspace." };
     if (!config.model) return { status: "NOT_CONFIGURED", message: "OPENAI_DECISIONS_MODEL is empty." };
+    // A saved key is not a working decision engine: with the default transport every call is refused before it is sent. Say so, not READY.
+    if (this.liveCallsOff) return { status: "UNAVAILABLE", message: `${DISABLED_CAPABILITIES["decision.openai"]} Decisions from OpenAI are switched off in this build. Choose OpenRouter Decisions or Gemini Decisions to make live decisions.` };
     return { status: "READY", message: `Credentials present for ${config.model}. No live request has been made.` };
   }
 

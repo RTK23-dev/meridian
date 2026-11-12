@@ -283,3 +283,13 @@ test("the engine declares its capabilities truthfully: text and images, three qu
   assert.equal(capabilities.reportsUsage, true);
   assert.equal(capabilities.semantics.predicate, "probability");
 });
+
+test("a saved key is not READY while live OpenAI calls are switched off: the status says so instead of promising a decision", async () => {
+  const keyed = new OpenAiDecisionsEngine({ config: { apiKey: "sk-fixture-key-0123456789" } });
+  const health = await keyed.health();
+  assert.equal(health.status, "UNAVAILABLE");
+  assert.match(health.message, /switched off/i);
+  assert.match(health.message, /OpenRouter|Gemini/);
+  const injected = new OpenAiDecisionsEngine({ config: { apiKey: "sk-fixture-key-0123456789" }, fetchImpl: (async () => new Response("{}")) as typeof fetch });
+  assert.equal((await injected.health()).status, "READY", "with a transport wired in, the engine reports its own readiness");
+});

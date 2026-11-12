@@ -10,7 +10,7 @@
  * - Preserve exact provider identity in decisions and answers.
  */
 
-import { gatedFetch } from "../providers/capability.ts";
+import { DISABLED_CAPABILITIES, gatedFetch } from "../providers/capability.ts";
 import type {
   JevProvider,
   JevProviderId,
@@ -78,6 +78,8 @@ export class TypeSafeDirectJevProvider implements JevProvider {
   private readonly sql?: Sql;
   private readonly env?: CredentialEnv;
   private readonly lookup?: JevCredentialLookup;
+  /** True when no transport was injected, so the default (which refuses every call) is in use. */
+  private readonly liveCallsOff: boolean;
 
   /**
    * No key is held here. Each request names its workspace, and the key is looked up for that workspace when the request is
@@ -93,6 +95,7 @@ export class TypeSafeDirectJevProvider implements JevProvider {
     const config = resolveJevConfig();
     this.baseUrl = options?.baseUrl ?? config.typesafe.baseUrl;
     this.fetchImpl = options?.fetchImpl ?? gatedFetch("decision.typesafe_jev");
+    this.liveCallsOff = options?.fetchImpl === undefined;
     this.sql = options?.sql;
     this.env = options?.env;
     this.lookup = options?.lookup;
@@ -151,6 +154,10 @@ export class TypeSafeDirectJevProvider implements JevProvider {
       resolution = await this.credentialFor(organizationId);
     } catch {
       return { status: "UNAVAILABLE", message: "The workspace's TypeSafe JEV credential could not be checked. No live request was made." };
+    }
+    if (resolution.status === "ready" && this.liveCallsOff) {
+      // A saved key is not a working decision engine: with the default transport the call is refused before it is sent. Say so, not READY.
+      return { status: "UNAVAILABLE", message: `${DISABLED_CAPABILITIES["decision.typesafe_jev"]} Decisions from TypeSafe JEV are switched off in this build. Choose OpenRouter Decisions or Gemini Decisions to make live decisions.` };
     }
     if (resolution.status === "ready") {
       const source = resolution.source === "workspace" ? "this workspace's saved key" : "the deployment's shared default key";
