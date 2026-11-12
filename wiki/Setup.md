@@ -1,5 +1,7 @@
 # Setup
 
+> **Which guide?** Just trying it: `npm run dev` (this page). Making your first real video: [YOUR_FIRST_REAL_VIDEO.md](../docs/YOUR_FIRST_REAL_VIDEO.md). Putting it on a server: [SETUP.md](../docs/SETUP.md). The owner's full live checklist: [FIRST_TEST_RUN.md](../docs/FIRST_TEST_RUN.md).
+
 ## On your machine
 
 You need Node.js 22. You do not need API keys to start.

@@ -2,7 +2,7 @@
 
 The [README](../README.md) says what Meridian is and how to run it. These documents go further. If a document and the app disagree, the app is what is running and the document should be corrected.
 
-Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first: where it stands, measured, with what is built, tested, browser-checked and live. [LAUNCHPAD.md](LAUNCHPAD.md) describes beta.13 and is superseded.
+Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first: where it stands, measured, with what is built, tested, browser-checked and live.
 
 ## Run the product
 

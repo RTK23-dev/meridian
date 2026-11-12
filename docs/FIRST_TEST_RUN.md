@@ -1,5 +1,7 @@
 # First test run
 
+> **Which guide?** Just trying it: `npm run dev` . Making your first real video: [YOUR_FIRST_REAL_VIDEO.md](YOUR_FIRST_REAL_VIDEO.md). Putting it on a server: [SETUP.md](SETUP.md). The owner's full live checklist: this page.
+
 This is the order to follow for the first run of Meridian with a real workspace. It is written for the owner, who holds the keys. Agents
 never hold keys (NORTH_STAR, decision 1), so the steps that call a provider are the owner's to run.
 
