@@ -24,6 +24,7 @@ export function ClaudeConnector({ organizationId, canAdmin }: { organizationId: 
   const [name, setName] = useState("");
   const [made, setMade] = useState<{ url: string; name: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
   const create = useScopedMutation({
     mutationKey: ["mutation", "mcp.connector.create", organizationId],
     mutationFn: (value: string) => createMcpConnector({ data: { organizationId, name: value } }),
@@ -88,6 +89,24 @@ export function ClaudeConnector({ organizationId, canAdmin }: { organizationId: 
                 </Button>
               </div>
               <p className="text-caption text-fg-muted">Paste it as a custom connector in Claude (Settings, Connectors) or ChatGPT (developer mode). Keep it private: it can spend from this workspace.</p>
+              <div className="space-y-1 border-t border-hairline pt-2">
+                <p className="text-sm font-semibold text-fg-primary">In Claude Code instead, run this once in your terminal:</p>
+                <div className="flex items-center gap-2">
+                  <Input aria-label="Claude Code command" readOnly value={`claude mcp add --transport http meridian ${made.url}`} onFocus={(event) => event.currentTarget.select()} className="min-w-0 flex-1 font-mono text-xs" />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      void navigator.clipboard?.writeText(`claude mcp add --transport http meridian ${made.url}`).then(() => setCopiedCode(true), () => setCopiedCode(false));
+                    }}
+                  >
+                    {copiedCode ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+                    {copiedCode ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+                <p className="text-caption text-fg-muted">Then ask Claude Code to make a Meridian video. With the <code>meridian-video</code> skill it makes the video on your own computer, free, and saves the finished MP4 back here.</p>
+              </div>
             </div>
           ) : null}
 

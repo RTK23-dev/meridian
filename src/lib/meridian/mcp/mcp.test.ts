@@ -97,7 +97,7 @@ describe("MCP protocol", () => {
     const tools = connectorTools();
     assert.deepEqual(tools.map((tool) => tool.name), [
       "meridian_start", "meridian_project_create", "meridian_project", "meridian_checkpoint", "meridian_project_update",
-      "meridian_status", "meridian_brand", "meridian_video_guide", "meridian_voice_models", "meridian_voiceover", "meridian_image", "meridian_decide", "meridian_files", "meridian_render",
+      "meridian_status", "meridian_brand", "meridian_video_guide", "meridian_voice_models", "meridian_voiceover", "meridian_image", "meridian_decide", "meridian_files", "meridian_upload_link", "meridian_render",
     ]);
     for (const tool of tools) assert.ok(z.toJSONSchema(tool.input), tool.name);
     const paid = tools.filter((tool) => ["meridian_voiceover", "meridian_image", "meridian_decide"].includes(tool.name));

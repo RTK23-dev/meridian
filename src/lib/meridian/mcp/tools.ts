@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Sql } from "../learning/store.ts";
 import type { ResolvedConnector } from "./connectors.ts";
 import { fileLink, listFiles, storeFile, type McpFile, type McpFileStore } from "./files.ts";
+import { isUploadMediaType, MAX_UPLOAD_BYTES, UPLOAD_MEDIA_TYPES, uploadLink } from "./upload-link.ts";
 import { budgetName, usd, withHold, type HoldLedger } from "./paid.ts";
 import { defineTool, type McpTool, type ToolContent, type ToolResult } from "./protocol.ts";
 import { readProject, recordProjectSpend } from "./projects.ts";
@@ -423,6 +424,39 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
         const views = files.map((file) => fileView(context, file));
         const lines = views.map((file) => `${file.id}: ${file.kind}${file.details.label ? ` "${String(file.details.label)}"` : ""}, ${file.mediaType}, ${file.costUsd === null ? "cost not reported" : usd(file.costUsd)}${file.url ? `, ${file.url}` : ""}`);
         return { text: views.length === 0 ? "No files have been made from a chat yet." : [...lines, linkNote(context)].filter(Boolean).join("\n"), data: { files: views } };
+      },
+    }),
+
+    defineTool({
+      name: "meridian_upload_link",
+      title: "Save a finished file to Meridian",
+      description: "Makes a 15-minute address you send a finished file to (for example the MP4 you rendered on your own machine), so Meridian keeps it with the video project and its other files. It takes video/mp4, audio/mpeg, audio/wav, image/png or image/jpeg up to 50 MB, and checks the file is what it says. Free.",
+      input: z.object({
+        mediaType: z.string().default("video/mp4").describe("The file's media type, for example video/mp4."),
+        projectId: projectIdSchema.optional(),
+      }),
+      role: "member",
+      annotations: { readOnlyHint: false, openWorldHint: false },
+      async run(context: ConnectorContext, input) {
+        if (!isUploadMediaType(input.mediaType)) {
+          return { text: `Meridian takes ${Object.keys(UPLOAD_MEDIA_TYPES).join(", ")}. ${input.mediaType} is not one of them.`, isError: true };
+        }
+        let brandId: string | null = null;
+        if (input.projectId) {
+          const project = await readProject(context.sql, context.connector.organizationId, input.projectId);
+          if (!project) return { text: "That video project is not in this workspace.", isError: true };
+          brandId = project.brandId ?? null;
+        }
+        const link = uploadLink({
+          origin: context.origin, secret: context.linkSecret, nowSeconds: Math.floor(context.now().getTime() / 1000),
+          claims: { connectorId: context.connector.id, organizationId: context.connector.organizationId, brandId, projectId: input.projectId ?? null, mediaType: input.mediaType },
+        });
+        if (!link) return { text: "No upload address could be made: the server has no MEDIA_LINK_SECRET set (at least 32 characters).", isError: true };
+        const command = `curl -fsS -X POST -H 'Content-Type: ${input.mediaType}' --data-binary @FILE '${link.url}'`;
+        return {
+          text: [`Upload the file within 15 minutes (until ${link.expiresAt}), up to ${Math.floor(MAX_UPLOAD_BYTES / 1_048_576)} MB. Replace FILE with the path:`, command, "The answer names the stored file. It then shows in meridian_files."].join("\n"),
+          data: { url: link.url, expiresAt: link.expiresAt, mediaType: input.mediaType, maxBytes: MAX_UPLOAD_BYTES, command },
+        };
       },
     }),
 

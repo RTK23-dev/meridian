@@ -41,6 +41,7 @@ import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiDriveCallbackRouteImport } from './routes/api/drive/callback'
 import { Route as ApiDriveConnectRouteImport } from './routes/api/drive/connect'
 import { Route as ApiMcpFilesFileIdRouteImport } from './routes/api/mcp-files/$fileId'
+import { Route as ApiMcpUploadTokenRouteImport } from './routes/api/mcp-upload/$token'
 import { Route as ApiMcpIndexRouteImport } from './routes/api/mcp/index'
 import { Route as ApiMcpTokenRouteImport } from './routes/api/mcp/$token'
 import { Route as ApiMediaLinksCreativeIdRouteImport } from './routes/api/media-links/$creativeId'
@@ -223,6 +224,11 @@ const ApiMcpFilesFileIdRoute = ApiMcpFilesFileIdRouteImport.update({
   path: '/api/mcp-files/$fileId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMcpUploadTokenRoute = ApiMcpUploadTokenRouteImport.update({
+  id: '/api/mcp-upload/$token',
+  path: '/api/mcp-upload/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiMcpIndexRoute = ApiMcpIndexRouteImport.update({
   id: '/api/mcp/',
   path: '/api/mcp/',
@@ -373,6 +379,7 @@ export interface FileRoutesByFullPath {
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp-upload/$token': typeof ApiMcpUploadTokenRoute
   '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
@@ -428,6 +435,7 @@ export interface FileRoutesByTo {
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp-upload/$token': typeof ApiMcpUploadTokenRoute
   '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
@@ -485,6 +493,7 @@ export interface FileRoutesById {
   '/api/drive/callback': typeof ApiDriveCallbackRoute
   '/api/drive/connect': typeof ApiDriveConnectRoute
   '/api/mcp-files/$fileId': typeof ApiMcpFilesFileIdRoute
+  '/api/mcp-upload/$token': typeof ApiMcpUploadTokenRoute
   '/api/mcp/$token': typeof ApiMcpTokenRoute
   '/api/media-links/$creativeId': typeof ApiMediaLinksCreativeIdRoute
   '/api/oauth/callback': typeof ApiOauthCallbackRoute
@@ -542,6 +551,7 @@ export interface FileRouteTypes {
     | '/api/drive/callback'
     | '/api/drive/connect'
     | '/api/mcp-files/$fileId'
+    | '/api/mcp-upload/$token'
     | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
@@ -597,6 +607,7 @@ export interface FileRouteTypes {
     | '/api/drive/callback'
     | '/api/drive/connect'
     | '/api/mcp-files/$fileId'
+    | '/api/mcp-upload/$token'
     | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
@@ -653,6 +664,7 @@ export interface FileRouteTypes {
     | '/api/drive/callback'
     | '/api/drive/connect'
     | '/api/mcp-files/$fileId'
+    | '/api/mcp-upload/$token'
     | '/api/mcp/$token'
     | '/api/media-links/$creativeId'
     | '/api/oauth/callback'
@@ -691,6 +703,7 @@ export interface RootRouteChildren {
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
   ApiDriveConnectRoute: typeof ApiDriveConnectRoute
   ApiMcpFilesFileIdRoute: typeof ApiMcpFilesFileIdRoute
+  ApiMcpUploadTokenRoute: typeof ApiMcpUploadTokenRoute
   ApiMcpTokenRoute: typeof ApiMcpTokenRoute
   ApiMediaLinksCreativeIdRoute: typeof ApiMediaLinksCreativeIdRoute
   ApiOauthCallbackRoute: typeof ApiOauthCallbackRoute
@@ -923,6 +936,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mcp-files/$fileId'
       fullPath: '/api/mcp-files/$fileId'
       preLoaderRoute: typeof ApiMcpFilesFileIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/mcp-upload/$token': {
+      id: '/api/mcp-upload/$token'
+      path: '/api/mcp-upload/$token'
+      fullPath: '/api/mcp-upload/$token'
+      preLoaderRoute: typeof ApiMcpUploadTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/mcp/': {
@@ -1174,6 +1194,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,
   ApiDriveConnectRoute: ApiDriveConnectRoute,
   ApiMcpFilesFileIdRoute: ApiMcpFilesFileIdRoute,
+  ApiMcpUploadTokenRoute: ApiMcpUploadTokenRoute,
   ApiMcpTokenRoute: ApiMcpTokenRoute,
   ApiMediaLinksCreativeIdRoute: ApiMediaLinksCreativeIdRoute,
   ApiOauthCallbackRoute: ApiOauthCallbackRoute,

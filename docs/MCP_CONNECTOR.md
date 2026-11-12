@@ -85,6 +85,13 @@ What the workspace needs before paid calls work:
 | Download links | `MEDIA_LINK_SECRET` (at least 32 characters) in the deployment environment. Without it, files are stored but not linked. |
 | Rendering in the chat | In claude.ai, allow this Meridian site in the code execution network settings, so the sandbox can download the files. |
 
+## Claude Code
+
+Claude Code can use the same connector and make the video on your own computer, free. Add it once with the command Meridian shows beside the
+link (`claude mcp add --transport http meridian <link>`), work from a checkout of this repository, and ask for a Meridian video. The
+`meridian-video` skill (`.claude/skills/meridian-video/SKILL.md`) walks Claude Code through the Q&A, the checkpoints, the free coded styles and
+the render, then saves the MP4 back with `meridian_upload_link`. It needs Node 22, Chromium and ffmpeg locally. Nothing is verified live.
+
 ## The tools
 
 | Tool | Cost | What it does |
@@ -102,6 +109,7 @@ What the workspace needs before paid calls work:
 | `meridian_image` | paid, $1 hold | One image with the Studio image model; stores it. Settles at the reported cost, else at the hold. A brand is optional. |
 | `meridian_decide` | paid, decision cap | Choose between options, yes/no, or a 1 to 5 score from the active decision engine, with its probability. |
 | `meridian_files` | free | The files made from chats, with fresh one-hour download links. |
+| `meridian_upload_link` | free | A 15-minute address to send a finished file to (an MP4 rendered on your own machine, or an MP3, WAV, PNG or JPEG), up to 50 MB. It checks the file is what it says, stores it with the video project and lists it in `meridian_files`. Revoking the link stops uploads at once. |
 | `meridian_render` | free | `claude`: the download links and the exact commands to render in the chat's sandbox. `hyperframes`: not available from the connector yet (see below). |
 
 `meridian_voiceover`, `meridian_image` and `meridian_decide` take an optional `projectId` and an optional `brandId`. With a project, a
@@ -136,8 +144,9 @@ Every paid call is written to the audit log with the link that made it.
 
 - **Cloud render (`renderer: "hyperframes"`).** It runs inside the video engine's jobs (HyperFrames cloud, then Shotstack). A chat cannot
   start those, so the tool says so. Rendering in the chat is free and works today.
-- **Saving a chat-rendered MP4 back to Meridian.** Not built: the hosted functions cap request bodies well below a video's size, so it
-  needs a direct storage upload.
+- **Saving a chat-rendered MP4 back to Meridian from a chat sandbox.** A coding agent on its own machine (Claude Code) saves it with
+  `meridian_upload_link`. A chat's sandbox can do the same if it can reach this Meridian site; the hosted functions cap request bodies well
+  below a video's size, so on a hosted deployment a large file still needs a direct storage upload.
 - **ChatGPT.** Its connector support is newer than Claude's, and the connector has not been tried from ChatGPT yet. It speaks the
   standard protocol, with JSON answers and no server stream.
 - **Live runs.** No test calls a provider, so these still need a live run:
