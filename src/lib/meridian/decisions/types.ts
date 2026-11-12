@@ -16,7 +16,7 @@ import type {
   JevDecisionResponse,
 } from "../jev/types.ts";
 
-export const DECISION_ENGINE_IDS = ["jev", "openai-decisions", "openrouter-decisions"] as const;
+export const DECISION_ENGINE_IDS = ["jev", "openai-decisions", "openrouter-decisions", "gemini-decisions"] as const;
 export type DecisionEngineId = (typeof DECISION_ENGINE_IDS)[number];
 
 export function isDecisionEngineId(value: unknown): value is DecisionEngineId {

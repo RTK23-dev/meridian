@@ -19,6 +19,7 @@ const ACCEPTS_IMAGES: Record<DecisionEngineId, boolean> = {
   jev: false,
   "openai-decisions": true,
   "openrouter-decisions": true,
+  "gemini-decisions": false,
 };
 
 /** Whether the engine can take image evidence. A text-only engine gets the text evidence and records that no images were seen. */

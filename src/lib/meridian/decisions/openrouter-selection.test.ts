@@ -210,7 +210,7 @@ describe("dispatch", () => {
 
   test("the default engine registry covers every engine id, including OpenRouter", () => {
     const registry = createDecisionEngines({ openrouter: new OpenRouterDecisionsEngine({ maxUsdPerCall: recordedDecisionCap, holds: memoryDecisionHolds() }) });
-    assert.deepEqual(Object.keys(registry).sort(), ["jev", "openai-decisions", "openrouter-decisions"]);
+    assert.deepEqual(Object.keys(registry).sort(), ["gemini-decisions", "jev", "openai-decisions", "openrouter-decisions"]);
     assert.equal(registry["openrouter-decisions"].id, "openrouter-decisions");
   });
 });

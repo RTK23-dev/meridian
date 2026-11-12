@@ -184,13 +184,15 @@ export function normalizeAnswer(input: {
   wire: WireQuestion;
   raw: unknown;
   model: string;
+  /** The provider the answer is recorded under. The OpenAI engine's own by default. */
+  provider?: string;
 }): JevAnswer {
   const base = {
     questionId: input.spec.id,
     questionVersion: input.spec.version,
     type: input.spec.type,
     model: input.model,
-    provider: PROVIDER,
+    provider: input.provider ?? PROVIDER,
     evidenceRefs: [],
     evaluatedAt: new Date().toISOString(),
   };
@@ -261,7 +263,7 @@ export function normalizeAnswer(input: {
   };
 }
 
-function usageOf(value: unknown): DecisionUsage | undefined {
+export function usageOf(value: unknown): DecisionUsage | undefined {
   if (!value || typeof value !== "object") return undefined;
   const usage = value as Record<string, unknown>;
   const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : undefined);
@@ -276,7 +278,7 @@ function usageOf(value: unknown): DecisionUsage | undefined {
   };
 }
 
-function failureKindForStatus(status: number, body: string): DecisionFailureKind {
+export function failureKindForStatus(status: number, body: string): DecisionFailureKind {
   if (status === 401 || status === 403) return "authentication";
   if (status === 429) return "rate_limited";
   if (status === 408) return "timeout";
@@ -285,12 +287,12 @@ function failureKindForStatus(status: number, body: string): DecisionFailureKind
   return "invalid_request";
 }
 
-function retryable(kind: DecisionFailureKind): boolean {
+export function retryable(kind: DecisionFailureKind): boolean {
   return kind === "rate_limited" || kind === "provider_unavailable";
 }
 
 /** Error text without anything that looks like a key. Provider error bodies are truncated. */
-function safeErrorText(text: string): string {
+export function safeErrorText(text: string): string {
   return text.replace(/sk-[A-Za-z0-9_-]{8,}/g, "sk-…").slice(0, 300);
 }
 

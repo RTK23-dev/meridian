@@ -114,6 +114,16 @@ export async function getDecisionEngineStatus(
   const rows = await Promise.all(
     DECISION_ENGINE_IDS.map(async (id) => {
       const engine = engines[id];
+      if (!engine) {
+        return {
+          id,
+          label: DECISION_ENGINE_LABELS[id],
+          isActive: id === active.engineId,
+          health: { status: "NOT_CONFIGURED", message: "This engine is not registered in this deployment." } as DecisionEngineHealth,
+          adapterVersion: "none",
+          capabilities: { engineId: id, questionKinds: [], inputModalities: ["text"], maxImages: 0, maxImageBytes: 0, imageMimeTypes: [], batchQuestions: false, reportsUsage: false, semantics: { predicate: "probability", choice: "categorical_with_confidence", score: "ordered_level_expectation" } } as DecisionCapabilities,
+        };
+      }
       return {
         id,
         label: DECISION_ENGINE_LABELS[id],

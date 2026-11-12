@@ -2,6 +2,7 @@
 // test database, and the gate reads them the same way production does. Only the OpenRouter HTTP call and the TypeSafe router are
 // fakes, so each case shows which request bodies would have reached a provider. No request reaches a network.
 
+import type { DecisionEngineRegistry } from "./dispatcher.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { getSql } from "../../db.ts";
@@ -106,7 +107,7 @@ async function chooseJevBackend(sql: Sql, organizationId: string, backend: "type
   }
 }
 
-async function runGate(input: { sql: Sql; organizationId: string; brandId: string; engines: Record<DecisionEngineId, DecisionEngine>; withImage: boolean }): Promise<GateResult> {
+async function runGate(input: { sql: Sql; organizationId: string; brandId: string; engines: DecisionEngineRegistry; withImage: boolean }): Promise<GateResult> {
   return runEngineGate({
     sql: input.sql,
     organizationId: input.organizationId,

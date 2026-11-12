@@ -27,7 +27,7 @@ import {
 import { getPipelineConfig } from "@/lib/meridian/factory/pipeline-actions";
 import { getSystemStatus } from "@/lib/meridian/system";
 import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions";
-import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getJevTypesafeModel, getMediaModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
+import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getGeminiDecisionModels, getJevTypesafeModel, getMediaModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { listMcpConnectors } from "@/lib/meridian/mcp/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
@@ -412,6 +412,17 @@ export const useAlertsQuery = (organizationId: string, enabled = true) => {
 export const useProviderSettingsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...providerSettingsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** Gemini's live model list for this workspace, and the model it has chosen for decisions. */
+export const useGeminiDecisionModelsQuery = (organizationId: string, enabled = true) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    queryKey: userScopedQueryKey(userId, qk.geminiDecisionModels(organizationId)),
+    queryFn: () => getGeminiDecisionModels({ data: { organizationId } }),
+    enabled: ready && enabled && !!organizationId,
+    staleTime: 0,
+  });
 };
 
 /** The workspace's TypeSafe model for direct TypeSafe decisions, the deployment's default, and the models it can choose. */

@@ -21,6 +21,7 @@ import { recordOpenRouterCheck, writeOpenRouterModel } from "../decisions/openro
 import { JevDecisionEngine } from "../decisions/jev-engine.ts";
 import { isJevBackend, isJevTypesafeModel, JEV_TYPESAFE_MODELS, readJevTypesafeModel, writeJevBackend, writeJevTypesafeModel, type JevTypesafeModel } from "../decisions/jev-backend.ts";
 import { resolveJevConfig } from "../jev/config.ts";
+import { geminiModelsFor, readGeminiModelChoice, writeGeminiModelChoice } from "../decisions/gemini-engine.ts";
 import { deploymentTextModel, generationCredentialStatus } from "../providers/chat.server.ts";
 import { GENERATION_TASKS, GENERATION_TASK_IDS, eligibleForTask, isGenerationTask, isPinnedModelId, saveGenerationModel, storedGenerationModels, type GenerationTask } from "./generation-models.ts";
 import { MODEL_PRESETS, isModelPreset, presetChoices } from "./model-presets.ts";
@@ -183,6 +184,50 @@ export const getOpenRouterDecisionModels = createServerFn({ method: "GET" })
     };
   });
 
+/**
+ * The Gemini models this workspace may choose for decisions, read live from Google with the workspace's own Gemini key, and the one it has
+ * chosen. Any member may read it. Nothing names a model here: Google's list does, and its newest released model is marked latest.
+ */
+export const getGeminiDecisionModels = createServerFn({ method: "GET" })
+  .validator((input: unknown) => {
+    const organizationId = asText(objectInput(input).organizationId);
+    if (!organizationId) throw new Error("organizationId is required.");
+    return { organizationId };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "viewer");
+    const chosen = await readGeminiModelChoice(sql, data.organizationId);
+    const listing = await geminiModelsFor(data.organizationId);
+    return listing.ok
+      ? { ok: true as const, chosen, readAt: listing.readAt, models: listing.models }
+      : { ok: false as const, chosen, readAt: listing.readAt, reason: listing.reason, models: [] };
+  });
+
+/** Saves the Gemini model for this workspace. It must be in Google's live list. Saving changes no active engine and sends no request but the list read. Admin only. */
+export const saveGeminiDecisionModel = createServerFn({ method: "POST" })
+  .validator((input: unknown) => {
+    const obj = objectInput(input);
+    const organizationId = asText(obj.organizationId);
+    const model = asText(obj.model);
+    if (!organizationId) throw new Error("organizationId is required.");
+    if (!model) throw new Error("Choose a model.");
+    return { organizationId, model };
+  })
+  .middleware([authMiddleware])
+  .handler(async ({ context, data }) => {
+    const sql = await getSql();
+    await requireMembership(sql, context.userId, data.organizationId, "admin");
+    const listing = await geminiModelsFor(data.organizationId);
+    if (!listing.ok) return { ok: false as const, reason: `${listing.reason} The model is unchanged.` };
+    if (!listing.models.some((model) => model.id === data.model)) {
+      return { ok: false as const, reason: `'${data.model}' is not in Google's current model list for this key. The model is unchanged.` };
+    }
+    await writeGeminiModelChoice(sql, { organizationId: data.organizationId, actorId: context.userId, model: data.model });
+    return { ok: true as const, model: data.model };
+  });
+
 /** Switches the active decision engine. Refused unless the target engine is configured; the previous choice is kept. */
 export const saveDecisionEngine = createServerFn({ method: "POST" })
   .validator((input: unknown) => {
@@ -201,6 +246,7 @@ export const saveDecisionEngine = createServerFn({ method: "POST" })
       return { ok: false as const, reason: `'${data.engineId}' is not a decision engine.` };
     }
     const target = createDecisionEngines()[data.engineId];
+    if (!target) return { ok: false as const, reason: `'${data.engineId}' is not available in this deployment.` };
     // The engine is checked for this workspace, so its own saved key is the one that decides READY.
     const health = target.healthFor ? await target.healthFor(data.organizationId) : await target.health();
     const result = await saveWorkspaceEngine(sql, {

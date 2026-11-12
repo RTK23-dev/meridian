@@ -88,7 +88,7 @@ export function SetupGuide() {
   const firstBrand = data.brands[0];
   const percent = summary.requiredTotal === 0 ? 0 : Math.round((summary.requiredDone / summary.requiredTotal) * 100);
 
-  const keyState = (id: "jev" | "openai" | "openrouter") => {
+  const keyState = (id: "jev" | "openai" | "openrouter" | "perception") => {
     const row = rowById(id);
     return { fingerprint: row?.fingerprint ?? null, removable: row?.removable ?? false };
   };
@@ -99,7 +99,7 @@ export function SetupGuide() {
         return <BrandAction brandCount={data.brands.length} canCreate={canCreate} firstBrandId={firstBrand?.id} firstBrandName={firstBrand?.name} />;
       case "engine":
         return engineStatus
-          ? <EngineChoice organizationId={organizationId} canAdmin={canAdmin} engines={engineStatus} keys={{ jev: keyState("jev"), openai: keyState("openai"), openrouter: keyState("openrouter") }} />
+          ? <EngineChoice organizationId={organizationId} canAdmin={canAdmin} engines={engineStatus} keys={{ jev: keyState("jev"), openai: keyState("openai"), openrouter: keyState("openrouter"), perception: keyState("perception") }} />
           : <p className="text-sm text-fg-muted">The engine status is loading.</p>;
       case "sources":
         return <SourcesAction rowById={rowById} loaded={summaries !== null} canAdmin={canAdmin} organizationId={organizationId} brandId={firstBrand?.id} />;

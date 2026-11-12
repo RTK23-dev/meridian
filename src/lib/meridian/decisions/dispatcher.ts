@@ -6,6 +6,7 @@
  * paid route, and no duplicate decision for confidence. The optional shadow evaluation is a separate, opt-in path and
  * is not part of this function.
  */
+import { GeminiDecisionsEngine } from "./gemini-engine.ts";
 import type { Sql } from "../learning/store.ts";
 import { JevDecisionEngine } from "./jev-engine.ts";
 import { OpenAiDecisionsEngine } from "./openai-engine.ts";
@@ -21,12 +22,14 @@ import {
   type DecisionResult,
 } from "./types.ts";
 
-export type DecisionEngineRegistry = Record<DecisionEngineId, DecisionEngine>;
+/** Every engine, with Gemini optional so a registry built before it existed stays valid. createDecisionEngines always supplies it. */
+export type DecisionEngineRegistry = Record<Exclude<DecisionEngineId, "gemini-decisions">, DecisionEngine> & Partial<Record<"gemini-decisions", DecisionEngine>>;
 
 export const DECISION_ENGINE_LABELS: Record<DecisionEngineId, string> = {
   jev: "TypeSafe JEV",
   "openai-decisions": "OpenAI Decisions",
   "openrouter-decisions": "OpenRouter Decisions",
+  "gemini-decisions": "Gemini Decisions",
 };
 
 /** Builds one instance of each engine. `jevRouter` lets JEV keep the transport the existing router already uses. */
@@ -34,6 +37,7 @@ export function createDecisionEngines(options: {
   jevRouter?: JevProviderRouter;
   openai?: OpenAiDecisionsEngine;
   openrouter?: OpenRouterDecisionsEngine;
+  gemini?: GeminiDecisionsEngine;
 } = {}): DecisionEngineRegistry {
   // One OpenRouter engine serves both the decisions engine and JEV's OpenRouter backend, so they share keys and settings.
   const openrouter = options.openrouter ?? new OpenRouterDecisionsEngine();
@@ -41,6 +45,7 @@ export function createDecisionEngines(options: {
     jev: new JevDecisionEngine(options.jevRouter, { openrouter }),
     "openai-decisions": options.openai ?? new OpenAiDecisionsEngine(),
     "openrouter-decisions": openrouter,
+    "gemini-decisions": options.gemini ?? new GeminiDecisionsEngine(),
   };
 }
 

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { GeminiDecisionControls } from "@/components/gemini-decision-controls";
 import { Button, DisabledReason } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { KeyForm } from "@/components/settings/setup-panel";
@@ -12,7 +13,7 @@ import { openRouterProgress, savedKeyEngineProgress, type EngineProgress } from 
 import { splitOperatorHint } from "@/components/settings/key-copy";
 
 /** What each engine does and what it needs, in plain words. */
-const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" }> = {
+const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" | "perception" }> = {
   jev: {
     title: "TypeSafe JEV",
     summary: "Answers each idea or ad as text: a score, a yes or no, or a choice.",
@@ -24,6 +25,12 @@ const ENGINE_COPY: Record<string, { title: string; summary: string; needs: strin
     summary: "The same questions, answered by an OpenAI model. It can also read images.",
     needs: "An OpenAI key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "openai",
+  },
+  "gemini-decisions": {
+    title: "Gemini Decisions",
+    summary: "Google's Gemini judges your ideas as text. You choose the model from Google's own live list, and the newest is marked.",
+    needs: "A Gemini key, saved on this card (the same key Perception and Production use), and a model chosen from Google's list.",
+    keyCategory: "perception",
   },
   "openrouter-decisions": {
     title: "OpenRouter Decisions",
@@ -49,7 +56,7 @@ export function EngineChoice({
   organizationId: string;
   canAdmin: boolean;
   engines: SetupEngines;
-  keys: Record<"jev" | "openai" | "openrouter", EngineKeyState>;
+  keys: Record<"jev" | "openai" | "openrouter" | "perception", EngineKeyState>;
 }) {
   const activeId = engines.active.engineId;
   const [picked, setPicked] = useState<string | null>(null);
@@ -123,6 +130,7 @@ export function EngineChoice({
                 <div className="space-y-3">
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg-primary">Needs: </span>{copy.needs}</p> : null}
               {!ready && engine.health.message ? <EngineReason message={engine.health.message} /> : null}
+              {engine.id === "gemini-decisions" && key && key.fingerprint !== null ? <GeminiDecisionControls organizationId={organizationId} canAdmin={canAdmin} /> : null}
               {!ready && key && copy && canAdmin ? (
                 <KeyForm row={{ label: copy.title, fingerprint: key.fingerprint, removable: key.removable }} organizationId={organizationId} canAdmin={canAdmin} category={copy.keyCategory} />
               ) : null}

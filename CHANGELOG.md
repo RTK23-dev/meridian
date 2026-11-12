@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Gemini Decisions, an alternative decision engine.** Choose Gemini next to TypeSafe JEV, OpenAI and OpenRouter. The workspace saves its Gemini key (the one Perception and Production use) and picks the model from Google's own live model list: nothing names a model in code, so a newer Gemini appears when Google lists it, and the newest released one is marked latest. A decision is one structured-output call; every answer is checked and an unusable one is an invalid response, never a guess. Google reports no price, so each call is held at the workspace's decision cap on Billing and settles at that cap; an unset cap sends nothing, and a call that may have been billed keeps its hold. Text only for now. Migration 0159. Not run against a live key.
+
 - **Cookbook ids are per brand.** A member of one brand can no longer learn that another brand has a cookbook with a given id: the unique key now includes the brand (migration 0151). A brand's own cookbook shadows a workspace-shared one with the same id. No data changes.
 
 ## Unreleased
