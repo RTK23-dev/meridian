@@ -1,6 +1,6 @@
 # Setup
 
-> **Which guide?** Just trying it: `npm run dev`.. Making your first real video: [YOUR_FIRST_REAL_VIDEO.md](YOUR_FIRST_REAL_VIDEO.md). Putting it on a server: this page. The owner's full live checklist: [FIRST_TEST_RUN.md](FIRST_TEST_RUN.md).
+> **Which guide?** Just trying it: `npm run dev`. Making your first real video: [YOUR_FIRST_REAL_VIDEO.md](YOUR_FIRST_REAL_VIDEO.md). Putting it on a server: this page. The owner's full live checklist: [FIRST_TEST_RUN.md](FIRST_TEST_RUN.md).
 
 How to run Meridian on a laptop or a server. What the product does is in the [README](../README.md). Which keys exist, and which stay off until you opt in, is in [PROVIDERS.md](PROVIDERS.md).
 
