@@ -122,8 +122,15 @@ How a paid call is guarded. This is the same lifecycle Studio and Factory media 
 2. A call refused before sending (not connected, or a 4xx from the provider) releases its hold.
 3. A call that may have reached the provider and then failed keeps its hold, and says so. On the monthly budget it is marked
    uncertain, so an admin can check it against the provider's account and release it on the Billing page.
-4. A call that succeeds settles at the cost the provider reported. If it reported none, it settles at the hold's ceiling
+4. A call that succeeds settles at the cost the provider reported. If it reported none, it settles at the hold
    (`unpriced-ceiling-v1`), so the budget never undercounts.
+
+How much a call holds:
+- **An image** holds $1, because no per-image price is declared.
+- **A voiceover** holds its text at the model's list rate times 2, rounded up to a cent, at least $0.01 and at most $1 (`speech.ts`
+  `voiceHoldUsd`). A few spoken lines hold cents. A speech model with no stated rate holds $1.
+- **The voiceover's bill** can lag the audio by a few seconds on OpenRouter, so it is read up to four times before the call settles
+  without one.
 
 A decision asked for a video without a brand is recorded in the decision log with no brand, so it is in no brand's calibration.
 

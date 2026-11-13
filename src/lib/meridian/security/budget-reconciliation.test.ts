@@ -74,7 +74,7 @@ test("Budget Reconciliation: actual spend transfers to spent and releases unused
   assert.equal(BigInt(entries[1].delta_reserved_micros), -2_000_000n);
 });
 
-test("Budget Reconciliation: overage is durable, explicit, and blocks new reservations", async () => {
+test("Budget Reconciliation: an overage the budget still covers is booked and written down, and stops nothing", async () => {
   const sql = await getSql();
   const orgId = "org-overage-" + Date.now();
   const brandId = "brand-overage-" + Date.now();
@@ -82,23 +82,16 @@ test("Budget Reconciliation: overage is durable, explicit, and blocks new reserv
   await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Overage Org', ${orgId}, 'user') on conflict do nothing`;
   await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Overage Brand', 'user') on conflict do nothing`;
   await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 20);
-  const reservation = await BudgetLedgerService.reserve(sql, {
-    organizationId: orgId,
-    brandId,
-    amountMicros: toMicros(1),
-  });
+  const reservation = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(1) });
 
-  const result = await BudgetLedgerService.reconcile(sql, {
-    reservationId: reservation.id,
-    actualSpentMicros: toMicros(1.5),
-  });
+  const result = await BudgetLedgerService.reconcile(sql, { reservationId: reservation.id, actualSpentMicros: toMicros(1.5) });
   assert.equal(result.overageMicros, toMicros(0.5));
 
   const accountRows = await sql<{ status: string; spent_micros: string | number | bigint; reserved_micros: string | number | bigint }>`
     select status, spent_micros, reserved_micros from budget_accounts
     where organization_id = ${orgId} and brand_id = ${brandId}
   `;
-  assert.equal(accountRows[0].status, "EXCEEDED");
+  assert.equal(accountRows[0].status, "ACTIVE", "the call billed over its own hold, but the budget still covers the spend");
   assert.equal(BigInt(accountRows[0].spent_micros), toMicros(1.5));
   assert.equal(BigInt(accountRows[0].reserved_micros), 0n);
 
@@ -106,10 +99,29 @@ test("Budget Reconciliation: overage is durable, explicit, and blocks new reserv
     select entry_type from budget_ledger_entries where reservation_id = ${reservation.id} order by created_at desc limit 1
   `;
   assert.equal(ledger[0].entry_type, "RESERVATION_OVERAGE");
-  await assert.rejects(
-    BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(0.01) }),
-    /Budget limit exceeded/
-  );
+  const next = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(0.01) });
+  assert.equal(next.status, "RESERVED", "the next call still starts");
+});
+
+test("Budget Reconciliation: an overage that passes the budget stops new calls until the budget is raised", async () => {
+  const sql = await getSql();
+  const orgId = "org-over-line-" + Date.now();
+  const brandId = "brand-over-line-" + Date.now();
+
+  await sql`insert into organizations (id, name, slug, created_by) values (${orgId}, 'Over Line Org', ${orgId}, 'user') on conflict do nothing`;
+  await sql`insert into brands (id, organization_id, name, created_by) values (${brandId}, ${orgId}, 'Over Line Brand', 'user') on conflict do nothing`;
+  await BudgetLedgerService.getOrCreateAccount(sql, orgId, brandId, 1.2);
+  const reservation = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(1) });
+  await BudgetLedgerService.reconcile(sql, { reservationId: reservation.id, actualSpentMicros: toMicros(1.5) });
+
+  const status = async () => (await sql<{ status: string }>`select status from budget_accounts where organization_id = ${orgId} and brand_id = ${brandId}`)[0]!.status;
+  assert.equal(await status(), "EXCEEDED", "the call in flight finished and passed the line");
+  await assert.rejects(BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(0.01) }), /Budget limit exceeded/);
+
+  await BudgetLedgerService.setBrandBudget(sql, { organizationId: orgId, brandId, capUsd: 2 });
+  assert.equal(await status(), "ACTIVE", "raising the budget over the spend resumes the brand");
+  const next = await BudgetLedgerService.reserve(sql, { organizationId: orgId, brandId, amountMicros: toMicros(0.01) });
+  assert.equal(next.status, "RESERVED");
 });
 
 test("Budget Reconciliation: estimated cost is settled with provenance and never stored as provider actual", async () => {

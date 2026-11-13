@@ -1,7 +1,39 @@
 // The connector's speech helpers, against rows recorded from OpenRouter's GET /models?output_modalities=speech (2026-11-09).
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { parseSpeechListing, speechModelLine, speechRequestBody, voiceProblem } from "./speech.ts";
+import { parseSpeechListing, readLaggingBill, speechModelLine, speechRequestBody, VOICE_HOLD_FLOOR_USD, voiceHoldUsd, voiceProblem } from "./speech.ts";
+
+describe("what a voiceover holds, and reading its bill", () => {
+  it("holds the text at the list rate with a margin: cents for a few lines, the ceiling only when the rate is not stated", () => {
+    const v4 = { usdPerCharacter: 0.00008 };
+    assert.equal(voiceHoldUsd(v4, 72, 1), 0.02, "72 characters at $0.08 per 1,000, doubled, rounded up to a cent");
+    assert.equal(voiceHoldUsd(v4, 4000, 1), 0.64, "the longest text the tool takes");
+    assert.equal(voiceHoldUsd(v4, 10, 1), VOICE_HOLD_FLOOR_USD, "never less than a cent");
+    assert.equal(voiceHoldUsd({ usdPerCharacter: 0 }, 500, 1), VOICE_HOLD_FLOOR_USD, "a free model still reserves the floor");
+    assert.equal(voiceHoldUsd({ usdPerCharacter: 0.001 }, 4000, 1), 1, "never more than the ceiling");
+    assert.equal(voiceHoldUsd({ usdPerCharacter: null }, 72, 1), 1, "no stated rate: the ceiling");
+  });
+
+  it("reads a lagging bill again after each wait, and stops at the first billed answer", async () => {
+    const waited: number[] = [];
+    const wait = async (ms: number) => void waited.push(ms);
+    const answers = [{ status: "unavailable" }, { status: "unavailable" }, { status: "billed", usd: 0.006 }, { status: "billed", usd: 9 }];
+    let reads = 0;
+    const bill = await readLaggingBill(async () => answers[reads++]!, [800, 1500, 2500], wait);
+    assert.deepEqual(bill, { status: "billed", usd: 0.006 });
+    assert.deepEqual([reads, waited], [3, [800, 1500]]);
+
+    reads = 0;
+    waited.length = 0;
+    const missed = await readLaggingBill(async () => ({ status: "unavailable", n: ++reads }), [800, 1500], wait);
+    assert.deepEqual([missed.status, reads, waited], ["unavailable", 3, [800, 1500]]);
+
+    reads = 0;
+    waited.length = 0;
+    await readLaggingBill(async () => ({ status: "billed", n: ++reads }), [800, 1500], wait);
+    assert.deepEqual([reads, waited], [1, []], "a bill that is ready is read once, with no wait");
+  });
+});
 
 const LISTING = {
   data: [
