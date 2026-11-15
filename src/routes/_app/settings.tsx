@@ -71,7 +71,7 @@ function SettingsPage() {
         </TabsContent>
 
         <TabsContent value="connections">
-          <ConnectionsTab organizationId={active.id} canAdmin={canAdmin} />
+          <ConnectionsTab organizationId={active.id} canAdmin={canAdmin} canMake={hasRole(active.role, "member")} />
         </TabsContent>
 
         <TabsContent value="models">

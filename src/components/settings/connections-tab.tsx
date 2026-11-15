@@ -5,6 +5,7 @@ import { ProviderSettingsPanel } from "@/components/provider-settings-panel";
 import { DriveConnectionPanel } from "@/components/settings/drive-connection";
 import { InfoButton } from "@/components/settings/info-button";
 import { ClaudeConnector } from "@/components/settings/claude-connector";
+import { ClaudeCodeVideo } from "@/components/settings/claude-code-video";
 import { qk } from "@/lib/query/keys";
 import { useDecisionEnginesQuery, useGenerationModelsQuery, useProviderSettingsQuery, useScopedMutation } from "@/lib/query/hooks";
 import {
@@ -51,7 +52,7 @@ function Dot({ className }: { className: string }) {
  * Connections: the main key, then every place Meridian needs a provider with a light, then the providers. Keys are saved once and never
  * shown again. Every state is the server's own (the credential resolver); nothing here is assumed to work.
  */
-export function ConnectionsTab({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+export function ConnectionsTab({ organizationId, canAdmin, canMake }: { organizationId: string; canAdmin: boolean; canMake: boolean }) {
   const providers = useProviderSettingsQuery(organizationId);
   const engines = useDecisionEnginesQuery(organizationId);
   const summaries = (providers.data as Partial<Record<ProviderCategory, ProviderConfigSummary>> | undefined) ?? null;
@@ -90,6 +91,8 @@ export function ConnectionsTab({ organizationId, canAdmin }: { organizationId: s
       </section>
 
       <ClaudeConnector organizationId={organizationId} canAdmin={canAdmin} />
+
+      <ClaudeCodeVideo organizationId={organizationId} canMake={canMake} />
 
       <section aria-labelledby="features-title" className="space-y-4">
         <div className="space-y-1">

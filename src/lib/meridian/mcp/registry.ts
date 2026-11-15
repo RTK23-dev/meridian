@@ -2,10 +2,11 @@
 // prompts a client may offer the person as one-click starters.
 import type { McpPrompt, McpTool } from "./protocol.ts";
 import { mediaTools, type ConnectorContext } from "./tools.ts";
+import { claudeCodeTools } from "./claude-code-tools.ts";
 import { workflowTools } from "./workflow-tools.ts";
 
 export function connectorTools(): McpTool<ConnectorContext>[] {
-  return [...workflowTools(), ...mediaTools()];
+  return [...workflowTools(), ...claudeCodeTools(), ...mediaTools()];
 }
 
 const text = (value: string) => [{ role: "user" as const, content: { type: "text" as const, text: value } }];

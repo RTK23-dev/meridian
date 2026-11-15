@@ -8,6 +8,7 @@ import { checkpointProject, createProject, listProjects, readProject, updateProj
 import { defineTool, type McpTool, type ToolResult } from "./protocol.ts";
 import { noBrand, optionalBrandIdSchema, projectIdSchema, requireBrand, workspaceLeftUsd, type ConnectorContext } from "./tools.ts";
 import { listFiles } from "./files.ts";
+import { completeRequest } from "../claude-code/requests.ts";
 import {
   CONTENT_MAX,
   DECIDERS,
@@ -105,6 +106,7 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
         language: z.string().min(2).max(16).default("en"),
         audience: z.string().max(500).default(""),
         title: z.string().max(120).optional(),
+        requestId: z.string().min(1).max(80).optional().describe("The id of the request the person made in Meridian (meridian_request), so the request is linked to this project."),
       }),
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
@@ -133,6 +135,7 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
           brief,
           budgetUsd: input.budgetUsd,
         });
+        const linked = input.requestId ? await completeRequest(context.sql, context.connector.organizationId, input.requestId, { id: project.id, brandId: project.brandId }) : false;
         const next = nextStep(project);
         return {
           text: [
@@ -140,10 +143,11 @@ export function workflowTools(): McpTool<ConnectorContext>[] {
             "Plan:",
             ...planLines(project.mode).map((line) => `- ${line}`),
             spendLine(project),
+            ...(input.requestId ? [linked ? `Linked to request ${input.requestId}.` : `Request ${input.requestId} was not linked: it is not open in this workspace, or it names another brand.`] : []),
             "",
             next,
           ].join("\n"),
-          data: { project: projectView(project), next },
+          data: { project: projectView(project), next, requestLinked: linked },
         };
       },
     }),

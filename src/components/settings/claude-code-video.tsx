@@ -1,0 +1,175 @@
+import { useState } from "react";
+import { Check, Copy } from "lucide-react";
+import { Badge, Button, SelectInput, Textarea } from "@/components/ui";
+import { InfoButton } from "@/components/settings/info-button";
+import { qk } from "@/lib/query/keys";
+import { useClaudeCodeSetupQuery, useScopedMutation } from "@/lib/query/hooks";
+import { cancelClaudeCodeRequest, createClaudeCodeRequest } from "@/lib/meridian/claude-code/actions";
+
+type Source = "gathered" | "factory" | "idea";
+type Made = { id: string; prompt: string };
+
+const SOURCES: Array<{ id: Source; label: string; hint: string }> = [
+  { id: "gathered", label: "Data Meridian already gathered", hint: "The brand's best open opportunity and the patterns the research found." },
+  { id: "factory", label: "The Content Factory's latest plan", hint: "The brief and objective of the brand's newest live plan." },
+  { id: "idea", label: "My own idea", hint: "Write it in a few words." },
+];
+
+/**
+ * One click to make a video from Claude Code. The click records what the video is for and where its idea comes from, and gives back one
+ * line to paste into Claude Code, which then makes the video on this computer, free, and saves it back. A source with nothing behind it is
+ * shown as not ready: nothing is filled in. The regular Content Factory stays one link away, for a video made inside Meridian instead.
+ */
+export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: string; canMake: boolean }) {
+  const setup = useClaudeCodeSetupQuery(organizationId);
+  const [brandId, setBrandId] = useState("");
+  const [source, setSource] = useState<Source>("idea");
+  const [idea, setIdea] = useState("");
+  const [made, setMade] = useState<Made | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  const [refusal, setRefusal] = useState<string | null>(null);
+
+  const create = useScopedMutation({
+    mutationKey: ["mutation", "claude-code.request", organizationId],
+    mutationFn: (_: void) => createClaudeCodeRequest({ data: { organizationId, brandId, source, idea } }),
+    invalidate: () => [qk.claudeCodeSetup(organizationId)],
+    onSuccess: (result) => {
+      if (result.ok) {
+        setMade({ id: result.request.id, prompt: result.prompt });
+        setRefusal(null);
+        void navigator.clipboard?.writeText(result.prompt).then(() => setCopied(result.request.id), () => setCopied(null));
+      } else {
+        setMade(null);
+        setRefusal(result.reason);
+      }
+    },
+  });
+  const cancel = useScopedMutation({
+    mutationKey: ["mutation", "claude-code.cancel", organizationId],
+    mutationFn: (id: string) => cancelClaudeCodeRequest({ data: { organizationId, id } }),
+    invalidate: () => [qk.claudeCodeSetup(organizationId)],
+    success: "Request cancelled. Its line stops working.",
+  });
+
+  const data = setup.data;
+  const brand = data?.brands.find((item) => item.id === brandId) ?? null;
+  const ready = (id: Source) => (id === "idea" ? true : brand ? brand.sources[id] : false);
+  const syncPrompt = "Install Meridian's video skills: call meridian_skills, then for each skill call it again with the name and write the files to .claude/skills/<name>/.";
+  const copy = (text: string, key: string) => void navigator.clipboard?.writeText(text).then(() => setCopied(key), () => setCopied(null));
+
+  return (
+    <section aria-labelledby="claude-code-video-title" className="panel space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 id="claude-code-video-title" className="text-section font-semibold text-fg-primary">Make a video with Claude Code</h2>
+        <Badge variant="info">Free</Badge>
+        <InfoButton label="making a video with Claude Code">
+          <p>Claude Code makes the video on your own computer with the coded styles, so it costs nothing. Meridian keeps the brand, the budget and the project, and stores the finished MP4.</p>
+          <p className="text-fg-muted">Add the connector first (the command under Chat connector above). One click here records what the video is for and gives you one line to paste into Claude Code. Nothing starts until you paste it.</p>
+          <p className="text-fg-muted">Prefer a video made inside Meridian, with the engine and the review gates? Use the regular Content Factory.</p>
+        </InfoButton>
+      </div>
+
+      {setup.isError ? <p className="text-sm text-fg-muted">This could not be loaded. Try again in a moment.</p> : null}
+      {!data && !setup.isError ? <p className="text-sm text-fg-muted">Loading...</p> : null}
+
+      {data ? (
+        <>
+          <div className="space-y-2">
+            <label className="block text-sm font-semibold text-fg-primary" htmlFor="claude-code-brand">Brand</label>
+            <SelectInput id="claude-code-brand" value={brandId} onChange={(event) => { setBrandId(event.target.value); setMade(null); setRefusal(null); }}>
+              <option value="">No brand (the workspace's own video)</option>
+              {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+            </SelectInput>
+          </div>
+
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-semibold text-fg-primary">Where does the idea come from?</legend>
+            {SOURCES.map((item) => {
+              const ok = ready(item.id);
+              const why = item.id === "idea" ? null : !brandId ? "Pick a brand first." : ok ? null : item.id === "gathered" ? "Nothing gathered for this brand yet." : "No live plan for this brand yet.";
+              return (
+                <label key={item.id} className={`flex items-start gap-2 text-sm ${ok ? "text-fg-primary" : "text-fg-muted"}`}>
+                  <input type="radio" name="claude-code-source" className="mt-1" checked={source === item.id} disabled={!ok} onChange={() => { setSource(item.id); setMade(null); setRefusal(null); }} />
+                  <span><span className="font-medium">{item.label}</span><span className="block text-caption text-fg-muted">{why ?? item.hint}</span></span>
+                </label>
+              );
+            })}
+          </fieldset>
+
+          <div className="space-y-1.5">
+            <label className="block text-sm font-semibold text-fg-primary" htmlFor="claude-code-idea">{source === "idea" ? "The idea" : "Anything to add (optional)"}</label>
+            <Textarea id="claude-code-idea" rows={2} maxLength={2000} value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={source === "idea" ? "A 30-second explainer on how our subscription works" : "A tone, a length, or something to include"} />
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <Button type="button" disabled={!canMake || create.isPending || !ready(source) || (source === "idea" && idea.trim().length < 3)} onClick={() => void create.mutateAsync().catch(() => undefined)}>
+              {create.isPending ? "Making..." : "Generate with Claude Code"}
+            </Button>
+            {!canMake ? <span className="text-caption text-fg-muted">A member or above can make a video.</span> : null}
+            <a className="text-sm font-semibold underline" href="/content-factory">Or use the regular Content Factory</a>
+          </div>
+
+          {refusal ? <p role="alert" className="text-sm text-fg-primary">{refusal}</p> : null}
+
+          {made ? (
+            <div role="status" className="space-y-2 rounded-sharp border border-border-strong p-3">
+              <p className="text-sm font-semibold text-fg-primary">Paste this into Claude Code{copied === made.id ? " (copied)" : ""}:</p>
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 truncate rounded-sharp bg-surface-muted px-2 py-1 font-mono text-xs">{made.prompt}</code>
+                <Button type="button" size="sm" variant="secondary" onClick={() => copy(made.prompt, made.id)}>
+                  {copied === made.id ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+                  {copied === made.id ? "Copied" : "Copy"}
+                </Button>
+              </div>
+              <p className="text-caption text-fg-muted">It works for 24 hours. Claude Code asks you only what is missing, makes the video on this computer, and saves it back to this workspace.</p>
+            </div>
+          ) : null}
+
+          <div className="space-y-2 border-t border-hairline pt-3">
+            <p className="text-sm font-semibold text-fg-primary">Video skills Meridian offers ({data.skills.length})</p>
+            {data.skills.length === 0 ? (
+              <p className="text-sm text-fg-muted">This server has no skills to offer.</p>
+            ) : (
+              <ul className="space-y-1 text-sm">
+                {data.skills.map((skill) => (
+                  <li key={skill.name} className="flex flex-wrap items-baseline gap-x-2">
+                    <code className="font-mono text-xs text-fg-primary">{skill.name}</code>
+                    <span className="font-mono text-caption text-fg-muted">{skill.version}</span>
+                    <span className="min-w-0 flex-1 truncate text-fg-muted">{skill.description}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="secondary" onClick={() => copy(syncPrompt, "sync")}>
+                {copied === "sync" ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+                Copy the sync prompt
+              </Button>
+              <span className="text-caption text-fg-muted">Paste it into Claude Code once; it installs these skills and later updates them. The version changes when a skill does.</span>
+            </div>
+          </div>
+
+          {data.requests.length > 0 ? (
+            <div className="space-y-1 border-t border-hairline pt-3">
+              <p className="text-sm font-semibold text-fg-primary">Recent requests</p>
+              <ul aria-label="Recent requests" className="divide-y divide-hairline rounded-sharp border border-hairline">
+                {data.requests.map((request) => (
+                  <li key={request.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                    <span className="min-w-0 flex-1 truncate text-fg-primary">{request.idea}</span>
+                    <Badge variant={request.status === "done" ? "success" : "neutral"}>{request.status}</Badge>
+                    {request.status === "open" || request.status === "claimed" ? (
+                      <>
+                        <Button type="button" variant="quiet" size="sm" onClick={() => copy(request.prompt, request.id)}>{copied === request.id ? "Copied" : "Copy line"}</Button>
+                        <Button type="button" variant="quiet" size="sm" disabled={!canMake || cancel.isPending} onClick={() => void cancel.mutateAsync(request.id).catch(() => undefined)}>Cancel</Button>
+                      </>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </section>
+  );
+}

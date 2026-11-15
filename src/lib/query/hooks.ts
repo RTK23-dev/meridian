@@ -30,6 +30,7 @@ import { acknowledgeStoredAlert, getAlerts } from "@/lib/meridian/alerts/actions
 import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getGeminiDecisionModels, getJevTypesafeModel, getMediaModels, getOpenRouterDecisionModels, getProviderSettings } from "@/lib/meridian/settings/server-actions";
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { listMcpConnectors } from "@/lib/meridian/mcp/actions";
+import { getClaudeCodeSetup } from "@/lib/meridian/claude-code/actions";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
@@ -449,6 +450,17 @@ export const useOpenRouterDecisionModelsQuery = (organizationId: string, enabled
 export const useGenerationModelsQuery = (organizationId: string, enabled = true) => {
   const { userId, ready } = useSession();
   return useQuery({ ...generationModelsQueryOptions(userId, organizationId), enabled: ready && enabled && !!organizationId });
+};
+
+/** The Claude Code card: the video skills on offer, each brand's sources, and the recent requests. Any member may read it. */
+export const useClaudeCodeSetupQuery = (organizationId: string) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    queryKey: userScopedQueryKey(userId, qk.claudeCodeSetup(organizationId)),
+    queryFn: () => getClaudeCodeSetup({ data: { organizationId } }),
+    staleTime: 15_000,
+    enabled: ready && !!organizationId,
+  });
 };
 
 /** The workspace's Claude connector links, without their secrets. Admin only; the role is checked on the server. */
