@@ -139,9 +139,14 @@ describe("video workflow", () => {
   it("offers prompts that start the intake, and refuses an unknown prompt", async () => {
     const protocol = { role: "member" as const, tools: [], context: {}, prompts: CONNECTOR_PROMPTS };
     const listed = (await handleMessage({ jsonrpc: "2.0", id: 1, method: "prompts/list" }, protocol)) as { result: { prompts: Array<{ name: string }> } };
-    assert.deepEqual(listed.result.prompts.map((prompt) => prompt.name), ["make_video", "studio_video", "resume_video"]);
+    assert.deepEqual(listed.result.prompts.map((prompt) => prompt.name), ["make_video", "studio_video", "video_request", "resume_video"]);
     const got = (await handleMessage({ jsonrpc: "2.0", id: 2, method: "prompts/get", params: { name: "make_video", arguments: { idea: "our mug" } } }, protocol)) as { result: { messages: Array<{ content: { text: string } }> } };
     assert.match(got.result.messages[0]!.content.text, /about: our mug\. Start with meridian_start/);
+    const request = (await handleMessage({ jsonrpc: "2.0", id: 5, method: "prompts/get", params: { name: "video_request", arguments: { requestId: "ccr_AbC123xyz" } } }, protocol)) as { result: { messages: Array<{ content: { text: string } }> } };
+    assert.match(request.result.messages[0]!.content.text, /Request id: ccr_AbC123xyz\. First call meridian_skills/);
+    const forged = (await handleMessage({ jsonrpc: "2.0", id: 6, method: "prompts/get", params: { name: "video_request", arguments: { requestId: "x; rm -rf /" } } }, protocol)) as { result: { messages: Array<{ content: { text: string } }> } };
+    assert.doesNotMatch(forged.result.messages[0]!.content.text, /rm -rf/);
+    assert.match(forged.result.messages[0]!.content.text, /missing or not valid/);
     const init = (await handleMessage({ jsonrpc: "2.0", id: 3, method: "initialize", params: {} }, protocol)) as { result: { capabilities: Record<string, unknown>; instructions: string } };
     assert.deepEqual(init.result.capabilities.prompts, { listChanged: false });
     assert.match(init.result.instructions, /call meridian_start FIRST/);

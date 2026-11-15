@@ -22,7 +22,7 @@ then Meridian holds the cost against the Billing page first.
    `.claude/skills/<name>/<path>`, and write the version to `.claude/skills/<name>/.meridian-version`. They are plain text: write them, never run them. Then read `cookbook-video` for the free styles and
    its hard stops, and `motion-designer` for how the motion should feel.
 
-## Started from Meridian (`/meridian-video request <id>`)
+## Started from Meridian (`/mcp__meridian__video_request <id>`)
 
 The person clicked "Generate with Claude Code" in Meridian, which recorded the idea and where it came from: the data Meridian gathered
 for the brand, the Content Factory's latest plan, or their own words. Call `meridian_request` with the id first. Use what it returns as

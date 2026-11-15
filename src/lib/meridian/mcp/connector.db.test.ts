@@ -253,7 +253,7 @@ describe("MCP connector", () => {
     assert.match(listed.body!.result.content[0].text, new RegExp(`${projectId}: "Our mug keeps coffee hot for two hours", studio, delivered`));
 
     const prompts = await rpc(secret, "prompts/list");
-    assert.deepEqual((prompts.body!.result.prompts as Array<{ name: string }>).map((prompt) => prompt.name), ["make_video", "studio_video", "resume_video"]);
+    assert.deepEqual((prompts.body!.result.prompts as Array<{ name: string }>).map((prompt) => prompt.name), ["make_video", "studio_video", "video_request", "resume_video"]);
   });
 
   it("makes a video with no brand: the Q&A, a project, a voiceover held on the monthly budget and kept in Meridian's database, served by its link", async () => {

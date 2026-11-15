@@ -58,8 +58,11 @@ function viewOf(row: Row): ClaudeCodeRequest {
   };
 }
 
-/** The one line to paste into Claude Code. The id is not a secret: the connector scopes every read to its own workspace. */
-export const requestPrompt = (id: string) => `/meridian-video request ${id}`;
+/**
+ * The one line to paste into Claude Code. It is the connector's own prompt, so it needs only the connector (no skill installed first): the
+ * prompt installs the skills when they are missing. The id is not a secret: the connector scopes every read to its own workspace.
+ */
+export const requestPrompt = (id: string) => `/mcp__meridian__video_request ${id}`;
 
 export type CreateRequestInput = {
   organizationId: string;

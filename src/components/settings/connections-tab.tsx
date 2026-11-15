@@ -92,7 +92,7 @@ export function ConnectionsTab({ organizationId, canAdmin, canMake }: { organiza
 
       <ClaudeConnector organizationId={organizationId} canAdmin={canAdmin} />
 
-      <ClaudeCodeVideo organizationId={organizationId} canMake={canMake} />
+      <ClaudeCodeVideo organizationId={organizationId} canMake={canMake} canAdmin={canAdmin} />
 
       <section aria-labelledby="features-title" className="space-y-4">
         <div className="space-y-1">

@@ -3,7 +3,8 @@ import { Check, Copy } from "lucide-react";
 import { Badge, Button, SelectInput, Textarea } from "@/components/ui";
 import { InfoButton } from "@/components/settings/info-button";
 import { qk } from "@/lib/query/keys";
-import { useClaudeCodeSetupQuery, useScopedMutation } from "@/lib/query/hooks";
+import { useClaudeCodeSetupQuery, useMcpConnectorsQuery, useScopedMutation } from "@/lib/query/hooks";
+import { createMcpConnector } from "@/lib/meridian/mcp/actions";
 import { cancelClaudeCodeRequest, createClaudeCodeRequest } from "@/lib/meridian/claude-code/actions";
 
 type Source = "gathered" | "factory" | "idea";
@@ -20,9 +21,59 @@ const CHOICE = "flex cursor-pointer items-start gap-2 rounded-sharp border p-3 t
 /**
  * One click to make a video from Claude Code, in three plain steps: what to make, where the idea comes from, then click. The click records a
  * request and gives back one line to paste into Claude Code, which makes the video on this computer, free, and saves it back. A source with
- * nothing behind it is shown as not ready, and nothing is filled in. Installing the skills is one button, kept out of the way.
+ * nothing behind it is shown as not ready, and nothing is filled in. Connecting is one button, once; the pasted line installs the skills itself.
  */
-export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: string; canMake: boolean }) {
+type Link = { id: string; lastUsedAt: string | null; revokedAt: string | null };
+
+/** Connecting Claude Code, once: one button makes the link and shows the one command to run. Only an admin can make a link. */
+function Connect({ organizationId, canAdmin }: { organizationId: string; canAdmin: boolean }) {
+  const list = useMcpConnectorsQuery(organizationId, canAdmin);
+  const links = ((list.data as Link[] | undefined) ?? []).filter((item) => item.revokedAt === null);
+  const [command, setCommand] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const make = useScopedMutation({
+    mutationKey: ["mutation", "claude-code.connect", organizationId],
+    mutationFn: (_: void) => createMcpConnector({ data: { organizationId, name: "Claude Code" } }),
+    invalidate: () => [qk.mcpConnectors(organizationId)],
+    onSuccess: (result) => {
+      const text = `claude mcp add --transport http meridian ${window.location.origin}/api/mcp/${result.secret}`;
+      setCommand(text);
+      void navigator.clipboard?.writeText(text).then(() => setCopied(true), () => setCopied(false));
+    },
+  });
+  const used = links.find((item) => item.lastUsedAt !== null);
+
+  return (
+    <div className="space-y-2 rounded-sharp border border-hairline p-3">
+      <p className={STEP}>Connect Claude Code (once)</p>
+      {!canAdmin ? (
+        <p className="text-sm text-fg-muted">A workspace admin connects Claude Code once, here. Ask them, then paste the line below.</p>
+      ) : command ? (
+        <div className="space-y-2" role="status">
+          <p className="text-sm text-fg-primary">Run this in your terminal{copied ? " (copied)" : ""}, then restart Claude Code. It is shown once, and it can spend from this workspace, so keep it private.</p>
+          <div className="flex items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-sharp bg-surface-muted px-2 py-1 font-mono text-xs">{command}</code>
+            <Button type="button" size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(command).then(() => setCopied(true), () => setCopied(false))}>
+              {copied ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+              {copied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+        </div>
+      ) : used ? (
+        <p className="text-sm text-fg-muted">Connected. Last used {new Date(used.lastUsedAt!).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}. Nothing more to set up: the line below installs the video skills the first time.</p>
+      ) : (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button type="button" size="sm" disabled={make.isPending || list.isPending} onClick={() => void make.mutateAsync().catch(() => undefined)}>
+            {make.isPending ? "Making..." : links.length > 0 ? "Make a new command" : "Connect Claude Code"}
+          </Button>
+          <span className="text-caption text-fg-muted">{links.length > 0 ? "A link exists but has not been used yet. Its command is shown only once, so make a new one if you lost it." : "One click makes a private link and gives you one command to run."}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ClaudeCodeVideo({ organizationId, canMake, canAdmin }: { organizationId: string; canMake: boolean; canAdmin: boolean }) {
   const setup = useClaudeCodeSetupQuery(organizationId);
   const [choice, setChoice] = useState("auto");
   const [brandId, setBrandId] = useState("");
@@ -58,7 +109,6 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
   const data = setup.data;
   const brand = data?.brands.find((item) => item.id === brandId) ?? null;
   const ready = (id: Source) => (id === "idea" ? true : brand ? brand.sources[id] : false);
-  const syncPrompt = "Install Meridian's video skills: call meridian_skills, then for each skill call it again with the name and write the files to .claude/skills/<name>/ (and the version to .claude/skills/<name>/.meridian-version).";
   const copy = (text: string, key: string) => void navigator.clipboard?.writeText(text).then(() => setCopied(key), () => setCopied(null));
   const canGenerate = canMake && !create.isPending && ready(source) && (source !== "idea" || idea.trim().length >= 3);
 
@@ -79,6 +129,8 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
 
       {data ? (
         <>
+          <Connect organizationId={organizationId} canAdmin={canAdmin} />
+
           <fieldset className="space-y-2">
             <legend className={STEP}>1. What do you want to make?</legend>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -162,17 +214,6 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
             </div>
           ) : null}
 
-          <details className="border-t border-hairline pt-3">
-            <summary className="cursor-pointer text-sm font-semibold text-fg-primary">Set up Claude Code (once)</summary>
-            <div className="mt-2 space-y-2">
-              <p className="text-sm text-fg-muted">Paste this into Claude Code once. It installs Meridian's {data.skills.length} video skills and later updates them.</p>
-              <Button type="button" size="sm" variant="secondary" onClick={() => copy(syncPrompt, "sync")}>
-                {copied === "sync" ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
-                {copied === "sync" ? "Copied" : "Copy the install prompt"}
-              </Button>
-              <p className="text-caption text-fg-muted">Skills: {data.skills.map((skill) => skill.name).join(", ")}.</p>
-            </div>
-          </details>
         </>
       ) : null}
     </section>

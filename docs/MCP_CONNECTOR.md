@@ -178,9 +178,12 @@ Settings, Connections, **Make a video with Claude Code**: pick a brand, pick whe
 - **My own idea**: your words.
 
 A source with nothing behind it is greyed out with what to do first; nothing is filled in. The click records a request (24 hours, migration
-0160) and copies one line, `/meridian-video request <id>`, to paste into Claude Code. The `meridian-video` skill reads the request through
+0160) and copies one line, `/mcp__meridian__video_request <id>`, to paste into Claude Code (the connector's own prompt, so only the connector is needed: it installs the skills when they are missing). The `meridian-video` skill reads the request through
 `meridian_request`, asks only what is missing, makes the video on your own computer, and saves the MP4 back. Nothing starts until the line is
 pasted. A video made inside Meridian, with the engine and its review gates, is the regular Content Factory, linked from the same card.
 
-**Skills.** The card lists the skills Meridian offers with their versions, and copies a sync prompt. Pasted into Claude Code, it installs each
-skill into `.claude/skills/<name>/` through `meridian_skills` and records the version, so a later run only fetches what changed.
+**Setup is one step, once.** The card's **Connect Claude Code** button (an admin) makes a private link and copies one command,
+`claude mcp add --transport http meridian <link>`; run it in a terminal and restart Claude Code. There is no separate skill install: the line the
+button gives afterwards is the connector's own prompt, which installs Meridian's video skills through `meridian_skills` (and records their
+versions in `.meridian-version`, so a later run fetches only what changed) before it reads the request. The server name must be `meridian`, as in
+the command.
