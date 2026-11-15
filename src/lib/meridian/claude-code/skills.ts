@@ -83,3 +83,25 @@ export function listVideoSkills(root: string = skillsRoot()): SkillSummary[] {
   }
   return out;
 }
+
+/**
+ * What a person can choose to make, in plain words. Each choice names the skill that does the making. "auto" leaves it to Claude, which
+ * picks among the free styles and asks the person. motion-designer is not a choice: it shapes the motion inside the others.
+ */
+export const SKILL_CHOICES = [
+  { id: "auto", skill: "meridian-video", label: "Let Claude choose", plain: "Claude asks a few quick questions, then picks a free style that fits." },
+  { id: "pixel_explainer", skill: "pixel-explainer", label: "8-bit science explainer", plain: "A retro pixel-art short that explains one idea, shot by shot." },
+  { id: "cookbook", skill: "cookbook-video", label: "A Meridian style", plain: "Isometric, paper cut, line diagram or data chart, drawn in code." },
+  { id: "scripts", skill: "direction-scripts", label: "Scripts only", plain: "Several short scripts to choose from. No video is made." },
+] as const satisfies ReadonlyArray<{ id: string; skill: VideoSkillName; label: string; plain: string }>;
+export type SkillChoiceId = (typeof SKILL_CHOICES)[number]["id"];
+
+export function isSkillChoice(id: string): id is SkillChoiceId {
+  return SKILL_CHOICES.some((choice) => choice.id === id);
+}
+
+/** The choices whose skill can be read now. A choice whose skill is missing is not offered. */
+export function availableChoices(root: string = skillsRoot()): Array<{ id: SkillChoiceId; skill: VideoSkillName; label: string; plain: string }> {
+  const have = new Set(listVideoSkills(root).map((skill) => skill.name));
+  return SKILL_CHOICES.filter((choice) => have.has(choice.skill)).map((choice) => ({ ...choice }));
+}

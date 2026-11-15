@@ -7,6 +7,7 @@ import type { Sql } from "../learning/store.ts";
 import { hasRole, isRole } from "../access.ts";
 
 const canMake = (role: string) => isRole(role) && hasRole(role, "member");
+import { isSkillChoice, SKILL_CHOICES, type SkillChoiceId } from "./skills.ts";
 import { factorySource, gatheredSource, type RequestSource, type SourceSnapshot } from "./sources.ts";
 
 export const REQUEST_TTL_HOURS = 24;
@@ -14,6 +15,8 @@ export const IDEA_MAX = 2000;
 
 export type ClaudeCodeRequest = {
   id: string;
+  /** What to make (a SkillChoiceId). */
+  choice: SkillChoiceId;
   brandId: string | null;
   source: RequestSource;
   idea: string;
@@ -40,12 +43,14 @@ const iso = (value: unknown) => new Date(value as string).toISOString();
 const parse = <T>(value: unknown, fallback: T): T => (value === null || value === undefined ? fallback : typeof value === "string" ? (JSON.parse(value) as T) : (value as T));
 
 function viewOf(row: Row): ClaudeCodeRequest {
+  const snapshot = parse<SourceSnapshot>(row.snapshot, { idea: row.idea, lines: [], refs: [] });
   return {
     id: row.id,
+    choice: snapshot.choice && isSkillChoice(snapshot.choice) ? snapshot.choice : "auto",
     brandId: row.brand_id,
     source: row.source as RequestSource,
     idea: row.idea,
-    snapshot: parse<SourceSnapshot>(row.snapshot, { idea: row.idea, lines: [], refs: [] }),
+    snapshot,
     status: row.status as ClaudeCodeRequest["status"],
     projectId: row.project_id,
     createdAt: iso(row.created_at),
@@ -62,6 +67,8 @@ export type CreateRequestInput = {
   role: string;
   brandId: string | null;
   source: RequestSource;
+  /** What to make (a SkillChoiceId). Leave out for "auto". */
+  choice?: string;
   /** The person's own words. Required for "idea"; optional extra direction for the others. */
   idea: string;
   now?: () => Date;
@@ -72,6 +79,8 @@ export type CreateRequestResult = { ok: true; request: ClaudeCodeRequest; prompt
 /** Makes a request. A member may; a viewer may not. A source with nothing behind it is refused with what to do first, never filled in. */
 export async function createRequest(sql: Sql, input: CreateRequestInput): Promise<CreateRequestResult> {
   if (!canMake(input.role)) return { ok: false, reason: "Making a video needs the member role or above." };
+  const choice: SkillChoiceId = input.choice === undefined || input.choice === "" ? "auto" : isSkillChoice(input.choice) ? input.choice : "auto";
+  if (input.choice && !isSkillChoice(input.choice)) return { ok: false, reason: `Choose one of: ${SKILL_CHOICES.map((item) => item.id).join(", ")}.` };
   const words = input.idea.replace(/\s+/g, " ").trim().slice(0, IDEA_MAX);
   if (input.brandId) {
     const brand = await sql<{ id: string }>`select id from brands where id = ${input.brandId} and organization_id = ${input.organizationId} and deleted_at is null`;
@@ -86,6 +95,7 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
     if (!found.ok) return { ok: false, reason: found.reason };
     snapshot = found.snapshot;
   }
+  snapshot = { ...snapshot, choice };
   const idea = (input.source === "idea" ? words : words.length >= 3 ? `${snapshot.idea}. ${words}` : snapshot.idea).slice(0, IDEA_MAX);
   if (idea.length < 3) return { ok: false, reason: "The source gave no idea to start from. Write one in your own words." };
   const now = (input.now ?? (() => new Date()))();

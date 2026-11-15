@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
-import { descriptionOf, isVideoSkill, listVideoSkills, readVideoSkill, VIDEO_SKILLS } from "./skills.ts";
+import { availableChoices, descriptionOf, isSkillChoice, SKILL_CHOICES, isVideoSkill, listVideoSkills, readVideoSkill, VIDEO_SKILLS } from "./skills.ts";
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "skills-"));
@@ -67,5 +67,13 @@ describe("the video skills Meridian offers", () => {
   it("reads a description from front matter only", () => {
     assert.equal(descriptionOf("---\ndescription: One line.\n---\nbody"), "One line.");
     assert.equal(descriptionOf("description: not in front matter"), null);
+  });
+
+  it("offers a choice only when its skill can be read, and every choice names an offered skill", () => {
+    assert.deepEqual(availableChoices(fixture()).map((choice) => choice.id), ["cookbook"]);
+    for (const choice of SKILL_CHOICES) assert.ok(isVideoSkill(choice.skill), choice.id);
+    assert.equal(isSkillChoice("auto"), true);
+    assert.equal(isSkillChoice("motion-designer"), false);
+    assert.deepEqual(availableChoices().map((choice) => choice.id), SKILL_CHOICES.map((choice) => choice.id));
   });
 });

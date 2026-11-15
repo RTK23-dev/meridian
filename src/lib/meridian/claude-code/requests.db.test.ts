@@ -63,6 +63,24 @@ describe("Claude Code requests", () => {
     assert.equal(result.request.status, "open");
   });
 
+  it("keeps what the person chose to make, defaults to Claude's choice, and refuses an unknown choice", async () => {
+    const chosen = await createRequest(db.sql, { ...base, brandId: null, source: "idea", choice: "pixel_explainer", idea: "How a black hole forms" });
+    assert.ok(chosen.ok);
+    assert.equal(chosen.request.choice, "pixel_explainer");
+    const left = await createRequest(db.sql, { ...base, brandId: null, source: "idea", idea: "How a black hole forms" });
+    assert.ok(left.ok);
+    assert.equal(left.request.choice, "auto");
+    const unknown = await createRequest(db.sql, { ...base, brandId: null, source: "idea", choice: "rm-rf", idea: "How a black hole forms" });
+    assert.equal(unknown.ok, false);
+    const context = { sql: db.sql, connector: { id: "x", organizationId: WS, role: "member" }, origin: "", now: () => new Date(), linkSecret: null, ports: {} } as unknown as ConnectorContext;
+    const tool = claudeCodeTools().find((item) => item.name === "meridian_request")! as unknown as { run(context: ConnectorContext, input: unknown): Promise<{ text: string }> };
+    assert.match((await tool.run(context, { requestId: chosen.request.id })).text, /Use the pixel-explainer skill/);
+    assert.match((await tool.run(context, { requestId: left.request.id })).text, /left it to you/);
+    const scripts = await createRequest(db.sql, { ...base, brandId: null, source: "idea", choice: "scripts", idea: "Three hooks for a mug" });
+    assert.ok(scripts.ok);
+    assert.match((await tool.run(context, { requestId: scripts.request.id })).text, /scripts only: write them, do not render/);
+  });
+
   it("refuses too short an idea, a viewer, and a brand of another workspace", async () => {
     const short = await createRequest(db.sql, { ...base, brandId: null, source: "idea", idea: "hi" });
     assert.equal(short.ok, false);

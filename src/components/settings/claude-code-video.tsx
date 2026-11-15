@@ -7,31 +7,35 @@ import { useClaudeCodeSetupQuery, useScopedMutation } from "@/lib/query/hooks";
 import { cancelClaudeCodeRequest, createClaudeCodeRequest } from "@/lib/meridian/claude-code/actions";
 
 type Source = "gathered" | "factory" | "idea";
-type Made = { id: string; prompt: string };
 
 const SOURCES: Array<{ id: Source; label: string; hint: string }> = [
+  { id: "idea", label: "My own idea", hint: "Write it in a few words." },
   { id: "gathered", label: "Data Meridian already gathered", hint: "The brand's best open opportunity and the patterns the research found." },
   { id: "factory", label: "The Content Factory's latest plan", hint: "The brief and objective of the brand's newest live plan." },
-  { id: "idea", label: "My own idea", hint: "Write it in a few words." },
 ];
 
+const STEP = "text-sm font-semibold text-fg-primary";
+const CHOICE = "flex cursor-pointer items-start gap-2 rounded-sharp border p-3 text-sm has-[:checked]:border-accent has-[:checked]:bg-surface-muted has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60";
+
 /**
- * One click to make a video from Claude Code. The click records what the video is for and where its idea comes from, and gives back one
- * line to paste into Claude Code, which then makes the video on this computer, free, and saves it back. A source with nothing behind it is
- * shown as not ready: nothing is filled in. The regular Content Factory stays one link away, for a video made inside Meridian instead.
+ * One click to make a video from Claude Code, in three plain steps: what to make, where the idea comes from, then click. The click records a
+ * request and gives back one line to paste into Claude Code, which makes the video on this computer, free, and saves it back. A source with
+ * nothing behind it is shown as not ready, and nothing is filled in. Installing the skills is one button, kept out of the way.
  */
 export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: string; canMake: boolean }) {
   const setup = useClaudeCodeSetupQuery(organizationId);
+  const [choice, setChoice] = useState("auto");
   const [brandId, setBrandId] = useState("");
   const [source, setSource] = useState<Source>("idea");
   const [idea, setIdea] = useState("");
-  const [made, setMade] = useState<Made | null>(null);
+  const [made, setMade] = useState<{ id: string; prompt: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
 
+  const reset = () => { setMade(null); setRefusal(null); };
   const create = useScopedMutation({
     mutationKey: ["mutation", "claude-code.request", organizationId],
-    mutationFn: (_: void) => createClaudeCodeRequest({ data: { organizationId, brandId, source, idea } }),
+    mutationFn: (_: void) => createClaudeCodeRequest({ data: { organizationId, brandId, source, choice, idea } }),
     invalidate: () => [qk.claudeCodeSetup(organizationId)],
     onSuccess: (result) => {
       if (result.ok) {
@@ -54,18 +58,19 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
   const data = setup.data;
   const brand = data?.brands.find((item) => item.id === brandId) ?? null;
   const ready = (id: Source) => (id === "idea" ? true : brand ? brand.sources[id] : false);
-  const syncPrompt = "Install Meridian's video skills: call meridian_skills, then for each skill call it again with the name and write the files to .claude/skills/<name>/.";
+  const syncPrompt = "Install Meridian's video skills: call meridian_skills, then for each skill call it again with the name and write the files to .claude/skills/<name>/ (and the version to .claude/skills/<name>/.meridian-version).";
   const copy = (text: string, key: string) => void navigator.clipboard?.writeText(text).then(() => setCopied(key), () => setCopied(null));
+  const canGenerate = canMake && !create.isPending && ready(source) && (source !== "idea" || idea.trim().length >= 3);
 
   return (
-    <section aria-labelledby="claude-code-video-title" className="panel space-y-4">
+    <section aria-labelledby="claude-code-video-title" className="panel space-y-5">
       <div className="flex flex-wrap items-center gap-2">
         <h2 id="claude-code-video-title" className="text-section font-semibold text-fg-primary">Make a video with Claude Code</h2>
         <Badge variant="info">Free</Badge>
         <InfoButton label="making a video with Claude Code">
           <p>Claude Code makes the video on your own computer with the coded styles, so it costs nothing. Meridian keeps the brand, the budget and the project, and stores the finished MP4.</p>
-          <p className="text-fg-muted">Add the connector first (the command under Chat connector above). One click here records what the video is for and gives you one line to paste into Claude Code. Nothing starts until you paste it.</p>
-          <p className="text-fg-muted">Prefer a video made inside Meridian, with the engine and the review gates? Use the regular Content Factory.</p>
+          <p className="text-fg-muted">Add the connector first (the command under Chat connector above). The click records what the video is for and gives you one line to paste into Claude Code. Nothing starts until you paste it.</p>
+          <p className="text-fg-muted">Prefer a video made inside Meridian, with the engine and its review gates? Use the regular Content Factory.</p>
         </InfoButton>
       </div>
 
@@ -74,35 +79,47 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
 
       {data ? (
         <>
+          <fieldset className="space-y-2">
+            <legend className={STEP}>1. What do you want to make?</legend>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {data.choices.map((item) => (
+                <label key={item.id} className={CHOICE}>
+                  <input type="radio" name="claude-code-choice" className="mt-1" checked={choice === item.id} onChange={() => { setChoice(item.id); reset(); }} />
+                  <span><span className="font-medium text-fg-primary">{item.label}</span><span className="block text-caption text-fg-muted">{item.plain}</span></span>
+                </label>
+              ))}
+            </div>
+            {data.choices.length === 0 ? <p className="text-sm text-fg-muted">This server has no video skills to offer.</p> : null}
+          </fieldset>
+
           <div className="space-y-2">
-            <label className="block text-sm font-semibold text-fg-primary" htmlFor="claude-code-brand">Brand</label>
-            <SelectInput id="claude-code-brand" value={brandId} onChange={(event) => { setBrandId(event.target.value); setMade(null); setRefusal(null); }}>
+            <label className={`block ${STEP}`} htmlFor="claude-code-brand">2. Which brand is it for?</label>
+            <SelectInput id="claude-code-brand" value={brandId} onChange={(event) => { setBrandId(event.target.value); reset(); }}>
               <option value="">No brand (the workspace's own video)</option>
               {data.brands.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
             </SelectInput>
           </div>
 
           <fieldset className="space-y-2">
-            <legend className="text-sm font-semibold text-fg-primary">Where does the idea come from?</legend>
+            <legend className={STEP}>3. Where does the idea come from?</legend>
             {SOURCES.map((item) => {
               const ok = ready(item.id);
               const why = item.id === "idea" ? null : !brandId ? "Pick a brand first." : ok ? null : item.id === "gathered" ? "Nothing gathered for this brand yet." : "No live plan for this brand yet.";
               return (
-                <label key={item.id} className={`flex items-start gap-2 text-sm ${ok ? "text-fg-primary" : "text-fg-muted"}`}>
-                  <input type="radio" name="claude-code-source" className="mt-1" checked={source === item.id} disabled={!ok} onChange={() => { setSource(item.id); setMade(null); setRefusal(null); }} />
+                <label key={item.id} className={`${CHOICE} ${ok ? "" : "text-fg-muted"}`}>
+                  <input type="radio" name="claude-code-source" className="mt-1" checked={source === item.id} disabled={!ok} onChange={() => { setSource(item.id); reset(); }} />
                   <span><span className="font-medium">{item.label}</span><span className="block text-caption text-fg-muted">{why ?? item.hint}</span></span>
                 </label>
               );
             })}
+            <div className="space-y-1.5 pt-1">
+              <label className="block text-sm text-fg-primary" htmlFor="claude-code-idea">{source === "idea" ? "The idea" : "Anything to add (optional)"}</label>
+              <Textarea id="claude-code-idea" rows={2} maxLength={2000} value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={source === "idea" ? "A 30-second explainer on how our subscription works" : "A tone, a length, or something to include"} />
+            </div>
           </fieldset>
 
-          <div className="space-y-1.5">
-            <label className="block text-sm font-semibold text-fg-primary" htmlFor="claude-code-idea">{source === "idea" ? "The idea" : "Anything to add (optional)"}</label>
-            <Textarea id="claude-code-idea" rows={2} maxLength={2000} value={idea} onChange={(event) => setIdea(event.target.value)} placeholder={source === "idea" ? "A 30-second explainer on how our subscription works" : "A tone, a length, or something to include"} />
-          </div>
-
           <div className="flex flex-wrap items-center gap-3">
-            <Button type="button" disabled={!canMake || create.isPending || !ready(source) || (source === "idea" && idea.trim().length < 3)} onClick={() => void create.mutateAsync().catch(() => undefined)}>
+            <Button type="button" disabled={!canGenerate} onClick={() => void create.mutateAsync().catch(() => undefined)}>
               {create.isPending ? "Making..." : "Generate with Claude Code"}
             </Button>
             {!canMake ? <span className="text-caption text-fg-muted">A member or above can make a video.</span> : null}
@@ -125,33 +142,9 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
             </div>
           ) : null}
 
-          <div className="space-y-2 border-t border-hairline pt-3">
-            <p className="text-sm font-semibold text-fg-primary">Video skills Meridian offers ({data.skills.length})</p>
-            {data.skills.length === 0 ? (
-              <p className="text-sm text-fg-muted">This server has no skills to offer.</p>
-            ) : (
-              <ul className="space-y-1 text-sm">
-                {data.skills.map((skill) => (
-                  <li key={skill.name} className="flex flex-wrap items-baseline gap-x-2">
-                    <code className="font-mono text-xs text-fg-primary">{skill.name}</code>
-                    <span className="font-mono text-caption text-fg-muted">{skill.version}</span>
-                    <span className="min-w-0 flex-1 truncate text-fg-muted">{skill.description}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="secondary" onClick={() => copy(syncPrompt, "sync")}>
-                {copied === "sync" ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
-                Copy the sync prompt
-              </Button>
-              <span className="text-caption text-fg-muted">Paste it into Claude Code once; it installs these skills and later updates them. The version changes when a skill does.</span>
-            </div>
-          </div>
-
           {data.requests.length > 0 ? (
             <div className="space-y-1 border-t border-hairline pt-3">
-              <p className="text-sm font-semibold text-fg-primary">Recent requests</p>
+              <p className={STEP}>Recent requests</p>
               <ul aria-label="Recent requests" className="divide-y divide-hairline rounded-sharp border border-hairline">
                 {data.requests.map((request) => (
                   <li key={request.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
@@ -168,6 +161,18 @@ export function ClaudeCodeVideo({ organizationId, canMake }: { organizationId: s
               </ul>
             </div>
           ) : null}
+
+          <details className="border-t border-hairline pt-3">
+            <summary className="cursor-pointer text-sm font-semibold text-fg-primary">Set up Claude Code (once)</summary>
+            <div className="mt-2 space-y-2">
+              <p className="text-sm text-fg-muted">Paste this into Claude Code once. It installs Meridian's {data.skills.length} video skills and later updates them.</p>
+              <Button type="button" size="sm" variant="secondary" onClick={() => copy(syncPrompt, "sync")}>
+                {copied === "sync" ? <Check aria-hidden="true" className="size-4" /> : <Copy aria-hidden="true" className="size-4" />}
+                {copied === "sync" ? "Copied" : "Copy the install prompt"}
+              </Button>
+              <p className="text-caption text-fg-muted">Skills: {data.skills.map((skill) => skill.name).join(", ")}.</p>
+            </div>
+          </details>
         </>
       ) : null}
     </section>

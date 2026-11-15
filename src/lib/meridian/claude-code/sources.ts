@@ -14,6 +14,8 @@ export type SourceSnapshot = {
   lines: string[];
   /** The Meridian rows it came from, so the chat can say what it used. */
   refs: Array<{ kind: string; id: string }>;
+  /** What the person chose to make (a SkillChoiceId). Absent on requests made before the choice existed: read as "auto". */
+  choice?: string;
 };
 
 export type SourceResult = { ok: true; snapshot: SourceSnapshot } | { ok: false; reason: string };
