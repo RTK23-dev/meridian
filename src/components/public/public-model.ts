@@ -39,7 +39,7 @@ export const WORKFLOW: readonly WorkflowStep[] = [
   {
     id: "publishing",
     label: "Publishing",
-    what: "A connected Facebook Page, Instagram, YouTube or TikTok account can receive an organic post. Paid ads are created paused. A channel with no connection says so, and nothing is sent.",
+    what: "Posting to Facebook, Instagram, YouTube and TikTok is switched off in this version: export the finished video and post it yourself. Paid ads are created paused.",
   },
   {
     id: "learning",
@@ -159,7 +159,7 @@ export const QUICKSTART: readonly QuickstartStep[] = [
   {
     id: "keys",
     title: "Connect the providers you use",
-    body: "Open Settings, then General, to save a provider key for the workspace. Only an admin can save one. A key is stored encrypted and is never shown again. A provider with no key stays not connected.",
+    body: "Open Settings, then Connections, to save a provider key for the workspace. Only an admin can save one. A key is stored encrypted and is never shown again. A provider with no key stays not connected.",
   },
   {
     id: "make",

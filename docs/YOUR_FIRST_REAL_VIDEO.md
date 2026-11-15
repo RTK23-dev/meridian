@@ -13,8 +13,9 @@ Do not set up everything first. Each step below says whether you need it.
 1. Run `npm run dev` and open http://127.0.0.1:8080. Create an account, a workspace and one brand (a name and what it sells).
 2. Open the Setup guide. It shows only two things to do. Do them:
    - **A brand.** You just made one.
-   - **One key for the service that judges your ideas.** If you have a TypeSafe key, choose TypeSafe JEV and paste it. Otherwise OpenAI or
-     OpenRouter. You need only one.
+   - **One key for the service that judges your ideas.** Choose **OpenRouter Decisions** (recommended) and paste
+     an OpenRouter key, or Gemini Decisions with a Gemini key. You need only one. TypeSafe JEV direct and OpenAI Decisions are switched
+     off in this version.
 3. Open **Billing** and set the **monthly budget** to a small number, for example $10. Meridian will not spend anything until you do, and it
    stops at that number. Set the brand budget to the same.
 4. On the brand, open **Content**, then **Batch**, and press **Try a demo batch**. It uses made-up data, costs nothing, and shows you what a

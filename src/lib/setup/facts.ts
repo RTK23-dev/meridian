@@ -4,6 +4,10 @@
  */
 import { setupRows, type SetupEngines, type SetupInput } from "../../components/settings/setup-model.ts";
 import type { GuideFacts } from "./guide.ts";
+import { DISABLED_CAPABILITIES } from "../meridian/providers/capability.ts";
+
+/** Engines whose live calls are switched off in this version. One of them not answering is not a choice a person can finish. */
+const SWITCHED_OFF: Record<string, string> = { jev: "decision.typesafe_jev", "openai-decisions": "decision.openai" };
 
 export function guideFacts(input: { brandCount: number | null; summaries: SetupInput["summaries"] | null; engines: SetupEngines | null }): GuideFacts {
   const { brandCount, summaries, engines } = input;
@@ -13,7 +17,7 @@ export function guideFacts(input: { brandCount: number | null; summaries: SetupI
     ? {
         label: active?.label ?? engines.active.engineId,
         // A workspace or deployment choice counts. The default does not, so a person still has to pick an engine that is ready.
-        chosen: engines.active.source !== "default",
+        chosen: engines.active.source !== "default" && !(active?.health.status !== "READY" && (SWITCHED_OFF[engines.active.engineId] ?? "") in DISABLED_CAPABILITIES),
         ready: active?.health.status === "READY",
         reason: active?.health.message ?? "The engine did not report its state.",
       }

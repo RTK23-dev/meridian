@@ -174,7 +174,7 @@ export async function generationModelFor(organizationId: string | null, task: Ge
   } else {
     const deployment = deploymentTextModel(deps.env);
     if (!deployment) {
-      return { status: "unset", reason: `No model is chosen for ${GENERATION_TASKS[task].label}. Choose one in Settings, or set OPENROUTER_MODEL for the deployment.` };
+      return { status: "unset", reason: `No model is chosen for ${GENERATION_TASKS[task].label} yet. Add an OpenRouter key in Settings, Connections, then pick a model in Settings, Models (Quick setup picks them all in one click).` };
     }
     model = deployment;
     source = "deployment";

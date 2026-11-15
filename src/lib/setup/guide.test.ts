@@ -28,7 +28,7 @@ test("after the brand exists, no engine chosen makes the engine the current step
   assert.equal(statusOf(steps, "engine"), "current");
   const engine = steps.find((step) => step.id === "engine");
   assert.match(engine?.detail ?? "", /No engine is chosen/);
-  assert.match(engine?.detail ?? "", /OpenAI Decisions uses an OpenAI key/);
+  assert.match(engine?.detail ?? "", /OpenRouter Decisions needs one OpenRouter key/);
 });
 
 test("a chosen engine that cannot answer yet stays current and carries its reason", () => {

@@ -81,7 +81,7 @@ What the workspace needs before paid calls work:
 | Voice, images | The OpenRouter key (Settings, Connections). |
 | Images | A Studio image model (Settings, Models, Studio, Images). |
 | Decisions | A decision engine that is ready (Settings, Connections, Decisions) and the decision cap on Billing. |
-| Storing files | Nothing. Without Google Drive, files are kept in Meridian's own database (up to 50 MB each). Once Drive is connected (Settings, Connections), new files go there; earlier ones stay readable where they are. |
+| Storing files | Nothing. Files are kept in Meridian's own database (up to 50 MB each). Writing to Google Drive is switched off in this version, so a connected Drive is not written to. |
 | Download links | `MEDIA_LINK_SECRET` (at least 32 characters) in the deployment environment. Without it, files are stored but not linked. |
 | Rendering in the chat | In claude.ai, allow this Meridian site in the code execution network settings, so the sandbox can download the files. |
 

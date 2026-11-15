@@ -150,6 +150,12 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
     }
   }
 
+  // A starting point fills the box and moves the cursor there, so the person sees where it went and can edit or send it.
+  const suggest = (value: string) => {
+    setText(value);
+    requestAnimationFrame(() => document.getElementById("create-message")?.focus());
+  };
+
   return (
     // On a phone the page reaches into <main>'s bottom padding (-mb-6), so the composer docks on the bottom bar at every scroll position.
     <div className="mx-auto -mb-6 flex min-h-[calc(100dvh-9rem)] w-full max-w-3xl flex-col lg:mb-0">
@@ -182,7 +188,7 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
         {mode === "studio" ? (
           <>
             {/* The request typed here is saved as the draft, as in Orchestrator, and stays in view above the phases. */}
-            {messages.length > 0 ? <CreateThread messages={messages} onSuggest={setText} /> : null}
+            {messages.length > 0 ? <CreateThread messages={messages} onSuggest={suggest} /> : null}
             {brandId ? (
               <Suspense fallback={<ScreenSkeleton label="Loading Studio" shape="cards" />}>
                 <section aria-label="Studio canvas" className="canvas-grid -mx-4 mt-4 px-4 py-5 sm:mx-0 sm:rounded-sharp sm:border sm:border-hairline sm:px-5">
@@ -197,7 +203,7 @@ export function CreatePage({ draftId = null, onDraft }: { draftId?: string | nul
           </>
         ) : (
           <>
-            <CreateThread messages={messages} onSuggest={setText} />
+            <CreateThread messages={messages} onSuggest={suggest} />
             {sessionId !== null && canAdmin ? <CreateScripts sessionId={sessionId} canAdmin={canAdmin} language={draftLanguage} onMessages={setMessages} /> : null}
           </>
         )}

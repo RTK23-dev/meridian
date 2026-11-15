@@ -8,7 +8,7 @@ Do not put a normal provider key in `.env`. A few values belong to the deploymen
 
 Save these in Settings for the workspace that will use them:
 
-- Decision engine: TypeSafe JEV, or OpenAI Decisions. One engine receives a decision. There is no silent fallback.
+- Decision engine: OpenRouter Decisions or Gemini Decisions (TypeSafe JEV direct and OpenAI Decisions are switched off in this version). One engine receives a decision. There is no silent fallback.
 - Image and video providers, including OpenRouter when a model is called through it
 - Meta, Google, and TikTok logins for publishing and performance
 - Google Drive, for files and exports

@@ -23,9 +23,9 @@ The loop, in either case:
 2. **Evidence.** Pages, ads, and uploads the brand is allowed to use.
 3. **Decision.** The decision engine answers a fixed set of questions from that evidence. It does not invent the evidence.
 4. **Brief.** An approved decision becomes a creative brief.
-5. **Make.** Images go to the image provider configured for the workspace. Video can go to Gemini Omni, Higgsfield, or a manual cloud folder. Hypit is not connected to production routing: it refuses every job until its runtime is connected and licensed (docs/HYPIT_LICENSE.md). If the chosen provider is not connected, the job says so and nothing is sent.
+5. **Make.** Images go to the image provider configured for the workspace. Video goes through OpenRouter with the model chosen in Settings, Models, or a manual cloud folder. The direct Gemini Omni and Higgsfield routes are switched off in this version. Hypit is not connected to production routing: it refuses every job until its runtime is connected and licensed (docs/HYPIT_LICENSE.md). If the chosen provider is not connected, the job says so and nothing is sent.
 6. **Check.** Claims, brand rules, rights, and a human review. A missing piece of evidence goes to review. It is never passed.
-7. **Publish.** Organic posts go to a connected account. Paid ads are created paused, and Meridian has no button that turns them on. A delivered video can also be repurposed into reviewed variations, and each step (library, upload, paused ad, Facebook post, metrics) is a separate action; see docs/FACTORY.md.
+7. **Publish.** Posting to Instagram, YouTube, TikTok and Facebook is switched off in this version: export the video and post it yourself. Paid ads are created paused, and Meridian has no button that turns them on. A delivered video can also be repurposed into reviewed variations, and each step (library, upload, paused ad, Facebook post, metrics) is a separate action; see docs/FACTORY.md.
 8. **Learn.** Measured results are stored only when they were observed, and the next brief can change.
 
 ## The screens
@@ -86,7 +86,7 @@ This is a pre-release, `1.1.0-beta.1`. Everything was checked with fixtures, fak
 What still needs a key or a decision. The code path exists, and it stays not connected until the server has the credential or you set the number:
 
 - Live image and video calls, including OpenRouter, Deepgram, Drive, and a Hypit process
-- Phrase search through YouTube, Meta Ad Library and SerpAPI. TikTok, Instagram, X, Facebook, Pinterest and LinkedIn are not available as sources in this release, and a saved key for them does nothing; upload the example or paste its text instead. A site's robots.txt or bot check is reported and never worked around
+- Phrase search through YouTube, Meta Ad Library and SerpAPI. TikTok, Instagram, X, Facebook, Pinterest and LinkedIn are read from public pages only, which often fails; upload the example or paste its text when it does. A site's robots.txt or bot check is reported and never worked around
 - Live publishing and performance for Meta, Google, TikTok, and YouTube
 - Shopify order webhooks, Apify discovery, and invitation email
 - Prices Meridian will not guess: HyperFrames per minute, Apify per 1,000 results, and `image.edit`

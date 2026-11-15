@@ -84,7 +84,7 @@ This runs the E1 acceptance on a recorded replay: no network and no keys.
 
 **Expected today: FAIL, 0 of 1 masters passed.** The one failing check is `ledger_bill_settles_render_cost`. The HyperFrames price per
 minute is unset, so a render has no provider bill to settle, and the render's cost stays unknown until the owner records the invoice line
-(render/STATUS.md). The dry run cannot supply that bill. Every other check passes, including the 1080x1920 output, the frame rate, the
+(`src/engine/render/STATUS.md`). The dry run cannot supply that bill. Every other check passes, including the 1080x1920 output, the frame rate, the
 audio, the integrity gate and the single ledger entry.
 
 This is an open owner decision, not a regression to hide. Choose one of these, and record it in `docs/engine/PHASE_LOG.md`:

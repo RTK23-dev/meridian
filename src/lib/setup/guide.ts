@@ -135,7 +135,7 @@ function detailOf(id: GuideStepId, facts: GuideFacts, done: boolean | null): str
     case "engine": {
       const engine = facts.engine;
       if (!engine) return "The engine status did not load.";
-      if (!engine.chosen) return "No engine is chosen for this workspace yet. Pick one below. TypeSafe JEV uses a TypeSafe key, and OpenAI Decisions uses an OpenAI key.";
+      if (!engine.chosen) return "No engine is chosen for this workspace yet. Pick one below. OpenRouter Decisions needs one OpenRouter key, and Gemini Decisions needs one Gemini key.";
       if (!engine.ready) return `${engine.label} is chosen, but it cannot answer yet. ${engine.reason}`;
       return `${engine.label} is chosen and ready. It receives every decision for this workspace.`;
     }

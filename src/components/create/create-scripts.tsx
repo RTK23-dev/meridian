@@ -133,6 +133,12 @@ export function CreateScripts({ sessionId, canAdmin, language: draftLanguage, on
         </Button>
         {block && !(seats && !seats.ok && block === seats.reason) ? <p className="text-sm text-fg-muted">{block}</p> : null}
       </div>
+      {seats && !seats.ok ? (
+        <p className="text-sm text-fg-muted">
+          <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections">Open Settings, Connections</a> to add a key. No key? The same page can{" "}
+          <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections#claude-code-video-title">make the video free with Claude Code</a>.
+        </p>
+      ) : null}
 
       {problem ? <ErrorNotice>{problem}</ErrorNotice> : null}
       {latestRun ? <RunSummary run={latestRun} /> : null}

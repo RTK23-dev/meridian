@@ -44,21 +44,21 @@ The brand brain is the first screen to complete: the four required fields are po
 
 ## Saving provider keys
 
-Keys are not set in `.env` for normal use. Open **Settings → General**:
+Keys are not set in `.env` for normal use. Open **Settings → Connections** (models are on **Settings → Models**):
 
 - **Setup** lists each provider with its state from the server: usable, unusable, not configured, or the deployment's shared
   default. Each state has its reason.
-- **Provider keys and settings** saves a key for this workspace. Only an admin can save or remove one. A key is stored
+- Each provider row saves a key for this workspace. Only an admin can save or remove one. A key is stored
   encrypted and is never shown again; the screen shows its last four characters.
 - **Google Drive** shows whether Drive is connected, and what is missing if it is not.
 
-The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers TypeSafe JEV, OpenAI Decisions or OpenRouter Decisions. OpenRouter also needs a decision model and a passed connection test before it can be chosen. The decision model is picked from OpenRouter's live list of decision models, which shows what each one takes, its price and the most one call can cost; a model that is not on that list cannot be saved. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
+The decision engine is chosen on the **Setup** page (`/setup`), where the engine choice offers OpenRouter Decisions (recommended) and Gemini Decisions. TypeSafe JEV direct and OpenAI Decisions are switched off in this version and are listed as not available. OpenRouter also needs a decision model and a passed connection test before it can be chosen. The decision model is picked from OpenRouter's live list of decision models, which shows what each one takes, its price and the most one call can cost; a model that is not on that list cannot be saved. Only one engine receives decisions per workspace. Every provider and its deployment opt-in are listed in PROVIDERS.md.
 
 JEV also has a backend setting, in **Settings** under the decision engine: TypeSafe System One (the default) or OpenRouter Decisions. Choosing OpenRouter makes JEV's decisions use the OpenRouter key and decision model, and the switch is saved only when OpenRouter reports ready (DECISIONS.md, "JEV backend").
 
 ## Google Drive
 
-Drive stores artifacts and exports only. Postgres holds the data. Connect Drive with one of these, set in `.env`:
+Drive is for artifacts and exports only; Postgres holds the data. Writing to Drive is switched off in this version (a retry could duplicate a file), so files stay in Meridian's database. Connect Drive with one of these, set in `.env`:
 
 - a service account: `GOOGLE_SERVICE_ACCOUNT_KEY` (the JSON key), or
 - an OAuth refresh token: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN`.

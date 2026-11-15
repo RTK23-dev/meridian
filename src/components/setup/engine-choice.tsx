@@ -11,34 +11,49 @@ import { useScopedMutation } from "@/lib/query/hooks";
 import type { SetupEngines } from "@/components/settings/setup-model";
 import { openRouterProgress, savedKeyEngineProgress, type EngineProgress } from "@/components/setup/engine-progress";
 import { splitOperatorHint } from "@/components/settings/key-copy";
+import { DISABLED_CAPABILITIES, type DisabledCapability } from "@/lib/meridian/providers/capability";
 
 /** What each engine does and what it needs, in plain words. */
-const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" | "perception" }> = {
+const ENGINE_COPY: Record<string, { title: string; summary: string; needs: string; keyCategory: "jev" | "openai" | "openrouter" | "perception"; keyLink?: { href: string; label: string }; off?: DisabledCapability }> = {
   jev: {
     title: "TypeSafe JEV",
     summary: "Answers each idea or ad as text: a score, a yes or no, or a choice.",
     needs: "A TypeSafe key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "jev",
+    off: "decision.typesafe_jev",
   },
   "openai-decisions": {
     title: "OpenAI Decisions",
     summary: "The same questions, answered by an OpenAI model. It can also read images.",
     needs: "An OpenAI key, saved on this card. Until that key is saved, this engine cannot be selected.",
     keyCategory: "openai",
+    off: "decision.openai",
   },
   "gemini-decisions": {
     title: "Gemini Decisions",
     summary: "Google's Gemini judges your ideas as text. You choose the model from Google's own live list, and the newest is marked.",
     needs: "A Gemini key, saved on this card (the same key Perception and Production use), and a model chosen from Google's list.",
     keyCategory: "perception",
+    keyLink: { href: "https://aistudio.google.com/apikey", label: "Get a Gemini key" },
   },
   "openrouter-decisions": {
     title: "OpenRouter Decisions",
     summary: "The same kinds of question, answered by a decision model on OpenRouter. The verified models can also read images.",
     needs: "An OpenRouter key, saved on this card, and a passed connection test. Until the test passes, this engine cannot be chosen.",
     keyCategory: "openrouter",
+    keyLink: { href: "https://openrouter.ai/keys", label: "Get an OpenRouter key" },
   },
 };
+
+/** The order the engines are offered in: the one most people should pick first. */
+const ORDER = ["openrouter-decisions", "gemini-decisions", "jev", "openai-decisions"];
+const RECOMMENDED = "openrouter-decisions";
+
+/** An engine whose live calls are switched off in this version and that is not working now. It is listed, not offered. */
+function switchedOff(engine: { id: string; health: { status: string } }): boolean {
+  const off = ENGINE_COPY[engine.id]?.off;
+  return off !== undefined && off in DISABLED_CAPABILITIES && engine.health.status !== "READY";
+}
 
 export type EngineKeyState = { fingerprint: string | null; removable: boolean };
 
@@ -60,7 +75,12 @@ export function EngineChoice({
 }) {
   const activeId = engines.active.engineId;
   const [picked, setPicked] = useState<string | null>(null);
-  const selected = picked ?? activeId;
+  const sorted = [...engines.engines].sort((a, b) => ORDER.indexOf(a.id) - ORDER.indexOf(b.id));
+  const offered = sorted.filter((engine) => !switchedOff(engine));
+  const unavailable = sorted.filter(switchedOff);
+  // The engine in use is shown selected, unless it is one that cannot work in this version: then the recommended one is.
+  const activeOffered = offered.some((engine) => engine.id === activeId);
+  const selected = picked ?? (activeOffered ? activeId : (offered.find((engine) => engine.id === RECOMMENDED) ?? offered[0])?.id ?? activeId);
   const [message, setMessage] = useState<string | null>(null);
   const labelOf = (id: string) => engines.engines.find((engine) => engine.id === id)?.label ?? id;
   const save = useScopedMutation({
@@ -89,7 +109,7 @@ export function EngineChoice({
       {error ? <PlainErrorMessage message={error.message} raw={error.raw} /> : null}
       {message ? <p className="text-sm font-medium text-success" role="status">{message}</p> : null}
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        {engines.engines.map((engine) => {
+        {offered.map((engine) => {
           const copy = ENGINE_COPY[engine.id];
           const ready = engine.health.status === "READY";
           // The engine receiving decisions right now, whether it was chosen for this workspace or is the default.
@@ -118,7 +138,7 @@ export function EngineChoice({
                     className="mt-1.5 size-4 shrink-0 accent-[var(--accent)]"
                   />
                   <label htmlFor={inputId} className={`block min-w-0 space-y-1 ${canAdmin ? "cursor-pointer" : ""}`}>
-                    <span className="block text-lg font-semibold text-fg-primary">{copy?.title ?? engine.label}</span>
+                    <span className="block text-lg font-semibold text-fg-primary">{copy?.title ?? engine.label}{engine.id === RECOMMENDED ? <span className="ml-2 align-middle text-xs font-semibold text-fg-muted">Recommended</span> : null}</span>
                     {copy && selected === engine.id ? <span className="block text-sm text-fg-muted">{copy.summary}</span> : null}
                   </label>
                 </div>
@@ -129,6 +149,7 @@ export function EngineChoice({
               {selected === engine.id ? (
                 <div className="space-y-3">
               {copy ? <p className="text-sm text-fg-muted"><span className="font-semibold text-fg-primary">Needs: </span>{copy.needs}</p> : null}
+              {!ready && copy?.keyLink && key && key.fingerprint === null ? <p className="text-sm"><a className="font-semibold underline" href={copy.keyLink.href} target="_blank" rel="noreferrer">{copy.keyLink.label}</a><span className="text-fg-muted"> (opens their site), then paste it below.</span></p> : null}
               {!ready && engine.health.message ? <EngineReason message={engine.health.message} /> : null}
               {engine.id === "gemini-decisions" && key && key.fingerprint !== null ? <GeminiDecisionControls organizationId={organizationId} canAdmin={canAdmin} /> : null}
               {!ready && key && copy && canAdmin ? (
@@ -145,6 +166,12 @@ export function EngineChoice({
           );
         })}
       </div>
+      {unavailable.length > 0 ? (
+        <p className="text-sm text-fg-muted">
+          Not available in this version: {unavailable.map((engine) => ENGINE_COPY[engine.id]?.title ?? engine.label).join(" and ")}.
+          {!activeOffered ? " The workspace starts on one of them, so pick an engine above." : ""}
+        </p>
+      ) : null}
       {!canAdmin ? <p className="text-sm text-fg-muted">Only a workspace admin can choose the engine or save a key. Everyone can see which one is in use.</p> : null}
       {canAdmin ? (
         <div className="flex flex-wrap items-center gap-3">
