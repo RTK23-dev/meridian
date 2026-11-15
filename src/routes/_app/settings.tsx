@@ -9,7 +9,8 @@ import { WeightsTab } from "@/components/settings/weights-tab";
 import { LearningTab } from "@/components/settings/learning-tab";
 import { DangerTab } from "@/components/settings/danger-tab";
 import { hasRole } from "@/lib/meridian/access";
-import { SETTINGS_SCREEN_LINKS } from "@/lib/navigation/model";
+import { SETTINGS_SCREEN_LINKS, simpleSettingsLinks } from "@/lib/navigation/model";
+import { useAdvanced } from "@/lib/navigation/use-advanced";
 
 type SettingsTab = "general" | "connections" | "models" | "members" | "weights" | "alerts" | "learning" | "danger";
 
@@ -22,6 +23,9 @@ export const Route = createFileRoute("/_app/settings")({
     typeof search.tab === "string" && (TAB_IDS as readonly string[]).includes(search.tab) ? { tab: search.tab as SettingsTab } : {},
   component: SettingsPage,
 });
+
+/** Tabs most people never need. They show only with "Show advanced screens" on, or when one is the open tab. */
+const ADVANCED_TABS: ReadonlySet<SettingsTab> = new Set<SettingsTab>(["weights", "alerts", "learning"]);
 
 const TABS: ReadonlyArray<{ id: SettingsTab; label: string }> = [
   { id: "general", label: "General" },
@@ -39,10 +43,13 @@ function SettingsPage() {
   const search = Route.useSearch();
   const navigate = Route.useNavigate();
   const tab: SettingsTab = search.tab ?? "general";
+  const [advanced, setAdvanced] = useAdvanced();
   const setTab = (next: SettingsTab) => void navigate({ search: { tab: next }, replace: true, resetScroll: false });
   if (!data?.active) return <p className="text-fg-muted">Create a workspace first.</p>;
   const active = data.active;
   const canAdmin = hasRole(active.role, "admin");
+  const tabs = advanced ? TABS : TABS.filter((item) => !ADVANCED_TABS.has(item.id) || item.id === tab);
+  const links = advanced ? SETTINGS_SCREEN_LINKS : simpleSettingsLinks(SETTINGS_SCREEN_LINKS);
 
   return (
     <div className="space-y-6">
@@ -55,12 +62,16 @@ function SettingsPage() {
       {tab === "general" ? <nav aria-label="Other screens in Settings" className="space-y-3">
         <p className="eyebrow">Also in Settings</p>
         <div className="flex flex-wrap gap-2">
-          {SETTINGS_SCREEN_LINKS.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
+          {links.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
         </div>
+        <label className="flex items-center gap-2 text-sm text-fg-muted">
+          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
+          Show advanced screens (operations, logs, calibration, scoring weights)
+        </label>
       </nav> : null}
       <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)} className="space-y-6">
         <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-hairline">
-          {TABS.map((item) => (
+          {tabs.map((item) => (
             <TabsTrigger key={item.id} value={item.id} className="shrink-0 max-sm:min-h-11">{item.label}</TabsTrigger>
           ))}
         </TabsList>

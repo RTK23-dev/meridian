@@ -1,3 +1,5 @@
+import { OffNotice } from "@/components/off-notice";
+import { isOff } from "@/lib/meridian/providers/off";
 import { useEffect, useMemo, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -205,6 +207,7 @@ export function Library({ brandId }: { brandId: string }) {
           Optional. Choose Meta, TikTok or Google Ads. Meridian creates the campaign, ad set and ad with the status paused, and stores a platform id only when the platform returns one. A missing token, Page, location or uploaded image stops the chain, and nothing is marked published from this click alone.
         </p>
         <PausedExplainer />
+        {isOff("publish.paused_action") ? <div className="mt-3"><OffNotice what="Creating paused ads from Meridian" instead="Export the video and create the ad in the platform's own ad manager." /></div> : null}
         {hasRole(data.role, "admin") ? (
           <form
             className="mt-4 grid gap-3"

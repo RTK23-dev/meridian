@@ -3,6 +3,7 @@
  * provider. Each card names its state, the server's own detail, and the step that is missing. A missing step is an
  * environment variable name or an OAuth step. A key value never appears here, and neither does a key fingerprint.
  */
+import { splitOperatorHint } from "./key-copy.ts";
 import type { getSystemStatus } from "@/lib/meridian/system";
 import type { ProviderCategory, ProviderConfigSummary } from "@/lib/meridian/settings/provider-config";
 
@@ -65,7 +66,7 @@ const OAUTH_PROVIDERS = new Set<keyof typeof ACCOUNT_LABEL>(["meta", "tiktok", "
 const ACCOUNT_MISSING: Record<keyof typeof ACCOUNT_LABEL, string> = {
   meta: "Connect with Meta OAuth. Choose the brand's ad account on Connected accounts; it is needed to publish.",
   tiktok: "Connect with TikTok OAuth. Choose the brand's ad account on Connected accounts; it is needed to publish.",
-  google: "Connect with Google OAuth. The Google Ads developer token is used only when GOOGLE_ADS_DEVELOPER_TOKEN_SHARED_DEFAULT=deployment.",
+  google: "Connect with your Google account. Reading Google Ads also needs a developer token, which whoever runs the server sets up.",
   ad_library: "Set META_AD_LIBRARY_TOKEN on the server. No ads are collected until a request succeeds.",
 };
 
@@ -160,7 +161,7 @@ function perceptionCard(summary: ProviderConfigSummary): CardModel {
     return {
       id: "google_ai_studio", label: "Google AI Studio", group: "research", kind: "key",
       status: "FAILED",
-      summary: summary.credentialReason ?? "The saved key cannot be used.",
+      summary: splitOperatorHint(summary.credentialReason ?? "The saved key cannot be used.").plain,
       missing: "Replace the workspace key in Settings, then test the connection.",
       facts: [source],
       workspaceKey,
@@ -169,8 +170,8 @@ function perceptionCard(summary: ProviderConfigSummary): CardModel {
   return {
     id: "google_ai_studio", label: "Google AI Studio", group: "research", kind: "key",
     status: "NOT_CONFIGURED",
-    summary: summary.credentialReason ?? "No Gemini key is available for this workspace.",
-    missing: "Add a workspace key in Settings, or set MERIDIAN_GEMINI_API_KEY on the server. GEMINI_API_KEY also works.",
+    summary: splitOperatorHint(summary.credentialReason ?? "No Gemini key is available for this workspace.").plain,
+    missing: "Add a Gemini key for this workspace in Settings, Connections.",
     facts: [source],
     workspaceKey,
   };

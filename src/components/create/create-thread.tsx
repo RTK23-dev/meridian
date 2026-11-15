@@ -29,6 +29,9 @@ export function CreateThread({ messages, onSuggest }: { messages: Message[]; onS
             </li>
           ))}
         </ul>
+        <p className="text-sm text-fg-muted">
+          No key yet? <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections">Make a video free with Claude Code</a>: it runs on your own computer and saves the result here.
+        </p>
       </section>
     );
   }

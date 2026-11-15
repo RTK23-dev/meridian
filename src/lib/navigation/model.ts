@@ -87,6 +87,23 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
   ];
 }
 
+/**
+ * Screens most people never need: operations, calibration, logs. They stay out of the sidebar and the Settings list until a person
+ * turns on "Show advanced screens" in Settings. Nothing is removed: each still opens by its address and from the command palette.
+ */
+export const ADVANCED_KEY = "meridian-advanced";
+export const ADVANCED_ITEM_IDS: ReadonlySet<string> = new Set(["jobs", "engine-ops", "calibration", "usage", "audit", "webhooks"]);
+
+/** The groups without the advanced screens. The screen a person is on is kept, so the sidebar never loses the current page. */
+export function simpleGroups(groups: NavGroup[], pathname: string): NavGroup[] {
+  return groups.map((group) => ({ ...group, items: group.items.filter((item) => !ADVANCED_ITEM_IDS.has(item.id) || isCurrentPath(pathname, item.to)) }));
+}
+
+/** The Settings list without the advanced screens. */
+export function simpleSettingsLinks(links: readonly NavItem[]): NavItem[] {
+  return links.filter((link) => !ADVANCED_ITEM_IDS.has(link.id));
+}
+
 /** The place a path belongs to, or null for a page outside the five places (the sign-in, the product page, the docs). */
 export function placeOf(pathname: string, brandId?: string): PlaceId | null {
   for (const group of sidebarGroups({ brandId, reviewCount: null })) {

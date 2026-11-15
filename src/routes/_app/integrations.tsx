@@ -1,3 +1,4 @@
+import { splitOperatorHint } from "@/components/settings/key-copy";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { useWorkspace } from "@/components/workspace";
@@ -220,7 +221,7 @@ function Integrations() {
                         <span className="font-semibold text-fg-primary">{row.label}</span>
                         <StatusBadge status={row.status} label={row.label} />
                       </div>
-                      <p className="text-sm text-fg-muted">{row.summary}</p>
+                      <p className="text-sm text-fg-muted">{splitOperatorHint(row.summary).plain}</p>
                     </li>
                   ))}
                 </ul>

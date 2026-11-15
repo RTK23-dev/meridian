@@ -425,7 +425,7 @@ export const addMember = createServerFn({ method: "POST" })
       objectId: inviteId,
       metadata: { email: data.email, role: data.role, delivery: result.status },
     });
-    return { status: result.status, message: result.message };
+    return { status: result.status, message: result.message, link: result.link };
   });
 
 export const acceptInvite = createServerFn({ method: "POST" })

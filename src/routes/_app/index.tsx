@@ -67,6 +67,21 @@ function Home() {
   }));
   const canCreate = hasRole(data.active.role, "member");
 
+  // A new workspace sees one thing to do, not a dashboard of empty panels. The dashboard appears with the first brand.
+  if (data.brands.length === 0) {
+    return (
+      <div className="space-y-8">
+        <PageHeader title="Workspace overview" description={`Welcome to ${data.active.name}. Start with the one step below.`} />
+        <SetupCallout steps={setupSteps} />
+        <section aria-labelledby="free-start" className="space-y-2 rounded-sharp border border-hairline p-5">
+          <h2 id="free-start" className="text-section font-semibold text-fg-primary">Or make a video for free first</h2>
+          <p className="text-sm text-fg-muted">Claude Code can make a video on your own computer with no key and no cost, and save it here.</p>
+          <Button asChild variant="secondary"><Link to="/settings" search={{ tab: "connections" }}>Make a video with Claude Code</Link></Button>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10">
       <PageHeader
@@ -74,6 +89,7 @@ function Home() {
         description={`A current view of ${data.active.name}, its brands, and work that needs attention.`}
         actions={canCreate ? <Button asChild variant="secondary"><Link to="/brands/new"><Plus aria-hidden="true" className="mr-2 size-4" />New brand</Link></Button> : undefined}
       />
+      <SetupCallout steps={setupSteps} />
       <KpiRow kpis={kpis} />
       <TeamPanel agents={team} />
       <AttentionList
@@ -83,7 +99,6 @@ function Home() {
         onRetryReviews={() => { void Promise.all(machines.map((query) => query.refetch())); }}
         onRetryConnections={() => { void integrations.refetch(); }}
       />
-      <SetupCallout steps={setupSteps} />
       <BrandGrid brands={data.brands} lookup={lookup} canCreate={canCreate} />
       <ActivityFeed entries={data.audit} brandNameById={brandNameById} />
     </div>

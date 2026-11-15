@@ -1,3 +1,5 @@
+import { OffNotice } from "@/components/off-notice";
+import { isOff } from "@/lib/meridian/providers/off";
 import { useId } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -12,6 +14,9 @@ import { CopyButton } from "./copy-button.tsx";
 import { frameShape } from "./aspect.ts";
 import { deliverByHandOnly, publishBlockReason } from "./publish-state.ts";
 import type { PublishReceipt } from "./types.ts";
+
+/** Posting from Meridian is off while all four channels are gated. */
+const publishingOff = isOff("publish.instagram", "publish.youtube", "publish.tiktok", "publish.facebook");
 
 export type PublishTarget = {
   creativeId: string;
@@ -106,6 +111,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
+          {publishingOff ? <div className="mt-3"><OffNotice what="Posting to Instagram, YouTube, TikTok and Facebook" instead="Export the video from Library and post it yourself. Nothing is sent from here." /></div> : null}
 
           <form
             noValidate
@@ -248,7 +254,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-4">
             {blockReason && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">{blockReason}</DisabledReason> : null}
             <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
-            <Button type="submit" disabled={pending || blockReason !== null} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>
+            <Button type="submit" disabled={pending || blockReason !== null || publishingOff} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>
               {pending ? "Publishing…" : `Publish to ${selected.length} destination${selected.length === 1 ? "" : "s"}`}
             </Button>
           </div>

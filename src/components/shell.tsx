@@ -13,9 +13,10 @@ import { Button, Dialog, DialogClose, DialogContent, DialogDescription, DialogTi
 import { CommandPalette } from "@/components/command-palette";
 import { PageCommandProvider } from "@/components/page-commands";
 import { usePageCommandRegistry } from "@/components/page-commands-context";
-import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, nextStep, placeOf, resolveLastBrand, sidebarGroups, switcherMode, unreadAlertLabel, type PlaceId } from "@/lib/navigation/model";
+import { bottomTabs, brandIdFromPath, documentTitle, isCurrentPath, LAST_BRAND_KEY, nextStep, placeOf, resolveLastBrand, sidebarGroups, simpleGroups, switcherMode, unreadAlertLabel, type PlaceId } from "@/lib/navigation/model";
 import { chordPath, INITIAL_SHORTCUT_STATE, isTypingTarget, nextShortcutState, type ShortcutState } from "@/lib/navigation/shortcuts";
 import { readLocal, writeLocal } from "@/lib/navigation/local-storage";
+import { useAdvanced } from "@/lib/navigation/use-advanced";
 import { routePageTitle } from "@/lib/navigation/route-data";
 
 const COLLAPSED_KEY = "meridian-nav-collapsed";
@@ -51,7 +52,11 @@ function ShellChrome({ children }: { children: ReactNode }) {
   const alerts = useAlertsQuery(active?.id ?? "", !!active);
   // A count is passed only once it has loaded. Null means "unknown", and the sidebar shows no badge for it.
   const reviewCount = machine.data ? machine.data.counts.reviews : null;
-  const groups = useMemo(() => sidebarGroups({ brandId, reviewCount }), [brandId, reviewCount]);
+  const [advanced] = useAdvanced();
+  const groups = useMemo(() => {
+    const all = sidebarGroups({ brandId, reviewCount });
+    return advanced ? all : simpleGroups(all, path);
+  }, [brandId, reviewCount, advanced, path]);
   const bellLabel = alerts.data ? unreadAlertLabel(alerts.data.alerts) : null;
   const tabs = bottomTabs(brandId);
   const next = nextStep({ pathname: path, brandId });

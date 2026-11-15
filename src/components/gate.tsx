@@ -28,15 +28,17 @@ export function Welcome() {
   useEffect(() => {
     document.title = documentTitle({ page: "Welcome" });
   }, []);
+  // An invited person arrives signed out on the invitation link. They are told so, and stay on the link, so accepting comes next.
+  const invited = typeof window !== "undefined" && window.location.pathname.replace(/\/+$/, "") === "/invite";
   return (
     <>
       <PublicHeader account={false} />
       <AuthShell
-        title="Sign in or create an account"
-        description="Your brands, records and decisions stay inside the workspace that owns them."
+        title={invited ? "You were invited to a workspace" : "Sign in or create an account"}
+        description={invited ? "Create an account with the email that was invited, or sign in if you have one. You accept the invitation on the next screen." : "Your brands, records and decisions stay inside the workspace that owns them."}
         footer={<PublicIntroLinks />}
       >
-        <EmailAuthForm initialMode="in" />
+        <EmailAuthForm initialMode={invited ? "up" : "in"} />
       </AuthShell>
       <PublicFooter />
     </>

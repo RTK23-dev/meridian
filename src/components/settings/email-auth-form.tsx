@@ -10,6 +10,12 @@ import { plainAuthError, plainServerError, signInSchema, signUpSchema, type Sign
 type Failure = { message: string; raw: string };
 
 /** Email and password, with sign-in and create-account as two forms. Each has its own schema, so inline checks match the mode. */
+/** Where a person lands after signing in: the invitation they opened, if that is where they are, else the workspace. */
+function afterSignIn(): string {
+  const { pathname, search } = window.location;
+  return pathname.replace(/\/+$/, "") === "/invite" && search.includes("token=") ? `${pathname}${search}` : "/";
+}
+
 export function EmailAuthForm({ initialMode = "up" }: { initialMode?: "in" | "up" }) {
   const [mode, setMode] = useState<"in" | "up">(initialMode);
   return (
@@ -37,7 +43,7 @@ function SignInForm() {
         setFailure({ message: plainAuthError(result.error, "sign-in"), raw: result.error.message ?? result.error.code ?? "" });
         return;
       }
-      window.location.assign("/");
+      window.location.assign(afterSignIn());
     } catch (caught) {
       const raw = errorText(caught);
       setFailure({ message: plainServerError(raw, "sign-in"), raw });
@@ -71,7 +77,7 @@ function SignUpForm() {
         setFailure({ message: plainAuthError(result.error, "sign-up"), raw: result.error.message ?? result.error.code ?? "" });
         return;
       }
-      window.location.assign("/");
+      window.location.assign(afterSignIn());
     } catch (caught) {
       const raw = errorText(caught);
       setFailure({ message: plainServerError(raw, "sign-up"), raw });

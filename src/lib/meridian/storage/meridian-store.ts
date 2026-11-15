@@ -10,6 +10,7 @@
  * - brandId null is the workspace's own space: a video made without a brand.
  */
 import type { Sql } from "../learning/store.ts";
+import { DISABLED_CAPABILITIES } from "../providers/capability.ts";
 import { createDatabaseObjectStore, DATABASE_OBJECT_MAX_BYTES } from "./database-store.ts";
 import { createGoogleDriveObjectStore, createSqlStorageMetadataRepository, type AssetLifecycle, type StorageScopeBrand, type StoredObject } from "./object-store.ts";
 
@@ -41,6 +42,13 @@ const homeCache = new Map<string, { home: StorageHome; at: number }>();
 export async function storageHomeOf(organizationId: string): Promise<StorageHome> {
   const hit = homeCache.get(organizationId);
   if (hit && Date.now() - hit.at < HOME_CACHE_MS) return hit.home;
+  // While writing to Drive is switched off, a connected Drive would refuse every new file. New files go to the database instead,
+  // and files already in Drive stay readable where they are.
+  if ("drive.write" in DISABLED_CAPABILITIES) {
+    const home: StorageHome = { kind: "database", detail: `Files are kept in Meridian's own database, up to ${DATABASE_OBJECT_MAX_BYTES / (1024 * 1024)} MB each. Writing to Google Drive is switched off in this version.` };
+    homeCache.set(organizationId, { home, at: Date.now() });
+    return home;
+  }
   const { GoogleDriveClient } = await import("./drive.ts");
   const health = await new GoogleDriveClient().health(organizationId).catch((error: unknown) => ({
     status: "UNAVAILABLE" as const,

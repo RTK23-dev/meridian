@@ -26,6 +26,8 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
 }) {
   const { reload } = useWorkspace();
   const [note, setNote] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [pendingRemoval, setPendingRemoval] = useState<MemberRow | null>(null);
   const changing = usePendingVariables<{ userId: string; role: string }>(ROLE_KEY(organizationId)).map((vars) => vars.userId);
@@ -87,6 +89,18 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
       </div>
 
       {note ? <p role="status" className="text-sm text-fg-primary">{note}</p> : null}
+      {inviteLink ? (
+        <div role="status" className="space-y-2 rounded-sharp border border-border-strong p-3">
+          <p className="text-sm font-semibold text-fg-primary">Invitation link: copy it now, it is shown once.</p>
+          <div className="flex items-center gap-2">
+            <Input aria-label="Invitation link" readOnly value={inviteLink} onFocus={(event) => event.currentTarget.select()} className="min-w-0 flex-1 font-mono text-xs" />
+            <Button type="button" size="sm" variant="secondary" onClick={() => void navigator.clipboard?.writeText(inviteLink).then(() => setLinkCopied(true), () => setLinkCopied(false))}>
+              {linkCopied ? "Copied" : "Copy"}
+            </Button>
+          </div>
+          <p className="text-caption text-fg-muted">It works once, for 7 days, and only for the email you invited. They open it, sign in or create an account with that email, and join.</p>
+        </div>
+      ) : null}
       {roleError ? <FormError message={plainServerError(roleError, "settings")} raw={roleError} /> : null}
 
       <DataTable
@@ -94,7 +108,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
         columns={columns}
         getRowId={(row) => row.userId}
         emptyTitle="No members yet"
-        emptyReason="Invite someone who already has an account, or send an invitation."
+        emptyReason="Invite someone with their email. They join by opening the invitation link."
       />
 
       {invites.length > 0 ? (
@@ -118,7 +132,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         organizationId={organizationId}
-        onInvited={(message) => { setNote(message); }}
+        onInvited={(message, link) => { setNote(message); setInviteLink(link); setLinkCopied(false); }}
       />
 
       <AlertDialog open={pendingRemoval !== null} onOpenChange={(open) => { if (!open) setPendingRemoval(null); }}>
@@ -156,7 +170,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   organizationId: string;
-  onInvited: (message: string) => void;
+  onInvited: (message: string, link: string | null) => void;
 }) {
   const { reload } = useWorkspace();
   const blank: MemberInviteInput = { email: "", role: "member" };
@@ -165,7 +179,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
     mutationKey: ["mutation", "workspace.invite", organizationId],
     mutationFn: (values: MemberInviteInput) => addMember({ data: { organizationId, ...values } }),
     onSuccess: async (result) => {
-      onInvited(result.message);
+      onInvited(result.message, result.link ?? null);
       await reload();
       form.reset(blank);
       onOpenChange(false);
@@ -185,7 +199,7 @@ function InviteDialog({ open, onOpenChange, organizationId, onInvited }: {
       <DialogContent>
         <DialogTitle className="text-section font-semibold text-fg-primary">Invite a member</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-fg-muted">
-          If the person already has an account, they are added now. Otherwise an invitation is recorded for them.
+          They join by opening a one-time invitation link. If no email can be sent, you get the link to pass on yourself.
         </DialogDescription>
         <form className="mt-4 space-y-4" onSubmit={form.handleSubmit((values) => { void invite.mutateAsync(values).catch(() => undefined); })} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
           <Field label="Email" error={form.formState.errors.email?.message} required>

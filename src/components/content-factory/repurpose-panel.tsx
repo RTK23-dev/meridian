@@ -1,3 +1,5 @@
+import { OffNotice } from "@/components/off-notice";
+import { isOff } from "@/lib/meridian/providers/off";
 import { useState } from "react";
 import { Badge, Button, Card, CardDescription, CardHeader, CardTitle, errorText, Input, toast } from "@/components/ui";
 import { checkContentFactoryRepurposeRender, getContentFactoryRepurposeOutput, listContentFactoryRepurposeReviews, previewContentFactoryRepurpose, reviewContentFactoryRepurposeVariant, startContentFactoryRepurpose, uploadContentFactoryRepurposeVariant, listContentFactoryPausedAdChoices, createContentFactoryPausedAd, listContentFactoryRepurposeFacebookPages, measureContentFactoryRepurposeRun, publishContentFactoryRepurposeToFacebook } from "@/lib/meridian/content-factory/actions";
@@ -347,6 +349,9 @@ function UploadToMeta({ sessionId, runId, variantKey }: { sessionId: string; run
     } finally {
       setBusy(false);
     }
+  }
+  if (isOff("publish.meta_video_upload")) {
+    return <OffNotice what="Uploading to the Meta ad account" instead="Download the video and upload it in Meta's own ad manager." />;
   }
   return (
     <div className="space-y-1">

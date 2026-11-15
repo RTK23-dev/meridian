@@ -10,8 +10,13 @@ export function newInviteToken(): string {
   return randomBytes(32).toString("base64url");
 }
 
+/** The one-time link an invited person opens. It carries the token, so it is shown once and never stored. */
+export function inviteLink(origin: string, token: string): string {
+  return `${origin.replace(/\/$/, "")}/invite?token=${encodeURIComponent(token)}`;
+}
+
 export function inviteEmail(input: { email: string; token: string; origin: string; workspace: string }): { to: string; subject: string; text: string } {
-  const link = `${input.origin.replace(/\/$/, "")}/invite?token=${encodeURIComponent(input.token)}`;
+  const link = inviteLink(input.origin, input.token);
   return {
     to: input.email,
     subject: `Invitation to ${input.workspace || "a Meridian workspace"}`,
@@ -23,6 +28,12 @@ export function selectEmailProvider(options?: { allowTest?: boolean; sent?: { to
   if (options?.allowTest) return testEmailProvider(options.sent);
   return realEmailProvider();
 }
+
+/**
+ * What happened to an invitation. When no email went out, `link` is the one-time link for the admin to pass on themselves: without it
+ * the invited person could never join. It is null when the email was sent.
+ */
+export type InviteOutcome = { status: "sent" | "pending"; message: string; link: string | null };
 
 export async function createInvitation(
   sql: Sql,
@@ -37,7 +48,7 @@ export async function createInvitation(
     provider: EmailProvider;
     now?: number;
   },
-): Promise<{ status: "sent" | "pending"; message: string }> {
+): Promise<InviteOutcome> {
   const token = newInviteToken();
   const tokenHash = hashInviteToken(token);
   const expires = new Date((input.now ?? Date.now()) + 7 * 24 * 60 * 60 * 1000).toISOString();
@@ -62,7 +73,7 @@ async function deliver(
     provider: EmailProvider;
     token: string;
   },
-): Promise<{ status: "sent" | "pending"; message: string }> {
+): Promise<InviteOutcome> {
   const message = inviteEmail({
     email: input.email,
     token: input.token,
@@ -75,7 +86,7 @@ async function deliver(
       update invites set status = 'sent', sent_at = now(), send_count = send_count + 1, last_error = ''
       where id = ${input.id} and organization_id = ${input.organizationId}
     `;
-    return { status: "sent", message: "Invitation email sent." };
+    return { status: "sent", message: "Invitation email sent.", link: null };
   }
   await sql`
     update invites set status = 'pending', last_error = ${result.error}
@@ -84,8 +95,9 @@ async function deliver(
   return {
     status: "pending",
     message: result.status === "NOT_CONFIGURED"
-      ? "Invitation stored. Email delivery is not configured, so nobody was notified."
-      : "Invitation stored. The email provider failed, so nobody was notified.",
+      ? "Invitation stored. No email was sent, so copy the link below and send it to them yourself."
+      : "Invitation stored. The email could not be confirmed as sent, so copy the link below and send it to them yourself.",
+    link: inviteLink(input.origin, input.token),
   };
 }
 

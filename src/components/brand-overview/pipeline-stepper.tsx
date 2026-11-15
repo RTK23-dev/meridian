@@ -5,7 +5,7 @@ import { doneCount, stageProgressPercent, type PipelineStage, type StageState } 
 const STATE: Record<StageState, { label: string; icon: LucideIcon; tone: string }> = {
   done: { label: "Done", icon: CircleCheck, tone: "text-success" },
   in_progress: { label: "In progress", icon: CircleDot, tone: "text-info" },
-  blocked: { label: "Blocked", icon: Lock, tone: "text-warning" },
+  blocked: { label: "Later", icon: Lock, tone: "text-fg-muted" },
   not_started: { label: "Not started", icon: Circle, tone: "text-fg-muted" },
 };
 
