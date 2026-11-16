@@ -458,7 +458,9 @@ export const useClaudeCodeSetupQuery = (organizationId: string) => {
   return useQuery({
     queryKey: userScopedQueryKey(userId, qk.claudeCodeSetup(organizationId)),
     queryFn: () => getClaudeCodeSetup({ data: { organizationId } }),
-    staleTime: 15_000,
+    staleTime: 3_000,
+    // While a video is waiting or being made, the card follows it. Otherwise it checks now and then whether the runner is online.
+    refetchInterval: (query) => (query.state.data?.requests.some((request) => request.status === "open" || request.status === "running") ? 4_000 : 20_000),
     enabled: ready && !!organizationId,
   });
 };

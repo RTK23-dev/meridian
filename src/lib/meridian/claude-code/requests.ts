@@ -8,6 +8,7 @@ import { hasRole, isRole } from "../access.ts";
 
 const canMake = (role: string) => isRole(role) && hasRole(role, "member");
 import { isSkillChoice, SKILL_CHOICES, type SkillChoiceId } from "./skills.ts";
+import { isRunnerModel, RUNNER_MODELS, type RunnerModelId } from "./queue.ts";
 import { factorySource, gatheredSource, type RequestSource, type SourceSnapshot } from "./sources.ts";
 
 export const REQUEST_TTL_HOURS = 24;
@@ -21,7 +22,14 @@ export type ClaudeCodeRequest = {
   source: RequestSource;
   idea: string;
   snapshot: SourceSnapshot;
-  status: "open" | "claimed" | "done" | "cancelled";
+  /** open: waiting for a runner. claimed: read by a pasted session. running: a runner is making it. */
+  status: "open" | "claimed" | "running" | "done" | "failed" | "cancelled";
+  /** The model tier the person chose (a RunnerModelId). */
+  model: RunnerModelId;
+  /** Why it failed or was queued again, when it was. */
+  lastError: string;
+  runnerName: string;
+  attempt: number;
   projectId: string | null;
   createdAt: string;
   expiresAt: string;
@@ -34,6 +42,10 @@ type Row = {
   idea: string;
   snapshot: unknown;
   status: string;
+  model?: string | null;
+  last_error?: string | null;
+  runner_name?: string | null;
+  attempt?: number | string | null;
   project_id: string | null;
   created_at: unknown;
   expires_at: unknown;
@@ -52,6 +64,10 @@ function viewOf(row: Row): ClaudeCodeRequest {
     idea: row.idea,
     snapshot,
     status: row.status as ClaudeCodeRequest["status"],
+    model: row.model && isRunnerModel(row.model) ? row.model : "auto",
+    lastError: row.last_error ?? "",
+    runnerName: row.runner_name ?? "",
+    attempt: Number(row.attempt ?? 0),
     projectId: row.project_id,
     createdAt: iso(row.created_at),
     expiresAt: iso(row.expires_at),
@@ -72,6 +88,8 @@ export type CreateRequestInput = {
   source: RequestSource;
   /** What to make (a SkillChoiceId). Leave out for "auto". */
   choice?: string;
+  /** The model tier (a RunnerModelId). Leave out for "auto". */
+  model?: string;
   /** The person's own words. Required for "idea"; optional extra direction for the others. */
   idea: string;
   now?: () => Date;
@@ -84,6 +102,8 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
   if (!canMake(input.role)) return { ok: false, reason: "Making a video needs the member role or above." };
   const choice: SkillChoiceId = input.choice === undefined || input.choice === "" ? "auto" : isSkillChoice(input.choice) ? input.choice : "auto";
   if (input.choice && !isSkillChoice(input.choice)) return { ok: false, reason: `Choose one of: ${SKILL_CHOICES.map((item) => item.id).join(", ")}.` };
+  if (input.model && !isRunnerModel(input.model)) return { ok: false, reason: `Choose one of: ${RUNNER_MODELS.map((item) => item.id).join(", ")}.` };
+  const model: RunnerModelId = input.model && isRunnerModel(input.model) ? input.model : "auto";
   const words = input.idea.replace(/\s+/g, " ").trim().slice(0, IDEA_MAX);
   if (input.brandId) {
     const brand = await sql<{ id: string }>`select id from brands where id = ${input.brandId} and organization_id = ${input.organizationId} and deleted_at is null`;
@@ -105,9 +125,9 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
   const expires = new Date(now.getTime() + REQUEST_TTL_HOURS * 3_600_000);
   const id = `ccr_${randomBytes(9).toString("base64url")}`;
   const rows = await sql<Row>`
-    insert into claude_code_requests (id, organization_id, brand_id, created_by, source, idea, snapshot, expires_at, created_at)
-    values (${id}, ${input.organizationId}, ${input.brandId}, ${input.userId}, ${input.source}, ${idea}, ${JSON.stringify(snapshot)}::jsonb, ${expires.toISOString()}, ${now.toISOString()})
-    returning id, brand_id, source, idea, snapshot, status, project_id, created_at, expires_at
+    insert into claude_code_requests (id, organization_id, brand_id, created_by, source, idea, snapshot, model, expires_at, created_at)
+    values (${id}, ${input.organizationId}, ${input.brandId}, ${input.userId}, ${input.source}, ${idea}, ${JSON.stringify(snapshot)}::jsonb, ${model}, ${expires.toISOString()}, ${now.toISOString()})
+    returning id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
   `;
   return { ok: true, request: viewOf(rows[0]!), prompt: requestPrompt(id) };
 }
@@ -115,7 +135,7 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
 /** A request of this workspace that is neither cancelled nor past its time, or null. */
 export async function readRequest(sql: Sql, organizationId: string, id: string, now: () => Date = () => new Date()): Promise<ClaudeCodeRequest | null> {
   const rows = await sql<Row>`
-    select id, brand_id, source, idea, snapshot, status, project_id, created_at, expires_at
+    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
     from claude_code_requests
     where id = ${id} and organization_id = ${organizationId} and status <> 'cancelled' and expires_at > ${now().toISOString()}
   `;
@@ -125,7 +145,7 @@ export async function readRequest(sql: Sql, organizationId: string, id: string, 
 /** The workspace's recent requests, newest first, for the Settings list. */
 export async function listRequests(sql: Sql, organizationId: string, limit = 8): Promise<ClaudeCodeRequest[]> {
   const rows = await sql<Row>`
-    select id, brand_id, source, idea, snapshot, status, project_id, created_at, expires_at
+    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
     from claude_code_requests where organization_id = ${organizationId} and status <> 'cancelled'
     order by created_at desc limit ${limit}
   `;
@@ -137,11 +157,15 @@ export async function claimRequest(sql: Sql, organizationId: string, id: string)
   await sql`update claude_code_requests set status = 'claimed' where id = ${id} and organization_id = ${organizationId} and status = 'open'`;
 }
 
-/** Links the project a request produced, and marks it done. Only a request of the same workspace (and, if it has one, the same brand). */
+/**
+ * Links the project a request produced. On the paste path that is the end, so the request is marked done. A job a runner holds stays
+ * running: the runner reports the end, and Meridian then checks that a video was saved. Only a request of the same workspace (and, if it
+ * has one, the same brand).
+ */
 export async function completeRequest(sql: Sql, organizationId: string, id: string, project: { id: string; brandId: string | null }): Promise<boolean> {
   const rows = await sql<{ id: string }>`
-    update claude_code_requests set status = 'done', project_id = ${project.id}
-    where id = ${id} and organization_id = ${organizationId} and status in ('open', 'claimed') and (brand_id is null or brand_id is not distinct from ${project.brandId})
+    update claude_code_requests set status = case when status = 'running' then 'running' else 'done' end, project_id = ${project.id}
+    where id = ${id} and organization_id = ${organizationId} and status in ('open', 'claimed', 'running') and project_id is null and (brand_id is null or brand_id is not distinct from ${project.brandId})
     returning id
   `;
   return rows.length > 0;
@@ -150,6 +174,6 @@ export async function completeRequest(sql: Sql, organizationId: string, id: stri
 /** Cancels a request of the workspace. A member may. */
 export async function cancelRequest(sql: Sql, input: { organizationId: string; role: string; id: string }): Promise<boolean> {
   if (!canMake(input.role)) return false;
-  const rows = await sql<{ id: string }>`update claude_code_requests set status = 'cancelled' where id = ${input.id} and organization_id = ${input.organizationId} and status in ('open', 'claimed') returning id`;
+  const rows = await sql<{ id: string }>`update claude_code_requests set status = 'cancelled', lease_token = null, lease_expires_at = null where id = ${input.id} and organization_id = ${input.organizationId} and status in ('open', 'claimed', 'running', 'failed') returning id`;
   return rows.length > 0;
 }

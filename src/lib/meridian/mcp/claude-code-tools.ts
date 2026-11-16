@@ -5,6 +5,7 @@
 import { z } from "zod";
 import { listVideoSkills, readVideoSkill, SKILL_CHOICES } from "../claude-code/skills.ts";
 import { claimRequest, readRequest } from "../claude-code/requests.ts";
+import { claimNext, reportJob, runnerSeen } from "../claude-code/queue.ts";
 import { defineTool, type McpTool } from "./protocol.ts";
 import type { ConnectorContext } from "./tools.ts";
 
@@ -61,6 +62,47 @@ export function claudeCodeTools(): McpTool<ConnectorContext>[] {
           ].join("\n"),
           data: { request },
         };
+      },
+    }),
+
+    defineTool({
+      name: "meridian_runner_next",
+      title: "Runner: take the next job",
+      description: "For Meridian's Claude Code runner, not for a chat. Checks the runner in and takes the oldest waiting request under a lease, or says none is waiting. Free.",
+      input: z.object({
+        runner: z.string().min(1).max(120).describe("This computer's name."),
+        problems: z.array(z.string().max(300)).max(8).default([]).describe("What the runner's own checks found wrong, in plain words. Empty when all passed."),
+        take: z.boolean().default(true).describe("False to check in without taking a job."),
+      }),
+      role: "member",
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      async run(context: ConnectorContext, input) {
+        const now = context.now();
+        await runnerSeen(context.sql, { organizationId: context.connector.organizationId, connectorId: context.connector.id, name: input.runner, checks: { problems: input.problems }, now });
+        // A runner whose own checks failed takes nothing: the job would only fail on it.
+        if (!input.take || input.problems.length > 0) return { text: "Checked in. No job was taken.", data: { job: null } };
+        const job = await claimNext(context.sql, { organizationId: context.connector.organizationId, runnerName: input.runner, now });
+        if (!job) return { text: "No request is waiting.", data: { job: null } };
+        return { text: `Took request ${job.requestId} (attempt ${job.attempt}).`, data: { job } };
+      },
+    }),
+
+    defineTool({
+      name: "meridian_runner_report",
+      title: "Runner: report on a job",
+      description: "For Meridian's Claude Code runner, not for a chat. Renews the lease on the job it holds, or reports the end. Done is checked: a video must have been saved to the request's project. Free.",
+      input: z.object({
+        requestId: z.string().min(1).max(80),
+        leaseToken: z.string().min(1).max(80),
+        state: z.enum(["heartbeat", "done", "failed"]),
+        error: z.string().max(2000).optional(),
+      }),
+      role: "member",
+      annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
+      async run(context: ConnectorContext, input) {
+        const result = await reportJob(context.sql, { organizationId: context.connector.organizationId, requestId: input.requestId, leaseToken: input.leaseToken, state: input.state, error: input.error, now: context.now() });
+        if (!result.ok) return { text: result.reason, isError: true, data: { held: false } };
+        return { text: result.message, data: { held: result.status === "running", status: result.status } };
       },
     }),
   ];
