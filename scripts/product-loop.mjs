@@ -216,6 +216,8 @@ try {
   await page.getByText("These findings changed the next recommendation.").waitFor();
 
   await page.goto(`${base}/settings`, { waitUntil: "networkidle" });
+  // Scoring weights is an advanced screen: it shows once a person turns the advanced screens on.
+  await page.getByLabel(/Show advanced screens/).check();
   await page.getByRole("tab", { name: "Scoring weights" }).click();
   const weightForm = page.locator("form").filter({ has: page.getByRole("button", { name: "Save diagnostic weights" }) });
   // Save stays disabled until a weight changes, so the run edits the first one before validating and saving.

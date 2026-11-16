@@ -15,8 +15,9 @@ import { frameShape } from "./aspect.ts";
 import { deliverByHandOnly, publishBlockReason } from "./publish-state.ts";
 import type { PublishReceipt } from "./types.ts";
 
-/** Posting from Meridian is off while all four channels are gated. */
-const publishingOff = isOff("publish.instagram", "publish.youtube", "publish.tiktok", "publish.facebook");
+/** The built-in channels whose posting is gated in this version. Any other destination (a test publisher, a registered channel) is not. */
+const OFF_CHANNELS: Record<string, Parameters<typeof isOff>[0]> = { "instagram-reels": "publish.instagram", "youtube-shorts": "publish.youtube", "tiktok-organic": "publish.tiktok", "facebook-pages": "publish.facebook" };
+const channelOff = (id: string) => id in OFF_CHANNELS && isOff(OFF_CHANNELS[id]!);
 
 export type PublishTarget = {
   creativeId: string;
@@ -91,6 +92,8 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
   const selected = form.watch("channelIds");
   const caption = form.watch("caption");
   const blockReason = publishBlockReason(channels, selected.length);
+  // Said only when a destination on this list is one of the gated channels. The server refuses those either way.
+  const publishingOff = channels.some((channel) => channelOff(channel.id));
   const handOnly = deliverByHandOnly(channels);
   const descriptionId = useId();
   const captionId = useId();
@@ -111,7 +114,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
-          {publishingOff ? <div className="mt-3"><OffNotice what="Posting to Instagram, YouTube, TikTok and Facebook" instead="Export the video from Library and post it yourself. Nothing is sent from here." /></div> : null}
+          {publishingOff ? <div className="mt-3"><OffNotice what="Posting to Instagram, YouTube, TikTok and Facebook" instead="Export the video from Library and post it yourself. Those destinations refuse and send nothing." /></div> : null}
 
           <form
             noValidate
@@ -254,7 +257,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           <div className="mt-4 flex flex-wrap items-center justify-end gap-2 border-t border-hairline pt-4">
             {blockReason && !pending ? <DisabledReason id="publish-destination-reason" className="basis-full text-right">{blockReason}</DisabledReason> : null}
             <Button type="button" variant="quiet" disabled={pending} onClick={() => dismiss.requestOpenChange(false)}>Close</Button>
-            <Button type="submit" disabled={pending || blockReason !== null || publishingOff} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>
+            <Button type="submit" disabled={pending || blockReason !== null} aria-describedby={blockReason && !pending ? "publish-destination-reason" : undefined}>
               {pending ? "Publishing…" : `Publish to ${selected.length} destination${selected.length === 1 ? "" : "s"}`}
             </Button>
           </div>
