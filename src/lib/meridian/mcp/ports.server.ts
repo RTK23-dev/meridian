@@ -168,7 +168,7 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
 
     async speak(input) {
       // POST /audio/speech (OpenRouter's TTS endpoint): the answer is the MP3 itself, and X-Generation-Id names the call for its bill.
-      const [{ normaliseSpeech }, { openRouterGenerationBill }, { SPEECH_PATH, speechRequestBody }] = await Promise.all([
+      const [{ normaliseSpeech }, { openRouterGenerationBill }, { SPEECH_PATH, SPEECH_BILL_WAITS_MS, readLaggingBill, speechRequestBody }] = await Promise.all([
         import("../../../engine/assets/normalise.ts"),
         import("../../../engine/gateway/generation.ts"),
         import("./speech.ts"),
@@ -193,7 +193,10 @@ export function productionPorts(sql: Sql, connector: ResolvedConnector): Connect
       if (!checked.ok) throw new Error(`The voiceover audio was not usable: ${checked.reason}`);
       const headers = (response as { headers?: Record<string, string> }).headers ?? {};
       const generationId = headers["x-generation-id"] ?? null;
-      const bill = generationId ? await openRouterGenerationBill(gw, { organizationId, generationId }) : null;
+      // OpenRouter's generation stats can lag the answer by a few seconds, so the bill is read again before the call settles without one.
+      const bill = generationId
+        ? await readLaggingBill(() => openRouterGenerationBill(gw, { organizationId, generationId }), SPEECH_BILL_WAITS_MS, (ms) => new Promise((resolve) => setTimeout(resolve, ms)))
+        : null;
       return { bytes: checked.value.bytes, mediaType: checked.value.mediaType, model: input.model, costUsd: bill?.status === "billed" ? bill.usd : null };
     },
 

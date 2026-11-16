@@ -1,7 +1,7 @@
 // Speech for the chat connector: OpenRouter's text-to-speech models, read from GET /models?output_modalities=speech and called with
 // POST /audio/speech (OpenRouter's TTS guide: an OpenAI-compatible endpoint; the answer is the raw audio, and its X-Generation-Id header
-// names the call for GET /generation?id=, which gives its bill). TTS is priced per character of input text. The connector holds a fixed
-// ceiling for each voiceover and settles at the bill, so a per-character rate is shown to the person, never reserved.
+// names the call for GET /generation?id=, which gives its bill). TTS is priced per character of input text, so a voiceover holds its
+// text at the model's list rate with a margin (voiceHoldUsd) and settles at the bill. A model with no stated rate holds the fixed ceiling.
 //
 // The listing is untrusted data: each row is checked, and a row that does not fit is left out. Pure: no network, no database.
 
@@ -86,6 +86,39 @@ export function voiceProblem(model: SpeechModel, voice: string): string | null {
   if (model.voices === null) return null;
   if (model.voices.includes(voice)) return null;
   return `${model.id} has no voice '${voice}'. Its voices include: ${model.voices.slice(0, 12).join(", ")}.`;
+}
+
+/** The waits before each further read of a voiceover's bill, in ms: the stats usually appear within a few seconds of the audio. */
+export const SPEECH_BILL_WAITS_MS = [800, 1500, 2500] as const;
+
+/**
+ * Reads a bill, and reads it again after each wait while it is still unavailable. Returns the first billed answer, or the last miss. The
+ * read and the wait are passed in, so this stays pure and a test runs it without a clock.
+ */
+export async function readLaggingBill<T extends { status: string }>(read: () => Promise<T>, waitsMs: readonly number[], wait: (ms: number) => Promise<void>): Promise<T> {
+  let bill = await read();
+  for (const ms of waitsMs) {
+    if (bill.status === "billed") break;
+    await wait(ms);
+    bill = await read();
+  }
+  return bill;
+}
+
+/** A voiceover holds its list price times this, so a bill a little over the list rate still fits the hold (owner direction 2026-11-12). */
+export const VOICE_HOLD_MARGIN = 2;
+/** The smallest hold: one cent, so a short line on a cheap model still reserves something a bill can settle against. */
+export const VOICE_HOLD_FLOOR_USD = 0.01;
+
+/**
+ * The hold for one voiceover, in USD: the text at the model's list rate times the margin, rounded up to a cent, at least the floor and at
+ * most the ceiling. A model whose rate is not stated holds the ceiling, because nothing says what it costs.
+ */
+export function voiceHoldUsd(model: Pick<SpeechModel, "usdPerCharacter">, characters: number, ceilingUsd: number): number {
+  const rate = model.usdPerCharacter;
+  if (rate === null || !Number.isFinite(rate) || rate < 0 || !Number.isFinite(characters) || characters < 0) return ceilingUsd;
+  const cents = Math.ceil(characters * rate * VOICE_HOLD_MARGIN * 100 - 1e-9);
+  return Math.min(ceilingUsd, Math.max(VOICE_HOLD_FLOOR_USD, cents / 100));
 }
 
 /** The request body for one voiceover: MP3, the person's pace only when it is not 1, and a delivery style only when one is given. */

@@ -167,7 +167,7 @@ describe("MCP connector", () => {
     const image = await call(secret, "meridian_image", { brandId: BRAND, prompt: "A ceramic mug on a desk at dawn" });
     const result = image.body!.result;
     assert.equal(result.isError, false, result.content[0].text);
-    assert.match(result.content[0].text, /reported no cost, so \$1\.00 \(the hold's ceiling\) is booked/);
+    assert.match(result.content[0].text, /reported no cost, so \$1\.00 \(the hold\) is booked/);
     assert.equal(result.content[1].type, "image");
     const after = (await BudgetLedgerService.getAccount(db.sql, WS, BRAND))!.spentMicros;
     assert.equal(after - before, 1_000_000n);
@@ -289,7 +289,7 @@ describe("MCP connector", () => {
         select status, brand_id, cost_usd, estimate_usd from model_runs where organization_id = ${WS} and operation = 'mcp.voiceover'
       `;
       assert.equal(holds.length, 1);
-      assert.deepEqual({ ...holds[0]!, cost_usd: Number(holds[0]!.cost_usd), estimate_usd: Number(holds[0]!.estimate_usd) }, { status: "completed", brand_id: null, cost_usd: 0.012, estimate_usd: 1 });
+      assert.deepEqual({ ...holds[0]!, cost_usd: Number(holds[0]!.cost_usd), estimate_usd: Number(holds[0]!.estimate_usd) }, { status: "completed", brand_id: null, cost_usd: 0.012, estimate_usd: 0.01 });
 
       const file = made.body!.result.structuredContent.file;
       assert.equal(file.brandId, null);

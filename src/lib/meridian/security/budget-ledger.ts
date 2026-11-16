@@ -203,7 +203,8 @@ export class BudgetLedgerService {
       insert into budget_accounts (id, organization_id, brand_id, max_spend_micros, spent_micros, reserved_micros)
       values (${id}, ${params.organizationId}, ${params.brandId}, ${capMicros.toString()}, 0, 0)
       on conflict (organization_id, brand_id) do update
-        set max_spend_micros = excluded.max_spend_micros, updated_at = now()
+        -- A budget that covers what is committed takes the account out of EXCEEDED: raising the budget is how a paused brand resumes (D12).
+        set max_spend_micros = excluded.max_spend_micros, status = 'ACTIVE', updated_at = now()
         where budget_accounts.spent_micros + budget_accounts.reserved_micros <= excluded.max_spend_micros
       returning id, organization_id, brand_id, max_spend_micros, spent_micros, reserved_micros, created_at, updated_at
     `;
@@ -381,7 +382,13 @@ export class BudgetLedgerService {
         update budget_accounts a
         set spent_micros = a.spent_micros + ${settlementMicros.toString()}::bigint,
             reserved_micros = a.reserved_micros - r.amount_micros,
-            status = case when ${settlementMicros.toString()}::bigint > r.amount_micros then 'EXCEEDED' else a.status end,
+            -- The account stops only when its committed spend passes the budget (decision D12: the call in flight finishes and may pass
+            -- the line; nothing starts after it). A call that bills over its own hold while the budget still covers it stops nothing
+            -- (owner direction 2026-11-12): the overage is booked and written to the ledger entry.
+            status = case
+              when a.spent_micros + ${settlementMicros.toString()}::bigint + a.reserved_micros - r.amount_micros > a.max_spend_micros then 'EXCEEDED'
+              else a.status
+            end,
             updated_at = now()
         from locked r
         where a.id = r.account_id and a.organization_id = r.organization_id and a.brand_id = r.brand_id

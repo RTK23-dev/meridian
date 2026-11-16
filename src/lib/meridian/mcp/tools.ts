@@ -11,7 +11,7 @@ import { isUploadMediaType, MAX_UPLOAD_BYTES, UPLOAD_MEDIA_TYPES, uploadLink } f
 import { budgetName, usd, withHold, type HoldLedger } from "./paid.ts";
 import { defineTool, type McpTool, type ToolContent, type ToolResult } from "./protocol.ts";
 import { readProject, recordProjectSpend } from "./projects.ts";
-import { speechModelLine, voiceProblem, type SpeechModel } from "./speech.ts";
+import { speechModelLine, voiceHoldUsd, voiceProblem, type SpeechModel } from "./speech.ts";
 import { paidCallProblem, type PaidKind, type ProjectState } from "./workflow.ts";
 
 /**
@@ -79,8 +79,8 @@ export type ConnectorContext = {
 /** The hold for one image, in USD: the same guard Studio and Factory images reserve, because no per-image price is declared. */
 export const IMAGE_CEILING_USD = 1;
 /**
- * The hold for one voiceover, in USD. The catalogue prices speech per token, and how many audio tokens a text becomes is not stated, so no
- * estimate is made from it: like an image, a voiceover holds a fixed guard and settles at the bill OpenRouter reports.
+ * The most one voiceover holds, in USD. The hold itself is the text at the model's list rate with a margin (speech.ts voiceHoldUsd), so a
+ * few lines hold cents; only a model with no stated rate holds this much. Either way the call settles at the bill OpenRouter reports.
  */
 export const VOICE_CEILING_USD = 1;
 /** Images up to this size are also sent inline, so the chat can look at them; larger ones are linked only. */
@@ -124,7 +124,7 @@ export const noBrand = (brandId: string): ToolResult => ({ text: `There is no br
 function costLine(outcome: { costUsd: number | null; settledUsd: number; basis: "reported" | "ceiling" }, brandId: string | null): string {
   return outcome.basis === "reported"
     ? `Cost: ${usd(outcome.costUsd ?? 0)}, as the provider reported it, paid from ${budgetName(brandId)}.`
-    : `The provider reported no cost, so ${usd(outcome.settledUsd)} (the hold's ceiling) is booked against ${budgetName(brandId)}.`;
+    : `The provider reported no cost, so ${usd(outcome.settledUsd)} (the hold) is booked against ${budgetName(brandId)}.`;
 }
 
 export const VIDEO_GUIDE = `# Making a Meridian video from this chat
@@ -291,18 +291,20 @@ export function mediaTools(): McpTool<ConnectorContext>[] {
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
       async run(context: ConnectorContext, input) {
-        const scope = await paidScope(context, input, "voiceover", VOICE_CEILING_USD);
-        if (!scope.ok) return scope.result;
-        const store = await context.ports.files();
-        const ready = await store.ready(context.connector.organizationId);
-        if (ready.status !== "ready") return { text: `${ready.reason} No voiceover was made, and nothing was spent.`, isError: true };
         const listing = await context.ports.speechModels();
         if (!listing.ok) return { text: `The speech models could not be read, so the model cannot be checked: ${listing.reason} Nothing was spent.`, isError: true };
         const model: SpeechModel | undefined = listing.models.find((item) => item.id === input.model);
         if (!model) return { text: `${input.model} is not a speech model in the live catalogue. meridian_voice_models lists them. Nothing was spent.`, isError: true };
         const voice = voiceProblem(model, input.voice);
         if (voice) return { text: `${voice} Nothing was spent.`, isError: true };
-        const outcome = await withHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: scope.brandId, ceilingUsd: VOICE_CEILING_USD, purpose: "voiceover", model: input.model }, async () => {
+        // The hold is this text at the model's list rate with a margin, so a short line never reserves (or books) a whole dollar.
+        const holdUsd = voiceHoldUsd(model, [...input.text].length, VOICE_CEILING_USD);
+        const scope = await paidScope(context, input, "voiceover", holdUsd);
+        if (!scope.ok) return scope.result;
+        const store = await context.ports.files();
+        const ready = await store.ready(context.connector.organizationId);
+        if (ready.status !== "ready") return { text: `${ready.reason} No voiceover was made, and nothing was spent.`, isError: true };
+        const outcome = await withHold(context.ports.ledger, { organizationId: context.connector.organizationId, brandId: scope.brandId, ceilingUsd: holdUsd, purpose: "voiceover", model: input.model }, async () => {
           const spoken = await context.ports.speak({ model: input.model, voice: input.voice, text: input.text, speed: input.speed, instructions: input.instructions ?? null });
           const file = await storeFile(context.sql, store, {
             organizationId: context.connector.organizationId,
