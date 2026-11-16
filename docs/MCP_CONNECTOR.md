@@ -192,8 +192,10 @@ link is kept in `.meridian/runner.json`, readable only by you, and git ignores i
 **What happens on a click.** A request is a job in a queue (migrations 0160 and 0163).
 
 1. The runner asks Meridian for the next job every few seconds (`meridian_runner_next`). Two runners never get the same job.
-2. It starts **a fresh Claude Code session for that job** (`claude -p`, with a session id of its own). A retry is a new session too. Nothing
-   carries over from an earlier video or from whatever else you use Claude Code for.
+2. It starts **a fresh Claude Code conversation for that job** (`claude -p`). A retry starts fresh too. Nothing carries over from an earlier
+   video or from whatever else you use Claude Code for. **The conversation is not saved** (`--no-session-persistence`), so making a hundred
+   videos adds nothing to your Claude Code history. The record of a job is its log in `.meridian/runner-logs/` (the newest 50 are kept).
+   To look into one job as a conversation, start the runner with `-- --keep-sessions`.
 3. **The model is the one chosen in the card:** Auto (Claude Code's `sonnet`), Best quality (`opus`) or Fastest (`haiku`). These are Claude
    Code's own names, so each follows Claude Code's current model for that tier.
 4. The session may use only Meridian's tools, the file tools, skills, and four programs (`node`, `ffmpeg`, `ffprobe`, `curl`). Anything else is
@@ -213,5 +215,5 @@ Before each job the runner checks this computer: Node 22, Claude Code installed 
 shown in the card in plain words, and no job is taken until it passes.
 
 **Not verified.** The queue, the runner's rules and the whole loop are tested with a stand-in for Claude Code. No run with the real Claude
-Code CLI is recorded: the flags are the documented ones (`-p`, `--model`, `--session-id`, `--permission-mode dontAsk`, `--mcp-config`,
+Code CLI is recorded: the flags are the documented ones (`-p`, `--model`, `--no-session-persistence`, `--permission-mode dontAsk`, `--mcp-config`,
 `--strict-mcp-config`, `--allowedTools`), and the first real run is the owner's to make.

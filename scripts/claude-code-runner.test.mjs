@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { ALLOWED_TOOLS, checkedLink, childEnv, claudeArgs, mcpConfig, readEnd, redact, versionOf } from "./claude-code-runner-lib.mjs";
+import { logsToDelete, LOGS_KEPT, ALLOWED_TOOLS, checkedLink, childEnv, claudeArgs, mcpConfig, readEnd, redact, versionOf } from "./claude-code-runner-lib.mjs";
 
 const LINK = "https://meridian.example/api/mcp/mrd_ABCDEFGHIJKLMNOPQRSTUV";
 
@@ -18,7 +18,11 @@ describe("the Claude Code runner's rules", () => {
     const args = claudeArgs({ prompt: "do it", model: "sonnet", sessionId: "11111111-1111-4111-8111-111111111111", mcpConfigPath: "/tmp/x/mcp.json" });
     assert.deepEqual(args.slice(0, 2), ["-p", "do it"]);
     assert.equal(args[args.indexOf("--model") + 1], "sonnet");
-    assert.equal(args[args.indexOf("--session-id") + 1], "11111111-1111-4111-8111-111111111111");
+    assert.ok(args.includes("--no-session-persistence"), "a job's conversation is not saved, so the person's Claude Code history does not fill up");
+    assert.ok(!args.includes("--session-id"));
+    const kept = claudeArgs({ prompt: "do it", model: "sonnet", sessionId: "11111111-1111-4111-8111-111111111111", mcpConfigPath: "/tmp/x/mcp.json", keepSession: true });
+    assert.equal(kept[kept.indexOf("--session-id") + 1], "11111111-1111-4111-8111-111111111111");
+    assert.ok(!kept.includes("--no-session-persistence"));
     assert.equal(args[args.indexOf("--permission-mode") + 1], "dontAsk");
     assert.equal(args[args.indexOf("--output-format") + 1], "json");
     assert.ok(args.includes("--strict-mcp-config"));
@@ -55,6 +59,12 @@ describe("the Claude Code runner's rules", () => {
     assert.match(readEnd({ code: null, signal: "SIGTERM", stdout: "", stderr: "", timedOut: true }).reason, /45 minutes/);
     assert.equal(readEnd({ code: 0, signal: null, stdout: "plain text, not JSON", stderr: "", timedOut: false }).ok, true);
     assert.equal(readEnd({ code: null, signal: "SIGKILL", stdout: "", stderr: "", timedOut: false }).ok, false);
+  });
+
+  test("keeps only the newest job logs", () => {
+    const files = Array.from({ length: LOGS_KEPT + 3 }, (_, i) => ({ name: `job-${i}.log`, mtimeMs: i }));
+    assert.deepEqual(logsToDelete(files), ["job-2.log", "job-1.log", "job-0.log"]);
+    assert.deepEqual(logsToDelete(files.slice(0, 5)), []);
   });
 
   test("finds the version number", () => {

@@ -46,15 +46,22 @@ export function mcpConfig(link) {
   return JSON.stringify({ mcpServers: { meridian: { type: "http", url: link } } });
 }
 
+/** How many job logs the runner keeps. Older ones are deleted, so the folder does not grow without end. */
+export const LOGS_KEPT = 50;
+
 /**
- * The arguments Claude Code is started with for one job: print mode, the chosen model, a session id of its own (a fresh conversation
- * for every attempt), only Meridian's MCP server, and the allowed tools. Anything not allowed is denied, not asked.
+ * The arguments Claude Code is started with for one job: print mode, the chosen model, a conversation of its own, only Meridian's MCP
+ * server, and the allowed tools. Anything not allowed is denied, not asked.
+ *
+ * Every job starts from nothing, but its conversation is NOT saved: a saved one per video would fill the person's Claude Code history
+ * with chats they never opened. The runner's own log of the job is the record. `keepSession` saves it under the job's session id, for
+ * looking into one job with `claude --resume`.
  */
-export function claudeArgs({ prompt, model, sessionId, mcpConfigPath }) {
+export function claudeArgs({ prompt, model, sessionId, mcpConfigPath, keepSession = false }) {
   return [
     "-p", prompt,
     "--model", model,
-    "--session-id", sessionId,
+    ...(keepSession ? ["--session-id", sessionId] : ["--no-session-persistence"]),
     "--output-format", "json",
     "--permission-mode", "dontAsk",
     "--max-turns", String(MAX_TURNS),
@@ -106,4 +113,9 @@ export function readEnd({ code, signal, stdout, stderr, timedOut }) {
 /** The first version number in `claude --version`, or null. */
 export function versionOf(text) {
   return /\d+\.\d+\.\d+/.exec(String(text ?? ""))?.[0] ?? null;
+}
+
+/** The log files to delete, oldest first, so that only the newest LOGS_KEPT stay. `files` is [{ name, mtimeMs }]. */
+export function logsToDelete(files, keep = LOGS_KEPT) {
+  return [...files].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(keep).map((file) => file.name);
 }

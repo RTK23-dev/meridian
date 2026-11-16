@@ -58,7 +58,7 @@ function Connect({ organizationId, canAdmin, runner }: { organizationId: string;
         <ul className="list-disc space-y-1 pl-5 text-sm text-fg-primary">{runner.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
       ) : null}
       {runner.online ? (
-        <p className="text-sm text-fg-muted">{runner.problems.length === 0 ? "A video you ask for below starts by itself, in a fresh Claude Code session each time." : "Fix the above on that computer. The runner checks again every minute."}</p>
+        <p className="text-sm text-fg-muted">{runner.problems.length === 0 ? "A video you ask for below starts by itself. Each one starts fresh, and none is added to your Claude Code chat history." : "Fix the above on that computer. The runner checks again every minute."}</p>
       ) : !canAdmin ? (
         <p className="text-sm text-fg-muted">A workspace admin connects a computer once, here. Until then, a video you ask for waits, and you can paste its line into Claude Code yourself.</p>
       ) : command ? (
@@ -220,7 +220,7 @@ export function ClaudeCodeVideo({ organizationId, canMake, canAdmin }: { organiz
                   {copied === made.id ? "Copied" : "Copy"}
                 </Button>
               </div>
-              <p className="text-caption text-fg-muted">A request waits for 24 hours. Each one runs in a fresh Claude Code session with the model you chose, and the finished video is saved to this workspace.</p>
+              <p className="text-caption text-fg-muted">A request waits for 24 hours. Each one starts fresh with the model you chose, adds nothing to your Claude Code chat history, and saves the finished video to this workspace.</p>
             </div>
           ) : null}
 

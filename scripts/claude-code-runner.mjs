@@ -4,23 +4,26 @@
  *
  *   npm run claude:runner -- <the link Meridian shows>     (the first time: the link is saved for next time)
  *   npm run claude:runner                                   (after that)
+ *   npm run claude:runner -- --keep-sessions                (also save each job as a Claude Code conversation, for debugging)
  *
  * It waits for videos you ask for in Meridian (Settings, Connections, "Make a video with Claude Code"). For each one it starts a fresh
  * Claude Code session with the model you chose, lets it make and upload the video, and tells Meridian how it ended. It uses your own
  * Claude Code sign-in and calls no paid provider. Stop it with Ctrl+C: a job it was making is queued again.
  */
 import { spawn, spawnSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, appendFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, appendFileSync } from "node:fs";
 import { hostname, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkedLink, childEnv, claudeArgs, HEARTBEAT_MS, JOB_TIMEOUT_MS, mcpConfig, POLL_MS, readEnd, redact, versionOf } from "./claude-code-runner-lib.mjs";
+import { checkedLink, childEnv, claudeArgs, HEARTBEAT_MS, JOB_TIMEOUT_MS, logsToDelete, mcpConfig, POLL_MS, readEnd, redact, versionOf } from "./claude-code-runner-lib.mjs";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const home = process.env.MERIDIAN_RUNNER_HOME || join(root, ".meridian");
 const configPath = join(home, "runner.json");
 const claudeBin = process.env.CLAUDE_BIN || "claude";
 const once = process.argv.includes("--once");
+// Off by default: a saved conversation per video would fill your Claude Code history. Turn it on to look into a job with `claude --resume`.
+const keepSession = process.argv.includes("--keep-sessions");
 const runnerName = (process.env.MERIDIAN_RUNNER_NAME || hostname() || "runner").slice(0, 120);
 
 const say = (line) => console.log(`[runner] ${line}`);
@@ -94,9 +97,16 @@ async function runJob(job) {
   const logDir = join(home, "runner-logs");
   mkdirSync(logDir, { recursive: true });
   const logPath = join(logDir, `${job.requestId}-${job.attempt}.log`);
+  // Only the newest logs are kept, so this folder does not grow without end.
+  try {
+    const files = readdirSync(logDir).map((name) => ({ name, mtimeMs: statSync(join(logDir, name)).mtimeMs }));
+    for (const name of logsToDelete(files)) rmSync(join(logDir, name), { force: true });
+  } catch {
+    // A log that cannot be removed is left; it does not stop the job.
+  }
   say(`Making ${job.requestId} (attempt ${job.attempt}, model ${job.model}). Log: ${logPath}`);
 
-  const child = spawn(claudeBin, claudeArgs({ prompt: job.prompt, model: job.model, sessionId: job.sessionId, mcpConfigPath: mcpPath }), {
+  const child = spawn(claudeBin, claudeArgs({ prompt: job.prompt, model: job.model, sessionId: job.sessionId, mcpConfigPath: mcpPath, keepSession }), {
     cwd: root,
     env: childEnv(process.env),
     stdio: ["ignore", "pipe", "pipe"],
