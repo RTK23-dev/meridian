@@ -101,7 +101,7 @@ function OpportunityDetail({ item, position, brandId, canEdit, triaging, onTriag
       </section>
 
       {(item.researchSampleCount ?? 0) > 0 ? <section aria-labelledby="opportunity-research" className="space-y-2">
-        <h3 id="opportunity-research" className="font-semibold">JEV Research pattern</h3>
+        <h3 id="opportunity-research" className="font-semibold">Research pattern</h3>
         <div className="flex flex-wrap gap-2">
           {item.researchState ? <Badge variant="info">{item.researchState.toLowerCase().replaceAll("_", " ")}</Badge> : null}
           <Badge variant="neutral">{item.researchSampleCount} source {item.researchSampleCount === 1 ? "ad" : "ads"}</Badge>

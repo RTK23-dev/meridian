@@ -160,7 +160,7 @@ export const copy = {
     patternsStored: (count: number) => `${count} ${count === 1 ? "pattern" : "patterns"} stored. Queued learning jobs were drained. Rank opportunities again to use them.`,
     noTestPublication: "No test publication is recorded for this brand yet.",
     testPublication: (id: string) => `Test publication · publisher ID ${id}`,
-    startingEstimates: "Sync to JEV Brain updates the starting estimates from these rows.",
+    startingEstimates: "Sync to the brand's memory updates the starting estimates from these rows.",
   },
   studio: {
     publisherId: "Publisher ID",

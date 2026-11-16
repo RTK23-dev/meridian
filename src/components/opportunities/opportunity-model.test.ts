@@ -5,7 +5,7 @@ import { evidenceSourceLabel, RANKING_INPUTS_NOTE } from "./opportunity-model.ts
 test("each evidence source reads as the kind of stored evidence it is", () => {
   assert.equal(evidenceSourceLabel("creative_records"), "Stored creatives");
   assert.equal(evidenceSourceLabel("market"), "Stored creatives");
-  assert.equal(evidenceSourceLabel("jev_research"), "JEV Research (Meta Ad Library)");
+  assert.equal(evidenceSourceLabel("jev_research"), "Research (Meta Ad Library)");
   assert.equal(evidenceSourceLabel("learned_pattern"), "Your recorded results");
   assert.equal(evidenceSourceLabel("reviews"), "Your review decisions");
   assert.equal(evidenceSourceLabel("brand_brain"), "Brand brain");

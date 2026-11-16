@@ -85,7 +85,7 @@ function Intelligence({ brandId }: { brandId: string }) {
         <div>
           <div className="flex items-center gap-2">
             <span className="eyebrow">
-              JEV Cognitive Engine
+              Cognitive Engine
             </span>
             <Badge variant="info">
               Multimodal 2.0
@@ -333,7 +333,7 @@ function Intelligence({ brandId }: { brandId: string }) {
             <EmptyState
               icon={<Compass aria-hidden="true" className="size-5" />}
               title={`No profile for ${platform}`}
-              reason="JEV computes rolling portfolio profiles automatically once accounts are connected and content is ingested."
+              reason="Meridian computes rolling portfolio profiles automatically once accounts are connected and content is ingested."
               action={
                 <Button asChild>
                   <Link to="/brands/$brandId/content" params={{ brandId }} search={{ section: "publish" }}>
@@ -360,7 +360,7 @@ function Intelligence({ brandId }: { brandId: string }) {
             <EmptyState
               icon={<Compass aria-hidden="true" className="size-5" />}
               title="No whitespace opportunities detected"
-              reason="As market evidence and competitor campaigns are collected, JEV automatically flags high-probability gaps."
+              reason="As market evidence and competitor campaigns are collected, Meridian flags high-probability gaps."
             />
           ) : (
             <WhitespaceRanking

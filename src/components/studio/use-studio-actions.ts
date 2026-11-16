@@ -59,7 +59,7 @@ export function useStudioActions(brandId: string) {
           return { kind: "awaiting", planId: awaiting.planId, plan: awaiting.plan, estimatedCostUsd: awaiting.estimatedCostUsd, note: awaiting.note };
         }
         if (res.status === "abstained") {
-          throw new Error((res as any).note || "JEV abstained from automated format selection. Please select an explicit format.");
+          throw new Error((res as any).note || "The decision engine could not choose a format automatically. Please select an explicit format.");
         }
         if (res.status === "rejected") {
           throw new Error((res as any).error || "Creative plan was rejected by Brand Guardian policy.");
@@ -108,7 +108,7 @@ export function useStudioActions(brandId: string) {
 
   const publishMulti = useScopedMutation({
     mutationKey: studioKey("publish-channels"),
-    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null }) =>
+    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null; confirmRetry: boolean }) =>
       publishMultiChannelVariant({ data: { brandId, ...vars } }),
     invalidate: () => [qk.studio(brandId), qk.library(brandId), qk.organic(brandId)],
     success: "Publish finished. The receipts are in the dialog.",
@@ -139,7 +139,7 @@ export function useStudioActions(brandId: string) {
   const anyActionPending = studioActions.some((action) => action.isPending);
 
   /** The test publisher goes through its own action; any other choice goes through the channel publish, with receipts. */
-  async function confirmPublish(target: { creativeId: string }, channelIds: string[], caption: string, trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null) {
+  async function confirmPublish(target: { creativeId: string }, channelIds: string[], caption: string, trial: { graduationStrategy: "MANUAL" | "SS_PERFORMANCE" } | null, confirmRetry = false) {
     if (channelIds.length === 1 && channelIds[0] === "test-publisher") {
       await publishTest.mutateAsync(target.creativeId).then((stored) => {
         const publication = stored.publications.find((item) => item.creativeId === target.creativeId);
@@ -154,7 +154,7 @@ export function useStudioActions(brandId: string) {
       }, () => undefined);
       return;
     }
-    await publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial }).catch(() => undefined);
+    await publishMulti.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial, confirmRetry }).catch(() => undefined);
   }
 
   return {

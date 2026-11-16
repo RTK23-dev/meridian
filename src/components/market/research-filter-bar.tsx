@@ -54,7 +54,7 @@ export function ResearchFilterBar({ filters, update, reset, topics, activeCount,
 
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p className="text-sm text-fg-muted" aria-live="polite">
-        Showing {visibleCount} of {totalCount} recent source records{activeCount ? `, with ${activeCount} filter${activeCount === 1 ? "" : "s"} applied` : ""}. Filter labels apply to JEV Research classifications.
+        Showing {visibleCount} of {totalCount} recent source records{activeCount ? `, with ${activeCount} filter${activeCount === 1 ? "" : "s"} applied` : ""}. Filter labels apply to Research classifications.
       </p>
       {activeCount > 0 ? <Button type="button" variant="quiet" onClick={reset}>Clear filters</Button> : null}
     </div>

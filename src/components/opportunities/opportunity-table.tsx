@@ -32,7 +32,7 @@ export function OpportunityTable(props: TableProps) {
   return <>
     <div className="hidden overflow-x-auto rounded-sharp border border-hairline md:block">
       <table className="w-full border-collapse text-left text-sm">
-        <caption className="sr-only">Opportunities for this brand. Use the column buttons to sort. A missing JEV probability is marked Unknown.</caption>
+        <caption className="sr-only">Opportunities for this brand. Use the column buttons to sort. A missing chance of success is marked Unknown.</caption>
         <thead className="bg-overlay">
           <tr>
             {canEdit ? <th scope="col" className="w-12 px-3 py-2"><SelectAllBox checked={allSelected} indeterminate={selectedVisible.length > 0 && !allSelected} label="Select all dismissable opportunities" onChange={(selected) => onSelectAll(selectableIds, selected)} /></th> : null}
@@ -40,7 +40,7 @@ export function OpportunityTable(props: TableProps) {
             <th scope="col" className="px-3 py-2 font-semibold">Opportunity</th>
             <SortHeader label="Rank score" sortKey="rank" active={sortKey === "rank"} direction={sortDirection} onSort={onSort} />
             <SortHeader label="Confidence" sortKey="confidence" active={sortKey === "confidence"} direction={sortDirection} onSort={onSort} />
-            <SortHeader label="JEV probability" sortKey="probability" active={sortKey === "probability"} direction={sortDirection} onSort={onSort} />
+            <SortHeader label="Chance of success" sortKey="probability" active={sortKey === "probability"} direction={sortDirection} onSort={onSort} />
             <SortHeader label="Status" sortKey="status" active={sortKey === "status"} direction={sortDirection} onSort={onSort} />
             <SortHeader label="Risk" sortKey="risk" active={sortKey === "risk"} direction={sortDirection} onSort={onSort} />
             <th scope="col" className="px-3 py-2 font-semibold"><span>Actions</span></th>
@@ -84,7 +84,7 @@ export function OpportunityTable(props: TableProps) {
           <dl className="grid grid-cols-2 gap-3 text-sm">
             <div><dt className="text-xs font-semibold text-fg-muted">Rank score</dt><dd className="mt-1"><ScoreValue value={finiteOrNull(item.expectedValue)} /></dd></div>
             <div><dt className="text-xs font-semibold text-fg-muted">Confidence</dt><dd className="mt-1"><ScoreValue value={finiteOrNull(item.confidence)} /></dd></div>
-            <div><dt className="text-xs font-semibold text-fg-muted">JEV probability</dt><dd className="mt-1"><ScoreValue value={jevProbability(item)} /></dd></div>
+            <div><dt className="text-xs font-semibold text-fg-muted">Chance of success</dt><dd className="mt-1"><ScoreValue value={jevProbability(item)} /></dd></div>
             <div><dt className="text-xs font-semibold text-fg-muted">Risk</dt><dd className="mt-1"><ScoreValue value={finiteOrNull(item.risk)} /></dd></div>
           </dl>
           {eligible ? <label className="inline-flex min-h-11 items-center gap-3 text-sm">

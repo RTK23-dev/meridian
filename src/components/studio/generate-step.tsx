@@ -72,7 +72,7 @@ export function GenerateStep({ brief, usage, canEdit, form, testImageAllowed, pr
           <div className="grid gap-3 md:grid-cols-2">
             <Field label="What to create" hint="Deliverable format strategy for this creative plan.">
               <SelectInput {...form.register("creationScope")}>
-                <option value="auto_choose">Auto (JEV evidence recommendation)</option>
+                <option value="auto_choose">Auto (recommended from the evidence)</option>
                 <option value="video_only">Video only (Reel / Short / UGC)</option>
                 <option value="image_only">Static image only</option>
                 <option value="carousel_only">Multi-slide carousel</option>

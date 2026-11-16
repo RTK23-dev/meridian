@@ -22,7 +22,7 @@ export function OpportunityChart({ rows }: { rows: Array<{ expectedValue: number
   return (
     <ChartPanel
       title="Open opportunity rank distribution"
-      description="Stored JEV expected-value scores"
+      description="Stored expected-value scores"
       label="Open opportunities grouped by stored expected value"
       bins={bins}
       unit="opportunities"

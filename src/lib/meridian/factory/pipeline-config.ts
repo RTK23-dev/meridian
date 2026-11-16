@@ -82,7 +82,7 @@ export const DEFAULT_STAGES: PipelineStageConfig[] = [
   {
     id: "grade",
     enabled: true,
-    label: "JEV Cognitive Grading",
+    label: "Cognitive Grading",
     description: "Evaluates psychological transferability, claim safety, and statistical win probability.",
     category: "intelligence",
   },

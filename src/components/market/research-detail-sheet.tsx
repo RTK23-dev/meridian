@@ -112,7 +112,7 @@ function Provenance({ ad, analysis }: { ad: ResearchAdRow; analysis: AnalysisVie
       <div><dt className="text-fg-muted">Model</dt><dd className="font-semibold">{ad.provider && ad.model ? `${ad.provider} / ${ad.model}` : "Not recorded"}</dd></div>
       <div><dt className="text-fg-muted">Schema version</dt><dd className="font-semibold">{ad.schemaVersion || "Not recorded"}</dd></div>
       <div><dt className="text-fg-muted">Prompt version</dt><dd className="font-semibold">Not returned by the server yet</dd></div>
-      <div><dt className="text-fg-muted">JEV Research confidence</dt><dd><ConfidenceChip value={analysisConfidence(ad)} /></dd></div>
+      <div><dt className="text-fg-muted">Research confidence</dt><dd><ConfidenceChip value={analysisConfidence(ad)} /></dd></div>
       <div><dt className="text-fg-muted">Review</dt><dd className="font-semibold">{reviewText}</dd></div>
       <div><dt className="text-fg-muted">Analysis fields</dt><dd className="font-semibold">{analysis ? "Stored" : "Not stored"}</dd></div>
     </dl>

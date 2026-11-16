@@ -33,7 +33,7 @@ export function PromptsPanel({
   return (
     <div className="space-y-6">
       <p className="max-w-3xl text-sm text-fg-muted">
-        The brief and script prompts are stored with a video when a line is saved. They do not replace the spoken copy. Perception and grading prompts are saved and not sent. Perception instructions are fixed, and grading stays on the versioned JEV questions.
+        The brief and script prompts are stored with a video when a line is saved. They do not replace the spoken copy. Perception and grading prompts are saved and not sent. Perception instructions are fixed, and grading stays on the versioned grading questions.
       </p>
 
       {PROMPT_KEYS.map((key) => {

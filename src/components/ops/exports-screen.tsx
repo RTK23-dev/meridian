@@ -77,7 +77,7 @@ export function ExportsScreen() {
         <ExportPanel
           id="opportunities-export"
           title="Opportunities"
-          description="One row per opportunity for the selected brand, with its rank score, JEV decision, probability, evidence confidence, risk and reason. An empty cell means the value is not stored."
+          description="One row per opportunity for the selected brand, with its rank score, decision, chance of success, evidence confidence, risk and reason. An empty cell means the value is not stored."
           action={<BrandExportAction brandId={brandId} hasBrands={brands.length > 0} id="opportunities-export-reason" label="Export opportunities" loading={opportunityExport.isPending} onClick={() => opportunityExport.mutate()} />}
           result={opportunityExport.data !== undefined ? rowsNote(opportunityExport.data, "opportunity", "opportunities") : null}
           error={opportunityExport.error}

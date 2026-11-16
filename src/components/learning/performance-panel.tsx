@@ -127,7 +127,7 @@ export function PerformancePanel({ brandId, canEdit, active }: { brandId: string
             {showForm ? "Close telemetry form" : "Add telemetry row"}
           </Button>
           <Button type="button" disabled={syncTelemetry.isPending || records.length === 0} aria-describedby={records.length === 0 ? "telemetry-sync-reason" : undefined} onClick={() => void handleSync()}>
-            {syncTelemetry.isPending ? "Syncing to JEV Brain…" : "Sync to JEV Brain"}
+            {syncTelemetry.isPending ? "Syncing to the brand's memory…" : "Sync to the brand's memory"}
           </Button>
           {records.length === 0 ? <DisabledReason id="telemetry-sync-reason" className="basis-full">Add a telemetry row first. There is nothing to sync yet.</DisabledReason> : null}
         </div>

@@ -314,7 +314,7 @@ export const PROMPT_META: Record<PromptKey, { label: string; purpose: string }> 
   briefPrompt: { label: "Brief synthesis", purpose: "Instructions for turning a market pattern into a brief." },
   scriptPrompt: { label: "Scriptwriting", purpose: "Instructions for script structure and spoken lines." },
   perceptionPrompt: { label: "Multimodal perception", purpose: "Instructions for reading video structure and audio." },
-  gradingPrompt: { label: "JEV cognitive grading", purpose: "Instructions for the grading rubric wording." },
+  gradingPrompt: { label: "Cognitive grading", purpose: "Instructions for the grading rubric wording." },
 };
 
 /** What a saved value does on a run. A value that is not read says so. */
@@ -331,7 +331,7 @@ export const NOT_READ_REASON = {
   confidenceMin: "Pick skips a concept whose decoded angle confidence is below this floor. A decode with no confidence is still used.",
   autoApproveEnabled: "Manual mode does not wait at the review step when this is on. A creative still has to be approved before it is published.",
   strictClaimGate: "On, an unapproved claim blocks the variant. Off, that claim waits for a person. Banned words still block. A missing claim still waits.",
-  prompt: "Perception instructions are fixed, so this text is not sent. Grading stays on the versioned JEV questions, so this text is not sent.",
+  prompt: "Perception instructions are fixed, so this text is not sent. Grading stays on the versioned grading questions, so this text is not sent.",
   briefPrompt: "Stored on the plan as visual direction. It does not replace the spoken copy.",
   scriptPrompt: "Stored with the video as visual direction, after the spoken copy. It does not replace the spoken copy.",
 } as const;

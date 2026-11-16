@@ -12,7 +12,7 @@ const EVIDENCE_SOURCE_LABEL: Record<string, string> = {
   creative_records: "Stored creatives",
   market: "Stored creatives",
   creative_embeddings: "Semantic clusters",
-  jev_research: "JEV Research (Meta Ad Library)",
+  jev_research: "Research (Meta Ad Library)",
   learned_pattern: "Your recorded results",
   performance: "Your recorded results",
   reviews: "Your review decisions",
@@ -36,7 +36,7 @@ export function evidenceSourceLabel(source: string): string {
  * rather than implying that every discovered page shapes an opportunity.
  */
 export const RANKING_INPUTS_NOTE =
-  "Ranking reads stored creatives, JEV Research patterns from collected Meta Ad Library ads, your recorded results and your review decisions. Pages and posts found on Market are stored as evidence, and ranking does not read them yet.";
+  "Ranking reads stored creatives, Research patterns from collected Meta Ad Library ads, your recorded results and your review decisions. Pages and posts found on Market are stored as evidence, and ranking does not read them yet.";
 export type OpportunitySortKey = "rank" | "confidence" | "status" | "risk" | "probability";
 export type SortDirection = "asc" | "desc";
 export type ScoreKey = "brandFit" | "historicalEvidence" | "marketSignal" | "novelty" | "reproducibility" | "saturation" | "risk";

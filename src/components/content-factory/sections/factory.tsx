@@ -505,7 +505,7 @@ export function FactoryPage({ brandId }: { brandId: string }) {
           <section className="space-y-4">
             <h2 className="text-section font-semibold">Multi-Channel Distribution & Organic Telemetry</h2>
             <p className="text-fg-muted">
-              Creatives are selectively dispatched to paid ad networks and organic social accounts. JEV learns from paid conversions and organic engagement without requiring every account to be connected.
+              Creatives are selectively dispatched to paid ad networks and organic social accounts. Meridian learns from paid conversions and organic engagement without requiring every account to be connected.
             </p>
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {(channelsQuery.data ?? []).map((channel) => (

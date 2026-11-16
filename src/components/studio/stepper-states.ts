@@ -19,7 +19,7 @@ export function studioStepperSteps(session: StudioData, brief: StudioBrief | nul
     {
       label: "Brief",
       state: brief?.status === "ready" ? "done" : recommendation ? "current" : "upcoming",
-      description: brief?.status === "ready" ? "Approved for production" : "JEV decision to brief",
+      description: brief?.status === "ready" ? "Approved for production" : "Decision to brief",
     },
     {
       label: "Generate",

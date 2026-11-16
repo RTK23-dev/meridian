@@ -28,7 +28,7 @@ import {
 const SORT_OPTIONS: Array<{ key: OpportunitySortKey; label: string }> = [
   { key: "rank", label: "Rank score" },
   { key: "confidence", label: "Confidence" },
-  { key: "probability", label: "JEV probability" },
+  { key: "probability", label: "Chance of success" },
   { key: "status", label: "Status" },
   { key: "risk", label: "Risk" },
 ];
