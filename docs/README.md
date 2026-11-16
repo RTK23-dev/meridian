@@ -16,7 +16,7 @@ Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first
 | [PROVIDERS.md](PROVIDERS.md) | Every provider, where its key is saved, and the deployment opt-ins |
 | [TESTING.md](TESTING.md) | Test commands, the CI jobs and the browser checks |
 | [RELEASE_ACCEPTANCE.md](RELEASE_ACCEPTANCE.md) | The browser acceptance of the Settings screens: the checks, how to run it, and what it does not cover |
-| [OUTBOUND_REQUESTS.md](OUTBOUND_REQUESTS.md) | Every path that can make a request outside the engine gateway, how each is guarded, and the twenty that are off |
+| [OUTBOUND_REQUESTS.md](OUTBOUND_REQUESTS.md) | Every path that can make a request outside the engine gateway, how each is guarded, and the nineteen that are off |
 | [OPENROUTER.md](OPENROUTER.md) | OpenRouter Decisions and text generation: holds, ceilings, the live catalogue, and the billing limitation |
 
 ## How the product works

@@ -15,6 +15,7 @@ import { Route as DocsRouteImport } from './routes/docs'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProductRouteImport } from './routes/product'
 import { Route as QuickstartRouteImport } from './routes/quickstart'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
@@ -92,6 +93,11 @@ const ProductRoute = ProductRouteImport.update({
 const QuickstartRoute = QuickstartRouteImport.update({
   id: '/quickstart',
   path: '/quickstart',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -354,6 +360,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/product': typeof ProductRoute
   '/quickstart': typeof QuickstartRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
@@ -409,6 +416,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/product': typeof ProductRoute
   '/quickstart': typeof QuickstartRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/$': typeof AppSplatRoute
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
@@ -467,6 +475,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/product': typeof ProductRoute
   '/quickstart': typeof QuickstartRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/_app/$': typeof AppSplatRoute
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
@@ -526,6 +535,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/product'
     | '/quickstart'
+    | '/reset-password'
     | '/$'
     | '/alerts'
     | '/audit'
@@ -581,6 +591,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/product'
     | '/quickstart'
+    | '/reset-password'
     | '/$'
     | '/alerts'
     | '/audit'
@@ -638,6 +649,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/product'
     | '/quickstart'
+    | '/reset-password'
     | '/_app/$'
     | '/_app/alerts'
     | '/_app/audit'
@@ -696,6 +708,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   ProductRoute: typeof ProductRoute
   QuickstartRoute: typeof QuickstartRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   ApiEngineMediaRoute: typeof ApiEngineMediaRoute
   ApiHealthRoute: typeof ApiHealthRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
@@ -754,6 +767,13 @@ declare module '@tanstack/react-router' {
       path: '/quickstart'
       fullPath: '/quickstart'
       preLoaderRoute: typeof QuickstartRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -1187,6 +1207,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   ProductRoute: ProductRoute,
   QuickstartRoute: QuickstartRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   ApiEngineMediaRoute: ApiEngineMediaRoute,
   ApiHealthRoute: ApiHealthRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,

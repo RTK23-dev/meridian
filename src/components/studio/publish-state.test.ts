@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deliverByHandOnly, publishBlockReason } from "./publish-state.ts";
+import { confirmRetryLabel, deliverByHandOnly, publishBlockReason, uncertainDestinations } from "./publish-state.ts";
 
 const connected = { connected: true };
 const notConnected = { connected: false, reason: "No Meta ad account is connected for this workspace." };
@@ -23,4 +23,20 @@ test("Publish asks for a destination when some are connected and none is selecte
 
 test("Publish is available when a connected destination is selected", () => {
   assert.equal(publishBlockReason([connected, notConnected], 1), null);
+});
+
+test("only a destination whose last receipt is uncertain offers the confirmation", () => {
+  const receipts = [
+    { channelId: "facebook-pages", platform: "facebook", status: "uncertain" },
+    { channelId: "instagram-reels", platform: "instagram", status: "published" },
+    { channelId: "youtube-shorts", platform: "youtube", status: "failed" },
+  ];
+  assert.deepEqual(uncertainDestinations(receipts), [{ channelId: "facebook-pages", platform: "facebook" }]);
+  assert.deepEqual(uncertainDestinations(receipts.slice(1)), []);
+  assert.deepEqual(uncertainDestinations(null), []);
+});
+
+test("the confirmation says which platform to check", () => {
+  assert.equal(confirmRetryLabel(["Facebook"]), "I checked Facebook: the earlier post is not there. Send it again.");
+  assert.equal(confirmRetryLabel(["Facebook", "TikTok", "Facebook"]), "I checked Facebook and TikTok: the earlier post is not there. Send it again.");
 });

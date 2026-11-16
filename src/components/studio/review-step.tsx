@@ -26,7 +26,7 @@ type ReviewStepProps = {
   recordingTest: boolean;
   recordingOrganic: boolean;
   onReviewSubmit: (creativeId: string, payload: ReviewPayload) => Promise<unknown>;
-  onPublishConfirm: (target: PublishTarget, channelIds: string[], caption: string, trial: PublishTrial) => Promise<unknown>;
+  onPublishConfirm: (target: PublishTarget, channelIds: string[], caption: string, trial: PublishTrial, confirmRetry: boolean) => Promise<unknown>;
   onPublishClose: () => void;
   onRetry: (variant: StudioVariant) => void;
   onRecordTest: () => void;
@@ -133,8 +133,8 @@ export function ReviewStep(props: ReviewStepProps) {
         pending={props.publishPending}
         results={props.publishResults}
         onClose={() => { setPublishTarget(null); props.onPublishClose(); }}
-        onConfirm={(channelIds, caption, trial) => {
-          if (publishTarget) void props.onPublishConfirm(publishTarget, channelIds, caption, trial).catch(() => undefined);
+        onConfirm={(channelIds, caption, trial, confirmRetry) => {
+          if (publishTarget) void props.onPublishConfirm(publishTarget, channelIds, caption, trial, confirmRetry).catch(() => undefined);
         }}
       />
 

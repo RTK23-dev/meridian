@@ -24,27 +24,23 @@ afterEach(() => {
   mock.restoreAll();
 });
 
-describe("disabled publish paths send nothing through their production defaults", () => {
-  test("the Facebook Page channel refuses through its default transport, reports a failure, and sends no request", async () => {
+describe("publish paths that are off send nothing through their production defaults", () => {
+  test("the Facebook Page channel is no longer gated: its default transport makes exactly one request, and no answer is UNCONFIRMED, never a retry", async () => {
     const channel = new FacebookPagesChannel();
     const receipt = await channel.publish({
       brandId: "brand_fixture",
-      source: {} as never,
-      creativeId: "creative_fixture",
-      assetId: "asset_fixture",
-      pageId: "page_fixture",
-      createdBy: "user_fixture",
+      organizationId: "org_fixture",
       caption: "A caption",
       title: "A title",
+      aspectRatio: "9:16",
       mediaBytes: new Uint8Array([1, 2, 3]),
       mimeType: "video/mp4",
-      connection: { connected: true, platform: "facebook", accountId: "page_fixture", accountName: "Fixture Page", accessToken: "fixture-token-not-real", scopes: null } as never,
-      confirmRetry: false,
-    } as never);
-    assert.equal(receipt.status, "failed", "a refused publish is a failure, never a published post");
-    assert.equal(receipt.code, "NOT_CONNECTED", "the refusal is the gate's, not an unknown outcome");
-    assert.match(receipt.error ?? "", /off in this build, so nothing was sent/, "the refusal names the gate");
-    assert.equal(requests, 0, "no Facebook request is sent");
+      connection: { connected: true, platform: "facebook", accountId: "page_fixture", accountName: "Fixture Page", accessToken: "fixture-token-not-real", scopes: null },
+    });
+    // The counting fetch above stands in for the network and never answers. Facebook switched on is the only channel that reaches it.
+    assert.equal(requests, 1, "exactly one request is made, with no automatic retry");
+    assert.equal(receipt.status, "failed", "an unanswered request is never a published post");
+    assert.equal(receipt.code, "UNCONFIRMED", "the post may have gone out, so it is unconfirmed rather than refused");
   });
 
   test("the paused publish for Meta refuses through its default transport and reports no created stage, with no request", async () => {

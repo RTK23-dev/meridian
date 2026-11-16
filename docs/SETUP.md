@@ -56,6 +56,10 @@ The decision engine is chosen on the **Setup** page (`/setup`), where the engine
 
 JEV also has a backend setting, in **Settings** under the decision engine: TypeSafe System One (the default) or OpenRouter Decisions. Choosing OpenRouter makes JEV's decisions use the OpenRouter key and decision model, and the switch is saved only when OpenRouter reports ready (DECISIONS.md, "JEV backend").
 
+## Password reset
+
+"Forgot your password?" on the sign-in form sends one email with a one-time link to `/reset-password` on this app's origin (set `BETTER_AUTH_URL` to the public address). The link works once and expires in 1 hour, and a reset signs the account out everywhere else. It needs `EMAIL_API_URL` and `EMAIL_API_KEY`, the same email service invitations use. Without them the screen says that password reset by email is not set up on this server and to ask whoever runs it; nothing is sent. With them, the screen gives the same answer for every address, so it never shows whether an account exists.
+
 ## Google Drive
 
 Drive is for artifacts and exports only; Postgres holds the data. Writing to Drive is switched off in this version (a retry could duplicate a file), so files stay in Meridian's database. Connect Drive with one of these, set in `.env`:

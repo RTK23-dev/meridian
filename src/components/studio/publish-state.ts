@@ -18,3 +18,20 @@ export function publishBlockReason(channels: readonly PublishStateChannel[], sel
 export function deliverByHandOnly(channels: readonly PublishStateChannel[]): boolean {
   return channels.length > 0 && !channels.some((channel) => channel.connected);
 }
+
+/**
+ * The destinations whose last receipt is uncertain: an earlier attempt may have posted, and nothing was sent again. Only these offer the
+ * "I checked the platform" confirmation. A destination with any other receipt never does.
+ */
+export function uncertainDestinations(
+  results: readonly { channelId: string; platform: string; status: string }[] | null | undefined,
+): { channelId: string; platform: string }[] {
+  return (results ?? []).filter((receipt) => receipt.status === "uncertain").map((receipt) => ({ channelId: receipt.channelId, platform: receipt.platform }));
+}
+
+/** The sentence of the confirmation checkbox. It names each platform that is uncertain, so the person knows where to look. */
+export function confirmRetryLabel(platformNames: readonly string[]): string {
+  const names = [...new Set(platformNames)];
+  const where = names.length === 0 ? "the platform" : names.length === 1 ? names[0]! : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return `I checked ${where}: the earlier post is not there. Send it again.`;
+}

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { gatedTransport, isCapabilityDisabledError } from "../providers/capability.ts";
-import type { Transport } from "../providers/http.ts";
+import { isCapabilityDisabledError } from "../providers/capability.ts";
+import { liveTransport, type Transport } from "../providers/http.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { GRAPH_BASE, classifyFailure, failure, parseJsonBody, responseId, unconfirmed } from "./graph.ts";
 import { readFacebookVideoMetrics } from "./metric-reads.ts";
@@ -31,7 +31,8 @@ export class FacebookPagesChannel implements DistributionChannel {
   private readonly transport: Transport;
 
   constructor(options: { transport?: Transport } = {}) {
-    this.transport = options.transport ?? gatedTransport("publish.facebook");
+    // One request per call and no automatic retry: a publish is guarded by the claim in service.ts, never by resending.
+    this.transport = options.transport ?? liveTransport();
   }
 
   checkConnection(connection: OrganicConnection | undefined): ConnectionCheck {

@@ -18,6 +18,12 @@ import { plainServerError } from "./form-model";
 const ROLE_KEY = (organizationId: string) => ["mutation", "workspace.role", organizationId] as const;
 
 /** Roles can be changed inline by an admin. Removing a member asks first, in a dialog that names the person. */
+/** Plain words for the invitation states the server records. */
+const INVITE_STATUS_LABEL: Record<string, string> = {
+  sending: "sending",
+  uncertain: "email may not have arrived",
+};
+
 export function MembersTab({ organizationId, members, invites, canAdmin }: {
   organizationId: string;
   members: MemberRow[];
@@ -120,7 +126,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
                 <span className="min-w-0 break-all text-fg-primary">{invite.email}</span>
                 <span className="flex flex-wrap gap-2 text-fg-muted">
                   <span>{invite.role}</span>
-                  <Badge variant="info">{invite.status}</Badge>
+                  <Badge variant={invite.status === "uncertain" ? "warning" : "info"}>{INVITE_STATUS_LABEL[invite.status] ?? invite.status}</Badge>
                 </span>
               </li>
             ))}

@@ -219,6 +219,26 @@ test("a connected YouTube channel publishes the stored video through its transpo
   }
 });
 
+test("a re-launch does not send a destination whose last attempt is uncertain or claimed, and the launch says so", async () => {
+  const sql = await getSql();
+  const tenant = await studioTenant(sql, "publish-uncertain-skip");
+  const runId = await runFor(sql, tenant, "full", "organic", ["facebook"]);
+  const creativeId = await producedCreative(sql, tenant, runId, "full");
+  await approveCreative(sql, creativeId);
+  for (const status of ["uncertain", "claimed"] as const) {
+    await sql`delete from organic_publish_claims where organization_id = ${tenant.organizationId} and creative_id = ${creativeId}`;
+    await sql`
+      insert into organic_publish_claims (id, organization_id, brand_id, creative_id, channel_id, platform, target_id, status, lease_token, lease_expires_at)
+      values (${randomUUID()}, ${tenant.organizationId}, ${tenant.brandId}, ${creativeId}, 'facebook-pages', 'facebook', 'page-1', ${status},
+        ${status === "claimed" ? "token-1" : null}, ${status === "claimed" ? new Date(Date.now() + 600_000).toISOString() : null}::timestamptz)
+    `;
+    const summary = await stage(sql, tenant, runId, "factory.launch");
+    assert.match(summary, /;uncertain=1(;|$)/, `${status}: the held destination is reported`);
+    assert.match(summary, /^launched:organic=0;not_connected=0;/, `${status}: nothing was sent or recorded`);
+    assert.equal((await organicRowsFor(sql, tenant, creativeId)).length, 0, `${status}: no receipt row, so the provider was never reached`);
+  }
+});
+
 /**
  * A video creative the way the video path stores one: a creative row, an asset row, and the stored bytes. The bytes are a fixture
  * with an MP4 `ftyp` header, not a rendered video. The channel checks the MIME type and that the bytes are not empty.

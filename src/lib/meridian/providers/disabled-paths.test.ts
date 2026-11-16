@@ -5,7 +5,6 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, mock, test } from "node:test";
 import { embedExternal } from "../embeddings/external.ts";
-import { realEmailProvider } from "../notifications/email.ts";
 import { generateNanoBananaImage } from "./nano-banana.server.ts";
 
 let requests: number;
@@ -32,13 +31,6 @@ describe("disabled paths send nothing through their production defaults", () => 
 
   test("the embeddings call refuses through its default transport and sends no request", async () => {
     await assert.rejects(embedExternal(["one fixture sentence"], { env: { url: "https://embeddings.example.test/v1", key: "fixture-key-not-real" } }), /No vector was stored/);
-    assert.equal(requests, 0);
-  });
-
-  test("the email send refuses through its default transport, reports it was not sent, and sends no request", async () => {
-    const provider = realEmailProvider({ url: "https://email.example.test/send", key: "fixture-key-not-real" });
-    const result = await provider.send({ to: "reviewer@example.test", subject: "Fixture", text: "Fixture body" } as never);
-    assert.notEqual(result.status, "SENT");
     assert.equal(requests, 0);
   });
 });

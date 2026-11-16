@@ -25,6 +25,12 @@ export const signUpSchema = z.object({
   password: newPasswordField,
 });
 
+export const resetRequestSchema = z.object({ email: emailField });
+export const resetPasswordSchema = z.object({ password: newPasswordField });
+
+export type ResetRequestValues = z.input<typeof resetRequestSchema>;
+export type ResetPasswordValues = z.input<typeof resetPasswordSchema>;
+
 export type SignInValues = z.input<typeof signInSchema>;
 export type SignUpValues = z.input<typeof signUpSchema>;
 
@@ -86,4 +92,13 @@ export function plainServerError(raw: string, context: ErrorContext = "settings"
 /** True when the plain message adds nothing over the raw text, so the Details disclosure can be left out. */
 export function needsDetails(plain: string, raw: string): boolean {
   return raw.trim() !== "" && raw.trim() !== plain.trim();
+}
+
+const RESET_LINK_DEAD = "This reset link has expired or was already used. Go back to sign in and choose Forgot your password to get a new one.";
+
+/** What a failed password reset means to the person. An expired, used or unknown link all read the same: the link no longer works. */
+export function plainResetError(error: AuthErrorLike): string {
+  if (error.code === "INVALID_TOKEN" || error.code === "TOKEN_EXPIRED") return RESET_LINK_DEAD;
+  if (error.status === 400 && !error.code) return RESET_LINK_DEAD;
+  return plainAuthError(error, "sign-in");
 }

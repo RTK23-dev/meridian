@@ -5,10 +5,11 @@ import { applyLearnedPatterns } from "../learning/store.ts";
 import { publishThrough } from "../providers/boundaries.ts";
 import { isTestingRuntimeNow } from "../runtime-mode.ts";
 import { isOrganicPlatform, resolveOrganicConnection, resolveOrganicConnections } from "./connection.ts";
-import type { OrganicPlatform } from "./types.ts";
+import type { OrganicPlatform, OrganicPublishReceipt } from "./types.ts";
 import type { TrialRequest } from "./trial.ts";
 import { recordTrialStep } from "./trial-check.ts";
 import { mediaDeliveryFor, signMediaLink, signedMediaUrl } from "../storage/media-link.ts";
+import { acquireClaim, outcomeOfReceipt, outcomeOfThrown, settleClaim, type ClaimOutcome, type ClaimRow } from "./publish-claims.ts";
 
 export async function requireBrandAccess(
   sql: Sql,
@@ -57,23 +58,71 @@ export type PublishMultiChannelInput = {
    * and a person may pass a choice for one post. Other channels ignore it.
    */
   trial?: TrialRequest | null;
+  /**
+   * A person checked the platform and the earlier post is not there, so a destination whose last attempt is uncertain may be sent once
+   * more. Without it, an uncertain destination is never sent again. It does not override a post the platform confirmed.
+   */
+  confirmRetry?: boolean;
+};
+
+/** What the publish reads from outside the database. A test passes fakes; production passes nothing. */
+export type PublishDeps = {
+  loadMedia?: (storageKey: string, organizationId: string, brandId: string) => Promise<{ bytes: Uint8Array } | null>;
+  now?: () => Date;
 };
 
 /**
  * One channel's receipt. `published` and `scheduled` are organic posts the provider confirmed. `paused` is a paid object the
  * provider created with its status PAUSED: it is never live, and it is not an organic publish. `not_connected` means nothing was
- * sent, and the reason says why. It is never counted as published.
+ * sent, and the reason says why. It is never counted as published. `uncertain` means an attempt may have posted and nothing was
+ * sent again: check the platform, then send again with `confirmRetry`. `in_progress` means another request holds the destination.
  */
 export type PublishChannelResult = {
   channelId: string;
   platform: string;
   type: "organic" | "paid";
   surface: "organic" | "paid";
-  status: "published" | "scheduled" | "paused" | "not_connected" | "failed";
+  status: "published" | "scheduled" | "paused" | "not_connected" | "failed" | "uncertain" | "in_progress";
   externalId?: string;
   url?: string;
   error?: string;
+  /** The provider's receipt code (UNCONFIRMED, REJECTED, ...), when the channel gave one. */
+  receiptCode?: string;
+  /** True when this receipt is the earlier confirmed post. Nothing was sent in this request. */
+  alreadySent?: boolean;
 };
+
+const PLATFORM_NAME: Record<string, string> = { facebook: "Facebook", instagram: "Instagram", youtube: "YouTube", tiktok: "TikTok" };
+
+/** The receipt for a destination that already holds a confirmed post. The provider is not called. */
+function receiptOfClaim(channelId: string, platform: string, claim: ClaimRow): PublishChannelResult {
+  return {
+    channelId,
+    platform,
+    type: "organic",
+    surface: "organic",
+    status: claim.status === "scheduled" ? "scheduled" : "published",
+    externalId: claim.externalId || undefined,
+    url: claim.postUrl || undefined,
+    receiptCode: claim.receiptCode || undefined,
+    alreadySent: true,
+  };
+}
+
+/** The receipt for a destination whose last attempt may have posted. It says to check the platform, and nothing was sent. */
+function uncertainReceipt(channelId: string, platform: string, claim: ClaimRow): PublishChannelResult {
+  const name = PLATFORM_NAME[platform] ?? platform;
+  const detail = claim.error ? ` ${claim.error}` : "";
+  return {
+    channelId,
+    platform,
+    type: "organic",
+    surface: "organic",
+    status: "uncertain",
+    receiptCode: claim.receiptCode || undefined,
+    error: `An earlier attempt to post this to ${name} may have gone out, so nothing was sent now. Check ${name} first.${detail} If the post is not there, confirm and send it again.`,
+  };
+}
 
 export type OrganicPostSummary = {
   id: string;
@@ -247,6 +296,7 @@ async function recordNotConnectedPost(
 export async function publishCreativeToChannels(
   sql: Sql,
   input: PublishMultiChannelInput,
+  deps: PublishDeps = {},
 ): Promise<PublishChannelResult[]> {
   const access = await requireBrandAccess(sql, input.userId, input.brandId, "member");
 
@@ -412,14 +462,19 @@ export async function publishCreativeToChannels(
     try {
       // The bytes live in Postgres (asset_blobs) or in Google Drive, located by the storage_objects row. This is the same read a
       // download makes, so a publish sends the file that the person can see.
-      const { loadStoredSource } = await import("../storage/asset-response.ts");
-      const { defaultArtifactDrive } = await import("../storage/artifact-drive.ts");
-      const stored = await loadStoredSource(sql, async () => defaultArtifactDrive(), {
-        storageKey: asset.storage_key,
-        organizationId: access.organizationId,
-        brandId: input.brandId,
-      });
-      if (stored && stored.bytes.byteLength > 0) mediaBytes = stored.bytes;
+      if (deps.loadMedia) {
+        const loaded = await deps.loadMedia(asset.storage_key, access.organizationId, input.brandId);
+        if (loaded && loaded.bytes.byteLength > 0) mediaBytes = loaded.bytes;
+      } else {
+        const { loadStoredSource } = await import("../storage/asset-response.ts");
+        const { defaultArtifactDrive } = await import("../storage/artifact-drive.ts");
+        const stored = await loadStoredSource(sql, async () => defaultArtifactDrive(), {
+          storageKey: asset.storage_key,
+          organizationId: access.organizationId,
+          brandId: input.brandId,
+        });
+        if (stored && stored.bytes.byteLength > 0) mediaBytes = stored.bytes;
+      }
     } catch {
       // storage unavailable
     }
@@ -436,9 +491,47 @@ export async function publishCreativeToChannels(
       continue;
     }
 
+    // The claim is written before the provider is called. It is the guard: a destination that holds a confirmed post is not sent again,
+    // an attempt whose outcome is unknown is not sent again until a person confirms, and two requests cannot both send.
+    const targetId = connection?.connected ? connection.accountId : "";
+    const scheduledIso = scheduledDate && !Number.isNaN(scheduledDate.getTime()) ? scheduledDate.toISOString() : null;
+    const claim = await acquireClaim(sql, {
+      organizationId: access.organizationId,
+      brandId: input.brandId,
+      creativeId: input.creativeId,
+      channelId: organicChannel.id,
+      targetId,
+      platform: organicChannel.platform,
+      createdBy: input.userId,
+      scheduledFor: scheduledIso,
+      now: (deps.now ?? (() => new Date()))(),
+      confirmRetry: input.confirmRetry === true,
+    });
+    if (claim.kind === "done") {
+      results.push(receiptOfClaim(channelId, organicChannel.platform, claim.claim));
+      continue;
+    }
+    if (claim.kind === "uncertain") {
+      results.push(uncertainReceipt(channelId, organicChannel.platform, claim.claim));
+      continue;
+    }
+    if (claim.kind === "in_progress") {
+      results.push({
+        channelId,
+        platform: organicChannel.platform,
+        type: "organic",
+        surface: "organic",
+        status: "in_progress",
+        error: "Another request is posting this to this destination. Nothing was sent now. Check again in a few minutes.",
+      });
+      continue;
+    }
+
+    let publishReceipt: OrganicPublishReceipt | null = null;
+    let outcome: ClaimOutcome;
     try {
       // The channel receives the connection the service resolved above. It never reads a token itself.
-      const publishReceipt = await organicChannel.publish({
+      publishReceipt = await organicChannel.publish({
         brandId: input.brandId,
         organizationId: access.organizationId,
         creativeId: input.creativeId,
@@ -455,62 +548,80 @@ export async function publishCreativeToChannels(
         verifiedMediaDomains,
         trial: organicChannel.platform === "instagram" ? (input.trial ?? null) : null,
       });
+      outcome = outcomeOfReceipt(publishReceipt);
+    } catch (err) {
+      // A thrown error is an unknown outcome unless the path was disabled before any request.
+      outcome = outcomeOfThrown(err);
+    }
 
-      // A channel that reports NOT_CONNECTED sent nothing, for example Instagram without a public media URL. That is a not_connected
-      // receipt, not a failed publish.
-      const receiptStatus = publishReceipt.code === "NOT_CONNECTED" ? "not_connected" : publishReceipt.status;
-      const postId = globalThis.crypto.randomUUID();
-      await sql`
-        insert into organic_posts (
-          id, organization_id, brand_id, creative_id, asset_id, platform, external_id,
-          post_url, caption, title, aspect_ratio, status, scheduled_for, published_at, error, surface
-        ) values (
-          ${postId}, ${access.organizationId}, ${input.brandId}, ${input.creativeId},
-          ${asset?.id ?? null}, ${publishReceipt.platform}, ${publishReceipt.externalId || null},
-          ${publishReceipt.postUrl || null}, ${caption}, ${title}, '9:16',
-          ${receiptStatus}, ${scheduledDate ? scheduledDate.toISOString() : null},
-          ${receiptStatus === "published" ? new Date().toISOString() : null},
-          ${publishReceipt.error || null}, 'organic'
-        )
-      `;
+    // organic_posts stays the receipt the readers use. A channel that reports NOT_CONNECTED sent nothing, for example Instagram
+    // without a public media URL: that is a not_connected receipt, not a failed publish.
+    const organicStatus =
+      outcome.status === "published" || outcome.status === "scheduled"
+        ? outcome.status
+        : outcome.status === "uncertain"
+          ? "uncertain"
+          : outcome.receiptCode === "NOT_CONNECTED"
+            ? "not_connected"
+            : "failed";
+    const platform = publishReceipt?.platform ?? organicChannel.platform;
+    const settled = await settleClaim(
+      sql,
+      claim.lease,
+      outcome,
+      { assetId: asset.id, platform, caption, title, scheduledFor: scheduledIso },
+      organicStatus,
+    );
 
+    if (outcome.status === "published" || outcome.status === "scheduled") {
       // A published trial step is recorded with its media id, so the scheduled check can read the same reel later. A failure to record it
       // is reported on the result: the post is already live, and nothing is hidden.
-      let trialNote = "";
-      if (publishReceipt.trial && receiptStatus === "published" && publishReceipt.externalId) {
+      let note = "";
+      if (!settled.recorded) {
+        note = `The post was confirmed (${outcome.externalId}), but this request no longer held its claim, so the record was not saved. Check the platform before sending again.`;
+      } else if (settled.receiptError) {
+        note = `The post is live (${outcome.externalId}), but its receipt row could not be saved: ${settled.receiptError}`;
+      } else if (publishReceipt?.trial && outcome.status === "published" && settled.postId) {
         try {
           await recordTrialStep(sql, {
             organizationId: access.organizationId,
             brandId: input.brandId,
-            organicPostId: postId,
-            mediaId: publishReceipt.externalId,
+            organicPostId: settled.postId,
+            mediaId: outcome.externalId,
             graduationStrategy: publishReceipt.trial.graduationStrategy,
           });
         } catch (trialError) {
-          trialNote = `The trial reel was published, but its feed check could not be scheduled: ${trialError instanceof Error ? trialError.message : String(trialError)}`;
+          note = `The trial reel was published, but its feed check could not be scheduled: ${trialError instanceof Error ? trialError.message : String(trialError)}`;
         }
       }
-
       results.push({
         channelId,
-        platform: publishReceipt.platform,
+        platform,
         type: "organic",
         surface: "organic",
-        status: receiptStatus,
-        externalId: publishReceipt.externalId,
-        url: publishReceipt.postUrl,
-        error: publishReceipt.error || trialNote || undefined,
+        status: outcome.status,
+        externalId: outcome.externalId,
+        url: outcome.postUrl || undefined,
+        receiptCode: outcome.receiptCode || undefined,
+        error: note || undefined,
       });
-    } catch (err) {
-      results.push({
-        channelId,
-        platform: organicChannel.platform,
-        type: "organic",
-        surface: "organic",
-        status: "failed",
-        error: err instanceof Error ? err.message : String(err),
-      });
+      continue;
     }
+
+    const name = PLATFORM_NAME[platform] ?? platform;
+    const reason = "error" in outcome ? outcome.error : "";
+    results.push({
+      channelId,
+      platform,
+      type: "organic",
+      surface: "organic",
+      status: organicStatus === "not_connected" ? "not_connected" : outcome.status === "uncertain" ? "uncertain" : "failed",
+      receiptCode: outcome.receiptCode || undefined,
+      error:
+        outcome.status === "uncertain"
+          ? `${reason} Nothing is reported as posted. Check ${name} first; if the post is not there, confirm and send it again.`
+          : reason,
+    });
   }
 
   // If any channel succeeded, transition creative and asset. A paused paid ad counts: the creative has been sent to a channel.

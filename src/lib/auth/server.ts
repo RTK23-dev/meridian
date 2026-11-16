@@ -9,12 +9,14 @@
  *
  * NEVER import this from client code. It pulls in `pg` and the database. The browser uses `@/lib/auth/client`.
  */
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { betterAuth } from "better-auth";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { Pool } from "pg";
 import { ensureDbReady, getPglite } from "../db";
+import { realEmailProvider } from "../meridian/notifications/email.ts";
 import { emailAndPasswordEnabled } from "./email-password";
+import { resetPasswordEmail, RESET_TOKEN_TTL_SECONDS } from "./password-reset";
 import { pgliteDialect } from "./pglite-dialect";
 import { parseTrustedOrigins, trustedOriginsFor } from "./trusted-origins";
 
@@ -100,7 +102,24 @@ export const auth = betterAuth({
   session: { cookieCache: { enabled: true, maxAge: 300 } },
 
   // Local email and password, toggled only in `./email-password`.
-  ...(emailAndPasswordEnabled ? { emailAndPassword: { enabled: true } } : {}),
+  ...(emailAndPasswordEnabled
+    ? {
+        emailAndPassword: {
+          enabled: true,
+          // One-time link to this app's own /reset-password page. Better Auth deletes the token when it is used.
+          resetPasswordTokenExpiresIn: RESET_TOKEN_TTL_SECONDS,
+          revokeSessionsOnPasswordReset: true,
+          sendResetPassword: async ({ user, token }: { user: { id: string; email: string }; token: string }) => {
+            const message = resetPasswordEmail({ email: user.email, token, origin: baseURL });
+            // The key names the user and the token's hash, never the token, so a repeat of this send is recognised by the provider.
+            const tokenFingerprint = createHash("sha256").update(token).digest("hex").slice(0, 16);
+            const result = await realEmailProvider().send({ ...message, idempotencyKey: `password-reset:${user.id}:${tokenFingerprint}` });
+            // The request screen gives the same answer either way, so a failure is only recorded here, without the address or the link.
+            if (result.status !== "sent") console.error(`[auth] Password reset email was not sent (${result.status}).`);
+          },
+        },
+      }
+    : {}),
 
   // `__Host-` cookies cannot carry a Domain attribute, so a sibling app on the same parent domain cannot set this session.
   advanced: {

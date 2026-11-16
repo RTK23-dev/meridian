@@ -45,7 +45,11 @@ const PAID_PAUSED = "paused";
 export type LaunchCreative = { creativeId: string; creativeStatus: string; gateResult: string };
 
 export type LaunchOutcome = {
-  organic: { published: number; notConnected: number; failed: number; alreadyPublished: number };
+  /**
+   * `uncertain`: destinations that are not sent. An earlier attempt may have posted (uncertain) or another request holds the claim (claimed).
+   * A person checks the platform and confirms in the publish dialog before it is sent again.
+   */
+  organic: { published: number; notConnected: number; failed: number; alreadyPublished: number; uncertain: number };
   paid: { paused: number; notConnected: number; failed: number; alreadyPaused: number };
   /** Creatives a person has not approved. They are not sent to any channel. */
   unapproved: number;
@@ -107,7 +111,8 @@ export function organicPlatformsOf(settings: Pick<RunSettings, "platforms">): st
 
 /**
  * Publishes one creative to the run's organic channels. A channel whose platform already has a confirmed post for this creative is
- * not sent again. The channels that remain go through publishCreativeToChannels, which records each receipt.
+ * not sent again, and neither is one whose claim is held (`claimed`) or whose last attempt is `uncertain`: it may have posted. The
+ * channels that remain go through publishCreativeToChannels, which claims each destination before the call and records each receipt.
  */
 async function publishOrganic(
   sql: Sql,
@@ -116,16 +121,25 @@ async function publishOrganic(
   platforms: string[],
   actorId: string,
   trial: TrialRequest | null,
-): Promise<{ results: PublishChannelResult[]; alreadyPublished: number; unmapped: string[]; error: string }> {
+): Promise<{ results: PublishChannelResult[]; alreadyPublished: number; uncertain: number; unmapped: string[]; error: string }> {
   const done = await sql<{ platform: string }>`
     select platform from organic_posts
     where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and creative_id = ${creativeId}
       and surface = 'organic' and status in ('published', 'scheduled')
   `;
   const donePlatforms = new Set(done.map((row) => row.platform));
+  // A destination that is claimed (a request holds it, or its lease ran out) or uncertain is not sent again. An expired claim turns
+  // uncertain inside the service, and a plain launch never sends an uncertain one.
+  const held = await sql<{ channel_id: string }>`
+    select channel_id from organic_publish_claims
+    where organization_id = ${scope.organizationId} and brand_id = ${scope.brandId} and creative_id = ${creativeId}
+      and status in ('claimed', 'uncertain')
+  `;
+  const heldChannels = new Set(held.map((row) => row.channel_id));
   const channelIds: string[] = [];
   const unmapped: string[] = [];
   let alreadyPublished = 0;
+  let uncertain = 0;
   for (const platform of platforms) {
     if (donePlatforms.has(platform)) {
       alreadyPublished += 1;
@@ -136,9 +150,13 @@ async function publishOrganic(
       unmapped.push(platform);
       continue;
     }
+    if (heldChannels.has(channelId)) {
+      uncertain += 1;
+      continue;
+    }
     channelIds.push(channelId);
   }
-  if (channelIds.length === 0) return { results: [], alreadyPublished, unmapped, error: "" };
+  if (channelIds.length === 0) return { results: [], alreadyPublished, uncertain, unmapped, error: "" };
   try {
     const results = await publishCreativeToChannels(sql, {
       organizationId: scope.organizationId,
@@ -149,10 +167,10 @@ async function publishOrganic(
       // The run's page default. Null is an ordinary publish, and the service applies it to Instagram only.
       trial,
     });
-    return { results, alreadyPublished, unmapped, error: "" };
+    return { results, alreadyPublished, uncertain, unmapped, error: "" };
   } catch (error) {
     // The service refuses a creative that is not approved, or an actor who is not a member. Nothing was sent.
-    return { results: [], alreadyPublished, unmapped, error: errorText(error) };
+    return { results: [], alreadyPublished, uncertain, unmapped, error: errorText(error) };
   }
 }
 
@@ -340,7 +358,7 @@ export async function launchFactoryRun(
   const trial = wantsOrganic ? await trialDefaultForRunPage(sql, scope, input.settings.pageId) : null;
 
   const outcome: LaunchOutcome = {
-    organic: { published: 0, notConnected: 0, failed: 0, alreadyPublished: 0 },
+    organic: { published: 0, notConnected: 0, failed: 0, alreadyPublished: 0, uncertain: 0 },
     paid: { paused: 0, notConnected: 0, failed: 0, alreadyPaused: 0 },
     unapproved,
     blocked,
@@ -353,6 +371,7 @@ export async function launchFactoryRun(
     if (wantsOrganic) {
       const organic = await publishOrganic(sql, scope, creative.creativeId, platforms, input.actorId, trial);
       outcome.organic.alreadyPublished += organic.alreadyPublished;
+      outcome.organic.uncertain += organic.uncertain;
       for (const platform of organic.unmapped) if (!outcome.unmapped.includes(platform)) outcome.unmapped.push(platform);
       if (organic.error) outcome.organic.failed += 1;
       for (const result of organic.results) {
@@ -361,6 +380,8 @@ export async function launchFactoryRun(
           outcome.receipts += 1;
         } else if (result.status === "not_connected") {
           outcome.organic.notConnected += 1;
+        } else if (result.status === "uncertain" || result.status === "in_progress") {
+          outcome.organic.uncertain += 1;
         } else {
           outcome.organic.failed += 1;
         }
@@ -390,6 +411,8 @@ export async function launchFactoryRun(
     `unapproved=${unapproved}`,
     `blocked=${blocked}`,
   ];
+  // Said only when a destination was held back, so a launch with none reads as before.
+  if (outcome.organic.uncertain > 0) parts.push(`uncertain=${outcome.organic.uncertain}`);
   if (!wantsOrganic && !wantsPaid) parts.push("intent=none");
   if (eligible.length === 0) parts.push("nothing-approved");
   outcome.summary = parts.join(";");

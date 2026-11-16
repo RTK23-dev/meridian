@@ -226,7 +226,11 @@ launch summary and is never sent.
 - **Organic** (`organic`, `both`): each platform the run names goes through `distribution/service.ts`. A platform with no organic
   channel is reported. A run with no platforms lists every organic platform, so each one shows its own state. A channel with no usable
   connection records `not_connected` with its reason, and sends nothing. It is never counted as published. A post is recorded in
-  `organic_posts` with surface `organic`.
+  `organic_posts` with surface `organic`. Posting to a connected Facebook Page works; Instagram, YouTube and TikTok posting is switched
+  off in this version, so those platforms send nothing. Before a channel is called, the service claims the creative, channel and account
+  (`organic_publish_claims`, `distribution/publish-claims.ts`), so a creative is never posted twice. A confirmed post is returned as it
+  was. A timeout, a rate limit, no reply or a lost claim leaves the destination `uncertain`: a launch skips it and reports
+  `uncertain=N`, and it is sent again only after a person checks the platform and confirms in the publish dialog.
 - **Paid** (`ad`, `both`): the campaign, ad set, ad creative and ad are created with status PAUSED, and each is recorded in
   `provider_objects` with surface `paid` and status `paused`. In the testing runtime the fixture engine in `publishing/engine.ts` answers,
   and it takes the run's targeting countries unchanged. Outside it (`liveRouteFor` in `factory/publish.ts`), the checks run in order and

@@ -39,7 +39,7 @@ export const WORKFLOW: readonly WorkflowStep[] = [
   {
     id: "publishing",
     label: "Publishing",
-    what: "Posting to Facebook, Instagram, YouTube and TikTok is switched off in this version: export the finished video and post it yourself. Paid ads are created paused.",
+    what: "Posting to a connected Facebook Page works. Instagram, YouTube and TikTok posting is switched off in this version: export the finished video and post it yourself. Paid ads are created paused.",
   },
   {
     id: "learning",

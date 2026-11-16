@@ -15,7 +15,7 @@ export function PublishCreativeDialog({ brandId, target, onClose }: { brandId: s
   const [results, setResults] = useState<PublishReceipt[] | null>(null);
   const publish = useScopedMutation({
     mutationKey: ["mutation", "library.publish"],
-    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: PublishTrial }) =>
+    mutationFn: (vars: { creativeId: string; channelIds: string[]; caption: string; trial: PublishTrial; confirmRetry: boolean }) =>
       publishMultiChannelVariant({ data: { brandId, ...vars } }),
     invalidate: () => [qk.library(brandId), qk.studio(brandId), qk.organic(brandId)],
     success: "Publish finished. The receipts are in the dialog.",
@@ -29,8 +29,8 @@ export function PublishCreativeDialog({ brandId, target, onClose }: { brandId: s
       pending={publish.isPending}
       results={results}
       onClose={onClose}
-      onConfirm={(channelIds, caption, trial) => {
-        void publish.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial }).catch(() => undefined);
+      onConfirm={(channelIds, caption, trial, confirmRetry) => {
+        void publish.mutateAsync({ creativeId: target.creativeId, channelIds, caption, trial, confirmRetry }).catch(() => undefined);
       }}
     />
   );

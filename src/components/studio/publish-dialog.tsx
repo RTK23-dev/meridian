@@ -12,11 +12,11 @@ import { copy, providerLabel, serverCodeMessage, statusLabel } from "@/lib/copy"
 import { cn } from "@/lib/cn";
 import { CopyButton } from "./copy-button.tsx";
 import { frameShape } from "./aspect.ts";
-import { deliverByHandOnly, publishBlockReason } from "./publish-state.ts";
+import { confirmRetryLabel, deliverByHandOnly, publishBlockReason, uncertainDestinations } from "./publish-state.ts";
 import type { PublishReceipt } from "./types.ts";
 
-/** The built-in channels whose posting is gated in this version. Any other destination (a test publisher, a registered channel) is not. */
-const OFF_CHANNELS: Record<string, Parameters<typeof isOff>[0]> = { "instagram-reels": "publish.instagram", "youtube-shorts": "publish.youtube", "tiktok-organic": "publish.tiktok", "facebook-pages": "publish.facebook" };
+/** The built-in channels whose posting is gated in this version (Facebook Page posting is on). Any other destination (a test publisher, a registered channel) is not. */
+const OFF_CHANNELS: Record<string, Parameters<typeof isOff>[0]> = { "instagram-reels": "publish.instagram", "youtube-shorts": "publish.youtube", "tiktok-organic": "publish.tiktok" };
 const channelOff = (id: string) => id in OFF_CHANNELS && isOff(OFF_CHANNELS[id]!);
 
 export type PublishTarget = {
@@ -58,6 +58,7 @@ const publishFormSchema = z
     caption: z.string().trim().max(CAPTION_MAX, `Use ${CAPTION_MAX} characters or fewer.`),
     trialFirst: z.boolean(),
     trialGraduation: z.enum(["", "MANUAL", "SS_PERFORMANCE"]),
+    confirmRetry: z.boolean(),
   })
   .refine((values) => !values.trialFirst || !values.channelIds.includes("instagram-reels") || values.trialGraduation !== "", {
     path: ["trialGraduation"],
@@ -72,7 +73,8 @@ type PublishDialogProps = {
   pending: boolean;
   results: readonly PublishReceipt[] | null;
   onClose: () => void;
-  onConfirm: (channelIds: string[], caption: string, trial: PublishTrial) => void;
+  /** `confirmRetry` is true only when a destination was uncertain and the person ticked that they checked the platform. */
+  onConfirm: (channelIds: string[], caption: string, trial: PublishTrial, confirmRetry: boolean) => void;
   /** Starts the export package for manual posting. Shown as the way to deliver when no destination is connected. */
   onExportPackage?: () => void;
 };
@@ -83,9 +85,9 @@ type PublishDialogProps = {
  */
 export function PublishDialog({ target, channels, pending, results, onClose, onConfirm, onExportPackage }: PublishDialogProps) {
   const defaults = { channelIds: channels.filter((channel) => channel.connected).map((channel) => channel.id), caption: target?.defaultCaption ?? "" };
-  const form = useForm<{ channelIds: string[]; caption: string; trialFirst: boolean; trialGraduation: "" | "MANUAL" | "SS_PERFORMANCE" }, unknown, PublishFormValues>({
+  const form = useForm<{ channelIds: string[]; caption: string; trialFirst: boolean; trialGraduation: "" | "MANUAL" | "SS_PERFORMANCE"; confirmRetry: boolean }, unknown, PublishFormValues>({
     resolver: zodResolver(publishFormSchema),
-    defaultValues: { ...defaults, trialFirst: false, trialGraduation: "" },
+    defaultValues: { ...defaults, trialFirst: false, trialGraduation: "", confirmRetry: false },
     mode: "onChange",
   });
   const { register, formState: { errors, isDirty } } = form;
@@ -95,6 +97,8 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
   // Said only when a destination on this list is one of the gated channels. The server refuses those either way.
   const publishingOff = channels.some((channel) => channelOff(channel.id));
   const handOnly = deliverByHandOnly(channels);
+  // A destination whose last receipt is uncertain is not sent again unless the person says they checked the platform.
+  const uncertain = uncertainDestinations(results);
   const descriptionId = useId();
   const captionId = useId();
   const frame = frameShape(target?.width, target?.height);
@@ -114,7 +118,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
           <DialogDescription id={descriptionId} className="mt-2 text-sm text-fg-muted">
             Choose where it goes. Nothing is sent to a destination you do not select. Each destination returns its own receipt.
           </DialogDescription>
-          {publishingOff ? <div className="mt-3"><OffNotice what="Posting to Instagram, YouTube, TikTok and Facebook" instead="Export the video from Library and post it yourself. Those destinations refuse and send nothing." /></div> : null}
+          {publishingOff ? <div className="mt-3"><OffNotice what="Posting to Instagram, YouTube and TikTok" instead="Export the video from Library and post it yourself. Those destinations refuse and send nothing." /></div> : null}
 
           <form
             noValidate
@@ -124,9 +128,11 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
               const trial: PublishTrial = values.channelIds.includes("instagram-reels") && values.trialFirst && values.trialGraduation
                 ? { graduationStrategy: values.trialGraduation }
                 : null;
-              onConfirm(values.channelIds, values.caption, trial);
-              // The dialog stays open to show the receipts, so the sent choice becomes the baseline. Closing does not ask.
-              form.reset(values, { keepValues: true });
+              // The confirmation counts only while a destination is uncertain, and only for this one send.
+              onConfirm(values.channelIds, values.caption, trial, values.confirmRetry && uncertain.length > 0);
+              // The dialog stays open to show the receipts, so the sent choice becomes the baseline. Closing does not ask. The confirmation
+              // is cleared: a new uncertain receipt needs a new check.
+              form.reset({ ...values, confirmRetry: false });
             })}
           >
           <div className="mt-4 space-y-4">
@@ -215,6 +221,17 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
               onDiscard={dismiss.discard}
             />
           </div>
+
+          {uncertain.length > 0 ? (
+            <div role="group" aria-label="Check before sending again" className="mt-4 space-y-2 rounded-sharp border border-border-strong p-3 text-sm">
+              <p className="font-semibold">An earlier post may have gone out</p>
+              <p className="text-fg-muted">Nothing was sent again. Open the destination, look for the post, and send again only if it is not there.</p>
+              <label className="flex min-h-11 items-start gap-3">
+                <input type="checkbox" className="mt-1 size-4 shrink-0" {...register("confirmRetry")} disabled={pending} />
+                <span>{confirmRetryLabel(uncertain.map((item) => providerLabel(item.platform)))}</span>
+              </label>
+            </div>
+          ) : null}
 
           {handOnly ? (
             <div className="mt-4 space-y-2 rounded-sharp border border-hairline bg-overlay p-3 text-sm">

@@ -325,6 +325,10 @@ test("an invitation email is one-time and does not keep the raw token", async ()
       });
       return [];
     }
+    if (text.includes("set status = 'sending'")) {
+      const row = invites.find((item) => item.id === values[0]);
+      return row ? [{ send_count: 1 }] : [];
+    }
     if (text.includes("set status = 'sent'")) {
       const row = invites.find((item) => item.id === values[0]);
       if (row) row.status = "sent";

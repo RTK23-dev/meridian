@@ -45,7 +45,10 @@ export const publishMultiChannelVariant = createServerFn({ method: "POST" })
     const trial = parseTrialRequest(body.trial);
     if (!trial.ok) throw new Error(trial.error);
 
-    return { brandId, creativeId, channelIds, caption, title, scheduledFor, trial: trial.value as TrialRequest | null };
+    // True only when a person checked the platform and the earlier post is not there. Anything else is a plain publish.
+    const confirmRetry = body.confirmRetry === true;
+
+    return { brandId, creativeId, channelIds, caption, title, scheduledFor, confirmRetry, trial: trial.value as TrialRequest | null };
   })
   .middleware([authMiddleware])
   .handler(async ({ context, data }) => {
@@ -61,6 +64,7 @@ export const publishMultiChannelVariant = createServerFn({ method: "POST" })
       scheduledFor: data.scheduledFor,
       userId: context.userId,
       trial: data.trial,
+      confirmRetry: data.confirmRetry,
     });
   });
 

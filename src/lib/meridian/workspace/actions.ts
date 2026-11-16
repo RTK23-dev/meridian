@@ -216,7 +216,7 @@ export const bootstrap = createServerFn({ method: "GET" })
     }>`
       select id, email, role, status, created_at
       from invites
-      where organization_id = ${activeOrg.id} and status in ('recorded', 'pending', 'sent')
+      where organization_id = ${activeOrg.id} and status in ('recorded', 'pending', 'sending', 'uncertain', 'sent')
       order by created_at desc
       limit 20
     `;

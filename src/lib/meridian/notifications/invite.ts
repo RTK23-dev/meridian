@@ -33,7 +33,7 @@ export function selectEmailProvider(options?: { allowTest?: boolean; sent?: { to
  * What happened to an invitation. When no email went out, `link` is the one-time link for the admin to pass on themselves: without it
  * the invited person could never join. It is null when the email was sent.
  */
-export type InviteOutcome = { status: "sent" | "pending"; message: string; link: string | null };
+export type InviteOutcome = { status: "sent" | "pending" | "uncertain"; message: string; link: string | null };
 
 export async function createInvitation(
   sql: Sql,
@@ -80,24 +80,41 @@ async function deliver(
     origin: input.origin,
     workspace: input.workspaceName,
   });
-  const result = await input.provider.send(message);
+  // Recorded before the provider is called, so a crash or a lost answer leaves 'sending' behind, never a silent 'pending'.
+  const marked = await sql<{ send_count: number }>`
+    update invites set status = 'sending', send_count = send_count + 1
+    where id = ${input.id} and organization_id = ${input.organizationId}
+    returning send_count
+  `;
+  const attempt = marked[0]?.send_count;
+  if (typeof attempt !== "number") throw new Error("Invitation was not found, so no email was sent.");
+  const result = await input.provider.send({ ...message, idempotencyKey: `${input.id}:${attempt}` });
   if (result.status === "sent") {
     await sql`
-      update invites set status = 'sent', sent_at = now(), send_count = send_count + 1, last_error = ''
+      update invites set status = 'sent', sent_at = now(), last_error = ''
       where id = ${input.id} and organization_id = ${input.organizationId}
     `;
     return { status: "sent", message: "Invitation email sent.", link: null };
   }
+  const state = result.status === "uncertain" ? "uncertain" : "pending";
   await sql`
-    update invites set status = 'pending', last_error = ${result.error}
+    update invites set status = ${state}, last_error = ${result.error}
     where id = ${input.id} and organization_id = ${input.organizationId}
   `;
+  const link = inviteLink(input.origin, input.token);
+  if (result.status === "uncertain") {
+    return {
+      status: "uncertain",
+      message: "Invitation stored. The email may or may not have arrived: the email service did not confirm it. Copy the link below and send it to them yourself.",
+      link,
+    };
+  }
   return {
     status: "pending",
     message: result.status === "NOT_CONFIGURED"
       ? "Invitation stored. No email was sent, so copy the link below and send it to them yourself."
-      : "Invitation stored. The email could not be confirmed as sent, so copy the link below and send it to them yourself.",
-    link: inviteLink(input.origin, input.token),
+      : "Invitation stored. The email service refused it, so no email was sent. Copy the link below and send it to them yourself.",
+    link,
   };
 }
 

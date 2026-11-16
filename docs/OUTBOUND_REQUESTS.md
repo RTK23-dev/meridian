@@ -32,7 +32,9 @@ The source of truth is `src/lib/meridian/providers/direct-requests.test.ts`. It 
 
 - `ledger`: OpenRouter Decisions (`decisions/openrouter-engine.ts`). Covered by `decisions/decision-holds.test.ts`.
 - `guarded`: the paused-ad creation and recovery state machine (`providers/meta-paused-ad.ts`, `content-factory/repurpose-paused-ad.ts`), and
-  the organic publish with receipts (`content-factory/repurpose-organic.ts`). Each names its test.
+  the organic publish with receipts (`content-factory/repurpose-organic.ts`), and outbound email (`notifications/email.ts`: one send per
+  attempt, an `Idempotency-Key` of `<invite id>:<attempt>`, the invite marked `sending` first and `uncertain` when the answer is lost;
+  `notifications/email.test.ts`, `notifications/invite.test.ts`). Each names its test.
 - `gateway`: the engine's transport and the media, render and download adapters, which take the gateway's injected transport.
 
 ## Disabled paths (fail closed)
@@ -53,8 +55,9 @@ Paid calls with no ledger hold:
 
 Side effects with no idempotency guard:
 
-- `publish.facebook`, `publish.instagram`, `publish.tiktok`, `publish.youtube`: social publishing (`distribution/*`). The guarded path is
-  the organic Facebook publish with receipts.
+- `publish.instagram`, `publish.tiktok`, `publish.youtube`: social publishing (`distribution/*`). Off. Facebook Page publishing is on: every
+  organic publish goes through `distribution/service.ts`, which writes a claim (`organic_publish_claims`) before the call, so a creative is
+  not posted twice and an unknown outcome is `uncertain` until a person checks the platform.
 - `publish.paused_action`: the paused publish action (`providers/publish-action.ts`).
 - `publish.meta_video_upload`: the Meta video upload (`content-factory/repurpose-upload-service.ts`).
 - `ads.meta_write`, `ads.google_ads_write`, `ads.tiktok_write`: ad writes. Their transports are gated per provider in `providers/live.ts`. The
@@ -62,7 +65,6 @@ Side effects with no idempotency guard:
 - `hypit.client`: the Hypit client and run (`hypit/client.ts`, `studio/hypit-run.ts`).
 - `drive.write`: Google Drive writes, including resumable uploads (`storage/drive.ts`, `storage/drive-resumable.ts`). Files are kept in
   Postgres unless Drive is connected.
-- `email.send`: outbound email (`notifications/email.ts`).
 - `alerts.webhook`: alert webhooks (`alerts/deliver.ts`) and the job executor's alert delivery (`jobs/execute.ts`).
 
 A disabled capability is also not retried. `sendWithRetry` (`providers/http.ts`) repeats only GET and PUT, or a request the caller marks
@@ -72,7 +74,7 @@ idempotent. The artifact upload (`storage/artifact-upload.ts`) stops at once on 
 Negative tests:
 
 - `providers/capability.test.ts`: each capability refuses without a request, and a disabled capability is not retried.
-- `providers/disabled-paths.test.ts`: the image adapter, the embeddings call and the email send, through their production defaults, send no
+- `providers/disabled-paths.test.ts`: the image adapter and the embeddings call, through their production defaults, send no
   request.
 - `distribution/disabled-entry-points.test.ts`: the Facebook, Instagram, YouTube and TikTok publish channels and the paused Meta publish,
   through their production defaults. A refusal is reported as `NOT_CONNECTED` with the gate's message, and no request is sent.

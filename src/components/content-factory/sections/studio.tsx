@@ -202,7 +202,7 @@ export function Studio({ brandId, embedded = false }: { brandId: string; embedde
             recordingTest={actions.recordTestPerformance.isPending}
             recordingOrganic={actions.recordOrganic.isPending}
             onReviewSubmit={submitReview}
-            onPublishConfirm={(target, channelIds, caption, trial) => actions.confirmPublish(target, channelIds, caption, trial)}
+            onPublishConfirm={(target, channelIds, caption, trial, confirmRetry) => actions.confirmPublish(target, channelIds, caption, trial, confirmRetry)}
             onPublishClose={() => actions.setPublishResults(null)}
             onRetry={retryVariant}
             onRecordTest={() => { void actions.recordTestPerformance.mutateAsync().catch(() => undefined); }}

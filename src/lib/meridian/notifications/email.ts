@@ -1,19 +1,23 @@
 import { emailApiKey } from "../credentials/secret-settings.ts";
 import type { Transport } from "../providers/http.ts";
-import { gatedTransport } from "../providers/capability.ts";
-import { sendWithRetry } from "../providers/http.ts";
+import { liveTransport, sendWithRetry } from "../providers/http.ts";
 import { emailApiUrlSetting } from "../config/server-settings.ts";
 
 export type EmailMessage = {
   to: string;
   subject: string;
   text: string;
+  /** Sent as the Idempotency-Key header, so a repeat of the same send is recognised by the provider. */
+  idempotencyKey?: string;
 };
 
 export type EmailResult =
   | { status: "sent"; provider: "test:email" | "real:email"; id: string }
   | { status: "NOT_CONFIGURED"; provider: "real:email"; error: string }
-  | { status: "failed"; provider: "real:email"; error: string };
+  /** The provider answered with a refusal (4xx): the email was not sent. */
+  | { status: "failed"; provider: "real:email"; error: string }
+  /** No answer (timeout, network error) or a 5xx: the email may or may not have been sent. */
+  | { status: "uncertain"; provider: "real:email"; error: string };
 
 export type EmailProvider = {
   id: "test:email" | "real:email";
@@ -40,14 +44,24 @@ export function realEmailProvider(env?: { url?: string; key?: string }, transpor
       if (!url || !key) {
         return { status: "NOT_CONFIGURED", provider: "real:email", error: "Email delivery is not configured." };
       }
-      const result = await sendWithRetry(transport ?? gatedTransport("email.send"), {
+      const result = await sendWithRetry(transport ?? liveTransport(), {
         method: "POST",
         url,
-        headers: { authorization: `Bearer ${key}`, "content-type": "application/json" },
+        headers: {
+          authorization: `Bearer ${key}`,
+          "content-type": "application/json",
+          ...(message.idempotencyKey ? { "idempotency-key": message.idempotencyKey } : {}),
+        },
         body: JSON.stringify({ to: message.to, subject: message.subject, text: message.text }),
       });
       if (!result.ok) {
-        return { status: "failed", provider: "real:email", error: `Email provider returned ${result.status || "network"}.` };
+        // Only a 4xx is a clear refusal. A status of 0 (no answer, thrown transport error) or a 5xx leaves the outcome unknown.
+        const refused = result.status >= 400 && result.status < 500;
+        return {
+          status: refused ? "failed" : "uncertain",
+          provider: "real:email",
+          error: `Email provider returned ${result.status || "no answer"}.`,
+        };
       }
       const id = result.json && typeof result.json === "object" && typeof (result.json as { id?: unknown }).id === "string"
         ? (result.json as { id: string }).id
