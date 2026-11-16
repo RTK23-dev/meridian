@@ -33,13 +33,23 @@ export function Welcome() {
   return (
     <>
       <PublicHeader account={false} />
-      <AuthShell
-        title={invited ? "You were invited to a workspace" : "Sign in or create an account"}
-        description={invited ? "Create an account with the email that was invited, or sign in if you have one. You accept the invitation on the next screen." : "Your brands, records and decisions stay inside the workspace that owns them."}
-        footer={<PublicIntroLinks />}
-      >
-        <EmailAuthForm initialMode={invited ? "up" : "in"} />
-      </AuthShell>
+      {invited ? (
+        <AuthShell
+          title="You were invited to a workspace"
+          description="Create an account with the email that was invited, or sign in if you have one. You accept the invitation on the next screen."
+          footer={<PublicIntroLinks />}
+        >
+          <EmailAuthForm initialMode="up" />
+        </AuthShell>
+      ) : (
+        <AuthShell
+          title="Sign in or create an account"
+          description="Your brands, records and decisions stay inside the workspace that owns them."
+          footer={<PublicIntroLinks />}
+        >
+          <EmailAuthForm initialMode="in" />
+        </AuthShell>
+      )}
       <PublicFooter />
     </>
   );
