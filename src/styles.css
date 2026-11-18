@@ -37,33 +37,39 @@
    never a tinted fill, so there are no -soft tokens. */
 :root {
   color-scheme: dark;
-  --bg-base: #000000;
-  --bg-raised: #0E0E0E;
-  --bg-overlay: #161616;
-  --border-hairline: #262626;
-  --border-strong: #6B6B6B;
-  --fg-primary: #FFFFFF;
-  --fg-secondary: #C4C4C4;
-  --fg-muted: #949494;
-  --accent-red: #FF2E38;
-  --accent-red-hover: #FF5A63;
-  --accent-red-muted: #2A0B0F;
+  --bg-base: #0D0D0E;
+  --bg-raised: #1C1C1E;
+  --bg-overlay: #242427;
+  --border-hairline: #2E2E32;
+  --border-strong: #7A7A80;
+  --fg-primary: #F4F4F5;
+  --fg-secondary: #C8C8CC;
+  --fg-muted: #9C9CA2;
+  --accent-red: #E0573A;
+  --accent-red-hover: #E9705A;
+  --accent-red-text: #EE7A5F;
+  --accent-red-muted: #2B1410;
   --on-accent: #000000;
-  --white-accent: #FFFFFF;
+  --white-accent: #F4F4F5;
   --success: #3DDC84;
   --warning: #FFB020;
-  --danger: #FF4D6A;
+  --danger: #FF5C75;
   --info: #5AA9FF;
   --scrim: rgb(0 0 0 / 0.6);
+  --dock: #2A2A2D;
+  --on-dock: #F4F4F5;
+  --on-dock-muted: #ABABB0;
   /* The accent is the reader's choice (ui/accent.ts). Red is the default, so these read the red roles until a preset is chosen. */
   --accent: var(--accent-red);
   --accent-hover: var(--accent-red-hover);
-  --accent-text: var(--accent-red);
+  --accent-text: var(--accent-red-text);
   --accent-muted: var(--accent-red-muted);
   --ring-on-accent: #FFFFFF;
   /* The site background's ground and line: the owner's settings for the map. They are not Katana roles. */
-  --map-bg: #0B0B0C;
-  --map-line: #1C1C1F;
+  --map-bg: #0D0D0E;
+  --map-line: #18181A;
+  --room-dot: rgb(255 255 255 / 0.09);
+  --room-wash: rgb(210 70 42 / 0.1);
   --dur-fast: 120ms;
   --dur-base: 200ms;
   --dur-slow: 320ms;
@@ -76,27 +82,33 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --bg-base: #FFFFFF;
-  --bg-raised: #F4F4F4;
-  --bg-overlay: #FFFFFF;
-  --border-hairline: #E2E2E2;
-  --border-strong: #767676;
-  --fg-primary: #0A0A0A;
-  --fg-secondary: #3D3D3D;
-  --fg-muted: #5E5E5E;
-  --accent-red: #C8102E;
-  --accent-red-hover: #A50D25;
-  --accent-red-muted: #FBE3E6;
-  --on-accent: #FFFFFF;
-  --white-accent: #0A0A0A;
-  --success: #14703A;
-  --warning: #8A5A00;
-  --danger: #B3133A;
-  --info: #0B5FB8;
-  --scrim: rgb(10 10 10 / 0.4);
+  --bg-base: #D3D3D4;
+  --bg-raised: #F1F1F1;
+  --bg-overlay: #F8F8F8;
+  --border-hairline: #BDBDC0;
+  --border-strong: #68686D;
+  --fg-primary: #111113;
+  --fg-secondary: #2E2E32;
+  --fg-muted: #46464B;
+  --accent-red: #D2462A;
+  --accent-red-hover: #DE5E43;
+  --accent-red-text: #922B15;
+  --accent-red-muted: #F3D6CD;
+  --on-accent: #000000;
+  --white-accent: #111113;
+  --success: #0D5E2F;
+  --warning: #6F4600;
+  --danger: #9E1230;
+  --info: #0A4F94;
+  --scrim: rgb(20 20 22 / 0.4);
+  --dock: #111113;
+  --on-dock: #F4F4F5;
+  --on-dock-muted: #ABABB0;
   --ring-on-accent: #0A0A0A;
-  --map-bg: #F4F4F2;
-  --map-line: #DCDCD7;
+  --map-bg: #D3D3D4;
+  --map-line: #C8C8CA;
+  --room-dot: rgb(0 0 0 / 0.13);
+  --room-wash: rgb(196 82 52 / 0.12);
 }
 
 /* Tailwind names. Static, so every name exists on :root for TSX inline styles as well as for utilities. The legacy names
@@ -129,18 +141,23 @@
   --color-on-accent: var(--on-accent);
   --color-white-accent: var(--white-accent);
   --color-scrim: var(--scrim);
+  --color-dock: var(--dock);
+  --color-on-dock: var(--on-dock);
+  --color-on-dock-muted: var(--on-dock-muted);
 
-  /* Katana: one sharp corner, 2 px, on every control, card, panel and dialog. Dots, avatars and switch thumbs keep rounded-full. */
-  --radius-sharp: 2px;
-  --radius-sm: 2px;
-  --radius-md: 2px;
-  --radius-lg: 2px;
-  --radius-xl: 2px;
+  /* Katana canvas (owner direction 2026-11-18, docs/design/KATANA_CANVAS_SYSTEM.md): soft corners on one scale. --radius-sharp keeps
+     its name as the control corner (inputs, menus, small cards: 12 px); a panel is 20 px; a frame, a sheet or a dialog is 28 px. Buttons,
+     chips, badges and the phone's tab bar are pills (rounded-full). */
+  --radius-sharp: 12px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
 
-  /* No shadows anywhere. Layers use a hairline or a strong edge. The names stay so older classes keep resolving. */
-  --shadow-sm: 0 0 #0000;
-  --shadow-md: 0 0 #0000;
-  --shadow-lg: 0 0 #0000;
+  /* One soft drop shadow per layer, never a glow: a tile lifts a little, a floating bar or menu more, a dialog most. */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.06), 0 10px 24px -16px rgb(0 0 0 / 0.35);
+  --shadow-md: 0 18px 40px -24px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 32px 64px -28px rgb(0 0 0 / 0.55);
 
   /* The type scale, in px for the size and line height. The smallest label is 12 px. */
   --text-eyebrow: 0.6875rem;
@@ -168,7 +185,14 @@
 }
 
 @layer base {
-  html { background: var(--map-bg); }
+  /* The room (owner direction 2026-11-18): the ground colour, a fine dot grid and a faint warm wash from the lower left, as in the
+     reference. The world map is drawn faintly over it (.site-map). */
+  html {
+    background-color: var(--map-bg);
+    background-image: radial-gradient(var(--room-dot) 1.1px, transparent 1.3px), radial-gradient(120% 80% at 0% 100%, var(--room-wash), transparent 60%);
+    background-size: 22px 22px, 100% 100%;
+    background-attachment: fixed;
+  }
   body {
     background: transparent;
     color: var(--color-fg);
@@ -230,13 +254,32 @@
   /* The wordmark sets in the display face, Sora 600, in sentence case. */
   .font-wordmark { font-family: var(--font-wordmark); letter-spacing: -0.02em; }
 
-  /* The card every screen uses: a raised surface with a hairline edge, a 16 px radius and room inside. No shadow. */
+  /* The card every screen uses: a tile on the room, 20 px corners, a hairline edge and one soft shadow. */
   .panel {
     border-radius: var(--radius-lg);
     border: 1px solid var(--color-border);
     background: var(--color-surface);
+    box-shadow: var(--shadow-sm);
     padding: 1rem;
   }
+  /* A layer that floats over the page: a menu, a popover, a dialog, a sheet, the phone's tab bar. */
+  .surface-float { box-shadow: var(--shadow-lg); }
+  /* A tile: the raised surface at the panel's corner, with the small shadow. A flat tile has no shadow. */
+  .surface-tile { border-radius: var(--radius-lg); background: var(--bg-raised); box-shadow: var(--shadow-sm); }
+  .surface-flat { border-radius: var(--radius-lg); background: var(--bg-raised); }
+  /* A menu, a popover or a tooltip: the overlay surface at the medium corner, lifted. */
+  .surface-menu { border-radius: var(--radius-md); background: var(--bg-overlay); box-shadow: var(--shadow-md); }
+  /* A dialog, or a sheet: the frame corner, lifted most. A side sheet rounds only the edge that faces the page. */
+  .surface-dialog { border-radius: var(--radius-xl); background: var(--bg-overlay); box-shadow: var(--shadow-lg); }
+  .sheet-right { box-shadow: var(--shadow-lg); }
+  @media (min-width: 40rem) {
+    /* On a phone the right sheet is the full width, so it has no corner to round. */
+    .sheet-right { border-radius: var(--radius-xl) 0 0 var(--radius-xl); }
+  }
+  /* The sun: the one hero disc of a screen, in the accent, lit from the upper middle (the canvas has its own, .kc-sun). */
+  .sun { border-radius: 9999px; background: radial-gradient(circle at 50% 42%, color-mix(in srgb, var(--accent) 82%, white) 0%, var(--accent) 46%, color-mix(in srgb, var(--accent) 82%, black) 100%); }
+  .sheet-left { border-radius: 0 var(--radius-xl) var(--radius-xl) 0; box-shadow: var(--shadow-lg); }
+  .sheet-bottom { border-radius: var(--radius-xl) var(--radius-xl) 0 0; box-shadow: var(--shadow-lg); }
   @media (min-width: 40rem) {
     .panel { padding: 1.5rem; }
   }
@@ -280,6 +323,9 @@
 .page-enter { animation: fade 280ms ease-out both; }details > summary { transition: color 160ms ease; }
 details > summary:hover { color: var(--color-fg); }
 
+/* The top bar's ground: the room fading out downwards, under the floating chips. */
+.chrome-fade { background: linear-gradient(to bottom, var(--map-bg) 0%, color-mix(in srgb, var(--map-bg) 82%, transparent) 62%, transparent 100%); }
+
 /* The navigation glass: the rail, the top bar and the phone bar sit on a frosted blur of the page beneath them, with only a faint tint. The
    tint is barely there in either theme, so the page's own text colours are the ones that read on it. */
 .nav-glass {
@@ -300,25 +346,16 @@ details > summary:hover { color: var(--color-fg); }
 
 /* The site background: the world as a square halftone, drawn at the window's density by site-background.tsx. The map and the grain are fixed
    and sit under the page content (a negative z-index), so every page is drawn on the map. The meridian is drawn above the navigation glass. */
-.site-map { position: fixed; inset: 0; z-index: -1; pointer-events: none; }
-/* The meridian is the line between the menu and the work area, on desktop, where the rail is. Elsewhere (the phone, and the pages with no rail)
-   it is not drawn: a line in the middle of a page would mean nothing. The shell sets the rail's state on the root, and the rail's width
-   comes from it. It sits above the frosted rail, so the frost cannot hide it. */
-.site-meridian {
-  display: none;
-  position: fixed; top: 0; bottom: 0; left: calc(var(--rail-edge, 0px) - 1px); width: 1px; z-index: 25; pointer-events: none;
-  background: var(--accent);
-}
-@media (min-width: 64rem) {
-  html[data-rail="expanded"] { --rail-edge: 232px; }
-  html[data-rail="collapsed"] { --rail-edge: 64px; }
-  html[data-rail] .site-meridian { display: block; }
-}
-.site-grain { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.07; }
+.site-map { position: fixed; inset: 0; z-index: -1; pointer-events: none; opacity: 0.35; }
+/* The meridian line is not drawn (owner direction 2026-11-18): the rail is a floating tile with its own edge, and a line beside it would
+   hang in the gap. The element stays in the site background, hidden, so the background component needs no change. */
+.site-meridian { display: none; }
+/* The grain is not drawn in the canvas system: the room is clean, with its dot grid. */
+.site-grain { display: none; }
 /* On a phone and a tablet the map is faint, so the page's own content leads. It moves with the page as it scrolls, as on desktop
    (site-background.tsx). The grain is not drawn there. The desktop keeps the full site background. */
 @media (max-width: 63.99rem) {
-  .site-map { opacity: 0.5; }
+  .site-map { opacity: 0.25; }
   .site-grain { display: none; }
 }
 
@@ -495,10 +532,10 @@ details > summary:hover { color: var(--color-fg); }
    shadow are replaced, so no toast casts a shadow and none is filled with a status colour. */
 [data-sonner-toast] {
   border-radius: var(--radius-sharp) !important;
-  border: 1px solid var(--border-strong) !important;
+  border: 1px solid var(--border-hairline) !important;
   background: var(--bg-overlay) !important;
   color: var(--fg-primary) !important;
-  box-shadow: none !important;
+  box-shadow: var(--shadow-lg) !important;
 }
 [data-sonner-toast][data-type="success"] { border-left: 2px solid var(--success) !important; }
 [data-sonner-toast][data-type="warning"] { border-left: 2px solid var(--warning) !important; }

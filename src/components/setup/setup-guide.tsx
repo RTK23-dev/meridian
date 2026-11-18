@@ -45,8 +45,8 @@ const STATE_VALUE: Record<"yes" | "no" | "not_checked", { text: string; classNam
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {
-  done: { icon: CircleCheck, className: "bg-success text-on-accent", label: "Done" },
-  current: { icon: Circle, className: "bg-fg-primary text-on-accent ring-4 ring-overlay", label: "Do this now" },
+  done: { icon: CircleCheck, className: "bg-success text-ground", label: "Done" },
+  current: { icon: Circle, className: "bg-fg-primary text-ground ring-4 ring-overlay", label: "Do this now" },
   todo: { icon: Circle, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "To do" },
   optional: { icon: CircleDashed, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "Optional" },
   unknown: { icon: CircleDashed, className: "bg-raised text-warning", label: "Could not check" },

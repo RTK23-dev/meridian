@@ -20,7 +20,7 @@ import { useAdvanced } from "@/lib/navigation/use-advanced";
 import { routePageTitle } from "@/lib/navigation/route-data";
 
 const COLLAPSED_KEY = "meridian-nav-collapsed";
-const SWITCHER_CLASS = "min-h-11 w-full rounded-sharp border border-border-strong bg-raised px-2 text-sm text-fg-primary";
+const SWITCHER_CLASS = "min-h-11 w-full rounded-full border border-hairline bg-overlay px-3 text-sm text-fg-primary";
 
 /** One icon per place. The rail and the phone bar both show these five. */
 const PLACE_ICONS: Record<PlaceId, LucideIcon> = { home: House, create: Plus, library: Library, insights: Activity, settings: Settings };
@@ -194,15 +194,15 @@ function ShellChrome({ children }: { children: ReactNode }) {
     return <div className="flex h-full flex-col">
       <div className="flex h-16 items-center justify-between px-4">
         <div className="min-w-0" onClick={() => setMobileNavOpen(false)}><Mark wordmark={!iconOnly} size={24} /></div>
-        {mobile ? <button className="grid size-11 place-items-center rounded-sharp text-fg-muted hover:bg-raised" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
+        {mobile ? <button className="grid size-11 place-items-center rounded-full text-fg-muted hover:bg-overlay" type="button" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation"><X aria-hidden="true" className="size-5" /></button> : null}
       </div>
       {/* Workspace first, brand directly below it on brand-scoped pages. The collapsed rail keeps one switcher button, which opens the command palette, so a workspace or brand can still be changed there. */}
-      {data && switcherMode({ collapsed, mobile }) === "selects" ? <div className="space-y-3 border-y border-hairline p-4">
+      {data && switcherMode({ collapsed, mobile }) === "selects" ? <div className="space-y-2 px-3 pb-2">
         {workspaceSwitcher(SWITCHER_CLASS)}
         {brandId ? brandSwitcher(SWITCHER_CLASS) : null}
       </div> : null}
-      {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="border-y border-hairline p-2">
-        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-sharp text-fg-muted hover:bg-raised hover:text-fg-primary">
+      {data && switcherMode({ collapsed, mobile }) === "rail-button" ? <div className="px-2 pb-2">
+        <button type="button" onClick={() => setPaletteOpen(true)} aria-label="Switch workspace or brand" title="Switch workspace or brand" className="grid min-h-11 w-full place-items-center rounded-full text-fg-muted hover:bg-overlay hover:text-fg-primary">
           <ArrowLeftRight aria-hidden="true" className="size-4" />
         </button>
       </div> : null}
@@ -214,20 +214,20 @@ function ShellChrome({ children }: { children: ReactNode }) {
             const here = currentPlace === place;
             const first = group.items[0]?.to;
             return <li key={group.id}>
-              {first ? <Link to={first as never} aria-current={here && group.items.some((item) => isCurrentPath(path, item.to)) ? "page" : undefined} title={iconOnly ? group.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(first)} onFocus={() => prefetch(first)} data-place={place} data-current={here || undefined} className={`relative flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm transition-colors duration-150 ${here ? "font-semibold text-fg-primary before:absolute before:inset-y-2 before:-left-3 before:w-[2px] before:bg-accent" : "text-fg-secondary hover:bg-raised hover:text-fg-primary"}`}>
-                <Icon aria-hidden="true" className={`size-4 shrink-0 ${here ? "text-accent" : ""}`} />
+              {first ? <Link to={first as never} aria-current={here && group.items.some((item) => isCurrentPath(path, item.to)) ? "page" : undefined} title={iconOnly ? group.label : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(first)} onFocus={() => prefetch(first)} data-place={place} data-current={here || undefined} className={`relative flex min-h-11 items-center gap-3 rounded-full px-3 text-sm transition-colors duration-150 ${iconOnly ? "justify-center" : ""} ${here ? "bg-white-accent font-semibold text-ground" : "text-fg-secondary hover:bg-overlay hover:text-fg-primary"}`}>
+                <Icon aria-hidden="true" className="size-4 shrink-0" />
                 <span className={iconOnly ? "sr-only" : "flex-1"}>{group.label}</span>
               </Link> : <div aria-disabled="true" data-place={place} className="flex min-h-11 items-start gap-3 px-3 py-2 text-sm text-fg-muted">
                 <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
                 <span className={iconOnly ? "sr-only" : "min-w-0"}>{group.label}<span className="block text-caption">Open a brand to see its screens.</span></span>
               </div>}
-              {here && !iconOnly && group.items.length > 0 ? <ul className="mb-3 ml-[1.35rem] mt-1 space-y-0.5 border-l border-hairline pl-3" aria-label={`${group.label} screens`}>
+              {here && !iconOnly && group.items.length > 0 ? <ul className="mb-3 ml-5 mt-1.5 space-y-0.5 border-l border-hairline pl-2" aria-label={`${group.label} screens`}>
                 {group.items.map((item) => {
                   const current = isCurrentPath(path, item.to);
                   return <li key={item.id}>
-                    <Link to={item.to as never} aria-current={current ? "page" : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`flex min-h-10 items-center justify-between gap-2 rounded-sharp px-2 text-sm ${current ? "font-semibold text-fg-primary" : "text-fg-muted hover:text-fg-primary"}`}>
+                    <Link to={item.to as never} aria-current={current ? "page" : undefined} onClick={() => setMobileNavOpen(false)} onMouseEnter={() => prefetch(item.to)} onFocus={() => prefetch(item.to)} className={`flex min-h-10 items-center justify-between gap-2 rounded-full px-3 text-sm ${current ? "bg-overlay font-semibold text-fg-primary" : "text-fg-muted hover:bg-overlay hover:text-fg-primary"}`}>
                       <span className="min-w-0 truncate">{item.label}</span>
-                      {item.badge ? <span className="shrink-0 rounded-sharp bg-fg-primary px-1.5 text-[11px] font-semibold leading-5 text-on-accent">{item.badge}<span className="sr-only"> open</span></span> : null}
+                      {item.badge ? <span className="shrink-0 rounded-full bg-accent px-1.5 text-[11px] font-semibold leading-5 text-on-accent">{item.badge}<span className="sr-only"> open</span></span> : null}
                     </Link>
                   </li>;
                 })}
@@ -235,47 +235,48 @@ function ShellChrome({ children }: { children: ReactNode }) {
             </li>;
           })}
         </ol>
-        {!brandId && canAddBrand ? <Link to="/brands/new" className="mt-4 flex min-h-11 items-center gap-3 rounded-sharp px-3 text-sm text-fg-muted hover:bg-raised hover:text-fg-primary"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
+        {!brandId && canAddBrand ? <Link to="/brands/new" className="mt-4 flex min-h-11 items-center gap-3 rounded-full px-3 text-sm text-fg-muted hover:bg-overlay hover:text-fg-primary"><Sparkles aria-hidden="true" className="size-4" />New brand</Link> : null}
       </nav>
-      <div className="border-t border-hairline p-3">
-        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-sharp px-3 text-left text-sm text-fg-muted hover:bg-raised lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} aria-controls="primary-navigation">
+      <div className="p-3">
+        <button type="button" onClick={toggleCollapsed} className="hidden min-h-11 w-full items-center gap-3 rounded-full px-3 text-left text-sm text-fg-muted hover:bg-overlay lg:flex" aria-label={collapsed ? "Expand navigation" : "Collapse navigation"} aria-expanded={!collapsed} aria-controls="primary-navigation">
           <ChevronDown aria-hidden="true" className={`size-4 transition ${collapsed ? "-rotate-90" : "rotate-90"}`} />{collapsed ? null : "Collapse navigation"}
         </button>
       </div>
     </div>;
   };
 
-  return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[64px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[232px_1fr]"}`}>
-    <aside className="nav-glass hidden lg:block">{sidebar()}</aside>
+  return <div className={`${collapsed ? "lg:grid lg:min-h-screen lg:grid-cols-[88px_1fr]" : "lg:grid lg:min-h-screen lg:grid-cols-[256px_1fr]"}`}>
+    {/* The rail is a floating tile inset from the window's edge, with its own corner and shadow (owner direction 2026-11-18). */}
+    <aside className="hidden lg:block lg:p-3"><div className="surface-tile sticky top-3 h-[calc(100vh-1.5rem)] overflow-hidden border border-hairline">{sidebar()}</div></aside>
     <Sheet direction="left" open={mobileNavOpen} onOpenChange={setMobileNavOpen}><SheetContent side="left" className="nav-glass nav-glass-panel flex flex-col"><SheetTitle className="sr-only">Primary navigation</SheetTitle>{sidebar(true)}</SheetContent></Sheet>
     {/* On a phone the shell is fixed to the screen and only the page scrolls, inside <main>, so the five places stay at the bottom edge even
         when Safari leaves the window scrolled after the keyboard closes. On desktop the page grows and the window scrolls, as before. */}
     <div className="fixed inset-0 flex min-w-0 flex-col lg:static lg:h-auto lg:min-h-screen">
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
-      <header className="nav-glass sticky top-0 z-20 border-b border-hairline">
-        <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2 sm:px-5">
-          <button type="button" className="grid size-11 shrink-0 place-items-center rounded-sharp text-fg-muted hover:bg-raised lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+      <header className="chrome-fade sticky top-0 z-20">
+        <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2.5 sm:px-5 lg:px-9">
+          <button type="button" className="surface-tile grid size-11 shrink-0 place-items-center rounded-full border border-hairline text-fg-primary hover:bg-overlay lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
           {/* On a phone the page title sits in the header, beside the menu, instead of in a second row under it. */}
-          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-primary md:hidden">{pageTitle ?? ""}</p>
-          <nav aria-label="Location" className="hidden min-w-0 flex-1 items-center gap-2 text-sm md:flex">
+          <p className="min-w-0 flex-1 truncate text-heading font-semibold text-fg-primary md:hidden">{pageTitle ?? ""}</p>
+          <div className="hidden min-w-0 flex-1 md:flex"><nav aria-label="Location" className="surface-tile flex min-h-11 min-w-0 items-center gap-2 rounded-full border border-hairline px-4 text-sm">
             <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
             {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg-primary">{pageTitle}</span></> : null}
-          </nav>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {active ? <span className="hidden text-caption text-fg-muted xl:inline">{active.role}</span> : null}
-            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex size-10 items-center justify-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11 sm:h-10 sm:w-auto sm:justify-start sm:gap-2 sm:border sm:border-border-strong sm:px-3 sm:text-sm" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-sharp border border-hairline px-1 text-[11px] sm:inline">⌘K</kbd></button>
-            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">
+          </nav></div>
+          <div className="surface-tile ml-auto flex shrink-0 items-center gap-1 rounded-full border border-hairline p-1">
+            {active ? <span className="hidden px-2 text-caption text-fg-muted xl:inline">{active.role}</span> : null}
+            <button type="button" onClick={() => setPaletteOpen(true)} className="inline-flex size-10 items-center justify-center rounded-full text-fg-secondary hover:bg-overlay pointer-coarse:size-11 sm:h-10 sm:w-auto sm:justify-start sm:gap-2 sm:bg-overlay sm:px-4 sm:text-sm" aria-label="Search and commands"><Search aria-hidden="true" className="size-4" /><span className="hidden sm:inline">Search</span><kbd className="hidden rounded-full border border-hairline px-1.5 text-[11px] sm:inline">⌘K</kbd></button>
+            <Link to="/alerts" aria-label={bellLabel ? `Alerts, ${bellLabel} unread` : "Alerts"} title="Alerts" className="relative grid size-10 place-items-center rounded-full text-fg-secondary hover:bg-overlay pointer-coarse:size-11">
               <Bell aria-hidden="true" className="size-4" />
-              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-sharp bg-fg-primary px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
+              {bellLabel ? <span aria-hidden="true" className="absolute -right-0.5 -top-0.5 min-w-4 rounded-full bg-accent px-1 text-center text-[11px] font-semibold leading-4 text-on-accent">{bellLabel}</span> : null}
             </Link>
-            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-sharp text-fg-muted hover:bg-raised pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
+            <button type="button" aria-label="Toggle theme" title="Toggle theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")} className="grid size-10 place-items-center rounded-full text-fg-secondary hover:bg-overlay pointer-coarse:size-11">{theme === "dark" ? <Sun aria-hidden="true" className="size-4" /> : <Moon aria-hidden="true" className="size-4" />}</button>
             <UserButton />
           </div>
         </div>
       </header>
-      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-5 pb-6 sm:px-6 lg:overflow-visible lg:px-12 lg:py-10 lg:pb-12">
+      <main ref={mainRef} id="main" tabIndex={-1} className="@container page-enter min-h-0 min-w-0 flex-1 overflow-y-auto px-4 py-4 pb-32 sm:px-6 lg:overflow-visible lg:px-12 lg:py-8 lg:pb-12">
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
@@ -285,17 +286,23 @@ function ShellChrome({ children }: { children: ReactNode }) {
           </section> : null}
         </div>
       </main>
-      {/* The five places, as on the walkthrough's phone frame. A place with no screen on this page is shown as unavailable. */}
-      <nav aria-label="Quick navigation" className="shrink-0 grid grid-cols-5 border-t border-hairline bg-ground pb-[env(safe-area-inset-bottom)] lg:hidden">
-        {tabs.map((tab) => {
-          const Icon = PLACE_ICONS[tab.place];
-          const here = currentPlace === tab.place;
-          if (!tab.to) {
-            return <span key={tab.place} aria-disabled="true" className="flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption text-fg-muted opacity-60"><Icon aria-hidden="true" className="size-5 shrink-0" /><span className="max-w-full truncate">{tab.label}</span></span>;
-          }
-          // The place you are in is marked three ways: its label is bold, its icon takes the accent, and a bar sits on the top edge.
-          return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`relative flex min-h-16 min-w-0 flex-col items-center justify-center gap-1.5 px-1 text-caption ${here ? "font-semibold text-fg-primary before:absolute before:inset-x-4 before:top-0 before:h-0.5 before:bg-accent" : "text-fg-secondary"}`}><Icon aria-hidden="true" className={`size-5 shrink-0 ${here ? "text-accent" : ""}`} /><span className="max-w-full truncate">{tab.label}</span></Link>;
-        })}
+      {/* The five places on a phone: a floating ink dock above the home indicator, as the reference's tool pill. The place you are in is
+          marked three ways: its icon sits on the accent disc, its label is bold, and it is announced as the current page. A place with no
+          screen on this page is shown as unavailable. */}
+      <nav aria-label="Quick navigation" className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] lg:hidden">
+        <div className="surface-float pointer-events-auto mx-auto grid max-w-md grid-cols-5 rounded-full bg-dock p-1.5 text-on-dock">
+          {tabs.map((tab) => {
+            const Icon = PLACE_ICONS[tab.place];
+            const here = currentPlace === tab.place;
+            if (!tab.to) {
+              return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[11px] text-on-dock-muted opacity-60"><span className="grid size-8 place-items-center"><Icon aria-hidden="true" className="size-[18px] shrink-0" /></span><span className="max-w-full truncate">{tab.label}</span></span>;
+            }
+            return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[11px] focus-visible:outline-on-dock ${here ? "font-semibold text-on-dock" : "text-on-dock-muted hover:text-on-dock"}`}>
+              <span className={`grid size-8 place-items-center rounded-full ${here ? "bg-accent text-on-accent" : ""}`}><Icon aria-hidden="true" className="size-[18px] shrink-0" /></span>
+              <span className="max-w-full truncate">{tab.label}</span>
+            </Link>;
+          })}
+        </div>
       </nav>
       <p className="sr-only" aria-live="polite" aria-atomic="true">{pageTitle ?? ""}</p>
     </div>

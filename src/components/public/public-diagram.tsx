@@ -48,7 +48,7 @@ export function TwoLanes() {
         ))}
       </div>
       <div aria-hidden="true" className="mx-auto h-12 w-px bg-hairline" />
-      <div className="bg-fg-primary p-6 text-on-accent sm:p-10">
+      <div className="bg-fg-primary p-6 text-ground sm:p-10">
         <p className="font-mono text-xs uppercase tracking-[0.14em]">Shared core</p>
         <ul className="mt-5 flex flex-wrap gap-2">
           {SHARED_CORE.map((item) => (

@@ -3,8 +3,8 @@ import test from "node:test";
 import { contrastRatio } from "../../lib/meridian/a11y/contrast.ts";
 import { ACCENT_PRESETS, DEFAULT_ACCENT, accentTokens, presetFor } from "./accent.ts";
 
-// The room the accent sits on: the dark room is black, and the light room is white.
-const ROOM = { dark: "#000000", light: "#FFFFFF" } as const;
+// The rooms the accent sits on (the canvas system, owner direction 2026-11-18): near-black, and a warm mid-grey.
+const ROOM = { dark: "#0D0D0E", light: "#D3D3D4" } as const;
 const HEX = /^#[0-9A-F]{6}$/;
 
 test("every preset has five valid colours in each theme, and the ids are unique", () => {
@@ -28,13 +28,13 @@ test("every preset passes the contrast rules in both themes", () => {
   }
 });
 
-test("the default accent is the red of the design, and it is the Katana red", () => {
+test("the default accent is the red of the design, the canvas system's vermilion", () => {
   const red = presetFor(DEFAULT_ACCENT);
   assert.equal(red.id, "red");
-  assert.equal(red.dark.accent, "#FF2E38");
-  assert.equal(red.dark.hover, "#FF5A63");
-  assert.equal(red.light.accent, "#C8102E");
-  assert.equal(red.light.hover, "#A50D25");
+  assert.equal(red.dark.accent, "#E0573A");
+  assert.equal(red.dark.hover, "#E9705A");
+  assert.equal(red.light.accent, "#D2462A");
+  assert.equal(red.light.hover, "#DE5E43");
 });
 
 test("a preset id that is not known falls back to the default", () => {

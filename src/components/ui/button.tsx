@@ -6,14 +6,16 @@ import { LoadingMark } from "./loading-mark";
 
 const focus = "focus-visible:outline-2 focus-visible:outline-offset-2";
 const quiet = `border-transparent bg-transparent text-fg-secondary hover:bg-raised hover:text-fg-primary active:bg-overlay focus-visible:outline-accent disabled:text-fg-muted ${focus}`;
+// Katana canvas (owner direction 2026-11-18): every button is a pill. The main action is ink, black on the light room and white on the
+// dark one, as in the owner's reference; the accent marks state (the selected tab, a badge, the focus ring), not the action.
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-sharp border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full border text-button font-semibold transition-colors duration-[120ms] ease-[cubic-bezier(0.2,0,0,1)] disabled:pointer-events-none disabled:cursor-not-allowed",
   {
     variants: {
       variant: {
-        primary: `border-accent bg-accent text-on-accent hover:border-accent-hover hover:bg-accent-hover active:bg-accent-hover focus-visible:outline-fg-primary disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
-        secondary: `border-border-strong bg-transparent text-fg-primary hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
+        primary: `border-white-accent bg-white-accent text-ground hover:border-fg-secondary hover:bg-fg-secondary active:bg-fg-secondary focus-visible:outline-accent disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
+        secondary: `border-hairline bg-raised text-fg-primary hover:border-border-strong hover:bg-overlay active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
         quiet,
         danger: `border-danger bg-transparent text-danger hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,
         ghost: quiet,

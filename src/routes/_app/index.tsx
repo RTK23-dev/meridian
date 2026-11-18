@@ -16,6 +16,7 @@ import type { SetupEngines, SetupInput } from "@/components/settings/setup-model
 import { BrandGrid, type BrandLookup, type MachineState } from "@/components/home/brand-grid";
 import { ActivityFeed } from "@/components/home/activity-feed";
 import { CreateWorkspace } from "@/components/home/create-workspace";
+import { StudioTiles } from "@/components/home/studio-tiles";
 import { attentionItems, homeKpis, isThinBrand, type ConnectionFact, type ReviewLoad } from "@/components/home/home-model";
 
 export const Route = createFileRoute("/_app/")({ staticData: { pageTitle: "Overview" }, component: Home });
@@ -73,6 +74,7 @@ function Home() {
       <div className="space-y-8">
         <PageHeader title="Workspace overview" description={`Welcome to ${data.active.name}. Start with the one step below.`} />
         <SetupCallout steps={setupSteps} />
+        <StudioTiles organizationId={organizationId} />
         <section aria-labelledby="free-start" className="space-y-2 rounded-sharp border border-hairline p-5">
           <h2 id="free-start" className="text-section font-semibold text-fg-primary">Or make a video for free first</h2>
           <p className="text-sm text-fg-muted">Claude Code can make a video on your own computer with no key and no cost, and save it here.</p>
@@ -90,6 +92,7 @@ function Home() {
         actions={canCreate ? <Button asChild variant="secondary"><Link to="/brands/new"><Plus aria-hidden="true" className="mr-2 size-4" />New brand</Link></Button> : undefined}
       />
       <SetupCallout steps={setupSteps} />
+      <StudioTiles organizationId={organizationId} />
       <KpiRow kpis={kpis} />
       <TeamPanel agents={team} />
       <AttentionList
