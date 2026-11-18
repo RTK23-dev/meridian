@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_PLACEHOLDER, CREATE_SUGGESTIONS, createSearchOf, fileProblem, purposeFor, referencePurposeOf, ruleFor, sendBlock, titleFor, togglePurposeOf } from "./create-model.ts";
+import { CREATE_ACCEPT, CREATE_MODE_COPY, CREATE_PLACEHOLDER, CREATE_SUGGESTIONS, CREATE_WAY_COPY, CREATE_WAYS, createSearchOf, defaultWay, textModelStateOf, wayOf, fileProblem, purposeFor, referencePurposeOf, ruleFor, sendBlock, titleFor, togglePurposeOf } from "./create-model.ts";
 import { MAX_MESSAGE_CHARS } from "../../lib/meridian/content-factory/model.ts";
 
 const ready = { text: "A 30-second video for my new mug", mode: "orchestrator" as const, canAdmin: true, busy: false };
@@ -31,9 +31,40 @@ test("a draft is named after the first line of the message, shortened when it is
 });
 
 test("each mode has a label and a one-line hint, and the page offers three starting points", () => {
-  assert.equal(CREATE_MODE_COPY.orchestrator.label, "Orchestrator");
-  assert.equal(CREATE_MODE_COPY.studio.label, "Studio");
+  assert.equal(CREATE_MODE_COPY.orchestrator.label, "Meridian plans it");
+  assert.equal(CREATE_MODE_COPY.studio.label, "I set each step");
   assert.equal(CREATE_SUGGESTIONS.length, 3);
+});
+
+test("the front door offers three plain ways, in order: free with Claude Code, with Meridian, and many variations", () => {
+  assert.deepEqual([...CREATE_WAYS], ["claude_code", "meridian", "batch"]);
+  assert.equal(CREATE_WAY_COPY.claude_code.label, "Free, with Claude Code on your computer");
+  assert.equal(CREATE_WAY_COPY.meridian.label, "With Meridian (uses your keys)");
+  assert.equal(CREATE_WAY_COPY.batch.label, "Many variations at once");
+});
+
+test("a remembered way is read back only when it is one of the ways", () => {
+  assert.equal(wayOf("batch"), "batch");
+  assert.equal(wayOf("orchestrator"), null);
+  assert.equal(wayOf(null), null);
+});
+
+test("the OpenRouter key's state decides whether a text model is available, and a failed read is unknown", () => {
+  assert.equal(textModelStateOf({ loading: true, failed: false, credentialState: undefined }), "loading");
+  assert.equal(textModelStateOf({ loading: false, failed: false, credentialState: "usable" }), "available");
+  assert.equal(textModelStateOf({ loading: false, failed: false, credentialState: "not_configured" }), "missing");
+  assert.equal(textModelStateOf({ loading: false, failed: false, credentialState: "unusable" }), "missing");
+  assert.equal(textModelStateOf({ loading: false, failed: false, credentialState: undefined }), "unknown");
+  assert.equal(textModelStateOf({ loading: false, failed: true, credentialState: undefined }), "unknown");
+});
+
+test("the page opens on Claude Code without a text model, on Meridian with one or when it cannot tell, and a remembered choice wins", () => {
+  assert.equal(defaultWay({ stored: null, textModel: "missing" }), "claude_code");
+  assert.equal(defaultWay({ stored: null, textModel: "available" }), "meridian");
+  assert.equal(defaultWay({ stored: null, textModel: "unknown" }), "meridian", "an unknown state does not guess the free way");
+  assert.equal(defaultWay({ stored: null, textModel: "loading" }), null, "nothing is chosen while the key state loads");
+  assert.equal(defaultWay({ stored: "batch", textModel: "missing" }), "batch");
+  assert.equal(defaultWay({ stored: "nonsense", textModel: "available" }), "meridian");
 });
 
 
@@ -73,4 +104,10 @@ test("the address reopens a draft by its id, and ignores anything else", () => {
   assert.deepEqual(createSearchOf({ draft: "../x" }), {});
   assert.deepEqual(createSearchOf({ draft: 4, other: "y" }), {});
   assert.deepEqual(createSearchOf({}), {});
+});
+
+test("the address can open the empty page on one way, and ignores a way that is not one", () => {
+  assert.deepEqual(createSearchOf({ way: "claude_code" }), { way: "claude_code" });
+  assert.deepEqual(createSearchOf({ way: "studio" }), {});
+  assert.deepEqual(createSearchOf({ draft: "d1", way: "meridian" }), { draft: "d1", way: "meridian" });
 });

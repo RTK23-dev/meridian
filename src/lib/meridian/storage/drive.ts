@@ -11,12 +11,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { gatedFetch } from "../providers/capability.ts";
 import type { AssetLifecycle } from "./object-store.ts";
 import { uploadArtifactToDrive, type ArtifactUploadPolicy, type ArtifactUploadStore } from "./artifact-upload.ts";
 import { createSqlArtifactUploadStore } from "./artifact-upload-sql.ts";
 import { DriveUploadError, type ResumableTransport } from "./drive-resumable.ts";
 import type { DriveObjectRecord } from "./drive-object-record.ts";
+import type { DriveReservationKey, DriveReservationStore } from "./drive-reservation.ts";
 import { invalidateGoogleDriveAccessToken, resolveDriveAccess } from "./google-auth.ts";
 import { driveFolderIdSetting } from "../config/server-settings.ts";
 
@@ -55,8 +55,10 @@ export type GoogleDriveClientOptions = {
   uploadStore?: () => Promise<ArtifactUploadStore>;
   /** Upload overrides: chunk size, retry cap, backoff and sleep. Defaults are 8 MiB chunks and six failures in a row. */
   upload?: ArtifactUploadPolicy;
-  /** The fetch for Drive writes: folder creation, small and resumable uploads, and deletes. Tests pass a fixture. Production passes nothing, so the disabled write path refuses. */
+  /** The fetch for Drive writes: folder creation, id reservation, small and resumable uploads, and deletes. Tests pass a fixture. Default: fetch. */
   fetch?: typeof fetch;
+  /** Where a small file's reserved Drive id is recorded before its create. Default: the shared database connection. */
+  reservations?: () => Promise<DriveReservationStore>;
   /** Writes the storage_objects row for a file put with `storageRecord`. Default: the shared database connection. */
   recordObject?: (record: DriveObjectRecord) => Promise<void>;
 };
@@ -85,7 +87,7 @@ export function driveScopeOf(brandId: string | null): string {
 }
 
 /** Access tokens come from the auth resolver's in-process cache. A token is never written to Postgres. */
-function driveTransportFor(organizationId: string, fetchImpl: typeof fetch = gatedFetch("drive.write")): ResumableTransport {
+function driveTransportFor(organizationId: string, fetchImpl: typeof fetch): ResumableTransport {
   return {
     fetch: fetchImpl,
     accessToken: async () => {
@@ -101,6 +103,24 @@ async function defaultRecordObject(record: DriveObjectRecord): Promise<void> {
   const { recordDriveObject } = await import("./drive-object-record.ts");
   await recordDriveObject(await getSql(), record);
 }
+
+async function defaultReservations(): Promise<DriveReservationStore> {
+  const { getSql } = await import("../../db.ts");
+  const { createSqlDriveReservationStore } = await import("./drive-reservation.ts");
+  return createSqlDriveReservationStore(await getSql());
+}
+
+/** A Drive file id from generateIds: letters, digits, '-' and '_'. Anything else in the answer is refused, not used in a URL. */
+const DRIVE_ID = /^[A-Za-z0-9_-]{10,128}$/;
+
+type DriveFileListing = {
+  id: string;
+  name: string;
+  mimeType: string;
+  size?: string;
+  webViewLink?: string;
+  appProperties?: Record<string, string>;
+};
 
 /** The shared Postgres connection, loaded on first use so importing this module stays light. */
 async function defaultUploadStore(): Promise<ArtifactUploadStore> {
@@ -132,9 +152,58 @@ export class GoogleDriveClient {
     return access.ok ? access.token : null;
   }
 
-  /** The fetch for every Drive write. Production passes none, so the drive.write gate refuses each write before any request is sent. */
+  /** The fetch for every Drive write: the injected one in tests, else the platform fetch. */
   private writeFetch(): typeof fetch {
-    return this.options.fetch ?? gatedFetch("drive.write");
+    return this.options.fetch ?? ((input, init) => fetch(input, init));
+  }
+
+  /**
+   * The Drive id this small file is created under. An id already reserved for the same file is reused; otherwise Drive generates one and
+   * it is recorded in Postgres before any create, and the first writer's id holds when two race.
+   */
+  private async reservedFileId(key: DriveReservationKey, token: string): Promise<string> {
+    const store = await (this.options.reservations ?? defaultReservations)();
+    const held = await store.find(key);
+    if (held) return held;
+    const res = await this.writeFetch()("https://www.googleapis.com/drive/v3/files/generateIds?count=1&space=drive", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) throw new Error(`Google Drive did not generate a file id (${res.status}). Nothing was written.`);
+    const generated = ((await res.json()) as { ids?: unknown }).ids;
+    const candidate = Array.isArray(generated) ? generated[0] : undefined;
+    if (typeof candidate !== "string" || !DRIVE_ID.test(candidate)) {
+      throw new Error("Google Drive returned no usable file id. Nothing was written.");
+    }
+    return store.reserve(key, candidate);
+  }
+
+  /**
+   * Checks that a file Drive already holds is this write: same workspace, scope and sha256 in its properties, and bytes whose sha256
+   * matches when read back. Anything else is an error, never a success.
+   */
+  private async confirmExisting(existing: DriveFileListing, input: DriveWriteInput, sha256: string): Promise<DriveFileMetadata> {
+    const properties = existing.appProperties || {};
+    if (
+      properties.organizationId !== input.organizationId ||
+      properties.brandId !== driveScopeOf(input.brandId) ||
+      properties.sha256 !== sha256
+    ) {
+      throw new Error("Google Drive storage key already exists with different tenant ownership or content.");
+    }
+    const stored = await this.get(existing.id, input.organizationId);
+    const storedSha256 = createHash("sha256").update(stored.bytes).digest("hex");
+    if (storedSha256 !== sha256 || stored.bytes.byteLength !== input.bytes.byteLength) {
+      throw new Error("Google Drive existing object failed idempotent upload verification.");
+    }
+    return {
+      fileId: existing.id,
+      name: existing.name,
+      mimeType: existing.mimeType || input.mimeType,
+      size: existing.size ? Number(existing.size) : stored.bytes.byteLength,
+      checksum: sha256,
+      webViewLink: existing.webViewLink,
+    };
   }
 
   /** Drive's reachability for this workspace's credential, or for the deployment's when no workspace is named. */
@@ -330,40 +399,9 @@ export class GoogleDriveClient {
     if (!existingRes.ok) {
       throw new Error(`Google Drive upload reconciliation failed (${existingRes.status}): ${await existingRes.text()}`);
     }
-    const existingData = (await existingRes.json()) as {
-      files?: Array<{
-        id: string;
-        name: string;
-        mimeType: string;
-        size?: string;
-        webViewLink?: string;
-        appProperties?: Record<string, string>;
-      }>;
-    };
+    const existingData = (await existingRes.json()) as { files?: DriveFileListing[] };
     const existing = existingData.files?.[0];
-    if (existing) {
-      const properties = existing.appProperties || {};
-      if (
-        properties.organizationId !== input.organizationId ||
-        properties.brandId !== driveScopeOf(input.brandId) ||
-        properties.sha256 !== sha256
-      ) {
-        throw new Error("Google Drive storage key already exists with different tenant ownership or content.");
-      }
-      const stored = await this.get(existing.id, input.organizationId);
-      const storedSha256 = createHash("sha256").update(stored.bytes).digest("hex");
-      if (storedSha256 !== sha256 || stored.bytes.byteLength !== input.bytes.byteLength) {
-        throw new Error("Google Drive existing object failed idempotent upload verification.");
-      }
-      return {
-        fileId: existing.id,
-        name: existing.name,
-        mimeType: existing.mimeType || input.mimeType,
-        size: existing.size ? Number(existing.size) : stored.bytes.byteLength,
-        checksum: sha256,
-        webViewLink: existing.webViewLink,
-      };
-    }
+    if (existing) return this.confirmExisting(existing, input, sha256);
 
     const fileMetadata = {
       name: fileName,
@@ -389,7 +427,7 @@ export class GoogleDriveClient {
         {
           ...this.options.upload,
           store,
-          transport: driveTransportFor(input.organizationId, this.options.fetch),
+          transport: driveTransportFor(input.organizationId, this.writeFetch()),
           onUnauthorized: () => invalidateGoogleDriveAccessToken(),
         },
         {
@@ -414,7 +452,12 @@ export class GoogleDriveClient {
       };
     }
 
-    // Multipart upload for <= 5 MB
+    // Multipart upload for <= 5 MB, under the id reserved in Postgres first. Drive refuses a second create with that id (409), so a
+    // concurrent writer or a retry after a lost response cannot add a second file; the 409 is confirmed by reading the file back.
+    const fileId = await this.reservedFileId(
+      { organizationId: input.organizationId, scope: driveScopeOf(input.brandId), storageKeyHash, sha256 },
+      token,
+    );
     const boundary = "-------314159265358979323846";
     const delimiter = `\r\n--${boundary}\r\n`;
     const closeDelimiter = `\r\n--${boundary}--`;
@@ -422,7 +465,7 @@ export class GoogleDriveClient {
     const metadataHeader = "Content-Type: application/json; charset=UTF-8\r\n\r\n";
     const mediaHeader = `Content-Type: ${input.mimeType}\r\n\r\n`;
 
-    const metaPart = Buffer.from(delimiter + metadataHeader + JSON.stringify(fileMetadata) + delimiter + mediaHeader);
+    const metaPart = Buffer.from(delimiter + metadataHeader + JSON.stringify({ id: fileId, ...fileMetadata }) + delimiter + mediaHeader);
     const closePart = Buffer.from(closeDelimiter);
     const multipartBody = Buffer.concat([metaPart, Buffer.from(input.bytes), closePart]);
 
@@ -438,6 +481,22 @@ export class GoogleDriveClient {
       },
     );
 
+    if (res.status === 409) {
+      await res.body?.cancel().catch(() => {});
+      const metaRes = await fetch(
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,size,appProperties,webViewLink,trashed`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!metaRes.ok) {
+        throw new Error(`Google Drive refused the reserved file id as taken (409), and that file could not be read (${metaRes.status}).`);
+      }
+      const held = (await metaRes.json()) as DriveFileListing & { trashed?: boolean };
+      if (held.trashed) throw new Error("The file under the reserved Drive id is in the Drive trash. Restore it or remove it from the trash first.");
+      if (held.appProperties?.meridian_storage_key_hash !== storageKeyHash) {
+        throw new Error("Google Drive holds a different file under the reserved file id. Nothing was overwritten.");
+      }
+      return this.confirmExisting({ ...held, id: fileId }, input, sha256);
+    }
     if (!res.ok) {
       throw new Error(`Google Drive upload failed (${res.status}): ${await res.text()}`);
     }

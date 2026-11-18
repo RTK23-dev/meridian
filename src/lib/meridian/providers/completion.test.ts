@@ -262,7 +262,7 @@ test("alerts dedupe and do not claim delivery without a target", async () => {
   assert.equal(second[0]?.lastSeen, "t2");
   const delivery = await deliverAlert(second[0]!, { kind: "none" }, async () => {
     throw new Error("should not send");
-  });
+  }, { idempotencyKey: "1:1" });
   assert.equal(delivery.status, "NOT_CONFIGURED");
 });
 

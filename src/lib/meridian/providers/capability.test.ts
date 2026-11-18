@@ -50,7 +50,7 @@ describe("disabled capabilities", () => {
 
   test("a disabled capability is sent once, with no retry and no wait, and reports that nothing was sent", async () => {
     let sleeps = 0;
-    const result = await sendWithRetry(gatedTransport("alerts.webhook"), request("POST"), {
+    const result = await sendWithRetry(gatedTransport("publish.tiktok"), request("POST"), {
       idempotent: true,
       sleep: async () => {
         sleeps += 1;

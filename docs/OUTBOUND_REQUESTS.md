@@ -34,7 +34,15 @@ The source of truth is `src/lib/meridian/providers/direct-requests.test.ts`. It 
 - `guarded`: the paused-ad creation and recovery state machine (`providers/meta-paused-ad.ts`, `content-factory/repurpose-paused-ad.ts`), and
   the organic publish with receipts (`content-factory/repurpose-organic.ts`), and outbound email (`notifications/email.ts`: one send per
   attempt, an `Idempotency-Key` of `<invite id>:<attempt>`, the invite marked `sending` first and `uncertain` when the answer is lost;
-  `notifications/email.test.ts`, `notifications/invite.test.ts`). Each names its test.
+  `notifications/email.test.ts`, `notifications/invite.test.ts`). Alert webhooks (`alerts/deliver.ts`, `alerts/delivery-job.ts`, run by
+  `jobs/execute.ts`): the attempt is recorded as `sending` before the request, sent once with an `Idempotency-Key` of
+  `<alert id>:<attempt>`; 2xx is `sent`, 4xx `failed` (retried up to three attempts, then `dead`), and no answer or 5xx `uncertain`,
+  which is never re-sent: the Alerts center tells the admin to check the receiving system (`alerts/delivery-job.db.test.ts`). Google
+  Drive writes (`storage/drive.ts`, `storage/drive-resumable.ts`): a small file is created under a Drive id from `files.generateIds`,
+  reserved in Postgres first (`drive_reserved_ids`, migration 0165), so a racing writer or a retry after a lost answer gets Drive's 409,
+  which counts as success only after the file's properties and sha256 are read back (`storage/drive-reserved-ids.test.ts`); large files
+  use the resumable session recorded in Postgres (`storage/drive-resumable-put.test.ts`). Each names its test. All are fixture-tested;
+  no live webhook or Drive write is recorded.
 - `gateway`: the engine's transport and the media, render and download adapters, which take the gateway's injected transport.
 
 ## Disabled paths (fail closed)
@@ -63,9 +71,6 @@ Side effects with no idempotency guard:
 - `ads.meta_write`, `ads.google_ads_write`, `ads.tiktok_write`: ad writes. Their transports are gated per provider in `providers/live.ts`. The
   guarded paused-ad path is `providers/meta-paused-ad.ts`.
 - `hypit.client`: the Hypit client and run (`hypit/client.ts`, `studio/hypit-run.ts`).
-- `drive.write`: Google Drive writes, including resumable uploads (`storage/drive.ts`, `storage/drive-resumable.ts`). Files are kept in
-  Postgres unless Drive is connected.
-- `alerts.webhook`: alert webhooks (`alerts/deliver.ts`) and the job executor's alert delivery (`jobs/execute.ts`).
 
 A disabled capability is also not retried. `sendWithRetry` (`providers/http.ts`) repeats only GET and PUT, or a request the caller marks
 idempotent. The artifact upload (`storage/artifact-upload.ts`) stops at once on a disabled capability. The image adapter returns
@@ -80,11 +85,8 @@ Negative tests:
   through their production defaults. A refusal is reported as `NOT_CONNECTED` with the gate's message, and no request is sent.
 - `content-factory/upload-default-gate.test.ts`: the Meta video upload through its production default, on the test database. With no
   readable video it is blocked; with readable bytes the `publish.meta_video_upload` gate refuses it. No receipt is stored either way.
-- `storage/drive-write-default-gate.test.ts`: a small Drive put, a delete and a folder create, through the production default. Each is
-  refused before any write is sent. Drive reads are not disabled, so they are not covered by this test.
 - `studio/hypit-default-gate.test.ts`: the Hypit start, poll and artifact calls, each given the `hypit.client` gate. The studio run itself
   needs a saved credential from the database, so it is not run end to end here.
-- `alerts/deliver-default-gate.test.ts`: the alert webhook through the `alerts.webhook` gate.
 - `providers/disabled-production-defaults.test.ts`: the OpenAI decisions engine, the TypeSafe JEV provider, the Gemini perception provider,
   the Higgsfield and Gemini Omni submissions, and the paused Google Ads and TikTok publishes, each through its production default, with a
   workspace key supplied through the module's own credential seam. The brand-level paused publish (`publish.paused_action`) is covered for

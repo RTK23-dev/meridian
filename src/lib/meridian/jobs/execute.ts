@@ -7,9 +7,8 @@ import { rerankBrand } from "../opportunity/rerank.ts";
 import { syncPublishingStatus } from "../publishing/provider.ts";
 import { videoQa } from "../video/provider.ts";
 import { allocateTraffic, type TrafficVariant } from "../experiments/allocate.ts";
-import { deliverAlert } from "../alerts/deliver.ts";
-import { deliveryPlan, deliveryUrlAllowed } from "../alerts/lifecycle.ts";
-import { gatedTransport } from "../providers/capability.ts";
+import { runAlertDelivery } from "../alerts/delivery-job.ts";
+import { liveTransport } from "../providers/http.ts";
 
 export type ExecutableJob = {
   id: string;
@@ -242,49 +241,16 @@ export async function executeJob(sql: Sql, job: ExecutableJob): Promise<string> 
     return `recorded:${eventId}:no-downstream-processing`;
   }
   if (job.job_type === "alert.deliver") {
-    const alertId = typeof payload.alertId === "string" ? payload.alertId : "";
-    const targetUrl = typeof payload.targetUrl === "string" ? payload.targetUrl : "";
-    if (!alertId) throw new Error("Alert delivery has no alert id.");
-    const target = targetUrl && deliveryUrlAllowed(targetUrl) ? { kind: "webhook" as const, url: targetUrl } : { kind: "none" as const };
-    const prior = await sql<{ status: string }>`
-      select status from delivery_attempts where alert_id = ${alertId} and organization_id = ${job.organization_id}
-    `;
-    const plan = deliveryPlan(prior, target);
-    if (plan.action !== "send" || target.kind !== "webhook") {
-      await sql`update alert_events set delivery_status = ${plan.status} where id = ${alertId} and organization_id = ${job.organization_id}`;
-      return plan.status;
-    }
-    const rows = await sql<{ id: string; code: string; severity: string; detail: string }>`
-      select id, code, severity, detail from alert_events where id = ${alertId} and organization_id = ${job.organization_id} limit 1
-    `;
-    const row = rows[0];
-    if (!row) return "missing";
-    const result = await deliverAlert(
+    // Claimed as 'sending' before the request, sent once with an Idempotency-Key, and never re-sent once its outcome is unknown.
+    return runAlertDelivery(
+      sql,
       {
-        id: row.id,
         organizationId: job.organization_id,
-        code: row.code,
-        severity: row.severity === "critical" || row.severity === "info" ? row.severity : "warning",
-        detail: row.detail,
-        firstSeen: "",
-        lastSeen: "",
-        acknowledged: false,
+        alertId: typeof payload.alertId === "string" ? payload.alertId : "",
+        targetUrl: typeof payload.targetUrl === "string" ? payload.targetUrl : "",
       },
-      target,
-      gatedTransport("alerts.webhook"),
+      liveTransport(),
     );
-    await sql`
-      insert into delivery_attempts (id, organization_id, alert_id, status, detail)
-      values (${crypto.randomUUID()}, ${job.organization_id}, ${alertId}, ${result.status === "sent" ? "sent" : "failed"}, ${result.error.slice(0, 300)})
-    `;
-    if (result.status !== "sent") {
-      const again = deliveryPlan([...prior, { status: "failed" }], target);
-      await sql`update alert_events set delivery_status = ${again.status === "dead" ? "dead" : "failed"} where id = ${alertId}`;
-      if (again.action === "dead") return "dead";
-      throw new Error(result.error || "The delivery target did not accept the alert.");
-    }
-    await sql`update alert_events set delivery_status = 'sent' where id = ${alertId} and organization_id = ${job.organization_id}`;
-    return "sent";
   }
   if (job.job_type === "video.generate" || job.job_type === "video.poll") {
     const { runVideoJob } = await import("../studio/media-work.ts");

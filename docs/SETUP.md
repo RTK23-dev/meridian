@@ -62,7 +62,7 @@ JEV also has a backend setting, in **Settings** under the decision engine: TypeS
 
 ## Google Drive
 
-Drive is for artifacts and exports only; Postgres holds the data. Writing to Drive is switched off in this version (a retry could duplicate a file), so files stay in Meridian's database. Connect Drive with one of these, set in `.env`:
+Drive is for artifacts and exports only; Postgres holds the data. When Drive is set up, new files are written there; without it they stay in Meridian's database (up to 50 MB each). A small file is created under a Drive file id reserved in the database first, so a retry or a second writer cannot make a duplicate. Connect Drive with one of these, set in `.env`:
 
 - a service account: `GOOGLE_SERVICE_ACCOUNT_KEY` (the JSON key), or
 - an OAuth refresh token: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` and `GOOGLE_REFRESH_TOKEN`.

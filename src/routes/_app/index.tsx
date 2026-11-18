@@ -76,7 +76,7 @@ function Home() {
         <section aria-labelledby="free-start" className="space-y-2 rounded-sharp border border-hairline p-5">
           <h2 id="free-start" className="text-section font-semibold text-fg-primary">Or make a video for free first</h2>
           <p className="text-sm text-fg-muted">Claude Code can make a video on your own computer with no key and no cost, and save it here.</p>
-          <Button asChild variant="secondary"><Link to="/settings" search={{ tab: "connections" }}>Make a video with Claude Code</Link></Button>
+          <Button asChild variant="secondary"><Link to="/create" search={{ way: "claude_code" }}>Make a video with Claude Code</Link></Button>
         </section>
       </div>
     );

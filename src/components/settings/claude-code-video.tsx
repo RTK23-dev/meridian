@@ -29,7 +29,28 @@ const CHOICE = "flex cursor-pointer items-start gap-2 rounded-sharp border p-3 t
 type Link = { id: string; lastUsedAt: string | null; revokedAt: string | null };
 
 /** Connecting Claude Code, once: one button makes the link and shows the one command to run. Only an admin can make a link. */
-type Runner = { online: boolean; name: string | null; lastSeenAt: string | null; problems: string[] };
+type RunnerSeen = { online: boolean; name: string; lastSeenAt: string; problems: string[] };
+type Runner = { online: boolean; name: string | null; lastSeenAt: string | null; problems: string[]; runners?: RunnerSeen[] };
+
+/** Every computer that is running the runner now, split into ready and connected-but-not-ready. Offline ones are left out. */
+function computers(runner: Runner): { ready: RunnerSeen[]; notReady: RunnerSeen[] } {
+  const all = runner.runners ?? (runner.name && runner.lastSeenAt ? [{ online: runner.online, name: runner.name, lastSeenAt: runner.lastSeenAt, problems: runner.problems }] : []);
+  const online = all.filter((item) => item.online);
+  return { ready: online.filter((item) => item.problems.length === 0), notReady: online.filter((item) => item.problems.length > 0) };
+}
+
+const names = (list: RunnerSeen[]) => list.map((item) => item.name).join(", ");
+
+/** "12 turns, 4 min 3 s" for a finished job, from what the runner reported. Nothing is shown for what was not reported. */
+function measured(turns: number | null | undefined, durationMs: number | null | undefined): string | null {
+  const parts: string[] = [];
+  if (typeof turns === "number") parts.push(`${turns} ${turns === 1 ? "turn" : "turns"}`);
+  if (typeof durationMs === "number") {
+    const seconds = Math.round(durationMs / 1000);
+    parts.push(seconds >= 60 ? `${Math.floor(seconds / 60)} min ${seconds % 60} s` : seconds < 1 ? "under 1 s" : `${seconds} s`);
+  }
+  return parts.length > 0 ? parts.join(", ") : null;
+}
 
 function Connect({ organizationId, canAdmin, runner }: { organizationId: string; canAdmin: boolean; runner: Runner }) {
   const list = useMcpConnectorsQuery(organizationId, canAdmin);
@@ -47,18 +68,24 @@ function Connect({ organizationId, canAdmin, runner }: { organizationId: string;
     },
   });
   const used = links.find((item) => item.lastUsedAt !== null);
+  const { ready, notReady } = computers(runner);
+  const online = ready.length + notReady.length > 0;
 
   return (
     <div className="space-y-2 rounded-sharp border border-hairline p-3">
       <div className="flex flex-wrap items-center gap-2">
-        <p className={STEP}>Your computer</p>
-        <Badge variant={runner.online && runner.problems.length === 0 ? "success" : "neutral"}>{runner.online ? (runner.problems.length === 0 ? `Ready on ${runner.name}` : `Connected on ${runner.name}, not ready`) : "Not running"}</Badge>
+        <p className={STEP}>{ready.length + notReady.length > 1 ? "Your computers" : "Your computer"}</p>
+        {ready.length > 0 ? <Badge variant="success">{`Ready on ${names(ready)}`}</Badge> : null}
+        {notReady.length > 0 ? <Badge variant="neutral">{`Connected on ${names(notReady)}, not ready`}</Badge> : null}
+        {!online ? <Badge variant="neutral">Not running</Badge> : null}
       </div>
-      {runner.online && runner.problems.length > 0 ? (
-        <ul className="list-disc space-y-1 pl-5 text-sm text-fg-primary">{runner.problems.map((problem) => <li key={problem}>{problem}</li>)}</ul>
+      {notReady.length > 0 ? (
+        <ul className="list-disc space-y-1 pl-5 text-sm text-fg-primary">
+          {notReady.flatMap((item) => item.problems.map((problem) => <li key={`${item.name}:${problem}`}>{notReady.length + ready.length > 1 ? `${item.name}: ${problem}` : problem}</li>))}
+        </ul>
       ) : null}
-      {runner.online ? (
-        <p className="text-sm text-fg-muted">{runner.problems.length === 0 ? "A video you ask for below starts by itself. Each one starts fresh, and none is added to your Claude Code chat history." : "Fix the above on that computer. The runner checks again every minute."}</p>
+      {online ? (
+        <p className="text-sm text-fg-muted">{ready.length > 0 ? `A video you ask for below starts by itself${ready.length > 1 ? " on whichever computer is free first; two never make the same one" : ""}. Each one starts fresh, and none is added to your Claude Code chat history.` : "Fix the above on that computer. The runner checks again every minute."}</p>
       ) : !canAdmin ? (
         <p className="text-sm text-fg-muted">A workspace admin connects a computer once, here. Until then, a video you ask for waits, and you can paste its line into Claude Code yourself.</p>
       ) : command ? (
@@ -142,7 +169,7 @@ export function ClaudeCodeVideo({ organizationId, canMake, canAdmin }: { organiz
         <Badge variant="info">Free</Badge>
         <InfoButton label="making a video with Claude Code">
           <p>Claude Code makes the video on your own computer with the coded styles, so it costs nothing. Meridian keeps the brand, the budget and the project, and stores the finished MP4.</p>
-          <p className="text-fg-muted">Add the connector first (the command under Chat connector above). The click records what the video is for and gives you one line to paste into Claude Code. Nothing starts until you paste it.</p>
+          <p className="text-fg-muted">Connect your computer once with the button in this card. After that, a click records what the video is for and your computer starts it by itself; without a running computer, the click gives you one line to paste into Claude Code.</p>
           <p className="text-fg-muted">Prefer a video made inside Meridian, with the engine and its review gates? Use the regular Content Factory.</p>
         </InfoButton>
       </div>
@@ -212,7 +239,7 @@ export function ClaudeCodeVideo({ organizationId, canMake, canAdmin }: { organiz
 
           {made ? (
             <div role="status" className="space-y-2 rounded-sharp border border-border-strong p-3">
-              <p className="text-sm font-semibold text-fg-primary">{data.runner.online && data.runner.problems.length === 0 ? "Queued. Your computer starts it within a few seconds; follow it under Recent requests." : `No computer is running the runner, so it is waiting. Start the runner, or paste this into Claude Code yourself${copied === made.id ? " (copied)" : ""}:`}</p>
+              <p className="text-sm font-semibold text-fg-primary">{computers(data.runner).ready.length > 0 ? "Queued. Your computer starts it within a few seconds; follow it under Recent requests." : `No computer is running the runner, so it is waiting. Start the runner, or paste this into Claude Code yourself${copied === made.id ? " (copied)" : ""}:`}</p>
               <div className="flex items-center gap-2">
                 <code className="min-w-0 flex-1 truncate rounded-sharp bg-surface-muted px-2 py-1 font-mono text-xs">{made.prompt}</code>
                 <Button type="button" size="sm" variant="secondary" onClick={() => copy(made.prompt, made.id)}>
@@ -231,11 +258,12 @@ export function ClaudeCodeVideo({ organizationId, canMake, canAdmin }: { organiz
                 {data.requests.map((request) => (
                   <li key={request.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
                     <span className="min-w-0 flex-1 truncate text-fg-primary">{request.idea}</span>
-                    <Badge variant={request.status === "done" ? "success" : request.status === "failed" ? "danger" : "neutral"}>{STATUS_LABEL[request.status] ?? request.status}</Badge>
+                    <Badge variant={request.status === "done" ? "success" : request.status === "failed" ? "danger" : "neutral"}>{request.status === "running" && request.progress ? `${STATUS_LABEL.running}: ${request.progress}` : STATUS_LABEL[request.status] ?? request.status}</Badge>
                     {request.status === "open" ? <Button type="button" variant="quiet" size="sm" onClick={() => copy(request.prompt, request.id)}>{copied === request.id ? "Copied" : "Copy line"}</Button> : null}
                     {request.status === "failed" || request.status === "claimed" ? <Button type="button" variant="quiet" size="sm" disabled={!canMake || retry.isPending} onClick={() => void retry.mutateAsync(request.id).catch(() => undefined)}>Run again</Button> : null}
                     {request.status === "open" || request.status === "claimed" || request.status === "running" ? <Button type="button" variant="quiet" size="sm" disabled={!canMake || cancel.isPending} onClick={() => void cancel.mutateAsync(request.id).catch(() => undefined)}>Cancel</Button> : null}
                     {request.lastError ? <p className="basis-full text-caption text-fg-muted">{request.lastError}</p> : null}
+                    {(request.status === "done" || request.status === "failed") && measured(request.turns, request.durationMs) ? <p className="basis-full text-caption text-fg-muted">{`Claude Code took ${measured(request.turns, request.durationMs)}${request.runnerName ? ` on ${request.runnerName}` : ""}.`}</p> : null}
                   </li>
                 ))}
               </ul>

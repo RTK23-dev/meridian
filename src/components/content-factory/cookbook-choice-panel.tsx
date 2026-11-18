@@ -75,19 +75,19 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
       const outcome = await chooseCookbookForRunAction({ data: { sessionId, cookbookId: choice.cookbookId, version: choice.version, values: choice.values } });
       if (outcome.ok) {
         setChosen(label);
-        toast.success(`Cookbook chosen: ${label}.`);
+        toast.success(`Style chosen: ${label}.`);
       } else {
         setError(outcome.reason);
       }
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The cookbook was not chosen.");
+      setError(caught instanceof Error ? caught.message : "The style was not chosen.");
     } finally {
       setBusy(false);
     }
   };
 
-  if (loaded.state === "loading") return <p className="mb-4 text-sm text-fg-muted">Reading the cookbooks for this video…</p>;
-  if (loaded.state === "unavailable") return <p className="mb-4 text-sm text-fg-muted">No cookbook yet: {loaded.reason}</p>;
+  if (loaded.state === "loading") return <p className="mb-4 text-sm text-fg-muted">Reading the styles for this video…</p>;
+  if (loaded.state === "unavailable") return <p className="mb-4 text-sm text-fg-muted">No style yet: {loaded.reason}</p>;
 
   const pickedView = loaded.view;
   const view: SelectionView =
@@ -96,7 +96,7 @@ export function CookbookChoicePanel({ sessionId, onChoiceNeededChange }: { sessi
       : pickedView;
   return (
     <section aria-labelledby="cf-cookbook" className="mb-4 space-y-3 rounded-sharp border border-hairline p-3">
-      <h2 id="cf-cookbook" className="text-sm font-semibold">Cookbook</h2>
+      <h2 id="cf-cookbook" className="text-sm font-semibold">Style</h2>
       {chosen !== null ? <p className="text-sm">Chosen: {chosen}. You can change it below until the video starts.</p> : null}
       {error !== null ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
       <div aria-busy={busy}>

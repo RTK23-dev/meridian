@@ -148,7 +148,9 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
   );
 
   let body: ReactNode;
-  if (current === "create") body = create;
+  // A workspace with no brand opens on the empty state that offers to create one, unless the address names a session to reopen.
+  if (routeBrandId === null && brands.length === 0 && search.session === undefined) body = noBrand;
+  else if (current === "create") body = create;
   else if (activeBrandId) body = BRAND_VIEWS[current](activeBrandId);
   else body = noBrand;
 

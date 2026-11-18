@@ -119,9 +119,9 @@ export function placeOf(pathname: string, brandId?: string): PlaceId | null {
  * Content page.
  */
 export const AREA_GUIDE: ReadonlyArray<{ id: string; label: string; path: string; what: string }> = [
-  { id: "cookbooks", label: "Cookbooks", path: "cookbooks", what: "The cookbooks a video can be made from: their steps, their cost and what each needs, and copies you can make and edit." },
+  { id: "cookbooks", label: "Cookbooks", path: "cookbooks", what: "The video styles a video can be made from: their steps, their cost and what each needs, and copies you can make and edit." },
   { id: "market", label: "Market", path: "market", what: "Find public pages and posts, collect ads, and store competitor observations." },
-  { id: "create", label: "Create", path: "/create", what: "Create is the one page for making. Say what to make, or set the controls yourself in Studio. Ideas ranks what to make next, Review holds drafts for a person, Library keeps them, Publish sends them out, and Results shows what worked. Batch (admins only) starts research-led production runs." },
+  { id: "create", label: "Create", path: "/create", what: "Create is the one page for making: free with Claude Code on your computer, or with Meridian, which plans it for you or lets you set each step. Ideas ranks what to make next, Review holds drafts for a person, Library keeps them, Publish sends them out, and Results shows what worked. Batch (admins only) starts research-led production runs." },
 ];
 
 /**

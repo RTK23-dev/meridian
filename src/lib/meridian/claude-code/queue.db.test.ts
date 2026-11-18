@@ -10,7 +10,7 @@ import { createConnector } from "../mcp/connectors.ts";
 import { claudeCodeTools } from "../mcp/claude-code-tools.ts";
 import { createProject } from "../mcp/projects.ts";
 import type { ConnectorContext } from "../mcp/tools.ts";
-import { claimNext, jobPrompt, LEASE_MS, MAX_ATTEMPTS, modelAlias, reportJob, requeue, RUNNER_ONLINE_MS, runnerSeen, runnerStatus } from "./queue.ts";
+import { claimNext, cleanProgress, jobPrompt, LEASE_MS, MAX_ATTEMPTS, modelAlias, reportJob, requeue, RUNNER_ONLINE_MS, runnerSeen, runnerStatus } from "./queue.ts";
 import { cancelRequest, completeRequest, createRequest, listRequests } from "./requests.ts";
 
 const WS = "ws_queue";
@@ -160,12 +160,69 @@ describe("the Claude Code job queue", () => {
   });
 
   it("shows a runner as online only while it keeps checking in, with what its checks found", async () => {
-    assert.deepEqual(await runnerStatus(db.sql, OTHER, at(0)), { online: false, name: null, lastSeenAt: null, problems: [] });
+    assert.deepEqual(await runnerStatus(db.sql, OTHER, at(0)), { online: false, name: null, lastSeenAt: null, problems: [], runners: [] });
     await runnerSeen(db.sql, { organizationId: WS, connectorId, name: "laptop", checks: { problems: ["ffmpeg is not installed."] }, now: at(0) });
     const online = await runnerStatus(db.sql, WS, at(1000));
     assert.equal(online.online, true);
     assert.deepEqual(online.problems, ["ffmpeg is not installed."]);
     assert.equal((await runnerStatus(db.sql, WS, at(RUNNER_ONLINE_MS + 1000))).online, false);
+  });
+
+  it("lists every computer that is running a runner, not only the most recent", async () => {
+    await runnerSeen(db.sql, { organizationId: WS, connectorId, name: "laptop", checks: { problems: [] }, now: at(10_000) });
+    await runnerSeen(db.sql, { organizationId: WS, connectorId, name: "desktop", checks: { problems: [] }, now: at(12_000) });
+    await runnerSeen(db.sql, { organizationId: WS, connectorId, name: "old-mac", checks: { problems: [] }, now: at(-10 * RUNNER_ONLINE_MS) });
+    const status = await runnerStatus(db.sql, WS, at(13_000));
+    assert.equal(status.name, "desktop", "the top-level fields stay the most recently seen runner");
+    assert.equal(status.online, true);
+    assert.deepEqual(status.runners.map((runner) => [runner.name, runner.online]), [["desktop", true], ["laptop", true], ["old-mac", false]]);
+    assert.deepEqual((await runnerStatus(db.sql, OTHER, at(13_000))).runners, []);
+  });
+
+  it("gives each of several waiting jobs to exactly one of two runners that ask at the same moment", async () => {
+    await drain();
+    const ids = [await make("Concurrent one"), await make("Concurrent two"), await make("Concurrent three")];
+    const taken: string[] = [];
+    for (let round = 0; round < 3; round += 1) {
+      const [a, b] = await Promise.all([
+        claimNext(db.sql, { organizationId: WS, runnerName: "laptop", now: at(20_000 + round) }),
+        claimNext(db.sql, { organizationId: WS, runnerName: "desktop", now: at(20_000 + round) }),
+      ]);
+      for (const job of [a, b]) if (job) taken.push(job.requestId);
+    }
+    assert.deepEqual([...taken].sort(), [...ids].sort(), "every job was taken once, none twice");
+    await drain();
+  });
+
+  it("stores what a job is doing with each heartbeat, and the turns and time at the end, never a link", async () => {
+    await drain();
+    const id = await make("A job that reports progress");
+    const job = (await claimNext(db.sql, { organizationId: WS, runnerName: "laptop", now: at(0) }))!;
+    await reportJob(db.sql, { organizationId: WS, requestId: id, leaseToken: job.leaseToken, state: "heartbeat", progress: "Rendering", now: at(1000) });
+    assert.equal((await statusOf(id))?.progress, "Rendering");
+    await reportJob(db.sql, { organizationId: WS, requestId: id, leaseToken: job.leaseToken, state: "heartbeat", now: at(2000) });
+    assert.equal((await statusOf(id))?.progress, "Rendering", "a heartbeat without a label keeps the last one");
+    await reportJob(db.sql, { organizationId: WS, requestId: id, leaseToken: job.leaseToken, state: "heartbeat", progress: "curl https://x.example/api/mcp/mrd_ABCDEFGHIJKLMNOP", now: at(3000) });
+    assert.equal((await statusOf(id))?.progress, "", "a label with a link is dropped");
+    await reportJob(db.sql, { organizationId: WS, requestId: id, leaseToken: job.leaseToken, state: "failed", error: "stopped", progress: "Saving the video", turns: 14, durationMs: 61_500, now: at(4000) });
+    const ended = await statusOf(id);
+    assert.equal(ended?.progress, "Saving the video");
+    assert.equal(ended?.turns, 14);
+    assert.equal(ended?.durationMs, 61_500);
+    assert.equal(await requeue(db.sql, { organizationId: WS, id, now: at(5000) }), true);
+    const again = await statusOf(id);
+    assert.deepEqual([again?.progress, again?.turns, again?.durationMs], ["", null, null], "a new attempt starts with nothing recorded");
+    const unknown = (await claimNext(db.sql, { organizationId: WS, runnerName: "laptop", now: at(6000) }))!;
+    await reportJob(db.sql, { organizationId: WS, requestId: id, leaseToken: unknown.leaseToken, state: "failed", error: "x", turns: -1, now: at(7000) });
+    assert.equal((await statusOf(id))?.turns, null, "a count that is not a whole number of at least 0 stays unknown");
+    await drain();
+  });
+
+  it("keeps a progress label to one short line", () => {
+    assert.equal(cleanProgress("  Rendering\n now "), "Rendering now");
+    assert.equal(cleanProgress("x".repeat(500)).length, 120);
+    assert.equal(cleanProgress("see http://example.com"), "");
+    assert.equal(cleanProgress(undefined), "");
   });
 
   it("serves the runner through the connector tools, and gives no job to a runner that is not ready", async () => {

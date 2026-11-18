@@ -90,17 +90,20 @@ export function claudeCodeTools(): McpTool<ConnectorContext>[] {
     defineTool({
       name: "meridian_runner_report",
       title: "Runner: report on a job",
-      description: "For Meridian's Claude Code runner, not for a chat. Renews the lease on the job it holds, or reports the end. Done is checked: a video must have been saved to the request's project. Free.",
+      description: "For Meridian's Claude Code runner, not for a chat. Renews the lease on the job it holds (with what it is doing now), or reports the end (with turns and duration when known). Done is checked: a video must have been saved to the request's project. Free.",
       input: z.object({
         requestId: z.string().min(1).max(80),
         leaseToken: z.string().min(1).max(80),
         state: z.enum(["heartbeat", "done", "failed"]),
         error: z.string().max(2000).optional(),
+        progress: z.string().max(120).optional().describe("What the job is doing now, as a short plain label such as 'Rendering'. Never a link, a command or a tool's arguments."),
+        turns: z.number().int().min(0).max(100_000).optional().describe("At the end: how many turns Claude Code took, when it said so."),
+        durationMs: z.number().int().min(0).max(7 * 24 * 3_600_000).optional().describe("At the end: how long Claude Code ran, in milliseconds, when it said so."),
       }),
       role: "member",
       annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: false },
       async run(context: ConnectorContext, input) {
-        const result = await reportJob(context.sql, { organizationId: context.connector.organizationId, requestId: input.requestId, leaseToken: input.leaseToken, state: input.state, error: input.error, now: context.now() });
+        const result = await reportJob(context.sql, { organizationId: context.connector.organizationId, requestId: input.requestId, leaseToken: input.leaseToken, state: input.state, error: input.error, progress: input.progress, turns: input.turns, durationMs: input.durationMs, now: context.now() });
         if (!result.ok) return { text: result.reason, isError: true, data: { held: false } };
         return { text: result.message, data: { held: result.status === "running", status: result.status } };
       },

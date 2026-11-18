@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui";
 import { loadCatalog, type CatalogEntry } from "@/engine/orchestrator/catalog";
 import { orchestratorPlanSchema, type NodeEvent, type OrchestratorPlan } from "@/engine/orchestrator/contracts";
@@ -109,6 +110,11 @@ export function OrchestratorScreen() {
 
   return (
     <div className="flex flex-col gap-4">
+      {/* This screen replays a recording. People who came here to make something are sent to Create, the one front door. */}
+      <div role="note" aria-label="Recorded example" className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-sharp border border-border-strong bg-raised px-4 py-3 text-sm text-fg-primary">
+        <p>This is a recorded example of how Meridian plans a video. To make your own, go to Create.</p>
+        <Link to="/create" className="font-semibold underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Go to Create</Link>
+      </div>
       <header className="flex flex-col gap-1">
         <h1 className="page-title">Orchestrator plan (recorded example)</h1>
         <p className="text-sm text-fg-muted">

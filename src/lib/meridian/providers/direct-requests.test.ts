@@ -108,6 +108,30 @@ const INVENTORY: Record<string, Entry> = {
     evidence: "src/lib/meridian/distribution/publish-claims.db.test.ts",
     note: "Facebook Page publishing, on. One request per publish, no retry. Every publish goes through distribution/service.ts, which claims the creative and Page before the call; an unknown outcome is 'uncertain' and is not sent again without a person's confirmation.",
   },
+  "src/lib/meridian/storage/drive.ts": {
+    kind: "side_effect",
+    governed: "guarded",
+    evidence: "src/lib/meridian/storage/drive-reserved-ids.test.ts",
+    note: "Google Drive writes and reads. A small file is created under a Drive id reserved in Postgres first (drive_reserved_ids), so a racing writer or a retry gets 409, confirmed by reading the file and its sha256 back. Folders converge on the earliest; deletes treat 404 as done.",
+  },
+  "src/lib/meridian/storage/drive-resumable.ts": {
+    kind: "side_effect",
+    governed: "guarded",
+    evidence: "src/lib/meridian/storage/drive-resumable-put.test.ts",
+    note: "Resumable Drive uploads. The session is recorded in Postgres before Drive is called, and the confirmed offset is reconciled before a chunk is resent.",
+  },
+  "src/lib/meridian/alerts/deliver.ts": {
+    kind: "side_effect",
+    governed: "guarded",
+    evidence: "src/lib/meridian/alerts/delivery-job.db.test.ts",
+    note: "Alert webhooks. One request per attempt with an Idempotency-Key of '<alert id>:<attempt>'; no answer or 5xx is 'uncertain' and is not sent again.",
+  },
+  "src/lib/meridian/jobs/execute.ts": {
+    kind: "side_effect",
+    governed: "guarded",
+    evidence: "src/lib/meridian/alerts/delivery-job.db.test.ts",
+    note: "The job executor's alert delivery (alerts/delivery-job.ts): the attempt is claimed as 'sending' before the request, and an uncertain one is never re-sent.",
+  },
   "src/lib/meridian/content-factory/repurpose-organic.ts": {
     kind: "side_effect",
     governed: "guarded",
@@ -118,10 +142,6 @@ const INVENTORY: Record<string, Entry> = {
   // Side effects. Each is disabled: its default transport refuses before any request is made, until its guard exists.
   "src/lib/meridian/providers/publish-action.ts": { kind: "side_effect", governed: "disabled", capability: "publish.paused_action", evidence: CAPABILITY_TEST, note: "The paused publish action. Off until a test proves its idempotency keys." },
   "src/lib/meridian/factory/publish.ts": { kind: "side_effect", governed: "disabled", capability: "ads.meta_write", evidence: CAPABILITY_TEST, note: "The factory's paid Meta publish. Its write goes through the ads.meta_write gate, so nothing is sent. The token renewal before it is a token refresh (oauth/auto-refresh.ts), not a paid request." },
-  "src/lib/meridian/storage/drive.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Google Drive writes and reads. Off; files are kept in Postgres." },
-  "src/lib/meridian/storage/drive-resumable.ts": { kind: "side_effect", governed: "disabled", capability: "drive.write", evidence: CAPABILITY_TEST, note: "Resumable Drive uploads. Their transport comes from drive.ts, which is off." },
-  "src/lib/meridian/alerts/deliver.ts": { kind: "side_effect", governed: "disabled", capability: "alerts.webhook", evidence: CAPABILITY_TEST, note: "Alert webhooks. Its only caller, the job executor, uses the same off capability." },
-  "src/lib/meridian/jobs/execute.ts": { kind: "side_effect", governed: "disabled", capability: "alerts.webhook", evidence: CAPABILITY_TEST, note: "The job executor's alert delivery. Off through the webhook capability." },
   "src/lib/meridian/hypit/client.ts": { kind: "side_effect", governed: "disabled", capability: "hypit.client", evidence: CAPABILITY_TEST, note: "The Hypit bridge client. Its transport comes from the caller; the lib run is off." },
   "src/lib/meridian/studio/hypit-run.ts": { kind: "side_effect", governed: "disabled", capability: "hypit.client", evidence: CAPABILITY_TEST, note: "Starts a Hypit run. Off through the Hypit capability." },
   "src/lib/meridian/distribution/instagram.ts": { kind: "side_effect", governed: "disabled", capability: "publish.instagram", evidence: CAPABILITY_TEST, note: "Instagram publishing and its reads. Off, since they share one transport." },

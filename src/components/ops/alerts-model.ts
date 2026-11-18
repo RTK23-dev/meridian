@@ -50,6 +50,10 @@ export function deliveryCopy(status: string): string {
   if (key === "pending") return "Waiting for the worker to send it to the saved target.";
   if (key === "sent") return "Delivered. The webhook endpoint accepted it.";
   if (key === "dead") return "Not delivered. Sending stopped after repeated failures.";
+  if (key === "queued") return "Queued. The worker sends it to the saved target.";
+  if (key === "sending") return "Sending now. If this does not change within a few minutes, the webhook may have received this. Check the receiving system.";
+  if (key === "failed") return "Not delivered yet. The webhook refused it; the worker tries again, up to three times.";
+  if (key === "uncertain") return "Delivery unknown. The webhook may have received this. Check the receiving system. Meridian does not send it again.";
   return status ? `Delivery status: ${statusLabel(status)}.` : "Delivery status is not recorded.";
 }
 

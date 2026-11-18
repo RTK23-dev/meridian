@@ -38,7 +38,7 @@ export const getClaudeCodeSetup = createServerFn({ method: "GET" })
       choices: availableChoices().map((choice) => ({ id: choice.id, label: choice.label, plain: choice.plain })),
       skills: listVideoSkills().map((skill) => ({ name: skill.name, description: skill.description, version: skill.version, files: skill.files.length })),
       brands: withSources,
-      requests: requests.map((request) => ({ id: request.id, choice: request.choice, model: request.model, lastError: request.lastError, runnerName: request.runnerName, expired: new Date(request.expiresAt).getTime() <= now.getTime(), brandId: request.brandId, source: request.source, idea: request.idea, status: request.status, createdAt: request.createdAt, prompt: requestPrompt(request.id) })),
+      requests: requests.map((request) => ({ id: request.id, choice: request.choice, model: request.model, lastError: request.lastError, runnerName: request.runnerName, progress: request.progress, turns: request.turns, durationMs: request.durationMs, expired: new Date(request.expiresAt).getTime() <= now.getTime(), brandId: request.brandId, source: request.source, idea: request.idea, status: request.status, createdAt: request.createdAt, prompt: requestPrompt(request.id) })),
     };
   });
 

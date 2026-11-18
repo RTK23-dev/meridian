@@ -8,9 +8,53 @@ export const CREATE_MODES = ["orchestrator", "studio"] as const;
 export type CreateMode = (typeof CREATE_MODES)[number];
 
 export const CREATE_MODE_COPY: Record<CreateMode, { label: string; hint: string }> = {
-  orchestrator: { label: "Orchestrator", hint: "Meridian plans the piece for you." },
-  studio: { label: "Studio", hint: "You set each step yourself, phase by phase." },
+  orchestrator: { label: "Meridian plans it", hint: "Meridian plans the piece for you." },
+  studio: { label: "I set each step", hint: "You set each step yourself, phase by phase." },
 };
+
+/**
+ * The first choice on an empty Create page: how the video is made. Claude Code makes it free on the person's own computer; Meridian makes it
+ * with the workspace's keys (the composer below); a batch makes many variations at once on a brand's Content page.
+ */
+export const CREATE_WAYS = ["claude_code", "meridian", "batch"] as const;
+export type CreateWay = (typeof CREATE_WAYS)[number];
+
+export const CREATE_WAY_COPY: Record<CreateWay, { label: string; hint: string }> = {
+  claude_code: { label: "Free, with Claude Code on your computer", hint: "Claude Code makes the video on your computer and saves it here. No key needed." },
+  meridian: { label: "With Meridian (uses your keys)", hint: "Describe it below. Meridian plans it with your workspace's models, within its budget." },
+  batch: { label: "Many variations at once", hint: "Turn one ready draft into a batch of variations, on a brand's Content page." },
+};
+
+/** Where the person's choice is remembered, per browser. */
+export const CREATE_WAY_KEY = "meridian.create.way";
+
+/** A stored way, or null when the value is missing or not one of the ways. */
+export function wayOf(value: string | null | undefined): CreateWay | null {
+  return typeof value === "string" && (CREATE_WAYS as readonly string[]).includes(value) ? (value as CreateWay) : null;
+}
+
+/** Whether the workspace has a text model to write with: its OpenRouter key's state as the credential resolver reports it. */
+export type TextModelState = "loading" | "available" | "missing" | "unknown";
+
+/** The OpenRouter key's state from the provider summaries. A summary that names no state, or a failed read, is unknown, never a guess. */
+export function textModelStateOf({ loading, failed, credentialState }: { loading: boolean; failed: boolean; credentialState: string | undefined }): TextModelState {
+  if (failed) return "unknown";
+  if (loading) return "loading";
+  if (credentialState === "usable") return "available";
+  if (credentialState === "not_configured" || credentialState === "unusable") return "missing";
+  return "unknown";
+}
+
+/**
+ * The way the page opens on. A choice the person made in this browser wins. Otherwise Claude Code when the workspace has no text model, and
+ * Meridian when it has one or when that cannot be told. Null while the key state is still loading, so the page does not flip under the person.
+ */
+export function defaultWay({ stored, textModel }: { stored: string | null; textModel: TextModelState }): CreateWay | null {
+  const remembered = wayOf(stored);
+  if (remembered) return remembered;
+  if (textModel === "loading") return null;
+  return textModel === "missing" ? "claude_code" : "meridian";
+}
 
 /** Starting points a person can tap, so an empty page still shows what it can make. */
 export const CREATE_SUGGESTIONS = [
@@ -79,10 +123,17 @@ export function togglePurposeOf(kind: FileKind, purpose: FilePurpose): FilePurpo
   return purpose === "material" ? reference : "material";
 }
 
-/** The Create page's address: `?draft=<id>` reopens a draft, so a reload or a shared link comes back to it and its scripts. */
-export type CreateSearch = { draft?: string };
+/**
+ * The Create page's address: `?draft=<id>` reopens a draft, so a reload or a shared link comes back to it and its scripts. `?way=` opens the
+ * empty page on one way to make it, so a link from elsewhere (Settings, the overview) lands on the free Claude Code option.
+ */
+export type CreateSearch = { draft?: string; way?: CreateWay };
 
 export function createSearchOf(search: Record<string, unknown>): CreateSearch {
+  const out: CreateSearch = {};
   const draft = search.draft;
-  return typeof draft === "string" && /^[A-Za-z0-9_:-]{1,100}$/.test(draft) ? { draft } : {};
+  if (typeof draft === "string" && /^[A-Za-z0-9_:-]{1,100}$/.test(draft)) out.draft = draft;
+  const way = wayOf(typeof search.way === "string" ? search.way : null);
+  if (way) out.way = way;
+  return out;
 }

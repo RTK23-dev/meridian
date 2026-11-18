@@ -30,6 +30,12 @@ export type ClaudeCodeRequest = {
   lastError: string;
   runnerName: string;
   attempt: number;
+  /** What a job being made is doing now ("Rendering"), or its last step. Empty when unknown. */
+  progress: string;
+  /** How many turns Claude Code took, or null when it was not reported. */
+  turns: number | null;
+  /** How long Claude Code ran, in milliseconds, or null when it was not reported. */
+  durationMs: number | null;
   projectId: string | null;
   createdAt: string;
   expiresAt: string;
@@ -46,6 +52,9 @@ type Row = {
   last_error?: string | null;
   runner_name?: string | null;
   attempt?: number | string | null;
+  progress?: string | null;
+  turns?: number | string | null;
+  duration_ms?: number | string | null;
   project_id: string | null;
   created_at: unknown;
   expires_at: unknown;
@@ -68,6 +77,9 @@ function viewOf(row: Row): ClaudeCodeRequest {
     lastError: row.last_error ?? "",
     runnerName: row.runner_name ?? "",
     attempt: Number(row.attempt ?? 0),
+    progress: row.progress ?? "",
+    turns: row.turns === null || row.turns === undefined ? null : Number(row.turns),
+    durationMs: row.duration_ms === null || row.duration_ms === undefined ? null : Number(row.duration_ms),
     projectId: row.project_id,
     createdAt: iso(row.created_at),
     expiresAt: iso(row.expires_at),
@@ -127,7 +139,7 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
   const rows = await sql<Row>`
     insert into claude_code_requests (id, organization_id, brand_id, created_by, source, idea, snapshot, model, expires_at, created_at)
     values (${id}, ${input.organizationId}, ${input.brandId}, ${input.userId}, ${input.source}, ${idea}, ${JSON.stringify(snapshot)}::jsonb, ${model}, ${expires.toISOString()}, ${now.toISOString()})
-    returning id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
+    returning id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, progress, turns, duration_ms, project_id, created_at, expires_at
   `;
   return { ok: true, request: viewOf(rows[0]!), prompt: requestPrompt(id) };
 }
@@ -135,7 +147,7 @@ export async function createRequest(sql: Sql, input: CreateRequestInput): Promis
 /** A request of this workspace that is neither cancelled nor past its time, or null. */
 export async function readRequest(sql: Sql, organizationId: string, id: string, now: () => Date = () => new Date()): Promise<ClaudeCodeRequest | null> {
   const rows = await sql<Row>`
-    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
+    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, progress, turns, duration_ms, project_id, created_at, expires_at
     from claude_code_requests
     where id = ${id} and organization_id = ${organizationId} and status <> 'cancelled' and expires_at > ${now().toISOString()}
   `;
@@ -145,7 +157,7 @@ export async function readRequest(sql: Sql, organizationId: string, id: string, 
 /** The workspace's recent requests, newest first, for the Settings list. */
 export async function listRequests(sql: Sql, organizationId: string, limit = 8): Promise<ClaudeCodeRequest[]> {
   const rows = await sql<Row>`
-    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, project_id, created_at, expires_at
+    select id, brand_id, source, idea, snapshot, status, model, last_error, runner_name, attempt, progress, turns, duration_ms, project_id, created_at, expires_at
     from claude_code_requests where organization_id = ${organizationId} and status <> 'cancelled'
     order by created_at desc limit ${limit}
   `;

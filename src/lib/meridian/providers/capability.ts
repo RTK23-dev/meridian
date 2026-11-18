@@ -16,8 +16,6 @@ export const DISABLED_CAPABILITIES = {
   "generation.gemini_omni": "Gemini omni generation is not held in the ledger.",
   "generation.gemini_image": "Gemini image generation is not held in the ledger.",
   "embeddings.external": "The paid embeddings API is not held in the ledger.",
-  "drive.write": "Google Drive writes, including resumable uploads, have no idempotency key, so a retry can duplicate a file.",
-  "alerts.webhook": "Alert webhooks have no idempotency key or guard.",
   "hypit.client": "The Hypit client and its runs have no idempotency guard in this code.",
   "publish.instagram": "Instagram writes carry no idempotency key.",
   "publish.tiktok": "TikTok writes carry no idempotency key.",

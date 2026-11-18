@@ -18,7 +18,7 @@ export function CookbookSelectionStep({
   if (view.state === "pick") {
     return (
       <section aria-labelledby="cookbook-pick-title" className="space-y-3">
-        <h3 id="cookbook-pick-title" className="text-section font-semibold text-fg-primary">Suggested cookbook: {view.title}</h3>
+        <h3 id="cookbook-pick-title" className="text-section font-semibold text-fg-primary">Suggested style: {view.title}</h3>
         <p className="text-small text-fg-secondary">{view.reason}</p>
         <p className="text-small text-fg-primary">{view.badge}. {view.estimate}.</p>
         {view.needs.length > 0 ? (
@@ -49,7 +49,7 @@ export function CookbookSelectionStep({
   if (view.state === "picker") {
     return (
       <section aria-labelledby="cookbook-picker-title" className="space-y-3">
-        <h3 id="cookbook-picker-title" className="text-section font-semibold text-fg-primary">Choose a cookbook</h3>
+        <h3 id="cookbook-picker-title" className="text-section font-semibold text-fg-primary">Choose a style</h3>
         <p className="text-small text-fg-secondary">{view.message}</p>
         <div className="flex flex-wrap gap-2">
           {view.options.map((cookbook) => (
@@ -74,7 +74,7 @@ export function CookbookSelectionStep({
     );
   }
   if (view.state === "failed") {
-    return <p role="alert" className="text-small text-danger">The cookbook selector failed: {view.message}</p>;
+    return <p role="alert" className="text-small text-danger">The style picker failed: {view.message}</p>;
   }
   return (
     <section aria-labelledby="cookbook-refused-title" className="space-y-2">

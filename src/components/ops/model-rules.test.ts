@@ -135,4 +135,8 @@ test("alerts: a delivery is described as delivered only once the endpoint accept
   assert.equal(deliveryCopy("dead"), "Not delivered. Sending stopped after repeated failures.");
   assert.equal(deliveryCopy(""), "Delivery status is not recorded.");
   assert.doesNotMatch(deliveryCopy("pending"), /Delivered/);
+  assert.match(deliveryCopy("uncertain"), /The webhook may have received this\. Check the receiving system\./);
+  assert.match(deliveryCopy("uncertain"), /does not send it again/);
+  assert.match(deliveryCopy("sending"), /Check the receiving system/);
+  assert.doesNotMatch(deliveryCopy("uncertain"), /Delivered\./);
 });

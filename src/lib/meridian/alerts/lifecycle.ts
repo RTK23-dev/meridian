@@ -22,12 +22,21 @@ export function deliveryUrlAllowed(url: string): boolean {
   }
 }
 
-/** Send, wait, or dead-letter. A missing target is not a delivered page. */
+/**
+ * Send, wait, or dead-letter. A missing target is not a delivered page.
+ *
+ * Attempt states (delivery_attempts.status): 'sending' is written before the request; the request ends it as 'sent' (2xx), 'failed'
+ * (4xx: not taken, may be tried again) or 'uncertain' (no answer, or 5xx: it may have been received). 'sent' and 'uncertain' are
+ * final: nothing is sent again by a job. An uncertain attempt waits for a person to check the receiving system. A 'sending' attempt is
+ * another delivery in flight, or one whose worker stopped mid-request, so it is not sent again either.
+ */
 export function deliveryPlan(
   attempts: { status: string }[],
   target: DeliveryTarget,
-): { action: "send" | "dead" | "skip"; status: "pending" | "dead" | "NOT_CONFIGURED" | "sent" } {
+): { action: "send" | "dead" | "skip"; status: "pending" | "dead" | "NOT_CONFIGURED" | "sent" | "uncertain" | "sending" } {
   if (attempts.some((item) => item.status === "sent")) return { action: "skip", status: "sent" };
+  if (attempts.some((item) => item.status === "uncertain")) return { action: "skip", status: "uncertain" };
+  if (attempts.some((item) => item.status === "sending")) return { action: "skip", status: "sending" };
   if (target.kind === "none" || !("url" in target) || !target.url?.trim()) return { action: "skip", status: "NOT_CONFIGURED" };
   if (!deliveryUrlAllowed(target.url)) return { action: "dead", status: "dead" };
   const failed = attempts.filter((item) => item.status === "failed").length;

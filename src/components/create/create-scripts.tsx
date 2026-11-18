@@ -135,8 +135,8 @@ export function CreateScripts({ sessionId, canAdmin, language: draftLanguage, on
       </div>
       {seats && !seats.ok ? (
         <p className="text-sm text-fg-muted">
-          <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections">Open Settings, Connections</a> to add a key. No key? The same page can{" "}
-          <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections#claude-code-video-title">make the video free with Claude Code</a>.
+          <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections">Open Settings, Connections</a> to add a key. No key?{" "}
+          <a className="font-semibold text-fg-primary underline" href="/create?way=claude_code">Make the video free with Claude Code</a> from Create.
         </p>
       ) : null}
 

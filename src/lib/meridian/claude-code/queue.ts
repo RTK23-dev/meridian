@@ -78,20 +78,53 @@ export async function runnerSeen(sql: Sql, input: { organizationId: string; conn
   `;
 }
 
-export type RunnerStatus = { online: boolean; name: string | null; lastSeenAt: string | null; problems: string[] };
+/** One computer running the runner. */
+export type RunnerSeen = { online: boolean; name: string; lastSeenAt: string; problems: string[] };
 
-/** The workspace's most recently seen runner. Offline is said plainly; it is never guessed online. */
+/**
+ * The workspace's runners. The first four fields are the most recently seen runner (as before); `runners` lists every runner seen
+ * recently, most recent first, so a workspace with several computers shows them all.
+ */
+export type RunnerStatus = { online: boolean; name: string | null; lastSeenAt: string | null; problems: string[]; runners: RunnerSeen[] };
+
+/** How many runners the card lists. */
+export const RUNNERS_SHOWN = 10;
+
+/** The workspace's runners, most recently seen first. Offline is said plainly; a runner is never guessed online. */
 export async function runnerStatus(sql: Sql, organizationId: string, now: Date = new Date()): Promise<RunnerStatus> {
   const rows = await sql<{ name: string; last_seen_at: unknown; checks: unknown }>`
-    select name, last_seen_at, checks from claude_code_runners where organization_id = ${organizationId} order by last_seen_at desc limit 1
+    select name, last_seen_at, checks from claude_code_runners where organization_id = ${organizationId} order by last_seen_at desc limit ${RUNNERS_SHOWN * 3}
   `;
-  const row = rows[0];
-  if (!row) return { online: false, name: null, lastSeenAt: null, problems: [] };
-  const seen = new Date(row.last_seen_at as string);
-  const checks = parse<{ problems?: unknown }>(row.checks, {});
-  const problems = Array.isArray(checks.problems) ? checks.problems.filter((item): item is string => typeof item === "string").slice(0, 6) : [];
-  return { online: now.getTime() - seen.getTime() < RUNNER_ONLINE_MS, name: row.name, lastSeenAt: seen.toISOString(), problems };
+  // The same computer name under two links is one computer: its latest check-in counts.
+  const byName = new Map<string, RunnerSeen>();
+  for (const row of rows) {
+    if (byName.has(row.name)) continue;
+    const seen = new Date(row.last_seen_at as string);
+    const checks = parse<{ problems?: unknown }>(row.checks, {});
+    const problems = Array.isArray(checks.problems) ? checks.problems.filter((item): item is string => typeof item === "string").slice(0, 6) : [];
+    byName.set(row.name, { online: now.getTime() - seen.getTime() < RUNNER_ONLINE_MS, name: row.name, lastSeenAt: seen.toISOString(), problems });
+  }
+  const runners = [...byName.values()].slice(0, RUNNERS_SHOWN);
+  const latest = runners[0];
+  if (!latest) return { online: false, name: null, lastSeenAt: null, problems: [], runners: [] };
+  return { online: latest.online, name: latest.name, lastSeenAt: latest.lastSeenAt, problems: latest.problems, runners };
 }
+
+/** A progress label is at most this long. */
+export const PROGRESS_MAX = 120;
+
+/**
+ * A runner's progress label, made safe to store and show: one line, at most PROGRESS_MAX characters, and empty if it carries a web
+ * address or the connector's path (a label names a step; it never holds a link). It is data from the runner, shown as text.
+ */
+export function cleanProgress(value: string | undefined): string {
+  const text = [...String(value ?? "")].map((char) => (char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127 ? " " : char)).join("").replace(/\s+/g, " ").trim().slice(0, PROGRESS_MAX);
+  if (/https?:\/\/|\/api\/mcp\/|mrd_[A-Za-z0-9_-]{8,}/i.test(text)) return "";
+  return text;
+}
+
+/** A count the runner reported, or null when it gave none or gave something that is not a whole number of at least 0. */
+const countOrNull = (value: number | undefined, max: number): number | null => (typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= max ? value : null);
 
 /**
  * Puts back, or fails, every running job whose lease ran out: its runner stopped. A job is queued again until it has used its attempts,
@@ -132,7 +165,7 @@ export async function claimNext(sql: Sql, input: { organizationId: string; runne
     await tx`
       update claude_code_requests
       set status = 'running', attempt = ${attempt}, lease_token = ${token}, lease_expires_at = ${expires}, runner_name = ${input.runnerName.slice(0, 120)},
-          session_id = ${sessionId}, started_at = ${at}, finished_at = null, last_error = ''
+          session_id = ${sessionId}, started_at = ${at}, finished_at = null, last_error = '', progress = '', turns = null, duration_ms = null
       where id = ${row.id}
     `;
     const snapshot = parse<SourceSnapshot>(row.snapshot, { idea: row.idea, lines: [], refs: [] });
@@ -147,6 +180,12 @@ export type ReportInput = {
   state: "heartbeat" | "done" | "failed";
   /** Why it failed, in the runner's words. Stored trimmed; it is data. */
   error?: string;
+  /** What the job is doing now, as a short plain label ("Rendering"). Sent with a heartbeat, and with the end as the last step. */
+  progress?: string;
+  /** How many turns Claude Code took, reported at the end when Claude Code said so. */
+  turns?: number;
+  /** How long Claude Code ran, in milliseconds, reported at the end when Claude Code said so. */
+  durationMs?: number;
   now: Date;
 };
 
@@ -179,12 +218,20 @@ export async function reportJob(sql: Sql, input: ReportInput): Promise<ReportRes
   }
   if (input.state === "heartbeat") {
     const expires = new Date(input.now.getTime() + LEASE_MS).toISOString();
-    await sql`update claude_code_requests set lease_expires_at = ${expires} where id = ${input.requestId} and lease_token = ${input.leaseToken}`;
+    const progress = input.progress === undefined ? null : cleanProgress(input.progress);
+    await sql`
+      update claude_code_requests set lease_expires_at = ${expires}, progress = coalesce(${progress}, progress)
+      where id = ${input.requestId} and lease_token = ${input.leaseToken}
+    `;
     return { ok: true, status: "running", message: "Lease renewed." };
   }
+  const progress = input.progress === undefined ? null : cleanProgress(input.progress);
+  const turns = countOrNull(input.turns, 100_000);
+  const durationMs = countOrNull(input.durationMs, 7 * 24 * 3_600_000);
   const finish = async (status: "done" | "failed", error: string) => {
     await sql`
-      update claude_code_requests set status = ${status}, lease_token = null, lease_expires_at = null, finished_at = ${at}, last_error = ${error.replace(/\s+/g, " ").trim().slice(0, 600)}
+      update claude_code_requests set status = ${status}, lease_token = null, lease_expires_at = null, finished_at = ${at}, last_error = ${error.replace(/\s+/g, " ").trim().slice(0, 600)},
+        progress = coalesce(${progress}, progress), turns = ${turns}, duration_ms = ${durationMs}
       where id = ${input.requestId} and lease_token = ${input.leaseToken}
     `;
   };
@@ -210,7 +257,8 @@ export async function requeue(sql: Sql, input: { organizationId: string; id: str
   const expires = new Date(input.now.getTime() + 24 * 3_600_000).toISOString();
   const rows = await sql<{ id: string }>`
     update claude_code_requests
-    set status = 'open', attempt = 0, lease_token = null, lease_expires_at = null, last_error = '', finished_at = null, expires_at = ${expires}
+    set status = 'open', attempt = 0, lease_token = null, lease_expires_at = null, last_error = '', finished_at = null, expires_at = ${expires},
+        progress = '', turns = null, duration_ms = null
     where id = ${input.id} and organization_id = ${input.organizationId} and status in ('failed', 'claimed')
     returning id
   `;

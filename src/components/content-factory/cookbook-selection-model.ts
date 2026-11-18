@@ -49,7 +49,7 @@ export function selectionViewOf(proposal: Proposal): SelectionView {
         badge: top.resolved.badge,
         estimate,
         alternatives: proposal.alternatives,
-        confirmLabel: "Use this cookbook",
+        confirmLabel: "Use this style",
         confirm: { cookbookId: top.cookbookId, version: top.version, values: top.values },
         controls: top.controls,
       };
@@ -63,7 +63,7 @@ export function selectionViewOf(proposal: Proposal): SelectionView {
     case "none":
       return {
         state: "none",
-        message: "No cookbook can run with these inputs yet.",
+        message: "No style can run with these inputs yet.",
         reasons: proposal.reasons,
       };
     case "failed":

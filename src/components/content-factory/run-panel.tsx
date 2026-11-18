@@ -107,7 +107,7 @@ function DraftPanel({ sessionId, view, lastRefusal, onStarted, guided = false }:
       <CookbookChoicePanel sessionId={sessionId} onChoiceNeededChange={setChoiceNeeded} />
       <div className="flex flex-wrap items-center gap-3">
         <Button size="md" loading={busy} disabled={busy || blocked || choiceNeeded} aria-describedby={blocked || choiceNeeded ? "cf-start-reason" : undefined} onClick={() => void start()}>Make this video</Button>
-        {blocked || choiceNeeded ? <p id="cf-start-reason" className="text-sm text-fg-muted">{blocked ? (view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first.") : "Choose a cookbook above, then make the video."}</p> : null}
+        {blocked || choiceNeeded ? <p id="cf-start-reason" className="text-sm text-fg-muted">{blocked ? (view.problems.length > 0 ? "Add the items listed above in the chat or Settings, on the left, then make the video." : "Connect the engine first.") : "Choose a style above, then make the video."}</p> : null}
       </div>
       {refusal || lastRefusal.length > 0 ? (
         <div role="status" className="mt-4 space-y-1 text-sm">

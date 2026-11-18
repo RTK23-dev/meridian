@@ -41,6 +41,8 @@ function stubDrive(options: { failUploads?: boolean } = {}) {
     const url = String(input);
     const method = (init?.method ?? "GET").toUpperCase();
     if (url.startsWith("https://oauth2.googleapis.com/token")) return json({ access_token: "token-test", expires_in: 3600 });
+    // The id a small file is created under. Drive refuses a second create with the same id (409).
+    if (url.startsWith("https://www.googleapis.com/drive/v3/files/generateIds")) return json({ ids: [`file${randomUUID().replace(/-/g, "")}`] });
     if (url.startsWith("https://www.googleapis.com/drive/v3/files?") && method === "GET") {
       const q = decodeURIComponent(new URL(url).searchParams.get("q") ?? "");
       if (q.includes("application/vnd.google-apps.folder")) return json({ files: [{ id: "folder-1", createdTime: "2026-10-10T00:00:00Z" }] });
@@ -55,13 +57,14 @@ function stubDrive(options: { failUploads?: boolean } = {}) {
       if (options.failUploads) return new Response("backend unavailable", { status: 500 });
       const body = Buffer.from(init!.body as Uint8Array);
       const text = body.toString("latin1");
-      const metaStart = text.indexOf('{"name"');
+      const metaStart = text.indexOf('{"id"');
       const metaEnd = text.indexOf("\r\n--", metaStart);
-      const meta = JSON.parse(text.slice(metaStart, metaEnd)) as { name: string; appProperties: Record<string, string> };
+      const meta = JSON.parse(text.slice(metaStart, metaEnd)) as { id: string; name: string; appProperties: Record<string, string> };
+      if (files.has(meta.id)) return new Response("A file already exists with the provided ID.", { status: 409 });
       const mimeType = /Content-Type: ([^\r\n]+)\r\n\r\n/.exec(text.slice(metaEnd))?.[1] ?? "application/octet-stream";
       const mediaStart = text.indexOf("\r\n\r\n", metaEnd + 4) + 4;
       const media = Uint8Array.from(body.subarray(mediaStart, body.lastIndexOf("\r\n--")));
-      const id = `file-${randomUUID()}`;
+      const id = meta.id;
       files.set(id, { id, name: meta.name, bytes: media, mimeType, appProperties: meta.appProperties });
       return json({ id, name: meta.name, mimeType, size: String(media.byteLength) });
     }

@@ -218,9 +218,16 @@ try {
   // The first-run journey of a person who has not read the code: Market, the three outcomes, the sources, the budget and the engine.
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`${base}/`, { waitUntil: "networkidle" });
-  const brandLink = page.getByRole("link", { name: /Acceptance Brand/ }).first();
-  await brandLink.waitFor();
-  const brandPath = `/brands/${new URL(await brandLink.getAttribute("href"), base).pathname.match(/\/brands\/([^/]+)/)[1]}`;
+  // "/" reopens the brand a person last opened. With one brand, the Content page above redirects to that brand's page, so the overview
+  // may already be the brand's; otherwise the brand is found by its link on the workspace overview.
+  const landed = new URL(page.url()).pathname.match(/^\/brands\/([^/]+)/);
+  let brandPath;
+  if (landed && landed[1] !== "new") brandPath = `/brands/${landed[1]}`;
+  else {
+    const brandLink = page.getByRole("link", { name: /Acceptance Brand/ }).first();
+    await brandLink.waitFor();
+    brandPath = `/brands/${new URL(await brandLink.getAttribute("href"), base).pathname.match(/\/brands\/([^/]+)/)[1]}`;
+  }
   await page.goto(`${base}${brandPath}/market`, { waitUntil: "networkidle" });
   const runsBlock = page.getByText("Recent discovery runs").locator("..");
   await runsBlock.waitFor().catch(async (error) => {
@@ -617,13 +624,13 @@ try {
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
     await form.getByText("Browse the style library").click();
-    // Only the styles some cookbook carries are offered: the library lists those (Cinematic story has no cookbook yet).
+    // Only the styles some cookbook (shown as a style template) carries are offered: the library lists those (Cinematic story has none yet).
     for (const label of ["Product promo", "Explainer", "Talking head", "UGC style", "Tips list"]) assert.match(await form.innerText(), new RegExp(label));
     // Auto reads the research structure that repeats most (problem solution, in the seeded patterns) and says why.
-    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "auto" });
+    await form.getByLabel("Style", { exact: true }).selectOption({ value: "auto" });
     await form.getByText(/Auto picked Explainer because "problem solution"/).waitFor();
     // The Super preset: one different style per video.
-    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "super" });
+    await form.getByLabel("Style", { exact: true }).selectOption({ value: "super" });
     await form.getByLabel("Number of videos").fill("3");
     await form.getByLabel("Total batch budget (USD)").fill("7");
     await form.getByLabel("Sample of the first video").waitFor();
@@ -645,7 +652,7 @@ try {
     const form = page.getByRole("form", { name: "Create video variations" });
     await form.waitFor();
     await form.getByLabel("Source draft").selectOption({ label: "Acceptance reference draft" });
-    await form.getByLabel("Style (filters the cookbooks)").selectOption({ value: "orchestrator" });
+    await form.getByLabel("Style", { exact: true }).selectOption({ value: "orchestrator" });
     await form.getByText(/makes one paid model call/).waitFor();
     await form.getByLabel("Number of videos").fill("2");
     await form.getByLabel("Total batch budget (USD)").fill("3.5");

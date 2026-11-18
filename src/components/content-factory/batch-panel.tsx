@@ -327,30 +327,30 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
                 value={total}
                 onChange={(event) => setTotal(event.target.value)}
               />
-              <Field label="Style (filters the cookbooks)" hint="The cookbook decides each video's style, and it sets how the video is briefed. A style with no cookbook yet is shown, but cannot be chosen. The style does not change how the engine renders.">
+              <Field label="Style" hint="The style template decides each video's look, and it sets how the video is briefed. A style with no template yet is shown, but cannot be chosen. The style does not change how the engine renders.">
                 <SelectInput value={style} onChange={(event) => { setStyle(event.target.value); setCookbookId(""); }}>
                   <option value={STYLE_AUTO}>Auto from my research (a fixed rule, no model call)</option>
                   <option value={STYLE_ORCHESTRATOR}>Let the orchestrator choose (asks your decision engine)</option>
-                  <option value={STYLE_SUPER}>Super: a different cookbook style for each video</option>
+                  <option value={STYLE_SUPER}>Super: a different style for each video</option>
                   {BRIEF_STYLE_IDS.map((id) => (
-                    <option key={id} value={id} disabled={!carried.includes(id)}>{carried.includes(id) ? styleLabel(id) : `${styleLabel(id)} (no cookbook yet)`}</option>
+                    <option key={id} value={id} disabled={!carried.includes(id)}>{carried.includes(id) ? styleLabel(id) : `${styleLabel(id)} (no template yet)`}</option>
                   ))}
                 </SelectInput>
               </Field>
               {isSpecific ? (
-                <Field label="Cookbook" hint="Every video in the batch is made from this cookbook, and takes its style. Its controls can be changed on the cookbook.">
+                <Field label="Style template" hint="Every video in the batch is made from this template, and takes its style. Its controls can be changed on the Cookbooks page.">
                   {styleCookbooks.length > 0 ? (
                     <SelectInput value={chosenCookbookId} onChange={(event) => setCookbookId(event.target.value)}>
                       {styleCookbooks.map((cookbook) => <option key={cookbook.cookbookId} value={cookbook.cookbookId}>{cookbook.label}</option>)}
                     </SelectInput>
-                  ) : <p className="text-sm text-fg-muted">No cookbook carries this style yet.</p>}
+                  ) : <p className="text-sm text-fg-muted">No template carries this style yet.</p>}
                 </Field>
               ) : null}
-              {cookbookLibrary.isError ? <p role="alert" className="text-sm text-danger">The cookbooks could not be loaded, so a batch cannot be made. Try again.</p> : null}
-              {poolPresets.length === 0 && cookbookLibrary.isSuccess ? <p className="text-sm text-fg-muted">No cookbook in this brand carries a style yet, so a batch cannot be made.</p> : null}
+              {cookbookLibrary.isError ? <p role="alert" className="text-sm text-danger">The styles could not be loaded, so a batch cannot be made. Try again.</p> : null}
+              {poolPresets.length === 0 && cookbookLibrary.isSuccess ? <p className="text-sm text-fg-muted">No style template in this brand carries a style yet, so a batch cannot be made.</p> : null}
               {style === STYLE_AUTO ? <p className="text-sm text-fg-muted">{autoReason(topStructure, poolPresets)}</p> : null}
               {style === STYLE_ORCHESTRATOR ? <p className="text-sm text-fg-muted">When you create the videos, your active decision engine is asked once to rank the styles for this brand, the source instruction and your research, and the videos take the styles in that order. This makes one paid model call. If the engine is not connected, or does not answer, nothing is created and you are told why.</p> : null}
-              {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style that a cookbook carries, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(poolPresets.length, Math.max(1, variationCount || 1))} {Math.min(poolPresets.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
+              {style === STYLE_SUPER ? <p className="text-sm text-fg-muted">Each video gets the next style that a template carries, so a batch of {Math.max(1, variationCount || 1)} tries {Math.min(poolPresets.length, Math.max(1, variationCount || 1))} {Math.min(poolPresets.length, Math.max(1, variationCount || 1)) === 1 ? "style" : "styles"}.</p> : null}
               <details className="rounded-sharp border border-hairline p-3 text-sm">
                 <summary className="cursor-pointer font-semibold">Browse the style library</summary>
                 <ul className="mt-2 space-y-2">

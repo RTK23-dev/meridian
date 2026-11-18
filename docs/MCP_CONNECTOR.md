@@ -81,7 +81,7 @@ What the workspace needs before paid calls work:
 | Voice, images | The OpenRouter key (Settings, Connections). |
 | Images | A Studio image model (Settings, Models, Studio, Images). |
 | Decisions | A decision engine that is ready (Settings, Connections, Decisions) and the decision cap on Billing. |
-| Storing files | Nothing. Files are kept in Meridian's own database (up to 50 MB each). Writing to Google Drive is switched off in this version, so a connected Drive is not written to. |
+| Storing files | Nothing. Files are kept in Meridian's own database (up to 50 MB each), or in Google Drive when Drive is connected. |
 | Download links | `MEDIA_LINK_SECRET` (at least 32 characters) in the deployment environment. Without it, files are stored but not linked. |
 | Rendering in the chat | In claude.ai, allow this Meridian site in the code execution network settings, so the sandbox can download the files. |
 
@@ -177,9 +177,9 @@ Code:
   `database-store.ts`);
 - the Settings section `src/components/settings/claude-connector.tsx`.
 
-## One click from Settings, to Claude Code
+## One click from Create, to Claude Code
 
-Settings, Connections, **Make a video with Claude Code**: pick a brand, pick where the idea comes from, and click **Generate with Claude Code**.
+Create, **Free, with Claude Code on your computer** (`/create?way=claude_code`; Settings, Connections points there): pick a brand, pick where the idea comes from, and click **Generate with Claude Code**.
 
 - **Data Meridian already gathered**: the brand's best open opportunity (ranked by expected value) and the research patterns behind it.
 - **The Content Factory's latest plan**: the objective and brief of the brand's newest live plan.
@@ -196,7 +196,7 @@ pasted. A video made inside Meridian, with the engine and its review gates, is t
 in the Meridian folder on the computer that has Claude Code, and leave it running; after the first time `npm run claude:runner` is enough (the
 link is kept in `.meridian/runner.json`, readable only by you, and git ignores it).
 
-**What happens on a click.** A request is a job in a queue (migrations 0160 and 0163).
+**What happens on a click.** A request is a job in a queue (migrations 0160, 0163 and 0166).
 
 1. The runner asks Meridian for the next job every few seconds (`meridian_runner_next`). Two runners never get the same job.
 2. It starts **a fresh Claude Code conversation for that job** (`claude -p`). A retry starts fresh too. Nothing carries over from an earlier
@@ -209,9 +209,15 @@ link is kept in `.meridian/runner.json`, readable only by you, and git ignores i
    denied, not asked, because nobody is watching. Claude Code's command rules narrow what it does; they are not a sandbox.
 5. It uses **your own Claude Code sign-in.** An `ANTHROPIC_API_KEY` in the environment is left out, so nothing is billed to a key, and the
    job is told to spend nothing in Meridian (`budgetUsd` 0, no paid tool).
-6. The runner sends a heartbeat every 30 seconds. If it stops (the computer sleeps, the terminal closes), the job is queued again after three
+6. The runner reads Claude Code's events as they come (`--output-format stream-json --verbose`) and turns each into a short label: reading
+   the request, planning, following a skill, rendering, saving the video. The latest label goes to Meridian with the heartbeat (and at
+   once when it changes, at most every 10 seconds), and the card shows it: "Being made: Rendering". A label names the step only; the link,
+   commands and a tool's arguments never go into it (a skill's name does, when it is a plain name). At the end the runner reports how many
+   turns Claude Code took and how long it ran, when Claude Code said so, and the card shows them under the finished request.
+7. The runner sends a heartbeat every 30 seconds. If it stops (the computer sleeps, the terminal closes), the job is queued again after three
    minutes, up to three tries, then marked failed with the reason. A job is stopped after 45 minutes.
-7. **Done is checked, not believed.** When Claude Code exits cleanly, Meridian looks for a saved video on the request's project. If there is
+8. **Done is checked, not believed.** Claude Code must exit cleanly and end with its final result event, without an error flag; a run
+   that stops without that result is a failure. Then Meridian looks for a saved video on the request's project. If there is
    none, the request is marked failed and says why. A scripts-only request needs only its project.
 
 The card shows the runner (ready, connected but not ready with what is missing, or not running) and each request's state (waiting, being
@@ -221,6 +227,45 @@ next heartbeat. With no runner running, a request waits 24 hours, and its line c
 Before each job the runner checks this computer: Node 22, Claude Code installed and signed in, `ffmpeg` and `ffprobe`. A failed check is
 shown in the card in plain words, and no job is taken until it passes.
 
+**Start with the computer.** `npm run claude:runner -- --install` (after the link is saved) writes a per-user service, so the runner starts
+when you sign in and starts again if it stops:
+
+| System | File | Turn it on |
+| --- | --- | --- |
+| macOS | `~/Library/LaunchAgents/com.meridian.claude-runner.plist` | `launchctl load -w <that file>` |
+| Linux | `~/.config/systemd/user/meridian-claude-runner.service` | `systemctl --user daemon-reload` then `systemctl --user enable --now meridian-claude-runner.service` |
+| Windows | `meridian-claude-runner.cmd` in your Startup folder | starts at your next sign-in (or open the file) |
+
+The command prints exactly what to run and runs it for you only with `--install --now`. The file holds the full path of Node.js, the
+Meridian folder and your PATH, never the link: the runner reads that from `.meridian/runner.json` (a custom `MERIDIAN_RUNNER_HOME` is not
+carried into the service). `--sandbox` and `--keep-sessions` given with `--install` are kept. It restarts after 10 seconds when it stops,
+except when the link is missing or refused (exit code 2), which a restart cannot fix; macOS restarts it at most once a minute. Its output
+goes to `.meridian/runner-service.log`. On Linux a user service runs while you are signed in; `loginctl enable-linger "$USER"` keeps it
+running when you are not. `npm run claude:runner -- --uninstall` stops it and removes the file.
+
+**Several computers.** Run the runner on as many computers as you like in one workspace, each with its own name
+(`MERIDIAN_RUNNER_NAME`, or the computer's name). A job goes to whichever asks first; the database hands each job to exactly one
+(`for update skip locked`, tested with two runners asking at the same moment). The card lists every computer online: "Ready on laptop,
+desktop", and any that are connected but not ready, with what is missing on each.
+
+**Containment (`--sandbox`).** Claude Code's command rules match command text; they are not a sandbox. With
+`npm run claude:runner -- --sandbox`, each job's Claude Code runs inside the system's own sandbox:
+
+- Linux: bubblewrap (`bwrap`). The whole system is read-only, `/tmp` is private to the job, the Meridian folder and Claude Code's own
+  settings (`~/.claude`, `~/.claude.json`, where it keeps its sign-in) are writable, and the sandbox ends with the runner.
+- macOS: `sandbox-exec`, with a profile that denies writing anywhere but the Meridian folder, the temporary folders and Claude Code's
+  settings.
+
+**It limits files, not the network.** Claude Code must reach Anthropic and Meridian, so the network stays open inside the sandbox, and a
+job can still read what your user can read. If `--sandbox` is asked for and the sandbox program is not there (or on Windows), the runner
+says so and does not start: it never runs unsandboxed instead.
+
+**Stopping a job.** A cancelled, timed-out or interrupted job is stopped as a whole: Claude Code runs in its own process group, which gets
+SIGTERM and, ten seconds later, SIGKILL (on Windows, `taskkill /T`). Programs it started (node, ffmpeg) stop with it.
+
 **Not verified.** The queue, the runner's rules and the whole loop are tested with a stand-in for Claude Code. No run with the real Claude
-Code CLI is recorded: the flags are the documented ones (`-p`, `--model`, `--no-session-persistence`, `--permission-mode dontAsk`, `--mcp-config`,
-`--strict-mcp-config`, `--allowedTools`), and the first real run is the owner's to make.
+Code CLI is recorded: the flags are the documented ones (`-p`, `--model`, `--no-session-persistence`, `--output-format stream-json`,
+`--verbose`, `--permission-mode dontAsk`, `--mcp-config`, `--strict-mcp-config`, `--allowedTools`), the event shapes the progress labels read
+(`system`/`init`, `assistant` messages with `tool_use` parts, the final `result` with `num_turns` and `duration_ms`) are taken from Claude
+Code's documentation, and the first real run is the owner's to make. The service files are checked by their contents in tests; none has
+been loaded by launchd, systemd or Windows here. The sandbox-exec profile is untested on a Mac.

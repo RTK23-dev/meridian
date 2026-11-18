@@ -6,7 +6,7 @@ import { CREATE_SUGGESTIONS } from "./create-model";
  * The conversation on the Create page. Empty, it shows what the page can make, as three starting points a person can tap. With messages,
  * each one is a saved line of the draft, and a note says what has and has not happened: a message only saves text to a draft.
  */
-export function CreateThread({ messages, onSuggest }: { messages: Message[]; onSuggest: (text: string) => void }) {
+export function CreateThread({ messages, onSuggest, onFreeWay }: { messages: Message[]; onSuggest: (text: string) => void; onFreeWay?: () => void }) {
   if (messages.length === 0) {
     return (
       <section aria-labelledby="create-start" className="flex flex-col gap-6 pt-4">
@@ -29,9 +29,12 @@ export function CreateThread({ messages, onSuggest }: { messages: Message[]; onS
             </li>
           ))}
         </ul>
-        <p className="text-sm text-fg-muted">
-          No key yet? <a className="font-semibold text-fg-primary underline" href="/settings?tab=connections">Make a video free with Claude Code</a>: it runs on your own computer and saves the result here.
-        </p>
+        {onFreeWay ? (
+          <p className="text-sm text-fg-muted">
+            No key yet?{" "}
+            <button type="button" onClick={onFreeWay} className="font-semibold text-fg-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Make a video free with Claude Code</button>: it runs on your own computer and saves the result here.
+          </p>
+        ) : null}
       </section>
     );
   }
