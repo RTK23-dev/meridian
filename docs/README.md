@@ -2,7 +2,7 @@
 
 The [README](../README.md) says what Meridian is and how to run it. These documents go further. If a document and the app disagree, the app is what is running and the document should be corrected.
 
-Starting work on Meridian? Open [STATE_2026-10-28.md](STATE_2026-10-28.md) first: where it stands, measured, with what is built, tested, browser-checked and live.
+Starting work on Meridian? The current release is **1.1.0**: what it contains is in [CHANGELOG.md](../CHANGELOG.md), what is still unverified live is in [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md), and what to do when something breaks is in [RUNBOOK.md](RUNBOOK.md). [STATE_2026-10-28.md](STATE_2026-10-28.md) is an older, dated baseline.
 
 ## Run the product
 

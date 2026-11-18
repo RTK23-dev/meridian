@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased
+## 1.1.0 — 2026-11-18
+
+**Stable by the owner's decision, before the live checks.** Everything below is tested with fixtures, fake services, a seeded local app,
+a stand-in for the Claude Code CLI and PostgreSQL in CI; CI is green on the release commit. **No live provider run is recorded.** Still
+owed, and to be recorded with ids and costs as they happen: the runner with the real Claude Code CLI, one Create run with an OpenRouter
+key, one invitation and one password-reset email, one Facebook Page post, one voiceover (to confirm the per-character rate), one alert
+webhook and one Google Drive write. Calibration on real outcomes (200 are needed) has not started. See docs/RELEASE_CHECKLIST.md.
+
+**Upgrading from 1.1.0-beta.1.** Run the migrations (0159 to 0166; `npm run db:migrate`, or the Docker image runs them on start). New
+optional settings are listed in `.env.example`: the runner's (`CLAUDE_BIN`, `MERIDIAN_RUNNER_HOME`, `MERIDIAN_RUNNER_NAME`), backups
+(`BACKUP_KEEP`, `RESTORE_DATABASE_URL`, `PG*`), the load check, and `TOKEN_ENCRYPTION_KEY_PREVIOUS` for key rotation. Email
+(invitations, password reset) needs `EMAIL_API_URL` and its key; without them invitations show a link to pass on and password reset says
+it is not set up. Point an uptime monitor at `GET /api/ready`.
 
 - **TOKEN_ENCRYPTION_KEY can be changed without losing saved keys.** Set the old value as `TOKEN_ENCRYPTION_KEY_PREVIOUS` and the new one as `TOKEN_ENCRYPTION_KEY`: reads try the current key, then the previous one, and everything is encrypted with the current one. `npm run keys:rotate` (`-- --dry-run` to count only) re-encrypts `credential_vault`, `provider_secrets.sealed_token` and `sealed_refresh`, and `artifact_upload_sessions.session_uri` under the current key, in batches inside transactions; it is idempotent, prints counts per table.column only, leaves values neither key opens untouched and counted, and refuses to start without a distinct previous key. The two AES-256-GCM formats now live in `vault/crypto.ts`; the stored formats are unchanged. Tested on PGlite and a local PostgreSQL 16; `docs/RUNBOOK.md` has the procedure. A leaked key still means revoking saved provider keys at each provider.
 - **Backups proven by a restore, a readiness check, a load check and a runbook.** `npm run db:backup` (pg_dump with a checksum and row counts), `npm run db:restore` (into a new database; over the live one only with `--into-live` and the name typed back), and `npm run db:restore-drill` (restores the newest backup into a scratch database, migrates it, compares counts, PASS or FAIL), run weekly in `.github/workflows/restore-drill.yml`. `GET /api/ready` answers 200 or 503 with the database, migration and job-queue state for uptime monitors. `npm run load-check` measures p50/p95/p99 of the hot paths. `docs/RUNBOOK.md` says what to do when something is wrong. The drill passed here on PostgreSQL 16; the load check's numbers are from a dev server and are a baseline only.

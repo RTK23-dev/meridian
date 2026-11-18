@@ -22,3 +22,7 @@ under that direction, so they can be read, questioned and reversed. Each says wh
    Drive guard cannot be built small and testable, Drive writing stays off.
 8. **Phase 4 (calibration on real outcomes) is not started.** It needs 200 real outcomes; building more before real data exists would be
    guessing. Changes when: measured results start arriving from posted videos.
+
+9. **1.1.0 is released as stable before the live checks (owner's own decision, 2026-11-18).** This reverses decision 2 for the label
+   only: the release notes, the README and the checklist say plainly that no live provider run is recorded and list the checks still owed.
+   Nothing is called verified that was not run.

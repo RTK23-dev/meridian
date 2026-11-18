@@ -21,4 +21,4 @@ It does not invent a result. A step with no key, no account, or no bill says so 
 - [Product loop](Product-loop.md)
 - [Credentials](Credentials.md)
 
-This release is `1.1.0-beta.1`, a pre-release. Tests cover the loop with fixtures. A live provider run is recorded only after the keys are on the server.
+This release is `1.1.0`, stable by the owner's decision. Tests cover the loop with fixtures; no live provider run is recorded yet (see docs/RELEASE_CHECKLIST.md for the live checks still owed).

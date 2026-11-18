@@ -81,7 +81,7 @@ Keys for a workspace are saved in the app. A few values belong to the deployment
 
 ## Where it stands
 
-This is a pre-release, `1.1.0-beta.1`. Everything was checked with fixtures, fake transports, a seeded local app and PostgreSQL in CI. **No live provider run is recorded.** Live provider behavior, real credentials, billing and publishing are unverified until the keys are on the server and someone runs them.
+This is `1.1.0`, released as stable by the owner on 2026-11-18. Everything was checked with fixtures, fake transports, a seeded local app, a stand-in for the Claude Code CLI and PostgreSQL in CI. **No live provider run is recorded yet.** Live provider behavior, real credentials, billing, email and publishing are unverified until the keys are on the server and someone runs them; the live checks still owed are listed in [docs/RELEASE_CHECKLIST.md](docs/RELEASE_CHECKLIST.md).
 
 What still needs a key or a decision. The code path exists, and it stays not connected until the server has the credential or you set the number:
 

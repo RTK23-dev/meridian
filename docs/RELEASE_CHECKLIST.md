@@ -1,6 +1,6 @@
 # Release checklist: from beta to stable
 
-The current version is 1.1.0-beta.1, a pre-release. The gates below are for the stable label only: a pre-release goes out with the open ones listed in its notes. These gates must all be recorded before the label changes. A gate is recorded by writing the date, the commit, and the evidence (ids, costs, output) under it. A fixture result never counts for a live gate.
+The current version is 1.1.0. **The owner released it as stable on 2026-11-18 with the live gates below still open** (decision recorded in docs/decisions/DECISIONS_2026-11-18.md). Each open box is closed when its live run is recorded, with ids and costs. The gates below are for the stable label only: a pre-release goes out with the open ones listed in its notes. These gates must all be recorded before the label changes. A gate is recorded by writing the date, the commit, and the evidence (ids, costs, output) under it. A fixture result never counts for a live gate.
 
 ## Done (fixtures and recorded data)
 
@@ -20,6 +20,17 @@ The current version is 1.1.0-beta.1, a pre-release. The gates below are for the 
 - [ ] **Output check:** the owner looks at the videos and confirms they are close enough to what they wanted.
 - [ ] **CI:** every job is green on the release commit.
 
+## Added since 1.1.0-beta.1 (open, need a live run)
+
+- [ ] **Claude Code runner:** one video made by `npm run claude:runner` with the real Claude Code CLI, saved and marked Done; the job log kept.
+- [ ] **Create with a key:** one script run with an OpenRouter key, from a new workspace, timed.
+- [ ] **Email:** one invitation and one password-reset email delivered; the invitation accepted from its link.
+- [ ] **Facebook Page post:** one organic post, its receipt and post id recorded; a forced timeout shows "uncertain" and does not post twice.
+- [ ] **Voiceover cost:** one voiceover whose billed cost is compared with its hold (confirms the per-character rate).
+- [ ] **Alert webhook and Google Drive write:** one of each against the real service.
+- [ ] **Restore drill on the deployment's database** (`npm run db:restore-drill`), and `GET /api/ready` watched by an uptime monitor.
+
 ## Then
 
-For stable: change the version to 1.1.0 (no beta suffix), move the notes under it in CHANGELOG.md, and remove "pre-release" from the README, only after every box above has evidence next to it. The pre-release version change to 1.1.0-beta.1 was made before these gates, as a pre-release.
+1.1.0 is out. The next stable after it (1.1.1 or 1.2.0) waits on the boxes above having evidence next to them, and on CI being green on its
+release commit.
