@@ -24,3 +24,6 @@ coverage
 
 # Screenshots written by the browser flow scripts (scripts/content-factory-flow.mjs)
 test-results/
+
+# Database backups (npm run db:backup). Copy them off this machine; never commit them.
+backups/

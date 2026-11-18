@@ -36,6 +36,7 @@ import { Route as AppUsageRouteImport } from './routes/_app/usage'
 import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
 import { Route as ApiEngineMediaRouteImport } from './routes/api/engine-media'
 import { Route as ApiHealthRouteImport } from './routes/api/health'
+import { Route as ApiReadyRouteImport } from './routes/api/ready'
 import { Route as AppBrandsNewRouteImport } from './routes/_app/brands/new'
 import { Route as ApiAssetsAssetIdRouteImport } from './routes/api/assets/$assetId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -198,6 +199,11 @@ const ApiEngineMediaRoute = ApiEngineMediaRouteImport.update({
 const ApiHealthRoute = ApiHealthRouteImport.update({
   id: '/api/health',
   path: '/api/health',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReadyRoute = ApiReadyRouteImport.update({
+  id: '/api/ready',
+  path: '/api/ready',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppBrandsNewRoute = AppBrandsNewRouteImport.update({
@@ -380,6 +386,7 @@ export interface FileRoutesByFullPath {
   '/webhooks': typeof AppWebhooksRoute
   '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/ready': typeof ApiReadyRoute
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -436,6 +443,7 @@ export interface FileRoutesByTo {
   '/webhooks': typeof AppWebhooksRoute
   '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/ready': typeof ApiReadyRoute
   '/': typeof AppIndexRoute
   '/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -495,6 +503,7 @@ export interface FileRoutesById {
   '/_app/webhooks': typeof AppWebhooksRoute
   '/api/engine-media': typeof ApiEngineMediaRoute
   '/api/health': typeof ApiHealthRoute
+  '/api/ready': typeof ApiReadyRoute
   '/_app/': typeof AppIndexRoute
   '/_app/brands/new': typeof AppBrandsNewRoute
   '/api/assets/$assetId': typeof ApiAssetsAssetIdRoute
@@ -555,6 +564,7 @@ export interface FileRouteTypes {
     | '/webhooks'
     | '/api/engine-media'
     | '/api/health'
+    | '/api/ready'
     | '/brands/new'
     | '/api/assets/$assetId'
     | '/api/auth/$'
@@ -611,6 +621,7 @@ export interface FileRouteTypes {
     | '/webhooks'
     | '/api/engine-media'
     | '/api/health'
+    | '/api/ready'
     | '/'
     | '/brands/new'
     | '/api/assets/$assetId'
@@ -669,6 +680,7 @@ export interface FileRouteTypes {
     | '/_app/webhooks'
     | '/api/engine-media'
     | '/api/health'
+    | '/api/ready'
     | '/_app/'
     | '/_app/brands/new'
     | '/api/assets/$assetId'
@@ -711,6 +723,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   ApiEngineMediaRoute: typeof ApiEngineMediaRoute
   ApiHealthRoute: typeof ApiHealthRoute
+  ApiReadyRoute: typeof ApiReadyRoute
   ApiAssetsAssetIdRoute: typeof ApiAssetsAssetIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiDriveCallbackRoute: typeof ApiDriveCallbackRoute
@@ -914,6 +927,13 @@ declare module '@tanstack/react-router' {
       path: '/api/health'
       fullPath: '/api/health'
       preLoaderRoute: typeof ApiHealthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/ready': {
+      id: '/api/ready'
+      path: '/api/ready'
+      fullPath: '/api/ready'
+      preLoaderRoute: typeof ApiReadyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/brands/new': {
@@ -1210,6 +1230,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   ApiEngineMediaRoute: ApiEngineMediaRoute,
   ApiHealthRoute: ApiHealthRoute,
+  ApiReadyRoute: ApiReadyRoute,
   ApiAssetsAssetIdRoute: ApiAssetsAssetIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiDriveCallbackRoute: ApiDriveCallbackRoute,

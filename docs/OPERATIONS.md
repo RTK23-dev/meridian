@@ -44,6 +44,8 @@ The check covers settings only. It does not prove the database is reachable or t
 
 ## Health
 
+For what to do when something is wrong, follow [RUNBOOK.md](RUNBOOK.md). `GET /api/ready` is the readiness check for uptime monitors.
+
 `GET /api/health` answers `{ "status": "ok" }` when the server is up. It does not read the database.
 `GET /api/health?detail=1` returns operational detail for the signed-in workspace, to a workspace admin only. Put only the liveness
 form behind a public load balancer.

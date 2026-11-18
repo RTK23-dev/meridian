@@ -1,0 +1,67 @@
+name: Restore drill
+
+# Proves the backup path end to end on a throwaway database: migrate, seed a small synthetic fixture, `npm run db:backup`, then
+# `npm run db:restore-drill`, which restores the newest backup into a scratch database, runs the migrator on it, compares row counts and
+# prints PASS or FAIL. The job fails on FAIL. It never touches a deployment's database. See docs/RUNBOOK.md, "Reading the restore drill".
+on:
+  schedule:
+    # Mondays 04:17 UTC.
+    - cron: "17 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ONNXRUNTIME_NODE_INSTALL: skip
+
+jobs:
+  restore-drill:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        # pgvector is needed: migration 0019 creates the vector extension, which the plain postgres:16 image does not include.
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: meridian
+          POSTGRES_PASSWORD: meridian
+          POSTGRES_DB: meridian
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U meridian -d meridian"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://meridian:meridian@127.0.0.1:5432/meridian
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install the PostgreSQL 16 client tools
+        # pg_dump and pg_restore must be at least the server's major version (16).
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-16
+          echo "/usr/lib/postgresql/16/bin" >> "$GITHUB_PATH"
+      - name: Migrate the database
+        run: node scripts/migrate.mjs
+      - name: Seed a small synthetic fixture
+        run: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f scripts/restore-drill-seed.sql
+      - name: Back up
+        run: npm run db:backup
+      - name: Restore drill
+        run: npm run db:restore-drill
+      - name: Keep the backup for a week
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: restore-drill-backup
+          path: backups/
+          retention-days: 7
+          if-no-files-found: ignore
