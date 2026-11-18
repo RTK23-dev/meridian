@@ -56,6 +56,7 @@ form behind a public load balancer.
   after they have been applied.
 - Back up with `pg_dump`. Restore into an empty database and point `DATABASE_URL` at it.
 - Saved keys are encrypted with `TOKEN_ENCRYPTION_KEY`. A backup without that key still restores, but its saved keys cannot be read.
+  After a key change (`npm run keys:rotate`, see `docs/RUNBOOK.md`), a backup taken before it needs the old key: keep it with that backup.
 
 ## Artifacts and exports
 

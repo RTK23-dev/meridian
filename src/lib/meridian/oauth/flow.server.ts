@@ -1,4 +1,5 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { decryptionKeys, openCompactWithKeys, sealCompact } from "../vault/crypto.ts";
 import { sendWithRetry, type Transport } from "../providers/http.ts";
 
 export type OauthProvider = "meta" | "tiktok" | "google";
@@ -169,27 +170,20 @@ export async function refreshOauthToken(
   return { accessToken: token, refreshToken: text(result.json, "refresh_token") || input.refreshToken, expiresIn: numberOrNull(result.json, "expires_in") };
 }
 
+/** Seals a token with the current key, in the compact format (vault/crypto.ts). */
 export function sealSecret(plain: string, keyRaw: string): string | { error: string } {
   if (!keyRaw.trim()) return { error: "TOKEN_ENCRYPTION_KEY is not configured. The token was not stored." };
-  const key = createHash("sha256").update(keyRaw).digest();
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const encrypted = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return Buffer.concat([iv, tag, encrypted]).toString("base64");
+  return sealCompact(plain, keyRaw);
 }
 
+/**
+ * Opens a sealed token with the current key, then with TOKEN_ENCRYPTION_KEY_PREVIOUS when it is set (decryptionKeys). Throws
+ * when no key opens it, as before.
+ */
 export function openSecret(sealed: string, keyRaw: string): string | { error: string } {
   if (!keyRaw.trim()) return { error: "TOKEN_ENCRYPTION_KEY is not configured." };
-  const bytes = Buffer.from(sealed, "base64");
-  if (bytes.length < 29) return { error: "The stored token could not be read." };
-  const key = createHash("sha256").update(keyRaw).digest();
-  const iv = bytes.subarray(0, 12);
-  const tag = bytes.subarray(12, 28);
-  const encrypted = bytes.subarray(28);
-  const decipher = createDecipheriv("aes-256-gcm", key, iv);
-  decipher.setAuthTag(tag);
-  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString("utf8");
+  if (Buffer.from(sealed, "base64").length < 29) return { error: "The stored token could not be read." };
+  return openCompactWithKeys(sealed, decryptionKeys(keyRaw)).plaintext;
 }
 
 function text(value: unknown, key: string): string {

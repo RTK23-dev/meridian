@@ -51,9 +51,19 @@ What to do when something is wrong, in order. Every command here exists in `pack
 - Connector link (the `/api/mcp/...` address, also in a runner's `.meridian/runner.json`): Settings, Connections, Chat connector, Revoke.
   It answers nothing from then on. Make a new one and start the runner with it (`npm run claude:runner -- <new link>`).
 - A provider key: replace it on Settings, Connections (the saved key is overwritten), then revoke the old key at the provider.
-- `TOKEN_ENCRYPTION_KEY` (encrypts saved keys and tokens): this version has no tool that re-encrypts saved keys under a new value.
-  Changing it makes every saved key and token unreadable, so they must all be saved again. Treat a leak of it as a leak of every saved key:
-  revoke them at each provider, set a new value, save new keys.
+- `TOKEN_ENCRYPTION_KEY` (encrypts saved keys, OAuth tokens, the Drive connection and Drive upload sessions). To change it without
+  losing what is saved:
+  1. Set the old value as `TOKEN_ENCRYPTION_KEY_PREVIOUS` and a new long random value as `TOKEN_ENCRYPTION_KEY`, in every process
+     (web, worker, scheduler), and restart them. Reads try the new key, then the old one; everything newly saved uses the new one.
+  2. `npm run keys:rotate -- --dry-run` (needs `DATABASE_URL`). It changes nothing and prints, per table.column, how many values are
+     re-encryptable, already current, and unreadable with both keys.
+  3. `npm run keys:rotate`. It re-encrypts every value under the new key, in batches inside transactions, and prints the same counts.
+     It is safe to run again; a second run changes nothing. Values neither key opens are left as they are and counted, never deleted:
+     save those keys or connections again. It refuses to start when `TOKEN_ENCRYPTION_KEY_PREVIOUS` is unset or equals the new key.
+  4. Remove `TOKEN_ENCRYPTION_KEY_PREVIOUS` and restart.
+
+  A leaked key still means revoking the saved provider keys and tokens at each provider and saving new ones: anyone with the old key
+  and a copy of the database (or a backup) can read them, and re-encrypting does not change that.
 - `BETTER_AUTH_SECRET`: set a new value and restart; everyone is signed out.
 
 ## Restoring from a backup

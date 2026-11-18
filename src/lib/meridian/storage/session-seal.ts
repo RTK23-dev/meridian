@@ -5,7 +5,19 @@
  */
 import { decryptPayload, encryptPayload } from "../vault/crypto.ts";
 
-const SEALED_PREFIX = "sealed:v1:";
+export const SEALED_PREFIX = "sealed:v1:";
+
+/** The envelope inside a stored sealed URI, or null when the value is not a sealed URI. Opens nothing. */
+export function sealedSessionEnvelope(stored: string): { ciphertext: string; iv: string; tag: string } | null {
+  if (!stored.startsWith(SEALED_PREFIX)) return null;
+  try {
+    const parsed = JSON.parse(Buffer.from(stored.slice(SEALED_PREFIX.length), "base64url").toString("utf8")) as Record<string, unknown>;
+    const { ciphertext, iv, tag } = parsed;
+    return typeof ciphertext === "string" && typeof iv === "string" && typeof tag === "string" ? { ciphertext, iv, tag } : null;
+  } catch {
+    return null;
+  }
+}
 
 /** A sealed URI could not be sealed or opened. The message never includes the URI or the key. */
 export class SessionSealError extends Error {

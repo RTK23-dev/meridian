@@ -3,10 +3,11 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { cycloneApiKey, emailApiKey, externalSemanticKey, tokenEncryptionKey, webhookSecret } from "./secret-settings.ts";
+import { cycloneApiKey, emailApiKey, externalSemanticKey, tokenEncryptionKey, tokenEncryptionKeyPrevious, webhookSecret } from "./secret-settings.ts";
 
 const ACCESSORS = [
   ["tokenEncryptionKey", tokenEncryptionKey, "TOKEN_ENCRYPTION_KEY"],
+  ["tokenEncryptionKeyPrevious", tokenEncryptionKeyPrevious, "TOKEN_ENCRYPTION_KEY_PREVIOUS"],
   ["externalSemanticKey", externalSemanticKey, "EXTERNAL_SEMANTIC_KEY"],
   ["emailApiKey", emailApiKey, "EMAIL_API_KEY"],
   ["cycloneApiKey", cycloneApiKey, "CYCLONE_API_KEY"],
@@ -22,7 +23,7 @@ describe("the secret accessors return the raw value", () => {
   }
 });
 
-// Every read of the five names is in this folder. A new reader calls an accessor instead of reading the environment itself.
+// Every read of these names is in this folder. A new reader calls an accessor instead of reading the environment itself.
 const NAMES = ACCESSORS.map(([, , variable]) => variable).join("|");
 const DIRECT_READ = new RegExp(`process\\.env(\\.(${NAMES})\\b|\\[["'](${NAMES})["']\\])`);
 const SRC_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
@@ -38,7 +39,7 @@ function appFiles(dir: string): string[] {
 }
 
 describe("the environment is read for a secret in one place", () => {
-  it("no app file reads one of the five names from process.env outside secret-settings.ts", () => {
+  it("no app file reads one of these names from process.env outside secret-settings.ts", () => {
     const offenders = appFiles(SRC_ROOT)
       .map((path) => relative(SRC_ROOT, path))
       .filter((rel) => rel !== THIS_MODULE)

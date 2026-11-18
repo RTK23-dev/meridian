@@ -130,7 +130,8 @@ A Factory run waits at each step that spends or publishes, unless its automation
 
 1. Create a PostgreSQL 16 database with the pgvector extension available (the `pgvector/pgvector:pg16` image includes it; a plain `postgres:16` does not), and set `DATABASE_URL`.
 2. Set `BETTER_AUTH_URL` to the public address, and `BETTER_AUTH_SECRET` and `TOKEN_ENCRYPTION_KEY` to long random values.
-   Keep `TOKEN_ENCRYPTION_KEY` safe: saved keys cannot be read without it.
+   Keep `TOKEN_ENCRYPTION_KEY` safe: saved keys cannot be read without it. To change it later, follow "A connector link or a key
+   leaked" in `docs/RUNBOOK.md` (`TOKEN_ENCRYPTION_KEY_PREVIOUS` and `npm run keys:rotate`).
 3. Set `NODE_ENV=production`. Do not set `MERIDIAN_TESTING_RUNTIME`; it enables the test providers.
 4. `npm run build` compiles the app and applies the migrations.
 5. Start the web process, then start the worker (`npm run worker`) and the scheduler (`npm run scheduler`). Without the worker,
