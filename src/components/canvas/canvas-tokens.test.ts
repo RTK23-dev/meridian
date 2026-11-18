@@ -37,6 +37,7 @@ const TEXT_PAIRS: Array<[string, string]> = [
   ["kc-card-muted", "kc-card-mid"],
   ["kc-card-muted", "kc-card-end"],
   ["kc-card-ink", "kc-note-body"],
+  ["kc-card-muted", "kc-note-body"],
   ["kc-later-ink", "kc-later"],
   ["kc-on-vermilion", "kc-vermilion"],
   ["kc-on-badge", "kc-badge"],

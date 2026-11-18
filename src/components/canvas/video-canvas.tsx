@@ -170,6 +170,8 @@ export function VideoCanvas({ projectId, onProject }: { projectId: string | null
         ) : null}
 
         <div ref={stageRef} className="kc-stage">
+          {/* The page title is the h1; the steps and the side column are its sections, so each card's h3 sits under an h2. */}
+          <h2 className="sr-only">The steps of the video</h2>
           {error ? <div className="absolute inset-x-4 top-20 z-20"><ErrorNotice>{errorText(error)}</ErrorNotice></div> : null}
           {topBar}
           {wide ? (

@@ -30,7 +30,8 @@ const pad = (n: number) => String(n).padStart(2, "0");
 /** One step of the video as a card. The whole card opens the step; its words come from what is stored, never from a guess. */
 export function StepCard({ node, files, empty = false, onOpen, style }: { node: CanvasNode; files: CanvasFile[]; empty?: boolean; onOpen: () => void; style?: React.CSSProperties }) {
   const tone = node.state === "settled" || node.state === "working" || node.state === "options" ? "kc-card" : node.state === "yours" ? "kc-card-yours" : "kc-card-later";
-  const muted = node.state === "yours" ? "opacity-80" : tone === "kc-card" ? "kc-card-muted" : "";
+  // Black on vermilion reads at 4.6:1, so the choice card's words stay full black; a faded black would not.
+  const muted = tone === "kc-card" ? "kc-card-muted" : "";
   const video = node.phase === "render" || node.phase === "deliver" ? files.find((file) => file.kind === "video" && file.url) : undefined;
   const image = node.phase === "assets" ? files.find((file) => file.kind === "image" && file.url) : undefined;
   const words = NODE_STATE_WORDS[node.state];
@@ -41,7 +42,7 @@ export function StepCard({ node, files, empty = false, onOpen, style }: { node: 
       {node.state === "settled" && node.decidedBy ? <DeciderPuck who={node.decidedBy} settled className="absolute -left-3 -top-3" /> : node.state !== "later" && node.state !== "stopped" ? <DeciderPuck who={node.decides === "person" ? "person" : "chat"} settled={false} className="absolute -left-3 -top-3" /> : null}
       <div className="flex items-start justify-between gap-2">
         <DotMatrix text={pad(node.index + 1)} dot={2.4} gap={1.2} label={`Step ${node.index + 1}`} />
-        <span className={cn("kc-chip inline-flex items-center gap-1.5 px-2 py-0.5 text-caption font-semibold", tone === "kc-card" ? "bg-black/25" : "bg-black/10")}>
+        <span className={cn("kc-chip inline-flex items-center gap-1.5 px-2 py-0.5 text-caption font-semibold", tone === "kc-card" ? "bg-black/25" : tone === "kc-card-yours" ? "bg-black text-white" : "bg-black/10")}>
           {node.state === "working" || node.state === "options" ? <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--kc-vermilion)]" /> : null}
           {words}
         </span>
@@ -101,7 +102,7 @@ export function FilesCard({ files, onOpen, style }: { files: CanvasFile[]; onOpe
             <span className={cn("grid flex-1 place-items-center rounded-[12px]", tone)}>
               <span className="flex flex-col items-center gap-1">
                 <Icon aria-hidden="true" className="size-6" />
-                <span className="kc-chip bg-black/15 px-1.5 text-caption">{chip}</span>
+                <span className="kc-chip bg-black px-1.5 text-caption text-white">{chip}</span>
               </span>
             </span>
             <span className="px-0.5 text-caption font-semibold">{label}</span>
