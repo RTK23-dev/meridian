@@ -31,6 +31,8 @@ import { getDecisionEngines, getGenerationCatalogue, getGenerationModels, getGem
 import { getBillingPage } from "@/lib/meridian/billing/actions";
 import { listMcpConnectors } from "@/lib/meridian/mcp/actions";
 import { getClaudeCodeSetup } from "@/lib/meridian/claude-code/actions";
+import { getVideoProject, listVideoProjects } from "@/lib/meridian/mcp/project-actions";
+import { canvasRefetchMs } from "@/components/canvas/canvas-model";
 import { getUncertainGenerationHolds } from "@/lib/meridian/providers/hold-review-actions";
 import { cancelJob, getJobDetail, getWorkerHealth, listJobs, listUsage, retryJob } from "@/lib/meridian/jobs/actions";
 import { getNotificationPreferences } from "@/lib/meridian/observability/actions";
@@ -462,6 +464,30 @@ export const useClaudeCodeSetupQuery = (organizationId: string) => {
     // While a video is waiting or being made, the card follows it. Otherwise it checks now and then whether the runner is online.
     refetchInterval: (query) => (query.state.data?.requests.some((request) => request.status === "open" || request.status === "running") ? 4_000 : 20_000),
     enabled: ready && !!organizationId,
+  });
+};
+
+/** The workspace's video projects (made by a chat or Claude Code through the connector), newest first. */
+export const useVideoProjectsQuery = (organizationId: string) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    queryKey: userScopedQueryKey(userId, qk.videoProjects(organizationId)),
+    queryFn: () => listVideoProjects({ data: { organizationId } }),
+    staleTime: 5_000,
+    refetchInterval: 20_000,
+    enabled: ready && !!organizationId,
+  });
+};
+
+/** One video project on the canvas. While a chat is making a step it is followed every few seconds; otherwise now and then. */
+export const useVideoProjectQuery = (organizationId: string, projectId: string | null) => {
+  const { userId, ready } = useSession();
+  return useQuery({
+    queryKey: userScopedQueryKey(userId, qk.videoProject(organizationId, projectId ?? "")),
+    queryFn: () => getVideoProject({ data: { organizationId, projectId: projectId ?? "" } }),
+    staleTime: 2_000,
+    refetchInterval: (query) => canvasRefetchMs(query.state.data ?? null),
+    enabled: ready && !!organizationId && !!projectId,
   });
 };
 

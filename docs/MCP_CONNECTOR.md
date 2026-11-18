@@ -62,6 +62,14 @@ The answers create the project (`meridian_project_create`), which returns the pl
 
 Every tool answer ends with the exact next step, so a chat can resume a video at any time (`meridian_project`).
 
+**The canvas (`/canvas`).** Every project is also a board in the app: the brief, the seven phases and the files, joined by wires, with
+who settled each step and what was settled. An Orchestrator project is followed while the chat makes it (re-read every 4 seconds while a
+chat step is open). In Studio and Guided mode, a person's checkpoint that has options can be settled on the canvas instead of in the chat:
+the person picks an option or writes their own words, and the checkpoint is resolved with `decidedBy: "person"` under the same rules
+(`canvas-decisions.ts`, then `checkpointProblem` under the row lock). The canvas never settles a chat's step. A member can also reopen a
+settled step, switch the mode, or stop the video; each change is written to the audit log. A viewer can look only. Media files play in the
+canvas only when the server has `MEDIA_LINK_SECRET` to sign their links.
+
 **One-click starters.** The connector also offers MCP prompts that a client can show in its menu: *Make a Meridian video*, *Make a
 video in Studio mode* and *Resume a Meridian video*.
 

@@ -29,7 +29,7 @@ test("workspace pages list the five places, with the workspace screens under the
   const groups = sidebarGroups({ reviewCount: 4 });
   assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
   assert.deepEqual(groups[0]?.items.map((item) => item.to), ["/", "/alerts"]);
-  assert.deepEqual(groups[1]?.items.map((item) => item.to), ["/create"], "Create is the one workspace screen for making");
+  assert.deepEqual(groups[1]?.items.map((item) => item.to), ["/create", "/canvas"], "Create starts a video; the canvas follows it");
   assert.deepEqual(groups[2]?.items.map((item) => item.to), ["/exports"]);
   assert.deepEqual(groups[3]?.items, [], "Insights needs a brand, so it has no screens here");
   assert.deepEqual(groups[4]?.items.map((item) => item.id), ["settings", "setup", "integrations", "jobs", "engine-ops"]);
@@ -41,8 +41,8 @@ test("workspace pages list the five places, with the workspace screens under the
 test("brand pages list the five places, with the brand screens under Home, Create and Insights", () => {
   const groups = sidebarGroups({ brandId: "brand-1", reviewCount: null });
   assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
-  // Four screens are the workspace's own, and the rest are this brand's.
-  const workspaceLevel = new Set(["/", "/alerts", "/exports", "/create"]);
+  // Five screens are the workspace's own, and the rest are this brand's.
+  const workspaceLevel = new Set(["/", "/alerts", "/exports", "/create", "/canvas"]);
   const brandItems = groups.slice(0, -1).flatMap((group) => group.items);
   for (const item of brandItems) assert.equal(workspaceLevel.has(item.to) || item.to === "/brands/brand-1" || item.to.startsWith("/brands/brand-1/"), true, item.to);
   const settingsItems = groups[groups.length - 1]?.items ?? [];
@@ -57,7 +57,7 @@ test("the rail lists the five places: Alerts and Exports have places, and the re
     assert.ok(ids.includes("alerts") && ids.includes("exports"), "Alerts is under Home and Exports under Library");
   }
   const brandIds = sidebarGroups({ brandId: "brand-1", reviewCount: null }).flatMap((group) => group.items.map((item) => item.id));
-  assert.equal(brandIds.length, 17, "Home 3, Create 5, Library 1, Insights 3 and Settings 5");
+  assert.equal(brandIds.length, 18, "Home 3, Create 6, Library 1, Insights 3 and Settings 5");
 });
 
 test("every screen in the rail is in exactly one place", () => {
@@ -202,7 +202,7 @@ function itemIds(groups: ReturnType<typeof sidebarGroups>, groupId: string): str
 
 test("the brand rail opens the Create page from the Create place, and keeps Calibration under Insights", () => {
   const groups = sidebarGroups({ brandId: "b1", reviewCount: null });
-  assert.deepEqual(itemIds(groups, "create"), ["create", "cookbooks", "brain", "products", "pages"], "Create is the one page for making; cookbooks, brain, products and pages are their own screens");
+  assert.deepEqual(itemIds(groups, "create"), ["create", "canvas", "cookbooks", "brain", "products", "pages"], "Create is the one page for starting; the canvas follows each video; cookbooks, brain, products and pages are their own screens");
   const create = groups.flatMap((group) => group.items).find((item) => item.id === "create");
   assert.equal(create?.to, "/create", "the rail item opens the one Create page");
   assert.deepEqual(itemIds(groups, "insights"), ["market", "intelligence", "calibration"]);
@@ -220,6 +220,8 @@ test("connected accounts are a section of the content page, and notification pre
 test("workspace pages show the five places, and Settings holds the settings screens", () => {
   const groups = sidebarGroups({ reviewCount: null });
   assert.deepEqual(groups.map((group) => group.id), ["home", "create", "library", "insights", "settings"]);
+  assert.deepEqual(itemIds(groups, "create"), ["create", "canvas"], "the video canvas sits beside Create");
+  assert.equal(placeOf("/canvas"), "create");
   assert.ok(itemIds(groups, "settings").includes("integrations"));
 });
 

@@ -55,6 +55,15 @@ test("every corner is the one sharp radius, so no rounded-md, -lg, -xl or -2xl r
   assert.deepEqual(offenders(/(?<![\w-])rounded-(?:sm|md|lg|xl|2xl|3xl)(?![\w-])/), []);
 });
 
+test("a soft corner appears only on the video canvas (owner direction 2026-11-18); every other screen keeps the one sharp radius", () => {
+  assert.deepEqual(offenders(/(?<![\w-])rounded-\[(?!2px\])[^\]]+\]/).filter((path) => !/^\/?components\/canvas\//.test(path)), []);
+  const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
+  for (const match of css.matchAll(/border-radius:\s*([^;]+);/g)) {
+    const selector = css.slice(css.lastIndexOf("}", match.index) + 1, css.lastIndexOf("{", match.index)).split("\n").pop()!.trim();
+    if (!selector.startsWith(".kc")) assert.match(match[1].trim(), /^var\(--radius-sharp\)|^var\(--radius-lg\)|^2px|!important$/, `${selector}: border-radius: ${match[1]}`);
+  }
+});
+
 test("no text is smaller than 11 px", () => {
   assert.deepEqual(offenders(/text-\[10px\]/), []);
 });
@@ -69,9 +78,16 @@ test("no legacy colour variable is written in the app", () => {
   assert.deepEqual(offenders(/var\(--color-/), []);
 });
 
-test("the stylesheet casts no shadow: every box-shadow is none", () => {
+test("the stylesheet casts no shadow outside the video canvas: every other box-shadow is none", () => {
+  // Owner direction 2026-11-18: the video canvas (.kc, components/canvas) follows the owner's Katana reference, with one soft shadow under
+  // its frame and cards, drawn only from its two shadow tokens. Every other surface keeps the rule: a layer is a hairline edge.
   const css = readFileSync(new URL("../styles.css", import.meta.url), "utf8");
-  for (const match of css.matchAll(/box-shadow:\s*([^;]+);/g)) assert.equal(match[1].trim().replace(/\s*!important/, ""), "none", `box-shadow: ${match[1]}`);
+  for (const match of css.matchAll(/box-shadow:\s*([^;]+);/g)) {
+    const selector = css.slice(css.lastIndexOf("}", match.index) + 1, css.lastIndexOf("{", match.index)).split("\n").pop()!.trim();
+    const value = match[1].trim().replace(/\s*!important/, "");
+    if (/^\.kc-[a-z-]+$/.test(selector)) assert.match(value, /^var\(--kc-(?:card-)?shadow\)$/, `${selector}: box-shadow: ${value}`);
+    else assert.equal(value, "none", `${selector}: box-shadow: ${value}`);
+  }
 });
 
 test("no infinite animation outlives reduced motion: the spinner and the running edge stop under it", () => {

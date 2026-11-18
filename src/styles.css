@@ -343,6 +343,130 @@ details > summary:hover { color: var(--color-fg); }
 .orch-edge { stroke-dasharray: 1; animation: orch-draw 480ms ease-out both; }
 
 
+/* The video canvas (owner direction 2026-11-18: the owner's reference images are "the ultimate visual reference for the Katana style").
+   Everything here is scoped to .kc, the canvas frame, so the rest of the app keeps its rules. The canvas alone has a soft radius, one soft
+   drop shadow under its frame and cards, a dot grid with a warm wash, dot-matrix lettering, and vermilion as its one accent. Dark is the
+   default; the light palette applies under data-theme="light". canvas-tokens.test.ts checks the text pairs of both palettes. */
+.kc {
+  --kc-room: #0D0D0E;
+  --kc-dot: rgb(255 255 255 / 0.13);
+  --kc-wash: rgb(210 70 42 / 0.18);
+  --kc-edge: rgb(255 255 255 / 0.09);
+  --kc-rail: #151516;
+  --kc-side: #111112;
+  --kc-tile: #1F1F21;
+  --kc-tile-ink: #F2F2F2;
+  --kc-tile-muted: #A6A6A6;
+  --kc-card-top: #3A3A3C;
+  --kc-card-mid: #2A2A2C;
+  --kc-card-end: #4A2117;
+  --kc-card-ink: #F4F4F4;
+  --kc-card-muted: #C2C2C2;
+  --kc-later: #161617;
+  --kc-later-ink: #9A9A9A;
+  --kc-note: #2B2B2D;
+  --kc-note-body: #3A3A3D;
+  --kc-pill: #232325;
+  --kc-pill-ink: #F2F2F2;
+  --kc-plus: #F2F2F2;
+  --kc-plus-ink: #0D0D0E;
+  --kc-vermilion: #D2462A;
+  --kc-on-vermilion: #000000;
+  --kc-badge: #B5381D;
+  --kc-on-badge: #FFFFFF;
+  --kc-wire: rgb(255 255 255 / 0.42);
+  --kc-wire-done: #E6E6E6;
+  --kc-wire-live: #D2462A;
+  --kc-room-ink: #F2F2F2;
+  --kc-room-muted: #A6A6A6;
+  --kc-focus: #F2F2F2;
+  --kc-shadow: 0 32px 64px -32px rgb(0 0 0 / 0.85);
+  --kc-card-shadow: 0 18px 36px -22px rgb(0 0 0 / 0.9);
+  color: var(--kc-room-ink);
+}
+:root[data-theme="light"] .kc {
+  --kc-room: #B4B4B4;
+  --kc-dot: rgb(0 0 0 / 0.16);
+  --kc-wash: rgb(196 82 52 / 0.5);
+  --kc-edge: rgb(255 255 255 / 0.55);
+  --kc-rail: #D6D6D6;
+  --kc-side: #C4C4C4;
+  --kc-tile: #EEEEEE;
+  --kc-tile-ink: #111111;
+  --kc-tile-muted: #555555;
+  --kc-card-top: #5B5B5D;
+  --kc-card-mid: #474749;
+  --kc-card-end: #7A3322;
+  --kc-card-ink: #F6F6F6;
+  --kc-card-muted: #DADADA;
+  --kc-later: #CDCDCD;
+  --kc-later-ink: #3B3B3B;
+  --kc-note: #D0D0D0;
+  --kc-note-body: #6A6A6A;
+  --kc-pill: #161616;
+  --kc-pill-ink: #F2F2F2;
+  --kc-plus: #000000;
+  --kc-plus-ink: #FFFFFF;
+  --kc-wire: rgb(0 0 0 / 0.5);
+  --kc-wire-done: #161616;
+  --kc-wire-live: #B5381D;
+  --kc-room-ink: #111111;
+  --kc-room-muted: #3D3D3D;
+  --kc-focus: #111111;
+  --kc-shadow: 0 28px 56px -30px rgb(0 0 0 / 0.5);
+  --kc-card-shadow: 0 16px 32px -22px rgb(0 0 0 / 0.55);
+}
+.kc :focus-visible { outline: 2px solid var(--kc-focus); outline-offset: 2px; }
+.kc-frame {
+  position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr) 272px; overflow: hidden;
+  height: max(640px, min(calc(100dvh - 10rem), 940px));
+  border-radius: 28px; border: 1px solid var(--kc-edge); background: var(--kc-room); box-shadow: var(--kc-shadow);
+}
+.kc-rail { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px 0; margin: 10px 0 10px 10px; border-radius: 20px; background: var(--kc-rail); }
+.kc-rail-gap { flex: 1; }
+.kc-stage {
+  position: relative; min-width: 0;
+  background-color: var(--kc-room);
+  background-image: radial-gradient(var(--kc-dot) 1.2px, transparent 1.4px), radial-gradient(120% 90% at 0% 100%, var(--kc-wash), transparent 62%);
+  background-size: 22px 22px, 100% 100%;
+}
+.kc-scroll { position: absolute; inset: 0; overflow: auto; scrollbar-width: thin; }
+.kc-board { position: relative; transform-origin: 0 0; }
+.kc-side { display: flex; flex-direction: column; gap: 10px; padding: 10px; background: var(--kc-side); overflow-y: auto; }
+.kc-tile { border-radius: 16px; background: var(--kc-tile); color: var(--kc-tile-ink); }
+.kc-tile-muted { color: var(--kc-tile-muted); }
+.kc-card {
+  border-radius: 18px; color: var(--kc-card-ink); box-shadow: var(--kc-card-shadow);
+  background: linear-gradient(180deg, var(--kc-card-top) 0%, var(--kc-card-mid) 52%, var(--kc-card-end) 100%);
+}
+.kc-card-muted { color: var(--kc-card-muted); }
+.kc-card-yours { border-radius: 18px; background: var(--kc-vermilion); color: var(--kc-on-vermilion); box-shadow: var(--kc-card-shadow); }
+.kc-card-later { border-radius: 18px; background: var(--kc-later); color: var(--kc-later-ink); border: 1px dashed var(--kc-wire); }
+.kc-note { border-radius: 18px; background: var(--kc-note); padding: 8px; box-shadow: var(--kc-card-shadow); }
+.kc-note-body { border-radius: 12px; background: var(--kc-note-body); color: var(--kc-card-ink); }
+.kc-pill { border-radius: 999px; background: var(--kc-pill); color: var(--kc-pill-ink); }
+.kc-chip { border-radius: 999px; }
+.kc-plus { display: inline-grid; place-items: center; border-radius: 10px; background: var(--kc-plus); color: var(--kc-plus-ink); }
+.kc-badge { display: inline-grid; place-items: center; min-width: 1.5rem; height: 1.25rem; padding: 0 0.375rem; border-radius: 999px; background: var(--kc-badge); color: var(--kc-on-badge); font-family: var(--font-mono); font-size: 0.6875rem; font-weight: 600; }
+.kc-puck { display: inline-grid; place-items: center; width: 2rem; height: 2rem; border-radius: 999px; background: var(--kc-tile); color: var(--kc-tile-ink); border: 2px solid var(--kc-room); }
+.kc-sun { border-radius: 999px; background: radial-gradient(circle at 50% 42%, #E0573A 0%, var(--kc-vermilion) 46%, var(--kc-badge) 100%); }
+.kc-room-muted { color: var(--kc-room-muted); }
+.kc-wire { fill: none; stroke: var(--kc-wire); stroke-width: 1.5; stroke-dasharray: 3 5; }
+.kc-wire-done { stroke: var(--kc-wire-done); }
+.kc-wire-live { stroke: var(--kc-wire-live); stroke-width: 2; stroke-dasharray: 6 6; animation: kc-run 900ms linear infinite; }
+.kc-wire-end { fill: var(--kc-room); stroke: var(--kc-wire-done); stroke-width: 1.5; }
+@keyframes kc-run {
+  from { stroke-dashoffset: 12; }
+  to { stroke-dashoffset: 0; }
+}
+/* On a phone and a tablet the canvas becomes the list (MERIDIAN_MIXED_DESIGN_PLAN section 1.7): the same steps in the same order. */
+@media (max-width: 63.99rem) {
+  .kc-frame { display: block; height: auto; border-radius: 22px; }
+  .kc-stage { padding: 12px; }
+  .kc-side { background: transparent; padding: 0 12px 12px; }
+}
+
+
 /* The globe mark. Its meridians turn about the vertical axis (scaleX follows the cosine of the angle), and the red meridian
    carries a short comet. The still globe sets the same angles inline, so it rests where the loading mark would be. */
 .globe-ink { fill: none; stroke: currentColor; }

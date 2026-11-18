@@ -50,7 +50,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
   if (!brandId) {
     return [
       { id: "home", label: "Home", items: [{ id: "overview", label: "Workspace overview", to: "/" }, { id: "alerts", label: "Alerts", to: "/alerts" }] },
-      { id: "create", label: "Create", items: [{ id: "create", label: "Create", to: "/create" }] },
+      { id: "create", label: "Create", items: [{ id: "create", label: "Create", to: "/create" }, { id: "canvas", label: "Canvas", to: "/canvas" }] },
       { id: "library", label: "Library", items: [{ id: "exports", label: "Exports", to: "/exports" }] },
       // Insights is about a brand's market, so it has no screens until a brand is open.
       { id: "insights", label: "Insights", items: [] },
@@ -67,6 +67,7 @@ export function sidebarGroups({ brandId, reviewCount }: { brandId?: string; revi
       label: "Create",
       items: [
         { id: "create", label: "Create", to: "/create", badge: openReviews },
+        { id: "canvas", label: "Canvas", to: "/canvas" },
         { id: "cookbooks", label: "Cookbooks", to: `${base}/cookbooks` },
         { id: "brain", label: "Brand brain", to: `${base}/brain` },
         { id: "products", label: "Products", to: `${base}/products` },

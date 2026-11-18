@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The video canvas, in the owner's Katana reference.** `/canvas` (under Create) shows a video project made with Meridian (by a chat or Claude Code) as a board: the brief, the seven steps and the files as cards joined by dashed wires, a live wire into the step being made, the puck of who settled each step, a right column with progress, the mode, the choices waiting and the files, and a hero card with a dot-matrix wordmark and the next move. Orchestrator videos are followed live; in Studio and Guided mode a person settles their own steps on the canvas (an offered option or their own words), and a member can reopen a step, switch the mode or stop the video, each written to the audit log. On a phone the board becomes the list. Owner direction 2026-11-18: the canvas alone (`.kc` in `styles.css`) has soft corners, one soft shadow, a warm wash and vermilion as its accent; the design rules allow them only there, and `canvas-tokens.test.ts` checks every text colour of both palettes. Tested on a local server with two projects made through the connector; no live run.
+
 ## 1.1.0 — 2026-11-18
 
 **Stable by the owner's decision, before the live checks.** Everything below is tested with fixtures, fake services, a seeded local app,
