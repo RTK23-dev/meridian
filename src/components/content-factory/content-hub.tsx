@@ -174,7 +174,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
                 <TabsTrigger
                   key={item}
                   value={item}
-                  className="min-h-11 rounded-sharp px-3 text-sm data-[state=active]:bg-raised after:hidden focus-visible:ring-2 focus-visible:ring-accent"
+                  className="min-h-11 px-3 text-sm focus-visible:ring-2 focus-visible:ring-accent"
                 >
                   <span className="inline-flex items-center gap-2">
                     <Icon aria-hidden="true" className="size-4 shrink-0" />
