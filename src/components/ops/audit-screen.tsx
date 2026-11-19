@@ -168,10 +168,10 @@ export function AuditScreen() {
         />
       ) : null}
       {data && span ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:justify-between">
           <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} aria-describedby={page === 0 ? "audit-page-status" : undefined} onClick={() => setPage(page - 1)}>Previous page</Button>
-          <p id="audit-page-status" className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
-          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "audit-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
+          <p id="audit-page-status" className="order-first col-span-2 text-center text-sm text-fg-muted sm:order-none">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+          <Button type="button" variant="secondary" size="md" className="justify-self-end" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "audit-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
         </div>
       ) : null}
     </div>

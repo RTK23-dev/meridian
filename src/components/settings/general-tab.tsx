@@ -84,7 +84,7 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         <p className="mt-3"><Link to="/billing" className="font-semibold underline underline-offset-2">Open billing and limits</Link></p>
       </section>
 
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+      <details className="group panel">
         <summary className="cursor-pointer text-base font-semibold text-fg-primary">Create another workspace<span className="ml-2 text-sm font-normal text-fg-muted">A second one keeps its own brands, members and keys</span></summary>
         <div className="mt-4">
       <section aria-labelledby="another-workspace-title" className="space-y-4 panel">

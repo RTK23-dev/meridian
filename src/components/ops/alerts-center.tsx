@@ -138,16 +138,16 @@ export function AlertsCenter() {
           <StatusBadge status={target.connected ? "connected" : "not_connected"} label="Webhook target" />
           <p className="text-sm text-fg-muted">{target.text}</p>
           {/* noValidate: a refused URL is explained next to the field, not by the browser's own popup. */}
-          <form className="flex flex-wrap items-end gap-3" noValidate onSubmit={submitTarget} onKeyDown={(event) => submitOnShortcut(event)}>
+          <form className="flex flex-wrap items-start gap-3" noValidate onSubmit={submitTarget} onKeyDown={(event) => submitOnShortcut(event)}>
             <div className="min-w-64 flex-1">
               <Field label="Webhook URL" hint="Must start with https. Plain http is allowed only for localhost. The URL is not shown again after you save it." error={targetForm.formState.errors.url?.message}>
                 <Input {...targetForm.register("url")} type="url" maxLength={500} placeholder="https://example.com/alerts" />
               </Field>
             </div>
-            <Button type="submit" variant="secondary" size="md" loading={saveTarget.isPending} disabled={busy || urlValue.trim() === ""} aria-describedby={urlValue.trim() === "" && !busy ? "target-url-reason" : undefined}>Save target</Button>
+            <Button type="submit" variant="secondary" size="md" className="sm:mt-7" loading={saveTarget.isPending} disabled={busy || urlValue.trim() === ""} aria-describedby={urlValue.trim() === "" && !busy ? "target-url-reason" : undefined}>Save target</Button>
             {urlValue.trim() === "" && !busy ? <DisabledReason id="target-url-reason" className="basis-full">Type the webhook URL to save it as the delivery target.</DisabledReason> : null}
             {target.connected ? (
-              <Button type="button" variant="quiet" size="md" disabled={busy} onClick={() => void saveTarget.mutateAsync("").catch(() => undefined)}>Remove target</Button>
+              <Button type="button" variant="quiet" size="md" className="sm:mt-7" disabled={busy} onClick={() => void saveTarget.mutateAsync("").catch(() => undefined)}>Remove target</Button>
             ) : null}
             <FormDiscardBar dirty={targetForm.formState.isDirty} subject="webhook target" onDiscard={() => targetForm.reset({ url: "" })} className="basis-full" />
           </form>

@@ -221,7 +221,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
                 <Icon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
                 <span className={iconOnly ? "sr-only" : "min-w-0"}>{group.label}<span className="block text-caption">Open a brand to see its screens.</span></span>
               </div>}
-              {here && !iconOnly && group.items.length > 0 ? <ul className="mb-3 ml-5 mt-1.5 space-y-0.5 border-l border-hairline pl-2" aria-label={`${group.label} screens`}>
+              {here && !iconOnly && group.items.length > 0 ? <ul className="mb-3 ml-5 mt-2 space-y-1 border-l border-hairline pl-2" aria-label={`${group.label} screens`}>
                 {group.items.map((item) => {
                   const current = isCurrentPath(path, item.to);
                   return <li key={item.id}>
@@ -255,11 +255,12 @@ function ShellChrome({ children }: { children: ReactNode }) {
       {/* One row at every width, never wrapping: the breadcrumb truncates on the left, the actions stay on the right. The header is solid in the
           map's own ground, so text scrolls under it without the map showing through. */}
       <header className="chrome-fade sticky top-0 z-20">
-        <div className="flex min-h-16 flex-nowrap items-center gap-2 px-3 py-2.5 sm:px-5 lg:px-9">
-          <button type="button" className="surface-tile grid size-11 shrink-0 place-items-center rounded-full border border-hairline text-fg-primary hover:bg-overlay lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
+        <div className="flex min-h-16 flex-nowrap items-center gap-2 px-4 py-2 sm:px-6 lg:px-9">
+          <button type="button" className="surface-tile grid size-12 shrink-0 place-items-center rounded-full border border-hairline text-fg-primary hover:bg-overlay pointer-coarse:size-13 lg:hidden" aria-label="Open navigation" aria-expanded={mobileNavOpen} aria-controls="primary-navigation" onClick={() => setMobileNavOpen(true)}><Menu aria-hidden="true" className="size-5" /></button>
           {/* On a phone the page title sits in the header, beside the menu, instead of in a second row under it. */}
-          <p className="min-w-0 flex-1 truncate text-heading font-semibold text-fg-primary md:hidden">{pageTitle ?? ""}</p>
-          <div className="hidden min-w-0 flex-1 md:flex"><nav aria-label="Location" className="surface-tile flex min-h-11 min-w-0 items-center gap-2 rounded-full border border-hairline px-4 text-sm">
+          {/* On a phone the page's own title opens the page just below, so the header does not repeat it. */}
+          <span className="flex-1 md:hidden" aria-hidden="true" />
+          <div className="hidden min-w-0 flex-1 md:flex"><nav aria-label="Location" className="surface-tile flex min-h-12 min-w-0 items-center gap-2 rounded-full border border-hairline px-4 text-sm">
             <Link to="/" className="shrink-0 text-fg-muted hover:text-fg-primary">Workspace</Link>
             {brand ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span className="min-w-0 max-w-40 truncate text-fg-muted">{brand.name}</span></> : null}
             {pageTitle ? <><span aria-hidden="true" className="shrink-0 text-border-strong">/</span><span aria-current="page" className="min-w-0 truncate font-semibold text-fg-primary">{pageTitle}</span></> : null}
@@ -280,7 +281,7 @@ function ShellChrome({ children }: { children: ReactNode }) {
         <div className="mx-auto w-full max-w-6xl">
           {children}
           {/* Every core screen names the next step, so a person always knows what comes after this one. */}
-          {next ? <section aria-label="Next step" className="mt-10 border-t border-hairline pt-6 sm:mt-12">
+          {next ? <section aria-label="Next step" className="mt-12">
             <p className="eyebrow mb-3">Next step</p>
             <Button asChild variant="secondary"><Link to={next.to as never} onMouseEnter={() => prefetch(next.to)} onFocus={() => prefetch(next.to)}>Continue to {next.label}<ArrowRight aria-hidden="true" className="size-4" /></Link></Button>
           </section> : null}
@@ -290,14 +291,14 @@ function ShellChrome({ children }: { children: ReactNode }) {
           marked three ways: its icon sits on the accent disc, its label is bold, and it is announced as the current page. A place with no
           screen on this page is shown as unavailable. */}
       <nav aria-label="Quick navigation" className="pointer-events-none absolute inset-x-0 bottom-0 z-30 px-3 pb-[max(env(safe-area-inset-bottom),0.75rem)] lg:hidden">
-        <div className="surface-float pointer-events-auto mx-auto grid max-w-md grid-cols-5 rounded-full bg-dock p-1.5 text-on-dock">
+        <div className="surface-float pointer-events-auto mx-auto grid max-w-md grid-cols-5 rounded-full bg-dock p-2 text-on-dock">
           {tabs.map((tab) => {
             const Icon = PLACE_ICONS[tab.place];
             const here = currentPlace === tab.place;
             if (!tab.to) {
-              return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[11px] text-on-dock-muted opacity-60"><span className="grid size-8 place-items-center"><Icon aria-hidden="true" className="size-[18px] shrink-0" /></span><span className="max-w-full truncate">{tab.label}</span></span>;
+              return <span key={tab.place} aria-disabled="true" className="flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-full px-1 text-[11px] text-on-dock-muted opacity-60"><span className="grid size-8 place-items-center"><Icon aria-hidden="true" className="size-[18px] shrink-0" /></span><span className="max-w-full truncate">{tab.label}</span></span>;
             }
-            return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-0.5 rounded-full px-1 text-[11px] focus-visible:outline-on-dock ${here ? "font-semibold text-on-dock" : "text-on-dock-muted hover:text-on-dock"}`}>
+            return <Link key={tab.place} to={tab.to as never} aria-current={here ? "page" : undefined} onMouseEnter={() => prefetch(tab.to)} onFocus={() => prefetch(tab.to)} className={`flex min-h-14 min-w-0 flex-col items-center justify-center gap-1 rounded-full px-1 text-[11px] focus-visible:outline-on-dock ${here ? "font-semibold text-on-dock" : "text-on-dock-muted hover:text-on-dock"}`}>
               <span className={`grid size-8 place-items-center rounded-full ${here ? "bg-accent text-on-accent" : ""}`}><Icon aria-hidden="true" className="size-[18px] shrink-0" /></span>
               <span className="max-w-full truncate">{tab.label}</span>
             </Link>;

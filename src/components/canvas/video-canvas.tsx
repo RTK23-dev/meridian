@@ -131,14 +131,14 @@ export function VideoCanvas({ projectId, onProject }: { projectId: string | null
 
   const topBar = (
     <div className={cn("flex flex-wrap items-start justify-between gap-2", wide ? "pointer-events-none absolute inset-x-4 top-4 z-10" : "mb-4")}>
-      <button type="button" onClick={() => setPanel("projects")} className="kc-tile kc-chip pointer-events-auto flex min-h-11 max-w-[min(22rem,100%)] items-center gap-2 py-1.5 pl-1.5 pr-4 text-left">
+      <button type="button" onClick={() => setPanel("projects")} className="kc-tile kc-chip pointer-events-auto flex min-h-11 max-w-[min(22rem,100%)] items-center gap-2 py-2 pl-2 pr-4 text-left">
         <span className="kc-pill grid size-8 shrink-0 place-items-center rounded-full"><Clapperboard aria-hidden="true" className="size-4" /></span>
         <span className="min-w-0">
           <span className="block text-caption font-semibold">Video project</span>
           <span className="kc-tile-muted block truncate text-caption">{project?.title ?? (projects.data?.length === 0 ? "No video yet" : "Choose a video")}</span>
         </span>
       </button>
-      <div className="kc-pill pointer-events-auto flex min-h-11 items-center gap-3 py-1.5 pl-2 pr-1.5">
+      <div className="kc-pill pointer-events-auto flex min-h-11 items-center gap-3 py-2 pl-2 pr-2">
         <span className="flex -space-x-2" aria-hidden="true">
           <DeciderPuck who="person" settled={false} />
           <DeciderPuck who="chat" settled={false} />
@@ -192,7 +192,7 @@ export function VideoCanvas({ projectId, onProject }: { projectId: string | null
                   </div>
                 </div>
               </div>
-              <div className="kc-pill absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 p-1.5" role="toolbar" aria-label="Board">
+              <div className="kc-pill absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 p-2" role="toolbar" aria-label="Board">
                 <button type="button" onClick={() => setZoom(stepZoom(scale, -1))} disabled={scale <= 0.5} aria-label="Zoom out" title="Zoom out" className="grid size-9 place-items-center rounded-[10px] hover:bg-white/10 disabled:opacity-40"><Minus aria-hidden="true" className="size-4" /></button>
                 <span className="w-12 text-center font-mono text-caption" aria-label={`Zoom ${Math.round(scale * 100)} percent`}>{Math.round(scale * 100)}%</span>
                 <button type="button" onClick={() => setZoom(stepZoom(scale, 1))} disabled={scale >= 1} aria-label="Zoom in" title="Zoom in" className="grid size-9 place-items-center rounded-[10px] hover:bg-white/10 disabled:opacity-40"><Plus aria-hidden="true" className="size-4" /></button>

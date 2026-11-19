@@ -162,14 +162,14 @@ export function SetupGuide() {
 
         <StarterLimits organizationId={organizationId} canAdmin={canAdmin} />
 
-        <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
+        <section aria-labelledby="setup-progress" className="surface-rise surface-tile border border-hairline p-4 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 id="setup-progress" className="text-xl font-semibold text-fg-primary">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
               <p className="text-sm text-fg-muted">{summary.headline}</p>
             </div>
             {next ? (
-              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-sharp bg-accent px-4 text-center text-sm font-semibold text-on-accent transition hover:brightness-110">
+              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-full bg-white-accent px-4 text-center text-sm font-semibold text-ground transition-colors hover:bg-fg-secondary">
                 Go to: {next.title}
               </a>
             ) : null}

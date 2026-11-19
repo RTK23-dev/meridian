@@ -72,10 +72,10 @@ function Home() {
   if (data.brands.length === 0) {
     return (
       <div className="space-y-8">
-        <PageHeader title="Workspace overview" description={`Welcome to ${data.active.name}. Start with the one step below.`} />
+        <PageHeader title="Workspace overview" description={`Welcome to ${data.active.name}. Set it up below, or make a first video for free.`} />
         <SetupCallout steps={setupSteps} />
         <StudioTiles organizationId={organizationId} />
-        <section aria-labelledby="free-start" className="space-y-2 rounded-sharp border border-hairline p-5">
+        <section aria-labelledby="free-start" className="panel space-y-2">
           <h2 id="free-start" className="text-section font-semibold text-fg-primary">Or make a video for free first</h2>
           <p className="text-sm text-fg-muted">Claude Code can make a video on your own computer with no key and no cost, and save it here.</p>
           <Button asChild variant="secondary"><Link to="/create" search={{ way: "claude_code" }}>Make a video with Claude Code</Link></Button>

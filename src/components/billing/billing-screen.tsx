@@ -63,9 +63,11 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
       {workspace.policyReadable ? null : (
         <p className="text-sm text-danger" role="alert">The workspace's saved policy cannot be read, so the measure ceiling and the decision cap are unknown. {workspace.policyReason ?? ""}</p>
       )}
-      <LimitForm organizationId={organizationId} kind="workspace_monthly_budget" value={workspace.monthlyBudgetUsd} canEdit={canEdit} />
-      <LimitForm organizationId={organizationId} kind="measure_ceiling" value={workspace.measureCeilingUsdPerSecond} canEdit={canEdit && workspace.policyReadable} />
-      <LimitForm organizationId={organizationId} kind="decision_cap" value={workspace.decisionCapUsd} canEdit={canEdit && workspace.policyReadable} />
+      <div className="panel space-y-6">
+        <LimitForm organizationId={organizationId} kind="workspace_monthly_budget" value={workspace.monthlyBudgetUsd} canEdit={canEdit} />
+        <LimitForm organizationId={organizationId} kind="measure_ceiling" value={workspace.measureCeilingUsdPerSecond} canEdit={canEdit && workspace.policyReadable} />
+        <LimitForm organizationId={organizationId} kind="decision_cap" value={workspace.decisionCapUsd} canEdit={canEdit && workspace.policyReadable} />
+      </div>
     </section>
   );
 }
@@ -88,7 +90,7 @@ function BrandsSection({ page }: { page: BillingPage }) {
 
 function BrandLimits({ organizationId, brand, canEdit }: { organizationId: string; brand: BillingBrand; canEdit: boolean }) {
   return (
-    <div className="space-y-5 rounded-sharp border border-hairline p-5" aria-label={`Limits for ${brand.name}`}>
+    <div className="panel space-y-5" aria-label={`Limits for ${brand.name}`}>
       <h3 className="text-body font-semibold">{brand.name}</h3>
       <LimitForm organizationId={organizationId} kind="brand_budget" brandId={brand.brandId} value={brand.brandBudgetUsd} canEdit={canEdit} committedUsd={brand.committedUsd} />
       <LimitForm organizationId={organizationId} kind="factory_daily_cap" brandId={brand.brandId} value={brand.factoryDailyCapUsd} canEdit={canEdit} />
@@ -104,7 +106,7 @@ function EstimatesSection({ page }: { page: BillingPage }) {
         <h2 id="billing-estimates" className="text-section font-semibold">Estimates</h2>
         <p className="text-fg-muted">These are not limits. The engine uses them to estimate a master's cost before it starts. They are read-only here.</p>
       </div>
-      <p className="text-sm">The fixed cost of one master is about ${page.fixedCostPerMasterUsd.toFixed(2)} before its shots.</p>
+      <p className="panel text-sm">The fixed cost of one master is about ${page.fixedCostPerMasterUsd.toFixed(2)} before its shots.</p>
     </section>
   );
 }

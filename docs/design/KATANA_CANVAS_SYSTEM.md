@@ -113,8 +113,8 @@ A shadow comes only from these tokens, through the surface classes; no screen wr
 
 The phone is designed first for the thumb and second for the eye, with the same tiles and ink as the desktop.
 
-1. **One header row of chips.** A round menu button, the screen's name in the heading size, and the tools pill (search, alerts, theme,
-   account). The location breadcrumb of the desktop is left out, so the header is one row and the page's own title starts under it.
+1. **One header row of chips.** A round menu button and the tools pill (search, alerts, theme, account), both 48 px (52 px on touch). The
+   page's own title opens the page just below, so the header does not repeat it, and the place you are in is on the dock.
 2. **A floating dock for the five places.** The five places (Home, Create, Library, Insights, Settings) sit in an ink pill that floats
    12 px above the home indicator and the screen's edges, at most 448 px wide. Each place is a 56 px target with its icon and its label,
    so the bar is never icons alone. The place you are in sits on a **vermilion disc** with a bold label and is announced as the current
@@ -129,7 +129,20 @@ The phone is designed first for the thumb and second for the eye, with the same 
 6. **Reach and focus.** Every target is at least 44 px on a touch screen; fields are 16 px so iOS does not zoom; the focus ring shows on the
    dock and on every chip.
 
-## 7. Tokens
+## 7. Spacing and layout
+
+- **One 4 px scale** for every gap, padding and margin: 4, 8, 12, 16, 20, 24, 32, 40, 48, 64, 80, 96. No 2, 6 or 10 px steps.
+- **Gutters:** 16 px on a phone, 24 px from 640 px, 32 px from 1024 px (48 px beside the desktop rail).
+- **Tiles:** 16 px inside on a phone, 24 px from 640 px. A section's title and its one-line description sit on the room; its controls sit
+  on the tile below them. A page title has no rule under it; the page header ends 24 px (32 px from 640 px) above the first tile.
+- **Rows of figures** (stats, counts) are two to a row on a phone and never one huge tile each.
+- **Tabs** are one row: on a narrow screen the track scrolls sideways and a label never wraps inside its pill.
+- **A filter's button** sits on its input's line: the field's label and its gap are 28 px, so the button starts 28 px down.
+- **Pagination** on a phone: the page status on its own line, the two buttons under it at either end.
+- **The canvas:** beside its side column from 1400 px; between 1024 and 1400 px the side column moves under the board as a row, so the
+  board keeps a readable zoom; on a phone it is the list.
+
+## 8. Tokens
 
 ```css
 /* Katana tokens: the canvas system (owner direction 2026-11-18). Generated from docs/design/tokens/katana-tokens.json. */

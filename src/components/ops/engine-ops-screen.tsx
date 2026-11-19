@@ -116,7 +116,7 @@ export function EngineOpsScreen() {
         {metrics.error ? <RefusalNotice error={metrics.error} /> : null}
         {report ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-5">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5 sm:gap-4">
               <Card className="p-4"><p className="text-small text-fg-muted">Requests</p><p className="text-section font-semibold">{report.requests.total}</p></Card>
               <Card className="p-4"><p className="text-small text-fg-muted">Delivered</p><p className="text-section font-semibold">{report.requests.delivered}</p></Card>
               <Card className="p-4"><p className="text-small text-fg-muted">Running</p><p className="text-section font-semibold">{report.requests.running}</p></Card>

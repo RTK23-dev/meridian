@@ -401,11 +401,11 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 /** The step kinds a plan can draw. Shown on the empty screen so a first-time reader knows what the orchestrator will build from. */
 function KindPreview() {
   return (
-    <ul aria-label="Step kinds a plan can draw" className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+    <ul aria-label="Step kinds a plan can draw" className="mt-3 grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-2">
       {NODE_KIND_ORDER.map((kind) => {
         const style = KIND_STYLE[kind];
         return (
-          <li key={kind} className="flex items-start gap-2.5 rounded-sharp border border-hairline p-2.5">
+          <li key={kind} className="flex items-start gap-3 rounded-sharp border border-hairline p-3">
             <span className={cn("grid size-7 shrink-0 place-items-center rounded-sharp border border-hairline", ACCENT[style.accent].text)}>
               <KindIcon kind={kind} className="size-3.5" />
             </span>

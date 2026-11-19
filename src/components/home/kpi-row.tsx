@@ -14,7 +14,7 @@ const ICONS: Record<KpiId, ReactNode> = {
 /** Renders only the cards the model returns. A card with a null value is still loading, and shows a skeleton. */
 export function KpiRow({ kpis }: { kpis: KpiSpec[] }) {
   return (
-    <section aria-label="Workspace metrics" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <section aria-label="Workspace metrics" className="grid grid-cols-2 gap-3 xl:grid-cols-5">
       {kpis.map((kpi) => kpi.value === null
         ? <KpiLoading key={kpi.id} label={kpi.label} />
         : <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} description={kpi.description} icon={ICONS[kpi.id]} />)}

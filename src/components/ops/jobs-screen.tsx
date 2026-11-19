@@ -150,7 +150,7 @@ export function JobsScreen() {
 
       <section aria-labelledby="jobs-heading" className="space-y-3">
         <h2 id="jobs-heading" className="text-section font-semibold">Jobs</h2>
-        <form className="grid gap-3 panel sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.5fr_auto]" onSubmit={applyFilters}>
+        <form className="grid gap-3 panel sm:grid-cols-2 xl:grid-cols-[1fr_1fr_1.5fr_auto] xl:items-start" onSubmit={applyFilters}>
           <Field label="Status">
             <SelectInput value={draft.status} onChange={(event) => setDraft({ ...draft, status: event.target.value })}>
               {JOB_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
@@ -165,7 +165,7 @@ export function JobsScreen() {
               {brands.map((brand) => <option key={brand.id} value={brand.id}>{brand.name}</option>)}
             </SelectInput>
           </Field>
-          <div className="flex flex-wrap items-end gap-2">
+          <div className="flex flex-wrap items-end gap-2 xl:pt-7">
             <Button type="submit">Apply filters</Button>
             <Button type="button" variant="quiet" disabled={!filtered && !draftFiltered} aria-describedby={!filtered && !draftFiltered ? "jobs-clear-reason" : undefined} onClick={clearFilters}>Clear</Button>
             {!filtered && !draftFiltered ? <DisabledReason id="jobs-clear-reason" className="basis-full">No filters are set.</DisabledReason> : null}
@@ -190,10 +190,10 @@ export function JobsScreen() {
           />
         ) : null}
         {page && span ? (
-          <div className="flex items-center justify-between gap-3">
+          <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:justify-between">
             <Button type="button" variant="secondary" size="md" disabled={filters.page === 0 || jobs.isFetching} aria-describedby={filters.page === 0 ? "jobs-page-status" : undefined} onClick={() => setFilters({ ...filters, page: filters.page - 1 })}>Previous page</Button>
-            <p id="jobs-page-status" className="text-sm text-fg-muted">Page {filters.page + 1} of {span.pageCount}{filters.page === 0 ? ". You are on the first page." : filters.page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
-            <Button type="button" variant="secondary" size="md" disabled={filters.page + 1 >= span.pageCount || jobs.isFetching} aria-describedby={filters.page + 1 >= span.pageCount ? "jobs-page-status" : undefined} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next page</Button>
+            <p id="jobs-page-status" className="order-first col-span-2 text-center text-sm text-fg-muted sm:order-none">Page {filters.page + 1} of {span.pageCount}{filters.page === 0 ? ". You are on the first page." : filters.page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+            <Button type="button" variant="secondary" size="md" className="justify-self-end" disabled={filters.page + 1 >= span.pageCount || jobs.isFetching} aria-describedby={filters.page + 1 >= span.pageCount ? "jobs-page-status" : undefined} onClick={() => setFilters({ ...filters, page: filters.page + 1 })}>Next page</Button>
           </div>
         ) : null}
       </section>

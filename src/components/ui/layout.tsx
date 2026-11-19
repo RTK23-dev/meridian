@@ -7,7 +7,7 @@ import { sparklineSummary } from "./sparkline-summary.ts";
 
 export interface BreadcrumbItem { label: string; to?: string }
 export function PageHeader({ title, description, breadcrumbs = [], actions, secondaryActions, className }: { title: string; description?: ReactNode; breadcrumbs?: BreadcrumbItem[]; actions?: ReactNode; secondaryActions?: ReactNode; className?: string }) {
-  return <header className={cn("mb-8 space-y-4 border-b border-hairline pb-6", className)}>
+  return <header className={cn("mb-6 space-y-4 sm:mb-8", className)}>
     {breadcrumbs.length ? <nav aria-label="Breadcrumb"><ol className="flex flex-wrap items-center gap-1 text-small text-fg-muted">{breadcrumbs.map((item, index) => <li key={`${item.label}-${index}`} className="flex items-center gap-1">{index ? <ChevronRight aria-hidden="true" className="size-3 text-border-strong" /> : null}{item.to ? <Link to={item.to} className="underline-offset-4 hover:text-fg-primary hover:underline">{item.label}</Link> : <span aria-current="page">{item.label}</span>}</li>)}</ol></nav> : null}
     <div className="flex flex-wrap items-end justify-between gap-4"><div className="min-w-0 space-y-2"><h1 className="page-title">{title}</h1>{description ? <p className="max-w-2xl text-body text-fg-muted">{description}</p> : null}</div><div className="flex items-center gap-2">{secondaryActions}{actions}</div></div>
   </header>;

@@ -159,7 +159,7 @@ export function ProjectsDrawer({
         <ul className="divide-y divide-hairline border-y border-hairline">
           {projects.map((item) => (
             <li key={item.id}>
-              <button type="button" onClick={() => onPick(item.id)} aria-current={item.id === currentId ? "true" : undefined} className="flex w-full flex-col gap-0.5 px-1 py-3 text-left hover:bg-raised aria-[current=true]:bg-raised">
+              <button type="button" onClick={() => onPick(item.id)} aria-current={item.id === currentId ? "true" : undefined} className="flex w-full flex-col gap-1 px-1 py-3 text-left hover:bg-raised aria-[current=true]:bg-raised">
                 <span className="font-semibold text-fg-primary">{item.title}</span>
                 <span className="text-caption text-fg-muted">
                   {MODE_COPY[item.mode].label} · {item.status === "active" ? (item.phase ? `at ${PHASE_COPY[item.phase as Phase]?.label ?? item.phase}` : "settled") : item.status} · {item.brandName ?? "No brand"}

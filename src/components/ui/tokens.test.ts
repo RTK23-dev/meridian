@@ -87,6 +87,13 @@ test("every var(--color-*) written in the app is defined in styles.css", () => {
   assert.deepEqual(missing, [], `styles.css does not define: ${missing.join(", ")}`);
 });
 
+test("every var(--color-*) the stylesheet reads is defined in it, so no rule falls back to nothing", () => {
+  // A rule that reads an undefined name draws nothing: a panel with no fill and no edge, a skip link with no colour.
+  const read = new Set([...css.matchAll(/var\((--color-[a-z0-9-]+)\)/g)].map((match) => match[1]));
+  const defined = new Set([...css.matchAll(/(--color-[a-z0-9-]+):/g)].map((match) => match[1]));
+  assert.deepEqual([...read].filter((name) => !defined.has(name)), []);
+});
+
 test("the three shadow tokens are soft drop shadows in black, never a glow or a colour", () => {
   for (const name of ["--shadow-sm", "--shadow-md", "--shadow-lg"]) {
     assert.match(aliases[name], /^(?:0 \d+px \d+px(?: -\d+px)? rgb\(0 0 0 \/ 0\.\d+\)(?:, )?)+$/, `${name}: ${aliases[name]}`);

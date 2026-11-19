@@ -42,7 +42,7 @@ export function StepCard({ node, files, empty = false, onOpen, style }: { node: 
       {node.state === "settled" && node.decidedBy ? <DeciderPuck who={node.decidedBy} settled className="absolute -left-3 -top-3" /> : node.state !== "later" && node.state !== "stopped" ? <DeciderPuck who={node.decides === "person" ? "person" : "chat"} settled={false} className="absolute -left-3 -top-3" /> : null}
       <div className="flex items-start justify-between gap-2">
         <DotMatrix text={pad(node.index + 1)} dot={2.4} gap={1.2} label={`Step ${node.index + 1}`} />
-        <span className={cn("kc-chip inline-flex items-center gap-1.5 px-2 py-0.5 text-caption font-semibold", tone === "kc-card" ? "bg-black/25" : tone === "kc-card-yours" ? "bg-black text-white" : "bg-black/10")}>
+        <span className={cn("kc-chip inline-flex items-center gap-2 px-2 py-1 text-caption font-semibold", tone === "kc-card" ? "bg-black/25" : tone === "kc-card-yours" ? "bg-black text-white" : "bg-black/10")}>
           {node.state === "working" || node.state === "options" ? <span aria-hidden="true" className="size-1.5 rounded-full bg-[var(--kc-vermilion)]" /> : null}
           {words}
         </span>
@@ -57,7 +57,7 @@ export function StepCard({ node, files, empty = false, onOpen, style }: { node: 
       <div className="mt-auto flex items-center justify-between gap-2 text-caption">
         <span className={muted}>{empty ? "Not started" : node.state === "settled" ? when(node.resolvedAt) ?? "" : node.decides === "person" ? "You choose" : "The chat decides"}</span>
         {node.state === "yours" ? (
-          <span className="kc-chip inline-flex items-center gap-1 bg-black px-2.5 py-1 font-semibold text-white">Choose <ArrowRight aria-hidden="true" className="size-3.5" /></span>
+          <span className="kc-chip inline-flex items-center gap-1 bg-black px-3 py-1 font-semibold text-white">Choose <ArrowRight aria-hidden="true" className="size-3.5" /></span>
         ) : null}
       </div>
       {/* The whole card is one control, so a click anywhere on it opens the step. */}
@@ -71,7 +71,7 @@ export function BriefCard({ brief, onOpen, style }: { brief: Brief | null; onOpe
   const facts = brief ? [brief.platform, brief.seconds ? `${brief.seconds} s` : null, brief.language].filter(Boolean).join(" · ") : null;
   return (
     <article aria-labelledby="kc-brief" className="kc-note absolute flex flex-col" style={{ width: CARD_W, height: CARD_H, ...style }}>
-      <div className="kc-note-body flex flex-1 flex-col gap-1.5 p-3">
+      <div className="kc-note-body flex flex-1 flex-col gap-2 p-3">
         <h3 id="kc-brief" className="text-small font-semibold">BRIEF · What to make</h3>
         <p className="kc-card-muted line-clamp-5 text-caption">{brief?.idea?.trim() || "No brief yet. A video starts from a short Q&A in a chat or in Claude Code."}</p>
       </div>
@@ -98,15 +98,15 @@ export function FilesCard({ files, onOpen, style }: { files: CanvasFile[]; onOpe
       <h3 id="kc-files" className="sr-only">Files this video made</h3>
       <div className="grid flex-1 grid-cols-3 gap-2">
         {tiles.map(({ id, label, chip, count, Icon, tone }) => (
-          <button key={id} type="button" onClick={onOpen} aria-label={`${label}: ${count} ${count === 1 ? "file" : "files"}`} className="kc-tile flex flex-col items-stretch gap-1.5 p-1.5 text-left">
+          <button key={id} type="button" onClick={onOpen} aria-label={`${label}: ${count} ${count === 1 ? "file" : "files"}`} className="kc-tile flex flex-col items-stretch gap-2 p-2 text-left">
             <span className={cn("grid flex-1 place-items-center rounded-[12px]", tone)}>
               <span className="flex flex-col items-center gap-1">
                 <Icon aria-hidden="true" className="size-6" />
-                <span className="kc-chip bg-black px-1.5 text-caption text-white">{chip}</span>
+                <span className="kc-chip bg-black px-2 text-caption text-white">{chip}</span>
               </span>
             </span>
-            <span className="px-0.5 text-caption font-semibold">{label}</span>
-            <span className="kc-tile-muted px-0.5 font-mono text-caption">{count} {count === 1 ? "file" : "files"}</span>
+            <span className="px-1 text-caption font-semibold">{label}</span>
+            <span className="kc-tile-muted px-1 font-mono text-caption">{count} {count === 1 ? "file" : "files"}</span>
           </button>
         ))}
       </div>

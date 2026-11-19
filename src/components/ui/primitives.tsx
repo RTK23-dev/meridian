@@ -65,9 +65,10 @@ export const TooltipTrigger = TooltipPrimitive.Trigger;
 export function TooltipContent({ className, ...props }: ComponentProps<typeof TooltipPrimitive.Content>) { return <TooltipPrimitive.Portal><TooltipPrimitive.Content {...props} className={cn("z-50 surface-menu border border-hairline px-2 py-1 text-caption text-fg-primary", className)} /></TooltipPrimitive.Portal>; }
 
 export const Tabs = TabsPrimitive.Root;
-export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex max-w-full flex-wrap gap-1 rounded-full border border-hairline bg-raised p-1", className)} />; }
-/** The tabs are a segmented pill track; the active tab is an ink pill, the same ink as the main action. */
-export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("relative min-h-9 rounded-full px-4 text-button font-semibold text-fg-secondary hover:text-fg-primary pointer-coarse:min-h-11 data-[state=active]:bg-white-accent data-[state=active]:text-ground", className)} />; }
+export function TabsList({ className, ...props }: ComponentProps<typeof TabsPrimitive.List>) { return <TabsPrimitive.List {...props} className={cn("inline-flex max-w-full flex-nowrap gap-1 overflow-x-auto rounded-full border border-hairline bg-raised p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)} />; }
+/** The tabs are a segmented pill track; the active tab is an ink pill, the same ink as the main action. On a narrow screen the track is one
+ *  row that scrolls sideways, so a label never wraps inside its pill. */
+export function TabsTrigger({ className, ...props }: ComponentProps<typeof TabsPrimitive.Trigger>) { return <TabsPrimitive.Trigger {...props} className={cn("relative min-h-9 shrink-0 whitespace-nowrap rounded-full px-4 text-button font-semibold text-fg-secondary hover:text-fg-primary pointer-coarse:min-h-11 data-[state=active]:bg-white-accent data-[state=active]:text-ground", className)} />; }
 export const TabsContent = TabsPrimitive.Content;
 
 export const Accordion = AccordionPrimitive.Root;

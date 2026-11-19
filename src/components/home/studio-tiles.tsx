@@ -21,9 +21,9 @@ export function StudioTiles({ organizationId }: { organizationId: string }) {
   const figure = (value: number | undefined) => (counts ? String(value ?? 0) : "…");
 
   return (
-    <section aria-labelledby="studio-tiles" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <section aria-labelledby="studio-tiles" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
       <h2 id="studio-tiles" className="sr-only">Videos</h2>
-      <div className="surface-tile col-span-2 flex flex-col gap-4 border border-hairline p-5 lg:row-span-2">
+      <div className="surface-tile col-span-2 flex flex-col gap-4 border border-hairline p-4 sm:p-6 xl:row-span-2">
         <DotMatrix text="Meridian" dot={3.2} gap={1.5} label="Meridian" fluid className="text-fg-primary" />
         <div className="flex flex-1 items-center gap-5">
           <div className="sun grid aspect-square w-28 shrink-0 place-items-center text-on-accent sm:w-36" aria-hidden="true">
@@ -40,7 +40,7 @@ export function StudioTiles({ organizationId }: { organizationId: string }) {
         </div>
       </div>
 
-      <section aria-labelledby="studio-latest" className={`${TILE} col-span-2 lg:col-span-2`}>
+      <section aria-labelledby="studio-latest" className={`${TILE} col-span-2`}>
         <div className={HEAD}>
           <h3 id="studio-latest">Latest video</h3>
           {latest ? <Link to="/canvas" search={{ project: latest.id }} aria-label={`Open ${latest.title} on the canvas`} className={ROUND}><ArrowRight aria-hidden="true" className="size-4" /></Link> : null}
@@ -57,7 +57,7 @@ export function StudioTiles({ organizationId }: { organizationId: string }) {
 
       <section aria-labelledby="studio-modes" className={TILE}>
         <h3 id="studio-modes" className={HEAD}>By mode</h3>
-        <ul className="mt-auto space-y-1.5">
+        <ul className="mt-auto space-y-2">
           {PROJECT_MODES.map((mode) => (
             <li key={mode} className="flex items-center justify-between gap-2 text-caption">
               <span className="flex items-center gap-2 text-fg-secondary"><DotMatrix text={MODE_LETTER[mode]} dot={1.8} gap={0.8} label="" className="text-fg-primary" />{MODE_COPY[mode].label}</span>

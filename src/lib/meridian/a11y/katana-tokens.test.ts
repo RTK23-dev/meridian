@@ -1,5 +1,5 @@
 // Checks the Katana tokens (docs/design/tokens/katana-tokens.json) three ways: every contrast pair meets its minimum in its theme, the
-// JSON agrees with the CSS block in the canvas system (docs/design/KATANA_CANVAS_SYSTEM.md section 7, owner direction 2026-11-18), and
+// JSON agrees with the CSS block in the canvas system (docs/design/KATANA_CANVAS_SYSTEM.md section 8, owner direction 2026-11-18), and
 // every ratio that document states in its colour table (section 2) is the ratio the repo's own helper computes. The third check tests the
 // document's figures instead of trusting them.
 import assert from "node:assert/strict";
@@ -45,7 +45,7 @@ test("no tinted status tokens: status is a dot and a word, never a -soft fill", 
 
 test("the JSON agrees with the Katana plan's CSS token block for every colour it defines", () => {
   const block = plan.match(/```css\n([\s\S]*?)```/g)?.find((candidate) => candidate.includes("Katana tokens"));
-  assert.ok(block, "section 7 of the canvas system has a CSS token block");
+  assert.ok(block, "section 8 of the canvas system has a CSS token block");
   const dark = block.match(/:root, :root\[data-theme="dark"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const light = block.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const declared = (body: string) => new Map([...body.matchAll(/--([a-z-]+): (#[0-9A-Fa-f]{6});/g)].map((m) => [m[1], m[2].toUpperCase()]));

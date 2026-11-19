@@ -19,7 +19,7 @@ function ProgressTile({ figures, onFollow }: { figures: CanvasFigures; onFollow:
         <h2 id="kc-progress">Progress</h2>
         <button type="button" onClick={onFollow} aria-label="Go to the step being made" className={ROUND}><ArrowRight aria-hidden="true" className="size-4" /></button>
       </div>
-      <div aria-hidden="true" className="flex h-12 items-end justify-center gap-[3px]">
+      <div aria-hidden="true" className="flex h-12 items-end justify-center gap-1">
         {figures.bars.map((bar, index) => (
           <span key={index} className={cn("w-1.5 rounded-full", bar === 1 ? "bg-[var(--kc-tile-ink)]" : bar > 0.5 ? "bg-[var(--kc-vermilion)]" : "bg-[var(--kc-tile-muted)]")} style={{ height: `${Math.round(bar * 100)}%` }} />
         ))}
@@ -48,7 +48,7 @@ function ModeTile({ mode, canEdit, busy, onMode }: { mode: ProjectMode | null; c
             <DropdownMenuContent align="end" className="max-w-72">
               {PROJECT_MODES.map((item) => (
                 <DropdownMenuItem key={item} disabled={item === mode} onSelect={() => onMode(item)}>
-                  <span className="flex flex-col gap-0.5">
+                  <span className="flex flex-col gap-1">
                     <span className="font-semibold">{MODE_COPY[item].label}{item === mode ? " (now)" : ""}</span>
                     <span className="text-caption text-fg-muted">{MODE_COPY[item].summary}</span>
                   </span>
@@ -96,7 +96,7 @@ export function CanvasSide({
 
   return (
     <aside className="kc-side" aria-label="This video">
-      <div className="grid grid-cols-2 gap-2.5">
+      <div className="grid grid-cols-2 gap-3">
         <ProgressTile figures={figures} onFollow={onFollow} />
         <ModeTile mode={project?.mode ?? null} canEdit={canEdit} busy={modeBusy} onMode={onMode} />
         <section aria-labelledby="kc-choices" className="kc-tile flex min-h-28 flex-col gap-2 p-3">
@@ -118,7 +118,7 @@ export function CanvasSide({
           </div>
           <button type="button" onClick={onFiles} className="mt-auto flex flex-wrap gap-1 text-left" aria-label={`Open the files: ${counts.voiceover} voice, ${counts.image} images, ${counts.video} video`}>
             {([["mp3", counts.voiceover], ["png", counts.image], ["mp4", counts.video]] as const).map(([chip, count]) => (
-              <span key={chip} className={cn("kc-chip px-2 py-0.5 font-mono text-caption", count > 0 ? "bg-[var(--kc-pill)] text-[var(--kc-pill-ink)]" : "kc-tile-muted border border-current/30")}>{chip} {count}</span>
+              <span key={chip} className={cn("kc-chip px-2 py-1 font-mono text-caption", count > 0 ? "bg-[var(--kc-pill)] text-[var(--kc-pill-ink)]" : "kc-tile-muted border border-current/30")}>{chip} {count}</span>
             ))}
           </button>
         </section>
@@ -127,7 +127,7 @@ export function CanvasSide({
       <section aria-labelledby="kc-hero" className="kc-tile flex flex-1 flex-col gap-3 p-4">
         <h2 id="kc-hero" className="sr-only">{project ? project.title : "No video open"}</h2>
         <DotMatrix text="Meridian" dot={3.2} gap={1.5} label="Meridian" accent fluid />
-        <span className="kc-chip w-fit bg-black/10 px-2.5 py-0.5 text-caption">{project ? (project.brandName ?? "No brand") : "Video project"}</span>
+        <span className="kc-chip w-fit bg-black/10 px-3 py-1 text-caption">{project ? (project.brandName ?? "No brand") : "Video project"}</span>
         <div className="relative grid flex-1 place-items-center py-1">
           <div className="kc-sun grid aspect-square w-[min(136px,62%)] place-items-center text-black">
             <DotMatrix text={`${figures.settled}/${figures.total}`} dot={4} gap={1.6} label={`${figures.settled} of ${figures.total} steps settled`} />
@@ -141,9 +141,9 @@ export function CanvasSide({
             <span className="kc-tile-muted whitespace-nowrap font-mono">{project ? spendLine(project) : "$0.00"}</span>
           </p>
           {move.kind === "new" ? (
-            <Link to="/create" search={{ way: "claude_code" }} aria-label={move.label} className="kc-pill inline-flex min-h-9 shrink-0 items-center gap-1.5 px-3 text-caption font-semibold">{move.short} <ArrowRight aria-hidden="true" className="size-3.5" /></Link>
+            <Link to="/create" search={{ way: "claude_code" }} aria-label={move.label} className="kc-pill inline-flex min-h-9 shrink-0 items-center gap-2 px-3 text-caption font-semibold">{move.short} <ArrowRight aria-hidden="true" className="size-3.5" /></Link>
           ) : (
-            <button type="button" onClick={move.kind === "watch" ? onFiles : move.kind === "choose" ? onChoose : onFollow} aria-label={move.label} title={move.label} className="kc-pill inline-flex min-h-9 shrink-0 items-center gap-1.5 px-3 text-caption font-semibold">
+            <button type="button" onClick={move.kind === "watch" ? onFiles : move.kind === "choose" ? onChoose : onFollow} aria-label={move.label} title={move.label} className="kc-pill inline-flex min-h-9 shrink-0 items-center gap-2 px-3 text-caption font-semibold">
               {move.short} <ArrowRight aria-hidden="true" className="size-3.5" />
             </button>
           )}
