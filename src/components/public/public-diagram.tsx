@@ -68,7 +68,7 @@ export function TwoLanes() {
 /** The commitments as numbered statements, one per row, each read on its own. */
 export function Commitments() {
   return (
-    <ol className="divide-y divide-border border-y border-hairline">
+    <ol className="divide-y divide-hairline border-y border-hairline">
       {COMMITMENTS.map((line, index) => (
         <li key={line} className="grid gap-2 py-6 md:grid-cols-[5rem_minmax(0,1fr)] md:gap-6">
           <span aria-hidden="true" className="font-mono text-sm text-fg-muted">{String(index + 1).padStart(2, "0")}</span>

@@ -148,6 +148,7 @@
   /* Katana canvas (owner direction 2026-11-18, docs/design/KATANA_CANVAS_SYSTEM.md): soft corners on one scale. --radius-sharp keeps
      its name as the control corner (inputs, menus, small cards: 12 px); a panel is 20 px; a frame, a sheet or a dialog is 28 px. Buttons,
      chips, badges and the phone's tab bar are pills (rounded-full). */
+  --radius-xs: 6px;
   --radius-sharp: 12px;
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -201,6 +202,25 @@
     line-height: 1.5rem;
   }
   button:not(:disabled), [role="button"]:not(:disabled) { cursor: pointer; }
+  /* One check and one radio for the whole app (the canvas system): a native checkbox or radio is drawn the same as the shared ones, so a
+     screen never shows the browser's own box in its own colour. The check is a 6 px square that fills with ink and shows a room-coloured
+     tick; the radio is a ring that takes an ink dot. Both keep the 2 px focus ring and dim when disabled. */
+  input[type="checkbox"], input[type="radio"] {
+    appearance: none; flex: none; display: inline-grid; place-content: center; width: 18px; height: 18px; margin: 0;
+    border: 1.5px solid var(--border-strong); background-color: var(--bg-overlay); color: var(--fg-primary); cursor: pointer;
+    transition: background-color 120ms, border-color 120ms;
+  }
+  input[type="checkbox"] { border-radius: var(--radius-xs); }
+  input[type="radio"] { border-radius: 9999px; }
+  input[type="checkbox"]:hover, input[type="radio"]:hover { border-color: var(--fg-secondary); }
+  input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate { background-color: var(--white-accent); border-color: var(--white-accent); }
+  input[type="checkbox"]:checked::after { content: ""; width: 9px; height: 5px; border: solid var(--bg-base); border-width: 0 0 2px 2px; transform: translateY(-1px) rotate(-45deg); }
+  input[type="checkbox"]:indeterminate::after { content: ""; width: 8px; height: 2px; background: var(--bg-base); }
+  input[type="radio"]:checked { border-color: var(--white-accent); }
+  input[type="radio"]:checked::after { content: ""; width: 8px; height: 8px; border-radius: 9999px; background: var(--white-accent); }
+  input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* On a touch screen the box grows a little; the row it sits in carries the full 44 px target. */
+  @media (pointer: coarse) { input[type="checkbox"], input[type="radio"] { width: 22px; height: 22px; } }
   /* One focus ring for every theme: 2px violet with a 2px offset. A control on a violet fill sets a white ring itself. */
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   /* The page's main region takes focus when a screen opens, so a reader lands on the page. It is a container, not a control, so it has no ring. */
@@ -262,6 +282,20 @@
     box-shadow: var(--shadow-sm);
     padding: 1rem;
   }
+  /* A choice: one option of a set, as a card. Its radio or check stays visible on the left; the whole card is the target. Unchosen it is
+     the overlay surface with a hairline; chosen it takes an ink edge (never the accent, which would read as an error). A disabled choice
+     dims. The focus ring is drawn on the card, not on the small control inside it. */
+  .choice {
+    display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-radius: var(--radius-md);
+    border: 2px solid var(--border-hairline); background: var(--bg-overlay); cursor: pointer; transition: border-color 120ms;
+  }
+  .choice:hover { border-color: var(--border-strong); }
+  .choice:has(:checked), .choice:has([data-state="checked"]) { border-color: var(--fg-primary); }
+  .choice:has(:disabled), .choice:has([data-disabled]) { opacity: 0.55; cursor: not-allowed; }
+  .choice:has(:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .choice :focus-visible { outline: none; }
+  .choice > input[type="radio"], .choice > input[type="checkbox"] { margin-top: 2px; }
+
   /* A layer that floats over the page: a menu, a popover, a dialog, a sheet, the phone's tab bar. */
   .surface-float { box-shadow: var(--shadow-lg); }
   /* A tile: the raised surface at the panel's corner, with the small shadow. A flat tile has no shadow. */
@@ -320,7 +354,17 @@
 }
 .surface-rise { animation: rise 460ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
 .stagger-in { animation: rise 420ms cubic-bezier(0.2, 0.7, 0.2, 1) both; }
-.page-enter { animation: fade 280ms ease-out both; }details > summary { transition: color 160ms ease; }
+.page-enter { animation: fade 280ms ease-out both; }
+details > summary { transition: color 160ms ease; list-style: none; cursor: pointer; }
+details > summary::-webkit-details-marker { display: none; }
+/* One disclosure mark for the whole app: a chevron that turns when the section opens. A summary that draws its own icon keeps it. */
+details > summary:not(:has(svg))::before {
+  content: ""; display: inline-block; flex: none; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; background: currentColor;
+  -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>") center / contain no-repeat;
+  mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><path d='m9 18 6-6-6-6'/></svg>") center / contain no-repeat;
+  transition: transform 120ms ease;
+}
+details[open] > summary:not(:has(svg))::before { transform: rotate(90deg); }
 details > summary:hover { color: var(--fg-primary); }
 
 /* The top bar's ground: the room fading out downwards, under the floating chips. */

@@ -19,9 +19,9 @@ export function CreateWays({ way, onWay }: { way: CreateWay | null; onWay: (way:
           return (
             <label
               key={id}
-              className="flex min-h-11 cursor-pointer items-start gap-3 rounded-sharp border border-hairline bg-overlay p-3 text-sm transition-colors hover:border-border-strong has-[:checked]:border-accent has-[:checked]:bg-raised has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
+              className="choice min-h-11 text-sm"
             >
-              <input type="radio" name="create-way" value={id} checked={way === id} onChange={() => onWay(id)} className="mt-1 shrink-0 accent-accent focus-visible:outline-none" />
+              <input type="radio" name="create-way" value={id} checked={way === id} onChange={() => onWay(id)} className="mt-0.5" />
               <span className="min-w-0">
                 <span className="flex items-center gap-1.5 font-semibold text-fg-primary">
                   <Icon aria-hidden="true" className="size-4 shrink-0 text-fg-secondary" />

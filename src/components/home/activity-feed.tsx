@@ -18,7 +18,7 @@ export function ActivityFeed({ entries, brandNameById }: { entries: AuditEntry[]
       {entries.length === 0 ? (
         <p className="text-sm text-fg-muted">No actions recorded yet.</p>
       ) : (
-        <ol className="divide-y divide-border">
+        <ol className="divide-y divide-hairline">
           {entries.map((entry) => {
             const line = describeAudit(entry, entry.brandId ? brandNameById.get(entry.brandId) ?? null : null);
             return (

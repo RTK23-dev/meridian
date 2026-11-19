@@ -100,8 +100,8 @@ test("the three shadow tokens are soft drop shadows in black, never a glow or a 
   }
 });
 
-test("the corners follow the canvas system's one scale: 12, 10, 14, 20 and 28 px", () => {
-  const scale = { "--radius-sharp": "12px", "--radius-sm": "10px", "--radius-md": "14px", "--radius-lg": "20px", "--radius-xl": "28px" };
+test("the corners follow the canvas system's one scale: 6 (a check), 12, 10, 14, 20 and 28 px", () => {
+  const scale = { "--radius-xs": "6px", "--radius-sharp": "12px", "--radius-sm": "10px", "--radius-md": "14px", "--radius-lg": "20px", "--radius-xl": "28px" };
   for (const [name, value] of Object.entries(scale)) assert.equal(aliases[name], value, `${name} must be ${value}`);
 });
 

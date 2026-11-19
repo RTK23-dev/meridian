@@ -16,7 +16,7 @@ export function DangerTab({ brands, canDelete }: { brands: BrandSummary[]; canDe
         {!canDelete ? <p className="text-sm text-fg-muted">Only an admin can delete a brand.</p> : null}
         {canDelete && brands.length === 0 ? <p className="text-sm text-fg-muted">There are no brands to delete.</p> : null}
         {canDelete && brands.length > 0 ? (
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-hairline">
             {brands.map((brand) => (
               <li key={brand.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
                 <span className="font-semibold text-fg-primary">{brand.name}</span>

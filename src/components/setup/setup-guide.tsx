@@ -166,7 +166,8 @@ export function SetupGuide() {
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 id="setup-progress" className="text-xl font-semibold text-fg-primary">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
-              <p className="text-sm text-fg-muted">{summary.headline}</p>
+              {/* The count is the heading and the next step is the button, so the sentence saying both again shows only when there is no button. */}
+              {next ? null : <p className="text-sm text-fg-muted">{summary.headline}</p>}
             </div>
             {next ? (
               <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-full bg-white-accent px-4 text-center text-sm font-semibold text-ground transition-colors hover:bg-fg-secondary">

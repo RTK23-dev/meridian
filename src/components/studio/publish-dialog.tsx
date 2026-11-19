@@ -190,7 +190,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
             <fieldset className="mt-4 space-y-2 rounded-sharp border border-hairline p-3 text-sm">
               <legend className="text-sm font-semibold">Instagram trial</legend>
               <label className="flex min-h-11 items-start gap-3">
-                <input type="checkbox" className="mt-1 size-4 shrink-0" {...register("trialFirst")} disabled={pending} />
+                <input type="checkbox" className="mt-1 shrink-0" {...register("trialFirst")} disabled={pending} />
                 <span>Post the Reel as a trial first. A trial is shared only with people who do not follow the account.</span>
               </label>
               {form.watch("trialFirst") ? (
@@ -227,7 +227,7 @@ export function PublishDialog({ target, channels, pending, results, onClose, onC
               <p className="font-semibold">An earlier post may have gone out</p>
               <p className="text-fg-muted">Nothing was sent again. Open the destination, look for the post, and send again only if it is not there.</p>
               <label className="flex min-h-11 items-start gap-3">
-                <input type="checkbox" className="mt-1 size-4 shrink-0" {...register("confirmRetry")} disabled={pending} />
+                <input type="checkbox" className="mt-1 shrink-0" {...register("confirmRetry")} disabled={pending} />
                 <span>{confirmRetryLabel(uncertain.map((item) => providerLabel(item.platform)))}</span>
               </label>
             </div>

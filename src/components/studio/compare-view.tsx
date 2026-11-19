@@ -76,7 +76,7 @@ export function CompareView({ variants, first, second, onChangeFirst, onChangeSe
                   <th scope="col" className="px-3 py-2 font-semibold">Match</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-hairline">
                 {variantMetadataDiff(a, b).map((row) => (
                   <tr key={row.field} className="align-top">
                     <th scope="row" className="px-3 py-2 font-normal">{row.field}</th>

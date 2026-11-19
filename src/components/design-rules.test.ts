@@ -59,7 +59,7 @@ test("corners come from the one scale: a written radius appears only on the vide
   for (const match of css.matchAll(/border-radius:\s*([^;]+);/g)) {
     const selector = css.slice(css.lastIndexOf("}", match.index) + 1, css.lastIndexOf("{", match.index)).split("\n").pop()!.trim();
     // A corner is a radius token, 0, or the full round of a pill or a disc (9999px, what rounded-full draws).
-    if (!selector.startsWith(".kc")) assert.match(match[1].trim(), /^(?:(?:var\(--radius-(?:sharp|sm|md|lg|xl)\)|0|9999px)\s*)+(?:!important)?$/, `${selector}: border-radius: ${match[1]}`);
+    if (!selector.startsWith(".kc")) assert.match(match[1].trim(), /^(?:(?:var\(--radius-(?:xs|sharp|sm|md|lg|xl)\)|0|9999px)\s*)+(?:!important)?$/, `${selector}: border-radius: ${match[1]}`);
   }
 });
 
@@ -68,7 +68,7 @@ test("no text is smaller than 11 px", () => {
 });
 
 test("no retired class name remains: the surfaces, the text and the borders use the Katana names", () => {
-  assert.deepEqual(offenders(/(?<![\w-])(?:bg|text|border|ring)-(?:surface|surface-2|fg|bg|border|accent-soft|accent-fg)(?![\w-])/), []);
+  assert.deepEqual(offenders(/(?<![\w-])(?:bg|text|border|ring|divide|outline|accent|stroke|fill|decoration|placeholder|caret)-(?:surface|surface-2|fg|bg|border|accent-soft|accent-fg)(?![\w-])/), []);
   assert.deepEqual(offenders(/(?<![\w-])(?:bg|text)-(?:success|warning|danger|info)-soft(?![\w-])/), []);
   assert.deepEqual(offenders(/surface-glow|surface-overlay|attention-signal|signal-ring|signal-working|orch-node/), []);
 });

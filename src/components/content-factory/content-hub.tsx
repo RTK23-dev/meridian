@@ -128,7 +128,7 @@ export function ContentHub({ brandId: routeBrandId, search, onSearchChange }: Pr
               role="radio"
               aria-checked={selected}
               onClick={() => onSearchChange({ section: "create", preset: item.id }, true)}
-              className={`group relative flex min-h-32 flex-col rounded-sharp border p-4 text-left transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${selected ? "border-accent bg-raised ring-1 ring-accent" : "border-hairline bg-overlay hover:border-accent"}`}
+              className={`group relative flex min-h-32 flex-col rounded-sharp border p-4 text-left transition duration-200 hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 ${selected ? "border-fg-primary bg-raised ring-1 ring-fg-primary" : "border-hairline bg-overlay hover:border-border-strong"}`}
             >
               <span className="mb-3 flex items-center justify-between gap-3">
                 <span className="text-sm font-semibold">{item.label}</span>

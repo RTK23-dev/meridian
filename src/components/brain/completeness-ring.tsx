@@ -8,7 +8,7 @@ export function CompletenessRing({ filled, total }: { filled: number; total: num
   const circumference = 2 * Math.PI * radius;
   return <div role="img" aria-label={`${filled} of ${total} required fields have content.`} className="relative grid size-16 shrink-0 place-items-center">
     <svg viewBox="0 0 64 64" aria-hidden="true" className="absolute inset-0 size-16 -rotate-90">
-      <circle cx="32" cy="32" r={radius} fill="none" strokeWidth="8" className="stroke-border" />
+      <circle cx="32" cy="32" r={radius} fill="none" strokeWidth="8" className="stroke-hairline" />
       <circle
         cx="32"
         cy="32"

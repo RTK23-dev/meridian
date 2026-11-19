@@ -113,7 +113,7 @@ function Shots({ shots, selected, onSelect }: { shots: BoardShot[]; selected: st
               type="button"
               aria-pressed={active}
               onClick={() => onSelect(active ? null : shot.shotId)}
-              className={`w-full rounded-sharp border p-3 text-left transition-colors hover:bg-overlay ${active ? "border-accent bg-accent-muted" : "border-hairline"}`}
+              className={`w-full rounded-sharp border p-3 text-left transition-colors hover:bg-overlay ${active ? "border-fg-primary bg-overlay" : "border-hairline"}`}
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="font-medium">{shot.label}</span>

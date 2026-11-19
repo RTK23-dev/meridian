@@ -67,7 +67,7 @@ export function DocsPage() {
       description="What the words in the product mean, how a deployment runs, and where the full reference lives in the repository."
     >
       <PublicSection id="concepts-title" title="Concepts">
-        <dl className="divide-y divide-border border-y border-hairline">
+        <dl className="divide-y divide-hairline border-y border-hairline">
           {CONCEPTS.map((concept) => (
             <div key={concept.term} className="grid gap-2 py-6 sm:grid-cols-[13rem_minmax(0,1fr)] sm:gap-8">
               <dt className="font-display text-lg font-semibold text-fg-primary">{concept.term}</dt>
@@ -99,7 +99,7 @@ export function DocsPage() {
       </PublicSection>
 
       <PublicSection id="reference-title" title="Reference in the repository">
-        <ul className="divide-y divide-border border-y border-hairline">
+        <ul className="divide-y divide-hairline border-y border-hairline">
           {REPO_DOCS.map((doc) => (
             <li key={doc.path}>
               <a
@@ -129,7 +129,7 @@ export function QuickstartPage() {
       description="Run Meridian on your own machine in a few minutes. The first screen to complete is the brand brain."
     >
       <PublicSection id="steps-title" title="The first run">
-        <ol className="divide-y divide-border border-y border-hairline">
+        <ol className="divide-y divide-hairline border-y border-hairline">
           {QUICKSTART.map((step, index) => (
             <li key={step.id} className="grid grid-cols-[minmax(0,1fr)] gap-4 py-8 sm:grid-cols-[5rem_minmax(0,1fr)] sm:gap-8">
               <span aria-hidden="true" className="font-mono text-sm text-fg-muted">{String(index + 1).padStart(2, "0")}</span>

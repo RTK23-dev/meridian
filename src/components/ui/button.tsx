@@ -14,7 +14,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        primary: `border-white-accent bg-white-accent text-ground hover:border-fg-secondary hover:bg-fg-secondary active:bg-fg-secondary focus-visible:outline-accent disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
+        // A disabled main action stays an ink pill, faded, so the page keeps one clear lead; its reason is written beside it.
+        primary: `border-white-accent bg-white-accent text-ground hover:border-fg-secondary hover:bg-fg-secondary active:bg-fg-secondary focus-visible:outline-accent disabled:opacity-40 ${focus}`,
         secondary: `border-hairline bg-raised text-fg-primary hover:border-border-strong hover:bg-overlay active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:bg-transparent disabled:text-fg-muted ${focus}`,
         quiet,
         danger: `border-danger bg-transparent text-danger hover:bg-raised active:bg-overlay focus-visible:outline-accent disabled:border-hairline disabled:text-fg-muted ${focus}`,

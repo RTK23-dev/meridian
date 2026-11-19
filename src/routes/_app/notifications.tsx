@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Button, Card, PageHeader, ScreenSkeleton } from "@/components/ui";
+import { Button, Card, PageHeader, ScreenSkeleton, Switch } from "@/components/ui";
 import { PlainErrorNotice, PlainErrorState } from "@/components/plain-error";
 import { useWorkspace } from "@/components/workspace";
 import { setNotificationPreference } from "@/lib/meridian/observability/actions";
@@ -31,9 +31,9 @@ function NotificationsPage() {
   if (query.isError && !query.data) return <PlainErrorState error={query.error} onRetry={() => void query.refetch()} />;
   if (!query.data) return <ScreenSkeleton label="Loading notification preferences" shape="rows" />;
   return <div className="space-y-6">
-    <PageHeader title="Notification preferences" description="Choose which in-app notifications appear for you in this workspace. These preferences do not control external webhook delivery." />
+    <PageHeader title="Notification preferences" description="Choose what shows in your in-app feed for this workspace: on shows it, off hides it. Webhooks are not changed here." />
     {change.error ? <PlainErrorNotice error={change.error} /> : null}
-    <Card><ul className="divide-y divide-border">{query.data.preferences.map(({ kind, enabled }) => <li key={kind} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"><div><p className="font-medium">{TITLES[kind] ?? kind}</p><p className="mt-1 text-sm text-fg-muted">{enabled ? "Shown in your in-app workspace feed." : "Hidden from your in-app workspace feed."}</p></div><label className="flex min-h-11 items-center gap-3"><span className="text-sm">{enabled ? "On" : "Off"}</span><input type="checkbox" className="size-6 accent-accent" aria-label={`${TITLES[kind] ?? kind} notifications`} checked={enabled} disabled={saving.includes(kind)} onChange={(event) => void change.mutateAsync({ kind, enabled: event.target.checked }).catch(() => undefined)} /></label></li>)}</ul></Card>
+    <Card><ul className="divide-y divide-hairline">{query.data.preferences.map(({ kind, enabled }) => <li key={kind} className="flex items-center justify-between gap-4 py-4 first:pt-0 last:pb-0"><p className="font-medium">{TITLES[kind] ?? kind}</p><Switch aria-label={`${TITLES[kind] ?? kind} notifications`} checked={enabled} disabled={saving.includes(kind)} onCheckedChange={(checked) => void change.mutateAsync({ kind, enabled: checked }).catch(() => undefined)} /></li>)}</ul></Card>
     {saving.length > 0 ? <p role="status" className="text-sm text-fg-muted">Saving preference…</p> : <Button type="button" variant="secondary" onClick={() => void query.refetch()}>Refresh preferences</Button>}
   </div>;
 }

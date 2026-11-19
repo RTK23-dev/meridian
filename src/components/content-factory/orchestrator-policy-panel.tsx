@@ -236,7 +236,7 @@ function FamilyCheckbox({ row, disabled, onToggle }: { row: FamilyRow; disabled:
   return (
     <li>
       <label className="inline-flex min-h-11 flex-wrap items-center gap-x-2 gap-y-0.5 text-sm sm:min-h-8">
-        <input type="checkbox" className="size-4" checked={row.switchedOff} disabled={disabled || row.locked} onChange={(event) => onToggle(event.target.checked)} />
+        <input type="checkbox" checked={row.switchedOff} disabled={disabled || row.locked} onChange={(event) => onToggle(event.target.checked)} />
         <span className="font-mono">{row.family}</span>
         <span className="text-fg-muted">{state}</span>
       </label>

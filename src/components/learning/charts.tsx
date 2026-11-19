@@ -5,7 +5,7 @@ import type { ChartPlotProps } from "./chart-plots";
 
 export type { ChartDatum } from "./chart-plots";
 
-const plotClass = "h-56 w-full text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-border";
+const plotClass = "h-56 w-full text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-hairline";
 
 // recharts is in chart-plots.tsx and loads with the first plot. The skeleton fills the plot's box until then.
 const ValueBarPlot = lazy(() => import("./chart-plots").then((module) => ({ default: module.ValueBarPlot })));

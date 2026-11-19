@@ -263,7 +263,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
       <CardHeader>
         <CardTitle>Batches of videos for {brandName}</CardTitle>
         <CardDescription>
-          Make a batch from draft videos and start them together under one budget. A start the engine refuses stays on its video with the reason. A start that would pass the budget stops the batch. A failed video can be retried alone.
+          Start draft videos together under one budget. A video the engine refuses keeps its reason, a failed one can be retried alone, and a start that would pass the budget stops the batch.
         </CardDescription>
       </CardHeader>
 
@@ -283,11 +283,20 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
         <fieldset className="space-y-3">
           <legend className="text-sm font-semibold">Create video variations</legend>
           <p className="text-sm text-fg-muted">
-            Pick a draft that has an uploaded reference video, attached Market research, a theme page and a plain instruction. Meridian makes original drafts from it, each with its own angle, and groups them into one batch. The reference is used only for structure and pacing. Nothing starts until you press Start batch.
+            Meridian makes original drafts from one ready draft, each with its own angle, and groups them into a batch. The reference sets only structure and pacing. Nothing starts until you press Start batch.
           </p>
           {sources.length === 0 ? (
             <div className="space-y-1 text-sm text-fg-muted">
-              <p>{sourceList.isPending ? "Looking for drafts that are ready..." : "No draft is ready to use as a source yet. A source needs an uploaded reference video, attached Market research, a theme page and a plain instruction."}</p>
+              {sourceList.isPending ? <p>Looking for drafts that are ready…</p> : (
+                <>
+                  <p>No draft is ready yet. A source draft needs all four:</p>
+                  <ul aria-label="What a source draft needs" className="flex flex-wrap gap-2 py-1">
+                    {["Uploaded reference video", "Market research", "Theme page", "Plain instruction"].map((need) => (
+                      <li key={need} className="inline-flex min-h-6 items-center rounded-full border border-hairline px-2 text-caption text-fg-secondary">{need}</li>
+                    ))}
+                  </ul>
+                </>
+              )}
               {notReady.length > 0 ? (
                 <ul className="list-disc pl-5">
                   {notReady.slice(0, 5).map((item) => <li key={item.id}><span className="font-semibold text-fg-primary">{item.title}</span>: {item.problem}</li>)}
@@ -451,7 +460,7 @@ export function BatchCard({ brandId, brandName, drafts, onOpenSession, onBatchCr
           <p className="text-sm" aria-label="Videos by state">
             {stateCounts(items).map((entry, index) => <span key={entry.state}>{index > 0 ? " · " : ""}{entry.count} {STATE_LABEL[entry.state].toLowerCase()}</span>)}
           </p>
-          <ol className="divide-y divide-border text-sm">
+          <ol className="divide-y divide-hairline text-sm">
             {items.map((item) => (
               <li key={item.sessionId} className="flex flex-wrap items-start justify-between gap-3 py-3">
                 <div className="min-w-0 space-y-1">

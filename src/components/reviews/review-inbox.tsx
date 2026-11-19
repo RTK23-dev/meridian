@@ -31,7 +31,7 @@ export function ReviewInbox({
                 type="button"
                 aria-current={selected ? "true" : undefined}
                 onClick={() => onSelect(index)}
-                className={`flex min-h-11 w-full flex-col gap-2 rounded-sharp border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${selected ? "border-accent bg-overlay" : "border-hairline bg-raised"}`}
+                className={`flex min-h-11 w-full flex-col gap-2 rounded-sharp border p-3 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${selected ? "border-fg-primary bg-overlay" : "border-hairline bg-raised"}`}
               >
                 <span className="block truncate font-semibold">{item.label || "Untitled review"}</span>
                 <span className="block text-xs text-fg-muted">{formatOpened(item.createdAt)} · {item.decision} · {item.question}</span>

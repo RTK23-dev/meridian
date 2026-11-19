@@ -9,7 +9,7 @@ export function WhereThingsLive({ brandId }: { brandId: string }) {
   return (
     <section aria-labelledby="where-things-live" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
       <h2 id="where-things-live" className="text-section font-semibold">Where things live</h2>
-      <ul className="mt-3 divide-y divide-border">
+      <ul className="mt-3 divide-y divide-hairline">
         {AREA_GUIDE.map((area) => (
           <li key={area.id} className="py-3">
             <Link to={(area.path.startsWith("/") ? area.path : `/brands/${brandId}/${area.path}`) as never} className="font-semibold underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2">

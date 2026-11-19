@@ -186,7 +186,7 @@ export function CalibrationScreen({ brandId }: { brandId: string }) {
           <EmptyState title="No approved version yet" reason="No version has been approved. The code defaults stay active." />
         ) : (
           <Card>
-            <ul className="divide-y divide-border">
+            <ul className="divide-y divide-hairline">
               {data.versions.map((version) => (
                 <li key={version.id} className="space-y-1 py-3 first:pt-0 last:pb-0">
                   <p className="font-semibold">Version {version.version}</p>

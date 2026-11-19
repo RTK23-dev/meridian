@@ -89,7 +89,7 @@ export function StepDrawer({
         >
           <RadioGroup label="The options the chat offered" value={choice} onValueChange={setChoice} className="space-y-2">
             {checkpoint.options.map((option, index) => (
-              <label key={option.label} htmlFor={`kc-option-${index}`} className="flex cursor-pointer items-start gap-3 rounded-sharp border border-hairline p-3 has-[[data-state=checked]]:border-fg-primary">
+              <label key={option.label} htmlFor={`kc-option-${index}`} className="choice">
                 <RadioGroupItem id={`kc-option-${index}`} value={option.label} className="mt-1" />
                 <span className="min-w-0 space-y-1">
                   <span className="block font-semibold text-fg-primary">{option.label}</span>

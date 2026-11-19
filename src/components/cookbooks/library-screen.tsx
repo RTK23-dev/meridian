@@ -5,7 +5,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Button, ScreenSkeleton, toast } from "@/components/ui";
+import { Button, Input, ScreenSkeleton, SelectInput, Switch, toast } from "@/components/ui";
 import { hasRole } from "@/lib/meridian/access";
 import type { Cookbook } from "@/lib/meridian/cookbooks/schema";
 import { defaultsOf, type ControlValue } from "@/lib/meridian/cookbooks/controls";
@@ -62,10 +62,10 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
 
       <section aria-labelledby="cookbook-filters" className="flex flex-wrap items-end gap-4">
         <h2 id="cookbook-filters" className="sr-only">Filter the cookbooks</h2>
-        <label className="flex flex-col gap-1 text-small">
-          <span className="text-fg-secondary">Family</span>
-          <select
-            className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
+        <label className="flex flex-col gap-1.5 text-small">
+          <span className="font-medium text-fg-primary">Family</span>
+          <SelectInput
+            className="w-56"
             value={filter.family}
             onChange={(event) => setFilter({ ...filter, family: event.target.value as LibraryFilter["family"] })}
           >
@@ -75,12 +75,9 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
                 {family}
               </option>
             ))}
-          </select>
+          </SelectInput>
         </label>
-        <label className="flex items-center gap-2 text-small text-fg-primary">
-          <input type="checkbox" checked={filter.freeOnly} onChange={(event) => setFilter({ ...filter, freeOnly: event.target.checked })} />
-          Free in agent mode only
-        </label>
+        <Switch label="Free in agent mode only" checked={filter.freeOnly} onCheckedChange={(checked) => setFilter({ ...filter, freeOnly: checked })} />
       </section>
 
       {cards.length === 0 ? (
@@ -108,23 +105,29 @@ export function CookbookLibraryScreen({ brandId }: { brandId: string }) {
   );
 }
 
+const CHIP = "inline-flex min-h-6 items-center rounded-full border border-hairline px-2 text-caption text-fg-secondary";
+
+/**
+ * One cookbook as a card: the family above the name, a two-line summary, then its facts as chips at the foot, so a grid of cards reads as
+ * names and chips rather than six stacked lines each. The open one takes the ink border, as every chosen option does.
+ */
 function CookbookCardButton({ card, selected, onOpen }: { card: CookbookCard; selected: boolean; onOpen: () => void }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
       onClick={onOpen}
-      className="flex h-full w-full flex-col gap-3 rounded-sharp border border-hairline bg-raised p-4 text-left transition-colors hover:bg-overlay focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+      className="flex h-full w-full flex-col gap-2 rounded-sharp border-2 border-hairline bg-raised p-4 text-left transition-colors hover:border-border-strong focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent aria-pressed:border-fg-primary aria-pressed:bg-overlay sm:p-5"
     >
-      <span className="flex items-center justify-between gap-2">
-        <span className="text-section font-semibold text-fg-primary">{card.label}</span>
-        <span className="rounded-full border border-hairline px-2 py-0.5 text-caption text-fg-secondary">{card.family}</span>
-      </span>
-      <span className="text-small text-fg-secondary">{card.summary}</span>
-      <span className="text-small font-medium text-fg-primary">{card.badge}</span>
-      <span className="text-small text-fg-muted">{card.estimate}</span>
+      <span className="eyebrow">{card.family}</span>
+      <span className="text-heading font-semibold text-fg-primary">{card.label}</span>
+      <span className="line-clamp-2 text-small text-fg-secondary">{card.summary}</span>
       {card.unresolved !== null ? <span className="text-small text-danger">{card.unresolved}</span> : null}
-      <span className="text-caption text-fg-muted">{card.source === "builtin" ? "Built in" : "Made in this workspace"}</span>
+      <span className="mt-auto flex flex-wrap items-center gap-2 pt-2">
+        <span className={card.freeInAgentMode ? "inline-flex min-h-6 items-center rounded-full bg-white-accent px-2 text-caption font-semibold text-ground" : `${CHIP} font-medium text-fg-primary`}>{card.badge}</span>
+        <span className={CHIP}>{card.source === "builtin" ? "Built in" : "Yours"}</span>
+        <span className="text-caption text-fg-muted">{card.estimate}</span>
+      </span>
     </button>
   );
 }
@@ -200,20 +203,21 @@ function CookbookDetail({
   };
 
   return (
-    <section aria-labelledby="cookbook-detail-title" className="space-y-6 rounded-sharp border border-hairline bg-raised p-6">
+    <section aria-labelledby="cookbook-detail-title" className="surface-tile space-y-6 border border-hairline p-4 sm:p-6">
       <header className="space-y-2">
         <h2 id="cookbook-detail-title" className="text-section font-semibold text-fg-primary">{cookbook.label}</h2>
         <p className="text-small text-fg-secondary">{cookbook.summary}</p>
-        <p className="text-caption text-fg-muted">
-          Version {cookbook.version} · {state.source === "builtin" ? "Built in" : "Made in this workspace"}
+        <p className="flex flex-wrap gap-2">
+          <span className={CHIP}>Version {cookbook.version}</span>
+          <span className={CHIP}>{state.source === "builtin" ? "Built in" : "Made in this workspace"}</span>
         </p>
       </header>
 
-      <div className="flex flex-wrap gap-3">
-        <Link to="/brands/$brandId/content" params={{ brandId }} search={{ section: "create" }} className="text-small font-medium text-accent underline underline-offset-4">
+      <div className="space-y-2">
+        <Link to="/brands/$brandId/content" params={{ brandId }} search={{ section: "create" }} className="inline-flex min-h-10 items-center rounded-full bg-white-accent px-4 text-button font-semibold text-ground hover:bg-fg-secondary">
           Make a video with this cookbook
         </Link>
-        <span className="text-small text-fg-muted">In Create, the run's Cookbook step offers it, with the settings below as its defaults.</span>
+        <p className="text-caption text-fg-muted">Create's Cookbook step offers it, with the settings below as its defaults.</p>
       </div>
 
       <div className="space-y-3">
@@ -228,20 +232,14 @@ function CookbookDetail({
           <h3 className="text-small font-semibold text-fg-primary">Save as my cookbook</h3>
           <p className="text-small text-fg-muted">A copy is yours to edit. It keeps a link to this cookbook.</p>
           <div className="flex flex-wrap items-end gap-3">
-            <label className="flex flex-col gap-1 text-small">
-              <span className="text-fg-secondary">Name</span>
-              <input
-                className="rounded-sharp border border-hairline bg-raised px-3 py-2 text-fg-primary"
-                value={copyName}
-                onChange={(event) => setCopyName(event.target.value)}
-                maxLength={80}
-              />
-            </label>
-            <label className="flex items-center gap-2 text-small text-fg-primary">
+            <div className="w-64">
+              <Input label="Name" value={copyName} onChange={(event) => setCopyName(event.target.value)} maxLength={80} />
+            </div>
+            <label className="flex min-h-10 items-center gap-2 text-small text-fg-primary">
               <input type="checkbox" checked={share} onChange={(event) => setShare(event.target.checked)} />
               Share with the whole workspace
             </label>
-            <Button type="button" loading={busy} disabled={busy} onClick={() => void copy()}>
+            <Button type="button" variant="secondary" loading={busy} disabled={busy} onClick={() => void copy()}>
               Save as my cookbook
             </Button>
           </div>

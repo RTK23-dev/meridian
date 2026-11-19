@@ -98,7 +98,7 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
           <section aria-labelledby="pillars-title" className="space-y-3">
             <h3 id="pillars-title" className="text-sm font-semibold">Content pillars</h3>
             {data.pillarMix.length === 0 ? <p className="text-sm text-fg-muted">No pillars yet.</p> : null}
-            <ul className="divide-y divide-border text-sm">
+            <ul className="divide-y divide-hairline text-sm">
               {data.pillarMix.map((row) => (
                 <li key={row.pillarId ?? "none"} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span className="font-semibold">{row.name}</span>
@@ -150,7 +150,7 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
           <section aria-labelledby="video-pillars-title" className="space-y-3">
             <h3 id="video-pillars-title" className="text-sm font-semibold">Pillar of each video</h3>
             {data.videos.length === 0 ? <p className="text-sm text-fg-muted">No videos yet.</p> : null}
-            <ul className="divide-y divide-border text-sm">
+            <ul className="divide-y divide-hairline text-sm">
               {data.videos.map((video) => (
                 <li key={video.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                   <span>{video.title} <span className="text-fg-muted">· {video.status}</span></span>
@@ -200,7 +200,7 @@ export function GovernanceCard({ brandId, brandName }: { brandId: string; brandN
           <section aria-labelledby="rights-title" className="space-y-3">
             <h3 id="rights-title" className="text-sm font-semibold">Rights records</h3>
             {data.rights.length === 0 ? <p className="text-sm text-fg-muted">No rights are recorded. A video made from a stored file cannot be approved until one is.</p> : null}
-            <ul className="divide-y divide-border text-sm">
+            <ul className="divide-y divide-hairline text-sm">
               {data.rights.map((record) => (
                 <li key={record.id} className="flex flex-wrap items-start justify-between gap-2 py-2">
                   <div className="min-w-0 space-y-1 break-words">

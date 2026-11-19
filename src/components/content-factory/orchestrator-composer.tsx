@@ -191,11 +191,11 @@ export function OrchestratorComposer({
           <legend className="text-sm font-semibold">Start from</legend>
           <div className="flex flex-col gap-2 sm:flex-row sm:gap-6">
             <label className="inline-flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
-              <input type="radio" name="composer-mode" value="format" checked={mode === "format"} onChange={() => setMode("format")} className="size-4" />
+              <input type="radio" name="composer-mode" value="format" checked={mode === "format"} onChange={() => setMode("format")} />
               A format to copy or make
             </label>
             <label className="inline-flex min-h-11 items-center gap-2 text-sm sm:min-h-8">
-              <input type="radio" name="composer-mode" value="own" checked={mode === "own"} onChange={() => setMode("own")} className="size-4" />
+              <input type="radio" name="composer-mode" value="own" checked={mode === "own"} onChange={() => setMode("own")} />
               My own inputs
             </label>
           </div>
@@ -300,7 +300,7 @@ export function OrchestratorComposer({
           <h3 id="composer-later-heading" className="text-sm font-semibold">
             Not connected yet
           </h3>
-          <ul className="divide-y divide-border rounded-sharp border border-hairline text-sm">
+          <ul className="divide-y divide-hairline rounded-sharp border border-hairline text-sm">
             <li className="flex flex-col gap-0.5 px-4 py-3 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
               <span className="font-medium">Reference files</span>
               <span className="text-fg-muted">Not connected yet. The plan cannot read files you attach here.</span>

@@ -78,7 +78,7 @@ export function ProviderCardGroup<Value extends string>({
                 disabled={card.disabled}
                 aria-describedby={card.disabled && card.disabledReason ? reasonId : undefined}
                 onChange={() => onChange(card.value)}
-                className="mt-1 size-4 shrink-0 accent-fg"
+                className="mt-1 size-4 shrink-0 accent-fg-primary"
               />
               <span className="min-w-0 space-y-1">
                 <span className="block font-semibold">

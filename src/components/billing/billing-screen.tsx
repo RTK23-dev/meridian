@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import { Button, ErrorState, Field, Input, PageHeader } from "@/components/ui";
+import { Badge, Button, ErrorState, Field, Input, PageHeader } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
@@ -54,11 +54,7 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-workspace" className="space-y-6">
       <div className="space-y-1">
         <h2 id="billing-workspace" className="text-section font-semibold">Workspace</h2>
-        <p className="text-fg-muted">These limits apply to the whole workspace, across every brand.</p>
-        <p className="text-sm text-fg-muted">
-          The monthly budget is a limit Meridian enforces, not your OpenRouter account balance. It applies to each calendar month (UTC) across paid text and video.
-          Blank means no budget is set, so paid generation is blocked until one is saved. There is no default.
-        </p>
+        <p className="max-w-[65ch] text-fg-muted">These apply across every brand. The monthly budget is Meridian's own limit for each calendar month (UTC), not your OpenRouter balance.</p>
       </div>
       {workspace.policyReadable ? null : (
         <p className="text-sm text-danger" role="alert">The workspace's saved policy cannot be read, so the measure ceiling and the decision cap are unknown. {workspace.policyReason ?? ""}</p>
@@ -166,7 +162,6 @@ function LimitForm({
             onChange={(event) => setDraft(event.target.value)}
             aria-describedby={statusId}
             className="w-40"
-            placeholder={value === null ? "Not set" : undefined}
           />
           {canEdit ? (
             <Button type="submit" disabled={save.isPending || shown === (value === null ? "" : value.toFixed(spec.decimals))}>
@@ -178,9 +173,13 @@ function LimitForm({
               Clear
             </Button>
           ) : null}
+          {/* The status is a dot and a word beside the field, not a sentence under it: "Not set" says it all, and the reason why reaches a
+              screen reader through the field's description. */}
+          <Badge id={statusId} variant={value === null || value === 0 ? "warning" : "success"} className="h-auto min-h-5 whitespace-normal">
+            {value === null ? <>Not set<span className="sr-only">. The step it guards is refused until you set it.</span></> : limitStatusText(kind, value)}
+          </Badge>
         </div>
       </Field>
-      <p id={statusId} className="text-sm text-fg-muted">{limitStatusText(kind, value)}</p>
       {failure ? <PlainErrorMessage message={failure.message} raw={failure.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
     </form>

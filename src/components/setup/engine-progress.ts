@@ -17,7 +17,7 @@ export function openRouterProgress(input: { keySaved: boolean; testPassed: boole
     { id: "active", label: "OpenRouter is the active engine", done: input.active && input.testPassed },
   ];
   const next = !input.keySaved
-    ? "Save your OpenRouter key below."
+    ? "Save your OpenRouter key first."
     : !input.testPassed
       ? "Test the connection below. Saving a key does not switch the engine."
       : !input.active
@@ -42,7 +42,7 @@ export function savedKeyEngineProgress(input: { engineLabel: string; keySaved: b
     { id: "active", label: `${input.engineLabel} is the active engine`, done: input.active && input.ready },
   ];
   const next = !input.keySaved
-    ? `Save your ${input.engineLabel} key below.`
+    ? `Save your ${input.engineLabel} key first.`
     : !input.ready
       ? "The key is saved, but this engine is not ready. The reason is shown above."
       : !input.active

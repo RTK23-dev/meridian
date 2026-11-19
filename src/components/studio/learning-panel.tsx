@@ -73,7 +73,7 @@ export function LearningPanel({ patterns, publications, organicPosts, canEdit, r
       {organicPosts.length > 0 ? (
         <div className="mt-4 border-t border-hairline pt-3">
           <h3 className="eyebrow">Organic social publications</h3>
-          <ul className="mt-2 divide-y divide-border text-sm">
+          <ul className="mt-2 divide-y divide-hairline text-sm">
             {organicPosts.map((post) => (
               <li key={post.id} className="flex flex-wrap items-center justify-between gap-2 py-3">
                 <div>

@@ -74,7 +74,7 @@ export function StoredPages({
   }
 
   return (
-    <ol aria-label="Stored pages and posts" className="divide-y divide-border rounded-sharp border border-hairline">
+    <ol aria-label="Stored pages and posts" className="divide-y divide-hairline rounded-sharp border border-hairline">
       {query.data.map((item) => (
         <li key={item.id} className="space-y-2 p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">

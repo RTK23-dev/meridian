@@ -6,6 +6,7 @@ export { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter }
 export { Badge, StatusBadge, badgeVariants } from "./badge";
 export { Toaster, toast, Skeleton, ScreenSkeleton, ChartSkeleton, EmptyState, ErrorState, ErrorNotice, NotConnected, errorText } from "./feedback";
 export { PageHeader, Stat, KpiCard, Stepper, Kbd, type BreadcrumbItem, type StepState } from "./layout";
+export { ClampedText } from "./clamped-text";
 export { DataTable } from "./data-table";
 export { Avatar, Logo } from "./avatar";
 export { ThemeProvider, useTheme, themeBootstrap, type Theme } from "./theme";

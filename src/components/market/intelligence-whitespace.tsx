@@ -36,7 +36,7 @@ export function WhitespaceRanking({ items, brandId, canEdit, pendingIds, onStatu
   onStatus: (id: string, status: "accepted" | "rejected") => void;
 }) {
   const ranked = rankWhitespace(items);
-  return <ol aria-label="Whitespace ranked by expected win probability" className="divide-y divide-border">
+  return <ol aria-label="Whitespace ranked by expected win probability" className="divide-y divide-hairline">
     {ranked.map((opportunity, index) => {
       const presentation = STATUS[opportunity.status] ?? STATUS.proposed;
       const StatusIcon = presentation.icon;
