@@ -54,7 +54,7 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-workspace" className="space-y-6">
       <div className="space-y-1">
         <h2 id="billing-workspace" className="text-section font-semibold">Workspace</h2>
-        <p className="max-w-[65ch] text-fg-muted">These apply across every brand. The monthly budget is Meridian's own limit for each calendar month (UTC), not your OpenRouter balance.</p>
+        <p className="max-w-[65ch] text-fg-muted">These apply across every brand. The monthly budget is Meridian's own limit for each calendar month (UTC), not your OpenRouter account balance.</p>
       </div>
       {workspace.policyReadable ? null : (
         <p className="text-sm text-danger" role="alert">The workspace's saved policy cannot be read, so the measure ceiling and the decision cap are unknown. {workspace.policyReason ?? ""}</p>
