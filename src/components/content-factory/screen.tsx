@@ -79,7 +79,10 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
         <div className="space-y-2">
           <h2 className="text-section font-semibold">Make and review video batches</h2>
           <p className="max-w-3xl text-sm text-fg-muted">Research a topic, then make many original videos from what you find. No video is marked complete unless the engine records the output.</p>
-          <ol aria-label="Steps to make many videos" className="max-w-3xl list-decimal space-y-1 pl-5 text-sm text-fg-primary">
+          {/* The six steps fold away, so the page opens on what to do next rather than on a list to read. */}
+          <details className="max-w-3xl text-sm">
+            <summary className="min-h-10 py-2 font-semibold text-fg-primary">How a batch is made <span className="font-normal text-fg-muted">· 6 steps</span></summary>
+          <ol aria-label="Steps to make many videos" className="mt-2 list-decimal space-y-2 pl-5 text-sm text-fg-primary">
             <li>Fill in your brand details{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/brain` as never} className="font-semibold underline underline-offset-4">Brand brain</Link></> : null}. Four fields are required.</li>
             <li>Collect research{initialBrandId ? <> on <Link to={`/brands/${initialBrandId}/market` as never} className="font-semibold underline underline-offset-4">Market</Link></> : null}: paste public page URLs of examples that work.</li>
             <li>Make one draft below. Upload your reference as a video file, attach the research and a theme page (its style, persona and voice are what the videos are made with), and write what the videos should be about. Files are kept in this workspace's Google Drive when it is connected, and in Meridian's own database when it is not.</li>
@@ -87,6 +90,7 @@ export function ContentFactoryScreen({ initialSessionId = null, embedded = false
             <li>Choose how many videos and one total budget under <strong>Create video variations</strong>. This makes the drafts and starts nothing.</li>
             <li>Read the list, then press <strong>Start the batch</strong>. Each video shows its real state. Open a video to approve or export it.</li>
           </ol>
+          </details>
         </div>
       ) : null}
       {embedded && newSession ? <div className="flex justify-end">{newSession}</div> : null}

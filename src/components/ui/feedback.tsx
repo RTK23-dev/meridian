@@ -35,14 +35,19 @@ export function ScreenSkeleton({ label, shape = "cards", className }: { label: s
   </div>;
 }
 
-/** Two short sentences and one action. The icon, if given, sits beside the title with no bubble around it. */
+/**
+ * Two short sentences and one action. An empty state is a gap, not a card: a dashed outline on the room with no fill, so it reads quieter
+ * than the tiles that hold real work beside it. The icon, if given, sits beside the title with no bubble around it.
+ */
 export function EmptyState({ icon, title, reason, action, className }: { icon?: ReactNode; title: string; reason: string; action?: ReactNode; className?: string }) {
-  return <Card className={cn("flex flex-col items-start gap-3 p-6", className)}>
-    {icon ? <span className="text-fg-muted">{icon}</span> : null}
-    <h2 className="font-display text-section font-semibold text-fg-primary">{title}</h2>
+  return <section className={cn("flex flex-col items-start gap-2 rounded-sharp border border-dashed border-border-strong/50 p-4 sm:p-6", className)}>
+    <div className="flex items-center gap-2">
+      {icon ? <span className="text-fg-muted [&_svg]:size-4">{icon}</span> : null}
+      <h2 className="text-heading font-semibold text-fg-primary">{title}</h2>
+    </div>
     <p className="max-w-lg text-small text-fg-muted">{reason}</p>
-    {action}
-  </Card>;
+    {action ? <div className="pt-2">{action}</div> : null}
+  </section>;
 }
 
 export function ErrorState({ message = "We could not load this information.", requestId, detail, onRetry, className }: { message?: string; requestId?: string; detail?: string; onRetry?: () => void; className?: string }) {

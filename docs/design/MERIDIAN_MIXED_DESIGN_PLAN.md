@@ -1,5 +1,7 @@
 # Meridian mixed design plan: Katana, Onlab's distances and Sanity's mechanisms
 
+> **Superseded in part (owner direction 2026-11-18).** The colours, corners, shadows and the meridian line are replaced by `KATANA_CANVAS_SYSTEM.md`. The rest still holds where the canvas system does not change it.
+
 Status: proposal for owner review. Written 2026-11-02. This document changes no app code. It adds the proposed token file (`docs/design/tokens/katana-tokens.json`), a prototype in `docs/design/prototype/`, set out as small plates (each part, with what it does and what it means), and the Sanity evidence in `docs/design/research/sanity/`. Open the prototype from `docs/design/prototype/README.md`.
 
 Scope: the design system, the Create flow (Brief, Plan, step details), the component states and the accessibility rules. Home, Library, Insights and Settings are covered only where the mixed rules change them (section 4.6).

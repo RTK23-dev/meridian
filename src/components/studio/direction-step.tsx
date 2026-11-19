@@ -152,7 +152,7 @@ export function DirectionStep({ session, brandId, canEdit, pending, opportunitie
           ) : alternatives.length === 0 ? (
             <p className="mt-3 text-sm text-fg-muted">No other open opportunity is stored for this brand.</p>
           ) : (
-            <ul className="mt-3 divide-y divide-border text-sm">
+            <ul className="mt-3 divide-y divide-hairline text-sm">
               {alternatives.map((item) => (
                 <li key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3">
                   <div className="min-w-0">

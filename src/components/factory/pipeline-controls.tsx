@@ -53,7 +53,7 @@ export function ChoiceGroup<T extends string | number>({
               />
               <label
                 htmlFor={id}
-                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sharp border border-border-strong bg-raised px-3 text-sm font-medium text-fg-primary hover:bg-overlay peer-checked:border-accent peer-checked:bg-accent-muted peer-checked:font-semibold peer-checked:ring-1 peer-checked:ring-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
+                className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-sharp border border-border-strong bg-raised px-3 text-sm font-medium text-fg-primary hover:bg-overlay peer-checked:border-fg-primary peer-checked:bg-white-accent peer-checked:font-semibold peer-checked:text-ground peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent peer-disabled:cursor-not-allowed peer-disabled:opacity-55 sm:min-h-9"
               >
                 {checked ? <Check aria-hidden="true" className="size-4 text-fg-primary" /> : null}
                 {option.label}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
-import { Link } from "@tanstack/react-router";
 import { Button, Field, Input, errorText } from "@/components/ui";
 import { UnsavedChangesBar } from "@/components/forms/unsaved-bar";
 import { UnsavedChangesGuard } from "@/components/forms/unsaved-guard";
@@ -75,22 +74,13 @@ export function GeneralTab({ organizationId, name, canAdmin }: { organizationId:
         {renameRaw ? <FormError message={plainServerError(renameRaw, "settings")} raw={renameRaw} /> : null}
       </section>
 
-      <section aria-labelledby="billing-limits-title" className="panel">
-        <h2 id="billing-limits-title" className="text-section font-semibold text-fg-primary">Billing and limits</h2>
-        <p className="mt-1 text-sm text-fg-muted">
-          The monthly budget, the brand budgets, the factory caps, the measure ceiling and the decision cap are set in one place.
-          Nothing is set by default: a limit that is not set refuses the paid step it guards.
-        </p>
-        <p className="mt-3"><Link to="/billing" className="font-semibold underline underline-offset-2">Open billing and limits</Link></p>
-      </section>
-
-      <details className="group rounded-sharp border border-hairline bg-raised p-5">
+      <details className="group panel">
         <summary className="cursor-pointer text-base font-semibold text-fg-primary">Create another workspace<span className="ml-2 text-sm font-normal text-fg-muted">A second one keeps its own brands, members and keys</span></summary>
         <div className="mt-4">
-      <section aria-labelledby="another-workspace-title" className="space-y-4 panel">
+      <section aria-labelledby="another-workspace-title" className="space-y-4">
         <div>
-          <h2 id="another-workspace-title" className="text-section font-semibold text-fg-primary">Create another workspace</h2>
-          <p className="mt-1 text-sm text-fg-muted">A second workspace keeps its own brands, members, and keys. You become its owner.</p>
+          <h2 id="another-workspace-title" className="sr-only">Create another workspace</h2>
+          <p className="text-sm text-fg-muted">You become its owner.</p>
         </div>
         <form className="flex flex-wrap items-end gap-3" onSubmit={createForm.handleSubmit(createWorkspace)} onKeyDown={(event) => submitOnShortcut(event)}>
           <Field label="Name" error={createForm.formState.errors.name?.message} required>

@@ -37,7 +37,7 @@ function ChangeList({ changes, hasPrevious }: { changes: BriefChange[]; hasPrevi
   if (!hasPrevious) return <p className="mt-2 text-sm text-fg-muted">There is no earlier brief to compare with.</p>;
   if (changes.length === 0) return <p className="mt-2 text-sm text-fg-muted">No field changed since the previous brief.</p>;
   return (
-    <ul className="mt-2 divide-y divide-border text-sm">
+    <ul className="mt-2 divide-y divide-hairline text-sm">
       {changes.map((change) => (
         <li key={change.field} className="py-3">
           <p className="font-semibold">{change.label}</p>
@@ -138,7 +138,7 @@ function BriefFrameSection({ brief, canEdit, pending, onSave }: { brief: StudioB
       <h3 id="brief-frame-title" className="font-semibold">Brief frame</h3>
       <p className="text-sm text-fg-muted">The constraints this brief was written under. Each value shows where it came from. A field with no stored value reads as not set.</p>
       <p className="text-sm text-fg-muted">Changing the frame does not change the brief's copy. The copy is judged as written.</p>
-      <dl className="divide-y divide-border text-sm">
+      <dl className="divide-y divide-hairline text-sm">
         <FrameReadRow label="Voice" text={frameFieldText(frame.voice)} source={frame.voice.source} />
         <FrameReadRow label="Prohibited claims" text={frameFieldText(frame.prohibitedClaims)} source={frame.prohibitedClaims.source} />
         <FrameReadRow label="Required disclaimers" text={frameFieldText(frame.requiredDisclaimers)} source={frame.requiredDisclaimers.source} />
@@ -148,7 +148,7 @@ function BriefFrameSection({ brief, canEdit, pending, onSave }: { brief: StudioB
         <FrameEditForm key={JSON.stringify(frame)} frame={frame} pending={pending} onSave={onSave} />
       ) : (
         <>
-          <dl className="divide-y divide-border text-sm">
+          <dl className="divide-y divide-hairline text-sm">
             <FrameReadRow label="Platform note" text={frameFieldText(frame.platform)} source={frame.platform.source} />
             <FrameReadRow
               label="Budget note"

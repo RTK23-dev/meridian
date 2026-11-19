@@ -28,7 +28,7 @@ export function EvidenceDrawer({ variant, onClose }: { variant: StudioVariant | 
                     <th scope="col" className="px-3 py-2 font-semibold">Reason</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border">
+                <tbody className="divide-y divide-hairline">
                   {questions.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-3 py-4 text-fg-muted">No decision record is stored for this variant.</td>

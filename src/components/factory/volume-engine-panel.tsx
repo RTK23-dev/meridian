@@ -76,7 +76,7 @@ export function VolumeEnginePanel({
               key={option.value}
               className="inline-flex min-h-11 items-center gap-2 rounded-sharp border border-dashed border-border-strong px-3 text-sm text-fg-muted opacity-70 sm:min-h-9"
             >
-              <input type="checkbox" disabled className="size-4" />
+              <input type="checkbox" disabled />
               {option.value}
             </label>
           ))}
@@ -139,7 +139,7 @@ export function VolumeEnginePanel({
                       disabled={!row.selectable}
                       aria-describedby={detailId}
                       onChange={() => onChange({ provider: row.id })}
-                      className="size-5 accent-fg"
+                      className="size-5 accent-fg-primary"
                     />
                     {row.label}
                   </label>

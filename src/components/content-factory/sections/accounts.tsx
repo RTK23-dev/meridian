@@ -351,7 +351,7 @@ function ConnectForm({
             role="radio"
             aria-checked={platform === item.id}
             onClick={() => onPlatform(item.id)}
-            className={`min-h-11 rounded-full border px-3 text-sm font-semibold ${platform === item.id ? "border-fg-primary bg-fg-primary text-on-accent" : "border-hairline bg-raised text-fg-primary hover:bg-overlay"}`}
+            className={`min-h-11 rounded-full border px-3 text-sm font-semibold ${platform === item.id ? "border-fg-primary bg-fg-primary text-ground" : "border-hairline bg-raised text-fg-primary hover:bg-overlay"}`}
           >
             {item.name}
           </button>

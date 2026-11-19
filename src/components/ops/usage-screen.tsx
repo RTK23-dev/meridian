@@ -67,7 +67,7 @@ export function UsageScreen() {
         description="Model runs recorded for this workspace. A cost a run did not report stays unknown. It is never counted as zero."
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <MetricCard
           label="Recorded runs"
           value={runs.toLocaleString()}

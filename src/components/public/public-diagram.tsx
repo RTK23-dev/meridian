@@ -48,7 +48,7 @@ export function TwoLanes() {
         ))}
       </div>
       <div aria-hidden="true" className="mx-auto h-12 w-px bg-hairline" />
-      <div className="bg-fg-primary p-6 text-on-accent sm:p-10">
+      <div className="bg-fg-primary p-6 text-ground sm:p-10">
         <p className="font-mono text-xs uppercase tracking-[0.14em]">Shared core</p>
         <ul className="mt-5 flex flex-wrap gap-2">
           {SHARED_CORE.map((item) => (
@@ -68,7 +68,7 @@ export function TwoLanes() {
 /** The commitments as numbered statements, one per row, each read on its own. */
 export function Commitments() {
   return (
-    <ol className="divide-y divide-border border-y border-hairline">
+    <ol className="divide-y divide-hairline border-y border-hairline">
       {COMMITMENTS.map((line, index) => (
         <li key={line} className="grid gap-2 py-6 md:grid-cols-[5rem_minmax(0,1fr)] md:gap-6">
           <span aria-hidden="true" className="font-mono text-sm text-fg-muted">{String(index + 1).padStart(2, "0")}</span>

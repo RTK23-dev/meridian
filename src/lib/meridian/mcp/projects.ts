@@ -37,7 +37,10 @@ export type ProjectSummary = { id: string; title: string; brandId: string | null
 
 const json = <T>(value: unknown, fallback: T): T => (value === null || value === undefined ? fallback : typeof value === "string" ? (JSON.parse(value) as T) : (value as T));
 
-function stateOf(row: ProjectRow): ProjectState & { updatedAt: string } {
+/** A project as stored, with when it last changed. */
+export type StoredProject = ProjectState & { updatedAt: string };
+
+function stateOf(row: ProjectRow): StoredProject {
   const mode = (PROJECT_MODES as readonly string[]).includes(row.mode) ? (row.mode as ProjectMode) : "studio";
   return {
     id: row.id,
@@ -68,7 +71,7 @@ export async function createProject(
 }
 
 /** One project of the workspace, or null. */
-export async function readProject(sql: Sql, organizationId: string, projectId: string): Promise<ProjectState | null> {
+export async function readProject(sql: Sql, organizationId: string, projectId: string): Promise<StoredProject | null> {
   const rows = await sql<ProjectRow>`select * from mcp_projects where id = ${projectId} and organization_id = ${organizationId} limit 1`;
   return rows[0] ? stateOf(rows[0]) : null;
 }
@@ -90,7 +93,7 @@ export async function listProjects(sql: Sql, organizationId: string, limit = 10)
 export async function checkpointProject(
   sql: Sql,
   input: { organizationId: string; projectId: string; request: CheckpointRequest; now: string },
-): Promise<{ ok: true; project: ProjectState } | { ok: false; reason: string }> {
+): Promise<{ ok: true; project: StoredProject } | { ok: false; reason: string }> {
   return withTransaction(sql, async (tx) => {
     const rows = await tx<ProjectRow>`select * from mcp_projects where id = ${input.projectId} and organization_id = ${input.organizationId} for update`;
     if (!rows[0]) return { ok: false as const, reason: "There is no such video project in this workspace." };
@@ -111,7 +114,7 @@ export async function checkpointProject(
 export async function updateProject(
   sql: Sql,
   input: { organizationId: string; projectId: string; mode?: ProjectMode; budgetUsd?: number | null; abandon?: boolean },
-): Promise<{ ok: true; project: ProjectState } | { ok: false; reason: string }> {
+): Promise<{ ok: true; project: StoredProject } | { ok: false; reason: string }> {
   return withTransaction(sql, async (tx) => {
     const rows = await tx<ProjectRow>`select * from mcp_projects where id = ${input.projectId} and organization_id = ${input.organizationId} for update`;
     if (!rows[0]) return { ok: false as const, reason: "There is no such video project in this workspace." };

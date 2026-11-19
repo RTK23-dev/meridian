@@ -61,7 +61,7 @@ export const GUIDE_STEPS: readonly Definition[] = [
     id: "engine",
     title: "Choose a decision engine",
     when: "Do this second. You need one key.",
-    what: "Meridian asks an AI service to judge your ideas and examples, for instance which video format is worth copying. You need one such service and its key, and no more. If you have a TypeSafe key, pick TypeSafe JEV. If you have an OpenAI or OpenRouter key instead, pick that one. Nothing is sent until you paste a key.",
+    what: "Meridian asks one AI service to judge your ideas and examples, such as which video format is worth copying. Pick the engine you already have a key for. Nothing is sent until you paste it.",
     why: "No idea is graded until an engine is chosen and ready.",
     required: true,
   },
@@ -135,7 +135,7 @@ function detailOf(id: GuideStepId, facts: GuideFacts, done: boolean | null): str
     case "engine": {
       const engine = facts.engine;
       if (!engine) return "The engine status did not load.";
-      if (!engine.chosen) return "No engine is chosen for this workspace yet. Pick one below. OpenRouter Decisions needs one OpenRouter key, and Gemini Decisions needs one Gemini key.";
+      if (!engine.chosen) return "No engine is chosen yet. OpenRouter Decisions needs one OpenRouter key; each other engine needs only its own.";
       if (!engine.ready) return `${engine.label} is chosen, but it cannot answer yet. ${engine.reason}`;
       return `${engine.label} is chosen and ready. It receives every decision for this workspace.`;
     }

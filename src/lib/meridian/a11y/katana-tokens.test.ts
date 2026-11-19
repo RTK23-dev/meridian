@@ -1,6 +1,7 @@
-// Checks the proposed Katana tokens (docs/design/tokens/katana-tokens.json) three ways: every contrast pair meets its minimum in its
-// theme, the JSON agrees with the CSS block in the Katana plan (section l), and every ratio the Katana plan states in its colour table
-// (section b) is the ratio the repo's own helper computes. The third check tests the plan's figures instead of trusting them.
+// Checks the Katana tokens (docs/design/tokens/katana-tokens.json) three ways: every contrast pair meets its minimum in its theme, the
+// JSON agrees with the CSS block in the canvas system (docs/design/KATANA_CANVAS_SYSTEM.md section 8, owner direction 2026-11-18), and
+// every ratio that document states in its colour table (section 2) is the ratio the repo's own helper computes. The third check tests the
+// document's figures instead of trusting them.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -12,7 +13,7 @@ type Tokens = { themes: Record<Theme, Record<string, string>>; contrast: Pair[] 
 
 const read = (path: string) => readFileSync(new URL(path, import.meta.url), "utf8");
 const tokens = JSON.parse(read("../../../../docs/design/tokens/katana-tokens.json")) as Tokens;
-const plan = read("../../../../docs/design/KATANA_DESIGN_PLAN.md");
+const plan = read("../../../../docs/design/KATANA_CANVAS_SYSTEM.md");
 
 const hex = (theme: Theme, key: string): string => {
   const value = tokens.themes[theme][key];
@@ -44,7 +45,7 @@ test("no tinted status tokens: status is a dot and a word, never a -soft fill", 
 
 test("the JSON agrees with the Katana plan's CSS token block for every colour it defines", () => {
   const block = plan.match(/```css\n([\s\S]*?)```/g)?.find((candidate) => candidate.includes("Katana tokens"));
-  assert.ok(block, "section l of the Katana plan has a CSS token block");
+  assert.ok(block, "section 8 of the canvas system has a CSS token block");
   const dark = block.match(/:root, :root\[data-theme="dark"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const light = block.match(/:root\[data-theme="light"\] \{([\s\S]*?)\n\}/)?.[1] ?? "";
   const declared = (body: string) => new Map([...body.matchAll(/--([a-z-]+): (#[0-9A-Fa-f]{6});/g)].map((m) => [m[1], m[2].toUpperCase()]));
@@ -58,7 +59,7 @@ test("the JSON agrees with the Katana plan's CSS token block for every colour it
 });
 
 test("every ratio the Katana plan states in its colour table is the computed ratio", () => {
-  // Rows look like: | pair | min | #FF2E38 on #000000 = **5.70:1** | #C8102E on #FFFFFF = **5.88:1** | pass |
+  // Rows look like: | pair | min | #EE7A5F on #0D0D0E = **7.02:1** | #922B15 on #D3D3D4 = **5.44:1** | pass |
   const stated = [...plan.matchAll(/#([0-9A-Fa-f]{6}) on #([0-9A-Fa-f]{6}) = \*\*([\d.]+):1\*\*/g)];
   assert.ok(stated.length >= 60, `expected 30 rows of two stated ratios, found ${stated.length}`);
   const mismatches: string[] = [];

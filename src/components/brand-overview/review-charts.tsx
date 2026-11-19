@@ -84,7 +84,7 @@ function ChartPanel({ title, description, label, bins, unit, children }: {
         <h2 className="text-base font-semibold text-fg-primary">{title}</h2>
         <p className="text-sm text-fg-muted">{description}</p>
       </div>
-      <div role="img" aria-label={`${label}. ${summary} ${unit}.`} className="h-52 text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-border">
+      <div role="img" aria-label={`${label}. ${summary} ${unit}.`} className="h-52 text-accent [&_.recharts-cartesian-axis-tick-value]:fill-fg-muted [&_line]:stroke-hairline">
         {children}
       </div>
       <dl className="grid grid-cols-3 gap-2 text-xs">

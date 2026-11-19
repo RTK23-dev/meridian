@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouterState } from "@tanstack/react-router";
-import { Button, ErrorState, Field, Input, PageHeader } from "@/components/ui";
+import { Badge, Button, ErrorState, Field, Input, PageHeader } from "@/components/ui";
 import { PlainErrorMessage } from "@/components/plain-error";
 import { plainError } from "@/lib/copy";
 import { qk } from "@/lib/query/keys";
@@ -54,18 +54,16 @@ function WorkspaceSection({ page }: { page: BillingPage }) {
     <section aria-labelledby="billing-workspace" className="space-y-6">
       <div className="space-y-1">
         <h2 id="billing-workspace" className="text-section font-semibold">Workspace</h2>
-        <p className="text-fg-muted">These limits apply to the whole workspace, across every brand.</p>
-        <p className="text-sm text-fg-muted">
-          The monthly budget is a limit Meridian enforces, not your OpenRouter account balance. It applies to each calendar month (UTC) across paid text and video.
-          Blank means no budget is set, so paid generation is blocked until one is saved. There is no default.
-        </p>
+        <p className="max-w-[65ch] text-fg-muted">These apply across every brand. The monthly budget is Meridian's own limit for each calendar month (UTC), not your OpenRouter account balance.</p>
       </div>
       {workspace.policyReadable ? null : (
         <p className="text-sm text-danger" role="alert">The workspace's saved policy cannot be read, so the measure ceiling and the decision cap are unknown. {workspace.policyReason ?? ""}</p>
       )}
-      <LimitForm organizationId={organizationId} kind="workspace_monthly_budget" value={workspace.monthlyBudgetUsd} canEdit={canEdit} />
-      <LimitForm organizationId={organizationId} kind="measure_ceiling" value={workspace.measureCeilingUsdPerSecond} canEdit={canEdit && workspace.policyReadable} />
-      <LimitForm organizationId={organizationId} kind="decision_cap" value={workspace.decisionCapUsd} canEdit={canEdit && workspace.policyReadable} />
+      <div className="panel space-y-6">
+        <LimitForm organizationId={organizationId} kind="workspace_monthly_budget" value={workspace.monthlyBudgetUsd} canEdit={canEdit} />
+        <LimitForm organizationId={organizationId} kind="measure_ceiling" value={workspace.measureCeilingUsdPerSecond} canEdit={canEdit && workspace.policyReadable} />
+        <LimitForm organizationId={organizationId} kind="decision_cap" value={workspace.decisionCapUsd} canEdit={canEdit && workspace.policyReadable} />
+      </div>
     </section>
   );
 }
@@ -88,7 +86,7 @@ function BrandsSection({ page }: { page: BillingPage }) {
 
 function BrandLimits({ organizationId, brand, canEdit }: { organizationId: string; brand: BillingBrand; canEdit: boolean }) {
   return (
-    <div className="space-y-5 rounded-sharp border border-hairline p-5" aria-label={`Limits for ${brand.name}`}>
+    <div className="panel space-y-5" aria-label={`Limits for ${brand.name}`}>
       <h3 className="text-body font-semibold">{brand.name}</h3>
       <LimitForm organizationId={organizationId} kind="brand_budget" brandId={brand.brandId} value={brand.brandBudgetUsd} canEdit={canEdit} committedUsd={brand.committedUsd} />
       <LimitForm organizationId={organizationId} kind="factory_daily_cap" brandId={brand.brandId} value={brand.factoryDailyCapUsd} canEdit={canEdit} />
@@ -104,7 +102,7 @@ function EstimatesSection({ page }: { page: BillingPage }) {
         <h2 id="billing-estimates" className="text-section font-semibold">Estimates</h2>
         <p className="text-fg-muted">These are not limits. The engine uses them to estimate a master's cost before it starts. They are read-only here.</p>
       </div>
-      <p className="text-sm">The fixed cost of one master is about ${page.fixedCostPerMasterUsd.toFixed(2)} before its shots.</p>
+      <p className="panel text-sm">The fixed cost of one master is about ${page.fixedCostPerMasterUsd.toFixed(2)} before its shots.</p>
     </section>
   );
 }
@@ -164,7 +162,6 @@ function LimitForm({
             onChange={(event) => setDraft(event.target.value)}
             aria-describedby={statusId}
             className="w-40"
-            placeholder={value === null ? "Not set" : undefined}
           />
           {canEdit ? (
             <Button type="submit" disabled={save.isPending || shown === (value === null ? "" : value.toFixed(spec.decimals))}>
@@ -176,9 +173,13 @@ function LimitForm({
               Clear
             </Button>
           ) : null}
+          {/* The status is a dot and a word beside the field, not a sentence under it: "Not set" says it all, and the reason why reaches a
+              screen reader through the field's description. */}
+          <Badge id={statusId} variant={value === null || value === 0 ? "warning" : "success"} className="h-auto min-h-5 whitespace-normal">
+            {value === null ? <>Not set<span className="sr-only">. The step it guards is refused until you set it.</span></> : limitStatusText(kind, value)}
+          </Badge>
         </div>
       </Field>
-      <p id={statusId} className="text-sm text-fg-muted">{limitStatusText(kind, value)}</p>
       {failure ? <PlainErrorMessage message={failure.message} raw={failure.raw} /> : null}
       {saved ? <p className="text-sm text-success" role="status">{saved}</p> : null}
     </form>

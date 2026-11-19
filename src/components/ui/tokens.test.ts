@@ -44,23 +44,26 @@ test("both themes define the same colour tokens, so no token falls back to the o
 });
 
 test("dark is the first palette on :root, and light applies only under data-theme", () => {
-  assert.equal(dark["--bg-base"], "#000000");
-  assert.equal(light["--bg-base"], "#FFFFFF");
+  // The canvas system's rooms (owner direction 2026-11-18): near-black and a warm mid-grey.
+  assert.equal(dark["--bg-base"], "#0D0D0E");
+  assert.equal(light["--bg-base"], "#D3D3D4");
   assert.doesNotMatch(css, /\.dark\s*\{/, "the .dark class is retired; themes switch on data-theme");
   assert.match(css, /@custom-variant dark \(&:where\(:root:not\(\[data-theme="light"\]\)/);
 });
 
-test("the red accent reaches 4.5:1 as text on the page in both themes, and its label reaches 4.5:1 on the red fill", () => {
-  const onDark = contrastRatio(dark["--accent-red"], dark["--bg-base"]);
-  const onLight = contrastRatio(light["--accent-red"], light["--bg-base"]);
+test("the vermilion reaches 4.5:1 as text and 3:1 as a fill on the page in both themes, and its label reaches 4.5:1 on the fill", () => {
+  const onDark = contrastRatio(dark["--accent-red-text"], dark["--bg-base"]);
+  const onLight = contrastRatio(light["--accent-red-text"], light["--bg-base"]);
   assert.ok(onDark >= 4.5 && onLight >= 4.5, `text ${onDark}:1 dark, ${onLight}:1 light`);
+  assert.ok(contrastRatio(dark["--accent-red"], dark["--bg-base"]) >= 3 && contrastRatio(light["--accent-red"], light["--bg-base"]) >= 3);
   assert.ok(contrastRatio(dark["--on-accent"], dark["--accent-red"]) >= 4.5);
   assert.ok(contrastRatio(light["--on-accent"], light["--accent-red"]) >= 4.5);
 });
 
 test("the accent is a variable the reader's choice sets, and it starts as the red", () => {
   assert.equal(declarations(ruleBody(":root"))["--accent"], "var(--accent-red)");
-  assert.equal(declarations(ruleBody(':root[data-theme="light"]'))["--accent-red"], "#C8102E");
+  assert.equal(declarations(ruleBody(':root[data-theme="light"]'))["--accent-red"], "#D2462A");
+  assert.equal(declarations(ruleBody(":root"))["--accent-text"], "var(--accent-red-text)");
 });
 
 test("the AttentionOS names are retired: the screens use the Katana role names, and no legacy alias remains", () => {
@@ -84,14 +87,22 @@ test("every var(--color-*) written in the app is defined in styles.css", () => {
   assert.deepEqual(missing, [], `styles.css does not define: ${missing.join(", ")}`);
 });
 
-test("no shadow token casts a shadow", () => {
-  for (const name of ["--shadow-sm", "--shadow-md", "--shadow-lg"]) assert.equal(aliases[name], "0 0 #0000", `${name} must not cast a shadow`);
+test("every var(--color-*) the stylesheet reads is defined in it, so no rule falls back to nothing", () => {
+  // A rule that reads an undefined name draws nothing: a panel with no fill and no edge, a skip link with no colour.
+  const read = new Set([...css.matchAll(/var\((--color-[a-z0-9-]+)\)/g)].map((match) => match[1]));
+  const defined = new Set([...css.matchAll(/(--color-[a-z0-9-]+):/g)].map((match) => match[1]));
+  assert.deepEqual([...read].filter((name) => !defined.has(name)), []);
 });
 
-test("every corner is the one Katana radius, 2 px", () => {
-  for (const name of ["--radius-sharp", "--radius-sm", "--radius-md", "--radius-lg", "--radius-xl"]) {
-    assert.equal(aliases[name], "2px", `${name} must be 2px`);
+test("the three shadow tokens are soft drop shadows in black, never a glow or a colour", () => {
+  for (const name of ["--shadow-sm", "--shadow-md", "--shadow-lg"]) {
+    assert.match(aliases[name], /^(?:0 \d+px \d+px(?: -\d+px)? rgb\(0 0 0 \/ 0\.\d+\)(?:, )?)+$/, `${name}: ${aliases[name]}`);
   }
+});
+
+test("the corners follow the canvas system's one scale: 6 (a check), 12, 10, 14, 20 and 28 px", () => {
+  const scale = { "--radius-xs": "6px", "--radius-sharp": "12px", "--radius-sm": "10px", "--radius-md": "14px", "--radius-lg": "20px", "--radius-xl": "28px" };
+  for (const [name, value] of Object.entries(scale)) assert.equal(aliases[name], value, `${name} must be ${value}`);
 });
 
 test("reduced motion removes movement and keeps colour fades", () => {

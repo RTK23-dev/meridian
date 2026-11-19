@@ -68,11 +68,11 @@ export function WebhookEventsScreen() {
         description="Each row is a webhook that arrived, with its provider event ID and the time it was received. The index does not record whether an event was processed, and it does not store payloads."
       />
 
-      <form className="grid gap-3 panel sm:grid-cols-[1fr_auto] sm:items-end" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
+      <form className="grid gap-3 panel sm:grid-cols-[1fr_auto] sm:items-start" onSubmit={applyFilter} onKeyDown={(event) => submitOnShortcut(event)} noValidate>
         <Field label="Provider" hint="The provider key as stored, such as meta or tiktok. Leave empty for all providers." error={filterForm.formState.errors.provider?.message}>
           <Input {...filterForm.register("provider")} maxLength={80} placeholder="meta" />
         </Field>
-        <Button type="submit">Apply filter</Button>
+        <Button type="submit" className="sm:mt-7">Apply filter</Button>
       </form>
 
       {query.isError && !data ? <PlainErrorState error={query.error} onRetry={() => void query.refetch()} /> : null}
@@ -92,10 +92,10 @@ export function WebhookEventsScreen() {
         />
       ) : null}
       {data && span ? (
-        <div className="flex items-center justify-between gap-3">
+        <div className="grid grid-cols-2 items-center gap-3 sm:flex sm:justify-between">
           <Button type="button" variant="secondary" size="md" disabled={page === 0 || query.isFetching} aria-describedby={page === 0 ? "events-page-status" : undefined} onClick={() => setPage(page - 1)}>Previous page</Button>
-          <p id="events-page-status" className="text-sm text-fg-muted">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
-          <Button type="button" variant="secondary" size="md" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "events-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
+          <p id="events-page-status" className="order-first col-span-2 text-center text-sm text-fg-muted sm:order-none">Page {page + 1} of {span.pageCount}{page === 0 ? ". You are on the first page." : page + 1 >= span.pageCount ? ". You are on the last page." : ""}</p>
+          <Button type="button" variant="secondary" size="md" className="justify-self-end" disabled={page + 1 >= span.pageCount || query.isFetching} aria-describedby={page + 1 >= span.pageCount ? "events-page-status" : undefined} onClick={() => setPage(page + 1)}>Next page</Button>
         </div>
       ) : null}
     </div>

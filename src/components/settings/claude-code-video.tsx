@@ -19,7 +19,7 @@ const SOURCES: Array<{ id: Source; label: string; hint: string }> = [
 const STATUS_LABEL: Record<string, string> = { open: "Waiting", claimed: "Opened in Claude Code", running: "Being made", done: "Done", failed: "Failed" };
 
 const STEP = "text-sm font-semibold text-fg-primary";
-const CHOICE = "flex cursor-pointer items-start gap-2 rounded-sharp border p-3 text-sm has-[:checked]:border-accent has-[:checked]:bg-surface-muted has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60";
+const CHOICE = "choice text-sm";
 
 /**
  * One click to make a video from Claude Code, in three plain steps: what to make, where the idea comes from, then click. The click records a

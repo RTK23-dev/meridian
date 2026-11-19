@@ -21,6 +21,7 @@ import { Route as AppSplatRouteImport } from './routes/_app/$'
 import { Route as AppAlertsRouteImport } from './routes/_app/alerts'
 import { Route as AppAuditRouteImport } from './routes/_app/audit'
 import { Route as AppBillingRouteImport } from './routes/_app/billing'
+import { Route as AppCanvasRouteImport } from './routes/_app/canvas'
 import { Route as AppContentFactoryRouteImport } from './routes/_app/content-factory'
 import { Route as AppCreateRouteImport } from './routes/_app/create'
 import { Route as AppEngineOpsRouteImport } from './routes/_app/engine-ops'
@@ -124,6 +125,11 @@ const AppAuditRoute = AppAuditRouteImport.update({
 const AppBillingRoute = AppBillingRouteImport.update({
   id: '/billing',
   path: '/billing',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppCanvasRoute = AppCanvasRouteImport.update({
+  id: '/canvas',
+  path: '/canvas',
   getParentRoute: () => AppRoute,
 } as any)
 const AppContentFactoryRoute = AppContentFactoryRouteImport.update({
@@ -371,6 +377,7 @@ export interface FileRoutesByFullPath {
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
   '/billing': typeof AppBillingRoute
+  '/canvas': typeof AppCanvasRoute
   '/content-factory': typeof AppContentFactoryRoute
   '/create': typeof AppCreateRoute
   '/engine-ops': typeof AppEngineOpsRoute
@@ -428,6 +435,7 @@ export interface FileRoutesByTo {
   '/alerts': typeof AppAlertsRoute
   '/audit': typeof AppAuditRoute
   '/billing': typeof AppBillingRoute
+  '/canvas': typeof AppCanvasRoute
   '/content-factory': typeof AppContentFactoryRoute
   '/create': typeof AppCreateRoute
   '/engine-ops': typeof AppEngineOpsRoute
@@ -488,6 +496,7 @@ export interface FileRoutesById {
   '/_app/alerts': typeof AppAlertsRoute
   '/_app/audit': typeof AppAuditRoute
   '/_app/billing': typeof AppBillingRoute
+  '/_app/canvas': typeof AppCanvasRoute
   '/_app/content-factory': typeof AppContentFactoryRoute
   '/_app/create': typeof AppCreateRoute
   '/_app/engine-ops': typeof AppEngineOpsRoute
@@ -549,6 +558,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/audit'
     | '/billing'
+    | '/canvas'
     | '/content-factory'
     | '/create'
     | '/engine-ops'
@@ -606,6 +616,7 @@ export interface FileRouteTypes {
     | '/alerts'
     | '/audit'
     | '/billing'
+    | '/canvas'
     | '/content-factory'
     | '/create'
     | '/engine-ops'
@@ -665,6 +676,7 @@ export interface FileRouteTypes {
     | '/_app/alerts'
     | '/_app/audit'
     | '/_app/billing'
+    | '/_app/canvas'
     | '/_app/content-factory'
     | '/_app/create'
     | '/_app/engine-ops'
@@ -822,6 +834,13 @@ declare module '@tanstack/react-router' {
       path: '/billing'
       fullPath: '/billing'
       preLoaderRoute: typeof AppBillingRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/canvas': {
+      id: '/_app/canvas'
+      path: '/canvas'
+      fullPath: '/canvas'
+      preLoaderRoute: typeof AppCanvasRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/content-factory': {
@@ -1147,6 +1166,7 @@ interface AppRouteChildren {
   AppAlertsRoute: typeof AppAlertsRoute
   AppAuditRoute: typeof AppAuditRoute
   AppBillingRoute: typeof AppBillingRoute
+  AppCanvasRoute: typeof AppCanvasRoute
   AppContentFactoryRoute: typeof AppContentFactoryRoute
   AppCreateRoute: typeof AppCreateRoute
   AppEngineOpsRoute: typeof AppEngineOpsRoute
@@ -1185,6 +1205,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppAlertsRoute: AppAlertsRoute,
   AppAuditRoute: AppAuditRoute,
   AppBillingRoute: AppBillingRoute,
+  AppCanvasRoute: AppCanvasRoute,
   AppContentFactoryRoute: AppContentFactoryRoute,
   AppCreateRoute: AppCreateRoute,
   AppEngineOpsRoute: AppEngineOpsRoute,

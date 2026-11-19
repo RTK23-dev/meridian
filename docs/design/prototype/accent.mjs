@@ -7,28 +7,28 @@
 export const ACCENT_PRESETS = Object.freeze([
   {
     id: "red", label: "Red",
-    dark: { accent: "#FF2E38", hover: "#FF5A63", text: "#FF2E38", muted: "#2A0B0F", on: "#000000" },
-    light: { accent: "#C8102E", hover: "#A50D25", text: "#C8102E", muted: "#FBE3E6", on: "#FFFFFF" },
+    dark: { accent: "#E0573A", hover: "#E9705A", text: "#EE7A5F", muted: "#2B1410", on: "#000000" },
+    light: { accent: "#D2462A", hover: "#DE5E43", text: "#922B15", muted: "#F3D6CD", on: "#000000" },
   },
   {
     id: "blue", label: "Blue",
     dark: { accent: "#4D9DFF", hover: "#74B5FF", text: "#4D9DFF", muted: "#0B1B2E", on: "#000000" },
-    light: { accent: "#1D5FD6", hover: "#1749A8", text: "#1D5FD6", muted: "#E4EEFD", on: "#FFFFFF" },
+    light: { accent: "#1D5FD6", hover: "#1749A8", text: "#123F8F", muted: "#DCE6F7", on: "#FFFFFF" },
   },
   {
     id: "violet", label: "Violet",
     dark: { accent: "#A77BFF", hover: "#BC9AFF", text: "#A77BFF", muted: "#1C1230", on: "#000000" },
-    light: { accent: "#6B3FD1", hover: "#5630AE", text: "#6B3FD1", muted: "#EFE9FD", on: "#FFFFFF" },
+    light: { accent: "#6B3FD1", hover: "#5630AE", text: "#4B2A96", muted: "#E8E0F7", on: "#FFFFFF" },
   },
   {
     id: "teal", label: "Teal",
     dark: { accent: "#2DD4BF", hover: "#5EE3D1", text: "#2DD4BF", muted: "#0B2723", on: "#000000" },
-    light: { accent: "#0F766E", hover: "#0B5E58", text: "#0F766E", muted: "#E0F5F2", on: "#FFFFFF" },
+    light: { accent: "#0F766E", hover: "#0B5E58", text: "#0A524D", muted: "#D8EEEA", on: "#FFFFFF" },
   },
   {
     id: "magenta", label: "Magenta",
     dark: { accent: "#F472B6", hover: "#F793C9", text: "#F472B6", muted: "#2C0F1E", on: "#000000" },
-    light: { accent: "#A3176A", hover: "#861356", text: "#A3176A", muted: "#FBE4F1", on: "#FFFFFF" },
+    light: { accent: "#A3176A", hover: "#861356", text: "#7A1150", muted: "#F4DCEA", on: "#FFFFFF" },
   },
 ]);
 

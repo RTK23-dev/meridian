@@ -45,8 +45,8 @@ const STATE_VALUE: Record<"yes" | "no" | "not_checked", { text: string; classNam
 };
 
 const STEP_MARK: Record<GuideStep["status"], { icon: typeof Circle; className: string; label: string }> = {
-  done: { icon: CircleCheck, className: "bg-success text-on-accent", label: "Done" },
-  current: { icon: Circle, className: "bg-fg-primary text-on-accent ring-4 ring-overlay", label: "Do this now" },
+  done: { icon: CircleCheck, className: "bg-success text-ground", label: "Done" },
+  current: { icon: Circle, className: "bg-fg-primary text-ground ring-4 ring-overlay", label: "Do this now" },
   todo: { icon: Circle, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "To do" },
   optional: { icon: CircleDashed, className: "bg-overlay text-fg-muted ring-1 ring-hairline", label: "Optional" },
   unknown: { icon: CircleDashed, className: "bg-raised text-warning", label: "Could not check" },
@@ -162,14 +162,15 @@ export function SetupGuide() {
 
         <StarterLimits organizationId={organizationId} canAdmin={canAdmin} />
 
-        <section aria-labelledby="setup-progress" className="surface-rise rounded-sharp border border-hairline bg-raised p-5 md:p-6">
+        <section aria-labelledby="setup-progress" className="surface-rise surface-tile border border-hairline p-4 sm:p-6">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="min-w-0 space-y-1">
               <h2 id="setup-progress" className="text-xl font-semibold text-fg-primary">{summary.requiredDone} of {summary.requiredTotal} required steps done</h2>
-              <p className="text-sm text-fg-muted">{summary.headline}</p>
+              {/* The count is the heading and the next step is the button, so the sentence saying both again shows only when there is no button. */}
+              {next ? null : <p className="text-sm text-fg-muted">{summary.headline}</p>}
             </div>
             {next ? (
-              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-sharp bg-accent px-4 text-center text-sm font-semibold text-on-accent transition hover:brightness-110">
+              <a href={`#step-${next.id}`} className="inline-flex min-h-11 max-w-full items-center rounded-full bg-white-accent px-4 text-center text-sm font-semibold text-ground transition-colors hover:bg-fg-secondary">
                 Go to: {next.title}
               </a>
             ) : null}

@@ -264,7 +264,7 @@ export function OrchestratorPlans() {
                   <li key={summary.id}>
                     <button
                       type="button"
-                      className={`w-full rounded-sharp border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-accent bg-accent-muted" : "border-hairline hover:bg-overlay"}`}
+                      className={`w-full rounded-sharp border px-3 py-2 text-left text-sm ${selectedId === summary.id ? "border-fg-primary bg-overlay" : "border-hairline hover:bg-overlay"}`}
                       onClick={() => act(() => open(summary.id))}
                       aria-current={selectedId === summary.id ? "true" : undefined}
                     >
@@ -535,7 +535,7 @@ function RunPlanControl(props: { canAdmin: boolean; busy: boolean; ceilingUsd: n
       {canAdmin ? (
         <div className="flex flex-col gap-1 text-sm">
           <label className="inline-flex min-h-11 items-center gap-2 sm:min-h-8">
-            <input type="checkbox" className="size-4" checked={measure} disabled={busy} onChange={(event) => setMeasure(event.target.checked)} />
+            <input type="checkbox" checked={measure} disabled={busy} onChange={(event) => setMeasure(event.target.checked)} />
             Measure unpriced video
           </label>
           <p className="text-xs text-fg-muted">

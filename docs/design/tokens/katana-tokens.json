@@ -1,48 +1,56 @@
 {
-  "name": "Katana (mixed)",
-  "status": "applied: src/styles.css declares these values, and styles.contrast.test.ts checks them in both themes. The owner decided Katana replaces the AttentionOS look.",
-  "source": "docs/design/KATANA_DESIGN_PLAN.md sections b, c, d, e and l, with the owner decisions in docs/design/KATANA_REDESIGN_PLAN.md section 14.7 (red is the primary action), and the mixed-plan additions marked in the note on each pair.",
-  "note": "Keys match the CSS custom properties without the leading --. Dark is the default; light applies under [data-theme=\"light\"]. accent-red is one role with two values, tuned so each passes contrast on its theme's page. on-accent is the label colour on a red fill (bg-base in each theme). Status is a dot and a word, never a tinted fill, so there are no -soft tokens.",
+  "name": "Katana (canvas)",
+  "status": "applied: src/styles.css declares these values, and styles.contrast.test.ts checks them in both themes. Owner direction 2026-11-18: the whole app follows the owner's Katana canvas references.",
+  "source": "docs/design/KATANA_CANVAS_SYSTEM.md (owner direction 2026-11-18), which supersedes the colours, corners and shadows of docs/design/KATANA_DESIGN_PLAN.md. The pairs keep the Katana plan's thirty and the mixed plan's five.",
+  "note": "Keys match the CSS custom properties without the leading --. Dark is the default; light applies under [data-theme=\"light\"]. accent-red is the vermilion fill (badges, the selected state, focus and graphics) and must reach 3:1 on the room; accent-red-text is the same colour darkened or lightened to read as text (4.5:1) on every surface. on-accent is the label on the fill. white-accent is the ink fill of the main action, the switch and the progress bar: black on the light room, white on the dark one.",
   "themes": {
     "dark": {
-      "bg-base": "#000000",
-      "bg-raised": "#0E0E0E",
-      "bg-overlay": "#161616",
-      "border-hairline": "#262626",
-      "border-strong": "#6B6B6B",
-      "fg-primary": "#FFFFFF",
-      "fg-secondary": "#C4C4C4",
-      "fg-muted": "#949494",
-      "accent-red": "#FF2E38",
-      "accent-red-hover": "#FF5A63",
-      "accent-red-muted": "#2A0B0F",
+      "bg-base": "#0D0D0E",
+      "bg-raised": "#1C1C1E",
+      "bg-overlay": "#242427",
+      "border-hairline": "#2E2E32",
+      "border-strong": "#7A7A80",
+      "fg-primary": "#F4F4F5",
+      "fg-secondary": "#C8C8CC",
+      "fg-muted": "#9C9CA2",
+      "accent-red": "#E0573A",
+      "accent-red-hover": "#E9705A",
+      "accent-red-text": "#EE7A5F",
+      "accent-red-muted": "#2B1410",
       "on-accent": "#000000",
-      "white-accent": "#FFFFFF",
+      "white-accent": "#F4F4F5",
       "success": "#3DDC84",
       "warning": "#FFB020",
-      "danger": "#FF4D6A",
+      "danger": "#FF5C75",
       "info": "#5AA9FF",
-      "scrim": "rgb(0 0 0 / 0.6)"
+      "scrim": "rgb(0 0 0 / 0.6)",
+      "dock": "#2A2A2D",
+      "on-dock": "#F4F4F5",
+      "on-dock-muted": "#ABABB0"
     },
     "light": {
-      "bg-base": "#FFFFFF",
-      "bg-raised": "#F4F4F4",
-      "bg-overlay": "#FFFFFF",
-      "border-hairline": "#E2E2E2",
-      "border-strong": "#767676",
-      "fg-primary": "#0A0A0A",
-      "fg-secondary": "#3D3D3D",
-      "fg-muted": "#5E5E5E",
-      "accent-red": "#C8102E",
-      "accent-red-hover": "#A50D25",
-      "accent-red-muted": "#FBE3E6",
-      "on-accent": "#FFFFFF",
-      "white-accent": "#0A0A0A",
-      "success": "#14703A",
-      "warning": "#8A5A00",
-      "danger": "#B3133A",
-      "info": "#0B5FB8",
-      "scrim": "rgb(10 10 10 / 0.4)"
+      "bg-base": "#D3D3D4",
+      "bg-raised": "#F1F1F1",
+      "bg-overlay": "#F8F8F8",
+      "border-hairline": "#BDBDC0",
+      "border-strong": "#68686D",
+      "fg-primary": "#111113",
+      "fg-secondary": "#2E2E32",
+      "fg-muted": "#46464B",
+      "accent-red": "#D2462A",
+      "accent-red-hover": "#DE5E43",
+      "accent-red-text": "#922B15",
+      "accent-red-muted": "#F3D6CD",
+      "on-accent": "#000000",
+      "white-accent": "#111113",
+      "success": "#0D5E2F",
+      "warning": "#6F4600",
+      "danger": "#9E1230",
+      "info": "#0A4F94",
+      "scrim": "rgb(20 20 22 / 0.4)",
+      "dock": "#111113",
+      "on-dock": "#F4F4F5",
+      "on-dock-muted": "#ABABB0"
     }
   },
   "shared": {
@@ -96,40 +104,216 @@
     "focus-ring": "2px solid accent-red, outline-offset 2px"
   },
   "contrast": [
-    { "fg": "fg-primary", "bg": "bg-base", "min": 4.5 },
-    { "fg": "fg-primary", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "fg-primary", "bg": "bg-overlay", "min": 4.5 },
-    { "fg": "fg-secondary", "bg": "bg-base", "min": 4.5 },
-    { "fg": "fg-secondary", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "fg-secondary", "bg": "bg-overlay", "min": 4.5 },
-    { "fg": "fg-muted", "bg": "bg-base", "min": 4.5 },
-    { "fg": "fg-muted", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "fg-muted", "bg": "bg-overlay", "min": 4.5 },
-    { "fg": "accent-red", "bg": "bg-base", "min": 4.5 },
-    { "fg": "accent-red", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "accent-red", "bg": "bg-overlay", "min": 4.5 },
-    { "fg": "accent-red-hover", "bg": "bg-base", "min": 4.5 },
-    { "fg": "on-accent", "bg": "accent-red", "min": 4.5, "use": "label on the red fill" },
-    { "fg": "on-accent", "bg": "accent-red-hover", "min": 4.5, "use": "label on the red fill, hover" },
-    { "fg": "fg-primary", "bg": "accent-red-muted", "min": 4.5, "use": "selected row text" },
-    { "fg": "bg-base", "bg": "white-accent", "min": 4.5, "use": "label on a white fill (switch on-state, primary on white)" },
-    { "fg": "success", "bg": "bg-base", "min": 4.5 },
-    { "fg": "success", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "success", "bg": "bg-overlay", "min": 4.5, "use": "added by the mixed plan: toasts and overlays" },
-    { "fg": "warning", "bg": "bg-base", "min": 4.5 },
-    { "fg": "warning", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "warning", "bg": "bg-overlay", "min": 4.5, "use": "added by the mixed plan: toasts and overlays" },
-    { "fg": "danger", "bg": "bg-base", "min": 4.5 },
-    { "fg": "danger", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "danger", "bg": "bg-overlay", "min": 4.5, "use": "added by the mixed plan: toasts and overlays" },
-    { "fg": "info", "bg": "bg-base", "min": 4.5 },
-    { "fg": "info", "bg": "bg-raised", "min": 4.5 },
-    { "fg": "info", "bg": "bg-overlay", "min": 4.5, "use": "added by the mixed plan: queued state in a drawer or toast" },
-    { "fg": "border-strong", "bg": "bg-base", "min": 3, "use": "control edges" },
-    { "fg": "border-strong", "bg": "bg-raised", "min": 3, "use": "control edges" },
-    { "fg": "border-strong", "bg": "bg-overlay", "min": 3, "use": "added by the mixed plan: overlay edges" },
-    { "fg": "accent-red", "bg": "bg-base", "min": 3, "use": "focus ring and graphics" },
-    { "fg": "white-accent", "bg": "bg-base", "min": 3, "use": "switch, checkbox and progress fills" },
-    { "fg": "danger", "bg": "bg-base", "min": 3, "use": "icons" }
+    {
+      "fg": "fg-primary",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-primary",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-primary",
+      "bg": "bg-overlay",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-secondary",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-secondary",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-secondary",
+      "bg": "bg-overlay",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-muted",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-muted",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "fg-muted",
+      "bg": "bg-overlay",
+      "min": 4.5
+    },
+    {
+      "fg": "accent-red-text",
+      "bg": "bg-base",
+      "min": 4.5,
+      "use": "the accent as text"
+    },
+    {
+      "fg": "accent-red-text",
+      "bg": "bg-raised",
+      "min": 4.5,
+      "use": "the accent as text"
+    },
+    {
+      "fg": "accent-red-text",
+      "bg": "bg-overlay",
+      "min": 4.5,
+      "use": "the accent as text"
+    },
+    {
+      "fg": "accent-red-text",
+      "bg": "bg-base",
+      "min": 4.5,
+      "use": "the accent as text"
+    },
+    {
+      "fg": "on-accent",
+      "bg": "accent-red",
+      "min": 4.5,
+      "use": "label on the red fill"
+    },
+    {
+      "fg": "on-accent",
+      "bg": "accent-red-hover",
+      "min": 4.5,
+      "use": "label on the red fill, hover"
+    },
+    {
+      "fg": "fg-primary",
+      "bg": "accent-red-muted",
+      "min": 4.5,
+      "use": "selected row text"
+    },
+    {
+      "fg": "bg-base",
+      "bg": "white-accent",
+      "min": 4.5,
+      "use": "label on a white fill (switch on-state, primary on white)"
+    },
+    {
+      "fg": "success",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "success",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "success",
+      "bg": "bg-overlay",
+      "min": 4.5,
+      "use": "added by the mixed plan: toasts and overlays"
+    },
+    {
+      "fg": "warning",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "warning",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "warning",
+      "bg": "bg-overlay",
+      "min": 4.5,
+      "use": "added by the mixed plan: toasts and overlays"
+    },
+    {
+      "fg": "danger",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "danger",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "danger",
+      "bg": "bg-overlay",
+      "min": 4.5,
+      "use": "added by the mixed plan: toasts and overlays"
+    },
+    {
+      "fg": "info",
+      "bg": "bg-base",
+      "min": 4.5
+    },
+    {
+      "fg": "info",
+      "bg": "bg-raised",
+      "min": 4.5
+    },
+    {
+      "fg": "info",
+      "bg": "bg-overlay",
+      "min": 4.5,
+      "use": "added by the mixed plan: queued state in a drawer or toast"
+    },
+    {
+      "fg": "border-strong",
+      "bg": "bg-base",
+      "min": 3,
+      "use": "control edges"
+    },
+    {
+      "fg": "border-strong",
+      "bg": "bg-raised",
+      "min": 3,
+      "use": "control edges"
+    },
+    {
+      "fg": "border-strong",
+      "bg": "bg-overlay",
+      "min": 3,
+      "use": "added by the mixed plan: overlay edges"
+    },
+    {
+      "fg": "accent-red",
+      "bg": "bg-base",
+      "min": 3,
+      "use": "focus ring and graphics"
+    },
+    {
+      "fg": "white-accent",
+      "bg": "bg-base",
+      "min": 3,
+      "use": "switch, checkbox and progress fills"
+    },
+    {
+      "fg": "danger",
+      "bg": "bg-base",
+      "min": 3,
+      "use": "icons"
+    },
+    {
+      "fg": "on-dock",
+      "bg": "dock",
+      "min": 4.5,
+      "use": "the phone's tab bar: the current place's label"
+    },
+    {
+      "fg": "on-dock-muted",
+      "bg": "dock",
+      "min": 4.5,
+      "use": "the phone's tab bar: the other places' labels"
+    },
+    {
+      "fg": "accent-red",
+      "bg": "dock",
+      "min": 3,
+      "use": "the phone's tab bar: the current place's disc"
+    }
   ]
 }

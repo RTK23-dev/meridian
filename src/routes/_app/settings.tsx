@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Button, PageHeader, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
+import { Button, PageHeader, Switch, Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui";
 import { useWorkspace } from "@/components/workspace";
 import { GeneralTab } from "@/components/settings/general-tab";
 import { ConnectionsTab } from "@/components/settings/connections-tab";
@@ -59,15 +59,14 @@ function SettingsPage() {
         breadcrumbs={[{ label: "Overview", to: "/" }]}
       />
       {/* Screens that moved out of the sidebar. Each keeps its own role checks; this list only links to them. */}
-      {tab === "general" ? <nav aria-label="Other screens in Settings" className="space-y-3">
-        <p className="eyebrow">Also in Settings</p>
-        <div className="flex flex-wrap gap-2">
-          {links.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
+      {tab === "general" ? <nav aria-label="Other screens in Settings" className="panel flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div className="space-y-3">
+          <p className="eyebrow">Also in Settings</p>
+          <div className="flex flex-wrap gap-2">
+            {links.map((link) => <Button key={link.to} asChild variant="secondary" size="md"><Link to={link.to as never}>{link.label}</Link></Button>)}
+          </div>
         </div>
-        <label className="flex items-center gap-2 text-sm text-fg-muted">
-          <input type="checkbox" className="size-4 accent-[var(--accent)]" checked={advanced} onChange={(event) => setAdvanced(event.target.checked)} />
-          Show advanced screens (operations, logs, calibration, scoring weights)
-        </label>
+        <Switch label="Show advanced screens" hint="Operations, logs, calibration and scoring weights." checked={advanced} onCheckedChange={setAdvanced} />
       </nav> : null}
       <Tabs value={tab} onValueChange={(value) => setTab(value as SettingsTab)} className="space-y-6">
         <TabsList aria-label="Settings sections" className="w-full flex-nowrap overflow-x-auto border-hairline">

@@ -120,7 +120,7 @@ export function MembersTab({ organizationId, members, invites, canAdmin }: {
       {invites.length > 0 ? (
         <section aria-labelledby="invites-title" className="space-y-2">
           <h3 id="invites-title" className="text-sm font-semibold text-fg-primary">Pending invitations</h3>
-          <ul className="divide-y divide-border rounded-sharp border border-hairline bg-raised">
+          <ul className="divide-y divide-hairline rounded-sharp border border-hairline bg-raised">
             {invites.map((invite) => (
               <li key={invite.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
                 <span className="min-w-0 break-all text-fg-primary">{invite.email}</span>

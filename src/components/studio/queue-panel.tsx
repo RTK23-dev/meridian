@@ -135,7 +135,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                     type="checkbox"
                     value={acct.id}
                     {...register("targetAccountIds")}
-                    className="size-4 accent-fg"
+                    className="size-4 accent-fg-primary"
                   />
                   <div className="truncate">
                     <span className="font-semibold block truncate">{acct.name}</span>
@@ -204,7 +204,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
                   <th scope="col" className="py-2 text-right">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-border">
+              <tbody className="divide-y divide-hairline">
                 {queueItems.map((item) => {
                   return (
                     <tr key={item.id} className="hover:bg-overlay">
@@ -254,7 +254,7 @@ export function QueuePanel({ brandId, variants, canEdit }: QueuePanelProps) {
             <CheckCircle2 className="h-4 w-4 text-success" aria-hidden="true" />
             Live Execution Receipts
           </h3>
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-hairline">
             {queueReceipts.map((rec) => (
               <div key={rec.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-xs">
                 <div>
